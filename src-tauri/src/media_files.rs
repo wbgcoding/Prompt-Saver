@@ -409,7 +409,7 @@ pub(crate) async fn video_folder_file_durations_ms(app: AppHandle, dir: String, 
 }
 
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
-// "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every 280 button
+// "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every result-dialog button
 // that writes into a folder instead of a dialog-chosen exact path.
 // The free name is claimed the moment it is found instead of merely observed: a
 // plain exists() check lets a file that appears at that name before a later
@@ -574,7 +574,7 @@ pub(crate) async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Op
     result.map(|p| p.to_string_lossy().to_string())
 }
 
-// 280's plain "Save" -- writes straight into recordingDir without a dialog
+// Plain "Save" -- writes straight into recordingDir without a dialog
 // (the common case); save_recording_as above keeps the free dialog for
 // everything else.
 #[tauri::command]
@@ -594,7 +594,7 @@ pub(crate) async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src
     Ok(dest.to_string_lossy().to_string())
 }
 
-// 280's "Copy" -- the video counterpart of the screenshot result dialog's
+// "Copy" -- the video counterpart of the screenshot result dialog's
 // clipboard copy. A video cannot be a bitmap, so the file itself is the
 // clipboard payload (the same CF_HDROP path copy_prompt already uses for any
 // file-attached prompt); it is moved into recordingDir first so the pasted
@@ -695,7 +695,7 @@ pub(crate) fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
 }
 
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
-// folder OR the current recordingDir (280's Copy/Save move the working file
+// folder OR the current recordingDir (Copy/Save move the working file
 // there before the window closes) -- never an arbitrary webview-supplied
 // path, same defense-in-depth pattern as delete_screenshot_file. Moves into
 // a "verworfen" subfolder of whichever of those two it was actually in,
@@ -756,8 +756,19 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     Some(dest)
 }
 
+// A cancelled take goes to its folder's holding area like a discarded one, so a
+// Cancel clicked by mistake can still be undone. A file that cannot be moved there
+// is removed with its mic track, as before.
+pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
+    let moved = path.parent().and_then(|dir| discard_recording_file_in(&[dir.to_path_buf()], path)).is_some();
+    if !moved {
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(path.with_extension("mic.wav"));
+    }
+}
+
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
-// folder OR the current recordingDir (280's Copy/Save move the working file
+// folder OR the current recordingDir (Copy/Save move the working file
 // there before the window closes) -- never an arbitrary webview-supplied
 // path, same defense-in-depth pattern as delete_screenshot_file. Moves into
 // a "verworfen" subfolder of whichever of those two it was actually in,

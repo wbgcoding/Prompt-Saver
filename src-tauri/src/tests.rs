@@ -6749,6 +6749,26 @@ fn discard_recording_file_in_moves_into_verworfen_instead_of_deleting() {
 }
 
 #[test]
+fn discard_or_remove_take_keeps_a_cancelled_take_restorable() {
+    let dir = std::env::temp_dir().join(format!("ps-cancel-take-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let take = dir.join("rec-2026-01-01-00-00-01.mp4");
+    fs::write(&take, b"video").unwrap();
+    fs::write(take.with_extension("mic.wav"), b"mic").unwrap();
+    discard_or_remove_take(&take);
+    assert!(!take.exists(), "the take leaves the recordings folder");
+    assert!(dir.join("verworfen").join("rec-2026-01-01-00-00-01.mp4").is_file(), "it waits in the holding area");
+    assert!(dir.join("verworfen").join("rec-2026-01-01-00-00-01.mic.wav").is_file(), "its mic track goes with it");
+    // A file the holding area refuses (no rec- name) is still removed, never left behind.
+    let other = dir.join("custom.mp4");
+    fs::write(&other, b"video").unwrap();
+    discard_or_remove_take(&other);
+    assert!(!other.exists());
+    assert!(!dir.join("verworfen").join("custom.mp4").exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn discard_recording_file_in_refuses_a_name_without_the_rec_prefix() {
     let dir = std::env::temp_dir().join(format!("ps-discard-prefix-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();

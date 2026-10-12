@@ -1129,12 +1129,12 @@ pub fn take_disk_low(session: &RecSession) -> Option<(u64, u64)> {
 // The output file exists the instant VideoEncoder::new() runs (it opens the
 // file eagerly), so a clean cancel still finalises it -- via the same
 // finish_and_stop tail, to keep exactly one shutdown sequence -- and then
-// deletes it, leaving no file behind.
+// moves it to the holding area for discarded recordings.
 pub fn cancel(session: RecSession) -> Result<(), String> {
     let path = session.output_path.clone();
     let mic_wav_path = session.mic_wav_path.clone();
     finish_and_stop(session)?;
-    let _ = std::fs::remove_file(&path);
+    crate::media_files::discard_or_remove_take(&path);
     if let Some(w) = mic_wav_path {
         let _ = std::fs::remove_file(&w);
     }

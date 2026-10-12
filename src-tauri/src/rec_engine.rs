@@ -971,12 +971,13 @@ pub(crate) struct RecordingPartInfo {
 
 // A cancel discards the WHOLE take, not just its current file -- every
 // earlier part a "finish and continue" chain already closed goes with it,
-// video, mic audio and its own key-overlay sidecar all three. Best-effort: a
-// missing file (already moved/deleted by the user) is not a reason to fail
-// an otherwise-successful cancel.
+// video, mic audio and its own key-overlay sidecar all three, into the
+// holding area when possible. Best-effort: a missing file (already
+// moved/deleted by the user) is not a reason to fail an otherwise-successful
+// cancel.
 #[cfg(windows)]
 pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo) {
-    let _ = std::fs::remove_file(&part.path);
+    crate::media_files::discard_or_remove_take(Path::new(&part.path));
     if let Some(w) = &part.mic_wav_path {
         let _ = std::fs::remove_file(w);
     }
