@@ -194,6 +194,17 @@ export function mediaTipLine(p) {
 // the render -- the backend call is fire-and-forget, and the panel only
 // re-renders once it actually comes back with something to show.
 export const mediaMetaBackfilled = new Set();
+// One pending repaint per render function: a library full of unmeasured rows
+// answers N times, and each answer used to rebuild the whole list.
+const backfillRepaint = new Map();
+function scheduleBackfillRepaint(rerender) {
+  clearTimeout(backfillRepaint.get(rerender));
+  backfillRepaint.set(rerender, setTimeout(() => {
+    backfillRepaint.delete(rerender);
+    // A closed panel repaints on its next open anyway.
+    if (!libraryEl.classList.contains("hidden")) rerender();
+  }, 120));
+}
 export function maybeBackfillMediaMeta(p, rerender) {
   if (!flag("mediaMetaBackfill") || mediaMetaBackfilled.has(p.id)) return;
   if (p.media_duration_ms || p.media_width || p.media_size_bytes) return; // already measured
@@ -205,7 +216,7 @@ export function maybeBackfillMediaMeta(p, rerender) {
       const idx = prompts.findIndex((x) => x.id === p.id);
       if (idx === -1) return;
       prompts[idx] = { ...prompts[idx], ...updated };
-      rerender();
+      scheduleBackfillRepaint(rerender);
     })
     .catch(() => {}); // best-effort -- a failed catch-up just tries again next session
 }
@@ -639,7 +650,6 @@ export function fillLibrarySort() {
   sel.value = libSortMode();
 }
 
-// Close the library and flush any deferred grid rebuild from batch edits.
 // The library was raised over the statistics dialog by jumpToPrompt. Put it back down;
 // `closeBehind` also dismisses the dialogs underneath (dragging onto the grid needs
 // the grid). Returns true if the library was raised at all.
@@ -653,6 +663,7 @@ export function dropLibraryFront(closeBehind) {
   }
   return true;
 }
+// Close the library and flush any deferred grid rebuild from batch edits.
 export function hideLibrary() {
   libraryEl.classList.add("hidden");
   // Prompts may have been edited or deleted while the library was up: the
@@ -903,6 +914,8 @@ export function renderLibrary() {
         const occupied = new Map(
           Object.entries(layoutOf(view)).map(([id, c]) => [cellKey(...c), id])
         );
+        // A folder's cell is not in the layout, but placing a tile onto it is refused.
+        for (const f of foldersOfView(view.id)) occupied.set(cellKey(...(f.cell || [0, 0])), f.id);
         const free = firstFree(occupied, view.cols, view.rows);
         if (!free) { toast(t("gridFull")); return; }
         await placeTile(p.id, free[0], free[1]);
@@ -1085,6 +1098,13 @@ export function updateGridBatchBar() {
   // resets the dropdown to the active view each time, which is the right default
   // for a selection that just grew.
   if (n > 0) { buildBatchColors("grid-batch-colors"); fillBatchViews("grid-batch-view"); }
+}
+// True when a dialog other than `selfId` is open, so Escape belongs to the main
+// dispatcher and a selection must stay alive. A library raised over the backup,
+// statistics or duplicate dialogs is the topmost thing, so those do not count.
+export function otherOverlayOpen(selfId) {
+  const under = document.body.classList.contains("library-front") ? ["backup-modal", "stats-modal", "dupes-modal"] : [];
+  return [...document.querySelectorAll(".overlay:not(.hidden)")].some((o) => o.id !== selfId && !under.includes(o.id));
 }
 export function clearGridSelection() {
   const was = document.body.classList.contains("grid-selecting");
@@ -1560,7 +1580,7 @@ export function bindLibrary() {
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden") && $("compare-modal").classList.contains("hidden")) {
+    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden") && !otherOverlayOpen("library")) {
       e.stopPropagation();
       setLibSelectMode(false);
     }
@@ -1594,7 +1614,7 @@ export function bindLibrary() {
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && gridSelected.size && $("compare-modal").classList.contains("hidden")) {
+    if (e.key === "Escape" && gridSelected.size && !otherOverlayOpen("")) {
       e.stopPropagation();
       clearGridSelection();
     }
