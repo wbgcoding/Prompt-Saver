@@ -827,8 +827,9 @@ body.launcher-body {
    Same card/row tokens as the launcher -- a right-click popup restyled to look
    like the rest of the app, since the native Win32 menu cannot be rounded. Row
    height, header height and separator height here are kept in sync with
-   TRAY_WIN_ROW_H / TRAY_WIN_HEAD_H / TRAY_WIN_SEP_H in lib.rs, which sizes the
-   window from the exact same numbers before any content is drawn. */
+   TRAY_WIN_ROW_H / TRAY_WIN_HEAD_H / TRAY_WIN_SEP_H in tray.rs, which sizes the
+   window from the exact same numbers before any content is drawn. The rows sit in
+   #rows, which has to be a flex column for the fixed flex-basis heights below to apply. */
 body.tray-menu-body {
   display: flex;
   padding: 0;
@@ -852,6 +853,7 @@ body.tray-menu-body {
   overflow-y: auto;
   overflow-x: hidden;
 }
+#rows { display: flex; flex: none; flex-direction: column; }
 .tray-menu-search {
   flex: 0 0 30px;
   box-sizing: border-box;
@@ -883,7 +885,9 @@ body.tray-menu-body {
   box-sizing: border-box;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  margin: 0 6px;
+  padding: 0 8px;
+  border-radius: 6px;
   cursor: pointer;
 }
 .tray-menu-row.active,
