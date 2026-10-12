@@ -517,6 +517,25 @@ fn view_add_and_remove_round_trip_only_with_yes() {
 }
 
 #[test]
+fn view_remove_dissolves_the_grid_folders_of_that_view() {
+    let mut store = fixture_store();
+    let dir = std::env::temp_dir();
+    let ok = run_cmd(&mut store, &dir, &["view", "add", "Second", "--yes"]);
+    let new_id = ok.stdout.trim().to_string();
+    store.settings.tile_folders.push(crate::TileFolder {
+        id: "f1".to_string(),
+        name: "Folder".to_string(),
+        color: String::new(),
+        view_id: new_id.clone(),
+        cell: [0, 0],
+        members: vec!["p1".to_string(), "p2".to_string()],
+    });
+    let out = run_cmd(&mut store, &dir, &["view", "remove", &new_id, "--yes"]);
+    assert_eq!(out.code, 0);
+    assert!(store.settings.tile_folders.is_empty());
+}
+
+#[test]
 fn view_remove_of_an_unknown_id_is_not_found() {
     let mut store = fixture_store();
     let dir = std::env::temp_dir();

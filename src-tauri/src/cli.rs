@@ -1510,11 +1510,11 @@ fn cmd_view_remove(store: &mut Store, id: &str) -> Outcome {
     if store.settings.views.len() <= 1 {
         return Outcome::err(4, "cannot remove the last view\n".to_string());
     }
-    store.settings.views.retain(|v| v.id != id);
-    if store.settings.active_view == id {
-        if let Some(first) = store.settings.views.first() {
-            store.settings.active_view = first.id.clone();
-        }
+    // Also dissolves the grid folders of that view, so their members are not
+    // left claimed by a folder nobody can reach.
+    let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    if let Err(e) = crate::views::remove_view_from_settings(&mut store.settings, id, &prompt_ids) {
+        return Outcome::err(4, format!("{e}\n"));
     }
     Outcome::ok(String::new()).mutating_settings()
 }
