@@ -936,6 +936,12 @@ pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Pa
         tx.commit()
     })();
     let _ = conn.execute("DETACH DATABASE backup", []);
+    if result.is_ok() {
+        // Another connection to data.db may still be open when this one closes; its
+        // committed pages must reach the main file, because the caller never touches
+        // the WAL of a selective restore.
+        let _ = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()));
+    }
     result.map_err(|e| e.to_string())
 }
 
@@ -1066,13 +1072,14 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
                 let _ = fs::remove_file(&staged);
                 return Err(e.to_string());
             }
+            // The renamed-in file must not pair with the old database's journal.
+            let _ = fs::remove_file(dir.join("data.db-wal"));
+            let _ = fs::remove_file(dir.join("data.db-shm"));
         } else {
             let result = restore_selective(&target, &staged, &scope);
             let _ = fs::remove_file(&staged);
             result?;
         }
-        let _ = fs::remove_file(dir.join("data.db-wal"));
-        let _ = fs::remove_file(dir.join("data.db-shm"));
         // Every prompt row on disk now comes from the backup, not from anything this
         // session wrote. The relaunch below rebuilds the store anyway, but a write
         // slipping in before it must not trust a single one of the old hashes.

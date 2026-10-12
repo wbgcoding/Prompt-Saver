@@ -11157,6 +11157,35 @@ fn restore_selective_data_scope_leaves_settings_untouched() {
 }
 
 #[test]
+fn restore_selective_flushes_the_wal_while_another_connection_is_open() {
+    let dir = std::env::temp_dir();
+    let target = dir.join(format!("{}-test-restore-wal-target.db", brand::SLUG));
+    let staged = dir.join(format!("{}-test-restore-wal-staged.db", brand::SLUG));
+    let wal = dir.join(format!("{}-test-restore-wal-target.db-wal", brand::SLUG));
+    let other = {
+        let conn = full_schema_db(&target, "target");
+        conn.query_row("PRAGMA journal_mode=WAL", [], |_| Ok(())).unwrap();
+        conn.execute_batch("INSERT INTO prompts VALUES('live', 0, '{}');").unwrap();
+        conn
+    };
+    {
+        let conn = full_schema_db(&staged, "staged");
+        conn.execute_batch("INSERT INTO prompts VALUES('backed-up', 0, '{}');").unwrap();
+    }
+    restore_selective(&target, &staged, "data").unwrap();
+    // The other connection is still open, so nothing may be left waiting in the WAL.
+    let wal_len = std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+    assert_eq!(wal_len, 0, "the restored rows must be in the main file, not in the WAL");
+    let id: String = other.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+    assert_eq!(id, "backed-up");
+    drop(other);
+    for ext in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(dir.join(format!("{}-test-restore-wal-target.db{ext}", brand::SLUG)));
+    }
+    let _ = std::fs::remove_file(&staged);
+}
+
+#[test]
 fn restore_selective_settings_scope_leaves_data_untouched() {
     let dir = std::env::temp_dir();
     let target = dir.join(format!("{}-test-restore-settings-target.db", brand::SLUG));
