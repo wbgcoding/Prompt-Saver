@@ -398,13 +398,15 @@ export function bindGridMenus({ openExternalFileInEditor }) {
       return;
     }
     if (act === "views") {
-      const rect = ctxEl.getBoundingClientRect();
+      // Anchored on the clicked row: the whole menu can reach the window bottom,
+      // which would leave no room below it and push the list to the top corner.
+      const rect = btn.getBoundingClientRect();
       closeCtx();
       openViewsPop(id, rect);
       return;
     }
     if (act === "moveToFolder") {
-      const rect = ctxEl.getBoundingClientRect();
+      const rect = btn.getBoundingClientRect();
       closeCtx();
       openMoveToFolderPop(id, rect);
       return;
