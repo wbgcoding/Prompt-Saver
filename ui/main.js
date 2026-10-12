@@ -456,7 +456,8 @@ async function maybeAskUpdateConsent(sealWarned) {
   });
   if (r !== true && r !== "alt") return;
   const enabled = r === true;
-  await invoke("set_update_consent", { enabled });
+  // A refused write (locked settings, read-only data folder) keeps the question open for the next start.
+  try { await invoke("set_update_consent", { enabled }); } catch (err) { errToast(err); return; }
   settings.update_consent = enabled ? "yes" : "no";
   settings.auto_update = enabled;
   // A yes starts the first check now, not at the next launch.
@@ -471,7 +472,7 @@ async function maybeOfferEditorDraftRecovery() {
   let draft = null;
   try { draft = await invoke("load_editor_draft"); } catch (_) { return; }
   if (!draft) return;
-  const when = new Date(draft.updatedAt * 1000).toLocaleString();
+  const when = new Date(draft.updatedAt * 1000).toLocaleString(LANG);
   const preview = (draft.name || draft.text || "").split("\n").slice(0, 2).join(" ").trim().slice(0, 140);
   const restore = await confirmDialog({
     title: t("draftRecoverTitle"),
@@ -495,6 +496,12 @@ async function maybeOfferEditorDraftRecovery() {
     }
   }
   openModal({ mode: "create", name: draft.name, text: draft.text, variants, title: t("nameModalTitle") });
+}
+
+// Each launch-time step runs on its own: one that fails must not skip the rest
+// (the tour, the crash-draft recovery, a promptsaver:// link that started the app).
+async function runGuarded(step) {
+  try { return await step(); } catch (err) { errToast(err); return undefined; }
 }
 
 async function init() {
@@ -578,7 +585,7 @@ async function init() {
       // The first-run tour comes right after, but only if that offer (the one
       // other dialog that can fire this early) did not itself appear this launch.
       invoke("show_main_window").catch(() => {}).finally(async () => {
-        await offerTakeover();
+        await runGuarded(offerTakeover);
         // Seeded AFTER the takeover offer, not before: seeding earlier (e.g. from
         // applySettingsUi()) would make the library non-empty and takeover_offer()
         // would then never fire, hiding the adoption question behind the tour. Only
@@ -586,16 +593,16 @@ async function init() {
         // already has content) must not repaint the grid a second time on every
         // launch, which would invalidate tile references a user could already be
         // interacting with.
-        const seeded = await seedExamplesIfNeeded();
-        if (seeded && seeded.length) await renderGrid();
+        const seeded = await runGuarded(seedExamplesIfNeeded);
+        if (seeded && seeded.length) await runGuarded(() => renderGrid());
         // Ahead of the tour: an unencrypted store is the more urgent of the two,
         // and the tour is retried next launch (tourSeen is only written by it).
-        const sealWarned = await warnStoreUnsealed();
-        await warnSettingsWriteFailed();
-        await warnDataDirSyncFolder();
-        await maybeAskUpdateConsent(sealWarned);
-        await maybeOpenFirstRunTour(sealWarned);
-        await maybeOfferEditorDraftRecovery();
+        const sealWarned = await runGuarded(warnStoreUnsealed);
+        await runGuarded(warnSettingsWriteFailed);
+        await runGuarded(warnDataDirSyncFolder);
+        await runGuarded(() => maybeAskUpdateConsent(sealWarned));
+        await runGuarded(() => maybeOpenFirstRunTour(sealWarned));
+        await runGuarded(maybeOfferEditorDraftRecovery);
         // A promptsaver:// link that started this process waits in the backend
         // until this listener side is up; ask for it only now.
         invoke("run_pending_launch_url").catch(() => {});

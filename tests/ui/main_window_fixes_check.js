@@ -21,6 +21,8 @@ function extractBlock(src, marker) {
 }
 const problems = [];
 const check = (ok, what) => { if (!ok) problems.push(what); };
+const pending = [];
+const later = (fn) => { pending.push(fn().catch((e) => problems.push(String(e.message || e)))); };
 const section = (fn) => { try { fn(); } catch (e) { problems.push(String(e.message || e)); } };
 const run = (code, sandbox) => { vm.createContext(sandbox); vm.runInContext(code, sandbox); return sandbox; };
 
@@ -145,9 +147,42 @@ section(() => {
   check(/if \(blockedByCooldown\(id, el\)\) return;\n  if \(dialogTokens/.test(cf), "activateTile must use the shared cooldown shake");
 });
 
-if (problems.length) {
-  console.error("FAIL");
-  for (const p of problems) console.error("  - " + p);
-  process.exit(1);
-}
-console.log("main window fixes: ok");
+// 6. Launch-time steps: a failing consent write or a failing step does not stop the ones after it.
+section(() => {
+  const main = read("main.js");
+  const toasts = [];
+  const sbG = run(extractBlock(main, "async function runGuarded("), { errToast: (e) => toasts.push(String(e)) });
+  const order = [];
+  later(async () => {
+    await sbG.runGuarded(async () => { throw new Error("boom"); });
+    await sbG.runGuarded(async () => { order.push("second"); });
+    check(order.join() === "second" && toasts.length === 1, "a failing launch step is reported and the next one still runs");
+  });
+  check(/runGuarded\(\(\) => maybeOpenFirstRunTour\(sealWarned\)\)/.test(main) && /runGuarded\(maybeOfferEditorDraftRecovery\)/.test(main), "the reveal chain guards the tour and the draft recovery");
+
+  const settings = { update_consent: "unasked", auto_update: true };
+  const errs = [];
+  let invokeFails = true;
+  const sbC = run(extractBlock(main, "async function maybeAskUpdateConsent("), {
+    settings, flag: () => false, t: (k) => k, errToast: (e) => errs.push(String(e)),
+    confirmDialog: async () => true,
+    invoke: async (cmd) => { if (cmd === "set_update_consent" && invokeFails) throw new Error("locked"); },
+  });
+  later(async () => {
+    await sbC.maybeAskUpdateConsent(false);
+    check(errs.length === 1 && settings.update_consent === "unasked", "a refused consent write is reported and leaves the question open");
+    invokeFails = false;
+    await sbC.maybeAskUpdateConsent(false);
+    check(settings.update_consent === "yes", "an accepted consent write is remembered");
+  });
+  check(/toLocaleString\(LANG\)/.test(main), "the crash-draft time is formatted in the UI language");
+});
+
+Promise.all(pending).then(() => {
+  if (problems.length) {
+    console.error("FAIL");
+    for (const p of problems) console.error("  - " + p);
+    process.exit(1);
+  }
+  console.log("main window fixes: ok");
+});
