@@ -263,6 +263,27 @@ export function hasImage(p) {
   return !!p && (p.has_image === true || !!p.image);
 }
 
+// What a prompt shows as media on a tile, derived the same way for a grid tile and a
+// folder member: `has` (known from the prompt list) decides the LAYOUT, `stored` (the
+// bytes, which may still be loading) whether the image can be drawn yet, `showKind`
+// and `showPath` the gif/video/image taken from the icon path or the file path.
+export function tileMedia(p) {
+  const kind = p.file_path ? mediaKind(p.file_path) : "";
+  const has = hasImage(p);
+  const stored = has ? imageOf(p) : "";
+  const iconKind = !has && p.icon_path ? mediaKind(p.icon_path) : "";
+  const showPath = iconKind ? p.icon_path : p.file_path;
+  const showKind = has ? "" : iconKind || kind;
+  return { kind, has, stored, showPath, showKind };
+}
+
+// The type badge icon: what the button COPIES (file/image/video), "" for plain text.
+export function tileTypeIcon(p, kind) {
+  return p.file_path
+    ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
+    : p.copy_image ? ICON_IMAGE : "";
+}
+
 // The prompt's stored image, or "" while it is still on its way (or absent).
 export function imageOf(p) {
   if (!p) return "";
@@ -382,16 +403,9 @@ export function buildTile(p) {
   if (times) tile.dataset.tipTimes = times;
 
   // Media on the tile: stored still, or gif/video from the icon/file path.
-  const kind = p.file_path ? mediaKind(p.file_path) : "";
-  // `has` (known from the prompt list) decides the LAYOUT, `stored` (the bytes,
-  // which may still be loading) decides whether the image can be drawn yet: so a
-  // tile waiting for its picture falls back to the name/colour face below instead
+  // A tile waiting for its picture falls back to the name/colour face below instead
   // of showing an empty frame or, worse, an unrelated icon-path preview.
-  const has = hasImage(p);
-  const stored = has ? imageOf(p) : "";
-  const iconKind = !has && p.icon_path ? mediaKind(p.icon_path) : "";
-  const showPath = iconKind ? p.icon_path : p.file_path;
-  const showKind = has ? "" : iconKind || kind;
+  const { kind, has, stored, showPath, showKind } = tileMedia(p);
   const pathVideo = p.show_image && !has && showKind === "video";
   const pathGif = p.show_image && !has && showKind === "gif";
   if (has && !stored) tile.dataset[IMG_WAIT] = p.id; // redrawn once the bytes land
@@ -458,9 +472,7 @@ export function buildTile(p) {
 
   // Subtle type badge in the top-left corner. It reflects what the button
   // COPIES (file/image/video): a decorative media icon never changes it.
-  const typeIcon = p.file_path
-    ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
-    : p.copy_image ? ICON_IMAGE : "";
+  const typeIcon = tileTypeIcon(p, kind);
   if (typeIcon && flag("typeBadges")) {
     const badge = document.createElement("span");
     badge.className = "tile-type";

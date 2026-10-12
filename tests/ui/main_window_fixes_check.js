@@ -407,6 +407,28 @@ section(() => {
   check(list(chain, "CHAIN_DYN_VARS") === list(read("promptVars.js"), "DYN_VARS"), "CHAIN_DYN_VARS drifted from DYN_VARS in promptVars.js");
 });
 
+// 16. Grid tile and folder member tile derive their media and type badge in one place.
+section(() => {
+  const tiles = read("tiles.js");
+  const code = [extractBlock(tiles, "export function tileMedia(").replace("export ", ""), extractBlock(tiles, "export function tileTypeIcon(").replace("export ", "")].join("\n");
+  const sb = run(code, {
+    mediaKind: (path) => (/\.mp4$/.test(path) ? "video" : /\.png$/.test(path) ? "image" : /\.gif$/.test(path) ? "gif" : ""),
+    hasImage: (p) => !!p.has_image, imageOf: (p) => (p.has_image ? "data:x" : ""),
+    ICON_VIDEO: "V", ICON_IMAGE: "I", ICON_PDF: "P", ICON_FILE: "F", PDF_EXT: /\.pdf$/i,
+  });
+  const m = sb.tileMedia({ file_path: "a.mp4", icon_path: "" });
+  check(m.kind === "video" && m.showKind === "video" && m.showPath === "a.mp4" && !m.has, "a video file shows as a video");
+  const m2 = sb.tileMedia({ file_path: "a.txt", icon_path: "b.gif" });
+  check(m2.showKind === "gif" && m2.showPath === "b.gif", "an icon path wins for display when there is no stored image");
+  const m3 = sb.tileMedia({ has_image: true, file_path: "a.png" });
+  check(m3.has && m3.stored === "data:x" && m3.showKind === "", "a stored image decides the layout");
+  check(sb.tileTypeIcon({ file_path: "a.mp4" }, "video") === "V" && sb.tileTypeIcon({ file_path: "a.pdf" }, "") === "P"
+    && sb.tileTypeIcon({ file_path: "a.zip" }, "") === "F" && sb.tileTypeIcon({ copy_image: true }, "") === "I" && sb.tileTypeIcon({}, "") === "", "type badge icon by what the button copies");
+  const gf = read("gridFolders.js");
+  check(/tileMedia\(p\)/.test(gf) && /tileTypeIcon\(p, kind\)/.test(gf), "the folder member tile uses the shared helpers");
+  check(/data-folder-id="\$\{CSS\.escape\(f\.id\)\}"/.test(gf), "the folder tile lookup escapes the id");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

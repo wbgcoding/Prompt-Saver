@@ -1,11 +1,10 @@
 // Grid folders: folder tiles, the folder popup, drag in and out.
-import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_PDF, ICON_VIDEO, inkShadow, invoke, memberDrag, openColorPop, PDF_EXT, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
+import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_EDIT, inkShadow, invoke, memberDrag, openColorPop, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, layoutOf, openMiniMenu, renderGrid } from "./views.js";
 import { recordToolUsage } from "./management.js";
-import { autoPasteDouble, autoPasteNow, cellAt, endDragVisuals, fitTilesShared, hasImage, imageOf, missingFiles, setHoverCell, showCopied } from "./tiles.js";
+import { autoPasteDouble, autoPasteNow, cellAt, endDragVisuals, fitTilesShared, imageOf, missingFiles, setHoverCell, showCopied, tileMedia, tileTypeIcon } from "./tiles.js";
 import { FOLDER_SVG } from "./floatShared.js";
-import { mediaKind } from "./media.js";
 import { FONTS } from "./fonts.js";
 import { placePopover } from "./popover.js";
 import { chainMode, toggleChainPick } from "./chain.js";
@@ -110,7 +109,7 @@ export function pickTileFolderColor(f, anchor) {
     // The free picker's SV field fires this on every drag frame: a full
     // renderGrid per frame would rebuild every tile in the view. Paint just
     // this one folder tile live, the same way buildFolderTile itself does.
-    const tile = gridEl.querySelector(`.folder-tile[data-folder-id="${f.id}"]`);
+    const tile = gridEl.querySelector(`.folder-tile[data-folder-id="${CSS.escape(f.id)}"]`);
     if (tile) {
       tile.classList.toggle("tinted", !!hex);
       tile.style.background = hex;
@@ -301,12 +300,7 @@ export function openTileFolderPop(f, anchor) {
     // badge, tinted background: so a folder never shows less than the grid
     // underneath it. Interactive bits (select checkbox, tile menu, video player)
     // stay out: this button already has its own click/drag/context-menu handling.
-    const kind = p.file_path ? mediaKind(p.file_path) : "";
-    const has = hasImage(p);
-    const stored = has ? imageOf(p) : "";
-    const iconKind = !has && p.icon_path ? mediaKind(p.icon_path) : "";
-    const showPath = iconKind ? p.icon_path : p.file_path;
-    const showKind = has ? "" : iconKind || kind;
+    const { kind, stored, showPath, showKind } = tileMedia(p);
     const showable = p.show_image && (stored || showKind === "image" || showKind === "gif");
     if (showable) {
       btn.classList.add("has-image");
@@ -335,9 +329,7 @@ export function openTileFolderPop(f, anchor) {
       btn.dataset.fitMode = "fixed";
     }
     btn.appendChild(label);
-    const typeIcon = p.file_path
-      ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
-      : p.copy_image ? ICON_IMAGE : "";
+    const typeIcon = tileTypeIcon(p, kind);
     if (typeIcon && flag("typeBadges")) {
       const badge = document.createElement("span");
       badge.className = "tile-type";
