@@ -6992,6 +6992,18 @@ fn place_in_dir_keeps_both_files_and_leaves_no_placeholder_on_failure() {
 }
 
 #[test]
+fn folder_import_skips_paths_that_leave_the_chosen_folder() {
+    assert!(folder_rel_path_is_safe("note.md"));
+    assert!(folder_rel_path_is_safe("sub/deeper/note.md"));
+    assert!(!folder_rel_path_is_safe("../x.md"));
+    assert!(!folder_rel_path_is_safe("sub/../../x.md"));
+    assert!(!folder_rel_path_is_safe("C:\\Windows\\win.ini"));
+    assert!(!folder_rel_path_is_safe("/etc/x.md"));
+    assert!(!folder_rel_path_is_safe("\\\\server\\share\\x.md"));
+    assert!(!folder_rel_path_is_safe(""));
+}
+
+#[test]
 fn is_own_mic_sidecar_accepts_only_the_matching_videos_own_sidecar() {
     let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
     let own_sidecar = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mic.wav");

@@ -1190,6 +1190,9 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     let base = Path::new(&dir);
     let mut items = Vec::new();
     for rel in rel_paths {
+        if !folder_rel_path_is_safe(&rel) {
+            continue;
+        }
         let path = base.join(&rel);
         let Ok(content) = read_import_folder_file(&path) else { continue };
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
@@ -1211,6 +1214,13 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     push_theme(&app, &settings);
     rebuild_tray(&app);
     Ok(count)
+}
+
+// A path from the frontend is only ever joined onto the chosen folder when it stays
+// inside it: no absolute path, drive prefix, root or `..` step.
+pub(crate) fn folder_rel_path_is_safe(rel: &str) -> bool {
+    let path = Path::new(rel);
+    path.components().next().is_some() && path.components().all(|c| matches!(c, std::path::Component::Normal(_)))
 }
 
 // One note file of an imported folder as a prompt. A file from an older version
