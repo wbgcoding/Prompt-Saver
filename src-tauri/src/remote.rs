@@ -987,6 +987,8 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
                 let state: State<RemoteApiState> = app_failed.state();
                 if current {
                     state.running.store(false, Ordering::SeqCst);
+                    state.port.store(0, Ordering::SeqCst);
+                    let _ = app_failed.emit("remote-api-status", serde_json::json!({"running": false, "port": 0}));
                 }
                 log_remote_app(&app_failed, "remoteApi", &format!("remote access could not bind its port: {e}"));
             },
@@ -1480,6 +1482,16 @@ fn handle_open(app: &AppHandle, settings: &Settings, id: String) {
 }
 
 fn handle_copy(app: &AppHandle, settings: &Settings, id: String) {
+    let exists = {
+        let state: State<Db> = app.state();
+        let guard = lock(&state);
+        guard.prompts.iter().any(|p| p.id == id)
+    };
+    if !exists {
+        // Same as open: no consent question for an id that does not exist.
+        log_remote(settings, "urlScheme", "a promptsaver://copy link named an id that does not exist");
+        return;
+    }
     if !consent(app, settings, "urlSchemeCopyAllowed", "copy") {
         return;
     }
