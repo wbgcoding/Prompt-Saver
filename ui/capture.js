@@ -1008,7 +1008,7 @@ export function bindCapture() {
   });
 
   attachSelectPicker($("snip-modal-saveas-format"));
-  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit };
+  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, closeSnipModal, snipEdit };
 }
 
 export function wireCapture() {

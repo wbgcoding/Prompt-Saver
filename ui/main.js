@@ -74,7 +74,7 @@ wireTheme();
 function bind() {
   bindEditor();
   bindCopyFlow();
-  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
+  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, closeSnipModal, snipEdit } = bindCapture();
   bindDictation();
   bindSettingsPanel();
   bindExpertMenu();
@@ -201,7 +201,7 @@ function bind() {
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
     else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
-    else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
+    else if (!$("snip-modal").classList.contains("hidden")) closeSnipModal();
     else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
