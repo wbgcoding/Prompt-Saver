@@ -1322,6 +1322,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 #shortcuts-modal.overlay { z-index: 100; }
 /* Confirm dialog stacks above everything (incl. the edit modal). */
 #confirm-modal.overlay { z-index: 80; }
+/* The screenshot editor is a full-window overlay at 90; a question raised while it is
+   open (discard, replace) has to be drawn above it. */
+body:has(#snip-edit:not(.hidden)) #confirm-modal.overlay { z-index: 95; }
 .modal {
   width: min(520px, 92vw);
   max-height: var(--modal-max-vh, 88vh);

@@ -4,12 +4,13 @@ import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { $, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, withShortcut } from "./core.js";
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
+import { confirmDialog } from "./dialog.js";
 import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
 import { buildSwatches } from "./editor.js";
 
 export function initSnipEditor() {
-  // ==== 117/118: screenshot editor ====
+  // ==== screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
   // untouched. Every knob below reads live from the expert menu.
@@ -1791,6 +1792,8 @@ export function initSnipEditor() {
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
+    // A question raised over the editor (discard, replace) owns every key.
+    if (!$("confirm-modal").classList.contains("hidden")) return;
     // The shortcuts overview is a sibling overlay, not inside snipEdit's own
     // DOM subtree, so it needs its own check before the editor's normal Tab
     // trap and tool shortcuts take over.
@@ -1818,7 +1821,7 @@ export function initSnipEditor() {
       // whole editor -- closing on Escape here would throw away every edit
       // made so far just because something happened to be selected.
       if (SE.lastNudged) { snipEditDeselectShape(); return; }
-      snipEditCancel();
+      snipEditRequestCancel();
       return;
     }
     if (document.activeElement === snipEditTextInput) return; // input owns its own keys
@@ -1939,6 +1942,26 @@ export function initSnipEditor() {
     snipEditClose();
     cb?.();
   }
+  // Escape, Cancel and X: edits are only thrown away after a yes, unless the expert
+  // switch for the discard question is off.
+  let snipCancelAsking = false;
+  async function snipEditRequestCancel() {
+    if (snipCancelAsking) return;
+    if (SE.ops.length === 0 || !flag("confirmDiscard")) { snipEditCancel(); return; }
+    snipCancelAsking = true;
+    let ok = false;
+    try {
+      ok = await confirmDialog({
+        title: t("discardTitle"),
+        message: t("discardMsg"),
+        confirmLabel: t("discardConfirm"),
+        cancelLabel: t("keepEditing"),
+      });
+    } finally {
+      snipCancelAsking = false;
+    }
+    if (ok && SE.active) snipEditCancel();
+  }
   // Applies the crop (if any) only now -- everything else stays undoable until export.
   // The output canvas is never larger than the source, so a 4K/panorama capture is
   // never upscaled, and this is a single synchronous pass, never a per-block loop.
@@ -1982,8 +2005,8 @@ export function initSnipEditor() {
     snipEditClose();
     cb?.(dataUrl);
   }
-  $("snip-edit-cancel").addEventListener("click", snipEditCancel);
-  $("snip-edit-close").addEventListener("click", snipEditCancel);
+  $("snip-edit-cancel").addEventListener("click", snipEditRequestCancel);
+  $("snip-edit-close").addEventListener("click", snipEditRequestCancel);
   $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
   $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
   $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
