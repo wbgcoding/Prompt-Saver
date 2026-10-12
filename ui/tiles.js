@@ -1,5 +1,5 @@
 // Grid tiles: building, auto-fit, images, video thumbs, drag-out and auto-paste.
-import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_UNDO, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, val, videoCache } from "./core.js";
+import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, LOCK_SVG, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, undoToast, val, videoCache } from "./core.js";
 import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
@@ -13,7 +13,7 @@ import { tileTimeLines } from "./journal.js";
 import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
 import { recordToolUsage } from "./management.js";
 import { openModal } from "./editor.js";
-import { armFolderDrop, disarmFolder, dropIntoFolder, folderById, openTileFolderPop, saveFolder } from "./gridFolders.js";
+import { armFolderDrop, disarmFolder, dropIntoFolder, endMemberDragLayers, folderById, openTileFolderPop, saveFolder } from "./gridFolders.js";
 import { openCtx } from "./gridMenus.js";
 
 // Auto-fit cache per (text, cell size); cleared on font changes.
@@ -344,10 +344,7 @@ export function buildTile(p) {
     lock.className = "tile-lock-badge";
     lock.title = t("editorSecretLabel");
     lock.setAttribute("aria-label", t("editorSecretLabel"));
-    lock.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
-      + '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 10.5V7a5 5 0 0 1 10 0v3.5"/>'
-      + '<rect x="5" y="10.5" width="14" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>'
-      + '</svg>';
+    lock.innerHTML = LOCK_SVG;
     tile.appendChild(lock);
   }
   // Bulk-selection checkbox. Its own pointerdown/click stop propagation so a
@@ -977,13 +974,9 @@ export function wireTiles() {
       // The undo belongs to the view the tile was moved in: placeTile reads the view
       // on screen, so after a tab switch it would pull the tile out of its own view.
       const movedIn = activeView().id;
-      toast(t("tileMoved"), {
-        label: t("undo"),
-        icon: ICON_UNDO,
-        onClick: () => {
-          if (favView || activeView().id !== movedIn) return;
-          placeTile(id, fromCol, fromRow);
-        },
+      undoToast(t("tileMoved"), () => {
+        if (favView || activeView().id !== movedIn) { toast(t("undoNotHere")); return; }
+        return placeTile(id, fromCol, fromRow);
       });
     }
   });
@@ -1001,6 +994,7 @@ export function wireTiles() {
       memberDrag.ghost?.remove();
     }
     assignMemberDrag(null);
+    endMemberDragLayers();
     endDragVisuals();
   });
   // Double-click an empty cell to create a prompt right there, instead of typing

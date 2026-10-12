@@ -197,6 +197,26 @@ section(() => {
   check(/clearTimeout\(toastHideTimer\)/.test(toastHead), "toast() must cancel the pending hide timer first");
 });
 
+// 8. Tile drag cleanup and the move undo.
+section(() => {
+  const gf = read("gridFolders.js");
+  const removed = [];
+  const layer = (name) => ({ classList: { remove: (c) => removed.push(name + ":" + c), add: () => {} } });
+  const sandbox = run(extractBlock(gf, "export function endMemberDragLayers(").replace("export ", ""), {
+    tileFolderBackdrop: layer("backdrop"), tileFolderPop: layer("pop"),
+  });
+  sandbox.endMemberDragLayers();
+  check(removed.join() === "backdrop:member-dragging,pop:member-dragging", "endMemberDragLayers frees both folder layers");
+  const closeFn = extractBlock(gf, "export function closeTileFolderPop(");
+  check(/endMemberDragLayers\(\)/.test(closeFn), "closing a folder popover frees the drag layers");
+  const tiles = read("tiles.js");
+  const cancelAt = tiles.indexOf('addEventListener("pointercancel"');
+  check(/endMemberDragLayers\(\)/.test(tiles.slice(cancelAt, cancelAt + 700)), "pointercancel frees the folder layers");
+  check(/undoToast\(t\("tileMoved"\)/.test(tiles), "the tile move offers its undo through undoToast");
+  check(/toast\(t\("undoNotHere"\)\)/.test(tiles), "an undo after a view switch says so");
+  check(/lock\.innerHTML = LOCK_SVG;/.test(tiles), "the tile lock badge reuses LOCK_SVG");
+});
+
 if (problems.length) {
     console.error("FAIL");
     for (const p of problems) console.error("  - " + p);

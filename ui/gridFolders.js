@@ -233,10 +233,17 @@ export let tileFolderPopId = null;
 // pointer through (class member-dragging) so the cell under the cursor is reachable.
 export const tileFolderBackdrop = document.createElement("div");
 
+// Gives the folder layers their pointer back once a member drag is over, however it ended.
+export function endMemberDragLayers() {
+  tileFolderBackdrop.classList.remove("member-dragging");
+  tileFolderPop.classList.remove("member-dragging");
+}
+
 export function closeTileFolderPop() {
   tileFolderPop.classList.add("hidden");
   tileFolderBackdrop.classList.add("hidden");
   tileFolderPopId = null;
+  endMemberDragLayers();
 }
 
 const CLOSE_ICON =
@@ -509,8 +516,7 @@ export function wireGridFolders() {
     }
     // Looked up while the layers still let the pointer through, released right after.
     const cell = cellAt(e.clientX, e.clientY);
-    tileFolderBackdrop.classList.remove("member-dragging");
-    tileFolderPop.classList.remove("member-dragging");
+    endMemberDragLayers();
     if (!cell) return;
     await takeOutOfFolder(d.id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
   });
