@@ -3608,9 +3608,9 @@ select.modal-input { padding-right: 30px; }
    input do not agree on their intrinsic height. A touch roomier than the old rows. */
 .backup-settings .modal-input,
 .backup-settings .backup-interval { height: 40px; padding-top: 0; padding-bottom: 0; }
-/* The interval dropdown is only as wide as its content, so it sits on one line with
-   the number fields beside it. */
-.backup-interval-row .backup-interval { min-width: 0; width: auto; }
+/* The interval dropdown is as wide as the number fields of the column (90px, see
+   .backup-set-row .clear-wrap), so the left edges of all right-aligned controls line up. */
+.backup-interval-row .backup-interval { min-width: 90px; width: 90px; }
 /* Settings split in two: left "make a backup / how often", right "how many are kept". */
 .backup-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 24px; align-items: start; }
 .backup-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
