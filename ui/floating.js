@@ -42,7 +42,7 @@ let menuOpen = false;
 // Drag-out (default off): the modifier separates "drag the prompt into another
 // app" from the plain drag, which moves this window.
 let dragOutOn = false, dragOutMod = "ctrlKey";
-let foldersOn = false; // pill folders (default off)
+let foldersOn = false; // pill folders; applyPrefs turns it on unless the setting says off
 let pText = "", pFile = "", pVariants = [];
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
@@ -167,16 +167,15 @@ function applyPillSize() {
   invoke("resize_float_pill", { id: promptId, width: box.w, height: box.h }).catch(() => {});
 }
 
-// The labels need the translation module, which is imported lazily because it is
-// large and the pill has to open fast. Behaviour must NOT wait for it: a slow or
-// failed import used to take the cooldown, opacity, folders and drag-out with it.
+// Behaviour (cooldown, opacity, folders, drag-out) is applied before the labels, so a
+// failure while building the texts never takes it away.
 async function applySettings() {
   const s = await invoke("get_settings");
   applyPrefs(s);
-  await applyTexts(s);
+  applyTexts(s);
 }
 
-async function applyTexts(s) {
+function applyTexts(s) {
   const t = compactTexts(resolveLang(s.language, LANGS));
   copiedText = t.copied;
   document.getElementById("feedback").textContent = copiedText;
@@ -206,7 +205,9 @@ function applyPrefs(s) {
   // Pills used media.js's hardcoded {volume:100, muted:true, looped:true} --
   // the expert videoVolume/videoMuted/videoLoop settings never reached them. Same
   // defaults applyValues() in expertMenu.js pushes for the grid tiles.
-  setMediaDefaults({ volume: Number(s.ui_values?.videoVolume) || 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop === true });
+  const vol = s.ui_values?.videoVolume;
+  // 0 is a valid volume (the expert slider starts at 0), so only a missing value falls back.
+  setMediaDefaults({ volume: vol != null && Number.isFinite(Number(vol)) ? Number(vol) : 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop === true });
   videoAutoplayOn = s.ui_flags?.videoAutoplay === true; // default off, matches optFlag("videoAutoplay")
   videoControlsOn = s.ui_flags?.videoControls !== false; // default on, matches flag("videoControls")
   if (!videoControlsOn) mediaBar.classList.add("hidden"); // off mid-hover must not leave it stuck open
@@ -228,7 +229,7 @@ function applyPrefs(s) {
   // visible/active with its parent off).
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
   // primeRotateBadge, not renderRotateBadge alone: rotateInfo stays null while the
-  // badge is off (47's own "no peek while off" guard), so flipping the flag back on
+  // badge is off (the "no peek while off" guard), so flipping the flag back on
   // here needs a fresh peek, not just a re-render of whatever was last known.
   primeRotateBadge();
   const op = Number(s.ui_values?.floatOpacity);
@@ -402,7 +403,8 @@ function applyPrompt(p) {
   captionEl.textContent = p.caption || "";
   captionEl.classList.toggle("hidden", !showMedia || !p.caption);
   captionEl.classList.toggle("auto", p.caption_size === 1);
-  captionEl.style.fontSize = p.caption_size > 1 ? `${Math.round(p.caption_size * scale)}px` : "";
+  pCaptionSize = p.caption_size || 0;
+  updateCaptionScale();
   if (showMedia) {
     pill.classList.add("has-image");
     pill.style.background = "transparent";
@@ -457,7 +459,6 @@ function applyPrompt(p) {
   primeRotateBadge();
   pFont = p.font || "";
   pSize = p.font_size || 0;
-  pCaptionSize = p.caption_size || 0;
   applyFont();
   applyPillSize();
   pollFileMissing();
@@ -761,28 +762,38 @@ window.addEventListener("mouseup", async () => {
     if (!menuOpen) applyPillSize(); // keep the menu+window when one is open
     ensureVideoPlaying();
     mergeAfterDrop();
-  } else if (menuOpen) {
-    closeMenu(); // a click on the pill closes the open menu
   } else {
-    // The gate (cooldown, double-click paste window, stamp before the await,
-    // rollback) is shared with the folder window. A prompt with a placeholder is
-    // handed to the main window, which asks for it and copies; that route never
-    // pastes on its own.
-    const r = await copyGate(promptId, async () => {
-      if (needsMainWindowCopy(pText, pVariants)) {
-        return emit("prompt-tray-copy", promptId).then(() => "handoff", () => false);
-      }
-      return invoke("copy_prompt", { id: promptId }).catch(() => false);
-    }, copyPrefs);
-    if (r === "paste") {
-      // Fast second click pastes the just-copied text into the last app.
-      invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch(() => {});
-    } else if (r === "copied") {
-      showCopied();
-      invoke("record_copy", { id: promptId }).catch(() => {});
-    }
+    await activatePill();
   }
 });
+
+// A click on the pill: closes an open menu, otherwise copies. Enter and Space on the
+// focused pill raise a click with no pointer (detail 0) and take the same path; a
+// mouse click is handled on mouseup above.
+async function activatePill() {
+  if (menuOpen) {
+    closeMenu(); // a click on the pill closes the open menu
+    return;
+  }
+  // The gate (cooldown, double-click paste window, stamp before the await,
+  // rollback) is shared with the folder window. A prompt with a placeholder is
+  // handed to the main window, which asks for it and copies; that route never
+  // pastes on its own.
+  const r = await copyGate(promptId, async () => {
+    if (needsMainWindowCopy(pText, pVariants)) {
+      return emit("prompt-tray-copy", promptId).then(() => "handoff", () => false);
+    }
+    return invoke("copy_prompt", { id: promptId }).catch(() => false);
+  }, copyPrefs);
+  if (r === "paste") {
+    // Fast second click pastes the just-copied text into the last app.
+    invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch(() => {});
+  } else if (r === "copied") {
+    showCopied();
+    invoke("record_copy", { id: promptId }).catch(() => {});
+  }
+}
+pill.addEventListener("click", (e) => { if (e.detail === 0) activatePill(); });
 
 // ---- Edge/corner resize ----
 // The grabbed edge/corner follows the cursor 1:1; the opposite side stays put.
@@ -792,9 +803,7 @@ let rzRaf = 0;
 let rzPending = null;
 
 function updateCaptionScale() {
-  if (pCaptionSize > 1) {
-    document.getElementById("caption").style.fontSize = `${Math.round(pCaptionSize * scale)}px`;
-  }
+  document.getElementById("caption").style.fontSize = pCaptionSize > 1 ? `${Math.round(pCaptionSize * scale)}px` : "";
 }
 
 // Pill box (logical px) at a given scale, leaving the live scale untouched.
