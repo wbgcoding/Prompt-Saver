@@ -141,9 +141,6 @@ export let toastTimer = null;
 export let appVersion = ""; // raw "1.6.0", for the About dialog
 export function assignAppVersion(v) { appVersion = v; }
 
-// A status line that carries a live value ("Version 1.6.0", a port, a host) is
-// remembered as key + token + value, so applyI18n can draw it again after a
-// language switch instead of leaving the old language standing.
 // Which edge of a sideways-scrolling strip still has content behind it: sets data-fade
 // (start, end, both) for the soft edge fade in CSS.
 export function syncEdgeFade(bar) {
@@ -156,6 +153,9 @@ export function syncEdgeFade(bar) {
   else delete bar.dataset.fade;
 }
 
+// A status line that carries a live value ("Version 1.6.0", a port, a host) is
+// remembered as key + token + value, so applyI18n can draw it again after a
+// language switch instead of leaving the old language standing.
 export function setStatusText(el, key, token, value) {
   if (!el) return;
   el.dataset.statusKey = key;
@@ -306,9 +306,13 @@ export function assignCOLORS(v) { COLORS = v; }
 export const PALETTE_LEN = DEFAULT_COLORS.length - 1; // editable hues (index 0 is "none")
 export const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+// The pending "finish hiding" step of the last hideToast(). A toast shown inside
+// that window (an Undo whose restore fails) must cancel it, or it hides the new one.
+let toastHideTimer = null;
 export function hideToast() {
   toastEl.classList.remove("show");
-  setTimeout(() => toastEl.classList.add("hidden"), 200);
+  clearTimeout(toastHideTimer);
+  toastHideTimer = setTimeout(() => toastEl.classList.add("hidden"), 200);
 }
 
 // Default toast icon (checkmark badge). Static, developer-controlled SVG.
@@ -367,6 +371,7 @@ export const VOICE_LANG_NOTICE_MS = 8000;
 // Arrow-key nudge step in the screenshot editor while Shift is held.
 export const NUM_FIELD_BIG_STEP = 10;
 export function toast(msg, action = null, tint = "", chips = null, duration = null) {
+  clearTimeout(toastHideTimer);
   toastEl.textContent = "";
   const hasChips = !!(chips && chips.length);
   // Only actionable toasts capture clicks; plain ones stay click-through so they

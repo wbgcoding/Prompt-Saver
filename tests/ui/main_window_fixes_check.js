@@ -179,7 +179,25 @@ section(() => {
 });
 
 Promise.all(pending).then(() => {
-  if (problems.length) {
+  // 7. A toast shown right after hideToast() is not hidden by the stale 200 ms timer.
+section(() => {
+  const core = read("core.js");
+  const timers = new Map();
+  let nextId = 1;
+  const classes = new Set(["show"]);
+  const sandbox = run(`let toastHideTimer = null;\n${extractBlock(core, "export function hideToast(").replace("export ", "")}`, {
+    toastEl: { classList: { remove: (c) => classes.delete(c), add: (c) => classes.add(c) } },
+    setTimeout: (fn) => { const id = nextId++; timers.set(id, fn); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+  });
+  sandbox.hideToast();
+  sandbox.hideToast();
+  check(timers.size === 1, `hideToast keeps a single pending hide timer (got ${timers.size})`);
+  const toastHead = core.slice(core.indexOf("export function toast("), core.indexOf("export function toast(") + 200);
+  check(/clearTimeout\(toastHideTimer\)/.test(toastHead), "toast() must cancel the pending hide timer first");
+});
+
+if (problems.length) {
     console.error("FAIL");
     for (const p of problems) console.error("  - " + p);
     process.exit(1);
