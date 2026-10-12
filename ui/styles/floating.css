@@ -708,6 +708,7 @@ body.vars-body {
   opacity: 0.8;
   cursor: pointer;
 }
+.vars-remember input[type="checkbox"] { accent-color: var(--pill-bg, currentColor); }
 .vars-actions {
   display: flex;
   justify-content: flex-end;

@@ -1215,6 +1215,9 @@ input[type="number"]::-webkit-inner-spin-button {
   margin: 0;
 }
 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+/* Plain checkboxes take the theme's accent in every dialog; the native control reads
+   as disabled in a dark theme. The switch variant draws itself. */
+input[type="checkbox"]:not(.switch) { accent-color: var(--accent); }
 
 /* ---- Per-view grid size inputs (views editor) ---- */
 .view-grid { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
