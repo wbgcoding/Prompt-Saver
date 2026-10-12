@@ -54,10 +54,10 @@ let openReq = 0;
 // has nothing to close); the blur is remembered and applied once the box arrived.
 let opening = false;
 let blurredWhileOpening = false;
-// "edit" starts empty, not a hardcoded English literal -- unlike every other
-// field here it spells the item word, which must only ever reach the screen
-// through the compact strings and their fork-brand substitution.
-let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Ungroup", takeOut: "Take out of folder" };
+// Empty until the settings arrive, like the pill: every label reaches the screen
+// through the compact strings (the item word also through their fork-brand
+// substitution), never through an English literal here.
+let TXT = { copied: "", size: "", edit: "", close: "", rename: "", dissolve: "", takeOut: "" };
 
 // Copy behaviour, mirrored from the pill window.
 let copyPrefs = readCopyPrefs({});
@@ -119,7 +119,7 @@ function paintFace(el, p, withName) {
     el.style.boxShadow = "";
     // Text on a member's own colour takes its ink from that colour, like a
     // floating button does; without one the theme's ink applies.
-    const ink = src ? null : inkForColor(p.color);
+    const ink = inkForColor(p.color);
     if (ink) {
       el.style.setProperty("--pill-fg", ink.fg);
       el.style.setProperty("--pill-ink-shadow", ink.shadow);
@@ -134,8 +134,6 @@ function paintFace(el, p, withName) {
   }
 }
 
-// Ring thickness, in proportion to the icon: the same reasoning as the pill's:
-// a fixed band is a hairline on a large folder and swallows a small one whole.
 // A changed ink rule repaints the faces on screen without a reload.
 onInkChange(() => {
   renderIcon();
@@ -145,6 +143,8 @@ onInkChange(() => {
 function renderIcon() {
   const box = FOLDER_BOX * state.scale;
   document.body.style.setProperty("--folder-box", px(box));
+  // Ring thickness, in proportion to the icon: the same reasoning as the pill's:
+  // a fixed band is a hairline on a large folder and swallows a small one whole.
   const ring = Math.round(Math.min(RING_MAX, Math.max(RING_MIN, box * 0.18)));
   document.getElementById("resize")?.style.setProperty("--rz", `${ring}px`);
   previewEl.innerHTML = "";
@@ -364,15 +364,15 @@ async function loadState() {
   if (open === "grid") await reflow();
 }
 
-// Same split as the pill: the lazily imported translations must never hold up the
-// settings that drive behaviour.
+// Same split as the pill: behaviour is applied before the labels, so a failure while
+// building the texts never takes it away.
 async function applySettings() {
   const s = await invoke("get_settings");
   applyPrefs(s);
-  await applyTexts(s);
+  applyTexts(s);
 }
 
-async function applyTexts(s) {
+function applyTexts(s) {
   TXT = compactTexts(resolveLang(s.language, LANGS));
   document.getElementById("size-label").textContent = TXT.size;
   parkedBadge.title = TXT.parked;
@@ -535,6 +535,13 @@ window.addEventListener("mouseup", () => {
   if (open) closePopover();
   else openPopover("grid");
 });
+// Enter and Space on the focused icon raise a click with no pointer (detail 0): same
+// toggle as a mouse release. A mouse click is handled on mouseup above.
+iconEl.addEventListener("click", (e) => {
+  if (e.detail !== 0) return;
+  if (open) closePopover();
+  else openPopover("grid");
+});
 
 iconEl.addEventListener("contextmenu", (e) => {
   e.preventDefault();
@@ -625,6 +632,11 @@ gridEl.addEventListener("dragstart", (e) => {
   e.dataTransfer.setData("text/plain", text);
   if (p.file_path) e.dataTransfer.setData("text/uri-list", fileUri(p.file_path));
   memberDrag = null;
+});
+// Keyboard activation of a member tile (a mouse click copies on mouseup below).
+gridEl.addEventListener("click", (e) => {
+  const tile = e.target.closest(".folder-member");
+  if (tile && e.detail === 0) copyMember(tile.dataset.id);
 });
 gridEl.addEventListener("dragend", (e) => {
   const tile = e.target.closest(".folder-member");
@@ -719,12 +731,12 @@ listen("language-changed", () => applySettings().catch(() => {}));
 // applySettings() alone never reaches state.cols (the grid column count) -- that only
 // arrives through loadState()'s own float_folder_state call, so a changed grid
 // column count never reached an already-open folder window without it too.
-// applySettings must land BEFORE loadState's own reflow/resize: reflow() sizes
-// the window from TILE/GAP/PAD, which only applySettings (via applyPrefs)
-// updates. Firing both in parallel let loadState's window-size math race ahead
-// of a still-pending settings fetch and resize the window for the OLD tile
-// size while renderGrid (from the settings landing moments later) drew tiles
-// at the NEW size -- clipped or oversized members until something else reflowed.
+// applySettings must land BEFORE loadState's own reflow/resize: applyPrefs redraws
+// an open grid with the new font and animation prefs, and loadState (the only place
+// the column count arrives) then sizes the window for that drawing. In parallel the
+// window could be sized for a grid drawn with the old prefs and redrawn with the new
+// ones moments later, leaving clipped or oversized members until something else
+// reflowed.
 listen("settings-changed", () => {
   applySettings().catch(() => {}).then(() => loadState());
   refreshParkedBadge();
@@ -769,8 +781,8 @@ function refreshParkedBadge() {
   try {
     applyFloatTheme(await invoke("current_theme"), await invoke("theme_vars"));
   } catch (_) {}
-  // The folder paints itself first; the translations (a large module, imported
-  // lazily so the window opens fast) land a moment later and only relabel.
+  // The folder paints itself first; the settings land a moment later and only
+  // relabel.
   applySettings().catch(() => {});
   await loadState().catch(() => {});
   refreshParkedBadge();
