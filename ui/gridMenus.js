@@ -35,8 +35,7 @@ export function openCtx(id, x, y) {
   ctxEl.querySelector('[data-act="chain"]').classList.toggle("hidden", !(isTextPrompt(cp) && flag("chainPrompts") && flag("chainQuickStart") && !chainMode));
   // Only a text prompt whose body actually contains Markdown syntax, same
   // check the formatted-copy entry in the editor uses.
-  const cfPrompt = prompts.find((x) => x.id === id);
-  const cfEligible = flag("copyFormatted") && isTextPrompt(cfPrompt) && hasMarkdownSyntax(cfPrompt?.text);
+  const cfEligible = flag("copyFormatted") && isTextPrompt(cp) && hasMarkdownSyntax(cp?.text);
   ctxEl.querySelector('[data-act="copyFormatted"]').classList.toggle("hidden", !cfEligible);
   // Hide the floating-button action when that feature is switched off; otherwise
   // name the actual effect of a click instead of a state-less "toggle".
@@ -47,7 +46,7 @@ export function openCtx(id, x, y) {
   // Archive: hidden unless the feature is on; the label names the action, not a state.
   const archiveBtn = ctxEl.querySelector('[data-act="archive"]');
   archiveBtn.classList.toggle("hidden", !flag("archiveTag"));
-  const archivedNow = isArchived(prompts.find((x) => x.id === id) || {});
+  const archivedNow = isArchived(cp || {});
   archiveBtn.querySelector(".ctx-label").textContent = t(archivedNow ? "unarchiveAction" : "archiveAction");
   // In the favorites view a prompt can't be hidden/removed: unstar it instead. With
   // other views to go to, hiding lives in the "Views..." submenu next to placing; with
@@ -63,13 +62,12 @@ export function openCtx(id, x, y) {
   // Only visible when this prompt actually rotates and both auto gates are on:
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
-  const rp = prompts.find((x) => x.id === id);
-  ctxEl.querySelector('[data-act="editVideo"]').classList.toggle("hidden", !(flag("videoEditor") && rp?.file_path && mediaKind(rp.file_path) === "video"));
-  ctxEl.querySelector('[data-act="editImage"]').classList.toggle("hidden", !(flag("screenshot") && flag("snipEditor") && rp?.file_path && ["image", "gif"].includes(mediaKind(rp.file_path))));
-  const rotateMenuEligible = !!rp && (rp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
+  ctxEl.querySelector('[data-act="editVideo"]').classList.toggle("hidden", !(flag("videoEditor") && cp?.file_path && mediaKind(cp.file_path) === "video"));
+  ctxEl.querySelector('[data-act="editImage"]').classList.toggle("hidden", !(flag("screenshot") && flag("snipEditor") && cp?.file_path && ["image", "gif"].includes(mediaKind(cp.file_path))));
+  const rotateMenuEligible = !!cp && (cp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
   rmenuBtn.classList.toggle("hidden", !rotateMenuEligible);
   if (rotateMenuEligible) {
-    const on = !!rp.rotate_auto;
+    const on = !!cp.rotate_auto;
     rmenuBtn.setAttribute("aria-checked", String(on));
     rmenuBtn.classList.toggle("checked", on);
     rmenuBtn.querySelector(".tb-check").innerHTML = on ? TB_CHECK : "";
