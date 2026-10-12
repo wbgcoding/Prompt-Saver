@@ -429,6 +429,18 @@ section(() => {
   check(/data-folder-id="\$\{CSS\.escape\(f\.id\)\}"/.test(gf), "the folder tile lookup escapes the id");
 });
 
+// 17. A text dropped into a field stays with the field.
+section(() => {
+  const ed = read("editor.js");
+  const sb = run(extractBlock(ed, "function dropTargetsField("), {});
+  const target = (matches) => ({ target: { closest: (sel) => (sel.split(",").some((x) => matches.includes(x.trim())) ? {} : null) } });
+  check(sb.dropTargetsField(target(["textarea"])) === true, "a drop on a textarea is left to the field");
+  check(sb.dropTargetsField(target(["input"])) === true, "a drop on an input is left to the field");
+  check(sb.dropTargetsField(target(["[contenteditable]"])) === true, "a drop on an editable element is left to the field");
+  check(sb.dropTargetsField(target([])) === false, "a drop on the page still creates a prompt");
+  check(/flag\("dragDrop"\) \|\| dropTargetsField\(e\)/.test(ed), "the window drop handler asks dropTargetsField");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

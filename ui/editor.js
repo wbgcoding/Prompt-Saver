@@ -1884,6 +1884,11 @@ export function bindEditor() {
 // Drag & drop onto the window: a dropped file/image/PDF becomes a button right
 // away (same dialog as the paperclip); dropped text fills the composer and opens
 // the save dialog. Extends the existing clipboard/screenshot paths.
+// A text drag that ends inside a field (the editor textarea, the library search) belongs
+// to that field: the window must not swallow it and offer to discard the editor.
+function dropTargetsField(e) {
+  return !!e.target?.closest?.("input, textarea, [contenteditable]");
+}
 export function setupDragDrop() {
   const wv = window.__TAURI__?.webview?.getCurrentWebview?.();
   wv?.onDragDropEvent?.((e) => {
@@ -1903,7 +1908,7 @@ export function setupDragDrop() {
   // Text dropped from another app (no file paths): native handler ignores it.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => {
-    if (!flag("dragDrop")) return;
+    if (!flag("dragDrop") || dropTargetsField(e)) return;
     const text = e.dataTransfer?.getData("text");
     if (text && !(e.dataTransfer.files && e.dataTransfer.files.length)) {
       e.preventDefault();
