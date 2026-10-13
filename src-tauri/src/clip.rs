@@ -6,9 +6,11 @@ use super::*;
 pub(crate) async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<(), String> {
     #[cfg(windows)]
     {
-        let hwnd = autopaste::begin_paste()?;
+        // The modifier wait inside finish_paste sleeps for up to half a second: both
+        // halves run on the blocking pool so no async worker is held for it.
+        let hwnd = tauri::async_runtime::spawn_blocking(autopaste::begin_paste).await.map_err(|e| e.to_string())??;
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms.clamp(10, 1000))).await;
-        autopaste::finish_paste(hwnd, enter)
+        tauri::async_runtime::spawn_blocking(move || autopaste::finish_paste(hwnd, enter)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {

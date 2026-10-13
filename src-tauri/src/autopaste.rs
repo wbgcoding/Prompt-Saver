@@ -70,21 +70,38 @@ pub fn finish_paste(hwnd: isize, send_enter: bool) -> Result<(), String> {
     // The hotkey that triggered the paste usually still has its modifiers down. Sent
     // on top of them, Ctrl+V reaches the target as Ctrl+Alt+V or Ctrl+Shift+V, and the
     // closing Ctrl-up releases the physical key. Pasted anyway after the bounded wait.
-    wait_for_modifiers_up(
-        |vk| unsafe { GetAsyncKeyState(vk) } < 0, // high bit: physically down now
-        || std::thread::sleep(Duration::from_millis(MODIFIER_POLL_MS)),
-    );
-    unsafe {
-        keybd_event(VK_CONTROL, 0, 0, 0);
-        keybd_event(VK_V, 0, 0, 0);
-        keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-        if send_enter {
-            std::thread::sleep(Duration::from_millis(20));
-            keybd_event(VK_RETURN, 0, 0, 0);
-            keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, 0);
-        }
+    paste_after_wait(
+        hwnd,
+        || unsafe { GetForegroundWindow() },
+        || {
+            wait_for_modifiers_up(
+                |vk| unsafe { GetAsyncKeyState(vk) } < 0, // high bit: physically down now
+                || std::thread::sleep(Duration::from_millis(MODIFIER_POLL_MS)),
+            );
+        },
+        || unsafe {
+            keybd_event(VK_CONTROL, 0, 0, 0);
+            keybd_event(VK_V, 0, 0, 0);
+            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+            if send_enter {
+                std::thread::sleep(Duration::from_millis(20));
+                keybd_event(VK_RETURN, 0, 0, 0);
+                keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, 0);
+            }
+        },
+    )
+}
+
+// The wait for the modifiers can take up to half a second, long enough for the user
+// to switch windows: the keystrokes are only sent when the target is still in front
+// after it, never to whatever window took over meanwhile.
+fn paste_after_wait(target: isize, foreground: impl Fn() -> isize, wait: impl FnOnce(), send: impl FnOnce()) -> Result<(), String> {
+    wait();
+    if foreground() != target {
+        return Err("focus-failed".into());
     }
+    send();
     Ok(())
 }
 
@@ -105,6 +122,20 @@ fn wait_for_modifiers_up(is_down: impl Fn(i32) -> bool, pause: impl Fn()) -> boo
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn the_keys_are_only_sent_while_the_target_is_still_in_front_after_the_wait() {
+        let sent = Cell::new(false);
+        // Focus moved on while the modifiers were being waited out.
+        let fg = Cell::new(7isize);
+        let r = paste_after_wait(7, || fg.get(), || fg.set(9), || sent.set(true));
+        assert_eq!(r, Err("focus-failed".to_string()));
+        assert!(!sent.get());
+        // Still in front: sent.
+        fg.set(7);
+        assert!(paste_after_wait(7, || fg.get(), || {}, || sent.set(true)).is_ok());
+        assert!(sent.get());
+    }
 
     #[test]
     fn the_paste_waits_for_held_modifiers_and_goes_ahead_after_the_deadline() {
