@@ -20034,3 +20034,25 @@ fn a_plaintext_trash_row_is_deleted_by_a_purge_and_sealed_by_a_keep() {
     assert_eq!(rows[0].0, "kept");
     assert!(rows[0].2.starts_with(ENC_PREFIX), "the kept row is sealed by the write");
 }
+
+#[test]
+fn a_converted_recordings_sidecars_stay_referenced_through_the_sweep() {
+    let dir = std::env::temp_dir().join(format!("ps-test-rec-converted-sidecars-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let video = dir.join("2026-09-04_07-00-00.webm");
+    let mic = dir.join("2026-09-04_07-00-00.mic.wav");
+    let keys = dir.join("2026-09-04_07-00-00.keys.json");
+    for f in [&video, &mic, &keys] {
+        fs::write(f, b"data").unwrap();
+        backdate(f, Duration::from_secs(45 * 60));
+    }
+    assert_eq!(mic_sidecar_video_path(&mic), Some(video.clone()));
+    assert_eq!(keys_sidecar_video_path(&keys), Some(video.clone()));
+    let mut referenced = std::collections::HashSet::new();
+    referenced.insert(video.to_string_lossy().replace('/', "\\").to_lowercase());
+    let (count, _) = sweep_stale_recordings_in(&dir, &referenced, &[], false, Duration::from_secs(600), Some(Duration::from_secs(30 * 60)));
+    assert_eq!(count, 0, "the sidecars of a kept converted recording must survive");
+    assert!(mic.exists() && keys.exists());
+    let _ = fs::remove_dir_all(&dir);
+}

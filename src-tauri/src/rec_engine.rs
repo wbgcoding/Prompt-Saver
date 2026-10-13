@@ -747,14 +747,28 @@ impl RecWavWriter {
     }
 }
 
-// The mp4 sibling of a "<name>.mic.wav" sidecar, or None if `path` is not one.
+// The video a sidecar named "<stem>.<something>" belongs to: a recording is
+// captured as mp4 but a format conversion leaves "<stem>.webm" (or gif, avi)
+// beside the very same sidecar names, so an existing sibling of any video format
+// wins and the mp4 name is the answer when none exists.
+fn sidecar_owner_video(path: &Path, stem: &str) -> PathBuf {
+    for ext in VIDEO_FORMATS {
+        let candidate = path.with_file_name(format!("{stem}.{ext}"));
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    path.with_file_name(format!("{stem}.mp4"))
+}
+
+// The video sibling of a "<name>.mic.wav" sidecar, or None if `path` is not one.
 pub(crate) fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".mic.wav")?;
-    Some(path.with_file_name(format!("{stem}.mp4")))
+    Some(sidecar_owner_video(path, stem))
 }
 
-// The mp4 sibling of a "<name>.keys.json" sidecar, or None if `path` is not
+// The video sibling of a "<name>.keys.json" sidecar, or None if `path` is not
 // one -- same shape as mic_sidecar_video_path above, kept free of the
 // keylog module (and its cfg(windows) gate) since the stale-recordings sweep
 // this feeds must reason about `.keys.json` on every target, not just
@@ -765,7 +779,7 @@ pub(crate) fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
 pub(crate) fn keys_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".keys.json")?;
-    Some(path.with_file_name(format!("{stem}.mp4")))
+    Some(sidecar_owner_video(path, stem))
 }
 
 pub(crate) const REC_QUEUE_CAP: usize = 4; // bounded frame queue -- drop-oldest once the feeder falls behind
