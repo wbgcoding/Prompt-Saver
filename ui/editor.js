@@ -783,7 +783,11 @@ export async function loadHistory(id) {
           // next save writes the still-open (stale) entries back over them.
           modalState.rotateEntries = (p.variants || []).length ? [p.text, ...p.variants] : [];
           modalState.rotateMode = p.rotate_mode || "";
-          renderRotateUi();
+          // Everything derived from the text is rebuilt from the restored values: the
+          // rendered Markdown pane, the placeholder bar and the entry list (whether the
+          // editor now shows one text field or the rotation list).
+          mdLastText = null;
+          syncModalImageUi(modalState.mode);
           updateLenCounter();
           toast(t("historyRestored"));
           await renderGrid(true);
