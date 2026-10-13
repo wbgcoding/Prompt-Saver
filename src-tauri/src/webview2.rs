@@ -173,6 +173,14 @@ pub(crate) fn install_webview2_runtime() -> bool {
     if fs::create_dir_all(&dir).is_err() {
         return false;
     }
+    // The staging folder goes on every way out of here, installer run or not.
+    struct RemoveDir(PathBuf);
+    impl Drop for RemoveDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = RemoveDir(dir.clone());
     let path = dir.join("MicrosoftEdgeWebview2Setup.exe");
     if fs::write(&path, &bytes).is_err() {
         return false;
