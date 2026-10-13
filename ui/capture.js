@@ -839,6 +839,15 @@ export function bindCapture() {
         const gen = snipCaptureGen;
         const savedNow = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
         if (gen !== snipCaptureGen) return; // a newer capture owns the state now
+        if (!ev.target.checked) {
+          // Switched off while the save ran: the off branch below found no saved copy
+          // to remove, so this one has to.
+          if (savedNow) {
+            const removed = await invoke("delete_screenshot_file", { path: savedNow }).catch(() => false);
+            if (!removed && gen === snipCaptureGen) pendingSnipPath = savedNow;
+          }
+          return;
+        }
         pendingSnipPath = savedNow;
         if (!pendingSnipPath) {
           // Nothing reached the disk: say so and put the switch back off, setting included.
