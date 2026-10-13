@@ -19955,3 +19955,27 @@ fn renaming_a_tag_to_another_casing_keeps_its_colour() {
     transfer_tag_color(&mut colors, "css", "css");
     assert_eq!(colors.get("css").map(String::as_str), Some("#ff0000"));
 }
+
+#[test]
+fn cancelling_interim_crops_does_not_deadlock_on_their_own_list_lock() {
+    let list: Arc<Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>>> = Arc::new(Mutex::new(Vec::new()));
+    let flag = Arc::new(AtomicBool::new(false));
+    let (flag2, list2) = (flag.clone(), list.clone());
+    // Mirrors a crop thread: runs until signalled, then takes the list lock to drop its own entry.
+    let handle = std::thread::spawn(move || {
+        while !flag2.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let me = std::thread::current().id();
+        list2.lock().unwrap().retain(|(_, h)| h.thread().id() != me);
+    });
+    list.lock().unwrap().push((flag, handle));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let list3 = list.clone();
+    std::thread::spawn(move || {
+        stop_and_join_interim_crops(&list3);
+        let _ = tx.send(());
+    });
+    assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "joining the crops hung");
+    assert!(list.lock().unwrap().is_empty());
+}

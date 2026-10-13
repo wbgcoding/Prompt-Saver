@@ -795,6 +795,17 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     Ok(payload)
 }
 
+/// Signals and joins every running interim crop. The list is moved into a local
+/// first and the lock released: a crop thread's last step takes the same lock
+/// to remove its own entry, so joining while holding it would never return.
+pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>>) {
+    let running = std::mem::take(&mut *crops.lock().unwrap_or_else(|e| e.into_inner()));
+    for (flag, handle) in running {
+        flag.store(true, Ordering::SeqCst);
+        let _ = handle.join();
+    }
+}
+
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
@@ -836,10 +847,7 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
         // ffmpeg process still reading the very file being removed (a delete
         // that fails because the file is still open, or one that "succeeds"
         // only for the crop's own rename to recreate it right after).
-        for (flag, handle) in std::mem::take(&mut *REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner())) {
-            flag.store(true, Ordering::SeqCst);
-            let _ = handle.join();
-        }
+        stop_and_join_interim_crops(&REC_INTERIM_CROPS);
         // Best-effort from here: a missing file (already moved/deleted by the
         // user) is not a reason to fail an otherwise-successful cancel.
         for part in std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner())) {
