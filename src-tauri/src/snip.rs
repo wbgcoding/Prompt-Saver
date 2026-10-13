@@ -132,10 +132,12 @@ pub(crate) fn close_all_snip(app: &AppHandle) {
         }
     }
     restore_app_windows_after_snip(app);
-    remove_snip_preview();
     // Ending a session invalidates every capture still running for it at once, so a
-    // late one never ends, copies or announces on behalf of the next session.
+    // late one never ends, copies or announces on behalf of the next session. Done
+    // before the preview is removed: a preview encode finishing between the two would
+    // otherwise still pass its generation check and register a file nobody removes.
     SNIP_GEN.fetch_add(1, Ordering::SeqCst);
+    remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     SNIP_PRESENTED.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
