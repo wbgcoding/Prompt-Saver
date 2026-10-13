@@ -1692,7 +1692,8 @@ export async function openSettingsDirectoryEntry(entry) {
 export function expertTabIndexOf(key, kind) {
   for (let i = 0; i < EXPERT_TABS.length; i++) {
     for (const g of EXPERT_TABS[i].groups) {
-      if ((g[kind] || []).includes(key)) return i;
+      // A flag entry is a bare key or { key, gate }; the other kinds are plain keys.
+      if (kind === "flags" ? groupFlags(g).some((f) => f.key === key) : (g[kind] || []).includes(key)) return i;
     }
   }
   return 0;
