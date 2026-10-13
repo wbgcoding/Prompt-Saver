@@ -20142,3 +20142,15 @@ fn a_busy_wal_checkpoint_aborts_the_move_instead_of_losing_rows() {
     drop((writer, reader));
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_second_hotkey_rearm_asks_the_running_one_to_repeat_instead_of_overlapping() {
+    use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+    let (running, again) = (AtomicBool::new(false), AtomicBool::new(false));
+    assert!(claim_rearm(&running, &again), "the first caller runs");
+    assert!(!again.load(SeqCst));
+    assert!(!claim_rearm(&running, &again), "a caller during a run does not start its own");
+    assert!(again.load(SeqCst), "it leaves a request for the runner");
+    running.store(false, SeqCst);
+    assert!(claim_rearm(&running, &again), "after the run ended the next caller runs again");
+}

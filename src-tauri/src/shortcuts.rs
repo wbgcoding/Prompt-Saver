@@ -322,7 +322,58 @@ pub(crate) fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
 pub(crate) static REC_STOP_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 pub(crate) static REC_PAUSE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
+// Runs of rearm_hotkeys never overlap: a second run interleaving with the first would
+// register accelerators the first just registered, read that as another app holding
+// them, and clear the user's hotkeys from the store. A caller that arrives while a
+// run is going does not wait (registering hops to the main thread, so a waiting
+// main-thread caller would block the very run it waits for); it asks the running
+// one to go around once more, which re-reads the settings and so includes this
+// caller's change.
+static REARM_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static REARM_AGAIN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+// Releases the running flag if a run panics; a normal exit releases it itself.
+struct RearmRunning(bool);
+impl Drop for RearmRunning {
+    fn drop(&mut self) {
+        if self.0 {
+            REARM_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
 pub(crate) fn rearm_hotkeys(app: &AppHandle) -> bool {
+    use std::sync::atomic::Ordering::SeqCst;
+    if !claim_rearm(&REARM_RUNNING, &REARM_AGAIN) {
+        return true;
+    }
+    let mut running = RearmRunning(true);
+    loop {
+        REARM_AGAIN.store(false, SeqCst);
+        let ok = rearm_hotkeys_once(app);
+        // Released before the last look at the request flag: a request that lands
+        // after this point finds no runner and runs itself, one before it is seen here.
+        REARM_RUNNING.store(false, SeqCst);
+        running.0 = false;
+        if REARM_AGAIN.load(SeqCst) && !REARM_RUNNING.swap(true, SeqCst) {
+            running.0 = true;
+            continue;
+        }
+        return ok;
+    }
+}
+
+// True when the caller became the runner; otherwise the running one is asked to repeat.
+pub(crate) fn claim_rearm(running: &std::sync::atomic::AtomicBool, again: &std::sync::atomic::AtomicBool) -> bool {
+    use std::sync::atomic::Ordering::SeqCst;
+    if running.swap(true, SeqCst) {
+        again.store(true, SeqCst);
+        return false;
+    }
+    true
+}
+
+fn rearm_hotkeys_once(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let rec_active = recording_active(app);
     // A binding stored by an older version can be one the blocklist now refuses.
