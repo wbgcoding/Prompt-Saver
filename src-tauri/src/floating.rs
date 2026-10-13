@@ -166,6 +166,15 @@ fn spawn_reveal_fallback(app: &AppHandle, label: String) {
     });
 }
 
+// The main screen's scale factor, the one factor every park spot calculation uses to
+// turn logical box sizes into the physical pixels the work areas are measured in.
+fn main_scale_factor(app: &AppHandle) -> f64 {
+    app.get_webview_window("main")
+        .and_then(|w| w.available_monitors().ok())
+        .and_then(|m| m.first().map(|m| m.scale_factor()))
+        .unwrap_or(1.0)
+}
+
 // `taken` collects the box this pill actually lands in (real or parked) so
 // the next call in the same sync_float_windows pass fans its own park spot
 // out from this one instead of landing on top of it.
@@ -196,8 +205,10 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
     }
 
     let (pw, ph) = pill_dims(is_image_prompt(prompt), scale);
-    let (x, y, parked) = resolve_float_spot(&pos, pw, ph, &screen_snapshot(app), taken);
-    taken.push(Rect { x, y, w: pw, h: ph });
+    // Spots and `taken` are physical pixels, the window sizes logical ones.
+    let dpi = main_scale_factor(app);
+    let (x, y, parked) = resolve_float_spot(&pos, pw * dpi, ph * dpi, &screen_snapshot(app), taken);
+    taken.push(Rect { x, y, w: pw * dpi, h: ph * dpi });
     mark_parked(app, &prompt.id, parked);
 
     let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("floating.html".into()))
@@ -838,8 +849,9 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         capture_excluded(&store.settings)
     };
     let side = folder_box(folder.scale);
-    let (x, y, parked) = resolve_float_spot(&folder.pos, side, side, &screen_snapshot(app), taken);
-    taken.push(Rect { x, y, w: side, h: side });
+    let dpi = main_scale_factor(app); // physical spots, logical size
+    let (x, y, parked) = resolve_float_spot(&folder.pos, side * dpi, side * dpi, &screen_snapshot(app), taken);
+    taken.push(Rect { x, y, w: side * dpi, h: side * dpi });
     mark_parked(app, &folder.id, parked);
 
     let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("folder.html".into()))
@@ -968,11 +980,7 @@ pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result
     let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
     // The work area is in physical pixels, the box sizes in logical ones: scale
     // them by the main screen's own factor, as the folder dissolve does.
-    let dpi = app
-        .get_webview_window("main")
-        .and_then(|w| w.available_monitors().ok())
-        .and_then(|m| m.first().map(|m| m.scale_factor()))
-        .unwrap_or(1.0);
+    let dpi = main_scale_factor(&app);
     let mut moves: Vec<(String, i32, i32)> = Vec::new();
     {
         let mut store = lock(&state);
