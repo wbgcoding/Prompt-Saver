@@ -376,8 +376,12 @@ export function themeVarRow(key, fallback) {
   return row;
 }
 
+// True while a save is in flight: a second click on Save must not create the theme twice
+// (a new theme's draft id stays empty until the editor closes).
+let savingTheme = false;
+
 export async function saveThemeDraft() {
-  if (!themeDraft) return;
+  if (!themeDraft || savingTheme) return;
   const name = $("theme-edit-name").value.trim();
   if (!name) {
     toast(t("themeNameRequired"));
@@ -385,28 +389,35 @@ export async function saveThemeDraft() {
     return;
   }
   themeDraft.name = name;
+  // Everything the rest of this function needs is read now: the editor can be
+  // closed (Cancel, Escape) while the backend call runs, which clears the draft.
+  const draftId = themeDraft.id;
+  const { base, vars } = themeDraft;
+  const saveBtn = $("theme-edit-save");
+  savingTheme = true;
+  if (saveBtn) saveBtn.disabled = true;
   try {
-    assignSettings(await invoke("save_custom_theme", {
-      id: themeDraft.id,
-      name,
-      base: themeDraft.base,
-      vars: themeDraft.vars,
-    }));
-  } catch (err) {
-    errToast(err);
-    return;
+    try {
+      assignSettings(await invoke("save_custom_theme", { id: draftId, name, base, vars }));
+    } catch (err) {
+      errToast(err);
+      return;
+    }
+    // A new theme is created active by the backend; editing an existing one switches
+    // to it, so the live preview simply carries on instead of snapping away.
+    const id = draftId || customThemeId(settings.theme);
+    const pref = `custom:${id}`;
+    if (settings.theme !== pref) {
+      settings.theme = pref;
+      await invoke("set_theme", { theme: pref }).catch((err) => errToast(err));
+    }
+    fillThemeSelect();
+    applyTheme(themeBase(pref));
+    if (themeDraft) closeThemeEditor(false);
+  } finally {
+    savingTheme = false;
+    if (saveBtn) saveBtn.disabled = false;
   }
-  // A new theme is created active by the backend; editing an existing one switches
-  // to it, so the live preview simply carries on instead of snapping away.
-  const id = themeDraft.id || customThemeId(settings.theme);
-  const pref = `custom:${id}`;
-  if (settings.theme !== pref) {
-    settings.theme = pref;
-    await invoke("set_theme", { theme: pref }).catch((err) => errToast(err));
-  }
-  fillThemeSelect();
-  applyTheme(themeBase(pref));
-  closeThemeEditor(false);
 }
 
 export async function deleteThemeDraft() {
