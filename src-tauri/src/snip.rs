@@ -1967,6 +1967,34 @@ pub(crate) fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Res
     Ok(())
 }
 
+// Folds the WAL into data.db. A busy answer (another connection still reads an old
+// snapshot) means rows may remain only in the -wal file, which the single-file copy
+// of the move would miss and the later cleanup would delete: retried briefly, then
+// the move is aborted.
+pub(crate) fn checkpoint_wal(c: &Connection, tries: u32) -> Result<(), String> {
+    for attempt in 0..tries.max(1) {
+        let busy: i64 = c
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if busy == 0 {
+            return Ok(());
+        }
+        if attempt + 1 < tries {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+    Err("the database is still in use by another task, so the move was not started: wait a moment and try again".to_string())
+}
+
+// Whether delete_data_dir may clean `dir`: only the folder the last move came from, and
+// never the folder the app is using right now, whatever the remembered one says.
+pub(crate) fn data_dir_cleanup_allowed(dir: &Path, last_old: Option<&Path>, live: &Path) -> bool {
+    if path_matches_configured_dir(dir, live) {
+        return false;
+    }
+    last_old.is_some_and(|p| p == dir)
+}
+
 // The disk half of a data-folder move, kept free of the AppHandle so the ORDER of
 // its steps can be tested: flush the live state into the folder being left, copy
 // the store across, point future launches at the new folder: and only once all of
@@ -1985,6 +2013,11 @@ pub(crate) fn move_store_dir(
     flush: &mut dyn FnMut() -> Result<(), String>,
     rebind: &mut dyn FnMut(),
 ) -> Result<bool, String> {
+    // The same folder under another spelling (casing, a trailing separator) is no
+    // move: treating it as one would mark the live folder as the redundant old copy.
+    if path_matches_configured_dir(new, current) {
+        return Ok(false);
+    }
     flush()?;
     // Adopt an existing store in the target; otherwise copy ours across. Abort
     // before writing the redirect pointer if the copy fails, so a launch can
@@ -2037,7 +2070,7 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     fs::create_dir_all(&new).map_err(|e| e.to_string())?;
     let current = data_dir(&app);
     let old = current.to_string_lossy().to_string();
-    if new == current {
+    if path_matches_configured_dir(&new, &current) {
         return Ok(old);
     }
     // Flush the live state into the folder we are leaving, and treat a failure as a
@@ -2060,7 +2093,7 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
         // Fold the WAL back into data.db so the single-file copy is complete
         // (recent copy_log appends can otherwise still live in data.db-wal).
         if let Some(c) = db_conn(&app) {
-            let _ = c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+            checkpoint_wal(&c, 10)?;
         }
         Ok(())
     };
@@ -2089,18 +2122,17 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
 // Delete the store files in a folder (old location after a move). Only ever
 // removes our known data files: never the folder itself or anything else.
 #[tauri::command]
-pub(crate) async fn delete_data_dir(path: String) -> bool {
+pub(crate) async fn delete_data_dir(app: AppHandle, path: String) -> bool {
     let dir = PathBuf::from(&path);
     if !dir.is_dir() {
         return false;
     }
     // Only ever clean the folder set_data_dir just moved away from: never an
     // arbitrary webview-supplied directory that happens to hold same-named files.
-    let allowed = LAST_OLD_DATA_DIR
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .as_ref()
-        .is_some_and(|p| *p == dir);
+    let allowed = {
+        let last_old = LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        data_dir_cleanup_allowed(&dir, last_old.as_deref(), &data_dir(&app))
+    };
     if !allowed {
         return false;
     }

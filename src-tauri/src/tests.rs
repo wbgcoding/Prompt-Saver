@@ -20098,3 +20098,47 @@ fn a_copy_restored_from_a_confidential_entry_is_confidential_and_sealed() {
     assert_eq!(secret_decrypt(&copy.text, &key).unwrap(), "plain body");
     assert_eq!(secret_decrypt(&copy.variants[0], &key).unwrap(), "plain entry");
 }
+
+#[test]
+fn the_live_data_folder_is_never_cleaned_whatever_was_remembered() {
+    let dir = std::env::temp_dir().join(format!("ps-test-live-dir-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let respelled = PathBuf::from(dir.to_string_lossy().to_uppercase());
+    // Remembered as the old folder, but it is the one in use (same folder, other casing).
+    assert!(!data_dir_cleanup_allowed(&dir, Some(&dir), &respelled));
+    let other = dir.join("elsewhere");
+    fs::create_dir_all(&other).unwrap();
+    assert!(data_dir_cleanup_allowed(&other, Some(&other), &dir));
+    assert!(!data_dir_cleanup_allowed(&other, None, &dir));
+    // A move onto the same folder under another spelling is no move at all.
+    let mut flushed = false;
+    let mut flush = || { flushed = true; Ok(()) };
+    let mut rebind = || {};
+    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    assert_eq!(move_store_dir(&dir, &respelled, &dir.join("pointer"), &mut flush, &mut rebind), Ok(false));
+    assert!(!flushed);
+    assert!(LAST_OLD_DATA_DIR.lock().unwrap().is_none());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_busy_wal_checkpoint_aborts_the_move_instead_of_losing_rows() {
+    let dir = std::env::temp_dir().join(format!("ps-test-wal-busy-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("t.db");
+    let writer = Connection::open(&path).unwrap();
+    writer.query_row("PRAGMA journal_mode=WAL", [], |r| r.get::<_, String>(0)).unwrap();
+    writer.execute_batch("CREATE TABLE t(a); INSERT INTO t VALUES(1);").unwrap();
+    assert!(checkpoint_wal(&writer, 1).is_ok(), "an idle database checkpoints cleanly");
+    writer.execute_batch("INSERT INTO t VALUES(2);").unwrap();
+    let reader = Connection::open(&path).unwrap();
+    reader.execute_batch("BEGIN; SELECT * FROM t;").unwrap();
+    writer.execute_batch("INSERT INTO t VALUES(3);").unwrap();
+    assert!(checkpoint_wal(&writer, 1).is_err(), "a reader holding the log makes the checkpoint busy");
+    reader.execute_batch("COMMIT;").unwrap();
+    assert!(checkpoint_wal(&writer, 1).is_ok());
+    drop((writer, reader));
+    let _ = fs::remove_dir_all(&dir);
+}
