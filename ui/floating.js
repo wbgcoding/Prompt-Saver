@@ -917,7 +917,14 @@ window.addEventListener("mouseup", () => { if (resizing) endResize(); });
 
 // Refresh pill when the prompt is edited in the main window.
 listen("prompt-updated", (e) => {
-  if (e.payload && e.payload.id === promptId) applyPrompt(e.payload);
+  const p = e.payload;
+  if (!p || p.id !== promptId) return;
+  if (!p.secret) { applyPrompt(p); return; }
+  // The event carries the stored (sealed) text of a confidential entry: the pill
+  // reloads it opened, and keeps its current text when the vault is locked.
+  invoke("get_prompt", { id: promptId })
+    .then((plain) => { if (plain) applyPrompt(plain); })
+    .catch(() => applyPrompt({ ...p, text: pText, variants: pVariants }));
 });
 // This pill's own rotation pointer moved (any window may have copied it). A
 // pushed event is always fresher than any in-flight peek; bump rotateReq so a
