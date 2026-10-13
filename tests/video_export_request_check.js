@@ -72,9 +72,46 @@ for (const sc of scenarios) {
 extractLine("request total_ms fed from total", "        total_ms: total,");
 extractLine("disk check durationMs fed from total", "destPath: dest, format, videoKbps: request.video_kbps, losslessQuality: request.lossless_quality, durationMs: total,");
 
+// A finished export is reported under the path the backend returned (it picks a free
+// name when the requested one is taken), never under the requested destination.
+if (!startExportBody.includes('const returned = await invoke("export_video", { req: request });')) {
+  problems.push("startExport no longer keeps the path export_video returns");
+}
+const afterReturn = startExportBody.slice(startExportBody.indexOf("const returned"));
+for (const bad of ['() => dest)', "path: dest }", "VE.lastExport = dest"]) {
+  if (afterReturn.includes(bad)) problems.push(`startExport uses the requested destination after success: ${bad}`);
+}
+// Progress belongs to one export on one recording generation.
+if (!src.includes("exportRun.gen !== VE.loadGen")) problems.push("export progress is not tied to the load generation");
+if (!startExportBody.includes('if (!stillHere()) $("ve-export-progress-row").classList.add("hidden");')) {
+  problems.push("startExport does not hide its progress row when the editor moved on");
+}
+
+// saveEditStateNow stores only changes made since the last export or load.
+{
+  const saved = [];
+  const box = {
+    VE: { editStateKeepOn: true, src: "a.mp4", ops: [{ tool: "trim" }], editStateSize: 5, editStateMtime: 1, dirty: false },
+    invoke: async (cmd) => { saved.push(cmd); },
+    JSON,
+  };
+  vm.createContext(box);
+  vm.runInContext(extractBlock("saveEditStateNow", "async function saveEditStateNow() {"), box);
+  (async () => {
+    await vm.runInContext("saveEditStateNow()", box);
+    if (saved.length) problems.push("saveEditStateNow saved although nothing changed since the export");
+    box.VE.dirty = true;
+    await vm.runInContext("saveEditStateNow()", box);
+    if (saved.length !== 1) problems.push("saveEditStateNow did not save an edited state");
+    finish();
+  })();
+}
+
+function finish() {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);
   process.exit(1);
 }
 console.log("PASS");
+}

@@ -3343,6 +3343,10 @@ function updateExportNote() {
 
 const exportEta = makeEtaEstimator();
 
+// The running export's recording generation and output length, so progress events
+// scale against this export and are ignored once another recording was loaded.
+let exportRun = null;
+
 // Whether an export that started on recording `gen` at edit revision `rev` rendered
 // everything that is in the editor now: the same recording, no edit made while it ran.
 function exportCoveredEdits(gen, rev) {
@@ -3392,6 +3396,7 @@ async function startExport(toClipboard) {
   const src = VE.src;
   const stillHere = () => VE.loadGen === gen;
   VE.exporting = true;
+  exportRun = { gen, total };
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
   $("ve-export-saveas").classList.add("hidden");
@@ -3443,7 +3448,10 @@ async function startExport(toClipboard) {
         }
       }
       try {
-        await invoke("export_video", { req: request });
+        // The backend lands the file on a free name when the requested one is
+        // taken, so everything after success refers to the path it returns.
+        const returned = await invoke("export_video", { req: request });
+        const outPath = typeof returned === "string" && returned ? returned : dest;
         invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
         // Only when nothing was edited while it ran: a later edit is not in the file.
         const covered = exportCoveredEdits(gen, rev);
@@ -3457,16 +3465,16 @@ async function startExport(toClipboard) {
         }
         if (stillHere()) setProgress(100);
         if (toClipboard) {
-          const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
-          if (stillHere()) $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", () => dest);
-          toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", () => dest));
+          const clipOk = await invoke("copy_file_to_clipboard", { path: outPath }).catch(() => false);
+          if (stillHere()) $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", () => outPath);
+          toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", () => outPath));
         } else {
           if (stillHere()) {
-            VE.lastExport = dest;
-            $("ve-export-status").textContent = t("veExportDone").replace("{path}", () => dest);
+            VE.lastExport = outPath;
+            $("ve-export-status").textContent = t("veExportDone").replace("{path}", () => outPath);
             $("ve-export-saveas").classList.remove("hidden");
           }
-          toast(t("veExportDone").replace("{path}", () => dest));
+          toast(t("veExportDone").replace("{path}", () => outPath));
         }
         return;
       } catch (err) {
@@ -3513,8 +3521,11 @@ async function startExport(toClipboard) {
     }
   } finally {
     VE.exporting = false;
+    exportRun = null;
     applyExportGate();
     $("ve-export-eta").textContent = "";
+    // The editor moved on to another recording: its progress row is not ours to leave showing.
+    if (!stillHere()) $("ve-export-progress-row").classList.add("hidden");
   }
 }
 
@@ -4178,7 +4189,10 @@ function armEditStateAutosave() {
 }
 
 async function saveEditStateNow() {
-  if (!VE.editStateKeepOn || !VE.src || !VE.ops.length || !VE.editStateSize) return;
+  // Nothing changed since the last export or load: the remembered row was either
+  // just discarded on purpose or is already current, and re-saving would offer
+  // exported work back on the next open.
+  if (!VE.editStateKeepOn || !VE.src || !VE.ops.length || !VE.editStateSize || !VE.dirty) return;
   try {
     await invoke("save_edit_state", {
       kind: "video",
@@ -4429,9 +4443,9 @@ listen("video-editor-load", async (e) => {
   loadRecording(path, originDir, overlayPath);
 });
 listen(EXPORT_PROGRESS_EVENT, (e) => {
-  if (!VE.exporting) return;
+  if (!VE.exporting || !exportRun || exportRun.gen !== VE.loadGen) return;
   const ms = Number(e.payload?.ms ?? e.payload ?? 0);
-  const total = totalOutMs();
+  const total = exportRun.total;
   if (total > 0) setProgress((ms / total) * 100);
 });
 
