@@ -136,9 +136,8 @@ pub(crate) fn install_webview2_runtime() -> bool {
     use std::io::Read;
     use std::os::windows::process::CommandExt;
     const BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
-    let resp = match ureq::get(BOOTSTRAPPER_URL)
+    let resp = match download_agent().get(BOOTSTRAPPER_URL)
         .set("User-Agent", brand::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(300))
         .call()
     {
         Ok(r) => r,

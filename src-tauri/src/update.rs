@@ -734,9 +734,8 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
 // `spawn_blocking` without an `AppHandle` (not needed here) crossing the
 // boundary.
 pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
-    let resp = ureq::get(&url)
+    let resp = download_agent().get(&url)
         .set("User-Agent", brand::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(300))
         .call()
         .map_err(|e| format!("download: {}", e))?;
     let mut bytes = Vec::new();

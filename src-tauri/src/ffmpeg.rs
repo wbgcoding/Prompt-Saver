@@ -158,10 +158,20 @@ pub(crate) fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
     verify_ffmpeg_zip_against(bytes, FFMPEG_SHA256)
 }
 
+// The HTTP client for the large downloads (ffmpeg, the installer, the WebView2
+// bootstrapper). ureq's overall request timeout would also bound reading the body,
+// so a slow link could never finish a big file; the connect and each single read are
+// bounded instead, which still ends a stalled transfer.
+pub(crate) fn download_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(30))
+        .timeout_read(std::time::Duration::from_secs(60))
+        .build()
+}
+
 pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
-    let resp = ureq::get(FFMPEG_URL)
+    let resp = download_agent().get(FFMPEG_URL)
         .set("User-Agent", brand::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(300))
         .call()
         .map_err(|e| format!("download: {}", e))?;
     let total: u64 = resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0);
