@@ -1092,6 +1092,12 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
                 save_prompts_and_trash(&app, &fresh);
             }
         }
+        // The store still holds the pre-restore prompts and settings until the
+        // relaunch, which every caller does right after Ok. Writing them back (the
+        // exit flush, a hotkey counter, any prompt save) would undo the restore, so
+        // every write is refused from here on, the same switch the demo-mode flip
+        // uses. Set before the store lock is released.
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
     }
     Ok(())
 }
