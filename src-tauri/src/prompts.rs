@@ -1037,18 +1037,26 @@ pub(crate) fn examples_still_pristine<'a>(
 // less-safe deletion.
 #[tauri::command]
 pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
-    let ids_to_delete = {
+    let (ids_to_delete, taken_ids, taken_seeds) = {
         let mut store = lock(&state);
         let ids = std::mem::take(&mut store.settings.example_prompt_ids);
         let seeds = std::mem::take(&mut store.settings.example_prompt_seeds);
-        examples_still_pristine(&ids, &seeds, &store.prompts)
+        (examples_still_pristine(&ids, &seeds, &store.prompts), ids, seeds)
     };
     if ids_to_delete.is_empty() {
         return Ok(());
     }
-    batch_prompts(app, state, ids_to_delete, "delete".to_string(), None, None, None, None, None)
+    let result = batch_prompts(app, state.clone(), ids_to_delete, "delete".to_string(), None, None, None, None, None)
         .await
-        .map(|_| ())
+        .map(|_| ());
+    if result.is_err() {
+        // The delete did not happen: the examples stay, so the lists naming them must
+        // too, or "Remove examples" could never be retried.
+        let mut store = lock(&state);
+        store.settings.example_prompt_ids = taken_ids;
+        store.settings.example_prompt_seeds = taken_seeds;
+    }
+    result
 }
 
 // Count for the "Remove examples (n)" button label: how many seeded examples would
