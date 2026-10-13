@@ -363,6 +363,21 @@ pub(crate) async fn start_recording(
     Err("recording is only available on Windows".to_string())
 }
 
+// One target switch at a time: the first-frame wait runs without the recording
+// lock, so a second pick (or the same one twice) would start another capture whose
+// commit could land after the newer one and leave the older pick as the final target.
+#[cfg(windows)]
+static SWITCH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+struct SwitchInFlightGuard;
+#[cfg(windows)]
+impl Drop for SwitchInFlightGuard {
+    fn drop(&mut self) {
+        SWITCH_IN_FLIGHT.store(false, Ordering::SeqCst);
+    }
+}
+
 // Swaps a running recording's own source rather than starting a new
 // one -- the control bar's target-switch button, only ever enabled (see
 // RecordingStatus::target_switch_enabled) for a window recording using a
@@ -392,6 +407,11 @@ pub(crate) async fn switch_recording_target(
             return Err("recording-target-switch-not-supported".to_string());
         }
     }
+    if SWITCH_IN_FLIGHT.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        let _ = app.emit("recording-target-switch-failed", "recording-busy");
+        return Err("recording-busy".to_string());
+    }
+    let _switch_guard = SwitchInFlightGuard;
     let new_hwnd = target_id as isize;
     // The window's OWN rect only names its corner -- what target_fits_canvas
     // needs is the display it sits on, the same shape monitor_rect_at already
@@ -777,8 +797,16 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
             *guard = Some(s);
             return Err("nothing to stop".to_string());
         }
+        // The state reads idle while the encoder flush below runs: holding the start
+        // claim until this function returns keeps a new take (and its key-overlay hook)
+        // from starting under the old take's teardown.
+        if REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            *guard = Some(s);
+            return Err("recording-busy".to_string());
+        }
         s
     };
+    let _rec_starting_guard = RecStartingGuard;
     // The outline window (region recordings only, see show_rec_outline) goes
     // the moment the session is taken, on every end path this function serves
     // (button, hotkey, auto-stop), even one where recording::stop fails below.
@@ -863,8 +891,14 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
             *guard = Some(s);
             return Err("nothing to cancel".to_string());
         }
+        // Same claim as stop_recording_now: no new take while this one is torn down.
+        if REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            *guard = Some(s);
+            return Err("recording-busy".to_string());
+        }
         s
     };
+    let _rec_starting_guard = RecStartingGuard;
     // Same as a normal stop: the outline window (if this was a region
     // recording) never survives a cancel, even one whose cleanup fails below.
     hide_rec_outline(&app);

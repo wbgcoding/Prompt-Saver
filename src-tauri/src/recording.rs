@@ -279,8 +279,13 @@ pub struct AudioConfig {
 }
 
 fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
+    // During a live target switch the old and the new capture push for a moment, each
+    // stamping its frame before its own copy work: the queue can hold an older stamp
+    // behind a newer one, which the encoder must never see.
+    let mut last_sent: Option<i64> = None;
     while let Some(item) = shared.pop_or_stop() {
-        if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
+        let ts = strictly_increasing_ts(&mut last_sent, item.ts);
+        if let Err(e) = encoder.send_frame_buffer(&item.bytes, ts) {
             append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
             shared.set_encode_error(e.to_string());
             shared.request_stop(); // further frames would just fail the same way
@@ -1032,6 +1037,9 @@ pub struct PendingSwitch {
     first_frame: Arc<AtomicBool>,
     // Identifies the session the switch was started for.
     shared: Arc<RecFeederShared>,
+    // The recording's clock: a paused one delivers no frames, so the wait below
+    // must not count paused time against the first-frame budget.
+    clock: Arc<RecordClock>,
     new_hwnd: isize,
 }
 
@@ -1061,20 +1069,38 @@ pub fn begin_switch_target(session: &RecSession, new_hwnd: isize, new_monitor: O
         MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
     );
     let control = RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?;
-    Ok(PendingSwitch { control, first_frame, shared: session.shared.clone(), new_hwnd })
+    Ok(PendingSwitch { control, first_frame, shared: session.shared.clone(), clock: session.clock.clone(), new_hwnd })
+}
+
+// What is left of the first-frame budget after one 10 ms tick: a paused recording
+// delivers no frame, so a paused tick costs nothing.
+pub(crate) fn switch_wait_budget_after_tick(budget_ms: u32, paused: bool) -> u32 {
+    if paused {
+        budget_ms
+    } else {
+        budget_ms.saturating_sub(10)
+    }
 }
 
 pub fn wait_switch_first_frame(pending: PendingSwitch) -> Result<PendingSwitch, String> {
     // A real frame typically lands within a couple hundred ms; 2s gives a
     // slow first WGC frame plenty of room without leaving a failed switch
     // hanging the caller for long.
-    let deadline = Instant::now() + Duration::from_secs(2);
+    // Only running time counts: while the recording is paused no capture delivers a
+    // frame, so a pause during the wait must not turn into a timeout. A recording
+    // that is being stopped ends the wait.
+    let mut budget_ms: u32 = 2000;
     while !pending.first_frame.load(Ordering::Acquire) {
-        if Instant::now() >= deadline {
+        if pending.shared.is_stopping() {
+            let _ = pending.control.stop();
+            return Err("no active recording".to_string());
+        }
+        if budget_ms == 0 {
             let _ = pending.control.stop();
             return Err("recording-target-switch-timeout".to_string());
         }
         thread::sleep(Duration::from_millis(10));
+        budget_ms = switch_wait_budget_after_tick(budget_ms, pending.clock.is_paused());
     }
     Ok(pending)
 }

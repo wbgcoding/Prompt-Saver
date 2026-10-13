@@ -20090,6 +20090,14 @@ fn history_snapshots_of_a_confidential_entry_open_with_the_key_and_plain_ones_pa
     assert_eq!(reveal_if_sealed(&sealed, &[9u8; 32]), sealed);
 }
 
+#[cfg(windows)]
+#[test]
+fn a_paused_recording_does_not_spend_the_switch_first_frame_budget() {
+    assert_eq!(recording::switch_wait_budget_after_tick(2000, true), 2000);
+    assert_eq!(recording::switch_wait_budget_after_tick(2000, false), 1990);
+    assert_eq!(recording::switch_wait_budget_after_tick(5, false), 0);
+}
+
 #[test]
 fn an_old_sealed_snapshot_is_opened_or_refused_never_shown_as_ciphertext() {
     let key = [7u8; 32];
