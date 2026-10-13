@@ -710,9 +710,13 @@ impl RecWavWriter {
     }
     pub(crate) fn write_samples(&mut self, samples: &[i16]) -> std::io::Result<()> {
         use std::io::Write;
+        // One write per chunk: a WriteFile call per sample (about 96000 a second) is
+        // more than a slow disk or a scanning virus guard can keep up with in real time.
+        let mut bytes = Vec::with_capacity(samples.len() * 2);
         for s in samples {
-            self.file.write_all(&s.to_le_bytes())?;
+            bytes.extend_from_slice(&s.to_le_bytes());
         }
+        self.file.write_all(&bytes)?;
         self.data_bytes = self.data_bytes.saturating_add(samples.len() as u64 * 2);
         Ok(())
     }
