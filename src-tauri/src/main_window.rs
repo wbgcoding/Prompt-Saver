@@ -65,9 +65,12 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
             .visible(false)
             .build()?,
     };
+    // show_main reaches this on the event-loop thread: a busy store (backup, import)
+    // must not freeze every window, so the window is dressed from defaults and the
+    // page applies the real settings once it loads.
     let settings = app
         .try_state::<Db>()
-        .map(|s| lock(&s).settings.clone())
+        .and_then(|s| try_lock_ignoring_poison(&s).map(|store| store.settings.clone()))
         .unwrap_or_default();
     set_capture_exclusion(&win, capture_excluded(&settings));
     if settings.always_on_top {

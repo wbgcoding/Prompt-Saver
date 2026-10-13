@@ -395,14 +395,10 @@ pub(crate) fn reapply_taskbar_state(app: &AppHandle) {
     };
     let enabled = app
         .try_state::<Db>()
-        .map(|s| {
-            s.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .ui_flags
-                .get("taskbarProgress")
-                .copied()
-                .unwrap_or(true)
+        // Runs on the event-loop thread (show_main): a store held by a backup or
+        // import counts as "on" instead of blocking every window.
+        .and_then(|s| {
+            try_lock_ignoring_poison(&s).map(|store| store.settings.ui_flags.get("taskbarProgress").copied().unwrap_or(true))
         })
         .unwrap_or(true);
     TASKBAR_RETRY.store(true, Ordering::SeqCst);
