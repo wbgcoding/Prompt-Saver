@@ -204,8 +204,19 @@ pub(crate) fn probe_media_meta(ffprobe: Option<&Path>, path: &Path) -> (u64, u32
 // during the render itself, so a long list is never held up waiting on ffprobe.
 // A no-op (Ok(None), nothing saved) when the entry already carries a
 // measurement, has no video/image attachment, or still cannot be read.
+//
+// The answer holds the four media fields only: the stored prompt of a confidential
+// entry carries ciphertext, and the window merges this answer over its decrypted copy.
+#[derive(serde::Serialize)]
+pub(crate) struct MediaMeta {
+    media_duration_ms: u64,
+    media_width: u32,
+    media_height: u32,
+    media_size_bytes: u64,
+}
+
 #[tauri::command]
-pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Option<Prompt>, String> {
+pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Option<MediaMeta>, String> {
     let media_path = {
         let store = lock(&state);
         if !store.settings.ui_flags.get("mediaMetaBackfill").copied().unwrap_or(true) {
@@ -240,7 +251,12 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
             p.media_width = width;
             p.media_height = height;
             p.media_size_bytes = size;
-            Some(p.clone())
+            Some(MediaMeta {
+                media_duration_ms: p.media_duration_ms,
+                media_width: p.media_width,
+                media_height: p.media_height,
+                media_size_bytes: p.media_size_bytes,
+            })
         }
         None => None,
     };
