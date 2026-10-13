@@ -42,6 +42,7 @@ async function main() {
   const calls = [];
   let stall = false;
   let stalled = null;
+  let continueDone = null;
   const sandbox = {
     console, navigator: { language: "en-US" },
     setTimeout, clearTimeout, setInterval, clearInterval,
@@ -59,6 +60,7 @@ async function main() {
     core: {
       invoke: async (cmd) => {
         calls.push(cmd);
+        if (cmd === "finish_and_continue_recording") { active = false; await new Promise((r) => { continueDone = r; }); active = true; return { gap_ms: 0 }; }
         if (cmd === "recording_status" && stall) return new Promise((r) => { stalled = r; });
         if (cmd === "recording_status") {
           return active ? {
@@ -129,6 +131,22 @@ async function main() {
   expect("stale poll: buttons enabled", btns().join(), "false,false,false");
   expect("stale poll: time follows the new recording", els.time.textContent, "00:03");
   if (calls.filter((c) => c === "recording_status").length < 1) problems.push("stale poll: poll stopped");
+
+  // Finish and continue: the backend answers "no recording" for the whole
+  // switch. The bar must stay up and keep polling, also for a poll that was
+  // asked inside the switch and answers after it.
+  elapsed = 70000;
+  await tick(700);
+  calls.length = 0;
+  const pending = els["continue-btn"].h.click();
+  await tick(700);
+  expect("continue gap: bar not hidden", calls.includes("hide_rec_bar"), false);
+  const before = calls.filter((c) => c === "recording_status").length;
+  continueDone();
+  await pending;
+  await tick(700);
+  expect("continue gap: bar not hidden after the switch", calls.includes("hide_rec_bar"), false);
+  if (calls.filter((c) => c === "recording_status").length <= before) problems.push("continue gap: poll stopped");
 
   // Keys, once the user clicked into the bar: Space pauses then resumes, Escape
   // stops (never cancels), and a held key repeating does nothing.

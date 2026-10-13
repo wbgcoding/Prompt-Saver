@@ -203,12 +203,21 @@ let pollTimer = 0;
 // Bumped for every new recording: a poll still waiting on the previous one's
 // status must not stop the new timer or hide the bar when it finally returns.
 let pollGen = 0;
+// While "finish and continue" runs, the backend holds the session out of its
+// state for the whole stop and restart, so recording_status answers "none"
+// although the recording goes on. A null answer that was asked inside that
+// window (or lands during it) must not close the bar; continueSeq changes at
+// both ends of the window to catch a poll that straddles it.
+let continuing = false;
+let continueSeq = 0;
 async function poll() {
   const gen = pollGen;
+  const seq = continueSeq;
   try {
     const status = await invoke("recording_status");
     if (gen !== pollGen) return;
     if (!status) {
+      if (continuing || seq !== continueSeq) return;
       // Stopped elsewhere -- the auto-stop path when the recorded window itself
       // closes, or any other race. This bar's own buttons would now just error
       // against a session that no longer exists, so close it too.
@@ -305,6 +314,8 @@ pauseBtn.addEventListener("click", async () => {
 continueBtn.addEventListener("click", async () => {
   if (continueBtn.disabled) return;
   continueBtn.disabled = true;
+  continuing = true;
+  continueSeq++;
   try {
     const result = await invoke("finish_and_continue_recording");
     showContinueGap(result.gap_ms);
@@ -322,6 +333,9 @@ continueBtn.addEventListener("click", async () => {
     }
     // "recording-too-young-to-continue" (a race with the 5-second guard) or
     // "no active recording" -- the next poll tick re-syncs the button state.
+  } finally {
+    continuing = false;
+    continueSeq++;
   }
 });
 stopBtn.addEventListener("click", async () => {
