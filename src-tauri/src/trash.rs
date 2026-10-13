@@ -532,6 +532,23 @@ pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
     settings.floating.clear();
 }
 
+// Every table a data wipe empties with a raw DELETE. The prompts and trash
+// tables are in the list although the two saves just emptied them: a save only
+// removes rows this process had loaded, so a row it could not decrypt (the very
+// reason a store can be locked) would otherwise survive the wipe.
+pub(crate) const DATA_WIPE_TABLES: [&str; 6] = ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state"];
+
+// Empties every table in DATA_WIPE_TABLES; returns the ones that failed with their error.
+pub(crate) fn wipe_data_tables(c: &Connection) -> Vec<(&'static str, rusqlite::Error)> {
+    let mut failed = Vec::new();
+    for table in DATA_WIPE_TABLES {
+        if let Err(e) = c.execute(&format!("DELETE FROM {table}"), []) {
+            failed.push((table, e));
+        }
+    }
+    failed
+}
+
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
 // behaviour, fonts) and remove the autostart registry entry.
 // Async: window closes + a full prompts/settings rewrite stay off the UI thread.
@@ -569,17 +586,9 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
         // private rows on disk while the user was told everything was gone.
         match db_conn(&app) {
             Some(c) => {
-                for (sql, table) in [
-                    ("DELETE FROM prompt_versions", "prompt_versions"), // version history
-                    ("DELETE FROM copy_log", "copy_log"),               // copy history
-                    ("DELETE FROM clip_inbox", "clip_inbox"),           // clipboard inbox
-                    ("DELETE FROM trash", "trash"),                     // trashed prompts
-                    ("DELETE FROM edit_state", "edit_state"),           // unfinished editor work
-                ] {
-                    if let Err(e) = c.execute(sql, []) {
-                        incomplete = true;
-                        append_crash_log(&format!("delete_all_data: could not clear {table}: {e}"));
-                    }
+                for (table, e) in wipe_data_tables(&c) {
+                    incomplete = true;
+                    append_crash_log(&format!("delete_all_data: could not clear {table}: {e}"));
                 }
             }
             None => {
@@ -587,8 +596,8 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
                 append_crash_log("delete_all_data: no DB connection, auxiliary tables not cleared");
             }
         }
-        // The trash DELETE above went straight to the table, and both saves emptied
-        // the tables anyway: nothing is on disk for the next write to skip.
+        // The wipe above went straight to the tables: nothing is on disk for the
+        // next write to skip.
         store.forget_written_rows();
     }
     rearm_hotkeys(&app); // No prompts left to keep accelerators bound

@@ -8445,11 +8445,10 @@ fn delete_all_data_clears_data_tables_only() {
              INSERT INTO edit_state VALUES('snip:c', 'snip', 'c', 1, 1, '{}', 1);",
     )
     .unwrap();
-    // Exactly the statements delete_all_data issues.
-    for table in ["prompt_versions", "copy_log", "clip_inbox", "trash", "edit_state"] {
-        conn.execute(&format!("DELETE FROM {table}"), []).unwrap();
-    }
-    conn.execute("DELETE FROM prompts", []).unwrap();
+    // A prompts row no save of this process knows about (sealed under another account).
+    conn.execute("INSERT INTO prompts VALUES('foreign', 1, 'sealed')", []).unwrap();
+    // Exactly the wipe delete_all_data runs.
+    assert!(wipe_data_tables(&conn).is_empty());
     let count = |t: &str| -> i64 {
         conn.query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| r.get(0)).unwrap()
     };
@@ -11959,7 +11958,7 @@ fn disk_state(conn: &Connection) -> (Vec<String>, String) {
 
 fn import_with(conn: &mut Connection, store: &mut Store, want_data: bool, want_settings: bool) -> Result<(usize, usize, bool, bool), String> {
     run_import(store, import_test_backup(), want_data, want_settings, |st, prompts, settings| {
-        db_write_import(conn, st, &st.prompts, prompts, settings).is_ok()
+        db_write_import(conn, st, &st.prompts, prompts, settings, false).is_ok()
     })
 }
 
@@ -19989,4 +19988,31 @@ fn recording_timestamps_never_go_backwards() {
     assert_eq!(recording::strictly_increasing_ts(&mut last, 330), 401);
     assert_eq!(recording::strictly_increasing_ts(&mut last, 401), 402);
     assert_eq!(recording::strictly_increasing_ts(&mut last, 900), 900);
+}
+
+#[test]
+fn an_import_over_the_decrypt_lock_replaces_rows_this_process_never_read() {
+    let mut conn = import_test_db();
+    let store = import_test_store(&mut conn);
+    // A row sealed under another account: on disk, never loaded, never in the map.
+    conn.execute("INSERT INTO prompts VALUES('foreign', 9, 'sealed')", []).unwrap();
+    let incoming = vec![test_prompt("new1")];
+    // A plain write spares it (another instance's unseen work) ...
+    db_write_import(&mut conn, &store, &incoming, true, false, false).unwrap();
+    let still: i64 = conn.query_row("SELECT COUNT(*) FROM prompts WHERE id = 'foreign'", [], |r| r.get(0)).unwrap();
+    assert_eq!(still, 1);
+    // ... a replacing write does not.
+    db_write_import(&mut conn, &store, &incoming, true, false, true).unwrap();
+    let ids: Vec<String> = conn.prepare("SELECT id FROM prompts ORDER BY ord").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+    assert_eq!(ids, vec!["new1".to_string()]);
+}
+
+#[test]
+fn a_failed_replacing_import_does_not_teach_the_map_about_unread_rows() {
+    let mut conn = import_test_db();
+    let store = import_test_store(&mut conn);
+    conn.execute("INSERT INTO prompts VALUES('foreign', 9, 'sealed')", []).unwrap();
+    conn.execute_batch("CREATE TRIGGER fail_prompts BEFORE INSERT ON prompts BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+    assert!(db_write_import(&mut conn, &store, &[test_prompt("new1")], true, false, true).is_err());
+    assert!(!store.written.borrow().contains_key(&row_key("prompts", "foreign")));
 }

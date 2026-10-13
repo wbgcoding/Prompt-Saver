@@ -1023,17 +1023,29 @@ pub(crate) fn run_import(
 // Writes the halves an import touched in one database transaction. No JSON
 // fallback: that file pair cannot be replaced atomically, so an import that
 // cannot reach the database fails and changes nothing.
-pub(crate) fn db_write_import(conn: &mut Connection, store: &Store, prompts: &[Prompt], write_prompts: bool, write_settings: bool) -> rusqlite::Result<()> {
-    let mut written = store.written.borrow_mut();
+// `replace_prompts` makes the prompts write a wholesale replacement: every row the
+// table holds is treated as known, so rows this process could not read (the ones that
+// locked the store) go too instead of surviving next to the imported set.
+pub(crate) fn db_write_import(
+    conn: &mut Connection, store: &Store, prompts: &[Prompt], write_prompts: bool, write_settings: bool, replace_prompts: bool,
+) -> rusqlite::Result<()> {
+    // Worked on as a copy and adopted only after the write succeeded, so a failed
+    // import never leaves the map claiming rows this process never loaded.
+    let mut written = store.written.borrow().clone();
+    if replace_prompts && write_prompts {
+        claim_present_rows(conn, "prompts", &mut written)?;
+    }
     match (write_prompts, write_settings) {
         (true, true) => db_write_prompts_and_settings(conn, prompts, &store.settings, &mut written),
         (true, false) => db_write_prompts(conn, prompts, &mut written),
         (false, true) => db_write_settings(conn, &store.settings),
         (false, false) => Ok(()),
-    }
+    }?;
+    *store.written.borrow_mut() = written;
+    Ok(())
 }
 
-pub(crate) fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, write_settings: bool) -> bool {
+pub(crate) fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, write_settings: bool, replace_prompts: bool) -> bool {
     if data_dir_write_blocked(app) || (store.prompts_locked && write_prompts) {
         return false;
     }
@@ -1047,7 +1059,7 @@ pub(crate) fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, w
         append_crash_log("persist failed: the import could not open the database");
         return false;
     };
-    if db_write_import(&mut conn, store, &prompts, write_prompts, write_settings).is_err() {
+    if db_write_import(&mut conn, store, &prompts, write_prompts, write_settings, replace_prompts).is_err() {
         append_crash_log("persist failed: the import could not be written to the database");
         return false;
     }
@@ -1105,8 +1117,11 @@ pub(crate) async fn import_all(
     let (settings, count, dropped_hotkeys, backup_pw_dropped, vault_mismatch) = {
         let mut store = lock(&state);
         let ocr_was_on = ocr_index_flag_on(&store);
+        // An import that overrides the decrypt lock replaces the table: the rows
+        // that caused the lock are unknown to this process and would stay behind.
+        let replace_prompts = want_data && store.prompts_locked;
         let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
-            save_import(&app, st, prompts, settings)
+            save_import(&app, st, prompts, settings, replace_prompts)
         })?;
         // The import's own save covers the prompt rows; the trash is written here.
         if want_settings && ocr_was_on && !ocr_index_flag_on(&store) {

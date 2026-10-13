@@ -772,6 +772,18 @@ pub(crate) fn write_rows(
     Ok(fresh)
 }
 
+// Lists every row currently in `table` as known to this process (stale hash), so
+// the next write_rows deletes the ones the new set leaves out. Only for a write
+// that replaces the table wholesale: write_rows normally spares rows it never saw.
+pub(crate) fn claim_present_rows(conn: &Connection, table: &str, written: &mut WrittenRows) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare(&format!("SELECT id FROM {table}"))?;
+    let ids: Vec<String> = stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    for id in ids {
+        written.entry(row_key(table, &id)).or_insert(STALE_ROW_HASH);
+    }
+    Ok(())
+}
+
 // Swap in one table's half of the map, after that table's write committed.
 pub(crate) fn adopt_written_rows(written: &mut WrittenRows, table: &str, fresh: WrittenRows) {
     let prefix = row_key(table, "");
