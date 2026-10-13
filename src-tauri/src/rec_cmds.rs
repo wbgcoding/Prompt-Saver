@@ -523,6 +523,11 @@ pub(crate) async fn finish_and_continue_recording(
         // in and the new part's clock from starting late.
         let switch_instant_ms = keylog::mono_ms();
         keylog::cut_off_at(switch_instant_ms);
+        // The bar's mute and pause state belongs to the take, not to one file:
+        // read it off the closing session so the next part starts the same way.
+        let carry_system_muted = session.system_queue.as_ref().is_some_and(|q| q.is_muted());
+        let carry_mic_muted = session.mic_queue.as_ref().is_some_and(|q| q.is_muted());
+        let carry_paused = session.phase == RecPhase::Paused;
         let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) =
             recording::stop(session)?;
         let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
@@ -532,7 +537,17 @@ pub(crate) async fn finish_and_continue_recording(
             target, out_path.clone(), audio, &canvas_mode,
             recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         ) {
-            Ok(new_session) => {
+            Ok(mut new_session) => {
+                if carry_system_muted {
+                    if let Some(q) = &new_session.system_queue {
+                        q.set_muted(true);
+                    }
+                }
+                if carry_mic_muted {
+                    if let Some(q) = &new_session.mic_queue {
+                        q.set_muted(true);
+                    }
+                }
                 // The new part's own clock zero point: the instant its
                 // capture actually came up, not `switch_instant_ms` (that
                 // one only marks when the OLD capture was cut off, taken
@@ -555,6 +570,9 @@ pub(crate) async fn finish_and_continue_recording(
                 // FIRST part's start.
                 keylog::maybe_stop_and_write(&path);
                 keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms, key_overlay_shortcuts_only);
+                if carry_paused {
+                    do_pause_recording(&mut new_session);
+                }
                 // The switch worked -- this part is now an interim one with no
                 // result dialog of its own, so its crop (if any) runs right away
                 // in the background instead of waiting on
@@ -640,7 +658,11 @@ pub(crate) async fn finish_and_continue_recording(
             Err(e)
         }
         Ok(ContinueOutcome::Continued(new_session, payload)) => {
+            let paused = new_session.phase == RecPhase::Paused;
             *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(*new_session);
+            if paused {
+                apply_tray_menu(&app); // the tray's Pause row shows Resume again
+            }
             Ok(payload)
         }
         Ok(ContinueOutcome::StoppedInstead(err)) => {
