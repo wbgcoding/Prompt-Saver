@@ -462,6 +462,7 @@ export async function startVoice(target, btn) {
   voiceArmCancelled = false;
   voiceToken = (voiceToken % 1e9) + 1;
   setVoiceBtnState(btn, "is-arming");
+  const myToken = voiceToken;
   let res;
   try {
     res = await invoke("voice_start", {
@@ -489,6 +490,10 @@ export async function startVoice(target, btn) {
     if (voiceSessionId === null && voiceState === "arming") endVoiceUi();
     return;
   }
+  // A session that ended (or was replaced by a newer one) before this reply was
+  // processed has nothing to adopt: a dead id stored while idle would never be
+  // overwritten, and the next stop would be sent to it.
+  if (voiceState === "idle" || myToken !== voiceToken) return;
   if (voiceSessionId === null) voiceSessionId = id;
   voiceResolvedLang = lang || voiceResolvedLang;
 }
