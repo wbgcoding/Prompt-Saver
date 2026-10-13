@@ -171,11 +171,13 @@ pub fn spawn_capture(
                 Ok(())
             })();
             if let Err(e) = result {
-                if e.code() == AUDCLNT_E_DEVICE_INVALIDATED {
-                    queue.mark_lost();
-                } else {
+                if e.code() != AUDCLNT_E_DEVICE_INVALIDATED {
                     super::append_crash_log(&format!("recording audio ({label}): {e}"));
                 }
+                // Any failure ends this source's capture, not only an unplugged
+                // device: a missing default or chosen device, or a refused
+                // start, must reach the bar as well instead of a silent track.
+                queue.mark_lost();
             }
         })
         .expect("spawn rec-audio thread")
