@@ -18295,7 +18295,9 @@ fn float_recall_queries_monitors_before_taking_the_store_lock() {
     let end = src[at..].find("\n}").expect("end") + at;
     let body = &src[at..end];
     let lock_at = body.find("lock(&state)").expect("takes the store lock");
-    for q in ["screen_snapshot(", "available_monitors("] {
+    // The scale factor comes from main_scale_factor, which does the monitor query.
+    assert!(src.contains("fn main_scale_factor(") && src.contains("available_monitors("));
+    for q in ["screen_snapshot(", "main_scale_factor("] {
         let q_at = body.find(q).unwrap_or_else(|| panic!("{q} missing"));
         assert!(q_at < lock_at, "{q} must run before the store lock is taken");
     }
