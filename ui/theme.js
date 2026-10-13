@@ -393,9 +393,9 @@ export async function saveThemeDraft() {
   // closed (Cancel, Escape) while the backend call runs, which clears the draft.
   const draftId = themeDraft.id;
   const { base, vars } = themeDraft;
-  const saveBtn = $("theme-edit-save");
+  const themeSaveEl = $("theme-edit-save");
   savingTheme = true;
-  if (saveBtn) saveBtn.disabled = true;
+  if (themeSaveEl) themeSaveEl.disabled = true;
   try {
     try {
       assignSettings(await invoke("save_custom_theme", { id: draftId, name, base, vars }));
@@ -416,7 +416,7 @@ export async function saveThemeDraft() {
     if (themeDraft) closeThemeEditor(false);
   } finally {
     savingTheme = false;
-    if (saveBtn) saveBtn.disabled = false;
+    if (themeSaveEl) themeSaveEl.disabled = false;
   }
 }
 
