@@ -120,7 +120,10 @@ export function journalRow(p, meta, onClick) {
         confirmLabel: t("delete"),
       });
       if (!ok) return;
-      try { await invoke("delete_copy_entry", { rowid: meta.rowid }); } catch (err) { errToast(err); return; }
+      // The command answers false (it does not reject) when the DELETE failed.
+      let deleted = false;
+      try { deleted = await invoke("delete_copy_entry", { rowid: meta.rowid }); } catch (err) { errToast(err); return; }
+      if (!deleted) { toast(t("persistFailed")); return; }
       await loadJournal(); // refetch: the entry (and only it) disappears
     });
     makeKeyboardActivatable(del);
