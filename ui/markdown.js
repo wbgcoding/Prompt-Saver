@@ -99,6 +99,15 @@ export const HL_RE = Object.fromEntries(Object.entries(HL_RULES).map(([id, def])
   new RegExp(def.rules.map(([cls, src]) => `(?<${cls}>${src})`).join("|"), `g${def.flags || ""}`),
 ]));
 
+// The index just past the character entity ("&#39;", "&amp;") that position `i` sits
+// inside (after its "&"), or 0 when it is not inside one.
+function entityEndAround(s, i) {
+  const amp = s.lastIndexOf("&", i - 1);
+  if (amp < 0 || i - amp > 8) return 0;
+  const m = /^&#?\w+;/.exec(s.slice(amp, amp + 10));
+  return m && amp + m[0].length > i ? amp + m[0].length : 0;
+}
+
 // Wrap recognised tokens of already-escaped code in themed spans.
 export function hlCode(escCode, lang) {
   const re = HL_RE[lang];
@@ -107,6 +116,11 @@ export function hlCode(escCode, lang) {
   let out = "", last = 0, m;
   while ((m = re.exec(escCode))) {
     if (!m[0]) { re.lastIndex++; continue; } // never spin on a zero-length match
+    // The code is already escaped: a match that starts inside a character entity
+    // ("&#39;" for an apostrophe: its "#" opens a comment, its digits are a number)
+    // is no token, and wrapping it would cut the entity. Scanning goes on after it.
+    const entityEnd = entityEndAround(escCode, m.index);
+    if (entityEnd) { re.lastIndex = entityEnd; continue; }
     out += escCode.slice(last, m.index);
     const cls = HL_CLASSES.find((c) => m.groups[c] !== undefined);
     out += `<span class="hl-${cls}">${m[0]}</span>`;
