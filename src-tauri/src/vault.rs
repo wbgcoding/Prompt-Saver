@@ -243,6 +243,26 @@ pub(crate) fn reveal_if_sealed(value: &str, key: &[u8; 32]) -> String {
     }
 }
 
+// True when the value has the shape of sealed text (the magic and a nonce behind
+// the base64), whether or not a key is at hand to open it.
+pub(crate) fn looks_sealed(value: &str) -> bool {
+    let raw = base64_decode(value);
+    raw.len() >= SECRET_MAGIC.len() + 12 && &raw[0..4] == SECRET_MAGIC
+}
+
+// Opens a version snapshot's text and variants for the history panel and for a
+// restore. Sealed values are opened whenever a session key exists, whatever the
+// prompt's flag says now: an entry made plain again keeps its older sealed
+// snapshots, and they must never be shown or restored as ciphertext. Without a key
+// a sealed value is refused as locked; an all-plain snapshot passes through.
+pub(crate) fn open_snapshot(text: &str, variants: &[String], key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
+    match key {
+        Some(k) => Ok((reveal_if_sealed(text, &k), variants.iter().map(|v| reveal_if_sealed(v, &k)).collect())),
+        None if looks_sealed(text) || variants.iter().any(|v| looks_sealed(v)) => Err("secret-locked".to_string()),
+        None => Ok((text.to_string(), variants.to_vec())),
+    }
+}
+
 // A version-history snapshot taken before an entry became confidential holds
 // plain text; one taken afterwards holds ciphertext already readable with the
 // current vault key. Used when restoring a snapshot into an entry that is

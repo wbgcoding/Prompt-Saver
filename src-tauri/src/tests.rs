@@ -20091,6 +20091,23 @@ fn history_snapshots_of_a_confidential_entry_open_with_the_key_and_plain_ones_pa
 }
 
 #[test]
+fn an_old_sealed_snapshot_is_opened_or_refused_never_shown_as_ciphertext() {
+    let key = [7u8; 32];
+    let sealed = secret_encrypt("the real text", &key);
+    let variants = vec![secret_encrypt("variant", &key), "plain variant".to_string()];
+    assert!(looks_sealed(&sealed));
+    assert!(!looks_sealed("just some words"));
+    // Entry made plain again: the key still opens its older sealed snapshots.
+    let (t, v) = open_snapshot(&sealed, &variants, Some(key)).unwrap();
+    assert_eq!(t, "the real text");
+    assert_eq!(v, vec!["variant".to_string(), "plain variant".to_string()]);
+    // No key: a sealed text or variant is refused, plain content passes.
+    assert_eq!(open_snapshot(&sealed, &[], None), Err("secret-locked".to_string()));
+    assert_eq!(open_snapshot("plain", &variants, None), Err("secret-locked".to_string()));
+    assert_eq!(open_snapshot("plain", &["x".to_string()], None), Ok(("plain".to_string(), vec!["x".to_string()])));
+}
+
+#[test]
 fn a_copy_restored_from_a_confidential_entry_is_confidential_and_sealed() {
     let key = [7u8; 32];
     let mut source = test_prompt("src");

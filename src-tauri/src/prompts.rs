@@ -1384,21 +1384,21 @@ pub(crate) async fn update_prompt(
 // List a prompt's version snapshots (newest first).
 #[tauri::command]
 pub(crate) async fn list_versions(app: AppHandle, state: State<'_, Db>, prompt_id: String) -> Result<Vec<PromptVersion>, String> {
-    // Snapshots of a confidential entry hold ciphertext; the history panel shows and
-    // restores plain text, so they are opened here or refused while the vault is locked.
-    let key = {
+    // Snapshots taken while the entry was confidential hold ciphertext, and they stay
+    // that way after it is made plain again; the history panel shows and restores
+    // plain text, so every sealed one is opened here or refused while the vault is
+    // locked, whatever the entry's flag says now.
+    let (key, secret) = {
         let store = lock(&state);
-        match store.prompts.iter().find(|p| p.id == prompt_id) {
-            Some(p) if p.secret => Some(secret_session_key(secret_timeout_min(&store.settings)).ok_or_else(|| "secret-locked".to_string())?),
-            _ => None,
-        }
+        let secret = store.prompts.iter().find(|p| p.id == prompt_id).is_some_and(|p| p.secret);
+        (secret_session_key(secret_timeout_min(&store.settings)), secret)
     };
+    if secret && key.is_none() {
+        return Err("secret-locked".to_string());
+    }
     let mut list = db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default();
-    if let Some(key) = key {
-        for v in list.iter_mut() {
-            v.text = reveal_if_sealed(&v.text, &key);
-            v.variants = v.variants.iter().map(|x| reveal_if_sealed(x, &key)).collect();
-        }
+    for v in list.iter_mut() {
+        (v.text, v.variants) = open_snapshot(&v.text, &v.variants, key)?;
     }
     Ok(list)
 }
@@ -1424,6 +1424,10 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
         let cap = history_cap(&store.settings);
         // Same "read before the mutable prompt borrow" rule as update_prompt.
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
+        // Plain from here on: a sealed snapshot is opened (or refused while locked)
+        // whatever the entry's flag says now, so ciphertext can never be written
+        // into an entry that is not confidential.
+        let (text, variants) = open_snapshot(&text, &variants, secret_key)?;
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
             let original = p.clone();
             // 35a: the undo snapshot of the CURRENT state must itself succeed before
@@ -1461,6 +1465,9 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             // stranded on an empty list (same invariant as everywhere else).
             p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
             p.rotate_auto = sanitize_rotate_auto(p.rotate_auto, &p.variants);
+            // What the stored entry holds (sealed for a confidential one) is what the
+            // windows are told; only the caller of this command gets the opened copy.
+            let stored = p.clone();
             let mut clone = p.clone();
             // The editor shows and re-saves plain text: the stored prompt keeps its
             // ciphertext, the copy handed back is opened with the same key.
@@ -1479,16 +1486,16 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
                 }
                 return Err("save-failed".into());
             }
-            Some(clone)
+            Some((clone, stored))
         } else {
             None
         }
     };
-    if let Some(p) = &restored {
-        let _ = app.emit("prompt-updated", p.clone());
+    if let Some((_, stored)) = &restored {
+        let _ = app.emit("prompt-updated", stored.clone());
         rebuild_tray(&app);
     }
-    Ok(restored)
+    Ok(restored.map(|(opened, _)| opened))
 }
 
 // The prompt "restore as new" builds from a version snapshot. Name and text/variants
@@ -1570,10 +1577,7 @@ pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>,
         if source.secret && key.is_none() {
             return Err("secret-locked".to_string());
         }
-        let (text, variants) = match key {
-            Some(k) => (reveal_if_sealed(&text, &k), variants.iter().map(|v| reveal_if_sealed(v, &k)).collect()),
-            None => (text, variants),
-        };
+        let (text, variants) = open_snapshot(&text, &variants, key)?;
         let mut prompt = build_restored_prompt(&source, &name, text, variants, &suffix);
         if source.secret {
             if let Some(k) = key {
