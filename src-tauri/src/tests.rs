@@ -20153,11 +20153,15 @@ fn a_second_hotkey_rearm_asks_the_running_one_to_repeat_instead_of_overlapping()
     use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
     let (running, again) = (AtomicBool::new(false), AtomicBool::new(false));
     assert!(claim_rearm(&running, &again), "the first caller runs");
-    assert!(!again.load(SeqCst));
+    again.store(false, SeqCst); // the runner clears the request at the top of its loop
     assert!(!claim_rearm(&running, &again), "a caller during a run does not start its own");
     assert!(again.load(SeqCst), "it leaves a request for the runner");
+    // The request is stored before the claim: a runner that releases the flag between
+    // the two still finds it, so a late caller can never be lost.
+    again.store(false, SeqCst);
     running.store(false, SeqCst);
     assert!(claim_rearm(&running, &again), "after the run ended the next caller runs again");
+    assert!(again.load(SeqCst), "the request is already in place when the claim is decided");
 }
 
 #[test]

@@ -343,9 +343,29 @@ impl Drop for RearmRunning {
 }
 
 pub(crate) fn rearm_hotkeys(app: &AppHandle) -> bool {
+    rearm_hotkeys_claimed(app).unwrap_or(true)
+}
+
+// Like rearm_hotkeys, but waits (bounded) until a pass of its OWN has run, so the
+// answer covers the caller's change: a coalesced caller only knows a running pass
+// will go around again, not what that pass found. Only for callers off the main
+// thread (async commands): registering hops to the main thread, and a main-thread
+// caller waiting here would block the pass it waits for.
+pub(crate) fn rearm_hotkeys_exact(app: &AppHandle) -> bool {
+    for _ in 0..50 {
+        if let Some(ok) = rearm_hotkeys_claimed(app) {
+            return ok;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+    true
+}
+
+// None when another run was going and was asked to repeat instead.
+fn rearm_hotkeys_claimed(app: &AppHandle) -> Option<bool> {
     use std::sync::atomic::Ordering::SeqCst;
     if !claim_rearm(&REARM_RUNNING, &REARM_AGAIN) {
-        return true;
+        return None;
     }
     let mut running = RearmRunning(true);
     loop {
@@ -359,18 +379,19 @@ pub(crate) fn rearm_hotkeys(app: &AppHandle) -> bool {
             running.0 = true;
             continue;
         }
-        return ok;
+        return Some(ok);
     }
 }
 
 // True when the caller became the runner; otherwise the running one is asked to repeat.
+// The request is stored BEFORE the claim: stored after it, the runner could release
+// the running flag and read the request flag in between and never see it, leaving
+// nobody to run. A winner's early store is harmless, the runner clears it at the top
+// of its loop.
 pub(crate) fn claim_rearm(running: &std::sync::atomic::AtomicBool, again: &std::sync::atomic::AtomicBool) -> bool {
     use std::sync::atomic::Ordering::SeqCst;
-    if running.swap(true, SeqCst) {
-        again.store(true, SeqCst);
-        return false;
-    }
-    true
+    again.store(true, SeqCst);
+    !running.swap(true, SeqCst)
 }
 
 fn rearm_hotkeys_once(app: &AppHandle) -> bool {
@@ -706,7 +727,7 @@ fn apply_hotkey(app: &AppHandle, state: &State<'_, Db>, slot: HotkeySlot, accel:
         slot.set(&mut store.settings, &hk);
         save_settings(app, &store.settings);
     }
-    let armed = rearm_hotkeys(app);
+    let armed = rearm_hotkeys_exact(app);
     match slot {
         // rearm_hotkeys' return value reports the APP hotkey's fate.
         HotkeySlot::App if !armed => Err(HK_CONFLICT.to_string()),
