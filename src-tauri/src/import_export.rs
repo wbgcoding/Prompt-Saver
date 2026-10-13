@@ -1040,12 +1040,14 @@ pub(crate) fn import_folder_max_setting(store: &Store) -> usize {
     store.settings.ui_values.get("importFolderMax").copied().unwrap_or(500.0).max(1.0) as usize
 }
 
+pub(crate) fn has_import_folder_ext(path: &Path) -> bool {
+    path.extension()
+        .map(|e| IMPORT_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
 pub(crate) fn is_import_folder_file(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .extension()
-            .map(|e| IMPORT_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
-            .unwrap_or(false)
+    path.is_file() && has_import_folder_ext(path)
 }
 
 // One file the scan found, already telling the frontend whether it CAN be
@@ -1175,6 +1177,9 @@ pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, 
         let store = lock(&state);
         (import_folder_depth_setting(&store), import_folder_max_setting(&store))
     };
+    // The pick is the user's consent to read this folder: the confirm step below
+    // spends it, so it cannot be pointed at a folder nobody picked.
+    grant_picked_dir(&dir, "importFolder");
     let (items, truncated) = scan_import_folder(&dir, max_depth, max_files);
     Ok(FolderImportPreview { dir: dir.to_string_lossy().to_string(), items, truncated })
 }
@@ -1188,12 +1193,20 @@ pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, 
 #[tauri::command]
 pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, dir: String, rel_paths: Vec<String>) -> Result<usize, String> {
     let base = Path::new(&dir);
+    if !consume_granted_dir(base, "importFolder") {
+        return Err("dir-not-picked".to_string());
+    }
     let mut items = Vec::new();
     for rel in rel_paths {
         if !folder_rel_path_is_safe(&rel) {
             continue;
         }
         let path = base.join(&rel);
+        // Only what the scan itself lists: a renderer-made path to some other kind of
+        // file never becomes a prompt.
+        if !has_import_folder_ext(&path) {
+            continue;
+        }
         let Ok(content) = read_import_folder_file(&path) else { continue };
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         if name.is_empty() {
