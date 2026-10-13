@@ -1749,12 +1749,6 @@ pub(crate) async fn batch_prompts(
     from_view_id: Option<String>,
     tag: Option<String>,
 ) -> Result<Settings, String> {
-    if action == "delete" {
-        // Tauri window calls must stay OUTSIDE the store mutex (deadlock trap).
-        for id in &ids {
-            close_floating_window(&app, id);
-        }
-    }
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let mut store = lock(&state);
     match action.as_str() {
@@ -1889,6 +1883,12 @@ pub(crate) async fn batch_prompts(
     let settings = webview_settings(&store.settings);
     drop(store); // never re-arm shortcuts while the store mutex is held
     if action == "delete" {
+        // Tauri window calls stay outside the store mutex (deadlock trap), and only
+        // after the save succeeded: a failed one returned above with the prompts still
+        // in the library, and their pills have to stay open then.
+        for id in &ids {
+            close_floating_window(&app, id);
+        }
         rearm_hotkeys(&app); // The deleted prompts give their accelerators back
         sync_float_windows(&app); // Folders left too small dissolve
     }
