@@ -20187,3 +20187,12 @@ fn a_second_run_under_the_same_op_id_gets_its_own_start_time() {
     // A run still going keeps its entry across progress reports.
     assert_eq!(entry_for_run(&mut ops, "backup", "backup").started_at_ms, start);
 }
+
+#[test]
+fn start_minimized_never_repoints_another_copys_autostart_entry() {
+    assert!(start_minimized_rewrites_entry(true, RegistryOwner::ThisExe));
+    assert!(start_minimized_rewrites_entry(true, RegistryOwner::Gone));
+    assert!(start_minimized_rewrites_entry(true, RegistryOwner::Missing));
+    assert!(!start_minimized_rewrites_entry(true, RegistryOwner::OtherExe));
+    assert!(!start_minimized_rewrites_entry(false, RegistryOwner::ThisExe));
+}

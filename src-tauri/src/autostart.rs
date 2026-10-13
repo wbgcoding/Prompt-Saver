@@ -182,6 +182,13 @@ pub(crate) fn skip_registry_removal(enabled: bool, owner: RegistryOwner) -> bool
     !enabled && owner == RegistryOwner::OtherExe
 }
 
+// Changing "start minimized" rewrites the autostart entry only when this copy's setting
+// is on AND the entry is not another copy's: repointing it would silently move the
+// user's autostart to this exe (portable beside installed).
+pub(crate) fn start_minimized_rewrites_entry(autostart_on: bool, owner: RegistryOwner) -> bool {
+    autostart_on && owner != RegistryOwner::OtherExe
+}
+
 // A reset turns the address scheme off like the switch does, so it leaves
 // another copy's registration alone too.
 pub(crate) fn url_scheme_removal_skipped() -> bool {
@@ -257,6 +264,7 @@ pub(crate) fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: boo
     // Only an active autostart entry carries the flag; without one there is no
     // Windows side to change.
     let prior_os = if autostart { autostart_command()? } else { None };
+    let rewrite = start_minimized_rewrites_entry(autostart, current_registry_owner(prior_os.as_deref()));
     two_state_change(
         &mut *store,
         prior_os,
@@ -268,8 +276,8 @@ pub(crate) fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: boo
             st.settings.start_minimized = prior;
             !persist || save_settings(&app, &st.settings)
         },
-        || if autostart { apply_autostart(true, enabled) } else { Ok(()) },
-        |prior_os| if autostart { autostart_restore(prior_os) } else { Ok(()) },
+        || if rewrite { apply_autostart(true, enabled) } else { Ok(()) },
+        |prior_os| if rewrite { autostart_restore(prior_os) } else { Ok(()) },
     )?;
     Ok(enabled)
 }
