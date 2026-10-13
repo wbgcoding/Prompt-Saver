@@ -2114,6 +2114,16 @@ pub(crate) fn gen_id() -> String {
     format!("p{}_{}", nanos, seq)
 }
 
+// Non-blocking variant for code on the event-loop thread: None while another thread
+// holds the mutex (a backup or import), a poisoned one is taken over like lock() does.
+pub(crate) fn try_lock_ignoring_poison<T>(m: &Mutex<T>) -> Option<std::sync::MutexGuard<'_, T>> {
+    match m.try_lock() {
+        Ok(g) => Some(g),
+        Err(std::sync::TryLockError::Poisoned(e)) => Some(e.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => None,
+    }
+}
+
 pub(crate) fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
     state.lock().unwrap_or_else(|e| e.into_inner())
 }

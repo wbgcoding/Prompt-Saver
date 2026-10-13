@@ -12,12 +12,13 @@ pub(crate) fn show_main(app: &AppHandle) {
     park_idle_snip_overlay(app);
     let win = show_main_seam(app.get_webview_window("main"), || build_main_window(app));
     let Some(win) = win else { return };
-    if let Some(state) = app.try_state::<Db>() {
-        let geom = state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .settings
-            .window;
+    // This runs on the event-loop thread (tray click, global shortcut): while a backup
+    // or import holds the store, waiting here would freeze every window. The window
+    // then simply comes back where it is.
+    let geom = app
+        .try_state::<Db>()
+        .and_then(|state| try_lock_ignoring_poison(&state).map(|store| store.settings.window));
+    if let Some(geom) = geom {
         let g = resolve_geometry(&win, geom);
         let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
         let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
@@ -254,10 +255,11 @@ pub(crate) fn open_launcher_window(app: &AppHandle, deferred: bool) {
 
 fn build_launcher_window(app: &AppHandle, deferred: bool) {
     let gen = LAUNCHER_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    // Event-loop thread: never wait on the store. Busy means "keep it out of screen
+    // captures", the cautious default.
     let excluded = {
         let state: State<Db> = app.state();
-        let store = lock(&state);
-        capture_excluded(&store.settings)
+        try_lock_ignoring_poison(&state).map(|store| capture_excluded(&store.settings)).unwrap_or(true)
     };
     let rect = launcher_rect(app);
     let win = match WebviewWindowBuilder::new(app, LAUNCHER_WIN_LABEL, WebviewUrl::App("launcher.html".into()))

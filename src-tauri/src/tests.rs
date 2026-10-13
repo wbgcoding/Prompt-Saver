@@ -20154,3 +20154,21 @@ fn a_second_hotkey_rearm_asks_the_running_one_to_repeat_instead_of_overlapping()
     running.store(false, SeqCst);
     assert!(claim_rearm(&running, &again), "after the run ended the next caller runs again");
 }
+
+#[test]
+fn a_busy_store_is_skipped_by_the_event_loop_lock_and_a_poisoned_one_is_taken_over() {
+    let m = std::sync::Arc::new(Mutex::new(5));
+    {
+        let held = m.lock().unwrap();
+        assert!(try_lock_ignoring_poison(&m).is_none(), "held by another: no waiting");
+        drop(held);
+    }
+    assert_eq!(*try_lock_ignoring_poison(&m).unwrap(), 5);
+    let m2 = m.clone();
+    let _ = std::thread::spawn(move || {
+        let _g = m2.lock().unwrap();
+        panic!("poison it");
+    })
+    .join();
+    assert_eq!(*try_lock_ignoring_poison(&m).unwrap(), 5);
+}
