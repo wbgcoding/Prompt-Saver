@@ -39,6 +39,7 @@ function sandbox() {
     $: () => ({ classList: { contains: () => true } }),
     snipEditContextIsOpen: () => false, snipColorPopIsOpen: () => false,
     snipEditDrawShapeSelectionLive() {}, snipEditUpdateNudgeHint() {},
+    scalePopOpen: false, snipScalePopIsOpen() { return sb.scalePopOpen; }, closeSnipScalePop() { sb.scalePopOpen = false; sb.scaleClosed = true; },
     NUM_FIELD_BIG_STEP: 10, snipOriginalToggle: { press() {} }, snipEditWrap: { style: {}, classList: { add() {} } },
   };
   vm.createContext(sb);
@@ -82,6 +83,27 @@ function sandbox() {
   sb.SE.floor = 1;
   sb.snipEditCropDiscard();
   check("discard crop below the floor: floor shifts", sb.SE.floor, 0);
+}
+// Discarding the crop detaches its op: the arrow keys must not nudge it back to life.
+{
+  const sb = sandbox();
+  const crop = { tool: "crop", rect: { x: 1, y: 1, w: 5, h: 5 } };
+  sb.SE.ops = [crop];
+  sb.SE.lastNudged = crop;
+  sb.snipEditCropDiscard();
+  check("discard crop: nudge target cleared", sb.SE.lastNudged, null);
+  const shape = { tool: "rect", rect: {} };
+  sb.SE.ops = [shape, { tool: "crop", rect: {} }];
+  sb.SE.lastNudged = shape;
+  sb.snipEditCropDiscard();
+  check("discard crop: a shape's nudge target stays", sb.SE.lastNudged === shape, true);
+}
+// Escape closes the resize popover first, and leaves the editor open.
+{
+  const sb = sandbox();
+  sb.scalePopOpen = true;
+  sb.snipEditKeydown({ key: "Escape", target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, repeat: false });
+  check("Escape closes the resize popover", sb.scaleClosed, true);
 }
 // Keys typed in a field never switch tools; the same key on the canvas does.
 {

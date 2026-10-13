@@ -29,7 +29,7 @@ function extractBlock(label, marker) {
   throw new Error(`unbalanced braces extracting ${label} from main.js`);
 }
 
-const sandbox = {};
+const sandbox = { SE: { w: 1000, h: 1000 } };
 vm.createContext(sandbox);
 vm.runInContext(
   extractBlock("snipEditResizeCropRect", "function snipEditResizeCropRect(orig, handle, pt, shift) {"),
@@ -77,6 +77,14 @@ const orig = { x: 0, y: 0, w: 200, h: 100 };
   const nr = resize(orig, "se", { x: 120, y: 80 }, true);
   check("se shift: top edge stays", nr.y, 0);
   check("se shift: left edge stays", nr.x, 0);
+}
+
+// The locked ratio never pushes an edge past the image: a 100x100 box at the right
+// edge, top handle pulled up with shift, would grow to 200 wide and overhang by 100.
+{
+  sandbox.SE = { w: 300, h: 200 };
+  const nr = resize({ x: 200, y: 0, w: 100, h: 100 }, "n", { x: 250, y: -100 }, true);
+  check("n shift at the right edge: stays inside the image", nr, { x: 200, y: 0, w: 100, h: 100 });
 }
 
 for (const p of problems) console.log("FAIL", p);

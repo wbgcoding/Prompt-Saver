@@ -933,7 +933,10 @@ export function initSnipEditor() {
       // the new height would push that fixed edge around.
       if (handle.includes("n")) nr.y = y <= y2 ? y2 - nr.h : y2;
     }
-    return nr;
+    // The locked ratio can push an edge past the image; the box stays inside it.
+    const x0 = Math.max(nr.x, 0), y0 = Math.max(nr.y, 0);
+    const x1 = Math.min(nr.x + nr.w, SE.w), y1 = Math.min(nr.y + nr.h, SE.h);
+    return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
   }
   function snipEditCropPointerMove(pt, shift) {
     const d = SE.drag;
@@ -992,6 +995,12 @@ export function initSnipEditor() {
     // Same floor adjustment as snipEditPushUniqueOp: only crops below the floor shift it.
     SE.floor = Math.max(0, SE.floor - SE.ops.slice(0, SE.floor).filter((o) => o.tool === "crop").length);
     SE.ops = SE.ops.filter((o) => o.tool !== "crop");
+    // A nudge target that was the discarded crop op is detached now: arrow keys must
+    // not move it and bring the discarded box back.
+    if (SE.lastNudged && !SE.ops.includes(SE.lastNudged)) {
+      SE.lastNudged = null;
+      snipEditUpdateNudgeHint();
+    }
     snipEditUpdateUndoRedoButtons();
     snipEditClearLive();
     snipEditRedrawBase();
@@ -1819,6 +1828,7 @@ export function initSnipEditor() {
       e.preventDefault();
       if (!snipCtxPop.classList.contains("hidden")) { closeSnipCtxPop(); return; }
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
+      if (snipScalePopIsOpen()) { closeSnipScalePop(); return; }
       if (snipEditContextIsOpen()) { closeSnipEditContext(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
       if (SE.tool === "crop" && (SE.drag || (SE.cropRect && !snipEditCropIsFull(SE.cropRect)) || SE.ops.some((o) => o.tool === "crop"))) { snipEditCropDiscard(); return; }
@@ -1934,6 +1944,7 @@ export function initSnipEditor() {
     snipEditCancelTextInput();
     closeSnipCtxPop();
     closeSnipEditContext();
+    closeSnipScalePop(); // its Apply would scale a canvas that is gone
     // Nothing of the session stays alive behind the hidden editor: the next open starts
     // from a fresh capture anyway.
     SE.img = null;
