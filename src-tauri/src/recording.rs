@@ -526,7 +526,7 @@ pub struct RecSession {
     pub audio_mic: bool,
     pub output_path: PathBuf,
     // What this session is actually capturing right now -- kept up to
-    // date across a live target switch (see switch_target) so "finish and
+    // date across a live target switch (see commit_switch_target) so "finish and
     // continue" can reopen against the SAME source without asking the
     // control bar to remember a target it was never given in the first
     // place (start_recording is invoked from the composer window, not
@@ -1023,7 +1023,19 @@ pub(crate) fn target_fits_canvas(
 // never jump. A failure at any step leaves the OLD session completely
 // untouched: the recording it is already producing never dies from a
 // failed switch.
-pub fn switch_target(session: &mut RecSession, new_hwnd: isize, new_monitor: Option<(i32, i32, u32, u32)>) -> Result<(), String> {
+//
+// Split in three so the (up to 2 s) wait for the first frame happens without
+// the recording-state lock: begin (validate, start the second capture),
+// wait, commit (swap the handles under the lock again).
+pub struct PendingSwitch {
+    control: CaptureControl<RecHandler, RecError>,
+    first_frame: Arc<AtomicBool>,
+    // Identifies the session the switch was started for.
+    shared: Arc<RecFeederShared>,
+    new_hwnd: isize,
+}
+
+pub fn begin_switch_target(session: &RecSession, new_hwnd: isize, new_monitor: Option<(i32, i32, u32, u32)>) -> Result<PendingSwitch, String> {
     let canvas_origin = session
         .canvas_origin
         .ok_or_else(|| "recording-target-switch-not-supported".to_string())?;
@@ -1048,19 +1060,37 @@ pub fn switch_target(session: &mut RecSession, new_hwnd: isize, new_monitor: Opt
         w, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
         MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
     );
-    let new_control = RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?;
+    let control = RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?;
+    Ok(PendingSwitch { control, first_frame, shared: session.shared.clone(), new_hwnd })
+}
+
+pub fn wait_switch_first_frame(pending: PendingSwitch) -> Result<PendingSwitch, String> {
     // A real frame typically lands within a couple hundred ms; 2s gives a
     // slow first WGC frame plenty of room without leaving a failed switch
     // hanging the caller for long.
     let deadline = Instant::now() + Duration::from_secs(2);
-    while !first_frame.load(Ordering::Acquire) {
+    while !pending.first_frame.load(Ordering::Acquire) {
         if Instant::now() >= deadline {
-            let _ = new_control.stop();
+            let _ = pending.control.stop();
             return Err("recording-target-switch-timeout".to_string());
         }
         thread::sleep(Duration::from_millis(10));
     }
-    let old_control = std::mem::replace(&mut session.control, new_control);
+    Ok(pending)
+}
+
+/// Swaps the proven new capture in. The recording may have ended or moved on to
+/// another session while the lock was released; then the new capture is just
+/// stopped again and the switch fails.
+pub fn commit_switch_target(session: Option<&mut RecSession>, pending: PendingSwitch) -> Result<(), String> {
+    let session = match session {
+        Some(s) if Arc::ptr_eq(&s.shared, &pending.shared) => s,
+        _ => {
+            let _ = pending.control.stop();
+            return Err("no active recording".to_string());
+        }
+    };
+    let old_control = std::mem::replace(&mut session.control, pending.control);
     if let Err(e) = old_control.stop() {
         // The new source is already live and recording fine -- losing the
         // old capture handle cleanly is a log-worthy oddity, not a reason
@@ -1069,7 +1099,7 @@ pub fn switch_target(session: &mut RecSession, new_hwnd: isize, new_monitor: Opt
     }
     // A later "finish and continue" reopens against whatever this session
     // is ACTUALLY capturing right now, so a switch updates that record too.
-    session.target = RecTarget::Window(new_hwnd);
+    session.target = RecTarget::Window(pending.new_hwnd);
     Ok(())
 }
 

@@ -402,9 +402,17 @@ pub(crate) async fn switch_recording_target(
     let app2 = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let rstate = app2.state::<RecordingState>();
+        // The lock is held only to read the session and to swap the handles; the
+        // wait for the new capture's first frame runs without it, so status
+        // polls, hotkeys and the tray menu are never stalled by a slow window.
+        let pending = {
+            let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+            let session = guard.as_ref().ok_or_else(|| "no active recording".to_string())?;
+            recording::begin_switch_target(session, new_hwnd, new_monitor)?
+        };
+        let pending = recording::wait_switch_first_frame(pending)?;
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
-        let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
-        recording::switch_target(session, new_hwnd, new_monitor)
+        recording::commit_switch_target(guard.as_mut(), pending)
     })
     .await
     .map_err(|e| e.to_string())?;
