@@ -233,6 +233,16 @@ pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(S
     Ok((text, variants))
 }
 
+// A stored value read back for display or editing: sealed text is opened with the
+// key, anything else (a snapshot taken before the entry became confidential, or
+// plain text) is returned as it is. The inverse direction of secret_encrypt_if_plain.
+pub(crate) fn reveal_if_sealed(value: &str, key: &[u8; 32]) -> String {
+    match secret_decrypt(value, key) {
+        Ok(plain) => upgrade_placeholders(&plain),
+        Err(_) => value.to_string(),
+    }
+}
+
 // A version-history snapshot taken before an entry became confidential holds
 // plain text; one taken afterwards holds ciphertext already readable with the
 // current vault key. Used when restoring a snapshot into an entry that is

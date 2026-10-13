@@ -20074,3 +20074,27 @@ fn a_request_is_judged_by_the_password_and_ranges_in_force_when_it_arrives() {
     // Loopback stays allowed whatever the ranges say.
     assert!(remote::live_access(&settings, "127.0.0.1".parse().unwrap()).is_some());
 }
+
+#[test]
+fn history_snapshots_of_a_confidential_entry_open_with_the_key_and_plain_ones_pass_through() {
+    let key = [7u8; 32];
+    let sealed = secret_encrypt("the real text", &key);
+    assert_eq!(reveal_if_sealed(&sealed, &key), "the real text");
+    assert_eq!(reveal_if_sealed("written before it was confidential", &key), "written before it was confidential");
+    // A different key opens nothing: the value comes back untouched, never as garbage text.
+    assert_eq!(reveal_if_sealed(&sealed, &[9u8; 32]), sealed);
+}
+
+#[test]
+fn a_copy_restored_from_a_confidential_entry_is_confidential_and_sealed() {
+    let key = [7u8; 32];
+    let mut source = test_prompt("src");
+    source.secret = true;
+    let mut copy = build_restored_prompt(&source, "n", "plain body".to_string(), vec!["plain entry".to_string()], "");
+    assert!(!copy.secret);
+    seal_restored_prompt(&mut copy, &key);
+    assert!(copy.secret);
+    assert_ne!(copy.text, "plain body");
+    assert_eq!(secret_decrypt(&copy.text, &key).unwrap(), "plain body");
+    assert_eq!(secret_decrypt(&copy.variants[0], &key).unwrap(), "plain entry");
+}

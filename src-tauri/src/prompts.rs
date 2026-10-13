@@ -1375,8 +1375,24 @@ pub(crate) async fn update_prompt(
 
 // List a prompt's version snapshots (newest first).
 #[tauri::command]
-pub(crate) async fn list_versions(app: AppHandle, prompt_id: String) -> Result<Vec<PromptVersion>, String> {
-    Ok(db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default())
+pub(crate) async fn list_versions(app: AppHandle, state: State<'_, Db>, prompt_id: String) -> Result<Vec<PromptVersion>, String> {
+    // Snapshots of a confidential entry hold ciphertext; the history panel shows and
+    // restores plain text, so they are opened here or refused while the vault is locked.
+    let key = {
+        let store = lock(&state);
+        match store.prompts.iter().find(|p| p.id == prompt_id) {
+            Some(p) if p.secret => Some(secret_session_key(secret_timeout_min(&store.settings)).ok_or_else(|| "secret-locked".to_string())?),
+            _ => None,
+        }
+    };
+    let mut list = db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default();
+    if let Some(key) = key {
+        for v in list.iter_mut() {
+            v.text = reveal_if_sealed(&v.text, &key);
+            v.variants = v.variants.iter().map(|x| reveal_if_sealed(x, &key)).collect();
+        }
+    }
+    Ok(list)
 }
 
 // The library's "last edited" sort mode. A prompt missing from the map has
@@ -1437,7 +1453,15 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             // stranded on an empty list (same invariant as everywhere else).
             p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
             p.rotate_auto = sanitize_rotate_auto(p.rotate_auto, &p.variants);
-            let clone = p.clone();
+            let mut clone = p.clone();
+            // The editor shows and re-saves plain text: the stored prompt keeps its
+            // ciphertext, the copy handed back is opened with the same key.
+            if p.secret {
+                if let Some(key) = secret_key {
+                    clone.text = reveal_if_sealed(&clone.text, &key);
+                    clone.variants = clone.variants.iter().map(|v| reveal_if_sealed(v, &key)).collect();
+                }
+            }
             // 35a/38: a failed save must roll the live entry back, same pattern as
             // update_prompt (7): otherwise the UI shows a restored prompt that
             // silently reverts to the pre-restore text on the next launch.
@@ -1500,13 +1524,18 @@ pub(crate) fn build_restored_prompt(source: &Prompt, version_name: &str, version
         media_height: 0,
         media_size_bytes: 0,
         image_text: String::new(),
-        // "Restore as new" always starts a fresh, non-confidential entry -- the
-        // snapshot's own text may or may not still be readable ciphertext
-        // depending on when it was taken, and carrying `secret` over without the
-        // vault key to match it would leave a confidential-flagged entry holding
-        // whatever that old text literally was.
+        // Starts non-confidential; restore_version_as_new seals the copy and marks it
+        // confidential when its source is, once the snapshot is open as plain text.
         secret: false,
     }
+}
+
+// A copy restored from a confidential entry is confidential too: its (plain) text and
+// entries are sealed with the vault key before it is stored.
+pub(crate) fn seal_restored_prompt(prompt: &mut Prompt, key: &[u8; 32]) {
+    prompt.secret = true;
+    prompt.text = secret_encrypt(&prompt.text, key);
+    prompt.variants = prompt.variants.iter().map(|v| secret_encrypt(v, key)).collect();
 }
 
 // Keeps a version snapshot AND the current entry: unlike restore_version (which
@@ -1526,7 +1555,23 @@ pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>,
         let Some(source) = store.prompts.iter().find(|p| p.id == pid).cloned() else {
             return Ok(None);
         };
-        let prompt = build_restored_prompt(&source, &name, text, variants, &suffix);
+        // A snapshot of a confidential entry may hold ciphertext. It is opened with the
+        // session key (refused while locked) and the copy stays confidential, sealed again,
+        // so the text never lands in a plain-looking entry.
+        let key = secret_session_key(secret_timeout_min(&store.settings));
+        if source.secret && key.is_none() {
+            return Err("secret-locked".to_string());
+        }
+        let (text, variants) = match key {
+            Some(k) => (reveal_if_sealed(&text, &k), variants.iter().map(|v| reveal_if_sealed(v, &k)).collect()),
+            None => (text, variants),
+        };
+        let mut prompt = build_restored_prompt(&source, &name, text, variants, &suffix);
+        if source.secret {
+            if let Some(k) = key {
+                seal_restored_prompt(&mut prompt, &k);
+            }
+        }
         // Same placement as add_prompt: next free cell of the active view, which in
         // practice is the view the user was looking at when they opened this
         // prompt's history: landing the copy right where the original lives.
