@@ -133,6 +133,17 @@ pub(crate) fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
         .max(0.0)
 }
 
+// The entry a progress or start report writes to. The ids are fixed ("backup",
+// "import"), so a second run finds the first one's finished entry: it is replaced by a
+// fresh one, or the new run would keep the old start time (which the UI keys its
+// once-per-run "done" toast on) and finish silently.
+pub(crate) fn entry_for_run<'a>(ops: &'a mut std::collections::HashMap<String, BgOp>, id: &str, kind: &str) -> &'a mut BgOp {
+    if ops.get(id).is_some_and(|o| o.finished_at_ms.is_some()) {
+        ops.insert(id.to_string(), BgOp::fresh(kind));
+    }
+    ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind))
+}
+
 // The one place `bg_ops()` is ever written. Deliberately free of any
 // AppHandle/window dependency: an export's own progress closure calls this
 // directly (see export_video_blocking's caller), so a job keeps reporting
@@ -156,7 +167,7 @@ pub(crate) fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>
             }
         }
         "indeterminate" => {
-            let entry = ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind));
+            let entry = entry_for_run(&mut ops, id, kind);
             entry.phase = OpPhase::Indeterminate;
             entry.finished_at_ms = None;
             if target.is_some() {
@@ -164,7 +175,7 @@ pub(crate) fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>
             }
         }
         _ => {
-            let entry = ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind));
+            let entry = entry_for_run(&mut ops, id, kind);
             entry.phase = OpPhase::Running(value.unwrap_or(0).min(100) as u8);
             entry.finished_at_ms = None;
             if target.is_some() {

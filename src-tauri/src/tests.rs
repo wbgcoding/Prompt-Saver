@@ -20172,3 +20172,18 @@ fn a_busy_store_is_skipped_by_the_event_loop_lock_and_a_poisoned_one_is_taken_ov
     .join();
     assert_eq!(*try_lock_ignoring_poison(&m).unwrap(), 5);
 }
+
+#[test]
+fn a_second_run_under_the_same_op_id_gets_its_own_start_time() {
+    let mut ops: HashMap<String, BgOp> = HashMap::new();
+    let first_start = entry_for_run(&mut ops, "backup", "backup").started_at_ms;
+    ops.get_mut("backup").unwrap().phase = OpPhase::Done;
+    ops.get_mut("backup").unwrap().finished_at_ms = Some(now_ms());
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let second = entry_for_run(&mut ops, "backup", "backup");
+    assert!(second.started_at_ms > first_start, "a finished entry is replaced");
+    assert!(second.finished_at_ms.is_none());
+    let start = second.started_at_ms;
+    // A run still going keeps its entry across progress reports.
+    assert_eq!(entry_for_run(&mut ops, "backup", "backup").started_at_ms, start);
+}
