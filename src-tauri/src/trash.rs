@@ -536,7 +536,8 @@ pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
 // tables are in the list although the two saves just emptied them: a save only
 // removes rows this process had loaded, so a row it could not decrypt (the very
 // reason a store can be locked) would otherwise survive the wipe.
-pub(crate) const DATA_WIPE_TABLES: [&str; 6] = ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state"];
+pub(crate) const DATA_WIPE_TABLES: [&str; 7] =
+    ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state", "editor_drafts"];
 
 // Empties every table in DATA_WIPE_TABLES; returns the ones that failed with their error.
 pub(crate) fn wipe_data_tables(c: &Connection) -> Vec<(&'static str, rusqlite::Error)> {
@@ -554,6 +555,11 @@ pub(crate) fn wipe_data_tables(c: &Connection) -> Vec<(&'static str, rusqlite::E
 // Async: window closes + a full prompts/settings rewrite stay off the UI thread.
 #[tauri::command]
 pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    // A read-only instance (the folder is held by another machine) must not reach
+    // the raw table wipe below: the saves are refused there, the DELETEs are not.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
+    }
     let labels: Vec<String> = app
         .webview_windows()
         .keys()

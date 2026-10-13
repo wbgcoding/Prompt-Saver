@@ -8436,6 +8436,8 @@ fn delete_all_data_clears_data_tables_only() {
              CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
              CREATE TABLE edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE editor_drafts(id TEXT PRIMARY KEY, prompt_id TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+             INSERT INTO editor_drafts VALUES('current', 'a', 'n', 'draft text', '', 1);
              INSERT INTO prompts VALUES('a', 0, '{}');
              INSERT INTO trash VALUES('b', 0, '{}');
              INSERT INTO meta VALUES('settings', '{\"theme\":\"ocean\"}');
@@ -8458,6 +8460,7 @@ fn delete_all_data_clears_data_tables_only() {
     assert_eq!(count("prompt_versions"), 0);
     assert_eq!(count("clip_inbox"), 0);
     assert_eq!(count("edit_state"), 0);
+    assert_eq!(count("editor_drafts"), 0, "a stale editor draft must not outlive the wipe");
     assert_eq!(count("meta"), 1, "settings must survive a data-only wipe");
 }
 
