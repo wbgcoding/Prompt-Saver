@@ -2905,6 +2905,11 @@ function keysPickerRow(op) {
   return wrap;
 }
 
+// Every media file the graph reads besides the source (overlay pictures and
+// videos, inserted clips, extra audio). The request names them so the backend can
+// refuse a movie=/amovie= source that is anything else.
+const exportMediaPaths = () => [...new Set(VE.ops.map((o) => o.path).filter(Boolean))];
+
 // The one place the operation list becomes ffmpeg. Produces a complete graph
 // consuming [0:v] and ending on [vout]; the audio half is built separately below
 // and ends on [aout], so the backend joins the two with ";" into a single
@@ -3418,6 +3423,7 @@ async function startExport(toClipboard) {
         dest_path: dest,
         filter_chain: lossless ? null : buildVideoChain(),
         audio_map: lossless ? null : buildAudioChain(),
+        media_paths: lossless ? [] : exportMediaPaths(),
         lossless_copy: lossless,
         // Distinct from lossless_copy -- this is the "Lossless" QUALITY tier,
         // which forces a real re-encode (see isLosslessCopy above) that must

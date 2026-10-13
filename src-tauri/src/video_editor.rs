@@ -652,8 +652,9 @@ pub(crate) fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, 
 // Export request built entirely by the frontend from its own operation list:
 // filter_chain/audio_map are raw -filter_complex fragments the
 // frontend compiles, ending in the fixed output labels below when present --
-// this backend never inspects or builds a filter graph itself, only wires the
-// two fragments together and maps their outputs.
+// this backend never builds a filter graph itself, only wires the two fragments
+// together and maps their outputs. export_video first checks each fragment
+// against export_graph (allowed filters, readable files).
 //   filter_chain: ends with [vout] if present, else the source video stream
 //                 is mapped unfiltered.
 //   audio_map:    ends with [aout] if present, else the source audio (if any)
@@ -670,6 +671,11 @@ pub(crate) struct ExportRequest {
     pub(crate) dest_path: String,
     pub(crate) filter_chain: Option<String>,
     pub(crate) audio_map: Option<String>,
+    // Every media file the graph reads besides the source (overlay pictures and
+    // videos, inserted clips, extra audio). The backend only lets a movie=/amovie=
+    // source open the source itself or one of these.
+    #[serde(default)]
+    pub(crate) media_paths: Vec<String>,
     pub(crate) lossless_copy: bool,
     // Distinct from lossless_copy (the stream-copy fast path) -- this is
     // "Lossless" picked as a re-encode QUALITY tier, which has no bitrate of
@@ -975,6 +981,8 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     if !export_dest_dir_is_authorized(&app, &state, &dst, &src) {
         return Err("export destination not recognized".to_string());
     }
+    let graphs: Vec<&str> = [req.filter_chain.as_deref(), req.audio_map.as_deref()].into_iter().flatten().collect();
+    validate_export_request_graphs(&src, &req.media_paths, &graphs)?;
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     EDITOR_EXPORT_GEN.store(my_gen, Ordering::SeqCst);
@@ -1055,6 +1063,7 @@ pub(crate) fn run_batch_job_blocking(
         dest_path: dest_path.to_string(),
         filter_chain: None,
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality,
         format: format.to_string(),

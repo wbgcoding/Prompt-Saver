@@ -70,6 +70,15 @@ for (const sc of scenarios) {
   if (!Number.isInteger(sandbox.result.dur)) problems.push(`${sc.name}: size estimate durationMs is ${sandbox.result.dur}, not an integer`);
 }
 extractLine("request total_ms fed from total", "        total_ms: total,");
+// The backend lets a movie=/amovie= source open only the source and the media the request names.
+extractLine("request names its media files", "        media_paths: lossless ? [] : exportMediaPaths(),");
+{
+  const box = { VE: { ops: [{ tool: "trim" }, { tool: "overlay", path: "C:/a/b.png" }, { tool: "overlay", path: "C:/a/b.png" }, { tool: "clip", path: "C:/a/c.mp4" }] } };
+  vm.createContext(box);
+  vm.runInContext(extractLine("exportMediaPaths", "const exportMediaPaths = () => [...new Set(VE.ops.map((o) => o.path).filter(Boolean))];"), box);
+  const got = JSON.stringify(vm.runInContext("exportMediaPaths()", box));
+  if (got !== JSON.stringify(["C:/a/b.png", "C:/a/c.mp4"])) problems.push(`exportMediaPaths returned ${got}`);
+}
 extractLine("disk check durationMs fed from total", "destPath: dest, format, videoKbps: request.video_kbps, losslessQuality: request.lossless_quality, durationMs: total,");
 
 // A finished export is reported under the path the backend returned (it picks a free

@@ -1452,6 +1452,7 @@ fn export_video_real_ffmpeg_lossless_trim_shortens_the_clip_via_stream_copy() {
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: None,
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: true,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -1482,6 +1483,7 @@ fn export_video_real_ffmpeg_filter_chain_crops_via_the_v_output_label() {
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: Some("[0:v]crop=32:32:0:0[vout]".to_string()),
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -1511,6 +1513,7 @@ fn export_video_real_ffmpeg_filter_chain_scales_to_the_requested_dimensions() {
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: Some("[0:v]scale=32:24[vout]".to_string()),
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -1558,6 +1561,7 @@ fn run_format_export(ffmpeg: &Path, src: &Path, dest: &Path, format: &str) -> St
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: None,
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: format.to_string(),
@@ -1624,6 +1628,7 @@ fn run_overlay_export(ffmpeg: &Path, src: &Path, dest: &Path, filter_chain: Stri
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: Some(filter_chain),
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -1802,6 +1807,7 @@ fn export_video_real_ffmpeg_lossless_quality_is_far_larger_than_a_capped_bitrate
         dest_path: lossless_dest.to_string_lossy().to_string(),
         filter_chain: Some("[0:v]scale=320:240[vout]".to_string()),
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: true,
         format: "mp4".to_string(),
@@ -1815,6 +1821,7 @@ fn export_video_real_ffmpeg_lossless_quality_is_far_larger_than_a_capped_bitrate
         dest_path: capped_dest.to_string_lossy().to_string(),
         filter_chain: Some("[0:v]scale=320:240[vout]".to_string()),
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -1851,6 +1858,7 @@ fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif(
         // carry audio at all; without the is_gif guard this would make
         // ffmpeg fail with "GIF muxer does not support audio".
         audio_map: Some("[0:a]volume=1[aout]".to_string()),
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "gif".to_string(),
@@ -1948,6 +1956,7 @@ fn export_video_real_ffmpeg_two_clips_of_different_resolution_and_rate_concatena
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: Some(video_chain),
         audio_map: Some(audio_chain),
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -1994,6 +2003,7 @@ fn export_video_real_ffmpeg_a_silent_inserted_clip_gets_silence_and_does_not_shi
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: Some(video_chain),
         audio_map: Some(audio_chain),
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -2113,6 +2123,7 @@ fn export_video_real_ffmpeg_cancel_leaves_no_destination_file() {
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: None,
         audio_map: None,
+        media_paths: Vec::new(),
         lossless_copy: false,
         lossless_quality: false,
         format: "mp4".to_string(),
@@ -7013,6 +7024,10 @@ fn place_in_dir_keeps_both_files_and_leaves_no_placeholder_on_failure() {
 
 #[test]
 fn folder_import_skips_paths_that_leave_the_chosen_folder() {
+    assert!(has_import_folder_ext(Path::new("sub/note.MD")));
+    assert!(has_import_folder_ext(Path::new("note.txt")));
+    assert!(!has_import_folder_ext(Path::new("config")));
+    assert!(!has_import_folder_ext(Path::new("id_rsa.pub")));
     assert!(folder_rel_path_is_safe("note.md"));
     assert!(folder_rel_path_is_safe("sub/deeper/note.md"));
     assert!(!folder_rel_path_is_safe("../x.md"));
@@ -20096,6 +20111,52 @@ fn a_paused_recording_does_not_spend_the_switch_first_frame_budget() {
     assert_eq!(recording::switch_wait_budget_after_tick(2000, true), 2000);
     assert_eq!(recording::switch_wait_budget_after_tick(2000, false), 1990);
     assert_eq!(recording::switch_wait_budget_after_tick(5, false), 0);
+}
+
+#[test]
+fn an_export_graph_may_only_read_the_source_and_the_media_the_request_names() {
+    let dir = std::env::temp_dir().join(format!("ps-export-graph-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec.mp4");
+    let badge = dir.join("badge.png");
+    let secret = dir.join("notes.txt");
+    for p in [&src, &badge, &secret] {
+        fs::write(p, b"x").unwrap();
+    }
+    // A path spelled the way ui/video.js writes it into a graph.
+    let ff = |p: &Path| {
+        let c = fs::canonicalize(p).unwrap().to_string_lossy().to_string();
+        c.trim_start_matches(r"\\?\").replace('\\', "/").replace(':', r"\:")
+    };
+    let media = vec![badge.to_string_lossy().to_string()];
+    let check = |g: &str| validate_export_request_graphs(&src, &media, &[g]);
+    // The shapes ui/video.js builds.
+    assert!(check("[0:v]fps=30,trim=start=0.000:end=2.000,setpts=PTS-STARTPTS[v0];[v0]scale=320:240,fade=t=in:st=0:d=1.000[vout]").is_ok());
+    assert!(check("[0:v]crop=32:32:0:0[vout]").is_ok());
+    assert!(check(r"[0:v]drawtext=fontfile='C\:/fonts/a.ttf':x=1:y=2:fontsize=20:fontcolor=0xffffff@1.00:expansion=none:text='hi, there'[vout]").is_ok());
+    assert!(check("[0:a]volume=1.00,atempo=1.3[aout]").is_ok());
+    assert!(check(&format!("movie='{}'[i0];[0:v][i0]overlay=1:2:enable='between(t,0.000,2.000)'[vout]", ff(&badge))).is_ok());
+    assert!(check(&format!("amovie='{}':loop=2[a1];[a1]anull[aout]", ff(&badge))).is_ok());
+    assert!(check(&format!("movie='{}'[i0]", ff(&src))).is_ok(), "the source itself is fine");
+    assert!(check(&format!("movie=filename='{}'[i0]", ff(&badge))).is_ok());
+    // File-reading filters and options, and filters the editor never builds.
+    assert!(check(r"[0:v]drawtext=textfile='C\:/Users/x/.ssh/config':fontsize=20[vout]").is_err());
+    assert!(check("[0:v]drawtext=fontsize=20:TextFile=x[vout]").is_err());
+    assert!(check(r"[0:v]subtitles='C\:/x/y.srt'[vout]").is_err());
+    assert!(check("[0:v]sendcmd=f=cmds.txt[vout]").is_err());
+    assert!(check("[0:v]zmq[vout]").is_err());
+    assert!(check(r"[0:v]null[vout];[0:a]ametadata=mode=print:file=C\:/x[aout]").is_err());
+    // A movie source that is not the source or a named media file, or has extra options.
+    assert!(check(&format!("movie='{}'[i0]", ff(&secret))).is_err());
+    assert!(check(r"movie='C\:/Users/x/.ssh/config'[i0]").is_err());
+    assert!(check(&format!("movie='{}':lavfi[i0]", ff(&badge))).is_err());
+    assert!(check(&format!("movie='{}':format_name=tty[i0]", ff(&badge))).is_err());
+    // Quoting cannot hide a second filter: a quoted comma stays part of the value.
+    assert!(check("[0:v]scale='iw,textfile=x'[vout]").is_ok());
+    assert!(check("[0:v]scale=1:1,movie=x[vout]").is_err());
+    // Media named by the request must carry a media extension.
+    assert!(validate_export_request_graphs(&src, &[secret.to_string_lossy().to_string()], &["[0:v]null[vout]"]).is_err());
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

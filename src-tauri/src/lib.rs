@@ -216,6 +216,9 @@ use ffmpeg::*;
 mod video_editor;
 use video_editor::*;
 
+mod export_graph;
+use export_graph::*;
+
 mod media_files;
 use media_files::*;
 
