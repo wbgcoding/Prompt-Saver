@@ -1303,6 +1303,16 @@ async fn handle_connection(
     }
 }
 
+// What the live settings say about this peer right before a request is
+// authorized: None when its address is no longer allowed, otherwise the stored
+// password hash as it is now (itself None when no password is configured).
+pub(crate) fn live_access(settings: &Settings, ip: IpAddr) -> Option<Option<String>> {
+    if !peer_allowed(ip, network_filter_enabled(settings), &allowed_ranges(settings)) {
+        return None;
+    }
+    Some(password_hash_hex(settings))
+}
+
 async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
     ip: IpAddr,
@@ -1320,7 +1330,19 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
             return;
         }
     };
-    let stored_hash = password_hash_hex(&settings);
+    // The settings were read before the handshake and the request read, up to
+    // twenty seconds ago. A password regenerated or a range narrowed since (neither
+    // restarts the receiver) must apply to this request, so both are checked again
+    // against the live settings right before authorizing.
+    let settings = {
+        let state: State<Db> = app.state();
+        let guard = lock(&state);
+        guard.settings.clone()
+    };
+    let Some(stored_hash) = live_access(&settings, ip) else {
+        log_remote(&settings, "remoteApi", "remote access: refused a connection from a disallowed address");
+        return;
+    };
     if let Err(status) = authorize(&req, stored_hash.as_deref()) {
         let (log_msg, body_msg): (&str, &str) = match status {
             405 => ("remote access: method not allowed", "method not allowed"),
