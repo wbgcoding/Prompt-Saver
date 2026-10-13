@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "Ten folder już nie istnieje",
     errSyncLeavePrompts: "Nie udało się zapisać promptów w poprzednim folderze",
     errSyncLeaveSettings: "Nie udało się zapisać ustawień w poprzednim folderze",
+    errDataDirBusy: "Folder danych jest nadal używany przez inne zadanie, więc nic nie zostało przeniesione. Poczekaj chwilę i spróbuj ponownie.",
     errNotTextAttachment: "Ten załącznik nie jest plikiem tekstowym",
     errUpdateNotNewer: "Ta wersja nie jest nowsza od zainstalowanej",
     errUpdateCheckFailed: "Sprawdzanie aktualizacji nie powiodło się. Spróbuj ponownie później.",

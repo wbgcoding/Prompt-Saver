@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "Acel dosar nu mai există",
     errSyncLeavePrompts: "Prompturile nu au putut fi salvate în dosarul anterior",
     errSyncLeaveSettings: "Setările nu au putut fi salvate în dosarul anterior",
+    errDataDirBusy: "Dosarul de date este încă folosit de altă sarcină, așa că nu s-a mutat nimic. Așteaptă un moment și încearcă din nou.",
     errNotTextAttachment: "Acest atașament nu este un fișier text",
     errUpdateNotNewer: "Această versiune nu este mai nouă decât cea instalată",
     errUpdateCheckFailed: "Verificarea actualizărilor a eșuat. Încearcă din nou mai târziu.",

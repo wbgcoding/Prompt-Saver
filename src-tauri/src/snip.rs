@@ -1985,7 +1985,7 @@ pub(crate) fn checkpoint_wal(c: &Connection, tries: u32) -> Result<(), String> {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
-    Err("the database is still in use by another task, so the move was not started: wait a moment and try again".to_string())
+    Err("the data folder is still in use".to_string())
 }
 
 // Whether delete_data_dir may clean `dir`: only the folder the last move came from, and

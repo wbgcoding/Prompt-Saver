@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "Essa pasta não existe mais",
     errSyncLeavePrompts: "Não foi possível salvar os prompts na pasta anterior",
     errSyncLeaveSettings: "Não foi possível salvar as configurações na pasta anterior",
+    errDataDirBusy: "A pasta de dados ainda está em uso por outra tarefa, então nada foi movido. Aguarde um momento e tente novamente.",
     errNotTextAttachment: "Este anexo não é um arquivo de texto",
     errUpdateNotNewer: "Esta versão não é mais recente que a instalada",
     errUpdateCheckFailed: "A verificação de atualizações falhou. Tente de novo mais tarde.",

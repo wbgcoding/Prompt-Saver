@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "Die map bestaat niet meer",
     errSyncLeavePrompts: "De prompts konden niet in de vorige map worden opgeslagen",
     errSyncLeaveSettings: "De instellingen konden niet in de vorige map worden opgeslagen",
+    errDataDirBusy: "De gegevensmap wordt nog door een andere taak gebruikt, dus er is niets verplaatst. Wacht even en probeer het opnieuw.",
     errNotTextAttachment: "Deze bijlage is geen tekstbestand",
     errUpdateNotNewer: "Deze versie is niet nieuwer dan de geïnstalleerde",
     errUpdateCheckFailed: "Het zoeken naar updates is mislukt. Probeer het later opnieuw.",

@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "Esa carpeta ya no existe",
     errSyncLeavePrompts: "No se pudieron guardar los prompts en la carpeta anterior",
     errSyncLeaveSettings: "No se pudieron guardar los ajustes en la carpeta anterior",
+    errDataDirBusy: "La carpeta de datos todavía la usa otra tarea, así que no se movió nada. Espera un momento e inténtalo de nuevo.",
     errNotTextAttachment: "Este adjunto no es un archivo de texto",
     errUpdateNotNewer: "Esta versión no es más reciente que la instalada",
     errUpdateCheckFailed: "Falló la búsqueda de actualizaciones. Inténtalo de nuevo más tarde.",

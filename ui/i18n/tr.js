@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "Bu klasör artık yok",
     errSyncLeavePrompts: "İstemler önceki klasöre kaydedilemedi",
     errSyncLeaveSettings: "Ayarlar önceki klasöre kaydedilemedi",
+    errDataDirBusy: "Veri klasörü hâlâ başka bir görev tarafından kullanılıyor, bu yüzden hiçbir şey taşınmadı. Biraz bekleyip tekrar deneyin.",
     errNotTextAttachment: "Bu ek bir metin dosyası değil",
     errUpdateNotNewer: "Bu sürüm yüklü sürümden daha yeni değil",
     errUpdateCheckFailed: "Güncelleme denetimi başarısız oldu. Daha sonra tekrar dene.",

@@ -1379,6 +1379,7 @@ export default {
     errFolderGone: "そのフォルダーはもう存在しません",
     errSyncLeavePrompts: "以前のフォルダーにプロンプトを保存できませんでした",
     errSyncLeaveSettings: "以前のフォルダーに設定を保存できませんでした",
+    errDataDirBusy: "データフォルダーが別の処理で使用中のため、何も移動されませんでした。しばらく待ってからもう一度お試しください。",
     errNotTextAttachment: "この添付ファイルはテキストファイルではありません",
     errUpdateNotNewer: "このリリースはインストール済みのバージョンより新しくありません",
     errUpdateCheckFailed: "アップデートの確認に失敗しました。後でもう一度お試しください。",
