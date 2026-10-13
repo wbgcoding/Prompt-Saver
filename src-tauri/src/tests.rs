@@ -20016,3 +20016,21 @@ fn a_failed_replacing_import_does_not_teach_the_map_about_unread_rows() {
     assert!(db_write_import(&mut conn, &store, &[test_prompt("new1")], true, false, true).is_err());
     assert!(!store.written.borrow().contains_key(&row_key("prompts", "foreign")));
 }
+
+#[test]
+fn a_plaintext_trash_row_is_deleted_by_a_purge_and_sealed_by_a_keep() {
+    let conn = row_test_db();
+    for id in ["gone", "kept"] {
+        conn.execute("INSERT INTO trash VALUES(?1, 0, ?2)", params![id, serde_json::to_string(&test_prompt(id)).unwrap()]).unwrap();
+    }
+    let mut written = WrittenRows::new();
+    let (trash, failures) = db_load_trash(&conn, &mut written);
+    assert_eq!((trash.len(), failures), (2, 0));
+    let kept: Vec<Prompt> = trash.into_iter().filter(|p| p.id == "kept").collect();
+    let mut conn = conn;
+    db_write_trash(&mut conn, &kept, &mut written).unwrap();
+    let rows = stored_rows(&conn, "trash");
+    assert_eq!(rows.len(), 1, "the purged plaintext row must not survive");
+    assert_eq!(rows[0].0, "kept");
+    assert!(rows[0].2.starts_with(ENC_PREFIX), "the kept row is sealed by the write");
+}

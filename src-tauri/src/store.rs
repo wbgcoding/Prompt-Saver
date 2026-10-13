@@ -873,15 +873,16 @@ pub(crate) fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Ve
                             let encrypted = data.starts_with(ENC_PREFIX);
                             match serde_json::from_str::<Prompt>(&dec_str(&data)) {
                                 Ok(p) => {
-                                    // Same rule as db_load: an unsealed row stays out of
-                                    // the map so the next write seals it instead of
-                                    // skipping it as unchanged.
-                                    if encrypted {
-                                        written.insert(
-                                            row_key("trash", &p.id),
-                                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
-                                        );
-                                    }
+                                    // An unsealed row gets the stale hash, never the real
+                                    // one: the next write seals it instead of skipping it as
+                                    // unchanged, and because the key is known a purge still
+                                    // deletes it (no load-time re-save exists for the trash).
+                                    let hash = if encrypted {
+                                        row_hash(&serde_json::to_string(&p).unwrap_or_default())
+                                    } else {
+                                        STALE_ROW_HASH
+                                    };
+                                    written.insert(row_key("trash", &p.id), hash);
                                     trash.push(p);
                                 }
                                 Err(_) if encrypted => failures += 1,
