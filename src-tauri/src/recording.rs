@@ -293,6 +293,48 @@ fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
     }
 }
 
+/// Returns `ts`, or one tick past the last sent timestamp when `ts` would not
+/// move forward, and records the result as the new last one.
+pub(crate) fn strictly_increasing_ts(last_sent: &mut Option<i64>, ts: i64) -> i64 {
+    let out = match *last_sent {
+        Some(prev) if ts <= prev => prev + 1,
+        _ => ts,
+    };
+    *last_sent = Some(out);
+    out
+}
+
+/// Sends every frame the capture callback has queued so far, in order. The
+/// first one also starts the clock-gated audio: whatever the audio queues
+/// collected before it is discarded.
+fn drain_pending_frames(
+    shared: &Arc<RecFeederShared>,
+    encoder: &mut VideoEncoder,
+    queues: &[Arc<AudioQueueShared>],
+    video_started: &mut bool,
+    last_frame: &mut Option<Vec<u8>>,
+    last_frame_at: &mut Option<Instant>,
+    last_sent: &mut Option<i64>,
+) {
+    while let Some(item) = shared.try_pop() {
+        if !*video_started {
+            *video_started = true;
+            shared.mark_first_frame();
+            for q in queues {
+                q.clear();
+            }
+        }
+        let ts = strictly_increasing_ts(last_sent, item.ts);
+        if let Err(e) = encoder.send_frame_buffer(&item.bytes, ts) {
+            append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
+            shared.set_encode_error(e.to_string());
+            shared.request_stop(); // further frames would just fail the same way
+        }
+        *last_frame = Some(item.bytes);
+        *last_frame_at = Some(Instant::now());
+    }
+}
+
 // Audio-enabled variant: a fixed 20ms tick drains the active audio
 // queue(s) (mixing when both system+mic are on) and feeds the encoder's
 // audio track, gated by the same RecordClock pause state the video path
@@ -333,23 +375,11 @@ fn feeder_loop_with_audio(
     // never trails real time by more than one tick.
     let mut last_frame: Option<Vec<u8>> = None;
     let mut last_frame_at: Option<Instant> = None;
+    // The last timestamp handed to the encoder: every later frame, a resent
+    // hold frame included, must be strictly greater.
+    let mut last_sent: Option<i64> = None;
     loop {
-        while let Some(item) = shared.try_pop() {
-            if !video_started {
-                video_started = true;
-                shared.mark_first_frame();
-                for q in &queues {
-                    q.clear();
-                }
-            }
-            if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
-                append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
-                shared.set_encode_error(e.to_string());
-                shared.request_stop(); // further frames would just fail the same way
-            }
-            last_frame = Some(item.bytes);
-            last_frame_at = Some(Instant::now());
-        }
+        drain_pending_frames(&shared, &mut encoder, &queues, &mut video_started, &mut last_frame, &mut last_frame_at, &mut last_sent);
         if shared.stopping.load(Ordering::Relaxed) {
             break;
         }
@@ -358,10 +388,13 @@ fn feeder_loop_with_audio(
             thread::sleep(next_tick - now);
         }
         next_tick += TICK;
+        // A frame that arrived during the sleep carries an older timestamp than
+        // the hold resend below would get; it goes out first.
+        drain_pending_frames(&shared, &mut encoder, &queues, &mut video_started, &mut last_frame, &mut last_frame_at, &mut last_sent);
         if video_started && !clock.is_paused() {
             if let (Some(bytes), Some(at)) = (&last_frame, last_frame_at) {
                 if at.elapsed() >= TICK {
-                    let ts = clock.now_ticks();
+                    let ts = strictly_increasing_ts(&mut last_sent, clock.now_ticks());
                     if let Err(e) = encoder.send_frame_buffer(bytes, ts) {
                         append_crash_log(&format!("recording: send_frame_buffer (hold) failed: {e}"));
                         shared.set_encode_error(e.to_string());
@@ -395,7 +428,8 @@ fn feeder_loop_with_audio(
     // was still in flight when the capture callback saw the stop signal,
     // same tail behaviour as the plain feeder_loop above.
     while let Some(item) = shared.pop_or_stop() {
-        if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
+        let ts = strictly_increasing_ts(&mut last_sent, item.ts);
+        if let Err(e) = encoder.send_frame_buffer(&item.bytes, ts) {
             append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
             shared.set_encode_error(e.to_string());
             break;

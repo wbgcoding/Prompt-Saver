@@ -19979,3 +19979,14 @@ fn cancelling_interim_crops_does_not_deadlock_on_their_own_list_lock() {
     assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "joining the crops hung");
     assert!(list.lock().unwrap().is_empty());
 }
+
+#[test]
+fn recording_timestamps_never_go_backwards() {
+    let mut last = None;
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 100), 100);
+    // A hold resend stamped ahead of a frame that arrived meanwhile.
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 400), 400);
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 330), 401);
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 401), 402);
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 900), 900);
+}
