@@ -19957,7 +19957,7 @@ fn renaming_a_tag_to_another_casing_keeps_its_colour() {
 
 #[test]
 fn cancelling_interim_crops_does_not_deadlock_on_their_own_list_lock() {
-    let list: Arc<Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>>> = Arc::new(Mutex::new(Vec::new()));
+    let list: Arc<Mutex<InterimCrops>> = Arc::new(Mutex::new(Vec::new()));
     let flag = Arc::new(AtomicBool::new(false));
     let (flag2, list2) = (flag.clone(), list.clone());
     // Mirrors a crop thread: runs until signalled, then takes the list lock to drop its own entry.

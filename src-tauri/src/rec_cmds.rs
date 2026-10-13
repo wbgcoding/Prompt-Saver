@@ -825,10 +825,12 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     Ok(payload)
 }
 
+pub(crate) type InterimCrops = Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>;
+
 /// Signals and joins every running interim crop. The list is moved into a local
 /// first and the lock released: a crop thread's last step takes the same lock
 /// to remove its own entry, so joining while holding it would never return.
-pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>>) {
+pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<InterimCrops>) {
     let running = std::mem::take(&mut *crops.lock().unwrap_or_else(|e| e.into_inner()));
     for (flag, handle) in running {
         flag.store(true, Ordering::SeqCst);
