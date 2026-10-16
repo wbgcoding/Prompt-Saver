@@ -2,13 +2,11 @@ use super::*;
 
 // ---------- OCR (Windows Media.Ocr, fully offline) ----------
 //
-// Text recognition from an image file or a snip-tool crop, using Windows' own
-// built-in recognizer -- no bundled third-party OCR library, no network.
-// Backend only -- the buttons that call it live in the frontend.
+// Text recognition from an image file or a snip-tool crop using Windows' built-in recognizer:
+// no bundled OCR library, no network. Backend only; the buttons live in the frontend.
 //
-// `ocr_join_lines` is pure text logic (no Windows API), so it is covered by
-// plain `cargo test --lib` on any platform. Everything else lives behind
-// `#[cfg(windows)]`, the same split this file already uses for `mod clipwatch`.
+// `ocr_join_lines` is pure text logic, so plain `cargo test --lib` covers it on any platform.
+// Everything else sits behind `#[cfg(windows)]`.
 
 #[derive(Serialize)]
 pub(crate) struct OcrLang {
@@ -24,9 +22,9 @@ pub(crate) struct OcrResult {
 
 // ---------- OCR language packs, managed from inside the app ----------
 //
-// `OcrCap` mirrors one row of `Get-WindowsCapability -Online -Name
-// "Language.OCR*"`. Size/version are exactly what Windows reports -- a size
-// Windows does not know becomes `None` (frontend renders "-"), never a guess.
+// `OcrCap` mirrors one row of `Get-WindowsCapability -Online -Name "Language.OCR*"`. Size and
+// version are what Windows reports: a size Windows does not know becomes `None` (the frontend
+// renders "-"), never a guess.
 #[derive(Serialize, Clone)]
 pub(crate) struct OcrCap {
     pub(crate) name: String,
@@ -38,10 +36,9 @@ pub(crate) struct OcrCap {
     pub(crate) install_size: Option<u64>,
 }
 
-// A capability row before its localized label is looked up. The label needs
-// the WinRT `Language::CreateLanguage` call (Windows-only); everything else
-// here is plain JSON parsing, kept free of any Windows API so the parser is
-// unit-testable on any platform, same split as ocr_join_lines/ocr_resize_target.
+// A capability row before its localized label is looked up. The label needs the WinRT
+// `Language::CreateLanguage` call (Windows-only); the rest is plain JSON parsing, kept free of
+// Windows APIs so the parser is unit-testable on any platform.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct OcrCapRaw {
     pub(crate) name: String,
@@ -52,10 +49,9 @@ pub(crate) struct OcrCapRaw {
     pub(crate) install_size: Option<u64>,
 }
 
-// What was last seen while a language WAS installed -- kept across restarts
-// (serialized into Settings.ui_texts, see ocr_lang_load_snapshots) so a
-// Windows feature update that silently drops a language pack is still
-// detected as "needs update" after the app relaunches.
+// What was last seen while a language was installed, kept across restarts (serialized into
+// Settings.ui_texts, see ocr_lang_load_snapshots) so a Windows feature update that silently
+// drops a language pack is still detected as "needs update" after relaunch.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub(crate) struct OcrCapSnapshot {
     pub(crate) version: String,
@@ -77,11 +73,10 @@ pub(crate) struct OcrLangUpdateDue {
 }
 
 // ---------------------------------------------------------------------------
-// Voice dictation via Windows.Media.SpeechRecognition. Same COM-per-thread
-// rule as mod ocr. Safety rules this module enforces: recognized text is
-// never logged on any path, no audio is ever written to disk, only one
-// session runs at a time, and recognition fails closed rather than sending
-// audio anywhere without the user's own consent.
+// Voice dictation via Windows.Media.SpeechRecognition. Same COM-per-thread rule as mod ocr.
+// Safety rules: recognized text is never logged, no audio is written to disk, one session
+// runs at a time, and recognition fails closed rather than send audio anywhere without the
+// user's consent.
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
@@ -99,10 +94,9 @@ pub(crate) struct VoiceSupport {
     pub(crate) needs_online: bool,
 }
 
-// voice_start's success payload. `lang` is the tag actually resolved from
-// "auto"/the requested one -- the frontend needs it to run spoken-command
-// post-processing in the language that is really being recognized, which is
-// not necessarily the UI's own display language.
+// voice_start's success payload. `lang` is the tag actually resolved from "auto" or the
+// requested one; the frontend needs it to run spoken-command post-processing in the language
+// really being recognized, which may differ from the UI language.
 #[derive(Serialize, Clone)]
 pub(crate) struct VoiceStartResult {
     pub(crate) id: u64,
@@ -133,36 +127,34 @@ pub(crate) struct VoiceErrorEvent {
     pub(crate) code: String,
 }
 
-// One session at a time -- a second voice_start while this holds Some(..) gets
-// voice-busy instead of opening a second recognizer. `ended` flips true exactly
-// once, inside the session's Completed handler, before voice-stopped is
-// emitted; every stop path (button, hotkey, shutdown, hard cap, silence) reads
-// it first so a session that already finished itself is never stopped twice --
-// a second StopAsync on an already-Completed session throws (0x80131509).
+// One session at a time: a second voice_start while this holds Some(..) gets voice-busy
+// instead of opening a second recognizer. `ended` flips true once, inside the session's
+// Completed handler, before voice-stopped is emitted; every stop path (button, hotkey,
+// shutdown, hard cap, silence) reads it first so a finished session is never stopped twice,
+// since a second StopAsync on a Completed session throws (0x80131509).
 pub(crate) struct VoiceHandle {
     pub(crate) id: u64,
     pub(crate) stop: std::sync::mpsc::Sender<&'static str>,
     pub(crate) ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
-// Second field: claimed while a voice_start call is between its busy check and
-// the real VoiceHandle landing in the first field -- see voice_start for why.
+// Second field: claimed while a voice_start call is between its busy check and the real
+// VoiceHandle landing in the first field (see voice_start).
 pub(crate) struct VoiceState(pub(crate) Mutex<Option<VoiceHandle>>, pub(crate) std::sync::atomic::AtomicBool);
 
 pub(crate) const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
-// Encoded length of a data URL handed over IPC; a 4K PNG from the screenshot
-// editor is ~40 MB, so this only stops runaway input.
+// Encoded length of a data URL handed over IPC; a 4K PNG from the screenshot editor is
+// ~40 MB, so this only stops runaway input.
 pub(crate) const MAX_IMAGE_DATA_URL_BYTES: u64 = 200 * 1024 * 1024;
 pub(crate) const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
 
-// Shared oversized-input guard for a data URL decoded straight from IPC:
-// each caller supplies its own ceiling (OCR keeps its own MAX_OCR_IMAGE_BYTES).
+// Shared oversized-input guard for a data URL decoded from IPC: each caller supplies its own
+// ceiling (OCR keeps MAX_OCR_IMAGE_BYTES).
 pub(crate) fn data_url_within_limit(data_url: &str, limit: u64) -> bool {
     data_url.len() as u64 <= limit
 }
 
-// Pure decision for mod ocr's resize_for_ocr: shrink an oversized image down to
-// max_dim, enlarge a very small one 2x, or leave it alone. Kept outside
-// `#[cfg(windows)]` so it is unit-testable on any platform, same as ocr_join_lines.
+// Pure decision for mod ocr's resize_for_ocr: shrink an oversized image to max_dim, enlarge a
+// very small one 2x, or leave it. Outside `#[cfg(windows)]` so it is unit-testable anywhere.
 pub(crate) fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: u32) -> Option<(u32, u32)> {
     if w > max_dim || h > max_dim {
         let scale = max_dim as f64 / (w.max(h) as f64);
@@ -176,10 +168,8 @@ pub(crate) fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: 
     }
 }
 
-// StorageFile::GetFileFromPathAsync only takes a plain backslash path. A
-// forward-slash path (what a webview or a script hands over) or an
-// extended-length one fails with a bad-pathname error that used to reach the
-// user as raw Windows text.
+// StorageFile::GetFileFromPathAsync only takes a plain backslash path. A forward-slash path
+// (from a webview or a script) or an extended-length one fails with a bad-pathname error.
 pub(crate) fn winrt_file_path(path: &str) -> String {
     let flat = path.replace('/', r"\");
     if let Some(rest) = flat.strip_prefix(r"\\?\UNC\") {
@@ -209,14 +199,12 @@ pub(crate) fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
     Ok(p.to_path_buf())
 }
 
-// Join OCR'd lines back into readable text. A line that does not end in
-// sentence-ending punctuation, followed by a line that starts with a lowercase
-// letter, is a mid-sentence wrap -- joined with a single space. An empty
-// recognized line is a paragraph break, kept as a blank line. Everything else
-// stays on its own line. Right-to-left scripts are not special-cased: Windows'
-// own result already has lines in correct reading order, and this function
-// only ever inspects whitespace/case at the edges, so it never assumes an
-// LTR character order.
+// Join OCR'd lines back into readable text. A line not ending in sentence-ending punctuation,
+// followed by a line starting with a lowercase letter, is a mid-sentence wrap and is joined
+// with a space. An empty recognized line is a paragraph break, kept as a blank line.
+// Everything else stays on its own line. Right-to-left scripts are not special-cased:
+// Windows' result already has lines in reading order, and this only inspects whitespace and
+// case at the edges.
 pub(crate) fn ocr_join_lines(lines: &[String]) -> String {
     fn ends_sentence(line: &str) -> bool {
         let trimmed = line.trim_end_matches(['"', '\'', ')', ']', '\u{201d}', '\u{2019}']);
@@ -251,26 +239,21 @@ pub(crate) fn ocr_join_lines(lines: &[String]) -> String {
     out
 }
 
-// Assembles the final OCR text from the recognized lines and trims the
-// result -- an image whose lines are all empty must yield a genuinely empty
-// string, not a run of newlines, so the caller can tell "nothing was
-// recognized" apart from a real (whitespace-only-looking) result.
+// Assembles the final OCR text from the recognized lines and trims it: an image whose lines
+// are all empty must yield an empty string, not a run of newlines, so the caller can tell
+// "nothing was recognized" from a result.
 pub(crate) fn ocr_assemble_text(lines: &[String], join_lines: bool) -> String {
     let joined = if join_lines { ocr_join_lines(lines) } else { lines.join("\n") };
     joined.trim().to_string()
 }
 
-// Strict allowlist check for a capability Name, BEFORE it is ever used to
-// build a PowerShell/process argument. Anchored on the whole string (not
-// a substring scan), so something like
-// "Language.OCR~~~de-DE~0.0.1.0; rm -rf" is rejected outright -- its trailing
-// bytes do not match the required "~0.0.1.0" suffix once the injected part is
-// accounted for. The tag itself is further restricted to [A-Za-z0-9-], so a
-// name that passes this check can never contain a shell metacharacter.
-// `prefix` is "Language.OCR~~~" or "Language.Speech~~~" (CapKind::prefix(),
-// inside mod ocr) -- kept as a plain &str here rather than taking CapKind
-// itself, since these three functions run BEFORE the #[cfg(windows)] branch
-// in every caller below (mod ocr, where CapKind lives, is windows-only).
+// Strict allowlist check for a capability Name, before it is used to build a PowerShell
+// argument. Anchored on the whole string, so "Language.OCR~~~de-DE~0.0.1.0; rm -rf" is
+// rejected: its trailing bytes do not match the required "~0.0.1.0" suffix. The tag is
+// further restricted to [A-Za-z0-9-], so a name that passes can never contain a shell
+// metacharacter. `prefix` is "Language.OCR~~~" or "Language.Speech~~~" (CapKind::prefix(),
+// inside mod ocr), kept a plain &str because these functions run before the #[cfg(windows)]
+// branch in every caller and CapKind is windows-only.
 pub(crate) fn ocr_capability_name_is_well_formed(prefix: &str, name: &str) -> bool {
     const SUFFIX: &str = "~0.0.1.0";
     if name.len() < prefix.len() + SUFFIX.len() + 2 {
@@ -283,34 +266,26 @@ pub(crate) fn ocr_capability_name_is_well_formed(prefix: &str, name: &str) -> bo
     tag.len() >= 2 && tag.len() <= 12 && tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-// Pulls "<tag>" out of "Language.OCR~~~<tag>~0.0.1.0" (or the Speech
-// equivalent). None for anything that does not have that exact shape
-// (callers only ever pass an already-validated name, but this stays total
-// rather than panicking).
+// Pulls "<tag>" out of "Language.OCR~~~<tag>~0.0.1.0" (or the Speech equivalent). None for
+// anything without that exact shape; callers pass validated names, but this stays total
+// rather than panicking.
 pub(crate) fn ocr_tag_from_capability_name(prefix: &str, name: &str) -> Option<String> {
     let rest = name.strip_prefix(prefix)?;
     let tag = rest.split('~').next()?;
     (!tag.is_empty()).then(|| tag.to_string())
 }
 
-// Parses `Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object
-// Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json` output.
-// PowerShell's ConvertTo-Json emits a single OBJECT (not a one-element array)
-// when there is exactly one match -- both shapes are accepted here. A field
-// Windows did not report (DownloadSize/InstallSize on an already-installed
-// capability, for instance) becomes `None`, never `Some(0)`.
+// Parses `Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object Name, State,
+// Version, DownloadSize, InstallSize | ConvertTo-Json` output. PowerShell's ConvertTo-Json
+// emits a single object (not a one-element array) when exactly one matches; both shapes are
+// accepted. A field Windows did not report (DownloadSize/InstallSize on an installed
+// capability, say) becomes `None`, never `Some(0)`.
 //
-// `State` was originally assumed to always be the enum's STRING name (matching
-// the spec author's own observation and this file's own now-corrected unit
-// tests) -- real capture on a VM showed it comes back as the BARE INTEGER
-// instead (`Microsoft.Dism.Commands.WindowsCapabilityState`, e.g. 0 = not
-// present, 4 = installed; confirmed against two capabilities independently
-// proven Installed/NotPresent by actually using/not using them). Both shapes
-// are accepted here since which one a given Windows build/PowerShell version
-// emits is apparently not something to rely on. An unrecognized numeric code
-// maps to NotPresent -- for a feature this consequential (it gates whether the
-// UI thinks a language is already usable), understating readiness is the safe
-// default, never the reverse.
+// `State` comes back as the bare integer on real systems
+// (`Microsoft.Dism.Commands.WindowsCapabilityState`, e.g. 0 = not present, 4 = installed) but
+// may be the enum's string name on other Windows/PowerShell versions, so both shapes are
+// accepted. An unrecognized numeric code maps to NotPresent: it gates whether the UI thinks a
+// language is usable, so understating readiness is the safe default.
 pub(crate) fn ocr_capability_state_from_value(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::String(s) => s.clone(),
@@ -343,10 +318,9 @@ pub(crate) fn ocr_parse_capabilities_json(prefix: &str, json: &str) -> Result<Ve
         let tag = ocr_tag_from_capability_name(prefix, &name).unwrap_or_default();
         let state = item.get("State").map(ocr_capability_state_from_value).unwrap_or_default();
         let version = item.get("Version").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        // Real Windows output showed 0 used as a "not reported" placeholder, not a
-        // genuine zero-byte size -- even for an already-Installed capability with
-        // real disk usage. Fold it into None too, same as an absent field, so the
-        // UI shows the honest "-" rather than a misleading "Download (0 B)".
+        // Real Windows output uses 0 as a "not reported" placeholder, even for an installed
+        // capability with real disk usage. Fold it into None like an absent field, so the UI shows
+        // "-" rather than a misleading "Download (0 B)".
         let download_size = item.get("DownloadSize").and_then(|v| v.as_u64()).filter(|&n| n != 0);
         let install_size = item.get("InstallSize").and_then(|v| v.as_u64()).filter(|&n| n != 0);
         out.push(OcrCapRaw { name, tag, state, version, download_size, install_size });
@@ -354,11 +328,10 @@ pub(crate) fn ocr_parse_capabilities_json(prefix: &str, json: &str) -> Result<Ve
     Ok(out)
 }
 
-// "Updatable" (worth a background notice) is narrower than "not installed": a
-// language Windows has never reported as installed is simply new, not a
-// regression. Only a previously-Installed language that either changed
-// version or vanished (state flipped to NotPresent, the real case after a
-// Windows feature update removes language packs) counts.
+// "Updatable" (worth a background notice) is narrower than "not installed": a language
+// Windows never reported as installed is new, not a regression. Only a previously installed
+// language that changed version or vanished (state flipped to NotPresent, as after a Windows
+// feature update removes language packs) counts.
 pub(crate) fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_state: &str, current_version: &str) -> bool {
     match previous {
         None => false,
@@ -374,9 +347,8 @@ pub(crate) fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_s
     }
 }
 
-// Shared by OCR and voice language-pack bookkeeping -- "ocrLangVersions"/
-// "ocrLangNextCheck" for CapKind::Ocr (unchanged keys, existing settings
-// survive), "voiceLangVersions"/"voiceLangNextCheck" for CapKind::Speech.
+// Shared by OCR and voice language-pack bookkeeping: "ocrLangVersions"/"ocrLangNextCheck" for
+// CapKind::Ocr, "voiceLangVersions"/"voiceLangNextCheck" for CapKind::Speech.
 #[cfg(windows)]
 pub(crate) fn lang_versions_key(kind: ocr::CapKind) -> String {
     format!("{}LangVersions", kind.slug())
@@ -386,9 +358,8 @@ pub(crate) fn lang_next_check_key(kind: ocr::CapKind) -> String {
     format!("{}LangNextCheck", kind.slug())
 }
 
-// Cross-restart bookkeeping for the "updatable?" decision -- a JSON blob
-// (tag -> OcrCapSnapshot) tucked into the existing free-form ui_texts map
-// rather than a new Settings field.
+// Cross-restart bookkeeping for the "updatable?" decision: a JSON blob (tag ->
+// OcrCapSnapshot) in the free-form ui_texts map rather than a new Settings field.
 #[cfg(windows)]
 pub(crate) fn lang_load_snapshots(settings: &Settings, kind: ocr::CapKind) -> HashMap<String, OcrCapSnapshot> {
     settings
@@ -417,9 +388,8 @@ pub(crate) async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     }
 }
 
-// Upscale_under_px/join_lines/lang/auto_pick_lang are sent by the frontend on every
-// call (it already holds the live values via val()/flag()/txt()) instead of the
-// backend re-reading them from Db state.
+// upscale_under_px, join_lines, lang and auto_pick_lang are sent by the frontend on every
+// call (it holds the live values) instead of the backend re-reading them from Db state.
 #[tauri::command]
 pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let validated = ocr_validate_path(&path)?;
@@ -437,15 +407,13 @@ pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: b
     }
 }
 
-// Entry point (a) -- "Recognize text" in #snip-modal runs on the capture
-// already shown there, which at that point only ever exists as a data URL (it may
-// not have been saved to disk yet). Thin command taking the data URL directly,
-// same shape as copy_image_data for the screenshot editor.
+// Entry point for "Recognize text" in #snip-modal, which runs on the capture already shown
+// there; at that point it exists only as a data URL (it may not be saved yet). Same shape as
+// copy_image_data for the screenshot editor.
 #[tauri::command]
 pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
-    // Same ceiling as the file-based path (check_import_size) -- this one
-    // arrives straight over IPC with no on-disk size to check ahead of time,
-    // so nothing bounded the encoded + decoded + RGBA buffers below before now.
+    // Same ceiling as the file-based path (check_import_size): this arrives over IPC with no
+    // on-disk size to check, so nothing else bounds the encoded, decoded and RGBA buffers below.
     if !data_url_within_limit(&data_url, MAX_OCR_IMAGE_BYTES) {
         return Err(format!(
             "file is too large ({} MB); the limit is {} MB",
@@ -469,27 +437,21 @@ pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join
     }
 }
 
-// Default matches the spec's own default (20000): long enough for a real
-// screenshot of text, short enough that a photo of a wall of text cannot
-// inflate the database.
+// Long enough for a real screenshot of text, short enough that a photo of a wall of text
+// cannot inflate the database.
 pub(crate) const OCR_INDEX_MAX_CHARS: usize = 20000;
 
-// The cap itself, split out from ocr_index_text below so it is testable
-// without a real OCR engine: char-safe (never splits a multi-byte character),
-// which `.chars().take(n)` already guarantees.
+// The cap itself, split out of ocr_index_text so it is testable without a real OCR engine.
+// `.chars().take(n)` never splits a multi-byte character.
 pub(crate) fn cap_ocr_text(text: &str, max_chars: usize) -> String {
     text.chars().take(max_chars).collect()
 }
 
-// Text recognized in an attached picture, for the search index only (never
-// shown, exported or synchronized). Always auto-picks the recognition
-// language rather than reading the interactive OCR feature's own language
-// setting: indexing runs silently
-// with ocrIndex switched on, whether or not the OCR text-recognition feature
-// itself is even turned on. A picture that cannot be decoded, an engine with
-// no language pack installed, or a blank result all come back as "", the
-// same "nothing to index" outcome a caller cannot tell apart from an error
-// and does not need to.
+// Text recognized in an attached picture, for the search index only (never shown, exported or
+// synchronized). It always auto-picks the recognition language instead of reading the
+// interactive OCR language setting, because indexing runs silently with ocrIndex on whether or
+// not the OCR feature itself is on. A picture that cannot be decoded, an engine with no
+// language pack, or a blank result all come back as "": the same "nothing to index" outcome.
 pub(crate) fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
     if data_url.is_empty() || !data_url_within_limit(data_url, MAX_OCR_IMAGE_BYTES) {
         return String::new();
@@ -503,12 +465,10 @@ pub(crate) fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
     cap_ocr_text(&text, max_chars)
 }
 
-// The decision behind "attach fills the field only while ocrIndex is on,
-// removing the picture always empties it" -- pulled out of
-// add_prompt/update_prompt as its own pure function so the gating is
-// provable without a real OCR engine or a running app: `recognize` is called
-// at most once, only for a non-empty picture with the switch on, and its
-// result is what a test controls instead of Windows.Media.Ocr.
+// The decision behind "attach fills the field only while ocrIndex is on, removing the
+// picture always empties it", pulled out of add_prompt/update_prompt so the gating is
+// provable without a real OCR engine: `recognize` is called at most once, only for a
+// non-empty picture with the switch on.
 pub(crate) fn resolved_image_text(new_image: &str, ocr_index_on: bool, recognize: impl FnOnce(&str) -> String) -> String {
     if new_image.is_empty() || !ocr_index_on {
         String::new()
@@ -517,12 +477,10 @@ pub(crate) fn resolved_image_text(new_image: &str, ocr_index_on: bool, recognize
     }
 }
 
-// Ids whose recognized picture text contains `query` -- pulled out of the
-// command below as its own pure function so it is testable without a running
-// app. This is the only way image_text is ever read back out: it never
-// crosses into the frontend at all (see SlimPrompt's From impl), so the
-// plain-text search every other field goes through client-side asks the
-// backend for this one field alone.
+// Ids whose recognized picture text contains `query`, as its own pure function so it is
+// testable without a running app. This is the only way image_text is read back: it never
+// crosses into the frontend (see SlimPrompt's From impl), so the client-side plain-text
+// search asks the backend for this one field.
 pub(crate) fn image_text_matches(prompts: &[Prompt], ocr_index_on: bool, query: &str) -> Vec<String> {
     if !ocr_index_on {
         return Vec::new();
@@ -576,9 +534,9 @@ pub(crate) fn cancel_ocr_index_backfill() {
     OCR_INDEX_CANCEL.store(true, Ordering::SeqCst);
 }
 
-// Writes recognized text onto a prompt only while it still shows the picture the text
-// came from and has no text yet: the user may have replaced or removed the picture
-// (or the text may have been refreshed) while the recognition ran.
+// Writes recognized text onto a prompt only while it still shows the picture the text came
+// from and has no text yet: the user may have replaced or removed the picture (or refreshed
+// the text) while recognition ran.
 pub(crate) fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> bool {
     if p.image != recognized_from || !p.image_text.is_empty() {
         return false;
@@ -587,9 +545,9 @@ pub(crate) fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: S
     true
 }
 
-// Switching the picture-text index off must not leave the recognized text
-// behind: it is searchable content read out of the user's pictures. Returns
-// whether anything was cleared, so the caller saves only when needed.
+// Switching the picture-text index off must not leave the recognized text behind: it is
+// searchable content read out of the user's pictures. Returns whether anything was cleared, so
+// the caller saves only when needed.
 pub(crate) fn clear_image_text(prompts: &mut [Prompt]) -> bool {
     let mut changed = false;
     for p in prompts.iter_mut().filter(|p| !p.image_text.is_empty()) {
@@ -599,8 +557,8 @@ pub(crate) fn clear_image_text(prompts: &mut [Prompt]) -> bool {
     changed
 }
 
-// Bumped by every clear. A recognition pass remembers the value it started with and
-// never writes its text back once it changed (or the switch is off).
+// Bumped by every clear. A recognition pass remembers the value it started with and never
+// writes its text back once it changed (or the switch is off).
 pub(crate) static OCR_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn ocr_epoch() -> u64 {
@@ -611,10 +569,10 @@ pub(crate) fn ocr_index_flag_on(store: &Store) -> bool {
     store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false)
 }
 
-// Cancels a running pass, invalidates every pass in flight and erases the text in
-// prompts AND trash. Caller holds the store lock and saves when this returns true.
-// Settings that arrive from outside (a settings import, a settings restore) may
-// switch the index off: its text goes with it, like the switch itself does.
+// Cancels a running pass, invalidates every pass in flight and erases the text in prompts and
+// trash. The caller holds the store lock and saves when this returns true. Settings arriving
+// from outside (an import or restore) may switch the index off; its text goes with it, like
+// the switch itself.
 pub(crate) fn clear_ocr_text_if_switched_off(was_on: bool, store: &mut Store) -> bool {
     was_on && !ocr_index_flag_on(store) && clear_ocr_index_text(store)
 }
@@ -627,9 +585,8 @@ pub(crate) fn clear_ocr_index_text(store: &mut Store) -> bool {
     live || trashed
 }
 
-// Writes one recognized text back, only while the index is still on and no clear
-// happened since the pass started and the prompt still shows the same picture.
-// Returns whether it was written.
+// Writes one recognized text back, only while the index is still on, no clear happened since
+// the pass started, and the prompt still shows the same picture. Returns whether it wrote.
 pub(crate) fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_from: &str, text: String, started_epoch: u64) -> bool {
     if ocr_epoch() != started_epoch || !ocr_index_flag_on(store) {
         return false;
@@ -637,12 +594,10 @@ pub(crate) fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_fr
     store.prompts.iter_mut().find(|p| p.id == id).is_some_and(|p| apply_backfill_text(p, recognized_from, text))
 }
 
-// The expert-menu "read existing pictures" action: every prompt that carries
-// a picture but no index text yet, read once, one at a time -- a single
-// sequential pass, never a flood of parallel OCR calls. Progress and
-// cancellation go through the same shared background-jobs registry
-// push_bg_op already gives export/convert/the ffmpeg download, so this needs
-// no progress UI of its own.
+// The expert-menu "read existing pictures" action: every prompt that carries a picture but no
+// index text yet is read once, one at a time in a single sequential pass, never a flood of
+// parallel OCR calls. Progress and cancellation use the shared background-jobs registry
+// (push_bg_op), so there is no progress UI of its own.
 #[tauri::command]
 pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     let Some(_pass) = OcrIndexPass::claim() else {
@@ -692,14 +647,12 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
     Ok(done)
 }
 
-// List recognition-language capabilities. Usually no elevated rights are
-// needed (Microsoft's own docs agree), but some Windows builds throw
-// ERROR_ELEVATION_REQUIRED even for this read-only query -- see the HResult
-// check in ocr::fetch_capabilities, which surfaces that case as its own
-// "ocr-caps-need-elevation" error instead of a raw failure.
-// `force` bypasses the in-memory cache (OCR_LANG_CACHE_H hours); the
-// cache is what ocr_install_language's whitelist check is validated against,
-// so a name can never be installed without having actually been enumerated.
+// List recognition-language capabilities. Usually no elevated rights are needed, but some
+// Windows builds throw ERROR_ELEVATION_REQUIRED even for this read-only query; see the
+// HResult check in ocr::fetch_capabilities, which surfaces it as "ocr-caps-need-elevation".
+// `force` bypasses the in-memory cache (OCR_LANG_CACHE_H hours); the cache is what
+// ocr_install_language's whitelist check validates against, so a name can never be installed
+// without having been enumerated.
 #[tauri::command]
 pub(crate) async fn ocr_capabilities(force: bool) -> Result<Vec<OcrCap>, String> {
     let cache_hours = OCR_LANG_CACHE_H;
@@ -716,31 +669,22 @@ pub(crate) async fn ocr_capabilities(force: bool) -> Result<Vec<OcrCap>, String>
     }
 }
 
-// Windows on some machines refuses the read-only capability listing to a normal
-// user (ocr_capabilities then fails with "ocr-caps-need-elevation"). This runs
-// the very same listing through the UAC prompt instead. Only ever called from
-// the button the user presses in the language dialog -- the app never asks for
-// rights on its own. Returns once the elevated process was launched; the
-// frontend polls ocr_capabilities_elevated_result for the list.
-// async + spawn_blocking: ShellExecuteW's "runas" verb blocks the
-// calling thread until the user actually answers the UAC prompt, not just
-// until the process starts (walking away leaves it blocked indefinitely).
-// spawn_blocking moves that wait onto the dedicated blocking-thread pool
-// instead of the tokio runtime's small async-worker set -- an earlier version
-// of this fn was async but called the blocking Win32 call directly, which
-// only relocated the stall onto a scarcer thread and could starve every other
-// async command in the app for as long as the prompt sat open. Its sibling
-// ocr_capabilities_elevated_result already used spawn_blocking correctly.
+// Some machines refuse the read-only capability listing to a normal user (ocr_capabilities
+// then fails with "ocr-caps-need-elevation"). This runs the same listing through the UAC
+// prompt. Only called from the button in the language dialog; the app never asks for rights
+// on its own. Returns once the elevated process was launched; the frontend polls
+// ocr_capabilities_elevated_result for the list.
+// async + spawn_blocking: ShellExecuteW's "runas" blocks the calling thread until the user
+// answers the UAC prompt (walking away leaves it blocked), so the wait goes onto the blocking
+// pool rather than the tokio runtime's small async-worker set, where it could starve every
+// other async command.
 #[tauri::command]
 pub(crate) async fn ocr_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
     {
-        // spawn_blocking: ShellExecuteW("runas") sits blocked until the user answers
-        // the UAC prompt, which can take as long as they like. Calling it directly in
-        // this async fn (as before) would tie up a tokio worker thread for that whole
-        // wait -- unlike a plain (non-async) command, which Tauri already dispatches
-        // via its own blocking pool, an async fn runs straight on the runtime's small
-        // worker set, and blocking one starves every other async command sharing it.
+        // spawn_blocking: ShellExecuteW("runas") sits blocked until the user answers the UAC prompt.
+        // An async fn runs on the runtime's small worker set, so blocking one there would starve
+        // every other async command.
         tauri::async_runtime::spawn_blocking(|| ocr::elevate_capabilities(ocr::CapKind::Ocr)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
@@ -749,11 +693,10 @@ pub(crate) async fn ocr_capabilities_elevate() -> Result<(), String> {
     }
 }
 
-// None while that elevated listing is still running (or was never started),
-// Some(list) once it wrote one. A failure inside the elevated process is
-// reported as an error, never as an empty list. Async + spawn_blocking: this
-// reads a file and, on success, calls into COM (caps_from_json's Language
-// lookups) via ensure_winrt, which must never run on the UI thread.
+// None while the elevated listing is still running (or never started), Some(list) once it
+// wrote one. A failure inside the elevated process is an error, never an empty list. Async +
+// spawn_blocking: this reads a file and calls into COM (caps_from_json's Language lookups)
+// via ensure_winrt, which must never run on the UI thread.
 #[tauri::command]
 pub(crate) async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, String> {
     #[cfg(windows)]
@@ -766,14 +709,12 @@ pub(crate) async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrC
     }
 }
 
-// Kick off an elevated install for one language capability. Validates
-// `name` BEFORE any string is built or a process is touched: first the
-// anchored character-class check, then -- only if that already passed --
-// membership in the capability set ocr_capabilities() most recently actually
-// enumerated. Returns as soon as the elevated process has been launched (or
-// launch was rejected); it never waits for Add-WindowsCapability to finish --
-// the frontend polls ocr_install_result / ocr_capabilities(force: true)
-// instead (no blocking, no wait-dialog without a cancel option).
+// Kick off an elevated install for one language capability. Validates `name` before any
+// string is built or a process is touched: first the anchored character-class check, then,
+// only if that passed, membership in the capability set ocr_capabilities() most recently
+// enumerated. Returns once the elevated process was launched (or rejected) and never waits
+// for Add-WindowsCapability; the frontend polls ocr_install_result and
+// ocr_capabilities(force: true).
 // async: same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
 #[tauri::command]
 pub(crate) async fn ocr_install_language(name: String) -> Result<(), String> {
@@ -794,11 +735,10 @@ pub(crate) async fn ocr_install_language(name: String) -> Result<(), String> {
     }
 }
 
-// Read (and, on a terminal result, clear) the result file the elevated
-// installer writes for `name`. None while the install is still running or was
-// never started; Some(...) once it finished, one way or the other. A
-// successful result is the point where the capability + engine caches get
-// invalidated -- see the comment in mod ocr::install_result for why here.
+// Read (and, on a terminal result, clear) the result file the elevated installer writes for
+// `name`. None while the install is still running or never started; Some(...) once it
+// finished. A successful result is when the capability and engine caches are invalidated (see
+// the comment in mod ocr::install_result).
 #[tauri::command]
 pub(crate) fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
     if !ocr_capability_name_is_well_formed("Language.OCR~~~", &name) {
@@ -814,10 +754,9 @@ pub(crate) fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
     }
 }
 
-// "Abbrechen" on the background update notice -- defers the NEXT
-// automatic notice by OCR_LANG_SNOOZE_H hours, so the user is not re-nagged on
-// every restart. Does not touch the check cadence itself; a
-// manual "Jetzt prüfen" (ocr_capabilities(force: true)) is unaffected by this.
+// The "Cancel" on the background update notice defers the next automatic notice by
+// OCR_LANG_SNOOZE_H hours so the user is not re-nagged on every restart. It does not touch
+// the check cadence; a manual check (ocr_capabilities(force: true)) is unaffected.
 #[tauri::command(async)]
 pub(crate) fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
@@ -826,11 +765,10 @@ pub(crate) fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     let _ = (app, state);
 }
 
-// Speech (voice dictation) language packs -- thin wrappers around the exact
-// same Get-WindowsCapability/Add-WindowsCapability machinery OCR uses (mod
-// ocr), just with CapKind::Speech. ocrAutoCopy/ocrJoinLines have no
-// counterpart here on purpose: that is OCR-specific post-processing of a
-// recognition result, not something dictated text needs.
+// Speech (voice dictation) language packs: thin wrappers around the same
+// Get-WindowsCapability/Add-WindowsCapability machinery OCR uses (mod ocr) with
+// CapKind::Speech. ocrAutoCopy/ocrJoinLines have no counterpart here: that is OCR-specific
+// post-processing, not something dictated text needs.
 #[tauri::command]
 pub(crate) async fn speech_capabilities(force: bool) -> Result<Vec<OcrCap>, String> {
     let cache_hours = VOICE_LANG_CACHE_H;
@@ -916,10 +854,9 @@ pub(crate) fn voice_lang_snooze(app: AppHandle, state: State<Db>) {
     let _ = (app, state);
 }
 
-// Shared by ocr_lang_snooze/voice_lang_snooze: defer the NEXT automatic notice
-// by the kind's snooze hours (lang_snooze_hours), so the user is not
-// re-nagged on every restart. Does not touch the check cadence itself; a
-// manual "Jetzt prüfen" (force: true) is unaffected by this.
+// Shared by ocr_lang_snooze/voice_lang_snooze: defer the next automatic notice by the kind's
+// snooze hours (lang_snooze_hours) so the user is not re-nagged on every restart. The check
+// cadence and a manual check (force: true) are unaffected.
 #[cfg(windows)]
 pub(crate) fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind) {
     let mut store = lock(state);
@@ -930,10 +867,9 @@ pub(crate) fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind
     save_settings(app, &store.settings);
 }
 
-// Language-pack timings, one set per kind (both kinds use the same values):
-// how long a checked capability list is trusted (hours), how often the
-// background watcher looks for updates (hours), and how long "Cancel" on the
-// update notice defers the next notice (hours).
+// Language-pack timings, one set per kind (both kinds use the same values): how long a
+// checked capability list is trusted, how often the background watcher looks for updates, and
+// how long "Cancel" on the update notice defers the next notice, all in hours.
 pub(crate) const OCR_LANG_CACHE_H: f64 = 24.0;
 pub(crate) const VOICE_LANG_CACHE_H: f64 = 24.0;
 #[cfg(windows)]
@@ -969,7 +905,7 @@ pub(crate) fn lang_snooze_hours(kind: ocr::CapKind) -> f64 {
     }
 }
 
-// Well after launch -- the first round must never compete with window build.
+// Well after launch: the first round must not compete with window build.
 #[cfg(windows)]
 pub(crate) const OCR_LANG_FIRST_DELAY_SECS: u64 = 30;
 
@@ -978,14 +914,11 @@ pub(crate) fn lang_check_interval(kind: ocr::CapKind) -> Duration {
     Duration::from_secs((lang_check_hours(kind) * 3600.0) as u64)
 }
 
-// Background watcher for "an installed language pack is now updatable" -- one
-// registration per kind on the SAME shared scheduler thread -- one thread checks
-// both lists, registering a second named job satisfies that, the same way
-// auto-backup/update-check/temp-sweep already share the thread.
-// Notification-ONLY -- it never installs anything itself (elevation always
-// needs the frontend's confirmDialog explanation first). Because of that,
-// "multiple due packages processed sequentially, never in parallel" is
-// automatically satisfied: one round only ever lists what is due in one event.
+// Background watcher for "an installed language pack is now updatable": one registration per
+// kind on the shared scheduler thread, like auto-backup, update-check and temp-sweep.
+// Notification only; it never installs anything itself (elevation always needs the frontend's
+// confirmDialog explanation first). A round only lists what is due in one event, so multiple
+// due packages are never processed in parallel.
 #[cfg(windows)]
 pub(crate) fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
     let job_name = format!("{}-lang-check", kind.slug());
@@ -996,8 +929,8 @@ pub(crate) fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
     });
 }
 
-// One round of the watcher. The persisted next-due time is what really decides
-// whether anything happens, so a restart neither skips nor duplicates a check.
+// One round of the watcher. The persisted next-due time decides whether anything happens, so
+// a restart neither skips nor duplicates a check.
 #[cfg(windows)]
 pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
     let snapshot = app.try_state::<Db>().map(|s| {
@@ -1030,9 +963,8 @@ pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
                 label: cap.label.clone(),
             });
         }
-        // Keep the remembered snapshot in step with what Windows reports right
-        // now, so the NEXT check compares against today's truth rather than a
-        // stale one.
+        // Keep the remembered snapshot in step with what Windows reports now, so the next check
+        // compares against today's truth.
         let now_installed = cap.state == "Installed";
         if now_installed || prev.is_some() {
             new_snapshots.insert(
@@ -1042,20 +974,17 @@ pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
         }
     }
     if !due.is_empty() && app.emit(kind.update_due_event(), &due).is_err() {
-        // Delivery failed -- leave the snapshot AND the next-check time exactly
-        // as they were, so the next scheduled tick redoes this same comparison
-        // and retries the emit. Persisting either here would make the notice
-        // look already handled (a since-updated snapshot no longer compares as
-        // "needs update") even though nothing was ever actually shown to the
-        // user, suppressing it for up to a full check interval.
+        // Delivery failed: leave the snapshot and the next-check time as they were, so the next tick
+        // redoes this comparison and retries the emit. Persisting either would make the notice look
+        // handled (a since-updated snapshot no longer compares as "needs update") though nothing was
+        // shown, suppressing it for up to a full check interval.
         return;
     }
     if let Some(s) = app.try_state::<Db>() {
         let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
         lang_save_snapshots(&mut store.settings, kind, &new_snapshots);
-        // Persist the next-due time so a user who dismisses the notice any way
-        // other than "Abbrechen" (lang_snooze) is not re-nagged on every app
-        // start -- the in-process wait cadence alone resets on every launch.
+        // Persist the next-due time so a user who dismisses the notice any way other than "Cancel"
+        // (lang_snooze) is not re-nagged on every start; the in-process cadence resets on launch.
         let next = now + (lang_check_hours(kind) * 3600.0) as u64;
         store.settings.ui_texts.insert(lang_next_check_key(kind), next.to_string());
         save_settings(app, &store.settings);
