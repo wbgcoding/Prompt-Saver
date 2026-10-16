@@ -15,14 +15,13 @@ pub(crate) const HK_SYSTEM: &str = "hotkey-system"; // Windows or every app owns
 pub(crate) const HK_TAKEN: &str = "hotkey-taken"; // already bound inside this app
 pub(crate) const HK_CONFLICT: &str = "hotkey-conflict"; // another running app holds the registration
 
-// Keys a global hotkey may never take, whatever the modifiers are. A registered
-// accelerator SWALLOWS the keystroke system-wide, so these would break the machine:
-// Tab/Escape/Enter are the universal navigation + confirm/cancel keys, Backspace
-// and Delete are word-wise text editing (Ctrl+Backspace), Insert carries the
-// classic clipboard aliases (Ctrl+Insert / Shift+Insert), Space is the IME switch
-// on CJK systems and the window menu with Alt, PrintScreen is screen capture, and
-// the lock keys are hardware state. This one list also covers Ctrl+Alt+Del,
-// Ctrl+Shift+Esc, Ctrl+Esc, Alt+Tab and Alt+Space without naming them.
+// Keys a global hotkey may never take, whatever the modifiers: a registered accelerator
+// swallows the keystroke system-wide. Tab/Escape/Enter are navigation and confirm/cancel,
+// Backspace and Delete are word-wise editing (Ctrl+Backspace), Insert has the clipboard
+// aliases (Ctrl/Shift+Insert), Space is the IME switch on CJK systems and the window menu
+// with Alt, PrintScreen is screen capture, and the lock keys are hardware state. The list
+// also covers Ctrl+Alt+Del, Ctrl+Shift+Esc, Ctrl+Esc, Alt+Tab and Alt+Space without naming
+// them.
 pub(crate) const RESERVED_KEYS: &[Code] = &[
     Code::Tab,
     Code::Escape,
@@ -39,11 +38,10 @@ pub(crate) const RESERVED_KEYS: &[Code] = &[
     Code::Pause,
 ];
 
-// Ctrl+<key> combinations every Windows application implements the same way. Taking
-// one globally means the user loses copy, paste or save in EVERY program. Only the
-// plain Ctrl form is blocked: adding Shift or Alt makes a distinct combination that
-// no longer belongs to anyone in particular, and that is the namespace users pick
-// their own shortcuts from.
+// Ctrl+<key> combinations every Windows application implements the same way; taking one
+// globally would remove copy, paste or save in every program. Only the plain Ctrl form is
+// blocked: adding Shift or Alt makes a distinct combination, the namespace users pick their
+// own shortcuts from.
 pub(crate) const UNIVERSAL_CTRL: &[Code] = &[
     Code::KeyA, // select all
     Code::KeyC, // copy
@@ -112,11 +110,10 @@ pub(crate) fn parse_accel(raw: &str) -> Option<Accel> {
     accel_error(raw).ok()
 }
 
-// Which feature a registered accelerator belongs to. A plain `Option<String>`
-// (None = app hotkey) stopped being enough once a THIRD kind of global hotkey
-// (131, voice dictation) needed its own owner that is neither the app hotkey nor
-// a prompt -- a sentinel prompt id would silently pass as a real Prompt(id) in
-// rearm_hotkeys and the handler below, so a real enum replaces it everywhere.
+// Which feature a registered accelerator belongs to. A plain `Option<String>` (None = app
+// hotkey) stopped being enough once voice dictation needed its own owner; a sentinel prompt
+// id would pass as a real Prompt(id) in rearm_hotkeys and the handler below, so a real enum
+// is used.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum HotkeyOwner {
     App,
@@ -129,15 +126,13 @@ pub(crate) enum HotkeyOwner {
     RecPause,
 }
 
-// Every accelerator that should be registered, in registration order. Unusable
-// accelerators and combinations an earlier entry already claimed are skipped: the
-// app hotkey wins, then voice dictation, then the two recording controls, then
-// prompts in list order. `per_prompt` is the promptHotkeys feature toggle -- off
-// leaves the stored accelerators alone and simply registers none of them.
-// `voice_hotkey` is only ever Some when both the `voice` and `voiceHotkey` flags
-// are on; `rec_stop_hotkey`/`rec_pause_hotkey` only ever Some while a recording
-// is actually running AND their own toggle is on -- both already-resolved
-// choices, not re-checked here.
+// Every accelerator that should be registered, in registration order. Unusable accelerators
+// and ones an earlier entry already claimed are skipped: the app hotkey wins, then voice
+// dictation, then the two recording controls, then prompts in list order. `per_prompt` is
+// the promptHotkeys toggle: off leaves the stored accelerators alone and registers none.
+// `voice_hotkey` is Some only when both the `voice` and `voiceHotkey` flags are on;
+// `rec_stop_hotkey`/`rec_pause_hotkey` are Some only while a recording runs and their own
+// toggle is on. The caller has already resolved these.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn hotkey_plan(
     app_hotkey: &str,
@@ -209,13 +204,12 @@ pub(crate) fn drop_colliding_hotkeys(app_hotkey: &str, reserved: &[&str], prompt
     dropped
 }
 
-// Check an accelerator from the editor against everything already bound. Empty
-// clears the binding; the error codes are turned into a localized inline message
-// by the UI. rec_stop_hotkey/rec_pause_hotkey are only checked while their own
-// feature is on -- setting a prompt hotkey to the same combination used to
-// go through fine, then silently stop firing for the whole duration of every
-// future recording, because hotkey_plan gives the recording controls priority.
-// Checking here closes that loophole before it can be created.
+// Check an accelerator from the editor against everything already bound. Empty clears the
+// binding; the error codes become a localized inline message in the UI.
+// rec_stop_hotkey/rec_pause_hotkey are checked only while their own feature is on.
+// Checking them here matters: hotkey_plan gives the recording controls priority, so a
+// prompt hotkey with the same combination would silently stop firing during every
+// recording.
 pub(crate) fn sanitize_hotkey(
     raw: &str,
     app_hotkey: &str,
@@ -285,15 +279,8 @@ pub(crate) fn sanitize_hotkey_mode(raw: &str) -> String {
 // rearm_hotkeys, read by the global shortcut handler.
 pub(crate) struct HotkeyTargets(pub(crate) Mutex<Vec<(Accel, HotkeyOwner)>>);
 
-// The single owner of the registered shortcut set: drop everything, then register
-// the app hotkey plus one accelerator per prompt. A combination the OS refuses is
-// owned by another app: it is cleared from the store instead of leaving a binding
-// the user believes in. Returns false when the APP hotkey was the refused one.
-// Must never run while the store mutex is held: registering hops to the main
-// thread, and the shortcut handler reads the store.
-// Whether a recording is currently in flight (Recording or Paused) --
-// both configs of RecordingState just wrap an Option, so this needs no
-// windows-only gating of its own.
+// Whether a recording is currently in flight (Recording or Paused); both configs of
+// RecordingState just wrap an Option, so no windows-only gating is needed.
 pub(crate) fn recording_active(app: &AppHandle) -> bool {
     app.try_state::<RecordingState>()
         .map(|s| s.0.lock().unwrap_or_else(|e| e.into_inner()).is_some())
@@ -313,22 +300,20 @@ pub(crate) fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
     None
 }
 
-// Whether the last rearm_hotkeys() actually got the stop/pause combination
-// registered -- read by recording_status() so the bar can warn instead of the
-// user believing in a binding that silently never fires. Unlike the app/voice
-// hotkey, a conflict here never clears the stored default: the default ships
-// pre-picked, and a transient collision (another app briefly holding the same
-// combination) should not permanently blank it out from under the user.
+// Whether the last rearm_hotkeys() actually registered the stop/pause combination, read by
+// recording_status() so the bar can warn instead of the user believing in a binding that
+// never fires. Unlike the app/voice hotkey, a conflict here never clears the stored
+// default: it ships pre-picked, and a transient collision with another app should not
+// blank it permanently.
 pub(crate) static REC_STOP_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 pub(crate) static REC_PAUSE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 // Runs of rearm_hotkeys never overlap: a second run interleaving with the first would
-// register accelerators the first just registered, read that as another app holding
-// them, and clear the user's hotkeys from the store. A caller that arrives while a
-// run is going does not wait (registering hops to the main thread, so a waiting
-// main-thread caller would block the very run it waits for); it asks the running
-// one to go around once more, which re-reads the settings and so includes this
-// caller's change.
+// register accelerators the first just registered, read that as another app holding them,
+// and clear the user's hotkeys from the store. A caller arriving during a run does not wait
+// (registering hops to the main thread, so a waiting main-thread caller would block the
+// run); it asks the running one to go around once more, which re-reads the settings and so
+// includes the caller's change.
 static REARM_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static REARM_AGAIN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -342,6 +327,12 @@ impl Drop for RearmRunning {
     }
 }
 
+// The single owner of the registered shortcut set: drop everything, then register the app
+// hotkey plus one accelerator per prompt. A combination the OS refuses is owned by another
+// app: it is cleared from the store instead of leaving a binding the user believes in.
+// Returns false when the APP hotkey was the refused one. Must never run while the store
+// mutex is held: registering hops to the main thread, and the shortcut handler reads the
+// store.
 pub(crate) fn rearm_hotkeys(app: &AppHandle) -> bool {
     rearm_hotkeys_claimed(app).unwrap_or(true)
 }
@@ -412,9 +403,9 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
                 .collect();
             let app_ok = store.settings.hotkey.trim().is_empty()
                 || parse_accel(&store.settings.hotkey).is_some();
-            // Registered only while BOTH the feature and its own opt-in flag are on --
-            // switching either off unregisters it without touching the stored string,
-            // the same way promptHotkeys already works for per_prompt above.
+            // Registered only while both the feature and its own opt-in flag are on; switching either
+            // off unregisters it without touching the stored string, like promptHotkeys for per_prompt
+            // above.
             let voice_hotkey_on = store.settings.ui_flags.get("voice") != Some(&false)
                 && store.settings.ui_flags.get("voiceHotkey") == Some(&true);
             let voice_hotkey = voice_hotkey_on.then_some(store.settings.voice_hotkey.as_str());
@@ -499,13 +490,10 @@ pub(crate) fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-hotkey", id.to_string());
 }
 
-// One key press starts, the next stops -- same toggle logic as the button,
-// just without ever bringing the window forward. A running session is stopped
-// exactly the way voice_stop's own command body does (send "manual" on its
-// channel); starting one is left to the main window's own JS, which already
-// owns every setting lookup, the command-word post-processing and where
-// the finished text goes -- the window stays fully capable of all of that while
-// hidden, the same way a prompt hotkey already copies without ever showing it.
+// One key press starts, the next stops, like the button but without bringing the window
+// forward. A running session is stopped as voice_stop does (send "manual" on its channel);
+// starting is left to the main window's JS, which owns the setting lookups, command-word
+// post-processing and where the text goes, and works while hidden like a prompt hotkey copy.
 pub(crate) fn toggle_voice_from_hotkey(app: &AppHandle) {
     if let Some(vstate) = app.try_state::<VoiceState>() {
         let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -519,11 +507,10 @@ pub(crate) fn toggle_voice_from_hotkey(app: &AppHandle) {
     let _ = app.emit_to("main", "voice-hotkey-toggle", ());
 }
 
-// The tray/hotkey counterparts of the recording bar's own Stop/Pause
-// buttons -- same commands, never a second implementation. Both run off a
-// throwaway thread rather than inline: the global-shortcut handler fires on the
-// main thread, and stopping finalizes the encoder (disk I/O), which must not
-// stall the message loop the way the show_rec_bar/open_tray_window bugs did.
+// The tray/hotkey counterparts of the recording bar's Stop/Pause buttons: same commands,
+// never a second implementation. Both run on a throwaway thread: the global-shortcut
+// handler fires on the main thread, and stopping finalizes the encoder (disk I/O), which
+// must not stall the message loop.
 #[cfg(windows)]
 pub(crate) fn trigger_rec_stop_hotkey(app: &AppHandle) {
     let app = app.clone();
@@ -540,18 +527,15 @@ pub(crate) fn trigger_rec_stop_hotkey(app: &AppHandle) {
 #[cfg(not(windows))]
 pub(crate) fn trigger_rec_stop_hotkey(_app: &AppHandle) {}
 
-// The one place that actually pauses/resumes a session -- the recbar
-// buttons, the global hotkey and the tray menu item all end up here, so
-// there is exactly one spot that can forget to also pause/resume the key
-// overlay capture (see keylog::pause/resume) instead of three.
+// The one place that pauses/resumes a session: the recbar buttons, the global hotkey and
+// the tray item all end up here, so the key-overlay capture (keylog::pause/resume) is
+// paused in exactly one spot.
 #[cfg(windows)]
 pub(crate) fn do_pause_recording(session: &mut recording::RecSession) {
     recording::pause(session);
     session.phase = RecPhase::Paused;
-    // The key-overlay capture used to keep running straight through a pause
-    // -- this drops every key struck while paused and freezes the
-    // active-recording clock keys are timed against, the same freeze-on-pause
-    // behaviour RecordClock already gives the video track.
+    // The key-overlay capture drops every key struck while paused and freezes the
+    // active-recording clock keys are timed against, like RecordClock does for the video track.
     keylog::pause();
 }
 
@@ -753,11 +737,10 @@ pub(crate) async fn set_voice_hotkey(app: AppHandle, state: State<'_, Db>, hotke
     apply_hotkey(&app, &state, HotkeySlot::Voice, &hotkey)
 }
 
-// Stop/pause counterparts of set_voice_hotkey -- validated against every OTHER hotkey
-// kind (including each other) before the write. Unlike the app/voice hotkey these are
-// only actually registered while a recording runs (rearm_hotkeys), so a "successful"
-// set here can still show as blocked later if another app claims the combination only
-// once recording starts -- that case is reported through recording_status(), not this call.
+// Stop/pause counterparts of set_voice_hotkey, validated against every other hotkey kind
+// (including each other) before the write. They are registered only while a recording runs
+// (rearm_hotkeys), so a successful set can still show as blocked later if another app
+// claims the combination only then; recording_status() reports that, not this call.
 #[tauri::command]
 pub(crate) async fn set_rec_stop_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
     apply_hotkey(&app, &state, HotkeySlot::RecStop, &hotkey)
