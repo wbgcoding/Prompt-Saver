@@ -46,14 +46,10 @@ pub(crate) fn seat_layout_ids_as_members(
     }
 }
 
-// Rebuilds one view's layout for its CURRENT grid size from `members`, the
-// view's real membership list. Never removes a member: an id
-// that finds no free cell simply gets no layout entry and shows up as
-// overflow in the UI instead of silently disappearing. Replaces the old
-// grow/shrink branching (which decided membership from the layouts
-// themselves and, along three separate paths, could drop or resurrect an
-// entry) with one unconditional recompute that cannot take a wrong branch
-// because it no longer has one.
+// Rebuilds one view's layout for its current grid size from `members`, the view's real
+// membership list. Never removes a member: an id that finds no free cell gets no layout
+// entry and shows up as overflow in the UI instead of silently disappearing. One
+// unconditional recompute, with no grow/shrink branching to get wrong.
 pub(crate) fn rebuild_view_layout(
     view: &mut View,
     folder_cells: &std::collections::HashSet<(u32, u32)>,
@@ -61,10 +57,8 @@ pub(crate) fn rebuild_view_layout(
 ) {
     let (cols, rows) = (view.cols, view.rows);
     let key = grid_key(cols, rows);
-    // Keep whatever the current size already has on record, dropping only
-    // entries for ids that are no longer members, now live inside a grid
-    // folder instead of on their own, or no longer fit (the grid shrank
-    // under them).
+    // Keep what the current size has on record, dropping entries for ids that are no longer
+    // members, now sit inside a grid folder, or no longer fit (the grid shrank).
     let mut layout: HashMap<String, [u32; 2]> = view.layouts.get(&key).cloned().unwrap_or_default();
     layout.retain(|pid, cell| {
         view.members.iter().any(|m| m == pid)
@@ -74,12 +68,10 @@ pub(crate) fn rebuild_view_layout(
     });
     let mut occupied: std::collections::HashSet<(u32, u32)> = folder_cells.clone();
     occupied.extend(layout.values().map(|c| (c[0], c[1])));
-    // A member without a cell yet prefers the spot it is remembered at from
-    // ANY other saved size (so shrinking and growing back restores exactly
-    // the old arrangement, and a member new to this size still lands close
-    // to where the user last saw it) before falling back to the first free
-    // cell. Growing always finds room for everyone; shrinking may not, and
-    // the ones left over stay members without a cell (overflow).
+    // A member without a cell prefers the spot it is remembered at from any other saved size
+    // (shrinking and growing back restores the old arrangement), then the first free cell.
+    // Growing always finds room; shrinking may not, and the leftovers stay members without a
+    // cell (overflow).
     let mut remembered: HashMap<&str, [u32; 2]> = HashMap::new();
     for (k, other) in &view.layouts {
         if *k == key {
@@ -141,19 +133,17 @@ pub(crate) fn fit_folders_to_grid(folders: &mut [TileFolder], view_id: &str, col
     }
 }
 
-// Change the active view's grid dimensions. The arrangement saved for the new
-// size (if any) is restored automatically because layouts are keyed per size;
-// membership itself (`members`) never changes here, so no entry can appear or
-// disappear from the view just because its grid did.
+// Change the active view's grid dimensions. The arrangement saved for the new size is
+// restored automatically (layouts are keyed per size); `members` never changes here, so
+// nothing appears or disappears just because the grid did.
 #[tauri::command(async)]
 pub(crate) fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: u32) -> Settings {
     let mut store = lock(&state);
     let cols = cols.clamp(GRID_MIN, GRID_MAX);
     let rows = rows.clamp(GRID_MIN, GRID_MAX);
-    // A folder whose cell no longer fits the shrunk grid moves to the first free
-    // cell in this view instead of landing off-grid and becoming unreachable -
-    // it loses at most its own cell, same as a single entry would.
-    // normalize_tile_folders below resolves any collision the move creates.
+    // A folder whose cell no longer fits the shrunk grid moves to the first free cell in this
+    // view instead of landing off-grid and unreachable; normalize_tile_folders below resolves
+    // any collision the move creates.
     fit_folders_to_grid(&mut store.settings.tile_folders, &id, cols, rows);
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
@@ -191,10 +181,9 @@ pub(crate) fn tag_key(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
-// Whether a prompt carries the reserved archive tag -- a plain tag match,
-// never a separate state field, so every other tag-aware code path (search,
-// export, backup, sync) already treats an archived prompt like any other one
-// without having to know this concept exists at all.
+// Whether a prompt carries the reserved archive tag: a plain tag match, not a state field,
+// so every tag-aware path (search, export, backup, sync) treats an archived prompt like any
+// other.
 pub(crate) fn is_archived(prompt: &Prompt, archive_tag_key: Option<&str>) -> bool {
     match archive_tag_key {
         Some(key) => prompt.tags.iter().any(|t| tag_key(t) == key),
@@ -344,11 +333,9 @@ pub(crate) fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) ->
     changed
 }
 
-// Move `old_key`'s color onto `new_key`, but only if `new_key` doesn't already
-// have one -- the surviving tag's own color always wins. This is what makes
-// renaming onto an existing tag a real merge rather than a plain rename: the
-// same rename_tag command handles both, this rule is the only thing distinguishing
-// "merge" from "rename" at the color layer.
+// Move `old_key`'s color onto `new_key` unless `new_key` already has one: the surviving
+// tag's color wins. This is what makes renaming onto an existing tag a merge; rename_tag
+// handles both.
 pub(crate) fn transfer_tag_color(colors: &mut HashMap<String, String>, old_key: &str, new_key: &str) {
     if let Some(color) = colors.remove(old_key) {
         colors.entry(new_key.to_string()).or_insert(color);
@@ -366,10 +353,9 @@ pub(crate) fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
     changed
 }
 
-// Batch "add tag": only touches the listed ids, and only those that don't already
-// carry it (case-insensitive) -- already having it is not an error, just a no-op
-// for that one prompt. `known` supplies the casing an existing tag is stored with,
-// same as the single-prompt editor's own sanitize_tags call.
+// Batch "add tag": touches only the listed ids that do not already carry it
+// (case-insensitive); already having it is a no-op, not an error. `known` supplies the
+// stored casing, like the editor's sanitize_tags call.
 pub(crate) fn add_tag_to_ids(
     prompts: &mut [Prompt],
     ids: &std::collections::HashSet<&str>,
@@ -539,9 +525,8 @@ pub(crate) fn apply_tag_colors(settings: &mut Settings, entries: Vec<TagColor>) 
     Ok(())
 }
 
-// "Colour every tag at once": one lock and one settings write for the whole set.
-// Doing it tag by tag through set_tag_color meant a full immediate write per tag,
-// which on a large library is that many disk writes back to back.
+// "Colour every tag at once": one lock and one settings write for the whole set, instead of
+// an immediate write per tag through set_tag_color.
 #[tauri::command(async)]
 pub(crate) fn set_tag_colors(app: AppHandle, state: State<Db>, entries: Vec<TagColor>) -> Result<Settings, String> {
     let mut store = lock(&state);
@@ -616,17 +601,12 @@ pub(crate) fn set_view_color(app: AppHandle, state: State<Db>, id: String, color
     webview_settings(&store.settings)
 }
 
-// The tab bar's order, and a group's own member order, are both nothing
-// but `settings.views`' own order (groupViews on the frontend filters that
-// same array; it is never sorted separately) -- so reordering either one is
-// one generic reshuffle of this Vec, never a merge/group operation, and it
-// can never touch a View's own fields (`members`/`layouts` ride along
-// untouched with their View no matter where it moves to).
-// `order` is the caller's desired full id sequence. An id in `order` that no
-// longer exists is skipped; a view left out of `order` (a stale caller, or
-// one added by another window mid-drag) keeps its old relative order,
-// appended after everything the caller did name -- a mismatch can reorder
-// less than intended but can never drop a view.
+// The tab bar's order and a group's member order are both just `settings.views`' order
+// (groupViews on the frontend filters that array without sorting it), so reordering either
+// is one reshuffle of this Vec and never touches a View's own fields. `order` is the
+// caller's desired full id sequence: an unknown id is skipped, and a view left out (stale
+// caller, or added by another window mid-drag) keeps its relative order after everything
+// named, so a mismatch can reorder less than intended but never drop a view.
 pub(crate) fn reorder_views_by_id(mut views: Vec<View>, order: &[String]) -> Vec<View> {
     let mut reordered: Vec<View> = Vec::with_capacity(views.len());
     for id in order {
@@ -671,9 +651,8 @@ pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String,
         return Ok(());
     }
     let mut store = lock(&state);
-    // Snapshot every color this can touch before mutating, so a failed save can
-    // put it back exactly instead of reporting success for a remap that never
-    // reached disk (a whole theme's tiles would then look remapped until restart).
+    // Snapshot every color this can touch before mutating, so a failed save can restore it
+    // instead of reporting success for a remap that never reached disk.
     let original_prompt_colors: Vec<(String, String)> = store
         .prompts
         .iter()
@@ -734,9 +713,9 @@ pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String,
 }
 
 // The settings half of deleting a view, apart from the lock and the save so it is
-// testable. A grid folder of the deleted view goes with it, and it must go now:
-// left behind until the next start it would still claim its members in
-// normalize_tile_folders' one-folder-per-prompt rule and starve a new folder.
+// testable. A grid folder of the deleted view goes with it now: left behind it would still
+// claim its members in normalize_tile_folders' one-folder-per-prompt rule and starve a new
+// folder.
 pub(crate) fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[String]) -> Result<(), String> {
     if settings.views.len() <= 1 {
         return Err("cannot delete the last view".to_string());
@@ -772,22 +751,18 @@ pub(crate) fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> S
 
 // ---------- Tile folder commands ----------
 
-// Bring the grid folders back to their invariants: only real prompts and real views,
-// no prompt in two folders (the first folder listing it wins), no two folders on the
-// same cell of the same view (the first one keeps it, the next is moved aside by the
-// renderer because its cell is cleared to the origin only if free), and no folder
-// left with fewer than two members: that one dissolves and its prompts become tiles
-// again. Runs on load and after every mutation. Idempotent.
-// `view_ids` rather than `&[View]`: every caller only ever needs to check
-// membership, so passing ids instead of whole views spares a clone of every view's
-// layout maps at each call site.
+// Bring the grid folders back to their invariants: only real prompts and real views, no
+// prompt in two folders (the first listing it wins), no two folders on one cell of a view
+// (a later one is pushed right), and no folder with fewer than two members (it dissolves
+// and its prompts become tiles again). Runs on load and after every mutation; idempotent.
+// Takes `view_ids` rather than `&[View]` to spare a clone of every view's layout maps at
+// each call site.
 pub(crate) fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
-        // A hand-edited/imported cell far outside any real grid (up to u32::MAX)
-        // must not reach the collision loop below: saturating_add stops advancing
-        // once it hits the cap, which would spin the loop forever with the store
-        // mutex held (app dead on startup).
+        // A hand-edited or imported cell far outside any grid (up to u32::MAX) must not reach the
+        // collision loop: saturating_add stops advancing at the cap and would spin forever with the
+        // store mutex held.
         folder.cell[0] = folder.cell[0].min(GRID_MAX);
         folder.cell[1] = folder.cell[1].min(GRID_MAX);
         folder.members.retain(|id| {
@@ -879,11 +854,10 @@ pub(crate) fn save_tile_folder(
     Ok(webview_settings(&store.settings))
 }
 
-// The shared tail of a folder edit. A prompt inside a folder is not a tile of its
-// own: its layout entries are dropped so the cell it used to sit on is free again.
-// A folder the edit left with a single member is about to be dropped by the
-// normalize step, so that member is seated on a cell first, the same as when a
-// prompt is taken out of a folder.
+// The shared tail of a folder edit. A prompt inside a folder is not a tile: its layout
+// entries are dropped so its old cell is free. A folder left with one member is about to be
+// dropped by normalize, so that member is seated on a cell first, as when a prompt is taken
+// out of a folder.
 pub(crate) fn finish_tile_folder_edit(settings: &mut Settings, prompt_ids: &[String]) {
     let inside: Vec<String> = settings.tile_folders.iter().flat_map(|f| f.members.iter().cloned()).collect();
     for view in settings.views.iter_mut() {
@@ -932,11 +906,11 @@ pub(crate) fn place_taken_out_member(
     Ok(())
 }
 
-// Where a prompt taken out of a folder really lands. A cell a folder will still hold
-// after the member left is not free to drop on: folders live outside view.layouts, so
-// the tile would save fine and never draw. It takes the first free cell instead. The
-// origin folder only counts while it keeps two or more members (below that it
-// dissolves and its last member is settled afterwards).
+// Where a prompt taken out of a folder really lands. A cell a folder still holds after the
+// member left is not free: folders live outside view.layouts, so the tile would save but
+// never draw, and it takes the first free cell instead. The origin folder counts only while
+// it keeps two or more members (below that it dissolves and its last member is settled
+// afterwards).
 pub(crate) fn take_out_target_cell(
     view: &View,
     folders: &[TileFolder],
@@ -1043,12 +1017,11 @@ pub(crate) fn seat_dissolved_members(view: &mut View, members: &[String], other_
     }
 }
 
-// Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each
-// member lands on the first free cell of the folder's view: the folder's own cell is
-// free again by the time this runs, so it is usually one of them. Cells held by any
-// OTHER folder still in that view are excluded too (they live outside view.layouts,
-// so first_free_cell alone would not see them: a member could otherwise be handed a
-// cell another folder already owns and never actually appear on screen).
+// Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each member
+// lands on the first free cell of the folder's view (usually including the folder's own,
+// free by then). Cells held by other folders in that view are excluded too: they live
+// outside view.layouts, so first_free_cell alone would hand a member a cell another folder
+// owns and it would never appear.
 #[tauri::command]
 pub(crate) fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
     let mut store = lock(&state);
