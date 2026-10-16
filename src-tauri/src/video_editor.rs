@@ -1163,6 +1163,9 @@ pub(crate) async fn export_recordings_batch(
     let mut ok = 0usize;
     let mut failed = 0usize;
     let mut in_flight: std::collections::VecDeque<(ExportJoinHandle, String, u64, AppHandle)> = std::collections::VecDeque::new();
+    // The batch dialog lists only this app's own recordings, so nothing else may
+    // be handed to ffmpeg through it.
+    let allowed_sources = recording_source_dirs(&app, &state);
 
     for item in items {
         if in_flight.len() >= parallel {
@@ -1170,7 +1173,7 @@ pub(crate) async fn export_recordings_batch(
             if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
         }
         let item_src = PathBuf::from(&item.src_path);
-        if !item_src.is_file() {
+        if !item_src.is_file() || !is_own_recording_source(&allowed_sources, &item_src) {
             failed += 1;
             continue;
         }
