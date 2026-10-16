@@ -19,26 +19,17 @@ use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
-// A very small crop is upscaled 2x before recognition -- the actual trick that
-// makes small on-screen text (button labels, tooltips) recognizable. An image
-// can only ever be too big (downscaled to MaxImageDimension) or too small
-// (upscaled here), never both. The threshold is threaded down as a parameter
-// (300 px, see OCR_UPSCALE_UNDER_PX).
-
-// COM must be initialized once per thread that calls into WinRT, and never on
-// the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
-// are reused across calls, so a thread-local guard keeps this to once per
-// thread rather than once per recognition.
+// COM must be initialized once per thread that calls into WinRT, never on the UI thread.
+// OCR calls run in spawn_blocking on reused pool threads, so a thread-local guard keeps it
+// to once per thread.
 pub(crate) fn ensure_winrt() {
     thread_local! {
         static DONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
     DONE.with(|d| {
         if !d.get() {
-            // Only remember success. A genuine failure here (rare -- e.g. out of
-            // memory) must not be recorded as done, or a later call on this same
-            // thread would never retry COM init again and every WinRT call after
-            // it would keep failing for a reason nothing here ever surfaces.
+            // Only remember success: recording a genuine failure (e.g. out of memory) as done would
+            // stop later calls on this thread from retrying.
             if unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.is_ok() {
                 d.set(true);
             }
@@ -61,10 +52,8 @@ fn engine_tag(engine: &OcrEngine) -> String {
         .unwrap_or_default()
 }
 
-// "auto" -> the user's profile languages; if none of those has a recognition
-// pack installed, fall back to whichever recognition language IS installed
-// instead of failing (use whatever language packs are already present).
-// Only when NOTHING is installed does this become a real error.
+// "auto" -> the user's profile languages; if none has a recognition pack installed, fall
+// back to any installed recognition language. Only when nothing is installed is it an error.
 fn create_auto_engine() -> Result<OcrEngine, String> {
     if let Ok(e) = OcrEngine::TryCreateFromUserProfileLanguages() {
         return Ok(e);
@@ -78,20 +67,14 @@ fn create_auto_engine() -> Result<OcrEngine, String> {
     OcrEngine::TryCreateFromLanguage(&first).map_err(|_| "ocr-no-language".to_string())
 }
 
-// Resolve (and cache) the OcrEngine for `lang` ("auto" or an explicit BCP-47
-// tag). Never recreates an engine that is already cached. When `lang` is
-// an explicit tag whose recognition pack is not actually installed,
-// `auto_pick` (always on in the app) decides
-// whether to fall back to whatever IS installed (use whatever language
-// packs are already present) or to fail with ocr-no-language. The
-// cache key stays the ORIGINAL requested `lang`, matching how "auto" already
-// caches whatever engine it happened to resolve to -- installing a new
-// language pack clears the whole cache (see mod ocr::install_result), so a
-// stale fallback never lingers once the desired pack becomes available.
+// Resolve (and cache) the OcrEngine for `lang` ("auto" or a BCP-47 tag). For an explicit
+// tag whose pack is not installed, `auto_pick` decides between falling back to an installed
+// language and failing with ocr-no-language. The cache key stays the requested `lang`, like
+// "auto"; installing a pack clears the whole cache (see mod ocr::install_result), so a
+// stale fallback never lingers.
 fn resolve_engine(lang: &str, auto_pick: bool) -> Result<OcrEngine, String> {
-    // Hold ONE guard across the whole check-then-insert -- releasing it between
-    // the read and the write let two concurrent OCR calls both miss the cache
-    // and each build their own engine (wasted work, not a correctness bug).
+    // One guard spans the whole check-then-insert so two concurrent calls cannot both miss the
+    // cache and each build an engine.
     let mut cache = engine_cache().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(e) = cache.get(lang) {
         return Ok(e.clone());
@@ -145,15 +128,13 @@ fn ocr_temp_path() -> PathBuf {
     std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-{}.png", brand::TEMP_PREFIX, gen_id()))
 }
 
-// Downscale a too-large image (proportionally, to MaxImageDimension) or
-// upscale a very small one 2x, writing the result to a NEW temp file --
-// `path` itself (which may be the user's own file for ocr_image) is never
-// modified. Returns `path` unchanged, with no extra disk write at all, when
-// no resize is needed.
+// Downscale a too-large image (proportionally, to MaxImageDimension) or upscale a very
+// small one 2x, which is what makes small on-screen text recognizable. The result goes to a
+// new temp file: `path` itself, possibly the user's own file, is never modified. Returns
+// `path` unchanged, with no disk write, when no resize is needed.
 fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(PathBuf, TempFileGuard), String> {
-    // The file is decoded upright (phone photos carry an EXIF rotation that
-    // BitmapDecoder would ignore) and handed on as a temp copy whenever its
-    // pixels differ from the file's own.
+    // Decoded upright (phone photos carry an EXIF rotation BitmapDecoder would ignore) and
+    // handed on as a temp copy whenever the pixels differ from the file's.
     let reader = image::ImageReader::open(path).map_err(|e| e.to_string())?;
     let (img, orientation) = super::decode_image_with_orientation(reader).ok_or_else(|| "could not decode image".to_string())?;
     let (w, h) = img.dimensions();
@@ -181,7 +162,6 @@ fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, a
     let max_dim = OcrEngine::MaxImageDimension().map_err(|e| e.to_string())?;
     let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim, upscale_below_px)?;
     let bitmap = bitmap_from_path(&sized_path)?;
-    // Recognition runs exactly once per call.
     let result = engine.RecognizeAsync(&bitmap).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
     let win_lines = result.Lines().map_err(|e| e.to_string())?;
     let size = win_lines.Size().map_err(|e| e.to_string())?;
@@ -215,9 +195,8 @@ pub(super) fn recognize_file(path: &Path, upscale_below_px: u32, join_lines: boo
     recognize(path, upscale_below_px, join_lines, lang, auto_pick_lang)
 }
 
-// Writes the crop out as a temp PNG under the branded temp dir (same naming
-// convention as write_snip_preview / pdfium_cache_path), then runs it through
-// the same recognize() path -- deleted in every code path via TempFileGuard.
+// Writes the crop out as a temp PNG under the branded temp dir (like write_snip_preview /
+// pdfium_cache_path) and runs it through recognize(); TempFileGuard deletes it on every path.
 pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let path = ocr_temp_path();
     if let Some(dir) = path.parent() {
@@ -230,13 +209,10 @@ pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join
 
 // ---- OCR language-pack management ----
 
-// Which language-pack family a capabilities/install call is about. Both
-// families share the exact same Get-WindowsCapability/Add-WindowsCapability
-// machinery below -- OCR and voice dictation each want their own
-// Windows "Language.*" feature, nothing else differs. The module keeps its
-// original name (OCR was here first); voice dictation reuses it wholesale
-// rather than duplicating a COM-interfacing module tree, per 126 ("nichts
-// davon wird kopiert").
+// Which language-pack family a capabilities/install call is about. OCR and voice dictation
+// share the same Get-WindowsCapability/Add-WindowsCapability machinery and differ only in
+// the Windows "Language.*" feature, so voice reuses this module instead of duplicating a
+// COM-interfacing tree.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum CapKind {
     Ocr,
@@ -249,20 +225,17 @@ impl CapKind {
             CapKind::Speech => "Language.Speech*",
         }
     }
-    // The capability Name prefix Windows reports for this kind. Three functions
-    // (validation, tag extraction, install-result file naming) depend on this
-    // varying by kind -- hardcoding the OCR prefix regardless of kind would
-    // make every speech language pack fail validation, lose its tag, and share
-    // an install-result file with the OCR one.
+    // The capability Name prefix Windows reports for this kind. Validation, tag extraction and
+    // install-result file naming all depend on it: a hardcoded OCR prefix would fail every
+    // speech pack's validation, lose its tag and share its result file with OCR.
     pub(super) fn prefix(self) -> &'static str {
         match self {
             CapKind::Ocr => "Language.OCR~~~",
             CapKind::Speech => "Language.Speech~~~",
         }
     }
-    // Temp-file name segment AND the ui_flags/ui_values/ui_texts setting-key
-    // prefix -- "voice", not "speech", to match the expert-menu keys (the
-    // table of language-pack settings).
+    // Temp-file name segment and ui_flags/ui_values/ui_texts setting-key prefix: "voice", not
+    // "speech", to match the expert-menu keys.
     pub(super) fn slug(self) -> &'static str {
         match self {
             CapKind::Ocr => "ocr",
@@ -292,9 +265,9 @@ fn cap_cache(kind: CapKind) -> &'static Mutex<Option<CapCache>> {
     }
 }
 
-// Whether this kind's listing failure has already reached the crash log
-// this session -- a machine that always refuses the unelevated query would
-// otherwise write the same multi-line PowerShell/DISM text on every poll.
+// Whether this kind's listing failure already reached the crash log this session: a
+// machine that always refuses the unelevated query would otherwise log the same multi-line
+// PowerShell/DISM text on every poll.
 fn caps_log_once(kind: CapKind) -> &'static AtomicBool {
     static OCR: OnceLock<AtomicBool> = OnceLock::new();
     static SPEECH: OnceLock<AtomicBool> = OnceLock::new();
@@ -304,18 +277,15 @@ fn caps_log_once(kind: CapKind) -> &'static AtomicBool {
     }
 }
 
-// PowerShell/DISM output for this failure is often several lines of banner
-// text ahead of the one line that actually says what happened -- the crash
-// log gets just that first line; the frontend's details disclosure still
-// gets the raw text untouched via caps_elevation_error.
+// PowerShell/DISM failures often put several lines of banner text ahead of the one that
+// says what happened: the crash log gets only the first line, the frontend's details
+// disclosure the raw text via caps_elevation_error.
 pub(super) fn strip_ps_banner(raw: &str) -> &str {
     raw.lines().next().unwrap_or(raw).trim()
 }
 
-// The set most recently returned by `capabilities()` doubles as the
-// install allowlist (see install_language) -- a name that was never
-// actually enumerated is rejected even if it happens to match the naming
-// regex.
+// The set most recently returned by `capabilities()` is the install allowlist (see
+// install_language): a name never enumerated is rejected even if it matches the naming regex.
 pub(super) fn is_known_capability(kind: CapKind, name: &str) -> bool {
     cap_cache(kind)
         .lock()
@@ -339,23 +309,18 @@ pub(super) fn capabilities(kind: CapKind, force: bool, cache_hours: f64) -> Resu
     Ok(caps)
 }
 
-// Runs PowerShell exactly once (no window), parses its JSON, and resolves
-// each capability's localized display name via the same WinRT Language
-// lookup the recognizer itself uses -- so this list is localized without
-// this app keeping its own name table.
+// Runs PowerShell once (no window), parses its JSON and resolves each capability's
+// localized display name via the WinRT Language lookup the recognizer uses, so no name
+// table is kept here.
 fn fetch_capabilities(kind: CapKind) -> Result<Vec<OcrCap>, String> {
     ensure_winrt();
     let _ = fs::create_dir_all(dism_temp_dir());
-    // The spec (and Microsoft's own docs) says listing needs no elevated rights,
-    // and with the log-path redirect above that mostly holds -- but some
-    // Windows builds/policies still refuse the read-only query outright for a
-    // reason that varies by machine (confirmed: one throws over the DISM log
-    // path, another over a flat "elevated rights required", neither sharing an
-    // HResult). There is exactly one remedy either way -- the elevated path
-    // below -- so ANY failure here maps to the same code, never a raw,
-    // locale-specific PowerShell blob left for the UI to guess at. The raw
-    // text still rides along (second field, "|"-joined) for the details
-    // disclosure and the crash log.
+    // Listing needs no elevated rights per the docs, and with the log-path redirect above that
+    // mostly holds, but some Windows builds/policies refuse the read-only query anyway (a DISM
+    // log path error on one, a flat "elevated rights required" on another). The only remedy is
+    // the elevated path below, so any failure here maps to the same code instead of a
+    // locale-specific PowerShell blob; the raw text rides along (second field, "|"-joined) for
+    // the details disclosure and the crash log.
     let script = format!(
         r#"Get-WindowsCapability -Online -Name "{filter}" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json"#,
         filter = kind.filter(),
@@ -372,17 +337,15 @@ fn fetch_capabilities(kind: CapKind) -> Result<Vec<OcrCap>, String> {
         caps_elevation_error(&raw)
     })
 }
-// The stable code the frontend matches on, plus the raw PowerShell/DISM text
-// as a second "|"-joined field for the details disclosure -- split out as its
-// own pure function so the wire format itself is unit-tested, not just typed
-// inline and trusted.
+// The stable code the frontend matches on plus the raw PowerShell/DISM text as a second
+// "|"-joined field for the details disclosure. A pure function so the wire format is
+// unit-tested.
 pub(super) fn caps_elevation_error(raw: &str) -> String {
     format!("ocr-caps-need-elevation|{raw}")
 }
 
-// The PowerShell query's JSON -> the list the UI shows. Shared by the normal
-// (unelevated) query and by the elevated one below, so both produce exactly
-// the same list, localized the same way.
+// The PowerShell query's JSON -> the UI's list; shared by the unelevated and elevated
+// queries so both are localized the same way.
 fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
     ensure_winrt();
     let raw = ocr_parse_capabilities_json(kind.prefix(), output)?;
@@ -405,12 +368,9 @@ fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
     Ok(out)
 }
 
-// Runs a PowerShell command with no visible window and returns its stdout.
-// The explicit working directory is ours, always writable, never
-// whatever the process happened to inherit -- DISM's "could not set the
-// current directory" half of the log-path error had nothing to do with the
-// actual query, so there is no reason to hand it a directory it might not
-// be able to write to either.
+// Runs a PowerShell command with no visible window and returns its stdout. The working
+// directory is our own always-writable one, not the inherited one: DISM's "could not set
+// the current directory" failure had nothing to do with the query itself.
 fn run_powershell_command(script: &str) -> Result<String, String> {
     let out = std::process::Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
@@ -425,22 +385,18 @@ fn run_powershell_command(script: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-// PowerShell single-quoted-string escaping (double an embedded quote). Used
-// for both the (already-validated) capability name and our own generated
-// temp paths, which can contain non-ASCII characters from the user's
-// profile path even though they can never contain a single quote in
-// practice -- escaping unconditionally costs nothing and removes the doubt.
+// PowerShell single-quoted-string escaping (doubles an embedded quote). Applied
+// unconditionally to the validated capability name and our temp paths, which may contain
+// non-ASCII profile-path characters.
 fn ps_single_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 
-// Every elevated round trip gets its own unguessable file names. The temp
-// folder is writable by anything running as this user, so a name derived only
-// from the language tag or the process id could be created in advance: a
-// planted result file makes the app report an install that never happened, and
-// a planted (or swapped) script file is a way to get whatever the user just
-// approved at the UAC prompt. The nonce is remembered for exactly as long as
-// the request is in flight, so the poll below still finds its own file.
+// Every elevated round trip gets unguessable file names. The temp folder is writable by
+// anything running as this user, so a name derived from the language tag or process id
+// could be created in advance: a planted result file would report an install that never
+// happened. The nonce is remembered while the request is in flight so the poll finds its
+// own file.
 fn request_nonce() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -472,12 +428,11 @@ fn install_result_path(kind: CapKind, nonce: &str) -> PathBuf {
     std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.json", brand::TEMP_PREFIX, kind.slug(), nonce))
 }
 
-// Launches an elevated PowerShell that runs Add-WindowsCapability and writes
-// its own success/failure (including whatever error message Windows gave)
-// to a result file, then returns immediately -- this call never waits for
-// that process. The script goes over as an encoded command (see
-// elevated_params), so there is no quoting of it to get wrong: `name` is
-// regex+whitelist-validated by the caller and the result path is entirely ours.
+// Launches an elevated PowerShell that runs Add-WindowsCapability and writes its
+// success/failure (with Windows' error message) to a result file, then returns without
+// waiting. The script goes over as an encoded command (see elevated_params), so there is no
+// quoting to get wrong: `name` is regex+whitelist-validated by the caller and the result
+// path is ours.
 pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> {
     let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
     let nonce = start_request(kind, &tag);
@@ -497,12 +452,11 @@ pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> 
     run_elevated_script(&script).inspect_err(|_| finish_request(kind, &tag))
 }
 
-// The argument string that hands `script` to an elevated PowerShell on its own
-// command line. The script is never written to a file: a file in the shared
-// temp folder can be replaced by any process of this user between the UAC
-// prompt and PowerShell opening it, which would run that replacement with the
-// rights the user just granted. PowerShell takes the script as base64 of its
-// UTF-16LE bytes, so no quoting of the script text is involved either.
+// The argument string that hands `script` to an elevated PowerShell on its own command
+// line. A script file in the shared temp folder could be replaced by any process of this
+// user between the UAC prompt and PowerShell opening it, running the replacement with the
+// rights just granted. PowerShell takes the script as base64 of its UTF-16LE bytes, so no
+// quoting is involved.
 pub(super) fn elevated_params(script: &str) -> Result<String, String> {
     use base64::Engine;
     let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
@@ -517,11 +471,9 @@ pub(super) fn elevated_params(script: &str) -> Result<String, String> {
     Ok(params)
 }
 
-// Starts `script` through the UAC prompt, returning as soon as the elevated
-// process has been launched (or the launch was refused). Used by both
-// elevated paths -- installing a language pack and, on machines that demand
-// rights even for the read-only listing, the listing itself. Any new
-// elevated call site goes through here, never a bespoke ShellExecuteW.
+// Starts `script` through the UAC prompt and returns once the elevated process is launched
+// (or the launch is refused). Both elevated paths (installing a pack, and the listing on
+// machines that demand rights even for it) go through here, never a bespoke ShellExecuteW.
 fn run_elevated_script(script: &str) -> Result<(), String> {
     // The elevated script writes its result into this folder.
     fs::create_dir_all(std::env::temp_dir().join(brand::TEMP_DIR)).map_err(|e| e.to_string())?;
@@ -538,16 +490,11 @@ fn run_elevated_script(script: &str) -> Result<(), String> {
     };
     let code = code.0 as isize;
     if code <= 32 {
-        // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
-        // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
-        // Windows versions for the same outcome. Neither is a real failure on
-        // its own -- what it MEANS differs by policy, not by whether this
-        // particular account happens to be an administrator (Windows still
-        // lets the credential prompt take a DIFFERENT admin's password).
-        // The wire strings keep their original names for the frontend's own
-        // dispatch on them (ui/dictation.js), even though "no-rights" now means
-        // "Group Policy denies the prompt outright" rather than "this
-        // account has none".
+        // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user declines the UAC
+        // prompt; ERROR_CANCELLED (1223) is the same outcome on some Windows versions. What it
+        // means depends on policy, not on whether this account is an administrator (the credential
+        // prompt can take a different admin's password). The wire strings keep their names for
+        // ui/dictation.js; "no-rights" now means Group Policy denies the prompt outright.
         if code == 5 || code == 1223 {
             return Err(match classify_elevation_refusal(elevation_denied_by_policy()) {
                 ElevationRefusal::PolicyBlocked => "ocr-elevate-no-rights".to_string(),
@@ -559,17 +506,12 @@ fn run_elevated_script(script: &str) -> Result<(), String> {
     Ok(())
 }
 
-// Whether THIS account's own token can complete "runas" without anyone
-// else's help -- never by string-matching a localised Windows message,
-// which varies by machine and language. `TokenElevationTypeLimited` is a
-// split-token administrator (UAC on): the consent prompt can succeed.
-// `Full` means the process is already elevated. `Default` means no split
-// token exists at all: either a standard account or an administrator
-// running with UAC turned off entirely, so membership in the
-// Administrators group is the only thing that tells the two apart. A
-// `false` here does NOT mean elevation can never succeed at all -- the
-// credential prompt Windows shows a standard account still takes a
-// DIFFERENT administrator's password, see `elevation_denied_by_policy`.
+// Whether this account's own token can complete "runas" unaided, judged from the token and
+// never by matching a localised Windows message. `Limited` is a split-token admin (UAC on):
+// the prompt can succeed. `Full` is already elevated. `Default` means no split token (a
+// standard account, or an admin with UAC off), so Administrators membership tells them
+// apart. `false` does not rule out elevation: a standard account's credential prompt still
+// takes a different administrator's password (see `elevation_denied_by_policy`).
 fn account_can_elevate() -> bool {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Security::{
@@ -604,17 +546,12 @@ fn account_can_elevate() -> bool {
     }
 }
 
-// Whether Group Policy denies the elevation prompt outright for this
-// account: "User Account Control: Behavior of the elevation prompt for
-// standard users" set to "Automatically deny elevation requests"
-// (`ConsentPromptBehaviorUser` = 0) skips the credential dialog entirely,
-// so there is no prompt left for even a different administrator's
-// password to complete -- the one case a retry genuinely cannot fix. Only
-// meaningful for an account that cannot elevate itself: an administrator's
-// own consent prompt is governed by a different key
-// (`ConsentPromptBehaviorAdmin`) and is never denied outright by this one.
-// Missing key or unreadable = not policy-denied, same as the key being
-// absent entirely (the out-of-the-box default).
+// Whether Group Policy denies the elevation prompt outright for this account ("Behavior of
+// the elevation prompt for standard users" = "Automatically deny", `ConsentPromptBehaviorUser`
+// = 0): no dialog appears, so not even a different administrator's password helps and a
+// retry cannot fix it. Only meaningful for an account that cannot elevate itself; an
+// administrator's prompt is governed by `ConsentPromptBehaviorAdmin`. A missing or
+// unreadable key counts as not denied (the default).
 fn elevation_denied_by_policy() -> bool {
     if account_can_elevate() {
         return false;
@@ -631,26 +568,20 @@ pub(super) enum ElevationRefusal {
     // Group Policy denies the elevation prompt outright: no dialog will
     // ever appear for this account, so a retry cannot help.
     PolicyBlocked,
-    // The dialog itself was declined or cancelled this time. Windows lets
-    // its credential prompt take a DIFFERENT administrator's password, so
-    // even an account that cannot elevate itself may still succeed next
-    // time -- trying again may succeed.
+    // The dialog was declined or cancelled this time; Windows lets its credential prompt take a
+    // different administrator's password, so trying again may succeed.
     Retryable,
 }
-// Pure decision, kept separate from the registry/token probes above so it
-// is unit-testable without touching Windows: given the same
-// refused/cancelled ShellExecuteW outcome, which of the two distinct
-// results the user sees.
+// Pure decision, apart from the registry/token probes so it is unit-testable: which of the
+// two results the user sees for a refused or cancelled ShellExecuteW.
 pub(super) fn classify_elevation_refusal(denied_by_policy: bool) -> ElevationRefusal {
     if denied_by_policy { ElevationRefusal::PolicyBlocked } else { ElevationRefusal::Retryable }
 }
 
-// DISM unconditionally writes a log to %WINDIR%\Logs\DISM at startup,
-// before it does anything else -- unwritable there without admin rights, so
-// an unprivileged Get-/Add-WindowsCapability call fails before the actual
-// query even runs, misread as "needs elevation" when it is really just a
-// log-path problem. Redirecting both -LogPath and -ScratchDirectory into
-// our own always-writable temp folder sidesteps it entirely.
+// DISM writes a log to %WINDIR%\Logs\DISM at startup, unwritable there without admin
+// rights, so an unprivileged Get-/Add-WindowsCapability fails before the query runs and is
+// misread as "needs elevation". Redirecting -LogPath and -ScratchDirectory into our own
+// temp folder avoids it.
 fn dism_temp_dir() -> PathBuf {
     std::env::temp_dir().join(brand::TEMP_DIR)
 }
@@ -664,9 +595,8 @@ pub(super) fn dism_log_args(kind: CapKind) -> String {
     )
 }
 
-// The nonce also keeps two windows (allowMultipleInstances) from overwriting
-// each other's script/result file for the SAME kind: it is per request, so it
-// separates them at least as well as the process id it replaced.
+// The nonce is per request, so two windows (allowMultipleInstances) never overwrite each
+// other's script/result file for the same kind.
 pub(super) const CAPS_TAG: &str = "caps";
 pub(super) fn caps_result_path(kind: CapKind, nonce: &str) -> PathBuf {
     std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json", brand::TEMP_PREFIX, kind.slug(), nonce))
@@ -675,16 +605,13 @@ fn caps_tmp_path(kind: CapKind, nonce: &str) -> PathBuf {
     std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json.tmp", brand::TEMP_PREFIX, kind.slug(), nonce))
 }
 
-// The same query fetch_capabilities runs, but through an elevated PowerShell
-// that writes its JSON to a temp file. Needed on machines where Windows
-// refuses even the read-only listing to a normal user: without a list there
-// is no install allowlist either, so no language could be added at all.
-// Never starts by itself -- only when the user presses the button in the dialog.
+// The same query fetch_capabilities runs, but through an elevated PowerShell that writes
+// its JSON to a temp file. Needed where Windows refuses even the read-only listing to a
+// normal user: without a list there is no install allowlist. Starts only when the user
+// presses the button in the dialog.
 //
-// PowerShell writes to a `.tmp` sibling first and Move-Item -Force's it onto
-// the real result path in one step, so a poll landing mid-write either finds
-// no file yet (not renamed) or the complete one (post-rename) -- never a
-// half-written JSON blob.
+// PowerShell writes a `.tmp` sibling and Move-Item -Force's it onto the result path in one
+// step, so a poll sees either no file or the complete one, never half a JSON blob.
 pub(super) fn elevate_capabilities(kind: CapKind) -> Result<(), String> {
     let nonce = start_request(kind, CAPS_TAG);
     let result_path = caps_result_path(kind, &nonce);
@@ -701,14 +628,13 @@ pub(super) fn elevate_capabilities(kind: CapKind) -> Result<(), String> {
     run_elevated_script(&script).inspect_err(|_| finish_request(kind, CAPS_TAG))
 }
 
-// Reads what the elevated listing wrote. Ok(None) = still running, or never
-// started. A successful list also fills the cache the normal query fills,
-// so the install allowlist keeps working unchanged.
+// Reads what the elevated listing wrote. Ok(None) = still running or never started. A
+// successful list also fills the cache the normal query fills, so the install allowlist
+// works unchanged.
 //
-// Deletes the file ONLY on a definite terminal outcome (a parseable error,
-// or a parseable list) -- never on a read that came back empty or
-// unparseable, which is treated as "not ready yet" instead of discarding a
-// result that might still be mid-write. Mirrors install_result's shape.
+// The file is deleted only on a definite terminal outcome (a parseable error or list); an
+// empty or unparseable read counts as not ready, since the result may be mid-write.
+// Mirrors install_result.
 pub(super) fn elevated_capabilities_result(kind: CapKind) -> Result<Option<Vec<OcrCap>>, String> {
     // No nonce means no elevated listing of ours is in flight.
     let Some(nonce) = pending_nonce(kind, CAPS_TAG) else { return Ok(None) };
@@ -746,9 +672,9 @@ pub(super) fn elevated_capabilities_result(kind: CapKind) -> Result<Option<Vec<O
     Ok(Some(caps))
 }
 
-// Parses the install result file's text. Windows PowerShell's `Out-File
-// -Encoding utf8` prepends a byte-order mark, which neither `trim` nor the
-// JSON parser accepts; None means "not parseable (yet)".
+// Parses the install result file's text. Windows PowerShell's `Out-File -Encoding utf8`
+// prepends a byte-order mark that neither `trim` nor the JSON parser accepts; None = not
+// parseable (yet).
 pub(super) fn parse_install_result(text: &str) -> Option<OcrInstallResult> {
     let text = text.trim_start_matches('\u{feff}').trim();
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
@@ -757,10 +683,8 @@ pub(super) fn parse_install_result(text: &str) -> Option<OcrInstallResult> {
     Some(OcrInstallResult { ok, error })
 }
 
-// Reads (and, once a terminal result is found, deletes) the result file
-// install_language's elevated process writes. Deleting on a terminal read
-// keeps a later poll from re-triggering the cache invalidation below on
-// every subsequent call.
+// Reads (and, on a terminal result, deletes) the result file install_language's elevated
+// process writes. Deleting keeps later polls from re-triggering the cache invalidation below.
 pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResult> {
     let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
     // No nonce means no install of this pack is in flight: whatever happens to
@@ -769,36 +693,29 @@ pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResu
     let path = install_result_path(kind, &nonce);
     let text = match fs::read_to_string(&path) {
         Ok(t) => t,
-        // Not there yet -- the elevated process has not written it (or
-        // finished the UAC prompt) -- genuinely still pending.
+        // Not written yet: the elevated process is still running or at the UAC prompt.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
-        // The file IS there but cannot be read (permissions, a sharing
-        // violation, a disk error) -- unlike "not found", this will never
-        // resolve itself on the next poll, so it must not look like "still
-        // running" forever. Left on disk for inspection rather than deleted,
-        // since a locked/inaccessible file could not be removed either.
+        // The file is there but unreadable (permissions, sharing violation, disk error). Unlike
+        // "not found" this never resolves on its own, so it must not look like "still running"
+        // forever. Left on disk for inspection, since a locked file could not be removed either.
         Err(_) => {
             finish_request(kind, &tag);
             return Some(OcrInstallResult { ok: false, error: Some("install-result-unreadable".to_string()) });
         }
     };
-    // Content that fails to parse stays "pending" rather than terminal --
-    // Out-File's write is not guaranteed atomic, so a poll can legitimately
-    // catch the file mid-write; the next poll a few seconds later normally
-    // sees the finished JSON. A permanently corrupt file is caught by the
-    // frontend's own poll cutoff instead of being declared a failure here.
+    // Content that fails to parse stays pending: Out-File's write is not atomic, so a poll can
+    // catch the file mid-write. A permanently corrupt file is caught by the frontend's poll
+    // cutoff.
     let OcrInstallResult { ok, error } = parse_install_result(&text)?;
     let _ = fs::remove_file(&path);
     finish_request(kind, &tag);
     if ok {
-        // Installation is done -- both caches must reflect it immediately, no
-        // restart needed. This command is the natural place to do that:
-        // it is the point where the backend already has fresh proof the
-        // install finished, rather than waiting on the frontend to notice
-        // state == "Installed" via a second ocr_capabilities() round trip.
+        // Installation is done: both caches must reflect it immediately. This is where the backend
+        // has fresh proof, instead of waiting for the frontend to see state == "Installed" via
+        // another round trip.
         *cap_cache(kind).lock().unwrap_or_else(|e| e.into_inner()) = None;
-        // The recognition engine cache is OCR-only (mod voice has no such
-        // cache -- a new voice session always resolves its language fresh).
+        // The recognition engine cache is OCR-only; a new voice session always resolves its
+        // language fresh.
         if kind == CapKind::Ocr {
             engine_cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
         }
