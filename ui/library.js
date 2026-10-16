@@ -7,7 +7,7 @@ import { fillVideoFormatSelect, fmtBytes, varPreview } from "./floatShared.js";
 import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, resolveVars, resolveVarsList, varTokens } from "./promptVars.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
-import { copyOnCooldown, recordCopy } from "./copyFlow.js";
+import { copyOnCooldown, peekResolveCommit, recordCopy } from "./copyFlow.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { allTags, renderTagFilter, tagColor, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
@@ -1463,21 +1463,14 @@ export async function copyResolved(p) {
         return true;
       }
     }
-    const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
-    const rawText = peek ? peek.text : p.text;
-    const text = varTokens(p, rawText).length ? await resolveVars(rawText) : rawText;
-    if (text === null || text === false) return false;
     // Handing the id over is what lets the backend open an auto-advance session for
     // an eligible prompt: without it this path copied plain text and the Auto
     // switch did nothing at all here, while the floating buttons (which copy through
     // copy_prompt) honoured it.
     const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
-    const ok = await invoke("copy_text", { text, id: armId }).catch(() => false);
-    // A failed peek already fell back to p.text above: committing anyway would
-    // advance whatever the pointer's REAL position is, not the entry we actually
-    // just copied. Only a successful peek may be followed by a commit.
-    if (ok && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
-    return ok;
+    return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch(() => false), {
+      resolve: (raw) => (varTokens(p, raw).length ? resolveVars(raw) : raw),
+    });
   }
   if (varTokens(p).length) {
     const text = await resolveVars(p.text);

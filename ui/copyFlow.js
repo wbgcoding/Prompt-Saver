@@ -43,6 +43,24 @@ export function markCopied(id) {
   copyTimes.set(id, now);
 }
 
+// Peek the entry a rotating prompt would copy, fill its placeholders, hand the text
+// to `copyFn` and advance the rotation only when that copy really happened (a
+// cancelled placeholder window or a failed copy burns no entry; a failed peek falls
+// back to the stored text and must not be followed by a commit). `afterResolve` runs
+// right after the placeholders are answered, cancelled or not. Resolves to copyFn's
+// result, false when cancelled.
+export async function peekResolveCommit(p, copyFn, { afterResolve, resolve = resolveVars } = {}) {
+  const rotating = (p.variants || []).length > 0;
+  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
+  const rawText = peek ? peek.text : p.text;
+  const text = await resolve(rawText);
+  afterResolve?.();
+  if (text === null || text === false) return false;
+  const ok = await copyFn(text);
+  if (ok && rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
+  return ok;
+}
+
 // Copy a text prompt after filling its placeholders. `paste` is only set by
 // activations that mean "paste" (Enter on a focused tile, a prompt hotkey with the
 // paste option on); a plain click copies and nothing else, exactly like a prompt
@@ -54,23 +72,20 @@ export async function copyTextWithVars(p, el, paste = false) {
   // upgrades the pending copy to a paste.
   if (varsWindowPending) { varsPasteRequested = true; return; }
   varsPasteRequested = false;
-  // Peek -> resolve -> copy -> commit, same order copyResolved uses -- this used
-  // to always resolve p.text (entry 0) even once rotation had moved past it.
-  const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText);
-  const pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
-  varsPasteRequested = false;
-  if (text === null) return;
-  const ok = await invoke("copy_text", { text })
-    .catch((e) => { errToast(e); return false; });
+  let pasteAfter = paste;
+  const ok = await peekResolveCommit(
+    p,
+    (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
+    {
+      afterResolve: () => {
+        pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
+        varsPasteRequested = false;
+      },
+    },
+  );
   if (ok) {
     showCopied(el);
     recordCopy(p.id);
-    // A failed peek already fell back to p.text above -- only a successful peek may
-    // be followed by a commit (copyResolved's own rule).
-    if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     if (pasteAfter) await autoPasteNow(el);
     maybeCloseOnCopy();
   }
@@ -84,17 +99,13 @@ export async function copyTextWithVars(p, el, paste = false) {
 export async function copyFormattedPrompt(id) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
-  const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText);
-  if (text === null) return; // the placeholder dialog was cancelled
-  const html = renderMarkdown(text);
-  const ok = await invoke("copy_formatted", { text, html }).catch((e) => { errToast(e); return false; });
+  const ok = await peekResolveCommit(
+    p,
+    (text) => invoke("copy_formatted", { text, html: renderMarkdown(text) }).catch((e) => { errToast(e); return false; }),
+  );
   if (ok) {
     toast(t("copied"));
     recordCopy(id);
-    if (rotating && peek) { invoke("rotation_commit", { id }).catch(() => {}); recordToolUsage("rotation_advance"); }
   }
 }
 
@@ -194,16 +205,13 @@ export async function onPromptHotkey(id, paste) {
 // window, then finish the copy exactly like every other path does.
 export async function copyOutsideApp(p, paste) {
   if (copyOnCooldown(p.id)) return;
-  // Same peek -> resolve -> copy -> commit order as copyTextWithVars/copyResolved.
-  const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText);
-  varsPasteRequested = false; // a second press only upgrades copies started in the window
-  if (text === null) return; // cancelled, or the window could not be opened
-  if (await invoke("copy_text", { text }).catch((e) => { errToast(e); return false; })) {
+  const ok = await peekResolveCommit(
+    p,
+    (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
+    { afterResolve: () => { varsPasteRequested = false; } }, // a second press only upgrades copies started in the window
+  );
+  if (ok) {
     recordCopy(p.id);
-    if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     if (paste) await autoPasteNow(null);
   }
 }
