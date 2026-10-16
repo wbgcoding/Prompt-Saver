@@ -920,6 +920,8 @@ export function initSnipEditor() {
     }
   }
   function snipEditResizeCropRect(orig, handle, pt, shift) {
+    // The dragged edge stops at the image border first; a locked ratio follows from there.
+    pt = { x: Math.min(Math.max(pt.x, 0), SE.w), y: Math.min(Math.max(pt.y, 0), SE.h) };
     let x = orig.x, y = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;
     if (handle.includes("n")) y = pt.y;
     if (handle.includes("s")) y2 = pt.y;
@@ -928,10 +930,26 @@ export function initSnipEditor() {
     const nr = { x: Math.min(x, x2), y: Math.min(y, y2), w: Math.abs(x2 - x), h: Math.abs(y2 - y) };
     if (shift && orig.w && orig.h) {
       const ratio = orig.w / orig.h;
-      if (handle === "n" || handle === "s") nr.w = nr.h * ratio; else nr.h = nr.w / ratio;
+      const vertical = handle === "n" || handle === "s";
+      if (vertical) nr.w = nr.h * ratio; else nr.h = nr.w / ratio;
       // The edge opposite a top handle is the anchor: re-derive the top from it, or
       // the new height would push that fixed edge around.
-      if (handle.includes("n")) nr.y = y <= y2 ? y2 - nr.h : y2;
+      const north = handle.includes("n");
+      if (north) nr.y = y <= y2 ? y2 - nr.h : y2;
+      const west = !vertical && handle.includes("w");
+      if (west) nr.x = x2 - nr.w;
+      // The derived side can still run out of room: shrink both together toward the
+      // anchored edges, so the ratio survives the image border.
+      const right = nr.x + nr.w, bottom = nr.y + nr.h;
+      const maxW = west ? right : SE.w - nr.x;
+      const maxH = north ? bottom : SE.h - nr.y;
+      const f = Math.min(1, nr.w > 0 ? maxW / nr.w : 1, nr.h > 0 ? maxH / nr.h : 1);
+      if (f < 1) {
+        nr.w *= f;
+        nr.h *= f;
+        if (west) nr.x = right - nr.w;
+        if (north) nr.y = bottom - nr.h;
+      }
     }
     // The locked ratio can push an edge past the image; the box stays inside it.
     const x0 = Math.max(nr.x, 0), y0 = Math.max(nr.y, 0);

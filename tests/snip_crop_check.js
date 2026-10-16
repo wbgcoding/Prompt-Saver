@@ -72,6 +72,18 @@ const orig = { x: 0, y: 0, w: 200, h: 100 };
   const nr = resize(orig, "nw", { x: 50, y: 20 }, false);
   check("nw plain: follows the pointer", nr, { x: 50, y: 20, w: 150, h: 80 });
 }
+// A locked ratio against the image border: the box shrinks as a whole, it never
+// loses its shape to a one-sided trim.
+{
+  const edge = { x: 900, y: 400, w: 100, h: 100 };
+  const n = resize(edge, "n", { x: 950, y: 200 }, true);
+  check("n shift at the right border: still square", n.w, n.h);
+  check("n shift at the right border: inside the image", n.x + n.w <= 1000, true);
+  check("n shift at the right border: bottom edge stays", n.y + n.h, 500);
+  const se = resize({ x: 800, y: 800, w: 100, h: 100 }, "se", { x: 1500, y: 1500 }, true);
+  check("se shift past both borders: ratio kept", se.w, se.h);
+  check("se shift past both borders: inside the image", se.x + se.w <= 1000 && se.y + se.h <= 1000, true);
+}
 // The bottom handles were already anchored on the top edge and stay that way.
 {
   const nr = resize(orig, "se", { x: 120, y: 80 }, true);
