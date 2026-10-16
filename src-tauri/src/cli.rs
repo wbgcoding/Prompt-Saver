@@ -1900,7 +1900,13 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         // Nothing is running to do it, so the Run entry is brought in line here.
         if let Some(("autostart", Ok(on))) = os_backed_toggle(&cmd) {
             if outcome.code == 0 {
-                if let Err(e) = crate::apply_autostart(on, store.settings.start_minimized) {
+                // Same gate as the app's switch: turning it off leaves another copy's entry alone.
+                let skip = prior_entry
+                    .as_ref()
+                    .map(|entry| crate::skip_registry_removal(on, crate::current_registry_owner(entry.as_deref())))
+                    .unwrap_or(false);
+                let applied = if skip { Ok(()) } else { crate::apply_autostart(on, store.settings.start_minimized) };
+                if let Err(e) = applied {
                     // Same as the app's own switch: neither side keeps the change.
                     if let Some(entry) = prior_entry {
                         let _ = crate::autostart_restore(entry);

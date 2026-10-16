@@ -198,6 +198,15 @@ pub(crate) fn url_scheme_removal_skipped() -> bool {
     }
 }
 
+// A reset turns autostart off like the switch does, so it leaves another copy's
+// Run entry alone too.
+pub(crate) fn autostart_removal_skipped() -> bool {
+    match autostart_command() {
+        Ok(cmd) => skip_registry_removal(false, current_registry_owner(cmd.as_deref())),
+        Err(_) => false,
+    }
+}
+
 pub(crate) fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
     match std::env::current_exe() {
         Ok(exe) => registry_owner(command, &exe.display().to_string(), |p| std::path::Path::new(p).exists()),

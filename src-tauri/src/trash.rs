@@ -660,7 +660,10 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
             let _ = win.close();
         }
     }
-    let _ = apply_autostart(false, false);
+    // Another copy's Run entry (portable versus installed) is not this reset's to remove.
+    if !autostart_removal_skipped() {
+        let _ = apply_autostart(false, false);
+    }
     let effects = {
         let mut store = lock(&state);
         let old = store.settings.clone();
