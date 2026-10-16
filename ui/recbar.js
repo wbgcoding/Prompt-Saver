@@ -214,6 +214,9 @@ let pollGen = 0;
 // both ends of the window to catch a poll that straddles it.
 let continuing = false;
 let continueSeq = 0;
+let autoStopping = false;
+// True once the take ended through this bar; its buttons then stay off.
+let stopped = false;
 async function poll() {
   const gen = pollGen;
   const seq = continueSeq;
@@ -234,9 +237,18 @@ async function poll() {
       // itself -- finish the stop properly (closes the file, emits
       // recording-captured with the error message) rather than sitting here
       // polling a session that looks alive but is no longer writing video.
-      clearInterval(pollTimer);
-      invoke("stop_recording").catch(() => {});
-      invoke("hide_rec_bar").catch(() => {});
+      // The poll keeps running until the stop went through: a refused stop (a
+      // continue in flight) is retried on the next tick instead of leaving a
+      // live recording behind a closed bar.
+      if (autoStopping) return;
+      autoStopping = true;
+      invoke("stop_recording")
+        .then(() => {
+          clearInterval(pollTimer);
+          invoke("hide_rec_bar").catch(() => {});
+        })
+        .catch(() => {})
+        .finally(() => { autoStopping = false; });
       return;
     }
     applyPaused(status.paused);
@@ -267,6 +279,8 @@ poll();
 function resetForNewRecording() {
   clearInterval(pollTimer);
   pollGen++;
+  stopped = false;
+  autoStopping = false;
   paused = false;
   pauseBtn.disabled = false;
   stopBtn.disabled = false;
@@ -318,6 +332,10 @@ pauseBtn.addEventListener("click", async () => {
 continueBtn.addEventListener("click", async () => {
   if (continueBtn.disabled) return;
   continueBtn.disabled = true;
+  // Stop and Cancel would find no session while the switch holds it out of the
+  // state, so they wait for the switch to end.
+  stopBtn.disabled = true;
+  cancelBtn.disabled = true;
   continuing = true;
   continueSeq++;
   try {
@@ -330,6 +348,7 @@ continueBtn.addEventListener("click", async () => {
     // closes like a normal stop instead of surfacing a second, redundant
     // error on top of that.
     if (typeof err === "string" && err.startsWith("recording-continue-failed-stopped:")) {
+      stopped = true;
       pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
       clearInterval(pollTimer);
       invoke("hide_rec_bar").catch(() => {});
@@ -340,24 +359,29 @@ continueBtn.addEventListener("click", async () => {
   } finally {
     continuing = false;
     continueSeq++;
+    if (!stopped) {
+      stopBtn.disabled = false;
+      cancelBtn.disabled = false;
+    }
   }
 });
-stopBtn.addEventListener("click", async () => {
+// Stop and Cancel close the bar only when the command went through. A refused
+// one (the recording is still alive) re-enables the buttons and the poll goes
+// on; if the recording already ended, the next poll tick closes the bar.
+async function endTake(command) {
   pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
   try {
-    await invoke("stop_recording");
-  } catch {}
+    await invoke(command);
+  } catch {
+    pauseBtn.disabled = false; stopBtn.disabled = false; cancelBtn.disabled = false;
+    return;
+  }
+  stopped = true;
   clearInterval(pollTimer);
   invoke("hide_rec_bar").catch(() => {});
-});
-cancelBtn.addEventListener("click", async () => {
-  pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
-  try {
-    await invoke("cancel_recording");
-  } catch {}
-  clearInterval(pollTimer);
-  invoke("hide_rec_bar").catch(() => {});
-});
+}
+stopBtn.addEventListener("click", () => endTake("stop_recording"));
+cancelBtn.addEventListener("click", () => endTake("cancel_recording"));
 
 // Keys act only once the user has clicked into the bar: the bar is shown
 // without focus on purpose, so the recorded app keeps it. Escape maps to Stop
