@@ -36,16 +36,13 @@ pub(crate) fn ensure_webview2() -> bool {
     false
 }
 
-// Authenticode-verify a staged file via WinVerifyTrust (WINTRUST_ACTION_GENERIC_VERIFY_V2,
-// no UI, no revocation check against a network CRL/OCSP responder -- this only needs to
-// prove the file is validly signed, not chase a live revocation list on every launch).
-// The update path (install_update) is fail-closed on a published SHA-256; this download
-// has no such hash to check against (it is Microsoft's own bootstrapper, not our own
-// release asset), so an Authenticode check is the equivalent integrity gate here: the
-// size cap + "MZ" header check above are only a corruption/wrong-format guard, not
-// authentication on their own.
-// The one publisher whose bootstrapper may be run: a valid chain alone would admit
-// any signed program served at the download address.
+// Authenticode-verify a staged file via WinVerifyTrust (WINTRUST_ACTION_GENERIC_VERIFY_V2, no
+// UI, no network revocation check: it only has to prove a valid signature). The update path is
+// fail-closed on a published SHA-256; this download is Microsoft's own bootstrapper with no such
+// hash, so Authenticode is the equivalent integrity gate (the size cap and "MZ" check are only
+// a corruption guard).
+// The one publisher whose bootstrapper may be run: a valid chain alone would admit any signed
+// program served at the download address.
 pub(crate) fn is_microsoft_signer(name: &str) -> bool {
     name == "Microsoft Corporation"
 }
@@ -154,11 +151,9 @@ pub(crate) fn install_webview2_runtime() -> bool {
     {
         return false;
     }
-    // Same two guards the update download uses: a file that exactly hit the cap was
-    // almost certainly truncated, and whatever we are about to execute has to at least
-    // be a Windows executable. (Not cryptographic authentication: the bootstrapper
-    // comes from Microsoft's own pinned fwlink over TLS, and only after the user
-    // agreed to install it.)
+    // Same two guards as the update download: a file that exactly hit the cap was probably
+    // truncated, and whatever we execute has to be a Windows executable. (Not authentication: the
+    // bootstrapper comes from Microsoft's pinned fwlink over TLS, after the user agreed.)
     if bytes.len() as u64 >= CAP || bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return false;
     }
@@ -184,10 +179,9 @@ pub(crate) fn install_webview2_runtime() -> bool {
     if fs::write(&path, &bytes).is_err() {
         return false;
     }
-    // Integrity: only Microsoft's own genuinely, chain-trust-signed bootstrapper is ever
-    // run. Unlike install_update, there is no separately-published hash to check this
-    // download against -- Authenticode, with the signer pinned to Microsoft, is the
-    // equivalent fail-closed gate here.
+    // Integrity: only Microsoft's own chain-trust-signed bootstrapper is run. There is no
+    // published hash to check it against, so Authenticode with the signer pinned to Microsoft is
+    // the fail-closed gate.
     if !signed_by_microsoft(&path) {
         return false;
     }
