@@ -1608,6 +1608,7 @@ export default {
     recBarMuteMic: "将麦克风静音",
     recBarUnmuteMic: "取消麦克风静音",
     recBarMicLost: "麦克风已断开，录制将继续但不含麦克风",
+    recBarSystemLost: "系统音频不可用，录制将继续但不含系统音频",
     pickFailed: "无法复制颜色，请重试。",
     colorCopied: "已复制颜色",
     flagColorPicker: "颜色拾取器（吸管）",
