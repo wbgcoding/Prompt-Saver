@@ -528,9 +528,12 @@ pub(crate) fn toggle_voice_from_hotkey(app: &AppHandle) {
 pub(crate) fn trigger_rec_stop_hotkey(app: &AppHandle) {
     let app = app.clone();
     let _ = std::thread::Builder::new().name("rec-hotkey-stop".into()).spawn(move || {
-        let _ = stop_recording_now(&app);
-        if let Some(w) = app.get_webview_window("rec-bar") {
-            let _ = w.hide();
+        // A refused stop (a continue holds the session out of the state) leaves the
+        // bar up: it still controls the recording and closes itself once that ends.
+        if stop_recording_now(&app).is_ok() {
+            if let Some(w) = app.get_webview_window("rec-bar") {
+                let _ = w.hide();
+            }
         }
     });
 }
