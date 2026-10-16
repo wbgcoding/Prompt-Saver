@@ -175,6 +175,11 @@ pub(crate) async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// How many copies from other apps the inbox keeps (the range ui_ranges.rs allows).
+pub(crate) fn clip_inbox_cap(settings: &Settings) -> usize {
+    settings.ui_values.get("clipInboxMax").copied().unwrap_or(50.0).clamp(10.0, 200.0) as usize
+}
+
 #[derive(Deserialize)]
 pub(crate) struct ClipRestoreItem {
     #[serde(default)]
@@ -190,7 +195,7 @@ pub(crate) struct ClipRestoreItem {
 // instead of one longer than the setting now allows.
 #[tauri::command]
 pub(crate) async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, items: Vec<ClipRestoreItem>) -> Result<(), String> {
-    let cap = lock(&state).settings.ui_values.get("clipInboxMax").copied().unwrap_or(50.0).clamp(10.0, 200.0) as usize;
+    let cap = clip_inbox_cap(&lock(&state).settings);
     let Some(conn) = db_conn(&app) else {
         return Err("history-failed".into());
     };

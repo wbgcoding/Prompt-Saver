@@ -1,4 +1,4 @@
-use super::{db_add_clip, db_conn, lock, now_secs, text_hash, Db};
+use super::{clip_inbox_cap, db_add_clip, db_conn, lock, now_secs, text_hash, Db};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -239,7 +239,7 @@ fn on_clipboard_update() {
         let store = lock(&state);
         let enabled = store.settings.ui_flags.get("clipWatcher") == Some(&true);
         let min = store.settings.ui_values.get("clipMinChars").copied().unwrap_or(3.0).max(1.0) as usize;
-        let cap = store.settings.ui_values.get("clipInboxMax").copied().unwrap_or(50.0).clamp(10.0, 200.0) as usize;
+        let cap = clip_inbox_cap(&store.settings);
         // At least one widely used password manager sets neither this nor the two OS
         // formats below, so the heuristic further down carries the real weight --
         // this stays on unless a user deliberately turns it off.

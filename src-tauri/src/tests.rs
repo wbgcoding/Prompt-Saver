@@ -13916,6 +13916,16 @@ fn a_failing_row_leaves_the_copy_history_untouched() {
 }
 
 #[test]
+fn the_clip_inbox_cap_defaults_and_clamps() {
+    let mut s = Settings::default();
+    assert_eq!(clip_inbox_cap(&s), 50);
+    s.ui_values.insert("clipInboxMax".into(), 5.0);
+    assert_eq!(clip_inbox_cap(&s), 10);
+    s.ui_values.insert("clipInboxMax".into(), 999.0);
+    assert_eq!(clip_inbox_cap(&s), 200);
+}
+
+#[test]
 fn the_clip_cap_counts_rows_and_an_undo_sorts_below_newer_copies() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(
