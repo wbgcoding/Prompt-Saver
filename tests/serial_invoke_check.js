@@ -71,6 +71,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await Promise.all([commit, peek, peekOther]);
   check("the peek follows its commit", started, ["rotation_commit:p1", "rotation_peek:p2", "rotation_peek:p1x"]);
 
+  // The editor draft write and its discard share one chain.
+  started.length = 0;
+  delays = { "save_editor_draft:1": 40 };
+  const tick = orderedInvoke("save_editor_draft", { v: 1 });
+  const discard = orderedInvoke("discard_editor_draft", { v: 2 });
+  await sleep(5);
+  check("a discard waits for the draft write in flight", started, ["save_editor_draft:1"]);
+  await Promise.all([tick, discard]);
+  check("the discard follows the draft write", started, ["save_editor_draft:1", "discard_editor_draft:2"]);
+
   // Commands outside the table are not chained.
   started.length = 0;
   delays = { "copy_text:1": 40 };

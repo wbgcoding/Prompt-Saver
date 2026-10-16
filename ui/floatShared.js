@@ -408,6 +408,9 @@ const ORDERED_KEYS = {
   set_autostart: () => "set_autostart",
   set_start_minimized: () => "set_start_minimized",
   set_favorite: () => "set_favorite",
+  // A tick still in flight must land before the discard of a save or cancel.
+  save_editor_draft: () => "draft",
+  discard_editor_draft: () => "draft",
   set_active_view: () => "views",
   reorder_views: () => "views",
   set_view_grid: () => "views",
