@@ -2,12 +2,9 @@ use super::*;
 
 // ---------- folder commands ----------
 
-// Repositions a folder pill the same way a mouse drag does -- used by the
-// folder window's own arrow-key move (folder.js), which has no native OS drag
-// gesture to hand this off to the way startDragging() does for a mouse. The
-// existing Moved handler on the folder window (see build_folder_window) is
-// what actually persists the new position, exactly as it does for a drag;
-// this only has to move the window and let that handler fire.
+// Repositions a folder pill the way a mouse drag does, for the folder window's arrow-key move
+// (folder.js), which has no native OS drag to hand off to. The Moved handler on the folder
+// window (build_folder_window) persists the new position, as it does for a drag.
 #[tauri::command]
 pub(crate) async fn set_folder_position(app: AppHandle, id: String, x: f64, y: f64, clamp: Option<bool>) -> Result<(), String> {
     if [x, y].iter().all(|v: &f64| v.is_finite()) {
@@ -261,11 +258,9 @@ pub(crate) struct FolderGeom {
     pub(crate) height: f64,
 }
 
-// Open the folder by growing its OWN window around the icon: no second window is
-// ever spawned, so z-order and focus stay exactly as simple as a single pill's. The
-// popover size comes in as logical pixels (what the webview measured) and is scaled
-// with THIS window's factor, so the same call is correct on a second monitor at a
-// different DPI.
+// Open the folder by growing its own window around the icon, so z-order and focus stay as
+// simple as a single pill's. The popover size comes in as logical pixels and is scaled with
+// this window's factor, so the call is correct on a monitor with a different DPI.
 #[tauri::command]
 pub(crate) async fn expand_float_folder(
     app: AppHandle,
