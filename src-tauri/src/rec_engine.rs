@@ -2,27 +2,18 @@ use super::*;
 
 // ---------- Screen recording: recording engine core ----------
 //
-// Windows Graphics Capture (via the windows-capture crate) plus its own Media
-// Foundation H.264 encoder. The target picker and control bar live further
-// down (see "Run the overlay as a recording-target picker" and "Recording
-// control bar" above); audio capture, quality/format options and further
-// polish are still to come.
+// Windows Graphics Capture (via the windows-capture crate) plus its own Media Foundation
+// H.264 encoder. Three behaviours of the crate shape this design:
+// - CaptureControl::stop() posts WM_QUIT to the capture thread and skips on_closed(), so the
+//   encoder must be finalised before stop() is called, never inside on_closed().
+// - CaptureControl::halt_handle() is the same flag stop() sets, not a pause; pause is
+//   tracked with our own clock.
+// - send_frame(&Frame) times video from WGC's per-frame timestamp, which keeps advancing
+//   during a pause and bakes a frozen-frame gap into the output. send_frame_buffer(bytes,
+//   own_timestamp) with a clock that stops while paused avoids that.
 //
-// Two research passes already paid for this design: a throwaway example
-// proved start/pause/resume/stop on real hardware, and three traps were found
-// and are worked around here:
-// - CaptureControl::stop() posts WM_QUIT to the capture thread and skips
-//   on_closed(), so the encoder must be finalised BEFORE stop() is called,
-//   never inside on_closed().
-// - CaptureControl::halt_handle() is the same flag stop() sets, not a pause --
-//   pause is tracked with our own clock instead.
-// - send_frame(&Frame) times video from WGC's own per-frame timestamp, which
-//   keeps advancing during a pause and bakes a frozen-frame gap into the
-//   output. send_frame_buffer(bytes, own_timestamp) with a clock that stops
-//   advancing while paused avoids that.
-//
-// Everything below that has no Windows-specific type is kept outside the
-// #[cfg(windows)] module so it stays unit-testable on any platform.
+// Everything without a Windows-specific type lives outside the #[cfg(windows)] module so it
+// stays unit-testable on any platform.
 
 // The recording state machine: pure functions of the current phase, so the
 // allowed transitions are testable without a capture session.
@@ -46,10 +37,9 @@ pub(crate) fn rec_can_finish(phase: RecPhase) -> bool {
     matches!(phase, RecPhase::Recording | RecPhase::Paused)
 }
 
-// The "active recording time" a pause must not advance, in 100ns ticks (the
-// same unit VideoEncoder::send_frame_buffer expects). Kept as a pure function
-// of its inputs so the pause-freezes-time behaviour is testable without a
-// real clock.
+// The "active recording time" a pause must not advance, in 100ns ticks (the unit
+// VideoEncoder::send_frame_buffer expects). Pure, so pause-freezes-time is testable without
+// a real clock.
 pub(crate) fn rec_clock_ticks(accumulated_ticks: i64, active_segment_elapsed_ticks: Option<i64>) -> i64 {
     accumulated_ticks.saturating_add(active_segment_elapsed_ticks.unwrap_or(0))
 }
@@ -104,14 +94,12 @@ impl RecordClock {
     }
 }
 
-// Pure byte-shuffle: crops to (crop_x, crop_y, crop_w, crop_h) within a
-// possibly padded, top-down source (row spacing `stride`), copying into a
-// tightly packed, bottom-up destination -- what VideoEncoder::send_frame_buffer's
-// own docs say it expects. A full-frame flip (the monitor/window targets) is
-// just this with the crop set to the whole frame; region recording (the third
-// target kind) uses a real sub-rectangle, since WGC itself has no region capture
-// source and always delivers the whole monitor. Independent of any capture-frame
-// type so it is unit-testable without a GPU or a Windows build.
+// Pure byte-shuffle: crops to (crop_x, crop_y, crop_w, crop_h) within a possibly padded,
+// top-down source (row spacing `stride`), copying into a tightly packed, bottom-up
+// destination, which is what VideoEncoder::send_frame_buffer expects. A full-frame flip is
+// this with the crop set to the whole frame; region recording uses a real sub-rectangle,
+// since WGC always delivers the whole monitor. Independent of any capture-frame type, so it
+// is unit-testable without a GPU.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn crop_and_flip_rows_bottom_up(
     raw: &[u8],
@@ -144,13 +132,10 @@ pub(crate) fn crop_and_flip_rows_bottom_up(
     out
 }
 
-// Re-anchors a top-down BGRA frame of its own live (width, height) into a
-// fixed (target_w, target_h) top-down canvas, top-left corner, black-padding
-// whatever the (smaller) live frame does not cover. Used only for the case a
-// Window recording target shrank mid-capture (see RecHandler::on_frame_arrived,
-// which routes a GROWN frame through scale_to_fit_frame_top_down instead --
-// cropping it here would have cut off whatever grew past the canvas) --
-// independent of the capture-frame type so it stays unit-testable.
+// Re-anchors a top-down BGRA frame of its live (width, height) into a fixed (target_w,
+// target_h) top-down canvas at the top-left, black-padding what the smaller frame does not
+// cover. Used when a Window target shrank mid-capture; a grown frame goes through
+// scale_to_fit_frame_top_down instead, since cropping would cut off what grew past the canvas.
 pub(crate) fn letterbox_frame_top_down(
     raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
 ) -> (Vec<u8>, usize) {
@@ -169,12 +154,10 @@ pub(crate) fn letterbox_frame_top_down(
     (out, dst_stride)
 }
 
-// The plain top-left crop above silently cut off whatever grew past the
-// encoder's fixed canvas on the right/bottom edge. When the live frame is
-// bigger in either dimension, scale the WHOLE frame down instead (aspect
-// ratio preserved, nearest-neighbour -- cheap enough for a capture thread and
-// plenty for the brief span a live resize actually spans) and centre it, so
-// nothing recorded is ever lost to a resize.
+// When the live frame is bigger than the encoder's fixed canvas in either dimension, scale
+// the whole frame down (aspect ratio preserved, nearest-neighbour: cheap enough for the
+// capture thread and fine for the brief span of a live resize) and centre it, so nothing
+// recorded is lost to a resize.
 pub(crate) fn scale_to_fit_frame_top_down(
     raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
 ) -> (Vec<u8>, usize) {
@@ -203,17 +186,12 @@ pub(crate) fn scale_to_fit_frame_top_down(
     (out, dst_stride)
 }
 
-// Places a top-down BGRA frame of its own live (width, height) at (at_x, at_y)
-// inside a fixed (canvas_w, canvas_h) top-down output buffer, black-padding
-// whatever the frame does not cover and silently clipping whatever falls
-// outside the buffer on any edge. A multi-display recording canvas can start
-// at a negative coordinate (a second display placed left of or above the first one), and a
-// tracked window dragged to the very edge of that canvas can still overhang
-// it by a pixel or two -- both are ordinary placements here, not error cases.
-// `letterbox_frame_top_down` is the (0, 0) case of this, kept as its own name
-// since its own two existing tests call it directly. Independent of any
-// capture-frame type so it stays unit-testable without a GPU or a Windows
-// build.
+// Places a top-down BGRA frame of its live (width, height) at (at_x, at_y) inside a fixed
+// (canvas_w, canvas_h) top-down output buffer, black-padding what it does not cover and
+// clipping whatever falls outside any edge. A multi-display canvas can start at a negative
+// coordinate (a display left of or above the first), and a window dragged to the canvas edge
+// can overhang it by a pixel or two; both are ordinary here. `letterbox_frame_top_down` is the
+// (0, 0) case, kept under its own name because tests call it directly.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn place_frame_in_canvas(
     raw: &[u8], width: usize, height: usize, stride: usize,
@@ -251,11 +229,9 @@ pub(crate) fn place_frame_in_canvas(
     (out, dst_stride)
 }
 
-// The combined-display rectangle (the default recording canvas for a
-// Window target), via the same desktop-geometry metrics Windows itself
-// already tracks -- a plain four-integer query, not an image read, and
-// already the union of every display, so no per-display enumeration or
-// union math is needed on top of it.
+// The combined-display rectangle (the default recording canvas for a Window target), from
+// the Windows desktop-geometry metrics: a four-integer query that is already the union of
+// every display.
 #[cfg(windows)]
 pub(crate) fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
     #[link(name = "user32")]
@@ -280,18 +256,15 @@ pub(crate) fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
     Ok((x, y, w as u32, h as u32))
 }
 
-// Whether an output size of (w, h) is small enough to even attempt (the
-// safety guard against the memory cost -- and possible outright refusal --
-// of a very large combined-display output). `build_encoder` is still tried
-// on top of this and can still fail on its own; this only short-circuits the
-// obviously too-large case before paying for that attempt.
+// Whether an output size of (w, h) is small enough to attempt, guarding against the memory
+// cost (and possible refusal) of a very large combined-display output. build_encoder is still
+// tried on top and can still fail.
 pub(crate) fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool {
     w <= ceiling_w && h <= ceiling_h
 }
 
-// A value from an imported settings file or a stray manual edit can carry
-// anything; fall back to the smallest, most conservative capture ("window")
-// for any string that is not one of the three modes this actually knows.
+// A value from an imported settings file or a manual edit can be anything; any string that
+// is not one of the three known modes falls back to the most conservative one ("window").
 pub(crate) fn sanitize_canvas_mode(raw: &str) -> &'static str {
     match raw {
         "monitor" => "monitor",
@@ -309,19 +282,16 @@ pub(crate) fn active_tick_secs(paused: bool) -> u64 {
     if paused { 0 } else { 1 }
 }
 
-// Pure predicate for the two optional recording safety nets (recMaxMin and
-// recMaxMb, both 0 = off) -- kept free of the watch thread's sleep loop so it
-// is unit-testable without spinning up a real recording.
+// Pure predicate for the two optional safety nets (recMaxMin and recMaxMb, 0 = off), free of
+// the watch thread's sleep loop so it is testable without a real recording.
 pub(crate) fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min: f64, max_mb: f64) -> bool {
     let by_time = max_min > 0.0 && elapsed_secs >= (max_min * 60.0) as u64;
     let by_size = max_mb > 0.0 && file_len >= (max_mb * 1024.0 * 1024.0) as u64;
     by_time || by_size
 }
 
-// The bounds of whichever display currently contains (x, y) -- the "the
-// display the window is on" fallback tier, using the same Win32 lookup
-// `resolve_region_monitor` already does for region recordings (no second way
-// to ask which display a point belongs to).
+// The bounds of the display containing (x, y), the "display the window is on" fallback tier;
+// uses the same Win32 lookup as resolve_region_monitor.
 #[cfg(windows)]
 pub(crate) fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
     let (hmon, ..) = resolve_region_monitor(x, y, 1, 1).ok()?;
@@ -329,9 +299,9 @@ pub(crate) fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
     Some((left, top, (right - left).max(1) as u32, (bottom - top).max(1) as u32))
 }
 
-// The part of a frame placed at (at_x, at_y) that really lands on the canvas, as
-// (x, y, w, h); None when none of it does. The used-area crop built from these
-// must stay inside the encoded picture, or ffmpeg refuses the crop.
+// The part of a frame placed at (at_x, at_y) that lands on the canvas, as (x, y, w, h), or
+// None. The used-area crop built from these must stay inside the encoded picture, or ffmpeg
+// refuses the crop.
 pub(crate) fn visible_canvas_rect(at_x: i64, at_y: i64, width: usize, height: usize, canvas_w: usize, canvas_h: usize) -> Option<(u32, u32, u32, u32)> {
     let x0 = at_x.max(0);
     let y0 = at_y.max(0);
@@ -343,13 +313,11 @@ pub(crate) fn visible_canvas_rect(at_x: i64, at_y: i64, width: usize, height: us
     Some((x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32))
 }
 
-// Tracks the union of every placed frame's own rectangle over a recording,
-// so the post-capture crop step knows the smallest rectangle that
-// still contains everything actually shown, rather than the full output
-// size -- which is mostly black once that size covers every display. Four
-// `AtomicU32`s rather than a `Mutex<Rect>`: `on_frame_arrived` runs on the
-// capture thread and must never block behind a lock a slow reader could be
-// holding.
+// Tracks the union of every placed frame's rectangle, so the post-capture crop knows the
+// smallest rectangle containing everything shown, not the full output size (mostly black
+// once it covers every display). Four AtomicU32s rather than a Mutex<Rect>:
+// on_frame_arrived runs on the capture thread and must never block behind a lock a slow
+// reader holds.
 pub(crate) struct UsedAreaTracker {
     pub(crate) min_x: std::sync::atomic::AtomicU32,
     pub(crate) min_y: std::sync::atomic::AtomicU32,
@@ -390,15 +358,10 @@ impl UsedAreaTracker {
     }
 }
 
-// Bitrate scaling: `recBitrateKbps` is defined as the rate for a
-// full-canvas recording, so when the canvas ends up larger than the window
-// itself (the every-display case), the encoder's bitrate is scaled down by
-// the fraction the window occupies of that canvas -- otherwise a small
-// window recorded on a huge canvas would spend most of its budget on pixels
-// that are just going to be black. Floored well above zero so a tiny window
-// on a huge canvas never gets an unusably low rate, and never scaled UP past
-// the configured value even if the "window" size handed in is somehow
-// already bigger than the canvas.
+// `recBitrateKbps` is the rate for a full-canvas recording, so when the canvas is larger than
+// the window (the every-display case) the bitrate is scaled down by the fraction the window
+// occupies, or a small window on a huge canvas would spend its budget on black pixels. It is
+// floored well above zero and never scaled up past the configured value.
 pub(crate) fn scale_bitrate_to_used_area(full_canvas_kbps: u32, used_w: u32, used_h: u32, canvas_w: u32, canvas_h: u32) -> u32 {
     if canvas_w == 0 || canvas_h == 0 {
         return full_canvas_kbps;
@@ -409,14 +372,11 @@ pub(crate) fn scale_bitrate_to_used_area(full_canvas_kbps: u32, used_w: u32, use
 
 // ---------- Screen recording: audio (loopback + microphone) ----------
 //
-// windows-capture's own VideoEncoder already accepts an AAC audio track
-// (AudioSettingsBuilder, send_audio_buffer) -- no custom Media Foundation
-// sink writer needed. What it does NOT do is capture the audio itself: that
-// is plain WASAPI (system loopback on the default render endpoint, the
-// microphone on the default -- or a chosen -- capture endpoint), converted to
-// this fixed target format before it reaches the encoder. Recording always
-// asks the encoder for exactly this format, so only the CAPTURE side ever
-// has to adapt to a device's own native format.
+// windows-capture's VideoEncoder accepts an AAC audio track (AudioSettingsBuilder,
+// send_audio_buffer) but does not capture audio. That is plain WASAPI (system loopback on
+// the default render endpoint, the microphone on the default or a chosen capture endpoint),
+// converted to this fixed target format before it reaches the encoder, so only the capture
+// side adapts to a device's native format.
 pub(crate) const REC_AUDIO_SAMPLE_RATE: u32 = 48_000;
 pub(crate) const REC_AUDIO_CHANNELS: u32 = 2;
 
@@ -426,13 +386,10 @@ pub(crate) fn audio_f32_to_i16(sample: f32) -> i16 {
     (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
 }
 
-// Down/up-mixes an interleaved f32 buffer from `in_channels` to `out_channels`
-// (mono -> stereo duplicates the one channel; N>2 -> stereo keeps the first
-// two and drops the rest -- good enough for a screen-recording voice/system
-// track, not a mixing console) and resamples to `out_rate` with linear
-// interpolation (adequate for speech/system audio at these sample rates; a
-// polyphase resampler would be overkill for this use case). Returns
-// interleaved i16 PCM at `out_channels`/`out_rate`.
+// Down/up-mixes an interleaved f32 buffer from `in_channels` to `out_channels` (mono ->
+// stereo duplicates the channel; N>2 -> stereo keeps the first two) and resamples to
+// `out_rate` with linear interpolation, which is adequate for speech and system audio.
+// Returns interleaved i16 PCM at `out_channels`/`out_rate`.
 pub(crate) fn audio_convert_to_target(
     samples: &[f32],
     in_channels: u32,
@@ -473,18 +430,15 @@ pub(crate) fn audio_convert_to_target(
     out
 }
 
-// Sums two equal-length interleaved i16 buffers (both sources active), with
-// saturating (hard-clip) addition rather than wraparound -- clipping on loud
-// combined peaks is far less objectionable than digital wraparound noise.
+// Sums two equal-length interleaved i16 buffers (both sources active) with saturating
+// addition: clipping on loud combined peaks is less objectionable than wraparound noise.
 pub(crate) fn audio_mix_i16(a: &[i16], b: &[i16]) -> Vec<i16> {
     a.iter().zip(b.iter()).map(|(&x, &y)| x.saturating_add(y)).collect()
 }
 
-// Minimal MP4 box walker, used only to measure each track's own declared
-// duration for the audio/video drift check below -- no new dependency, no
-// Media Foundation reader needed (the file's own box tree already carries
-// the answer, same "trust the output file's own numbers" approach 191 used
-// for its pause-gap proof).
+// Minimal MP4 box walker, used only to measure each track's declared duration for the
+// audio/video drift check below; the file's box tree carries the answer, so no extra
+// dependency or Media Foundation reader is needed.
 #[cfg(test)]
 pub(crate) fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize>)> {
     let mut out = Vec::new();
@@ -515,9 +469,9 @@ pub(crate) fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize
     out
 }
 
-// Descends `path` (e.g. ["moov", "trak"]), fanning out at every level that
-// has more than one match (there are two "trak" boxes once audio is on) --
-// so this returns every leaf box matching the full path, in file order.
+// Descends `path` (e.g. ["moov", "trak"]), fanning out at every level with more than one
+// match (two "trak" boxes once audio is on); returns every leaf box matching the full path,
+// in file order.
 #[cfg(test)]
 #[allow(clippy::single_range_in_vec_init)] // a Vec<Range> search scope, not an index list
 pub(crate) fn mp4_find_path(data: &[u8], path: &[&str]) -> Vec<std::ops::Range<usize>> {
@@ -536,12 +490,9 @@ pub(crate) fn mp4_find_path(data: &[u8], path: &[&str]) -> Vec<std::ops::Range<u
     current
 }
 
-// One track's own declared duration in seconds, from its mdhd box
-// (moov/trak/mdia/mdhd) -- version 0 uses 32-bit fields, version 1 uses
-// 64-bit creation/modification/duration with a still-32-bit timescale.
-// Handler-type fourCC per track (moov/trak/mdia/hdlr), e.g. "vide"/"soun" --
-// verifies which declared duration in mp4_track_durations_secs actually
-// belongs to which stream, rather than assuming trak order.
+// Handler-type fourCC per track (moov/trak/mdia/hdlr), e.g. "vide"/"soun", to verify which
+// declared duration in mp4_track_durations_secs belongs to which stream instead of assuming
+// trak order.
 #[cfg(test)]
 pub(crate) fn mp4_track_handler_types(data: &[u8]) -> Vec<String> {
     let mut out = Vec::new();
@@ -556,6 +507,9 @@ pub(crate) fn mp4_track_handler_types(data: &[u8]) -> Vec<String> {
     out
 }
 
+// One track's declared duration in seconds, from its mdhd box (moov/trak/mdia/mdhd). Version
+// 0 uses 32-bit fields, version 1 64-bit creation/modification/duration with a 32-bit
+// timescale.
 #[cfg(test)]
 pub(crate) fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
     let mut out = Vec::new();
@@ -585,20 +539,16 @@ pub(crate) fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
     out
 }
 
-// Producer (a WASAPI capture thread) / consumer (the recording feeder's fixed-
-// cadence audio tick) queue of already-converted interleaved i16 PCM at the
-// fixed target format above. Capped well above one tick's worth so a capture
-// thread that briefly gets ahead does not grow without bound; the cap is
-// generous (2s) since audio packets arrive in small, frequent bursts, unlike
-// video frames.
+// Producer (a WASAPI capture thread) / consumer (the feeder's fixed-cadence audio tick)
+// queue of converted interleaved i16 PCM in the target format above. Capped at 2s so a
+// capture thread that gets ahead does not grow it without bound; audio arrives in small,
+// frequent bursts, so that is generous.
 pub(crate) struct AudioQueueShared {
     pub(crate) samples: Mutex<std::collections::VecDeque<i16>>,
     pub(crate) lost: std::sync::atomic::AtomicBool,
-    // The rec bar's mute buttons flip this instead of stopping the
-    // WASAPI capture thread itself -- push() below just stops feeding the
-    // queue while it is set, and drain()'s existing zero-pad-on-underflow
-    // (a few lines down) does the rest, so the muted span of the track comes
-    // out as real silence rather than a gap, with zero change to timing.
+    // The rec bar's mute buttons flip this instead of stopping the WASAPI capture thread: push()
+    // stops feeding the queue while it is set and drain()'s zero-pad on underflow turns the muted
+    // span into real silence, with no change to timing.
     pub(crate) muted: std::sync::atomic::AtomicBool,
 }
 impl AudioQueueShared {
@@ -626,9 +576,9 @@ impl AudioQueueShared {
     pub(crate) fn is_muted(&self) -> bool {
         self.muted.load(std::sync::atomic::Ordering::Relaxed)
     }
-    // Drains exactly `n` samples, zero-padding (silence) if fewer are
-    // available -- the tick must never block or shrink to keep the encoder's
-    // own monotonic audio clock in step with real wall-clock time.
+    // Drains exactly `n` samples, zero-padding with silence if fewer are available: the tick
+    // must never block or shrink, to keep the encoder's monotonic audio clock in step with wall
+    // time.
     pub(crate) fn drain(&self, n: usize) -> Vec<i16> {
         let mut q = self.samples.lock().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::with_capacity(n);
@@ -643,38 +593,25 @@ impl AudioQueueShared {
     pub(crate) fn is_lost(&self) -> bool {
         self.lost.load(std::sync::atomic::Ordering::Relaxed)
     }
-    // Discards whatever is currently queued -- used once, the moment the
-    // first video frame arrives, to throw away audio captured during WGC's
-    // own startup latency (real, measured: a few hundred ms before the first
-    // frame shows up). Without this, audio ticking (which starts as soon as
-    // the feeder thread exists, well before any video) would establish an
-    // audio "time zero" earlier than video's own "time zero" (the first
-    // frame's own timestamp, per send_frame_buffer's self-normalization) --
-    // measured as an audio track running ~0.3s longer than the video track
-    // in every real recording before this fix.
+    // Discards what is queued. Called once, when the first video frame arrives, to throw away
+    // audio captured during WGC's startup latency (a few hundred ms). Audio ticking starts with
+    // the feeder thread, well before any video, so without this the audio "time zero" would
+    // precede video's (the first frame's timestamp) and the audio track would run ~0.3s longer.
     pub(crate) fn clear(&self) {
         self.samples.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }
 
-// A same-stem "<name>.mic.wav" sidecar for the microphone track when a
-// recording captures both system and mic audio. Two independent AAC tracks
-// in the same MP4 is the end state the video editor produces, but writing
-// them at capture time would mean the encoder (windows-capture's own
-// MediaStreamSource-based VideoEncoder) needs a second, simultaneously
-// selectable audio stream, which that encoder does not support -- and a
-// custom Media Foundation sink writer just for this would put fresh risk on
-// an already-shipped, freshly-stabilised recording engine. So capture keeps
-// writing exactly one AAC track (system, when present) into the mp4, as
-// before, and the second source goes to this plain PCM sidecar instead; the
-// editor muxes the two into one two-track mp4 the first time it opens the
-// recording (see video_editor::mux_mic_track's contract).
-// A hand-rolled RIFF/WAVE header rather than a new crate dependency -- the format
-// is small and fixed (mono/stereo 16-bit PCM), not worth a dep. The header is 80
-// bytes: RIFF, WAVE, a 28-byte JUNK chunk that is the room a 64-bit size table
-// needs, fmt, data. Up to 4 GiB the file is an ordinary WAV (every reader skips the
-// JUNK); past that finish() turns the same bytes into an RF64 file whose JUNK chunk
-// becomes the ds64 size table, so a long mic track stays readable.
+// A same-stem "<name>.mic.wav" sidecar for the microphone track when a recording captures
+// both system and mic audio. The encoder (windows-capture's VideoEncoder) cannot write a
+// second selectable audio stream, and a custom Media Foundation sink writer would put risk
+// on the stabilised recording engine. So capture writes one AAC track (system, when present)
+// into the mp4 and the second source goes to this PCM sidecar; the editor muxes the two into
+// a two-track mp4 the first time it opens the recording (see video_editor::mux_mic_track).
+// The RIFF/WAVE header is hand-rolled: the format is small and fixed (mono/stereo 16-bit PCM).
+// It is 80 bytes: RIFF, WAVE, a 28-byte JUNK chunk (room for a 64-bit size table), fmt,
+// data. Up to 4 GiB the file is an ordinary WAV (readers skip the JUNK); past that finish()
+// turns the same bytes into an RF64 file whose JUNK chunk becomes the ds64 table.
 pub(crate) const REC_WAV_HEADER_BYTES: u64 = 80;
 const REC_WAV_DATA_SIZE_OFFSET: u64 = 76;
 
@@ -710,8 +647,8 @@ impl RecWavWriter {
     }
     pub(crate) fn write_samples(&mut self, samples: &[i16]) -> std::io::Result<()> {
         use std::io::Write;
-        // One write per chunk: a WriteFile call per sample (about 96000 a second) is
-        // more than a slow disk or a scanning virus guard can keep up with in real time.
+        // One write per chunk: a WriteFile call per sample (about 96000 a second) is more than a
+        // slow disk or a scanning virus guard can keep up with.
         let mut bytes = Vec::with_capacity(samples.len() * 2);
         for s in samples {
             bytes.extend_from_slice(&s.to_le_bytes());
@@ -720,9 +657,8 @@ impl RecWavWriter {
         self.data_bytes = self.data_bytes.saturating_add(samples.len() as u64 * 2);
         Ok(())
     }
-    // Seeks back to patch the placeholder sizes now that the real total is
-    // known -- streamed formats (WAV included) put their length in the header,
-    // so it cannot be written until the last sample has landed.
+    // Seeks back to patch the placeholder sizes once the real total is known; streamed WAV puts
+    // its length in the header, so it cannot be written until the last sample landed.
     pub(crate) fn finish(mut self) -> std::io::Result<()> {
         use std::io::{Seek, SeekFrom, Write};
         // Everything after the first 8 bytes: the header minus RIFF and its size, plus the data.
@@ -751,10 +687,9 @@ impl RecWavWriter {
     }
 }
 
-// The video a sidecar named "<stem>.<something>" belongs to: a recording is
-// captured as mp4 but a format conversion leaves "<stem>.webm" (or gif, avi)
-// beside the very same sidecar names, so an existing sibling of any video format
-// wins and the mp4 name is the answer when none exists.
+// The video a sidecar named "<stem>.<something>" belongs to. A recording is captured as mp4
+// but a format conversion leaves "<stem>.webm" (or gif, avi) beside the same sidecars, so an
+// existing sibling of any video format wins and the mp4 name is the answer when none exists.
 fn sidecar_owner_video(path: &Path, stem: &str) -> PathBuf {
     for ext in VIDEO_FORMATS {
         let candidate = path.with_file_name(format!("{stem}.{ext}"));
@@ -772,14 +707,11 @@ pub(crate) fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     Some(sidecar_owner_video(path, stem))
 }
 
-// The video sibling of a "<name>.keys.json" sidecar, or None if `path` is not
-// one -- same shape as mic_sidecar_video_path above, kept free of the
-// keylog module (and its cfg(windows) gate) since the stale-recordings sweep
-// this feeds must reason about `.keys.json` on every target, not just
-// Windows. Without this, sweep_stale_recordings_in only ever
-// treated a key-overlay sidecar as unreferenced -- it was deleted out from
-// under a KEPT recording as soon as it aged past the stale window, even
-// though the mp4 itself was correctly kept.
+// The video sibling of a "<name>.keys.json" sidecar, or None. Same shape as
+// mic_sidecar_video_path, kept free of the keylog module (and its cfg(windows) gate)
+// because the stale-recordings sweep must reason about `.keys.json` on every target;
+// otherwise the sweep would treat a key-overlay sidecar as unreferenced and delete it from
+// under a kept recording once it aged past the stale window.
 pub(crate) fn keys_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".keys.json")?;
@@ -793,46 +725,37 @@ pub(crate) struct RecFrameItem {
     pub(crate) ts: i64,
 }
 
-// Shared between the WGC capture callback (producer) and the encoder feeder
-// thread (consumer). windows-capture's own internal channel from our callback
-// to its transcode thread is unbounded and un-instrumentable, so a slow
-// encoder must be caught here instead: a full queue drops the OLDEST frame
-// rather than blocking the capture callback (and with it the desktop
-// compositor). Dropped frames are counted and logged, never silent.
+// Shared between the WGC capture callback (producer) and the encoder feeder thread
+// (consumer). windows-capture's own channel to its transcode thread is unbounded and
+// un-instrumentable, so a slow encoder must be caught here: a full queue drops the oldest
+// frame rather than block the capture callback (and with it the desktop compositor).
+// Dropped frames are counted and logged.
 pub(crate) struct RecFeederShared {
     pub(crate) queue: Mutex<std::collections::VecDeque<RecFrameItem>>,
     pub(crate) cv: std::sync::Condvar,
     pub(crate) dropped: std::sync::atomic::AtomicU64,
     pub(crate) stopping: std::sync::atomic::AtomicBool,
-    // First unrecoverable encoder write failure (e.g. disk full), if any --
-    // surfaced to the user rather than left as a silently truncated recording.
-    // Only the first is kept: a failing encoder tends to fail identically on
-    // every following frame, and one message is all the user needs.
+    // First unrecoverable encoder write failure (e.g. disk full), surfaced to the user rather
+    // than left as a silently truncated recording. Only the first is kept: a failing encoder
+    // tends to fail identically on every following frame.
     pub(crate) encode_error: Mutex<Option<String>>,
-    // Set once, the same instant the audio feeder sees its first video
-    // frame -- lets a parallel mic-sidecar writer thread (RecWavWriter, spawned
-    // only when both system and mic are captured) discard its own pre-roll at
-    // the same "time zero" the main track uses, without stealing frames from
-    // the feeder's single-consumer queue to find that moment itself.
+    // Set once, when the audio feeder sees its first video frame. Lets the parallel mic-sidecar
+    // writer thread (RecWavWriter, spawned when both system and mic are captured) discard its
+    // pre-roll at the same "time zero" as the main track without taking frames from the feeder's
+    // single-consumer queue.
     pub(crate) first_frame: std::sync::atomic::AtomicBool,
-    // Written only by the capture callback (never the feeder thread), the
-    // same "window size" canvas default's resize-safety-net path
-    // (scale_to_fit_frame_top_down) that shrinks a grown window's picture to
-    // keep fitting the encoder's original, smaller canvas -- the exact
-    // moment content starts being lost off the edge. Largest frame size ever
-    // seen (for a possible future message; only the timestamp is shown
-    // today) plus the timestamp of the FIRST such frame, encoded as ms + 1 so
-    // 0 unambiguously means "never happened" -- a real first frame at ms=0 is
-    // not something this recorder can produce anyway (on_frame_arrived does
-    // real work before ever reading the clock a second time).
+    // Written only by the capture callback, in the resize safety net (scale_to_fit_frame_top_down)
+    // that shrinks a grown window's picture to fit the encoder's original canvas, which is when
+    // content starts being lost off the edge. Largest frame size seen (only the timestamp is
+    // shown today) plus the timestamp of the first such frame as ms + 1, so 0 means "never
+    // happened".
     pub(crate) resize_crop_max_w: std::sync::atomic::AtomicU32,
     pub(crate) resize_crop_max_h: std::sync::atomic::AtomicU32,
     pub(crate) resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64,
-    // Set at most once per recording, by the disk-space watch thread, the
-    // first time free space drops below the warning threshold -- read (and cleared)
-    // by the live recording_status poll so the control bar can show it
-    // exactly once, never stopping the recording (that is the hard, separate
-    // "low-disk-space" threshold at warn_mb/4 below).
+    // Set at most once per recording, by the disk-space watch thread, the first time free space
+    // drops below the warning threshold; read and cleared by the recording_status poll so the
+    // control bar shows it once without stopping the recording (the hard "low-disk-space" stop
+    // is a separate threshold at warn_mb/4).
     pub(crate) disk_low: Mutex<Option<(u64, u64)>>,
 }
 impl RecFeederShared {
@@ -850,10 +773,9 @@ impl RecFeederShared {
             disk_low: Mutex::new(None),
         }
     }
-    // Called only from on_frame_arrived's legacy resize-safety-net branch, at
-    // the exact instant a grown window's picture is being shrunk to keep
-    // fitting the canvas -- never from the 369 placement-canvas branch, which
-    // is deliberately oversized and can never lose content this way.
+    // Called only from on_frame_arrived's resize-safety-net branch, when a grown window's picture
+    // is shrunk to fit the canvas; never from the placement-canvas branch, whose canvas is
+    // oversized on purpose and cannot lose content this way.
     pub(crate) fn mark_resize_crop(&self, width: u32, height: u32, ts_ticks: i64) {
         use std::sync::atomic::Ordering::Relaxed;
         self.resize_crop_max_w.fetch_max(width, Relaxed);
@@ -861,10 +783,9 @@ impl RecFeederShared {
         let ts_ms = (ts_ticks / 10_000).max(0) as u64;
         let _ = self.resize_crop_first_ms_plus_one.compare_exchange(0, ts_ms + 1, Relaxed, Relaxed);
     }
-    // Safe to call only once the capture callback is provably done (after
-    // finish_and_stop has run session.control.stop()) -- the same threading
-    // rule as the used-area tracker: written only by the capture thread,
-    // read only once that thread is guaranteed to have stopped writing.
+    // Call only once the capture callback is provably done (after finish_and_stop ran
+    // session.control.stop()): like the used-area tracker, it is written only by the capture
+    // thread and read only after that thread stopped writing.
     pub(crate) fn resize_crop_at_ms(&self) -> Option<u64> {
         use std::sync::atomic::Ordering::Relaxed;
         let plus_one = self.resize_crop_first_ms_plus_one.load(Relaxed);
@@ -882,8 +803,8 @@ impl RecFeederShared {
             *d = Some((free_mb, est_seconds));
         }
     }
-    // Consuming: recording_status() takes it exactly once, so the control
-    // bar's toast fires exactly once per recording, not on every poll tick.
+    // Consuming: recording_status() takes it once, so the control bar's toast fires once per
+    // recording, not on every poll tick.
     pub(crate) fn take_disk_low(&self) -> Option<(u64, u64)> {
         self.disk_low.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
@@ -893,9 +814,8 @@ impl RecFeederShared {
             *e = Some(msg);
         }
     }
-    // Non-consuming: the live status poll (recording_status) and the final
-    // stop payload both need to read this, and the live poll must not eat it
-    // before the stop payload gets a turn.
+    // Non-consuming: the live status poll and the final stop payload both read this, and the
+    // poll must not eat it before the stop payload.
     pub(crate) fn peek_encode_error(&self) -> Option<String> {
         self.encode_error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
@@ -921,9 +841,9 @@ impl RecFeederShared {
             q = self.cv.wait(q).unwrap_or_else(|e| e.into_inner());
         }
     }
-    // Non-blocking pop, used by the audio-tick feeder loop: video frames are
-    // drained whenever available between ticks, never waited on (the audio
-    // tick's own pacing must not stall behind an empty video queue).
+    // Non-blocking pop for the audio-tick feeder loop: video frames are drained whenever
+    // available between ticks, never waited on, so the tick's pacing does not stall behind an
+    // empty video queue.
     pub(crate) fn try_pop(&self) -> Option<RecFrameItem> {
         let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
         q.pop_front()
@@ -932,13 +852,10 @@ impl RecFeederShared {
         self.stopping.store(true, std::sync::atomic::Ordering::Relaxed);
         self.cv.notify_all();
     }
-    // Lets the capture callback stop pushing NEW frames the instant a stop
-    // was requested, symmetric with how the audio capture threads stop
-    // producing once audio_stop fires -- without this, video kept accepting
-    // frames for as long as WGC stayed alive (control.stop() only runs after
-    // the encoder is finalised, see Trap 1 below), while audio had already
-    // gone silent, so the video track ended up measurably longer than the
-    // audio track at the end of every recording.
+    // Lets the capture callback stop pushing new frames the instant a stop is requested,
+    // symmetric with the audio capture threads stopping on audio_stop. Otherwise video would keep
+    // accepting frames while WGC stays alive (control.stop() runs only after the encoder is
+    // finalised) and end up longer than the audio track.
     pub(crate) fn is_stopping(&self) -> bool {
         self.stopping.load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -954,30 +871,23 @@ pub(crate) struct RecordingStoppedPayload {
     pub(crate) path: String,
     pub(crate) dropped_frames: u64,
     pub(crate) encode_error: Option<String>,
-    // Set when both system and mic were captured -- the video editor
-    // consolidates this sidecar into the mp4's second AAC track on open.
+    // Set when both system and mic were captured; the video editor merges this sidecar into the
+    // mp4's second AAC track on open.
     pub(crate) mic_wav_path: Option<String>,
-    // One sentence naming the canvas a window recording actually used
-    // (e.g. "every display", "the display the window is on", "the
-    // window's own size") -- None for Monitor/Region targets, which have
-    // exactly one candidate and nothing to report.
+    // One sentence naming the canvas a window recording used (e.g. "every display", "the display
+    // the window is on", "the window's own size"); None for Monitor/Region targets.
     pub(crate) canvas_note: Option<String>,
-    // True when the window used less of its canvas than the canvas itself,
-    // leaving a black margin the frontend should now trim automatically
-    // (crop_recording_to_used_area) before showing the result. Always
-    // false for Monitor/Region and for the "window's own size" fallback.
+    // True when the window used less of its canvas than the canvas itself, leaving a black margin
+    // the frontend trims (crop_recording_to_used_area) before showing the result. Always false
+    // for Monitor/Region and the "window's own size" tier.
     pub(crate) needs_crop: bool,
-    // Milliseconds into the recording when the "window size" canvas default
-    // first had to shrink the picture to keep it fitting (the window grew
-    // past its starting size) -- None if that never happened. Drives the
-    // reactive notice offering to switch recCanvasMode to "all" from now on.
+    // Milliseconds into the recording when the "window size" canvas default first had to shrink
+    // the picture (the window grew past its starting size); None if never. Drives the notice
+    // offering to switch recCanvasMode to "all".
     pub(crate) resize_crop_at_ms: Option<u64>,
-    // Every earlier part of this recording, oldest first, when the "finish and
-    // continue" button was used at least once -- empty for a plain recording,
-    // so existing callers reading only `path` see no change at all. The
-    // frontend chains [...parts, { path, mic_wav_path }] when it wants the
-    // full sequence, e.g. to open every part in the video editor one after
-    // another with its own mic sidecar muxed in.
+    // Every earlier part of this recording, oldest first, when "finish and continue" was used;
+    // empty for a plain recording. The frontend chains [...parts, { path, mic_wav_path }] for the
+    // full sequence, e.g. to open every part in the video editor with its mic sidecar muxed in.
     pub(crate) parts: Vec<RecordingPartInfo>,
 }
 
@@ -987,11 +897,9 @@ pub(crate) struct RecordingPartInfo {
     pub(crate) mic_wav_path: Option<String>,
 }
 
-// A cancel discards the WHOLE take, not just its current file -- every
-// earlier part a "finish and continue" chain already closed goes with it,
-// video, mic audio and its own key-overlay sidecar all three, into the
-// holding area when possible. Best-effort: a missing file (already
-// moved/deleted by the user) is not a reason to fail an otherwise-successful
+// A cancel discards the whole take: every earlier part a "finish and continue" chain closed
+// goes with it (video, mic audio and key-overlay sidecar), into the holding area when
+// possible. Best-effort: a file already moved or deleted by the user does not fail the
 // cancel.
 #[cfg(windows)]
 pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo) {
@@ -1004,17 +912,15 @@ pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo) {
 
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct RecordingContinuedPayload {
-    // The just-finished part's own outcome -- surfaced here (rather than only
-    // logged) because this part gets no result dialog of its own; the final
-    // stop is still the only place a dropped-frame count or encode error
-    // becomes visible to the user, via `RecordingStoppedPayload.parts`.
+    // The just-finished part's outcome, surfaced here because this part gets no result dialog;
+    // the final stop is the only place a dropped-frame count or encode error becomes visible to
+    // the user, via `RecordingStoppedPayload.parts`.
     pub(crate) finished_part_path: String,
     pub(crate) finished_part_dropped_frames: u64,
     pub(crate) finished_part_encode_error: Option<String>,
     pub(crate) new_path: String,
     pub(crate) part_number: u32,
-    // How long the switch itself took, start to finish -- shown briefly in
-    // the control bar so the missing moment between the two files is never
-    // silently hidden from the user.
+    // How long the switch took, shown briefly in the control bar so the moment missing between
+    // the two files is not hidden from the user.
     pub(crate) gap_ms: u64,
 }
