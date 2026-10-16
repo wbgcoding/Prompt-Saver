@@ -1380,6 +1380,7 @@ export default {
     errUpdaterHashMismatch: "Güncelleme reddedildi: indirilen dosya sağlama toplamıyla eşleşmiyor",
     errUpdateRecordingActive: "Bir kayıt sürüyor. Önce onu bitirin, sonra güncellemeyi yükleyin.",
     errUpdateJobsRunning: "Arka plan işleri hâlâ çalışıyor. Bitmelerini bekleyin, sonra güncellemeyi yükleyin.",
+    errUpdatePortableManual: "Bu taşınabilir sürümdür. Sürüm sayfası açıldı: yeni taşınabilir exe dosyasını indirin ve bunun yerine koyun.",
     errBackupTooLarge: "Bu yedek 512 MB'tan büyük olduğu için geri yüklenmedi",
     errStoreTooLargeForBackup: "Veri deposu 512 MB'tan büyük olduğu için yedeklenemiyor",
     errBackupSchemaMismatch: "Bu dosya bir {app} veritabanına benzemiyor ve geri yüklenmedi",

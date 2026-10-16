@@ -694,6 +694,17 @@ pub(crate) fn update_url_is_newer_release(url: &str) -> bool {
     !tag.is_empty() && version_newer(tag, APP_VERSION)
 }
 
+// The release page of the version a pinned download URL belongs to. A portable
+// copy is not replaced by the installer, so it is sent there instead.
+pub(crate) fn release_page_for(url: &str) -> Option<String> {
+    if !valid_update_url(url) {
+        return None;
+    }
+    let prefix = format!("{}/releases/download/", repo_url());
+    let tag = url.strip_prefix(prefix.as_str())?.split('/').next()?;
+    Some(format!("{}/releases/tag/{}", repo_url(), tag))
+}
+
 // The installer ends the app, which would cut a live recording short (an MP4
 // with no index, unplayable) or abandon a running export, so it waits for them.
 // A recording counts while it switches files too, when the state reads empty.
@@ -711,6 +722,14 @@ pub(crate) fn update_blocker(recording: bool, switching: bool, jobs: usize) -> O
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
+    // The setup would install a second, installed copy next to this portable
+    // exe and restart the old one. The release page opens instead; the person
+    // replaces the portable exe by hand.
+    if is_portable() {
+        let page = release_page_for(&url).ok_or_else(|| "invalid update source".to_string())?;
+        std::process::Command::new("explorer").arg(page).spawn().map_err(|e| e.to_string())?;
+        return Err("portable-update-manual".to_string());
+    }
     if let Some(why) = update_blocker(recording_active(&app), REC_STARTING.load(Ordering::SeqCst), bg_ops_running_count()) {
         return Err(why.to_string());
     }

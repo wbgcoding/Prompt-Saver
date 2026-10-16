@@ -1380,6 +1380,7 @@ export default {
     errUpdaterHashMismatch: "Atualização rejeitada: o download não corresponde à sua soma de verificação",
     errUpdateRecordingActive: "Uma gravação está em andamento. Termine-a e depois instale a atualização.",
     errUpdateJobsRunning: "Ainda há tarefas em segundo plano. Aguarde o término e depois instale a atualização.",
+    errUpdatePortableManual: "Esta é a versão portátil. A página da versão está aberta: baixe o novo exe portátil e substitua este.",
     errBackupTooLarge: "Este backup ultrapassa 512 MB e não foi restaurado",
     errStoreTooLargeForBackup: "O armazenamento de dados ultrapassa 512 MB e não pode ser copiado",
     errBackupSchemaMismatch: "Este arquivo não parece um banco de dados do {app} e não foi restaurado",

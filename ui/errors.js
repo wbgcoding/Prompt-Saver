@@ -37,6 +37,7 @@ export const ERROR_MSG_KEYS = {
   "demo-mode-multiple-instances": "demoModeMultipleInstances",
   "dir-not-picked": "syncDirNotApplied",
   "recording-busy": "recBusy",
+  "portable-update-manual": "errUpdatePortableManual",
   "recording-active": "errUpdateRecordingActive",
   "jobs-running": "errUpdateJobsRunning",
   "busy": "ffmpegDownloadBusy",

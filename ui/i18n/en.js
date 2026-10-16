@@ -1387,6 +1387,7 @@ export default {
     errUpdaterHashMismatch: "Update rejected: the download does not match its checksum",
     errUpdateRecordingActive: "A recording is running. Finish it, then install the update.",
     errUpdateJobsRunning: "Background jobs are still running. Let them finish, then install the update.",
+    errUpdatePortableManual: "This is the portable version. The release page is open: download the new portable exe and replace this one.",
     errBackupTooLarge: "This backup is larger than 512 MB and was not restored",
     errStoreTooLargeForBackup: "The data store is larger than 512 MB and cannot be backed up",
     errBackupSchemaMismatch: "This file does not look like a {app} database and was not restored",

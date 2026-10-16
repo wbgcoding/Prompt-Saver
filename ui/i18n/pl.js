@@ -1380,6 +1380,7 @@ export default {
     errUpdaterHashMismatch: "Aktualizacja odrzucona: pobrany plik nie zgadza się z sumą kontrolną",
     errUpdateRecordingActive: "Trwa nagrywanie. Zakończ je, a potem zainstaluj aktualizację.",
     errUpdateJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem zainstaluj aktualizację.",
+    errUpdatePortableManual: "To wersja przenośna. Strona wydania jest otwarta: pobierz nowy przenośny plik exe i zastąp nim ten.",
     errBackupTooLarge: "Ta kopia zapasowa przekracza 512 MB i nie została przywrócona",
     errStoreTooLargeForBackup: "Magazyn danych przekracza 512 MB i nie można wykonać kopii zapasowej",
     errBackupSchemaMismatch: "Ten plik nie wygląda na bazę danych {app} i nie został przywrócony",

@@ -20547,3 +20547,11 @@ fn quit_counts_a_live_recording_as_a_running_job() {
     assert_eq!(quit_blockers(0, true), 1, "a recording alone asks first");
     assert_eq!(quit_blockers(2, true), 3);
 }
+
+#[test]
+fn portable_update_points_at_the_release_page_of_the_offered_version() {
+    let url = format!("{}/releases/download/v9.9.9/{}-setup.exe", repo_url(), brand::SLUG);
+    assert_eq!(release_page_for(&url), Some(format!("{}/releases/tag/v9.9.9", repo_url())));
+    assert_eq!(release_page_for("https://example.com/releases/download/v9.9.9/x-setup.exe"), None, "only our own repo");
+    assert_eq!(release_page_for(&format!("{}/releases/download/../x/y.exe", repo_url())), None);
+}

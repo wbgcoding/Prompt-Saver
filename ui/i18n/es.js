@@ -1380,6 +1380,7 @@ export default {
     errUpdaterHashMismatch: "Actualización rechazada: la descarga no coincide con su suma de comprobación",
     errUpdateRecordingActive: "Hay una grabación en curso. Termínala y luego instala la actualización.",
     errUpdateJobsRunning: "Aún hay tareas en segundo plano. Espera a que terminen y luego instala la actualización.",
+    errUpdatePortableManual: "Esta es la versión portátil. La página de la versión está abierta: descarga el nuevo exe portátil y reemplaza este.",
     errBackupTooLarge: "Esta copia de seguridad supera los 512 MB y no se restauró",
     errStoreTooLargeForBackup: "El almacén de datos supera los 512 MB y no se puede respaldar",
     errBackupSchemaMismatch: "Este archivo no parece una base de datos de {app} y no se restauró",
