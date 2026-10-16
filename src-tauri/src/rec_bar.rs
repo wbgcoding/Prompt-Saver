@@ -100,6 +100,12 @@ pub(crate) fn rec_bar_mark_moved() {
     REC_BAR_FOLLOWING.store(false, Ordering::SeqCst);
 }
 
+// Whether the bar may close after a stop attempt: the stop went through, or
+// there is no session left and none is being swapped in.
+pub(crate) fn follow_stop_settled(stop_ok: bool, recording: bool, switching: bool) -> bool {
+    stop_ok || (!recording && !switching)
+}
+
 pub(crate) fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     let my_gen = REC_BAR_FOLLOW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     REC_BAR_FOLLOWING.store(true, Ordering::SeqCst);
@@ -116,9 +122,15 @@ pub(crate) fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
             // The recorded window itself closed mid-recording: the capture source
             // is gone, so auto-stop (keeping the file so far) rather than leaving
             // a dead session running and the bar stuck at its last position.
-            let _ = stop_recording_now(&app);
-            let _ = win.hide();
-            break;
+            let stop_ok = stop_recording_now(&app).is_ok();
+            // A refused stop (a continue holds the session out of the state)
+            // is retried on the next tick; the bar closes once it went
+            // through or nothing records or switches any more.
+            if follow_stop_settled(stop_ok, recording_active(&app), REC_STARTING.load(Ordering::SeqCst)) {
+                let _ = win.hide();
+                break;
+            }
+            continue;
         }
         if REC_BAR_FOLLOWING.load(Ordering::SeqCst) {
             position_rec_bar(&win, "window", hwnd);

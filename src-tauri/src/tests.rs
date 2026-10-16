@@ -20452,3 +20452,11 @@ fn editor_decision_follows_the_editors_answer() {
     tx.send("asking".into()).unwrap();
     assert_eq!(wait_for_editor_decision(&rx, short, short), EditorLoadDecision::Refused);
 }
+
+#[test]
+fn follow_thread_keeps_the_bar_while_a_stop_is_refused_mid_switch() {
+    assert!(follow_stop_settled(true, false, false), "a stop that went through closes the bar");
+    assert!(!follow_stop_settled(false, false, true), "a continue in flight keeps it for a retry");
+    assert!(!follow_stop_settled(false, true, false), "a session that refused the stop keeps it");
+    assert!(follow_stop_settled(false, false, false), "nothing recording any more closes it");
+}
