@@ -3684,7 +3684,8 @@ $("ve-trim-end-val").addEventListener("change", () => {
 const numFieldDec = t("numFieldDecrease");
 const numFieldInc = t("numFieldIncrease");
 const numFieldList = t("numFieldPresets");
-const numFieldWheelOn = settings?.ui_flags?.numFieldWheel !== false;
+// Read on each wheel turn: `settings` is still null when these fields are built.
+const numFieldWheelOn = () => settings?.ui_flags?.numFieldWheel !== false;
 for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
   numberField({
     input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,

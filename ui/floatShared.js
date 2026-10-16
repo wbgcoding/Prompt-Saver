@@ -623,7 +623,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   el.addEventListener(
     "wheel",
     (e) => {
-      if (!wheelEnabled) return;
+      if (!(typeof wheelEnabled === "function" ? wheelEnabled() : wheelEnabled)) return; // a function reads the switch live
       e.preventDefault();
       stepBy(e.deltaY < 0 ? 1 : -1, e.shiftKey);
     },
