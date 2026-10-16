@@ -61,6 +61,17 @@ check("zh trailing literal word is not swallowed", zh("说完字面量"), "说�
 check("english 'point' is plain text, not a punctuation command", applyVoiceCommands("the point is clear", { punct: true, autoCaps: false, lang: "en" }), "the point is clear");
 check("english 'period' still is a punctuation command", applyVoiceCommands("the end period", { punct: true, autoCaps: false, lang: "en" }), "the end.");
 
+// Japanese command words inside ordinary words stay text.
+const ja = (t) => applyVoiceCommands(t, { punct: true, autoCaps: false, lang: "ja" });
+check("ja verb ending is not a period", ja("会議が始まる"), "会議が始まる");
+check("ja 'kakkoii' is not a paren", ja("かっこいい"), "かっこいい");
+check("ja 'dashboard' is not a dash", ja("ダッシュボード"), "ダッシュボード");
+check("ja 'tablet' is not a tab", ja("タブレット"), "タブレット");
+check("ja 'Colombia' is not a colon", ja("コロンビア"), "コロンビア");
+check("ja period and comma commands", ja("こんにちは読点元気です句点"), "こんにちは,元気です.");
+check("ja paren command before a kanji", ja("かっこ注意かっことじ"), "(注意)");
+check("zh comma inside a sentence", applyVoiceCommands("你好逗号再见句号", { punct: true, autoCaps: false, lang: "zh" }), "你好,再见.");
+
 // Per-language command-key parity: every language must define the same
 // concepts (punctuation + function words + the literal escape word) as DE --
 // same parity discipline as tests/i18n_check.js, just for this file's own

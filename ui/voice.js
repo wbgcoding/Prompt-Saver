@@ -16,7 +16,7 @@ const VOICE_PUNCT = {
   pt: { "ponto": ".", "vírgula": ",", "ponto de interrogação": "?", "ponto de exclamação": "!", "dois pontos": ":", "ponto e vírgula": ";", "hífen": "-", "travessão": "–", "barra": "/", "aspas": "\"", "abre parênteses": "(", "fecha parênteses": ")", "por cento": "%" },
   pl: { "kropka": ".", "przecinek": ",", "znak zapytania": "?", "wykrzyknik": "!", "dwukropek": ":", "średnik": ";", "łącznik": "-", "myślnik": "–", "ukośnik": "/", "cudzysłów": "\"", "otwórz nawias": "(", "zamknij nawias": ")", "procent": "%" },
   zh: { "句号": ".", "逗号": ",", "问号": "?", "感叹号": "!", "冒号": ":", "分号": ";", "连字符": "-", "破折号": "–", "斜杠": "/", "引号": "\"", "左括号": "(", "右括号": ")", "百分号": "%" },
-  ja: { "まる": ".", "てん": ",", "クエスチョンマーク": "?", "びっくりマーク": "!", "コロン": ":", "セミコロン": ";", "ハイフン": "-", "ダッシュ": "–", "スラッシュ": "/", "引用符": "\"", "かっこ": "(", "かっことじ": ")", "パーセント": "%" },
+  ja: { "句点": ".", "読点": ",","クエスチョンマーク": "?", "びっくりマーク": "!", "コロン": ":", "セミコロン": ";", "ハイフン": "-", "ダッシュ": "–", "スラッシュ": "/", "引用符": "\"", "かっこ": "(", "かっことじ": ")", "パーセント": "%" },
   nl: { "punt": ".", "komma": ",", "vraagteken": "?", "uitroepteken": "!", "dubbele punt": ":", "puntkomma": ";", "koppelteken": "-", "streepje": "–", "schuine streep": "/", "aanhalingsteken": "\"", "haakje openen": "(", "haakje sluiten": ")", "procent": "%" },
   tr: { "nokta": ".", "virgül": ",", "soru işareti": "?", "ünlem işareti": "!", "iki nokta": ":", "noktalı virgül": ";", "kısa çizgi": "-", "uzun çizgi": "–", "eğik çizgi": "/", "tırnak işareti": "\"", "parantez aç": "(", "parantez kapa": ")", "yüzde": "%" },
   ro: { "punct": ".", "virgulă": ",", "semn de întrebare": "?", "semn de exclamare": "!", "două puncte": ":", "punct și virgulă": ";", "cratimă": "-", "linie de pauză": "–", "bară oblică": "/", "ghilimele": "\"", "paranteză deschisă": "(", "paranteză închisă": ")", "procent": "%" },
@@ -69,6 +69,17 @@ function voiceEmitWord(word, capNext, outSoFar) {
 // never recognized. Scanned by raw character position instead. Capitalization
 // does not apply to either script, so autoCaps is simply not consulted here.
 const CJK_LANGS = new Set(["zh", "ja"]);
+// A kana command word directly followed by more kana is part of a longer word
+// ("かっこいい", "ダッシュボード", "タブレット"), and a katakana one right after
+// katakana is the tail of one; neither is a command.
+const KANA = /[぀-ヿ]/;
+const KATAKANA = /[゠-ヿ]/;
+function cjkCommandStandsAlone(text, start, phrase) {
+  const next = text[start + phrase.length];
+  if (next && KANA.test(next) && KANA.test(phrase[phrase.length - 1])) return false;
+  const prev = start > 0 ? text[start - 1] : "";
+  return !(prev && KATAKANA.test(prev) && KATAKANA.test(phrase[0]));
+}
 function applyVoiceCommandsCjk(text, commands, literalWord) {
   let maxLen = literalWord.length;
   for (const phrase of commands.keys()) maxLen = Math.max(maxLen, phrase.length);
@@ -92,7 +103,7 @@ function applyVoiceCommandsCjk(text, commands, literalWord) {
         matched = true;
         break;
       }
-      if (commands.has(chunk)) {
+      if (commands.has(chunk) && cjkCommandStandsAlone(text, i, chunk)) {
         out += commands.get(chunk).value;
         i += len;
         matched = true;
