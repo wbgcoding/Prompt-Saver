@@ -71,9 +71,8 @@ export const EXPERT_DROPDOWNS = {
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["last", "optSnipToolLast"], ["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
      ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "last", "snipEditor"),
-  // What the text tool draws behind its letters. Replaces the old boolean
-  // snipTextPlate flag; a stored true/false there converts once on read
-  // (below) since the program has no released version to stay compatible with.
+  // What the text tool draws behind its letters. A stored boolean from the former snipTextPlate
+  // flag converts once on read (below).
   snipTextBack: {
     label: "valSnipTextBack",
     gate: "snipEditor",
@@ -90,9 +89,8 @@ export const EXPERT_DROPDOWNS = {
       applyValues();
     },
   },
-  // Options are fetched once from ocr_languages() at startup and cached
-  // (ocrLangsCache, near the OCR wiring below) -- "Automatic" is always first,
-  // regardless of what the OS itself reports.
+  // Options are fetched once from ocr_languages() at startup and cached (ocrLangsCache, near the
+  // OCR wiring below); "Automatic" is always first.
   ocrLang: {
     label: "valOcrLang",
     gate: "ocr",
@@ -120,10 +118,9 @@ export const EXPERT_DROPDOWNS = {
     },
   },
   // Which camera the camera window opens with. Options come from
-  // navigator.mediaDevices.enumerateDevices() (cameraDevicesCache, near the
-  // recording wiring below) -- listing devices never turns the camera light
-  // on, only getUserMedia does, so this is safe to populate from the main
-  // window itself. Empty string = the system default camera.
+  // navigator.mediaDevices.enumerateDevices() (cameraDevicesCache); listing never turns the
+  // camera light on, only getUserMedia does, so the main window can populate it. Empty string =
+  // the system default camera.
   cameraDevice: {
     label: "valCameraDevice",
     gate: "cameraRecord",
@@ -137,12 +134,10 @@ export const EXPERT_DROPDOWNS = {
   },
   cameraResolution: enumDropdown("cameraResolution", "valCameraResolution",
     [["480", "optCameraRes480"], ["720", "optCameraRes720"], ["1080", "optCameraRes1080"]], "720", "cameraRecord"),
-  // Three quality steps, default "high". Picking a step re-suggests the
-  // matching recBitrateKbps default (REC_QUALITY_BITRATE) so the two controls
-  // stay in sync without forcing a second manual edit -- the slider still
-  // accepts any later override. "Lossless" leaves the slider's value alone
-  // since it has no effect on that step (a separate ffmpeg CRF-0 pass produces
-  // it after the recording stops).
+  // Three quality steps, default "high". Picking a step re-suggests the matching recBitrateKbps
+  // default (REC_QUALITY_BITRATE) so the two controls stay in sync; the slider still accepts any
+  // later override. "Lossless" leaves the slider alone, since a separate ffmpeg CRF-0 pass
+  // produces it after recording stops.
   recQuality: {
     label: "valRecQuality",
     gate: "screenRecord",
@@ -161,26 +156,21 @@ export const EXPERT_DROPDOWNS = {
       applyValues();
     },
   },
-  // MP4 is always what the recorder itself writes; webm/gif are produced by
-  // an ffmpeg conversion pass once the recording stops (see convert_recording
-  // on the backend and the post-capture menu that calls it).
+  // MP4 is what the recorder writes; webm/gif come from an ffmpeg conversion pass after the
+  // recording stops (convert_recording on the backend).
   recFormat: enumDropdown("recFormat", "valRecFormat",
     VIDEO_FORMATS.map((f) => [f, videoFormatLabelKey(f)]), "mp4", "screenRecord", normRecFormat),
-  // "window" matches resolve_recording_settings' own existing fallback default
-  // exactly -- adding this row must not change what already happens today.
+  // "window" matches resolve_recording_settings' own fallback default exactly.
   recCanvasMode: enumDropdown("recCanvasMode", "valRecCanvasMode",
     [["all", "recCanvasAll"], ["monitor", "recCanvasMonitor"], ["window", "recCanvasWindow"]], "window", "screenRecord"),
-  // Applies to every screenshot: the snip tool's own save/save-as/save-to-folder
-  // paths AND the video editor's "export still frame" (same setting, one format
-  // for anything this app calls a screenshot). webp and bmp are always
-  // lossless (see encode_screenshot in capture.rs); only jpeg has a quality of its
-  // own, which is why snipSaveQuality only shows for jpeg.
+  // Applies to every screenshot: the snip tool's save/save-as/save-to-folder paths and the video
+  // editor's "export still frame". webp and bmp are always lossless (see encode_screenshot in
+  // capture.rs); only jpeg has a quality, so snipSaveQuality only shows for jpeg.
   screenshotFormat: enumDropdown("screenshotFormat", "valScreenshotFormat",
     [["png", "optScreenshotFormatPng"], ["jpeg", "optScreenshotFormatJpeg"], ["webp", "optScreenshotFormatWebp"],
       ["bmp", "optScreenshotFormatBmp"]], "png", "screenshot", normScreenshotFormat),
-  // Same pattern as ocrLang just above: fetched once from voice_languages()
-  // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
-  // opens the shared language-pack dialog instead of ever being stored.
+  // Same pattern as ocrLang: fetched once from voice_languages() at startup (voiceLangsCache),
+  // "Automatic" first, a trailing entry opens the shared language-pack dialog instead of being stored.
   voiceLang: {
     label: "valVoiceLang",
     gate: "voice",
@@ -224,9 +214,9 @@ export function applyFlags() {
   // with no speech engine at all must hide the button regardless of the flag.
   document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);
   refreshCustomThemes(); // The feature may have just been switched on or off
-  // Flags that change .tile-name metrics via CSS have no dedicated apply* path, so a
-  // cached fit size from before the toggle would otherwise linger until fitCache's
-  // own 1000-entry eviction. (The tile style refits itself in applyValues.)
+  // Flags that change .tile-name metrics via CSS have no apply* path, so a cached fit size from
+  // before the toggle would linger until fitCache's own eviction. (The tile style refits itself
+  // in applyValues.)
   fitCache.clear();
   if (chainMode && !flag("chainPrompts")) setChainMode(false); // killed in expert menu
   if (chainLock && !flag("chainLock")) { assignChainLock(false); $("chain-btn")?.classList.remove("chain-locked"); }
@@ -294,15 +284,13 @@ export function withTip(row, key) {
   return row;
 }
 
-// A small per-row undo icon, visible only while this exact row differs from its
-// default: resets just this one key. Reuses the same isRowChanged() diff as the
-// group reset and the same per-key commands resetExpertGroup() uses; no confirmation, since one
-// click back is reversible.
-// `after` lets a caller outside the main expert menu (the backup/statistics
-// panels, their own top-level window) redraw itself instead of renderExpert().
-// Always built (never null) and shown/hidden through a class, so a value that
-// changes without a full menu rebuild (a dragged slider, a flipped switch)
-// still gets its reset button live -- syncRowReset() below is what flips it.
+// A small per-row undo icon, visible only while this row differs from its default: resets just
+// this one key, using the same isRowChanged() diff as the group reset and the per-key commands
+// resetExpertGroup() uses. No confirmation, since one click back is reversible. `after` lets a
+// caller outside the main expert menu (the backup/statistics panels) redraw itself instead of
+// renderExpert(). Always built and shown/hidden through a class, so a value changed without a
+// menu rebuild (a dragged slider, a flipped switch) still gets its reset button live;
+// syncRowReset() flips it.
 export function rowResetBtn(kind, key, after) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -361,10 +349,9 @@ export function flagRow(key) {
   const span = document.createElement("span");
   span.textContent = t(flagLabelKey(key));
   row.append(span);
-  // Features that ship OFF get a small badge (a sign, not text crowding the
-  // label) so it's clear at a glance which settings are additions beyond the
-  // standard configuration. Read from the shipped default, so a brand that turns
-  // a feature off is labelled correctly too.
+  // Features that ship OFF get a small badge so it is clear which settings are additions beyond
+  // the standard configuration. Read from the shipped default, so a brand that turns a feature
+  // off is labelled correctly too.
   if (!shipsOn(key)) {
     const badge = document.createElement("span");
     badge.className = "default-off-badge";
@@ -379,11 +366,9 @@ export function flagRow(key) {
   input.checked = flagState(key);
   input.addEventListener("change", async () => {
     const enabled = input.checked;
-    // Demo mode swaps the whole store, which needs a relaunch either way, so it
-    // never goes through the normal set_ui_flag path below: turning it on calls
-    // its own backend command and the app restarts into the sample library;
-    // turning it off asks first, since anything typed during the session is
-    // about to disappear, then restarts back into the real one.
+    // Demo mode swaps the whole store and needs a relaunch either way, so it skips the normal
+    // set_ui_flag path: turning it on calls its own backend command and restarts into the sample
+    // library; turning it off asks first, since anything typed during the session disappears.
     if (key === "demoMode") {
       if (enabled) {
         try { await invoke("enable_demo_mode", { lang: LANG }); } // the app restarts on success and never returns here
@@ -425,9 +410,9 @@ export function flagRow(key) {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
       accepted = false;
-      // The backend refused to switch the feature on (today: prompt sync, whose
-      // safety backup or first folder write failed). It left the flag off, so the switch has to follow:
-      // a checkbox that shows a state the store does not have is worse than the error.
+      // The backend refused to switch the feature on (e.g. prompt sync whose safety backup or first
+      // folder write failed) and left the flag off; the switch has to follow, since a checkbox
+      // showing a state the store lacks is worse than the error.
       const msg = String(err);
       if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
       else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
@@ -463,9 +448,8 @@ export function flagRow(key) {
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
     if (key === "clipWatcher" && !enabled && accepted) await offerClipInboxCleanup();
-    // "only changed" has to recompute after EVERY flag (not just gating ones,
-    // which is all a plain re-render used to care about): the row set depends on
-    // this flag's own value now, not only on what it gates.
+    // "only changed" must recompute after every flag, not just gating ones: the row set depends on
+    // this flag's own value.
     if (GATING_FLAGS.has(key) || expertOnlyChanged) renderExpert();
     else syncRowReset("flags", key); // reset icon must not wait for an unrelated rebuild
     renderViews();
@@ -595,9 +579,8 @@ export function valueRow(key) {
   const slider = document.createElement("input");
   slider.type = "range";
   slider.className = "value-range";
-  // topUnlimited adds one extra stop past the real max: a slider parked there
-  // shows the "unlimited" label and stores 0, exactly like a 0-stop's zeroLabel
-  // does at the low end.
+  // topUnlimited adds one extra stop past the real max: a slider parked there shows the
+  // "unlimited" label and stores 0, like a 0-stop's zeroLabel at the low end.
   const unlimitedStop = cfg.topUnlimited ? cfg.max + cfg.step : null;
   const isUnlimitedStop = () => cfg.topUnlimited && Number(slider.value) === unlimitedStop;
   // A `stops` list drives a stepped slider (e.g. history length up to a million,
@@ -631,11 +614,9 @@ export function valueRow(key) {
   if (resetBtn) right.append(resetBtn);
   head.append(span, right);
   row.append(head, slider);
-  // The quality slider is a JPEG-only concept -- every other screenshot
-  // format is always lossless (see encode_screenshot in capture.rs), so a
-  // quality percentage would apply to nothing. renderExpert() rebuilds this
-  // row whenever screenshotFormat itself changes (dropdownRow's own change
-  // handler), so this stays in sync without a dedicated listener of its own.
+  // The quality slider is JPEG-only (every other screenshot format is lossless, see
+  // encode_screenshot in capture.rs). renderExpert() rebuilds this row whenever screenshotFormat
+  // changes (dropdownRow's change handler), so it needs no listener of its own.
   if (key === "snipSaveQuality") {
     row.classList.toggle("hidden", txt("screenshotFormat") !== "jpeg");
   }
@@ -675,10 +656,9 @@ export function selectRow(key) {
   num.min = SELECT_CUSTOM_MIN;
   num.max = SELECT_CUSTOM_MAX;
   num.className = "modal-input expert-num";
-  // The presets show their unit ("7d", "24h") right on the option: the free-entry
-  // field cannot, since it holds only the number. Without this, a value typed here
-  // looked unit-less, inviting the unit to be typed into the number field itself
-  // ("7d"), which a number input silently discards with no error at all.
+  // The presets show their unit ("7d", "24h") on the option, but the free-entry field holds only
+  // the number, so the unit sits beside it: otherwise a typed value looks unit-less and invites
+  // typing the unit into it, which a number input silently discards.
   const unit = document.createElement("span");
   unit.className = "expert-num-unit";
   unit.textContent = cfg.unit;
@@ -697,10 +677,9 @@ export function selectRow(key) {
       num.classList.remove("hidden");
       unit.classList.remove("hidden");
       num.focus();
-      // No re-render here even under "only changed": it would rebuild the row
-      // (a fresh, unfocused num) right out from under the focus() above, right as
-      // the user is about to type into it. The number field's own "change" below
-      // covers the filter once a value is actually committed.
+      // No re-render here even under "only changed": it would rebuild the row (a fresh, unfocused
+      // num) out from under the focus() above. The number field's own "change" below covers the
+      // filter once a value is committed.
       persist(Math.max(1, Number(num.value) || cfg.def)).then(() => syncRowReset("selects", key));
     } else {
       num.classList.add("hidden");
@@ -745,10 +724,8 @@ export function dropdownRow(key) {
   sel.value = cfg.get();
   sel.addEventListener("change", async () => {
     await cfg.set(sel.value);
-    // A setter may decline the picked value instead of persisting it; resync
-    // so the select never keeps showing a choice that never took effect. A
-    // no-op for a dropdown whose get() already reports back exactly what
-    // set() just wrote.
+    // A setter may decline the picked value; resync so the select never shows a choice that did
+    // not take effect (a no-op when get() already reports what set() wrote).
     sel.value = cfg.get();
     if (expertOnlyChanged) renderExpert();
     else syncRowReset("dropdowns", key); // reset icon must not wait for an unrelated rebuild
@@ -759,10 +736,9 @@ export function dropdownRow(key) {
   return row;
 }
 
-// The reason line under recQuality/recFormat: the GIF format's fixed 30s cap
-// (always shown, ffmpeg or not) and, when ffmpeg is missing, why the picked
-// step/format cannot actually be produced plus an inline offer to fetch it --
-// on the control itself, not only in the help (an explicit requirement).
+// The reason line under recQuality/recFormat: the GIF format's fixed 30s cap (always shown)
+// and, when ffmpeg is missing, why the picked step/format cannot be produced plus an inline
+// offer to fetch it, on the control itself and not only in the help.
 export function recFfmpegHintEl(key, sel) {
   const hint = document.createElement("div");
   hint.className = "expert-row-hint";
@@ -806,9 +782,8 @@ export let micDevicesCache = []; // [{id, name}], fetched once at startup (init(
 export function assignMicDevicesCache(v) { micDevicesCache = v; }
 export let cameraDevicesCache = []; // [{id, name}], fetched once at startup (init())
 export function assignCameraDevicesCache(v) { cameraDevicesCache = v; }
-// Whether ffmpeg was found (see ffmpeg_status's own doc comment: never probed
-// on app start, only lazily the first time a control that needs it renders --
-// here, the first time the recQuality/recFormat expert rows are built).
+// Whether ffmpeg was found (see ffmpeg_status: never probed on app start, only the first time
+// a control that needs it renders, i.e. the recQuality/recFormat expert rows).
 // null = not checked yet.
 export let ffmpegAvailable = null; // null = unknown/unchecked, true/false = confirmed present/absent
 export let ffmpegChecking = false; // separate in-flight guard -- a slow probe must not render as "confirmed missing"
@@ -817,11 +792,9 @@ export function ensureFfmpegStatusChecked() {
   ffmpegChecking = true;
   invoke("ffmpeg_status")
     .then((p) => { ffmpegAvailable = !!p; ffmpegChecking = false; renderExpert(); })
-    // A failed probe (not "ffmpeg missing", the call itself erroring) leaves
-    // this null rather than latching false, so the next render retries
-    // instead of claiming "missing" for the rest of the session. It does NOT
-    // re-render itself: that render would start the probe again at once, an
-    // endless loop of failing calls.
+    // A failed probe (the call itself erroring, not "ffmpeg missing") leaves this null rather than
+    // latching false, so the next render retries. It does not re-render itself: that would start
+    // the probe again at once, an endless loop of failing calls.
     .catch(() => { ffmpegAvailable = null; ffmpegChecking = false; });
 }
 export let voiceLangsCache = []; // [{tag, label}], fetched once at startup (init())
@@ -830,43 +803,37 @@ export function assignVoiceLangsCache(v) { voiceLangsCache = v; }
 // Windows-only, so an unsupported machine is the rare case, not the default).
 export let voiceSupport = { supported: true, engine: "", langs: [], needs_online: false };
 export function assignVoiceSupport(v) { voiceSupport = v; }
-// Whether the backend still manages to seal everything it writes. Read once at
-// startup and pushed by the "store-unsealed" event if it changes mid-session;
-// assumed true until the backend says otherwise, so a failed call never invents
-// a warning that is not real.
+// Whether the backend still manages to seal everything it writes. Read once at startup and
+// pushed by the "store-unsealed" event if it changes; assumed true until the backend says
+// otherwise, so a failed call never invents a warning.
 export let storeSealed = true;
 export function assignStoreSealed(v) { storeSealed = v; }
-// Whether the settings row on disk was present but unreadable at the last load
-// (query error, decrypt failure, corrupt JSON) -- unlike storeSealed this never
-// changes mid-session on its own, only through reset/import, both of which
-// already reload the whole window, so refreshSettingsLocked() is called from
-// there instead of a push event. Assumed false until the backend says otherwise.
+// Whether the settings row on disk was present but unreadable at the last load (query error,
+// decrypt failure, corrupt JSON). Unlike storeSealed it only changes through reset/import,
+// which reload the whole window, so refreshSettingsLocked() is called from there instead of a
+// push event. Assumed false until the backend says otherwise.
 export let settingsLocked = false;
 export async function refreshSettingsLocked() {
   settingsLocked = (await invoke("settings_locked").catch(() => false)) === true;
   if (!$("settings-expert").classList.contains("hidden")) renderExpert();
 }
-// Whether the LAST settings write actually reached disk -- like storeSealed
-// (not settingsLocked) this can flip at any time mid-session, so the live
-// state comes from the existing "persist-failed" event rather than a poll.
+// Whether the last settings write reached disk. Like storeSealed it can flip mid-session, so
+// the live state comes from the "persist-failed" event rather than a poll.
 export let settingsWriteFailed = false;
 export function assignSettingsWriteFailed(v) { settingsWriteFailed = v; }
 
 // ---- Data folder lock -----------------------------------------------------
-// Whether another machine's fresh lock on the data folder is making this
-// process read-only, and which machine that is. Decided once at load (or right
-// after set_data_dir points at a new folder), like settingsLocked, nothing
-// here changes on its own mid-session, so a poll at those two moments is
-// enough; there is no push event for it.
+// Whether another machine's fresh lock on the data folder makes this process read-only, and
+// which machine. Decided once at load (or right after set_data_dir points at a new folder);
+// nothing changes it mid-session, so a poll at those two moments is enough.
 export let dataDirLockStatus = { readOnly: false, otherHost: null };
 export async function refreshDataDirLock() {
   dataDirLockStatus = (await invoke("data_dir_lock_status").catch(() => null)) || { readOnly: false, otherHost: null };
   renderDataDirReadOnlyBanner();
   if (!$("settings-expert").classList.contains("hidden")) renderExpert();
 }
-// The persistent line in the window itself -- deliberately NOT only the
-// expert-menu notice below, since a user who never opens the expert menu
-// still has to know their edits are not being saved right now.
+// The persistent line in the window itself, not only the expert-menu notice below: a user who
+// never opens the expert menu still has to know their edits are not being saved.
 export function renderDataDirReadOnlyBanner() {
   const banner = $("data-dir-readonly-banner");
   if (!banner) return;
@@ -903,9 +870,8 @@ export function syncBannerStack() {
     more.setAttribute("aria-label", t("bannerMoreAria"));
   }
 }
-// Told once per session: the folder's sync risk does not change mid-session on
-// its own (only changing it does, which confirmSyncFolderChoice below warns
-// about separately, right before committing to the new folder).
+// Told once per session: the folder's sync risk does not change on its own mid-session
+// (changing the folder does, which confirmSyncFolderChoice below warns about).
 export let dataDirSyncWarnedThisSession = false;
 export async function warnDataDirSyncFolder() {
   if (dataDirSyncWarnedThisSession) return;
@@ -948,11 +914,9 @@ export const EXPERT_PATHS = {
       renderExpert();
     },
   },
-  // Same storage key the video editor's own "Export to…" folder picker
-  // already writes (video.js persistExportSettings/videoExportDir) -- this
-  // row only makes that existing, already-persisted preference visible and
-  // resettable from the expert menu, it does not add a second place it is
-  // remembered. Empty means "next to the source file", exactly like today.
+  // Same storage key as the video editor's "Export to…" folder picker (video.js
+  // persistExportSettings/videoExportDir); this row only makes that preference visible and
+  // resettable from the expert menu. Empty means "next to the source file".
   videoExportDir: {
     label: "valVideoExportDir",
     gate: "videoEditor",
@@ -1018,9 +982,8 @@ export const EXPERT_PATHS = {
     // Back to the default folder is a folder change like any other, same question.
     onReset: () => { applySyncDir(""); },
   },
-  // Target for the recording result window's plain "Save"/"Copy" -- the
-  // raw capture itself always stays in <data>/recordings until one of those
-  // moves it here (or the window closes unsaved and it is deleted instead).
+  // Target for the recording result window's plain "Save"/"Copy". The raw capture stays in
+  // <data>/recordings until one of those moves it here (or the window closes unsaved and it is deleted).
   recordingDir: {
     label: "valRecordingDir",
     gate: "screenRecord",
@@ -1038,33 +1001,27 @@ export const EXPERT_PATHS = {
       invoke("set_recording_dir", { dir: "" }).catch((e) => errToast(e));
       renderExpert();
     },
-    // The only path row that also shows how much space its folder holds, plus
-    // a cleanup button right next to that -- pathRow() renders both only when
-    // this is set, so every other path (screenshotDir, syncDir, dataDir) is
-    // untouched.
+    // The only path row that also shows how much space its folder holds, plus a cleanup button;
+    // pathRow() renders both only when this is set.
     videoCleanup: true,
   },
 };
 
-// A colour, through the shared colorpop.js picker (never a native
-// <input type=color>) -- unlike the accent palette above, each of these is
-// one single stored hex string in ui_texts, so it stays out of the generic
-// EXPERT_DEFS/isRowChanged machinery the same deliberate way `palette` does.
+// A colour through the shared colorpop.js picker (never a native <input type=color>). Unlike
+// the accent palette above, each is one stored hex string in ui_texts, so it stays out of the
+// generic EXPERT_DEFS/isRowChanged machinery, like `palette`.
 export const EXPERT_COLORS = {
   // Read by the backend when a region recording starts (see show_rec_outline).
   recOutlineColor: { label: "valRecOutlineColor", def: "#2563eb", gate: "recOutline" },
-  // `def` is a FUNCTION here, not a fixed hex, because the screenshot editor's
-  // own current fallback (COLORS[1]) already tracks the user's custom palette
-  // -- freezing this row at a fixed hex would silently stop following a
-  // palette someone already recoloured, which is a real behaviour change this
-  // row must not cause. colorRow() below resolves a function `def` before use.
+  // `def` is a function here because the screenshot editor's fallback (COLORS[1]) tracks the
+  // user's custom palette; a fixed hex would stop following a recoloured palette. colorRow()
+  // below resolves a function `def` before use.
   snipDefaultColor: { label: "valSnipDefaultColor", def: () => COLORS[1] || "#ef4444", gate: "snipEditor" },
 };
 
-// (folder path -> {count, bytes}) for the recordingDir video-folder readout, so
-// switching the folder and switching back does not re-fetch what is already
-// known. Cleared (falsy) means "not fetched yet for this path" -- pathRow()
-// shows a loading placeholder until refreshVideoFolderInfo() resolves.
+// (folder path -> {count, bytes}) for the recordingDir video-folder readout, so switching the
+// folder and back does not re-fetch what is known. Falsy means "not fetched yet for this
+// path"; pathRow() shows a loading placeholder until refreshVideoFolderInfo() resolves.
 export let videoFolderInfo = null;
 export let videoFolderInfoDir = null;
 export let videoFolderGen = 0;
@@ -1077,11 +1034,10 @@ export function refreshVideoFolderInfo(dir) {
     .catch(() => { if (gen === videoFolderGen) { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); } });
 }
 
-// Switching the Markdown-sync folder. The files in the old folder stay where they
-// are unless the user says otherwise, so the question comes first and its answer
-// rides along as an explicit instruction -- the backend never decides to delete a
-// folder by itself, and it only ever removes files this app wrote (a stranger's
-// file in there stops the whole delete and is reported instead).
+// Switching the Markdown-sync folder. The files in the old folder stay unless the user says
+// otherwise, so the question comes first and its answer rides along as an explicit
+// instruction: the backend never deletes a folder by itself, and only removes files this app
+// wrote (a stranger's file in there stops the whole delete and is reported).
 export async function applySyncDir(dir) {
   const next = dir || "";
   if ((settings.ui_texts?.syncDir || "") === next) return;
@@ -1104,12 +1060,9 @@ export async function applySyncDir(dir) {
   try {
     await invoke("set_sync_dir", { dir: next, deleteOld });
   } catch (e) {
-    // "dir-not-picked" means the switch never happened at all -- the backend
-    // refused before touching anything, so the folder shown here must go
-    // back to what it actually still is instead of the new one this call
-    // never actually applied. Any other error means the switch DID go
-    // through and only the old-folder delete afterwards refused, which is
-    // the unrelated case the "old folder kept" dialog below still covers.
+    // "dir-not-picked" means the backend refused before touching anything, so the folder shown
+    // here goes back to what it still is. Any other error means the switch went through and only
+    // the old-folder delete was refused, which the "old folder kept" dialog below covers.
     if (String(e) === "dir-not-picked") {
       settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: previous };
       renderExpert();
@@ -1127,10 +1080,9 @@ export async function applySyncDir(dir) {
   refreshSyncStatus(true);
 }
 
-// Live state of the Markdown sync, shown under its folder row: when the folder was
-// last read, how many files were in it, and why it is paused if it is. Fetched once
-// per expert-menu render at most -- a second render while the answer is still on its
-// way must not start a second round trip.
+// Live state of the Markdown sync, shown under its folder row: when the folder was last read,
+// how many files it held, and why it is paused if it is. Fetched at most once per expert-menu
+// render, so a second render while the answer is on its way starts no second round trip.
 export let syncStatus = null;
 export let syncStatusPending = false;
 // Asked-at-all, not answered: a command that fails (or answers with nothing) must
@@ -1268,10 +1220,9 @@ export async function openVideoCleanup(dir) {
     }
     updateExportBtn();
   };
-  // The trash section: a discarded recording sitting in this same
-  // folder's "verworfen" subfolder, restorable or deletable one at a time --
-  // independent of the age-based bulk cleanup above, so it refreshes on its
-  // own after either action instead of closing the whole dialog.
+  // The trash section: a discarded recording in this folder's "verworfen" subfolder, restorable
+  // or deletable one at a time. Independent of the age-based bulk cleanup above, so it refreshes
+  // on its own after either action instead of closing the dialog.
   const discardedSection = $("video-cleanup-discarded-section");
   const discardedList = $("video-cleanup-discarded-list");
   const refreshDiscarded = async () => {
@@ -1358,10 +1309,9 @@ export async function openVideoCleanup(dir) {
 const BATCH_KBPS_HIGH = 12000;
 const BATCH_KBPS_SMALL = 4000;
 
-// One small dialog for exporting several finished recordings at once --
-// format, quality, destination, nothing else. The full video editor's export
-// panel (crop, overlays, a timeline) makes no sense for a batch of unrelated
-// files, so this never opens that editor.
+// One small dialog for exporting several finished recordings at once: format, quality,
+// destination. The full video editor's export panel makes no sense for a batch of unrelated
+// files, so this never opens it.
 export async function runBatchExportRecordings(dir, names) {
   const modal = $("batch-export-modal");
   const summary = $("batch-export-summary");
@@ -1581,9 +1531,8 @@ export const EXPERT_LABEL_KEYS = {
 };
 // The def a given setting kind lives in: so its optional `gate` can be read.
 export const EXPERT_DEFS = { values: EXPERT_VALUES, selects: EXPERT_SELECTS, dropdowns: EXPERT_DROPDOWNS, paths: EXPERT_PATHS };
-// Flags that own gated rows. Only those change the menu's shape when toggled, so
-// only those need a re-render: the rest are body classes and re-rendering the
-// whole tab for them just made the list flicker.
+// Flags that own gated rows. Only those change the menu's shape when toggled; the rest are
+// body classes, and re-rendering the whole tab for them made the list flicker.
 export const GATING_FLAGS = new Set(
   [
     ...Object.values(EXPERT_DEFS).flatMap((defs) => Object.values(defs).map((d) => d.gate)),
@@ -1605,16 +1554,13 @@ export function settingHit(settingKey, labelKey, q) {
   return i18nHit(tipKey, q);
 }
 
-// A hand-maintained directory of every findable setting OUTSIDE the expert
-// menu -- the normal settings page, the always-visible toolbar, the library
-// dialog and the backup manager. The expert search above already covers
-// EXPERT_TABS itself; this is what lets the same search also surface a hit in
-// one of these other areas, badge it, and jump straight to it on click.
-// `key` is the element's real DOM id for "normal"/"toolbar"/"library" entries
-// (they already carry a stable id); for "backup" entries -- built fresh by
-// renderBackupPanel() and otherwise id-less -- it is the `data-setting-row`
-// value stamped onto that row below. tests/settings_directory_check.py cross-
-// checks this list against the real markup so a forgotten field is caught.
+// A hand-maintained directory of every findable setting outside the expert menu: the normal
+// settings page, the toolbar, the library dialog and the backup manager. The expert search
+// covers EXPERT_TABS itself; this lets the same search surface a hit in these areas, badge it,
+// and jump to it on click. `key` is the element's DOM id for "normal"/"toolbar"/"library"
+// entries; for "backup" entries (built by renderBackupPanel(), otherwise id-less) it is the
+// `data-setting-row` value stamped onto that row. tests/settings_directory_check.py
+// cross-checks this list against the real markup.
 export const SETTINGS_DIRECTORY = [
   { key: "theme-select", area: "normal", label: "theme" },
   { key: "lang-select", area: "normal", label: "language" },
@@ -1781,26 +1727,22 @@ export function toggleExpertGroup(title, sec, fill) {
 }
 
 // ---- Expert-menu notices -------------------------------------------------
-// A notice is not a setting: it reports a state the app is currently in, has
-// nothing to switch, and appears only while that state holds. Notices render at
-// the top of their group, above the settings, so the state is read before the
-// controls it affects.
+// A notice is not a setting: it reports a state the app is currently in, has nothing to
+// switch, and appears only while that state holds. Notices render at the top of their group so
+// the state is read before the controls it affects.
 //
-// There is deliberately NO switch to hide the unsealed-store notice. Everything
-// else in the expert menu can be turned off; a warning that describes what is
-// actually on disk right now cannot, because a warning nobody can see is worth
-// nothing. This is the one exception to "every feature gets a toggle".
+// There is deliberately no switch to hide the unsealed-store notice: a warning describing what
+// is on disk right now cannot be hideable, because a warning nobody can see is worth nothing.
+// This is the one exception to "every feature gets a toggle".
 export const EXPERT_NOTICES = {
   storeUnsealed: {
     when: () => !storeSealed,
     title: "storeUnsealedRow",
     body: "storeUnsealedRowNote",
-    // Leads to the one control that actually reacts to this warning: turning
-    // individual entries confidential encrypts them with their own password,
-    // independent of whatever DPAPI is doing for the rest of the store. The
-    // button sits next to the notice, not inside it -- the notice row itself
-    // stays plain text with no control of its own, as the rule for notices
-    // requires (see noticeActionRow).
+    // Leads to the one control that reacts to this warning: turning individual entries
+    // confidential encrypts them with their own password, independent of DPAPI. The button sits
+    // next to the notice, not inside it, since a notice row stays plain text with no control (see
+    // noticeActionRow).
     action: { label: "storeUnsealedAction", run: () => jumpToExpertSetting("secretPrompts", "flags") },
   },
   settingsLocked: {
@@ -1816,9 +1758,8 @@ export const EXPERT_NOTICES = {
   dataDirReadOnly: {
     when: () => dataDirLockStatus.readOnly,
     title: "dataDirReadOnlyRow",
-    // The only notice whose text needs a value filled in -- noticeRow() below
-    // fills {host} for every notice, a no-op for the others since none of
-    // their strings contain that token.
+    // The only notice whose text needs a value filled in: noticeRow() fills {host} for every
+    // notice, a no-op for the others.
     body: "dataDirReadOnlyRowNote",
   },
 };
@@ -1865,18 +1806,15 @@ export function actionRow(a) {
   btn.dataset.action = a.id;
   btn.textContent = t(a.label);
   if (a.tip) btn.title = t(a.tip);
-  // Passing the button itself lets a long-running action (ffmpeg-download) show
-  // progress in its own label and repurpose a second click as cancel: every
-  // existing handler ignores the extra argument.
+  // Passing the button itself lets a long-running action (ffmpeg-download) show progress in its
+  // own label and repurpose a second click as cancel; other handlers ignore the extra argument.
   btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.(btn));
   return btn;
 }
 
-// A hotkey-capture row for the expert menu itself, not a button that jumps to a
-// settings field -- click the input, press a combo, same as every other hotkey
-// field in the app (bindHotkeyField). Rebuilt on every renderExpert() call, so
-// the field is bound fresh each time rather than once at boot like the settings
-// dialog's own fields.
+// A hotkey-capture row for the expert menu itself (click the input, press a combo, like every
+// other hotkey field via bindHotkeyField). Rebuilt on every renderExpert() call, so the field
+// is bound fresh each time rather than once at boot.
 export const HOTKEY_ROW_DEFS = {
   recStopHotkey: { current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
   recPauseHotkey: { current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
@@ -1884,9 +1822,8 @@ export const HOTKEY_ROW_DEFS = {
 export function hotkeyRow(key, labelKey) {
   const def = HOTKEY_ROW_DEFS[key];
   const row = document.createElement("div");
-  // Label above the capture field, same stacked shape as pathRow -- the expert
-  // menu's own column is narrower than the settings dialog .field-inline was
-  // built for, and a single "label ... 460px field" line would overflow it.
+  // Label above the capture field, stacked like pathRow: the expert menu's column is narrower
+  // than the settings dialog's .field-inline layout, which would overflow.
   row.className = "field value-field hotkey-field";
   const head = document.createElement("div");
   head.className = "value-head";
@@ -2071,13 +2008,10 @@ export function renderExpert() {
         head.classList.add("collapsible");
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
-      // Per-category reset: only worth showing when there is something in this
-      // group to reset. Reuses the same isRowChanged() diff as the per-row reset.
-      // Data & system (expGroupData) mixes ordinary settings with destructive,
-      // one-click data actions (emergency purge, delete all data) right below
-      // them -- a bulk-reset button in that neighbourhood is one misclick away
-      // from looking like another destructive action, so it never appears here
-      // regardless of how many of its settings differ from default.
+      // Per-category reset: only shown when something in the group differs, using the same
+      // isRowChanged() diff as the per-row reset. Data & system (expGroupData) mixes ordinary
+      // settings with destructive one-click data actions (emergency purge, delete all data), so a
+      // bulk-reset button there could look like another destructive action and never appears.
       const right = document.createElement("span");
       right.className = "expert-group-title-right";
       const changedHere = changedKeysInGroup(group);
@@ -2118,10 +2052,8 @@ export function renderExpert() {
         for (const key of paths) sec.appendChild(pathRow(key));
         for (const a of actions) sec.appendChild(actionRow(a));
       } else {
-        // Every kind of row obeys the same contract: a setting whose gate names a
-        // toggle in THIS group renders right beneath that toggle and vanishes with
-        // it, nested as deep as the gates go. Dropdowns and actions used to sit in
-        // a block of their own at the end, which is what tore features apart.
+        // Every kind of row obeys the same contract: a setting whose gate names a toggle in this group
+        // renders right beneath that toggle and vanishes with it, nested as deep as the gates go.
         const shownFlags = new Set(flags);
         const ownerOf = (kind, k) => {
           const g = kind === "flags" ? FLAG_GATES[k]
@@ -2185,13 +2117,10 @@ export function renderExpert() {
   box.scrollTop = keepScroll;
 }
 
-// Which of this group's own rows currently differ from their default: reuses
-// the same isRowChanged() diff renderExpert()'s keep() applies, just standalone
-// so the reset button can both decide whether to show itself and know exactly
-// what to touch. Deliberately NOT gated on gateOpen(): a row hidden behind a
-// switched-off toggle can still hold a changed value underneath, and a group
-// reset must clear that too -- otherwise the stale value survives, invisible,
-// until the toggle is turned back on.
+// Which of this group's rows currently differ from their default, using the same isRowChanged()
+// diff as renderExpert()'s keep(), standalone so the reset button can decide whether to show
+// and what to touch. Deliberately not gated on gateOpen(): a row behind a switched-off toggle
+// can still hold a changed value, and a group reset must clear that too.
 export function changedKeysInGroup(group) {
   const out = { flags: [], values: [], selects: [], dropdowns: [], paths: [], palette: false };
   for (const f of groupFlags(group)) {
@@ -2208,11 +2137,10 @@ export function changedKeysInGroup(group) {
   return out;
 }
 
-// Reset only what THIS category owns, straight through the same per-key
-// set_ui_flag/set_ui_value/set_ui_text commands a manual edit would use: the
-// backend's own side effects (screensaver exclusion, tray, clipboard watcher, …)
-// are already keyed on the setting being touched, so resetting an unrelated
-// category can never drag them along; nothing extra to guard here.
+// Reset only what this category owns, through the same per-key
+// set_ui_flag/set_ui_value/set_ui_text commands a manual edit uses: the backend's side effects
+// (screensaver exclusion, tray, clipboard watcher, ...) are keyed on the setting touched, so
+// resetting one category cannot drag in another's.
 export async function resetExpertGroup(group, changed, count) {
   const ok = await confirmDialog({
     title: t(group.title),
@@ -2326,13 +2254,11 @@ export function bindExpertMenu() {
   attachSelectPicker($("video-cleanup-age"));
 
   // ---------- ffmpeg ----------
-  // Fetched on demand only: never on app start, never in the background.
-  // Discovery (next to the exe → data folder → PATH) runs entirely on the Rust
-  // side and touches no network; this only ever runs when the user explicitly
-  // clicks the expert menu's action. Any future video feature that shells out
-  // to ffmpeg should call the same three commands (ffmpeg_status /
-  // download_ffmpeg / cancel_ffmpeg_download) from wherever it first needs
-  // ffmpeg and finds it missing.
+  // Fetched on demand only: never on app start, never in the background. Discovery (next to the
+  // exe, data folder, PATH) runs on the Rust side and touches no network; this only runs when
+  // the user clicks the expert menu's action. Any video feature that shells out to ffmpeg should
+  // call the same three commands (ffmpeg_status / download_ffmpeg / cancel_ffmpeg_download)
+  // where it first finds ffmpeg missing.
   const ffmpegRun = (btn) => runFfmpegDownload(btn, {
     t,
     onDone: () => {
