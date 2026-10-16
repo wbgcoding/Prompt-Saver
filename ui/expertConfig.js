@@ -69,13 +69,11 @@ export const FLAG_LABELS = {
   tilePressScale: "flagTilePressScale",
   copyFlash: "flagCopyFlash",
   cleanupFiles: "flagCleanupFiles",
-  // A text prompt can hold a list of variants instead of one text; each
-  // copy serves the next entry (in order, or shuffled without repeats). On by
-  // default now; it shipped off at first.
+  // A text prompt can hold a list of variants instead of one text; each copy serves the next
+  // entry (in order, or shuffled without repeats).
   rotatingPrompts: "flagRotatingPrompts",
-  // Sub-toggle of rotatingPrompts, itself also default on.
+  // Sub-toggles of rotatingPrompts.
   rotateBadge: "flagRotateBadge",
-  // Sub-toggle of rotatingPrompts, default on.
   rotateAuto: "flagRotateAuto",
   // New features (default on).
   lengthCounter: "flagLengthCounter",
@@ -100,12 +98,10 @@ export const FLAG_LABELS = {
   codeAutoDetect: "flagCodeAutoDetect", // render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // per-prompt global hotkeys
-  // Sub-toggle of promptHotkeys, default on -- moved from
-  // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
+  // Sub-toggle of promptHotkeys.
   promptHotkeyPaste: "flagPromptHotkeyPaste",
-  // A custom, rounded/themed tray context menu instead of the native Win32
-  // popup. Off falls back to the plain OS menu -- the escape hatch if the
-  // custom window ever misbehaves on some setup.
+  // A custom, rounded/themed tray context menu instead of the native Win32 popup. Off falls back
+  // to the plain OS menu, the escape hatch if the custom window misbehaves.
   trayCustomMenu: "flagTrayCustomMenu",
   trayRecent: "flagTrayRecent",         // "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // pipette; pick a screen colour to the clipboard
@@ -119,11 +115,10 @@ export const FLAG_LABELS = {
   // Filter row at the top of the custom tray menu, searching every prompt
   // rather than only the shown favourites/recents.
   traySearch: "flagTraySearch",
-  // Split from the old single autoBackupBeforeWipe so either case can be
-  // switched off on its own. Both ship default on.
+  // Either backup can be switched off on its own.
   backupBeforeReset: "flagBackupBeforeReset",
   backupBeforeDelete: "flagBackupBeforeDelete",
-  // Sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
+  // Sub-toggles of ocr, themselves default on.
   ocrAutoCopy: "flagOcrAutoCopy",
   ocrJoinLines: "flagOcrJoinLines",
   // Auto-opens the five-step first-run tour once, right after the example
@@ -139,66 +134,53 @@ export const FLAG_LABELS = {
   voiceAutoStop: "flagVoiceAutoStop",
   // Screen recording. Ships ON, like ocr/voice.
   screenRecord: "flagScreenRecord",
-  // Sub-toggle of screenRecord: whether the mouse pointer appears in the
-  // recording. Ships ON.
+  // Sub-toggle of screenRecord: whether the mouse pointer appears in the recording.
   recCursor: "flagRecCursor",
-  // Sub-toggle of screenRecord: system audio (WASAPI loopback) into the
-  // recording's audio track. Ships ON.
+  // Sub-toggle of screenRecord: system audio (WASAPI loopback) in the recording's audio track.
   recAudioSystem: "flagRecAudioSystem",
-  // Sub-toggle of screenRecord, microphone audio into its own track --
-  // moved here from OPT_FLAG_LABELS, its shipped default flipping from off to
-  // on (into a sidecar track only, muxed in audibly later from the video
-  // editor -- see AudioConfig.mic in recording.rs). A stored user value from
-  // before this change, or an explicit opt-out, still wins.
+  // Sub-toggle of screenRecord: microphone audio into its own sidecar track, muxed in audibly
+  // later from the video editor (see AudioConfig.mic in recording.rs). A stored user value or an
+  // explicit opt-out wins.
   recAudioMic: "flagRecAudioMic",
-  // A running recording would otherwise have only the bar itself as a way
-  // to stop or pause it. All three ship ON.
-  // Sub-toggle of screenRecord: the one-time reactive notice offering to
-  // switch the recording canvas to "every display" the first time a window
-  // recording (still on its "window size" default) actually grows past its
-  // starting size and starts losing picture at the edge. Ships ON.
+  // A running recording would otherwise have only the bar itself as a way to stop or pause it.
+  // Sub-toggle of screenRecord: the one-time notice offering to switch the recording canvas to
+  // "every display" the first time a window recording (still on its "window size" default) grows
+  // past its starting size and starts losing picture at the edge.
   recCropNotice: "flagRecCropNotice",
-  // The control bar's file-size readout, from 500 MB on, plus a
-  // highlighted ETA once the recording nears recMaxMb. Ships ON.
+  // The control bar's file-size readout, from 500 MB on, plus a highlighted ETA once the
+  // recording nears recMaxMb.
   recBarSize: "flagRecBarSize",
-  // The control bar's target-switch button: swaps a running window
-  // recording's own source without restarting it. Ships ON.
+  // The control bar's target-switch button: swaps a running window recording's source without
+  // restarting it.
   recTargetSwitch: "flagRecTargetSwitch",
   // Trims the black border the larger-than-window recording area leaves.
-  // Ships ON, matching today's unconditional automatic crop exactly.
   recAutoCrop: "flagRecAutoCrop",
   numFieldWheel: "flagNumFieldWheel",
   editStateKeep: "flagEditStateKeep",
   recStopHotkey: "flagRecStopHotkey",
   recPauseHotkey: "flagRecPauseHotkey",
   recTrayEntries: "flagRecTrayEntries",
-  // Catches a crashed recording's unplayable leftover before it sits
-  // there forever -- ships ON, like the rest of the recorder's own upkeep.
+  // Catches a crashed recording's unplayable leftover before it sits there forever.
   recSweepBroken: "flagRecSweepBroken",
-  // The video editor satellite window, reachable from a recording's
-  // result modal and from any video prompt's context menu. Ships ON, like the
-  // rest of the media-editing features (snipEditor, ocr, voice).
+  // The video editor window, reachable from a recording's result modal and from any video
+  // prompt's context menu.
   videoEditor: "flagVideoEditor",
-  // The screenshot editor has had edge/center snapping for a while
-  // (snipEditSnap); this is the same behaviour for the video editor's crop box
-  // and overlays, kept as its own switch since the two editors want it
-  // independently.
+  // Edge/centre snapping for the video editor's crop box and overlays, a separate switch from
+  // the screenshot editor's snipEditSnap since the two editors want it independently.
   videoEditSnap: "flagVideoEditSnap",
-  // Only matters once clipWatcher (itself off by default) is on -- ships ON so a
-  // guessed password never has to be manually turned away in the first place.
+  // Only matters once clipWatcher (off by default) is on; on by default so a guessed password
+  // never reaches the inbox.
   clipSkipSecrets: "flagClipSkipSecrets",
-  // Plain-text preview (txt/md/json/csv) for a file attachment, next to the
-  // existing image/PDF preview. Ships ON.
+  // Plain-text preview (txt/md/json/csv) for a file attachment, next to the image/PDF preview.
   attachTextPreview: "flagAttachTextPreview",
-  // A second copy entry that puts both the Markdown text and its rendered
-  // form on the clipboard, for apps that read CF_HTML. Ships ON.
+  // A second copy entry that puts both the Markdown text and its rendered form on the
+  // clipboard, for apps that read CF_HTML.
   copyFormatted: "flagCopyFormatted",
-  // Keeps a ring buffer of the last error messages shown, reachable from the
-  // expert menu's "Recent messages" action. Off means the list stays empty and
-  // nothing is collected. Ships ON.
+  // Keeps a ring buffer of the last error messages shown, reachable from the expert menu's
+  // "Recent messages" action. Off collects nothing.
   errorLog: "flagErrorLog",
-  // The thin frame around a region recording. It is never part of the video
-  // (its window is excluded from capture). Ships ON.
+  // The thin frame around a region recording; its window is excluded from capture, so it is
+  // never part of the video.
   recOutline: "flagRecOutline",
 };
 export const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
@@ -208,8 +190,7 @@ export const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 // class that is present exactly when the option is on.
 export const OPT_FLAG_LABELS = {
   // Features extras
-  // Favorites view: the header star that opens a live grid of favorites. Ships OFF,
-  // like the old settings switch it replaced.
+  // Favorites view: the header star that opens a live grid of favorites.
   favViewButton: "flagFavViewButton",
   // Statistics: counts tool use only once switched on (the backend has always
   // read it that way). Only ever rendered in the backups dialog.
@@ -228,9 +209,9 @@ export const OPT_FLAG_LABELS = {
   storeFiles: "flagStoreFiles",
   gridLines: "flagGridLines",
   // Library/search extras
-  // Reads text out of an attached picture and adds it to the library search,
-  // lowest priority behind the name and the prompt body. Ships off: text
-  // recognition costs time and reads a picture the user may not expect read.
+  // Reads text out of an attached picture and adds it to the library search, lowest priority
+  // behind the name and the prompt body. Off by default: text recognition costs time and reads a
+  // picture the user may not expect read.
   ocrIndex: "flagOcrIndex",
   // Appearance extras
   frostedModals: "flagFrostedModals",
@@ -240,11 +221,11 @@ export const OPT_FLAG_LABELS = {
   // Media extras
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
-  // New features (default off).
+  // More features (default off).
   autoPasteEnter: "flagAutoPasteEnter",
   clipWatcher: "flagClipWatcher",
   backupGfs: "flagBackupGfs",           // period-based retention
-  // v2.6.0 additions (all default off, shown with the default-off suffix).
+  // More features (default off, shown with the default-off suffix).
   editorMonospace: "flagEditorMonospace",       // monospace editor textarea
   hideWindowOnCopy: "flagHideWindowOnCopy",     // hide window after copying a prompt
   dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
@@ -257,18 +238,15 @@ export const OPT_FLAG_LABELS = {
   // windows can run side by side. Read once at launch, before settings normally
   // load: toggling it needs a restart to take effect (flagRow() toasts that).
   allowMultipleInstances: "flagAllowMultipleInstances",
-  // Off = today's behaviour: the data folder is written to unconditionally,
-  // whatever it holds. On (shipped) = a lock file next to the database refuses
-  // writes for as long as another machine's lock on the same (typically synced)
-  // folder is still fresh -- see acquire_data_dir_lock/DATA_DIR_READONLY in
-  // store.rs.
+  // Off = the data folder is written to unconditionally, whatever it holds. On (shipped) = a lock
+  // file next to the database refuses writes while another machine's lock on the same (typically
+  // synced) folder is fresh; see acquire_data_dir_lock/DATA_DIR_READONLY in store.rs.
   dataDirLock: "flagDataDirLock",
-  // Swaps the whole window over to a bundled sample library -- for showing the
-  // app or taking a screenshot without exposing real data. The real store is
-  // never touched; see enable_demo_mode/disable_demo_mode in demo.rs. This flag
-  // is never toggled through the normal set_ui_flag path (see flagRow's own
-  // demoMode branch below) -- it only ever reads true from the sample
-  // settings a demo session itself ships with.
+  // Swaps the whole window over to a bundled sample library, for showing the app or taking a
+  // screenshot without exposing real data. The real store is never touched (see
+  // enable_demo_mode/disable_demo_mode in demo.rs). Never toggled through the normal set_ui_flag
+  // path (see flagRow's demoMode branch); it only reads true from the sample settings a demo
+  // session ships with.
   demoMode: "flagDemoMode",
   // Off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
@@ -289,38 +267,36 @@ export const OPT_FLAG_LABELS = {
   // other tag-aware path already handles it. Browsing hides it; searching still
   // finds it, and the library toggle brings it back into view.
   archiveTag: "flagArchiveTag",
-  // A maintained list of name/value pairs (expert menu, empty by default) that
-  // the fill-in dialog SUGGESTS for a matching placeholder name, one tier below
-  // a remembered last input and above the text's own {?name=default}. Kept
-  // apart from varDefaults on purpose -- a deliberately maintained value must
-  // never be mistaken for whatever happened to be typed in last.
+  // A maintained list of name/value pairs (expert menu, empty by default) that the fill-in
+  // dialog suggests for a matching placeholder name, one tier below a remembered last input and
+  // above the text's own {?name=default}. Kept apart from varDefaults so a deliberately
+  // maintained value is never mistaken for whatever was typed last.
   varFixed: "flagVarFixed",
-  // Per-entry encryption. Ships off: an untouched install has nothing to type a
-  // vault password for.
+  // Per-entry encryption. Off by default: an untouched install has nothing to type a vault
+  // password for.
   secretPrompts: "flagSecretPrompts",
-  // The local remote-access receiver and the promptsaver:// link
-  // scheme. Both off by default -- this is the app's one new network surface.
+  // The local remote-access receiver and the promptsaver:// link scheme. Both off by default:
+  // this is the app's one network surface.
   remoteApi: "flagRemoteApi",
   remoteNetworkFilter: "flagRemoteNetworkFilter",
   // Certificate lifetime (825 days instead of ten years). Flipping it makes a
   // new certificate, so it has its own confirmed command (toggleShortLivedCert).
   remoteTlsShortLived: "remoteTlsShortLived",
   urlScheme: "flagUrlScheme",
-  // System-wide key capture for the video editor's "keys" overlay. Ships
-  // OFF -- a low-level keyboard hook exists nowhere in this app unless the
-  // user turns this on for a specific recording.
+  // System-wide key capture for the video editor's "keys" overlay. Off by default: no low-level
+  // keyboard hook exists in this app unless the user turns this on for a specific recording.
   keyOverlay: "flagKeyOverlay",
-  // Sub-toggle of keyOverlay: restricts capture to shortcut and navigation
-  // keys only (see mod keylog's resolve_verdict), for a recording with
-  // confidential input. Ships OFF -- the plain default records every key.
+  // Sub-toggle of keyOverlay: restricts capture to shortcut and navigation keys only (see mod
+  // keylog's resolve_verdict), for a recording with confidential input. Off by default; the
+  // plain default records every key.
   keyOverlayShortcutsOnly: "flagKeyOverlayShortcutsOnly",
-  // The record button's right-click "Record camera" entry and its own window.
-  // Ships OFF, like every feature that can turn a camera light on -- see
-  // camera.rs for the WebView2 permission handling this switch gates.
+  // The record button's right-click "Record camera" entry and its own window. Off by default,
+  // like every feature that can turn a camera light on (see camera.rs for the WebView2
+  // permission handling this switch gates).
   cameraRecord: "flagCameraRecord",
-  // Tile videos start playing on their own. Ships OFF.
+  // Tile videos start playing on their own.
   videoAutoplay: "flagVideoAutoplay",
-  // Tile videos loop. Ships OFF.
+  // Tile videos loop.
   videoLoop: "flagVideoLoop",
 };
 export const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
@@ -407,33 +383,20 @@ export const EXPERT_VALUES = {
   // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
   // or not, shares this one value (see SNIP_SAVE_Q in snip.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
-  // A file past this size is rejected before it loads when opening one for
-  // editing -- open_file_in_editor reads the very same key.
-  // 0 means forever, same convention as trashRetentionDays.
+  // Days an editor's saved edit state is kept. 0 means forever, like trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
   // Delay between picking a recording target and the capture actually starting -- 0 disables it.
   recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
-  // The encoder always recorded at a fixed 30fps regardless of the source
-  // monitor's real refresh rate until this was added -- a 60/144Hz screen can
-  // now be captured at its own rate instead of being silently capped.
+  // Capture rate in frames per second, so a 60/144Hz screen can be recorded at its own rate.
   recFps: { label: "valRecFps", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "screenRecord" },
-  // Native H.264 bitrate. Has no effect once recQuality is "lossless" -- that
-  // step is produced by a separate ffmpeg CRF-0 re-encode after the recording
-  // stops, not by this slider (see the recQuality/recBitrateKbps tooltips).
+  // Native H.264 bitrate. No effect when recQuality is "lossless": that step is a separate
+  // ffmpeg CRF-0 re-encode after the recording stops.
   recBitrateKbps: { label: "valRecBitrateKbps", min: 1000, max: 50000, step: 500, def: 12000, unit: "kbps", gate: "screenRecord" },
   cameraFramerate: { label: "valCameraFramerate", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "cameraRecord" },
   recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
   recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
-  // How many recordings the "export selected" batch dialog encodes at once --
-  // more overlaps ffmpeg calls and finishes sooner, at the cost of more CPU
-  // and disk I/O in parallel.
-  // How young a moov-less (broken) recording has to be to still get a pass
-  // (the post-capture menu's stop might just still be finalising) and how often
-  // the background sweep for it (and for merely-undecided recordings) runs.
-  // How long a discarded recording sits in its "verworfen" trash before the
-  // background sweep removes it for good. Shown under the recording switch
-  // only; it is not tied to recSweepBroken because the backend runs this
-  // sweep whether or not the broken-recording sweep is on.
+  // How long a discarded recording stays in its trash before the sweep removes it. Independent
+  // of recSweepBroken: the backend runs this sweep either way.
   recDiscardKeepH: { label: "valRecDiscardKeepH", min: 0, max: 720, step: 1, def: 24, unit: "h", zeroLabel: "retentionForever", gate: "screenRecord" },
   voiceAutoStopSec: { label: "valVoiceAutoStopSec", min: 1, max: 60, step: 1, def: 10, unit: "s", gate: "voiceAutoStop" },
   voiceMaxMin: { label: "valVoiceMaxMin", min: 1, max: 60, step: 1, def: 10, unit: "min", gate: "voice" },
@@ -443,11 +406,8 @@ export const EXPERT_VALUES = {
   historyPerPrompt: { label: "valHistoryPerPrompt", min: 5, max: 100, step: 5, def: 20, unit: "", gate: "promptHistory" },
   // Usage statistics: how many rows the top-N lists show.
   statsTopN: { label: "valStatsTopN", min: 5, max: 100, step: 1, def: 10, unit: "", gate: "usageStats" },
-  // Duplicate finder: similarity threshold.
-  // Shared by the duplicate finder above and the save-time similar-prompt hint --
-  // one number, one notion of "similar", per the spec. Gated on similarHint
-  // rather than dupFinder since the hint is the more commonly-hit path (it
-  // fires on every save); no OR-gate exists for a row two flags both use.
+  // Duplicate finder similarity threshold, shared with the save-time similar-prompt hint (one
+  // notion of "similar"). Gated on similarHint, which fires on every save; a row has one gate.
   similarThreshold: { label: "valSimilarThreshold", min: 70, max: 99, step: 1, def: 85, unit: "%", gate: "similarHint" },
   // Import from a folder: how many subfolder levels to scan (1 = the picked
   // folder only) and how many files to stop at.
@@ -455,13 +415,11 @@ export const EXPERT_VALUES = {
   importFolderMax: { label: "valImportFolderMax", min: 10, max: 2000, step: 10, def: 500, unit: "", gate: "importExport" },
   // How often the open editor writes its autosave draft.
   editorDraftSecs: { label: "valEditorDraftSecs", min: 0, max: 30, step: 1, def: 5, unit: "s", zeroLabel: "valOff", offAtZero: true },
-  // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
+  // Matches the crash log's rotation cap (256 KB).
   errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB", display: "mb", gate: "errorLog" },
   // Automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
-  // How long the auto-backup job waits after launch before its first check --
-  // long enough for the window and store to settle, short enough that a
-  // backup due at launch does not sit for a full BACKUP_CHECK_SECS tick.
+  // Delay after launch before the first backup check, so the window and store settle first.
   backupStartDelayS: { label: "valBackupStartDelay", min: 0, max: 300, step: 5, def: 20, unit: "s", gate: "autoBackup" },
   // GFS retention tiers (kept per distinct day / week / month / year).
   backupDaily: { label: "valBackupDaily", min: 0, max: 30, step: 1, def: 3, unit: "", gate: "backupGfs" },
@@ -476,18 +434,12 @@ export const EXPERT_VALUES = {
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
   // Confidential-entry vault: how long an unlocked session stays unlocked. 0 = until quit.
   secretTimeoutMin: { label: "valSecretTimeoutMin", min: 0, max: 240, step: 5, def: 15, unit: "min", zeroLabel: "secretTimeoutNever", gate: "secretPrompts" },
-  // Keyboard grid focus fades this long after the window loses focus.
-  // Tag chip text size (editor, library filter row, manager).
-  // Column count for the grid tag-filter popover.
   // How many custom themes may be stored (keeps the settings blob bounded).
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
-  // How many views a group popover lists before it starts scrolling.
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
   inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 25, unit: "%", gate: "autoInk" },
   // How dark the halo behind white text gets, in percent.
   inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 75, unit: "%", gate: "inkHalo" },
-  // How much of a tab's outer edge counts as "drop here to reorder" rather than
-  // "drop here to group" -- a wider tab needs a wider zone to stay easy to aim at.
   // How many entries each tray quick-copy section lists.
   trayRecentN: { label: "valTrayRecentN", min: 1, max: 10, step: 1, def: 5, unit: "", gate: "trayRecent" },
   trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
@@ -495,21 +447,16 @@ export const EXPERT_VALUES = {
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
   // How far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
-  // Loupe grid size (odd numbers only: the centre cell must be the exact picked pixel).
   // How many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
-  // Swatch diameter in the right-click colour-history popover.
   // Cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
-  // Auto-advance session tuning: mirrors the backend's auto_cfg() defaults.
-  // A remaining-time estimate only shows once a progress bar has moved this
-  // far, and only if what's left is still worth naming a number for.
+  // Minutes a finished background job stays listed in the header popover.
   bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
   // How long the Undo button on a destructive-action toast stays clickable.
   undoToastMs: { label: "valUndoToastMs", min: 0, max: 20000, step: 500, def: 8000, unit: "ms", zeroLabel: "valOff", offAtZero: true },
-  // How many recent error messages the ring buffer keeps.
-  // The port shows on the persistent badge while the receiver
-  // runs -- a companion program reads it from there, not from this slider.
+  // The port shows on the persistent badge while the receiver runs; a companion program reads
+  // it from there, not from this slider.
   remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi", input: true },
   remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi", topUnlimited: true },
 };
@@ -526,11 +473,8 @@ export const EXPERT_SELECTS = {
   // How long a deleted prompt sits in the trash before it is purged automatically.
   // No feature gate: trash is not optional, delete always goes through it.
   trashRetentionDays: { label: "valTrashRetentionDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever" },
-  // How long a KEPT recording may age before an unreferenced one becomes fair
-  // game for the same sweep that already handles undecided/broken files.
-  // Off by default (0), same "0 = forever" convention, so nothing changes for
-  // anyone who never opens this row -- a referenced recording never qualifies
-  // regardless of this value.
+  // How long a kept recording may age before an unreferenced one is swept like undecided or
+  // broken files. 0 (default) means forever. A referenced recording never qualifies.
   recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 90, unit: "d", zeroLabel: "retentionForever", gate: "screenRecord" },
   // How often the background thread checks for a new release.
   updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h" },
@@ -544,20 +488,16 @@ export const STYLE_OPTS = [["short", "optStyleShort"], ["medium", "optStyleMediu
 // picked (see recQuality's set() below); documented in docs/help.md.
 export const REC_QUALITY_BITRATE = { small: 4000, high: 12000 };
 
-// Expert menu organised into tabs. The shape is deliberate: the first tab holds
-// FEATURES: a toggle followed by everything that tunes it, so a switched-off
-// feature costs exactly one line: while the remaining tabs hold the general
-// values that belong to no single feature.
+// Expert menu organised into tabs. The first tab holds the features: a toggle followed by
+// everything that tunes it, so a switched-off feature costs one line. The remaining tabs hold
+// general values that belong to no single feature.
 export const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], dropdowns: ["attachPreviewSize"] },
     { title: "expGroupViews", flags: ["multiView", { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["maxViews", "gridMax"] },
-    // Placeholders, from the grammar to where the app asks for them. varFixed
-    // (a hand-maintained name/value list, empty by default, only ever
-    // SUGGESTED in the fill-in dialog) stays in this same group rather than
-    // its own -- its gate parent promptVars lives here, and a gated flag has
-    // to sit with its parent.
+    // Placeholders, from the grammar to where the app asks for them. varFixed sits here because
+    // its gate parent promptVars does; a gated flag stays with its parent.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together; the
     // highlighter only ever paints inside the preview.
@@ -572,10 +512,9 @@ export const EXPERT_TABS = [
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN"] },
-    // Auto-advancing through a rotation -- not a capture tool, stays in tab 1.
+    // Auto-advancing through a rotation. Not a capture tool, so it stays in tab 1.
     { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries"], dropdowns: ["rotateDefaultMode"] },
-    // Voice dictation -- not a capture tool either (it puts text into the composer,
-    // the same way typing does), stays in tab 1.
+    // Voice dictation puts text into the composer like typing does, so it stays in tab 1.
     { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
       actions: [{ id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
   ] },
@@ -588,21 +527,19 @@ export const EXPERT_TABS = [
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"] },
-    // The recording hotkeys render their own capture row directly (hotkeyRow())
-    // instead of a button that jumps to a settings field -- see actionRow()'s
-    // "hotkey" branch.
+    // The recording hotkeys render their own capture row (hotkeyRow()) instead of a button that
+    // jumps to a settings field.
     { title: "expGroupRecording", flags: ["screenRecord"], values: ["recCountdownS", "recFps", "recBitrateKbps", "recMaxMin", "recMaxMb", "recDiscardKeepH"], selects: ["recordingRetentionDays"], dropdowns: ["recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"] },
     { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recHotkeyFieldLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recHotkeyFieldLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupCamera", flags: ["cameraRecord"], values: ["cameraFramerate"], dropdowns: ["cameraDevice", "cameraResolution"] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "videoEditSnap", gate: "videoEditor" }], paths: ["videoExportDir"] },
-    // What the screenshot editor and the video editor share -- created here so
-    // no setting key is ever declared in two groups (expert_menu_check.py).
+    // Settings the screenshot and video editors share, declared once so no key sits in two groups
+    // (expert_menu_check.py).
     { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["editStateKeepDays"] },
   ] },
   { title: "expTabTiles", groups: [
-    // Split by what a setting actually does: acting on a tile, the hover tooltip,
-    // and pure looks. One 26-entry blob made everything hard to find.
+    // Split by what a setting does: acting on a tile, the hover tooltip, and pure looks.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim"] },
     { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
@@ -639,9 +576,9 @@ export const EXPERT_TABS = [
   ] },
 ];
 
-// Sub-toggle -> the feature it belongs to, collected from the group lists above so a
-// gate is declared in exactly one place. gateOpen() walks it, which is what makes a
-// whole branch (feature -> sub-toggle -> its sliders) vanish together.
+// Sub-toggle to its feature, collected from the group lists above so a gate is declared in
+// one place. gateOpen() walks it, so a whole branch (feature, sub-toggle, sliders) vanishes
+// together.
 export const FLAG_GATES = Object.fromEntries(
   EXPERT_TABS.flatMap((tab) => tab.groups.flatMap(groupFlags))
     .filter((f) => f.gate)
@@ -735,15 +672,12 @@ export const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 export const SCREENSHOT_FORMATS = ["png", "jpeg", "webp", "bmp"];
 export const normScreenshotFormat = (v) => (SCREENSHOT_FORMATS.includes(v) ? v : "png");
 
-// Flags whose state changes the tile DOM itself (everything else is a body class).
-// rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
-// a full rebuild here, an already-open grid keeps showing (or hiding) it until some
-// unrelated re-render happens to catch up.
+// Flags whose state changes the tile DOM itself (everything else is a body class). The
+// rotate flags gate a tile's own badge element, so they need a full rebuild.
 export const TILE_DOM_FLAGS = new Set(["captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "tileFavBadge", "autoInk", "inkHalo"]);
 
-// Almost every expert value only drives a CSS variable, so rebuilding the whole grid
-// for it threw away and recreated every tile: visible as a flash through the
-// translucent settings overlay. Only these actually change tile DOM.
+// Almost every expert value only drives a CSS variable; rebuilding the grid for it would
+// flash through the translucent settings overlay. Only these change tile DOM.
 export const GRID_DOM_VALUES = new Set(["gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
 
 export const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup" };
