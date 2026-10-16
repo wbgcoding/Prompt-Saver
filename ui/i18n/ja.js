@@ -1608,6 +1608,7 @@ export default {
     recBarMuteMic: "マイクをミュート",
     recBarUnmuteMic: "マイクのミュートを解除",
     recBarMicLost: "マイクが切断されました。録画はマイクなしで続行します",
+    recBarSystemLost: "システム音声を取得できません。録画はシステム音声なしで続行します",
     pickFailed: "色をコピーできませんでした。もう一度お試しください。",
     colorCopied: "色をコピーしました",
     flagColorPicker: "カラーピッカー（スポイト）",
