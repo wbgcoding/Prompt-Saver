@@ -1714,7 +1714,12 @@ function endTimelineDrag() {
   const drag = VE.drag;
   if (!drag) return;
   VE.drag = null;
-  if (drag.kind === "trim") setTrim(drag.live.startMs, drag.live.endMs);
+  if (drag.kind === "trim") {
+    // A click on a handle that did not move it is no edit: no undo step, no dirty mark.
+    const cur = opOf("trim");
+    const a = cur ? cur.startMs : 0, b = cur ? cur.endMs : VE.dur;
+    if (drag.live.startMs !== a || drag.live.endMs !== b) setTrim(drag.live.startMs, drag.live.endMs);
+  }
 }
 
 regionsEl.addEventListener("pointerup", endTimelineDrag);
@@ -4431,7 +4436,7 @@ window.addEventListener("resize", () => {
 
 listen("theme-changed", (e) => { applyTheme(e.payload?.theme, e.payload?.vars); drawWave(0); if (VE.hasMic) drawWave(1); });
 listen("language-changed", () => { invoke("get_settings").then((s) => loadTexts(s)).catch(() => {}); });
-listen("settings-changed", () => { invoke("get_settings").then(applySettings).catch(() => {}); });
+listen("settings-changed", () => { invoke("get_settings").then((s) => { settings = s; applySettings(s); }).catch(() => {}); });
 // Opening a second recording reuses this window instead of stacking another one.
 listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
