@@ -1108,6 +1108,7 @@ export default {
     ffmpegExtracting: "ffmpeg uitpakken…",
     ffmpegDownloadDone: "ffmpeg gedownload",
     ffmpegCancelHint: "Klik om de download te annuleren",
+    ffmpegDownloadBusy: "ffmpeg wordt al gedownload",
     valRecQuality: "Kwaliteit",
     optRecQualitySmall: "Klein",
     optRecQualityHigh: "Hoog",

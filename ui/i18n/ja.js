@@ -1108,6 +1108,7 @@ export default {
     ffmpegExtracting: "ffmpeg を展開中…",
     ffmpegDownloadDone: "ffmpeg をダウンロードしました",
     ffmpegCancelHint: "クリックしてダウンロードをキャンセル",
+    ffmpegDownloadBusy: "ffmpeg はすでにダウンロード中です",
     valRecQuality: "品質",
     optRecQualitySmall: "小サイズ",
     optRecQualityHigh: "高品質",

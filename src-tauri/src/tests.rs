@@ -20460,3 +20460,12 @@ fn follow_thread_keeps_the_bar_while_a_stop_is_refused_mid_switch() {
     assert!(!follow_stop_settled(false, true, false), "a session that refused the stop keeps it");
     assert!(follow_stop_settled(false, false, false), "nothing recording any more closes it");
 }
+
+#[test]
+fn ffmpeg_download_claim_admits_one_caller_at_a_time() {
+    static FLAG: AtomicBool = AtomicBool::new(false);
+    let first = FlagClaim::take(&FLAG).expect("the first caller gets the claim");
+    assert!(FlagClaim::take(&FLAG).is_none(), "a second start is refused while the first runs");
+    drop(first);
+    assert!(FlagClaim::take(&FLAG).is_some(), "the claim is free again once the holder is done");
+}

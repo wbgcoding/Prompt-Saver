@@ -1108,6 +1108,7 @@ export default {
     ffmpegExtracting: "Se dezarhivează ffmpeg…",
     ffmpegDownloadDone: "ffmpeg descărcat",
     ffmpegCancelHint: "Clic pentru a anula descărcarea",
+    ffmpegDownloadBusy: "ffmpeg se descarcă deja",
     valRecQuality: "Calitate",
     optRecQualitySmall: "Mică",
     optRecQualityHigh: "Ridicată",

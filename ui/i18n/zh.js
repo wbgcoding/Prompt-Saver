@@ -1108,6 +1108,7 @@ export default {
     ffmpegExtracting: "正在解压 ffmpeg…",
     ffmpegDownloadDone: "ffmpeg 下载完成",
     ffmpegCancelHint: "点击以取消下载",
+    ffmpegDownloadBusy: "ffmpeg 正在下载中",
     valRecQuality: "质量",
     optRecQualitySmall: "小文件",
     optRecQualityHigh: "高质量",

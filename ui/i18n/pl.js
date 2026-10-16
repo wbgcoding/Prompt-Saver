@@ -1108,6 +1108,7 @@ export default {
     ffmpegExtracting: "Rozpakowywanie ffmpeg…",
     ffmpegDownloadDone: "Pobrano ffmpeg",
     ffmpegCancelHint: "Kliknij, aby anulować pobieranie",
+    ffmpegDownloadBusy: "ffmpeg jest już pobierany",
     valRecQuality: "Jakość",
     optRecQualitySmall: "Mały plik",
     optRecQualityHigh: "Wysoka jakość",

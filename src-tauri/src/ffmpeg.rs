@@ -30,6 +30,22 @@ pub(crate) const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
 // retry is needed.
 pub(crate) static FFMPEG_DOWNLOAD_CANCEL: AtomicBool = AtomicBool::new(false);
 
+// Held for the whole download: a second start (another window) is refused
+// instead of running a second 100 MB transfer that shares one cancel flag.
+pub(crate) static FFMPEG_DOWNLOAD_RUNNING: AtomicBool = AtomicBool::new(false);
+
+pub(crate) struct FlagClaim(&'static AtomicBool);
+impl FlagClaim {
+    pub(crate) fn take(flag: &'static AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).ok().map(|_| Self(flag))
+    }
+}
+impl Drop for FlagClaim {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 pub(crate) fn hex_decode(s: &str) -> Option<Vec<u8>> {
     if s.len() % 2 != 0 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
@@ -123,6 +139,8 @@ pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
 // failure leaves nothing behind (nothing is written until the hash is verified).
 #[tauri::command]
 pub(crate) async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
+    let _claim = FlagClaim::take(&FFMPEG_DOWNLOAD_RUNNING).ok_or_else(|| "busy".to_string())?;
+    // Only the claim holder may clear a cancel request.
     FFMPEG_DOWNLOAD_CANCEL.store(false, Ordering::SeqCst);
     push_bg_op(&app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);
     let app_done = app.clone();

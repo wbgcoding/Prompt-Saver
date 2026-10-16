@@ -1108,6 +1108,7 @@ export default {
     ffmpegExtracting: "ffmpeg açılıyor…",
     ffmpegDownloadDone: "ffmpeg indirildi",
     ffmpegCancelHint: "İndirmeyi iptal etmek için tıklayın",
+    ffmpegDownloadBusy: "ffmpeg zaten indiriliyor",
     valRecQuality: "Kalite",
     optRecQualitySmall: "Küçük",
     optRecQualityHigh: "Yüksek",

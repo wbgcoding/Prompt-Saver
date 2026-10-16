@@ -37,6 +37,7 @@ export const ERROR_MSG_KEYS = {
   "demo-mode-multiple-instances": "demoModeMultipleInstances",
   "dir-not-picked": "syncDirNotApplied",
   "recording-busy": "recBusy",
+  "busy": "ffmpegDownloadBusy",
   "save-failed": "persistFailed",
   "remote-off-not-saved": "remoteOffNotSaved",
   "remote-tls-short-lived-has-own-command": "remoteTlsShortLivedOwnCommand",
