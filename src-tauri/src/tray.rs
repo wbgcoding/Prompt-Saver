@@ -338,10 +338,8 @@ pub(crate) fn push_tray_section(
     }
 }
 
-// The custom Windows-11-style tray window replaces the native right-click
-// popup. Ships on (a rounder, themed look was the whole point of building it);
-// switching it off is the escape hatch back to the plain OS menu if the
-// custom window ever misbehaves.
+// The custom Windows-11-style tray window replaces the native right-click popup. Ships on;
+// switching it off is the escape hatch back to the plain OS menu.
 pub(crate) const TRAY_CUSTOM_MENU_KEY: &str = "trayCustomMenu";
 
 pub(crate) fn tray_custom_menu_on(settings: &Settings) -> bool {
@@ -364,11 +362,10 @@ pub(crate) fn apply_tray_menu(app: &AppHandle) {
         None => return,
     };
     if custom {
-        // The custom window gets its content freshly prepared (tray_open_prep)
-        // on every right-click, so there is nothing to precompute here: just
-        // make sure no native popup is left attached to fight it for the
-        // right-click. Detaching also skips every rebuild this function would
-        // otherwise do while the toggle stays on.
+        // The custom window's content is prepared fresh (tray_open_prep) on every right-click, so
+        // nothing is precomputed here: just detach any native popup so it cannot fight the window
+        // for the right-click, which also skips every rebuild this function would otherwise do
+        // while the toggle stays on.
         if let Some(tray) = app.tray_by_id("tray") {
             let _ = tray.set_menu::<Menu<tauri::Wry>>(None);
         }
@@ -470,10 +467,9 @@ pub(crate) fn handle_tray_menu_id(app: &AppHandle, id: &str) {
 }
 
 // ---------- Custom Windows-11-style tray window ----------
-// The native TrackPopupMenu cannot be rounded or restyled -- that is a shell/XAML
-// look, not something Win32 menus support. apply_tray_menu() detaches the native
-// menu entirely while trayCustomMenu is on (see there), and this window takes
-// over the right-click instead, drawing its OWN content from the plan below.
+// The native TrackPopupMenu cannot be rounded or restyled. apply_tray_menu() detaches the
+// native menu while trayCustomMenu is on, and this window takes over the right-click,
+// drawing its own content from the plan below.
 
 pub(crate) const TRAY_WIN_LABEL: &str = "tray-menu";
 pub(crate) const TRAY_WIN_W: f64 = 240.0; // logical px; keep in sync with .tray-menu-card in floating.css
@@ -507,9 +503,8 @@ pub(crate) struct TrayWinPlan {
     pub(crate) sections: Vec<TrayWinSection>,
     pub(crate) show_label: String,
     pub(crate) quit_label: String,
-    // Whether the search row at the top of the menu is drawn at all (traySearch,
-    // default on) -- tray_window_logical_height only reserves a row for it when
-    // this is true, so an unrelated off switch never grows the window for nothing.
+    // Whether the search row at the top is drawn (traySearch, default on);
+    // tray_window_logical_height reserves a row for it only then.
     pub(crate) search_on: bool,
     pub(crate) search_ph: String,
 }
@@ -523,13 +518,11 @@ pub(crate) fn tray_kind_str(kind: TrayKind) -> &'static str {
     }
 }
 
-// Same content, same order as the native menu (tray_plan/tray_labels) -- this is
-// a restyle, not a second menu with its own rules. Built fresh on every open, so
-// (unlike the native HMENU) there is no separate rebuild-on-change path to keep
-// in sync.
-// The plan from plain data, so the store lock is the only thing the caller holds
-// while this runs and the content stays testable without an app handle. The
-// recording phase is read before the lock is taken (it has its own mutex).
+// Same content and order as the native menu (tray_plan/tray_labels): a restyle, not a
+// second menu with its own rules. Built fresh on every open, so there is no
+// rebuild-on-change path to keep in sync. Takes plain data so the store lock is the only
+// thing the caller holds and the content is testable without an app handle; the recording
+// phase is read before the lock (it has its own mutex).
 pub(crate) fn tray_win_plan_from_store(store: &Store, phase: Option<RecPhase>) -> TrayWinPlan {
     let cfg = tray_cfg(&store.settings);
     let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
@@ -613,15 +606,12 @@ pub(crate) fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     logical_h
 }
 
-// clamp_to_work only ever repositions -- it cannot shrink a window taller than
-// the work area, so at the supported 10-favorites/10-recents limits (both
-// sections on by default) the uncapped content could reach ~742 logical px and
-// overhang the bottom of a small or heavily-scaled display, with the card's own
-// (former) "overflow: hidden" then making the lower rows -- Quit included --
-// impossible to reach. Capped to the work area with an 8px margin so it never
-// sits flush against the taskbar/screen edge; floating.css makes the card
-// scroll internally once its content no longer fits the capped height. Split
-// out from tray_window_rect so the cap math is testable without an AppHandle.
+// clamp_to_work only repositions, it cannot shrink a window taller than the work area, and
+// at the 10-favorites/10-recents limits the content can reach ~742 logical px and overhang
+// a small or heavily scaled display, leaving the lower rows (Quit included) unreachable.
+// Capped to the work area with an 8px margin so it never sits flush against the edge;
+// floating.css makes the card scroll once content no longer fits. Split out of
+// tray_window_rect so the cap math is testable without an AppHandle.
 pub(crate) fn tray_window_capped_height(plan: &TrayWinPlan, work_h: f64, dpi: f64) -> f64 {
     (tray_window_logical_height(plan) * dpi).min((work_h - 8.0 * dpi).max(TRAY_WIN_ROW_H * dpi))
 }
@@ -678,12 +668,11 @@ pub(crate) fn prewarm_tray_window(app: &AppHandle) {
 
 // Runs on the event-loop thread, so it takes the plan prepared by tray_open_prep and
 // touches no lock but the tiny pending slots. Opens at the cursor, clamped into that
-// monitor's work area -- same helper every other cursor-anchored popup (launcher, var
-// prompt) already uses. A hidden WebView2 is throttled (paused timers and IPC), so the
-// window is first shown at its final size far off-screen, which wakes the page; the
-// page draws the plan and then asks for the reveal (tray_window_reveal), which only
-// moves it into place, so a stale menu from the last open never flashes up. A
-// watchdog puts it on screen anyway if the page does not ask in time.
+// monitor's work area like every other cursor-anchored popup. A hidden WebView2 is
+// throttled (paused timers and IPC), so the window is first shown at its final size far
+// off-screen to wake the page; the page draws the plan and asks for the reveal
+// (tray_window_reveal), which only moves it into place, so a stale menu from the last open
+// never flashes. A watchdog reveals it anyway if the page never asks.
 pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: bool) {
     let rect = tray_window_rect(app, &plan);
     *TRAY_WIN_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(plan);
@@ -764,13 +753,12 @@ pub(crate) fn tray_window_close(app: AppHandle) {
     hide_tray_window(&app);
 }
 
-// The tray filter row hands its first keystroke to the quick launcher: what was typed
-// becomes the launcher's starting query and the launcher is built, but it only appears
-// (launcher_ready) once its page is up. The tray window keeps the focus and every key
-// until then, passes on the complete text (tray_launcher_prefill) the moment the launcher
-// takes the focus away, and closes itself after that.
-// Must stay async: it builds the launcher window, and window creation from a sync
-// command deadlocks on Windows (sync commands run on the main thread).
+// The tray filter row hands its first keystroke to the quick launcher: the typed text
+// becomes the launcher's starting query and the launcher is built, but appears
+// (launcher_ready) only once its page is up. The tray window keeps focus and every key
+// until then, passes on the complete text (tray_launcher_prefill) when the launcher takes
+// focus, and closes itself. Must stay async: it builds a window, and window creation from
+// a sync command deadlocks on Windows.
 #[tauri::command]
 pub(crate) async fn tray_open_launcher(app: AppHandle, query: String) {
     *LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()) = launcher_prefill_text(&query);
