@@ -19,6 +19,10 @@ import { openCtx } from "./gridMenus.js";
 
 export let libQuery = ""; // prompt library search text
 export function assignLibQuery(v) { libQuery = v; }
+// A search to open the library with: its open handler resets the query after its own
+// awaits, so a query set right after the click would be wiped.
+let libPresetQuery = null;
+export function presetLibQuery(q) { libPresetQuery = q; }
 // Ids whose recognized image text matched the last query sent to
 // search_image_text, and the (trimmed, lowercased) query they were fetched
 // for -- image_text itself never reaches the frontend, so this is the only
@@ -1505,10 +1509,12 @@ export function syncLibraryCols() {
 
 export function bindLibrary() {
   $("library-btn").addEventListener("click", async () => {
+    const preset = libPresetQuery ?? "";
+    libPresetQuery = null;
     await refreshLastEdited();
     await refreshClipInbox(); // decides whether the history tab is offered
-    libQuery = "";
-    $("library-q").value = "";
+    libQuery = preset;
+    $("library-q").value = preset;
     // The type pick is remembered per window; search, colour and favourites are not.
     libTypes.clear();
     for (const type of typeFilterOf("libTypeFilter")) libTypes.add(type);

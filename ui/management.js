@@ -5,7 +5,7 @@ import { applyFlags, applyValues, renderExpert, rowResetBtn, withTip } from "./e
 import { loadPalette, refreshColorUI } from "./theme.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { runStatsExport, syncSettingsControls } from "./settingsPanel.js";
-import { assignLibQuery, lastEdited, libLabel, libQuery, refreshImageHits, renderLibrary, restoreBatchDelete } from "./library.js";
+import { lastEdited, libLabel, libQuery, presetLibQuery, refreshImageHits, renderLibrary, restoreBatchDelete } from "./library.js";
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes, varPreview } from "./floatShared.js";
@@ -220,10 +220,8 @@ export function jumpToPrompt(name) {
   // raised above them, so closing it lands back on the statistics it was opened from.
   document.body.classList.add("library-front");
   assignLibraryTab("prompts");
+  presetLibQuery(name || ""); // the open handler resets the query, so it takes this one along
   $("library-btn").click(); // resets + opens the library
-  assignLibQuery(name || "");
-  $("library-q").value = libQuery;
-  renderLibrary();
 }
 // Inline expert panels (backups + statistics): filled on demand by renderExpert.
 
