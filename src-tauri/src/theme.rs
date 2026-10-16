@@ -312,7 +312,7 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
     let json = serde_json::to_string_pretty(&ThemeExport { name: theme.name.clone(), base: theme.base, vars: theme.vars })
         .map_err(|e| e.to_string())?;
     let file = file_dialog(&app)
-        .set_file_name(format!("{}.json", theme.name))
+        .set_file_name(format!("{}.json", export_file_name_from(&theme.name, "theme")))
         .add_filter("JSON", &["json"])
         .save_file();
     match file {

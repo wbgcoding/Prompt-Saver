@@ -827,6 +827,18 @@ pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
     !EXPORT_RESERVED_STEMS.contains(&first_segment.as_str())
 }
 
+// A suggested file name from free text (a theme name, say): characters Windows does
+// not allow in a name become "-", and a result the validator above still refuses
+// (empty, "..", a reserved device name) falls back to `fallback`.
+pub(crate) fn export_file_name_from(name: &str, fallback: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || (c as u32) < 0x20 { '-' } else { c })
+        .collect();
+    let cleaned = cleaned.trim().trim_end_matches('.').trim_end().to_string();
+    if export_file_name_is_valid(&cleaned) { cleaned } else { fallback.to_string() }
+}
+
 // Exporting a file over itself would ask ffmpeg to read and overwrite the
 // same file mid-run; refused outright rather than relying on reserve_unique_dest_path
 // to save it by silently picking a different name. dest need not exist yet

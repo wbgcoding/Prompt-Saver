@@ -6223,6 +6223,17 @@ fn an_edit_without_text_keeps_a_confidential_prompts_ciphertext() {
 // An entry sealed under another vault's key shows as locked and refuses a save,
 // so its original ciphertext survives until the right password opens it.
 #[test]
+fn a_theme_name_becomes_a_usable_export_file_name() {
+    assert_eq!(export_file_name_from("Blue/Grey", "theme"), "Blue-Grey");
+    assert_eq!(export_file_name_from("a:b*c?", "theme"), "a-b-c-");
+    assert_eq!(export_file_name_from("Plain name", "theme"), "Plain name");
+    assert_eq!(export_file_name_from("..", "theme"), "theme");
+    assert_eq!(export_file_name_from("CON", "theme"), "theme");
+    assert_eq!(export_file_name_from("Dots...", "theme"), "Dots");
+    assert!(export_file_name_is_valid(&export_file_name_from("x\\y|z\"", "theme")));
+}
+
+#[test]
 fn an_entry_sealed_with_another_key_stays_locked_and_refuses_an_edit() {
     let (mine, theirs) = ([7u8; 32], [9u8; 32]);
     let mut p = image_text_prompt("s", "");
