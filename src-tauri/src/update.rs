@@ -694,10 +694,26 @@ pub(crate) fn update_url_is_newer_release(url: &str) -> bool {
     !tag.is_empty() && version_newer(tag, APP_VERSION)
 }
 
+// The installer ends the app, which would cut a live recording short (an MP4
+// with no index, unplayable) or abandon a running export, so it waits for them.
+// A recording counts while it switches files too, when the state reads empty.
+pub(crate) fn update_blocker(recording: bool, switching: bool, jobs: usize) -> Option<&'static str> {
+    if recording || switching {
+        Some("recording-active")
+    } else if jobs > 0 {
+        Some("jobs-running")
+    } else {
+        None
+    }
+}
+
 // Download the installer to %TEMP%, run it fully silent (/S), restart the
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
+    if let Some(why) = update_blocker(recording_active(&app), REC_STARTING.load(Ordering::SeqCst), bg_ops_running_count()) {
+        return Err(why.to_string());
+    }
     // Only our own release assets under the exact pinned repo path: not any github.com URL.
     if !valid_update_url(&url) {
         return Err("invalid update source".to_string());

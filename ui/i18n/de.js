@@ -1385,6 +1385,8 @@ export default {
     errUpdaterTooLarge: "Das heruntergeladene Update ist zu groß oder unvollständig. Versuche das Update später erneut.",
     errUpdaterInvalidInstaller: "Die heruntergeladene Datei ist kein gültiges Installationsprogramm. Versuche das Update später erneut.",
     errUpdaterHashMismatch: "Update abgelehnt: der Download stimmt nicht mit seiner Prüfsumme überein",
+    errUpdateRecordingActive: "Eine Aufnahme läuft. Beende sie und installiere dann das Update.",
+    errUpdateJobsRunning: "Hintergrundaufgaben laufen noch. Warte, bis sie fertig sind, und installiere dann das Update.",
     errBackupTooLarge: "Diese Sicherung ist größer als 512 MB und wurde nicht wiederhergestellt",
     errStoreTooLargeForBackup: "Der Datenspeicher ist größer als 512 MB und kann nicht gesichert werden",
     errBackupSchemaMismatch: "Diese Datei sieht nicht wie eine {app}-Datenbank aus und wurde nicht wiederhergestellt",

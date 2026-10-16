@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "La actualización descargada es demasiado grande o está incompleta. Vuelve a intentar la actualización más tarde.",
     errUpdaterInvalidInstaller: "El archivo descargado no es un instalador válido. Vuelve a intentar la actualización más tarde.",
     errUpdaterHashMismatch: "Actualización rechazada: la descarga no coincide con su suma de comprobación",
+    errUpdateRecordingActive: "Hay una grabación en curso. Termínala y luego instala la actualización.",
+    errUpdateJobsRunning: "Aún hay tareas en segundo plano. Espera a que terminen y luego instala la actualización.",
     errBackupTooLarge: "Esta copia de seguridad supera los 512 MB y no se restauró",
     errStoreTooLargeForBackup: "El almacén de datos supera los 512 MB y no se puede respaldar",
     errBackupSchemaMismatch: "Este archivo no parece una base de datos de {app} y no se restauró",

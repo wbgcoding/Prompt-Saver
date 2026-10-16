@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "下载的更新过大或不完整。请稍后重试更新。",
     errUpdaterInvalidInstaller: "下载的文件不是有效的安装程序。请稍后重试更新。",
     errUpdaterHashMismatch: "更新被拒绝：下载内容与校验和不匹配",
+    errUpdateRecordingActive: "正在录制。请先结束录制，再安装更新。",
+    errUpdateJobsRunning: "后台任务仍在运行。请等它们完成后再安装更新。",
     errBackupTooLarge: "此备份超过 512 MB，未能恢复",
     errStoreTooLargeForBackup: "数据存储超过 512 MB，无法备份",
     errBackupSchemaMismatch: "此文件看起来不是 {app} 的数据库，未能恢复",

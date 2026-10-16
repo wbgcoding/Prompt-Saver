@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "L'aggiornamento scaricato è troppo grande o incompleto. Riprova l'aggiornamento più tardi.",
     errUpdaterInvalidInstaller: "Il file scaricato non è un programma di installazione valido. Riprova l'aggiornamento più tardi.",
     errUpdaterHashMismatch: "Aggiornamento rifiutato: il download non corrisponde al suo checksum",
+    errUpdateRecordingActive: "Una registrazione è in corso. Terminala, poi installa l'aggiornamento.",
+    errUpdateJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi installa l'aggiornamento.",
     errBackupTooLarge: "Questo backup supera i 512 MB e non è stato ripristinato",
     errStoreTooLargeForBackup: "L'archivio dati supera i 512 MB e non può essere sottoposto a backup",
     errBackupSchemaMismatch: "Questo file non sembra un database di {app} e non è stato ripristinato",

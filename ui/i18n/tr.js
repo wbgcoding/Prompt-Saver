@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "İndirilen güncelleme çok büyük veya eksik. Güncellemeyi daha sonra yeniden deneyin.",
     errUpdaterInvalidInstaller: "İndirilen dosya geçerli bir kurulum dosyası değil. Güncellemeyi daha sonra yeniden deneyin.",
     errUpdaterHashMismatch: "Güncelleme reddedildi: indirilen dosya sağlama toplamıyla eşleşmiyor",
+    errUpdateRecordingActive: "Bir kayıt sürüyor. Önce onu bitirin, sonra güncellemeyi yükleyin.",
+    errUpdateJobsRunning: "Arka plan işleri hâlâ çalışıyor. Bitmelerini bekleyin, sonra güncellemeyi yükleyin.",
     errBackupTooLarge: "Bu yedek 512 MB'tan büyük olduğu için geri yüklenmedi",
     errStoreTooLargeForBackup: "Veri deposu 512 MB'tan büyük olduğu için yedeklenemiyor",
     errBackupSchemaMismatch: "Bu dosya bir {app} veritabanına benzemiyor ve geri yüklenmedi",

@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "Pobrana aktualizacja jest za duża lub niekompletna. Spróbuj ponowić aktualizację później.",
     errUpdaterInvalidInstaller: "Pobrany plik nie jest prawidłowym instalatorem. Spróbuj ponowić aktualizację później.",
     errUpdaterHashMismatch: "Aktualizacja odrzucona: pobrany plik nie zgadza się z sumą kontrolną",
+    errUpdateRecordingActive: "Trwa nagrywanie. Zakończ je, a potem zainstaluj aktualizację.",
+    errUpdateJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem zainstaluj aktualizację.",
     errBackupTooLarge: "Ta kopia zapasowa przekracza 512 MB i nie została przywrócona",
     errStoreTooLargeForBackup: "Magazyn danych przekracza 512 MB i nie można wykonać kopii zapasowej",
     errBackupSchemaMismatch: "Ten plik nie wygląda na bazę danych {app} i nie został przywrócony",

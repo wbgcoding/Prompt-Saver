@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "ダウンロードした更新が大きすぎるか、不完全です。後でもう一度更新をお試しください。",
     errUpdaterInvalidInstaller: "ダウンロードしたファイルは有効なインストーラーではありません。後でもう一度更新をお試しください。",
     errUpdaterHashMismatch: "更新は拒否されました：ダウンロード内容がチェックサムと一致しません",
+    errUpdateRecordingActive: "録画中です。録画を終えてから更新をインストールしてください。",
+    errUpdateJobsRunning: "バックグラウンド処理がまだ実行中です。完了してから更新をインストールしてください。",
     errBackupTooLarge: "このバックアップは512MBを超えるため復元されませんでした",
     errStoreTooLargeForBackup: "データストアが512MBを超えているため、バックアップできません",
     errBackupSchemaMismatch: "このファイルは{app}のデータベースではないようなので、復元されませんでした",

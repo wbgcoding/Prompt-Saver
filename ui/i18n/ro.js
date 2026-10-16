@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "Actualizarea descărcată este prea mare sau incompletă. Încearcă din nou actualizarea mai târziu.",
     errUpdaterInvalidInstaller: "Fișierul descărcat nu este un program de instalare valid. Încearcă din nou actualizarea mai târziu.",
     errUpdaterHashMismatch: "Actualizare respinsă: descărcarea nu corespunde sumei sale de control",
+    errUpdateRecordingActive: "O înregistrare este în curs. Încheie-o, apoi instalează actualizarea.",
+    errUpdateJobsRunning: "Încă rulează sarcini în fundal. Așteaptă să se termine, apoi instalează actualizarea.",
     errBackupTooLarge: "Această copie de rezervă depășește 512 MB și nu a fost restaurată",
     errStoreTooLargeForBackup: "Depozitul de date depășește 512 MB și nu poate fi copiat de rezervă",
     errBackupSchemaMismatch: "Acest fișier nu pare a fi o bază de date {app} și nu a fost restaurat",

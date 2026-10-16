@@ -20531,3 +20531,12 @@ fn import_truncates_an_over_long_note_on_a_char_boundary() {
     assert!(kept.chars().all(|c| c == '\u{e4}'));
     assert_eq!(lenient_import_note("short note"), "short note");
 }
+
+#[test]
+fn update_waits_for_a_recording_or_a_running_job() {
+    assert_eq!(update_blocker(true, false, 0), Some("recording-active"));
+    assert_eq!(update_blocker(false, true, 0), Some("recording-active"), "a file switch still counts as recording");
+    assert_eq!(update_blocker(false, false, 2), Some("jobs-running"));
+    assert_eq!(update_blocker(true, false, 2), Some("recording-active"));
+    assert_eq!(update_blocker(false, false, 0), None);
+}

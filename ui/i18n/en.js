@@ -1385,6 +1385,8 @@ export default {
     errUpdaterTooLarge: "The downloaded update is too large or incomplete. Try the update again later.",
     errUpdaterInvalidInstaller: "The downloaded file is not a valid installer. Try the update again later.",
     errUpdaterHashMismatch: "Update rejected: the download does not match its checksum",
+    errUpdateRecordingActive: "A recording is running. Finish it, then install the update.",
+    errUpdateJobsRunning: "Background jobs are still running. Let them finish, then install the update.",
     errBackupTooLarge: "This backup is larger than 512 MB and was not restored",
     errStoreTooLargeForBackup: "The data store is larger than 512 MB and cannot be backed up",
     errBackupSchemaMismatch: "This file does not look like a {app} database and was not restored",

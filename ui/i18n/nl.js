@@ -1378,6 +1378,8 @@ export default {
     errUpdaterTooLarge: "De gedownloade update is te groot of onvolledig. Probeer de update later opnieuw.",
     errUpdaterInvalidInstaller: "Het gedownloade bestand is geen geldig installatieprogramma. Probeer de update later opnieuw.",
     errUpdaterHashMismatch: "Update geweigerd: de download komt niet overeen met de controlesom",
+    errUpdateRecordingActive: "Er loopt een opname. Rond die af en installeer daarna de update.",
+    errUpdateJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en installeer daarna de update.",
     errBackupTooLarge: "Deze back-up is groter dan 512 MB en is niet hersteld",
     errStoreTooLargeForBackup: "De gegevensopslag is groter dan 512 MB en kan niet worden geback-upt",
     errBackupSchemaMismatch: "Dit bestand lijkt geen {app}-database te zijn en is niet hersteld",
