@@ -7,9 +7,8 @@ pub(crate) struct StatBar {
     pub(crate) name: String,
     pub(crate) count: u32,
 }
-// One day's copy count. `ts` is that day's UTC midnight (unix seconds): the
-// frontend already has locale-aware date formatting via Intl, no reason to
-// duplicate it (or pull in a date crate) on the Rust side for a label string.
+// One day's copy count. `ts` is that day's UTC midnight (unix seconds); the frontend
+// formats dates with Intl, so no date crate is needed here.
 #[derive(Serialize)]
 pub(crate) struct DayCount {
     pub(crate) ts: u64,
@@ -26,12 +25,10 @@ pub(crate) struct UsageStats {
 }
 
 // ---- Most-used tools ----
-// The functions this counts, each counted in the
-// SAME usage/last_used maps a prompt copy uses (see record_tool_usage below),
-// under a key namespace no real prompt id can ever collide with -- prompt ids
-// come from gen_id(), never the fixed "tool:" prefix. This array is also the
-// single source of truth a test checks the counted keys against, so a new
-// tool call site can never silently go uncounted without a test noticing.
+// The functions this counts, in the same usage/last_used maps a prompt copy uses (see
+// record_tool_usage), under a key namespace no real prompt id can collide with (ids come
+// from gen_id(), never the fixed "tool:" prefix). It is also the single list a test checks
+// counted keys against, so a new tool call site cannot go uncounted unnoticed.
 pub(crate) const TOOL_KEYS: [&str; 13] = [
     "screenshot",
     "screenshot_editor",
@@ -58,9 +55,8 @@ pub(crate) fn tool_usage_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("usageStats") == Some(&true)
 }
 
-// The actual increment, split out from the command below so it is directly
-// testable without a mock Tauri runtime (State<'_, Db>' cannot be constructed
-// in a unit test, same reasoning as export_prompts elsewhere in this file).
+// The increment itself, apart from the command below so it is testable without a mock
+// Tauri runtime (State<'_, Db> cannot be built in a unit test).
 pub(crate) fn apply_tool_usage(settings: &mut Settings, tool: &str) {
     let key = tool_usage_key(tool);
     let slot = settings.usage.entry(key.clone()).or_insert(0);
@@ -68,11 +64,10 @@ pub(crate) fn apply_tool_usage(settings: &mut Settings, tool: &str) {
     settings.last_used.insert(key, now_secs());
 }
 
-// Record one use of a tool -- called by the UI right after the action
-// succeeds. Off the moment usage statistics are off: unlike record_copy's
-// usage/last_used (always collected, only copyHistory's own row log is a
-// privacy toggle), this counter set exists purely for the dashboard and has
-// no other purpose, so nothing about it should survive the switch being off.
+// Record one use of a tool, called by the UI right after the action succeeds. Does nothing
+// while usage statistics are off: unlike record_copy's usage/last_used (always collected),
+// this counter set exists only for the dashboard, so nothing of it should survive the
+// switch being off.
 #[tauri::command]
 pub(crate) async fn record_tool_usage(state: State<'_, Db>, tool: String) -> Result<(), String> {
     if !TOOL_KEYS.contains(&tool.as_str()) {
@@ -110,10 +105,9 @@ pub(crate) fn prompt_stat_type(p: &Prompt) -> &'static str {
 // Aggregate everything in Rust so a 1000-prompt library returns one compact struct.
 #[tauri::command]
 pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Result<UsageStats, String> {
-    // The copy journal lives in SQLite and owes nothing to the in-memory store,
-    // so it is read BEFORE the store is locked. Opening the database and running
-    // a query while holding that lock made every copy and every save wait for the
-    // statistics dialog to finish opening.
+    // The copy journal lives in SQLite and does not need the in-memory store, so it is read
+    // before the store is locked; running the query under that lock made every copy and save
+    // wait for the statistics dialog to open.
     let now = now_secs();
     let copies7 = db_conn(&app)
         .map(|c| {
@@ -158,12 +152,10 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
 }
 
 // ---- Usage statistics export ----
-// One row per prompt (not just the dashboard's top-N) plus the daily copy
-// counts of the last 14 days and every tool counter. A name/tag counter is not a substitute for a
-// spreadsheet someone can sort and filter on their own. `last_used`/`ts` stay
-// raw unix seconds: the dashboard already formats them through Intl on the JS
-// side, and duplicating a calendar calculation here for a plain text export
-// would be a second place to get the leap-year math wrong.
+// One row per prompt (not just the dashboard's top-N) plus the daily copy counts of the
+// last 14 days and every tool counter, for a spreadsheet someone can sort and filter.
+// `last_used`/`ts` stay raw unix seconds: the dashboard formats them through Intl on the JS
+// side, and a calendar calculation here would be a second place for leap-year bugs.
 #[derive(Serialize)]
 pub(crate) struct StatsExportEntry {
     pub(crate) name: String,
@@ -183,8 +175,7 @@ pub(crate) fn stats_display_name(p: &Prompt) -> String {
     }
 }
 
-// Tool-usage rows join this export once per-tool usage counters exist; an
-// empty slice until then keeps the JSON shape stable across both features.
+// One export row per prompt in the store.
 pub(crate) fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
     let usage = &store.settings.usage;
     let last_used = &store.settings.last_used;
@@ -252,19 +243,16 @@ pub(crate) fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], to
     serde_json::to_string_pretty(&StatsExport { version: 1, entries, daily, tools }).unwrap_or_default()
 }
 
-// Same shape as export_prompts (format select -> save dialog), fed from the
-// statistics dashboard's own button instead of the settings export row.
-// The dashboard is where the data is on screen, so the "export it" action
-// stays next to it rather than in an unrelated dialog.
+// Same shape as export_prompts (format select, save dialog), fed from the statistics
+// dashboard's own button so the export action sits next to the data on screen.
 #[tauri::command]
 pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String) -> Result<usize, String> {
     let daily = db_conn(&app).map(|c| db_daily_copies(&c, 14)).unwrap_or_default();
     let (entries, tools) = {
         let store = lock(&state);
         let entries = stats_export_entries(&store);
-        // Every tool, not just the dashboard's top-N -- same "the export holds
-        // everything, the dashboard only shows the top slice" rule the entries
-        // above already follow.
+        // Every tool, not just the dashboard's top-N: the export holds everything, the dashboard
+        // only the top slice.
         let tools: Vec<StatsExportEntry> = TOOL_KEYS
             .iter()
             .map(|k| StatsExportEntry {
@@ -295,24 +283,21 @@ pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: S
     }
 }
 
-// ---- Storage breakdown (statistics/backups window, "Speicher" section) ----
-// One row per storage kind the app itself writes to disk, plus the two rows a
-// retention overview adds beside these once it exists. `key` is a stable id
-// the frontend switches on; `path` is what an "open folder" button reveals,
-// left empty for a row with no single folder to point at.
+// ---- Storage breakdown (statistics/backups window, storage section) ----
+// One row per storage kind the app writes to disk. `key` is a stable id the frontend
+// switches on; `path` is what an "open folder" button reveals, empty for a row with no
+// single folder.
 #[derive(Serialize, Clone)]
 pub(crate) struct StorageItem {
     pub(crate) key: String,
     pub(crate) path: String,
     pub(crate) bytes: u64,
     pub(crate) count: u64,
-    // The scan stopped at the entry cap -- the numbers above are a lower
-    // bound, not the true total. Kept apart from `denied` so the frontend can
-    // word the two situations differently.
+    // The scan stopped at the entry cap, so the numbers are a lower bound. Kept apart from
+    // `denied` so the frontend can word the two cases differently.
     pub(crate) capped: bool,
-    // The folder exists but could not be listed (a permissions problem) --
-    // reported as such rather than silently shown as an empty, empty-looking
-    // 0 B row.
+    // The folder exists but could not be listed (a permissions problem): reported as such
+    // instead of as an empty 0 B row.
     pub(crate) denied: bool,
 }
 
@@ -327,10 +312,9 @@ pub(crate) fn file_size_or_zero(path: &std::path::Path) -> u64 {
     fs::metadata(path).map(|m| m.len()).unwrap_or(0)
 }
 
-// (count, bytes) of every distinct, still-existing attachment path -- two
-// prompts sharing the same file (a rotating entry's variants, say) must count
-// that file once, not twice, and a path that no longer resolves contributes
-// nothing rather than erroring the whole readout.
+// (count, bytes) of every distinct, still-existing attachment path: a file shared by two
+// prompts (a rotating entry's variants, say) counts once, and a path that no longer
+// resolves adds nothing instead of failing the readout.
 pub(crate) fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
     let mut seen = std::collections::HashSet::new();
     let mut bytes = 0u64;
@@ -347,11 +331,10 @@ pub(crate) fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
     (count, bytes)
 }
 
-// (count, bytes, capped, denied) for one folder, one level deep -- matches
-// video_folder_stats_in's precedent of never descending into subfolders. The
-// scan stops once `cap` files have been counted, so a folder with millions of
-// small files cannot hang the window open. `read_dir` is injected so a
-// permissions failure can be exercised in a test without changing real ACLs.
+// (count, bytes, capped, denied) for one folder, one level deep (never descending into
+// subfolders, like video_folder_stats_in). The scan stops after `cap` files so a folder
+// with millions of small files cannot hang the window. `read_dir` is injected so a
+// permissions failure can be tested without changing real ACLs.
 pub(crate) fn scan_dir_stats_with(
     dir: &std::path::Path,
     cap: usize,
@@ -359,8 +342,8 @@ pub(crate) fn scan_dir_stats_with(
 ) -> (u64, u64, bool, bool) {
     let entries = match read_dir(dir) {
         Ok(e) => e,
-        // A folder nothing has written to yet (the recordings folder before a
-        // first capture, say) is simply empty, never an error.
+        // A folder nothing has written to yet (the recordings folder before a first capture) is
+        // simply empty, not an error.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (0, 0, false, false),
         Err(e) => return (0, 0, false, e.kind() == std::io::ErrorKind::PermissionDenied),
     };
@@ -430,9 +413,8 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
         items.push(StorageItem { key: "database".into(), path: db.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
     }
 
-    // Attachments: a prompt's file only ever keeps its original path (the
-    // import/export notes on file_path explain why), so there is no single
-    // app folder to scan -- this sums whatever those paths currently point to.
+    // Attachments: a prompt's file keeps only its original path, so there is no app folder to
+    // scan; this sums whatever those paths currently point to.
     {
         let (count, bytes) = attachments_bytes(&file_paths);
         items.push(StorageItem { key: "attachments".into(), path: String::new(), bytes, count, capped: false, denied: false });
@@ -445,8 +427,8 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
         items.push(StorageItem { key: "screenshots".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
     }
 
-    // Recordings, plus their own "verworfen" discard trash as a separate row --
-    // the same folder the expert menu's recording-folder readout already reads.
+    // Recordings, plus the discard trash as a separate row: the same folder the expert menu's
+    // recording-folder readout reads.
     {
         let target = recording_dir(&recording_custom);
         let (count, bytes) = video_folder_stats_in(&target);
@@ -513,15 +495,12 @@ pub(crate) fn open_storage_folder(path: String) -> Result<(), String> {
     open_explorer_at(&path)
 }
 
-// One row per kept-data category (trash, copy history, clipboard inbox,
-// recordings, discarded recordings, temporary exports, edit states) for the
-// statistics/backups window's own overview -- distinct from StorageBreakdown
-// above, which is disk USAGE grouped by folder; this is RETENTION grouped by
-// what a setting actually governs. Deliberately reuses the same counting each
-// category already had (video_folder_stats_in for the two recording rows,
-// the same SQL every other command in this file already runs against
-// copy_log/clip_inbox/edit_state) rather than inventing a second way to
-// measure the same folder or table.
+// One row per kept-data category (trash, copy history, clipboard inbox, recordings,
+// discarded recordings, temporary exports, edit states) for the statistics/backups
+// window's overview. Distinct from StorageBreakdown above, which is disk usage by folder:
+// this is retention grouped by what a setting governs. It reuses each category's existing
+// counting (video_folder_stats_in for the recording rows, the SQL other commands here run
+// against copy_log/clip_inbox/edit_state) instead of a second way to measure the same thing.
 #[derive(Serialize, Clone)]
 pub(crate) struct RetentionItem {
     pub(crate) key: String,
@@ -682,12 +661,11 @@ pub(crate) fn view_names_by_prompt(views: &[View]) -> std::collections::HashMap<
 pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<DupGroup>, String> {
     use rayon::prelude::*;
     use std::collections::{HashMap as Map, HashSet as Set};
-    // Clone the (few) fields this scan needs and drop the lock before the O(n^2)
-    // comparison below - this used to hold the store mutex for the whole scan,
-    // blocking every other command (add/update/delete, all of which also need this
-    // same mutex) for however long comparing a few hundred prompts took. The result
-    // is a snapshot - a prompt changed concurrently mid-scan might be very slightly
-    // stale in this one report, an acceptable trade for a read-only finder.
+    // Clone the few fields this scan needs and drop the lock before the O(n^2) comparison,
+    // which would otherwise block every command needing the store mutex for as long as
+    // comparing a few hundred prompts takes. The result is a snapshot: a prompt changed
+    // mid-scan may be slightly stale in this one report, an acceptable trade for a read-only
+    // finder.
     let (prompts, dup_ignored, views, usage) = {
         let store = lock(&state);
         (
@@ -701,10 +679,9 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
     // edge list below becomes the full n^2 triangle. The setting itself never goes
     // below 70 %, so this only bounds what a malformed call could ask for.
     let thr = (threshold / 100.0).clamp(0.5, 1.0);
-    // A rotating prompt is compared on entry 1 (p.text) only, deliberately:
-    // two prompts that happen to share their FIRST entry but differ in the rest are
-    // not "near duplicates" of each other, and comparing every entry pair would
-    // turn this already-O(n^2) scan into O(n^2 * entries).
+    // A rotating prompt is compared on entry 1 (p.text) only: two prompts that share their
+    // first entry but differ in the rest are not near duplicates, and comparing every entry
+    // pair would turn this O(n^2) scan into O(n^2 * entries).
     let items: Vec<(&DupSource, String)> = prompts
         .iter()
         // Confidential entries were already left out of the snapshot (their stored
@@ -784,11 +761,10 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
 }
 
 // ---- Similar-on-save hint ----
-// How long the after-save similarity scan may run before it gives up and
-// reports nothing rather than risk being felt as a stall. find_duplicates'
-// own O(n^2) scan above does not need a budget like this one -- that one is
-// an explicit "scan now" action the user already chose to wait for, while
-// this one runs after every ordinary save, unasked.
+// How long the after-save similarity scan may run before it gives up and reports nothing
+// rather than be felt as a stall. find_duplicates needs no such budget: it is an explicit
+// "scan now" action the user chose to wait for, while this runs after every ordinary save,
+// unasked.
 pub(crate) const SIMILAR_HINT_BUDGET: std::time::Duration = std::time::Duration::from_millis(40);
 
 #[derive(Serialize, Clone)]
@@ -798,12 +774,10 @@ pub(crate) struct SimilarHit {
     pub(crate) name: String,
 }
 
-// Whether two normalized lengths could possibly clear `thr` under trigram
-// Dice similarity. Dice can never exceed 2*min/(min+max), even at a perfect
-// overlap of the shorter one into the longer, so a pair whose lengths differ
-// enough is provably impossible and can be skipped before ever paying for
-// dup_trigrams on it -- the "only against entries of similar length" half of
-// the time budget.
+// Whether two normalized lengths could clear `thr` under trigram Dice similarity. Dice
+// never exceeds 2*min/(min+max), even with the shorter fully inside the longer, so a pair
+// whose lengths differ enough is provably impossible and skipped before paying for
+// dup_trigrams on it.
 pub(crate) fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
     if a == 0 || b == 0 {
         return false;
@@ -812,14 +786,12 @@ pub(crate) fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
     2.0 * lo as f64 / (hi + lo) as f64 >= thr
 }
 
-// The same trigram/Dice calculation find_duplicates uses above, run against
-// just the ONE prompt that was saved instead of every pair in the store.
-// Pure and synchronous, so it is callable straight from a unit test without a
-// Db/AppHandle; the command below only adds the store lookup around it.
-// Time-boxed (SIMILAR_HINT_BUDGET) and length-filtered, so a 10,000-entry
-// store does not turn an ordinary save into a stall -- callers run it AFTER
-// the save already returned, so even reaching the budget only delays the
-// hint, never the save itself.
+// The same trigram/Dice calculation find_duplicates uses, run against just the one prompt
+// that was saved instead of every pair. Pure and synchronous, so a unit test can call it
+// without a Db/AppHandle; the command below adds the store lookup. Time-boxed
+// (SIMILAR_HINT_BUDGET) and length-filtered, so a 10,000-entry store does not turn an
+// ordinary save into a stall; it runs after the save returned, so reaching the budget only
+// delays the hint.
 pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold: f64) -> Option<SimilarHit> {
     let start = std::time::Instant::now();
     let thr = (threshold / 100.0).clamp(0.5, 1.0);
@@ -861,16 +833,13 @@ pub(crate) fn similar_inputs(prompts: &[Prompt], id: &str) -> Option<(Prompt, Ve
     Some((target, others))
 }
 
-// Called from the frontend right after add_prompt/update_prompt already
-// returned -- never awaited as part of saving, so a slow scan can only ever
-// delay the hint toast, not the save. A missing id (deleted again in the
-// instant between save and this call) is simply "nothing to report", not an
-// error worth surfacing.
+// Called by the frontend after add_prompt/update_prompt already returned, never awaited as
+// part of saving, so a slow scan can only delay the hint toast. A missing id (deleted in
+// the instant between save and this call) is "nothing to report", not an error.
 #[tauri::command]
 pub(crate) async fn similar_to_saved(state: State<'_, Db>, id: String, threshold: f64) -> Result<Option<SimilarHit>, String> {
-    // Snapshot and drop the lock before the scan, same tradeoff find_duplicates
-    // makes above and for the same reason -- this must not block every other
-    // command for the length of the (bounded, but still real) comparison.
+    // Snapshot and drop the lock before the scan, as find_duplicates does: the bounded but real
+    // comparison must not block every other command.
     let Some((target, others)) = similar_inputs(&lock(&state).prompts, &id) else {
         return Ok(None);
     };
