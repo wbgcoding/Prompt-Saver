@@ -142,6 +142,9 @@ export function setFavView(on) {
 // the moment the count changes, and any button now outside it is re-fitted.
 export function renderFavGrid() {
   $("grid-empty").classList.add("hidden"); // this view has its own empty message
+  // The overhang banner belongs to a normal view; its Grow button does nothing here.
+  $("grid-overflow").classList.add("hidden");
+  syncBannerStack();
   const favs = prompts.filter((p) => p.favorite);
   const n = favs.length;
   const ids = new Set(favs.map((p) => p.id));
