@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Salve suas alterações primeiro.",
     secretExportTitle: "Entradas confidenciais nesta exportação",
     secretExportMsg: "Esta exportação inclui {n} entradas confidenciais. Se mantidas, permanecem cifradas e é preciso a senha do cofre para lê-las de novo. Se excluídas, não aparecem de forma alguma.",
+    secretExportSkipMsg: "{n} entradas confidenciais não podem permanecer cifradas neste formato, por isso são excluídas. Exporte como JSON para mantê-las cifradas.",
     secretExportInclude: "Manter cifradas",
     secretExportExclude: "Excluí-las",
     editorSecretLabel: "Confidencial",

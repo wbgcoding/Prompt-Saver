@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Sla je wijzigingen eerst op.",
     secretExportTitle: "Vertrouwelijke items in deze export",
     secretExportMsg: "Deze export bevat {n} vertrouwelijke items. Behouden blijven ze versleuteld en is het kluiswachtwoord nodig om ze weer te lezen. Weggelaten verschijnen ze helemaal niet.",
+    secretExportSkipMsg: "{n} vertrouwelijke items kunnen in dit formaat niet versleuteld blijven en worden weggelaten. Exporteer als JSON om ze versleuteld te houden.",
     secretExportInclude: "Versleuteld behouden",
     secretExportExclude: "Weglaten",
     editorSecretLabel: "Vertrouwelijk",

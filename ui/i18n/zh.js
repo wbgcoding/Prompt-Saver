@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "请先保存更改。",
     secretExportTitle: "此导出中的机密条目",
     secretExportMsg: "此导出包含 {n} 个机密条目。保留时它们仍保持加密，需要保险库密码才能再次读取；排除时它们完全不会出现。",
+    secretExportSkipMsg: "此格式无法让 {n} 个机密条目保持加密，因此它们会被排除。请导出为 JSON 以保持加密。",
     secretExportInclude: "保留加密内容",
     secretExportExclude: "排除它们",
     editorSecretLabel: "机密",

@@ -48,7 +48,7 @@ export function hideSettings() {
 
 // ---- Settings actions ----
 export async function runExport(format) {
-  const includeSecrets = await confirmSecretExport(null);
+  const includeSecrets = await confirmSecretExport(null, format);
   if (includeSecrets === null) return;
   try {
     await withDialog(() => invoke("export_prompts", { format, includeSecrets }));

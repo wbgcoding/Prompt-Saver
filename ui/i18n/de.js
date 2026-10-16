@@ -844,6 +844,7 @@ export default {
     secretNeedsSaveFirst: "Speichere deine Änderungen zuerst.",
     secretExportTitle: "Vertrauliche Einträge in diesem Export",
     secretExportMsg: "Dieser Export enthält {n} vertrauliche Einträge. Werden sie beibehalten, bleiben sie verschlüsselt und brauchen zum erneuten Lesen das Tresor-Passwort. Werden sie ausgelassen, fehlen sie im Export ganz.",
+    secretExportSkipMsg: "{n} vertrauliche Einträge können in diesem Format nicht verschlüsselt bleiben und werden ausgelassen. Exportiere als JSON, um sie verschlüsselt zu behalten.",
     secretExportInclude: "Verschlüsselt beibehalten",
     secretExportExclude: "Auslassen",
     editorSecretLabel: "Vertraulich",

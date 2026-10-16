@@ -1383,9 +1383,20 @@ export async function batchArchive(ids, run) {
 // store with none never sees this step. `null` means the whole export was
 // cancelled here (never reaches export_prompts); otherwise a plain boolean,
 // default false ("aus") matching the OK button/Enter key.
-export async function confirmSecretExport(idFilter) {
+export async function confirmSecretExport(idFilter, format) {
   const n = prompts.filter((p) => p.secret && (!idFilter || idFilter.has(p.id))).length;
   if (!n) return false;
+  // Only the JSON file carries the confidential flag, so the other formats can
+  // only leave these entries out.
+  if (format !== "json") {
+    const go = await confirmDialog({
+      title: t("secretExportTitle"),
+      message: t("secretExportSkipMsg").replace("{n}", String(n)),
+      confirmLabel: t("secretExportExclude"),
+      danger: false,
+    });
+    return go ? false : null;
+  }
   const choice = await confirmDialog({
     title: t("secretExportTitle"),
     message: t("secretExportMsg").replace("{n}", String(n)),
@@ -1399,7 +1410,7 @@ export async function confirmSecretExport(idFilter) {
 
 export async function batchExport(format, ids) {
   if (!ids.length) return;
-  const includeSecrets = await confirmSecretExport(new Set(ids));
+  const includeSecrets = await confirmSecretExport(new Set(ids), format);
   if (includeSecrets === null) return;
   try {
     const n = await invoke("export_prompts", { format, ids, includeSecrets });

@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Önce değişikliklerinizi kaydedin.",
     secretExportTitle: "Bu dışa aktarımdaki gizli girişler",
     secretExportMsg: "Bu dışa aktarım {n} gizli giriş içeriyor. Tutulursa şifreli kalırlar ve tekrar okumak için kasa şifresi gerekir. Hariç tutulursa hiç görünmezler.",
+    secretExportSkipMsg: "{n} gizli giriş bu biçimde şifreli kalamaz, bu yüzden hariç tutulur. Şifreli tutmak için JSON olarak dışa aktarın.",
     secretExportInclude: "Şifreli tut",
     secretExportExclude: "Hariç tut",
     editorSecretLabel: "Gizli",

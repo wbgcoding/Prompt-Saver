@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Najpierw zapisz zmiany.",
     secretExportTitle: "Poufne wpisy w tym eksporcie",
     secretExportMsg: "Ten eksport zawiera {n} poufnych wpisów. Zachowane pozostaną zaszyfrowane i do ich ponownego odczytania będzie potrzebne hasło sejfu. Pominięte nie pojawią się wcale.",
+    secretExportSkipMsg: "{n} poufnych wpisów nie może pozostać zaszyfrowanych w tym formacie, więc zostaną pominięte. Wyeksportuj jako JSON, aby zachować je zaszyfrowane.",
     secretExportInclude: "Zachowaj zaszyfrowane",
     secretExportExclude: "Pomiń je",
     editorSecretLabel: "Poufny",

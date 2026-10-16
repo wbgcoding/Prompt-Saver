@@ -6705,6 +6705,7 @@ fn import_folder_files_appends_a_prompt_with_tags_note_and_variants() {
         variants,
         rotate_mode: String::new(),
         favorite: false,
+        secret: false,
     }];
     let count = append_imported_prompts(&mut store, items);
     assert_eq!(count, 1);
@@ -20468,4 +20469,48 @@ fn ffmpeg_download_claim_admits_one_caller_at_a_time() {
     assert!(FlagClaim::take(&FLAG).is_none(), "a second start is refused while the first runs");
     drop(first);
     assert!(FlagClaim::take(&FLAG).is_some(), "the claim is free again once the holder is done");
+}
+
+fn bare_import_store() -> Store {
+    Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() }
+}
+
+#[test]
+fn json_round_trip_keeps_a_confidential_entry_sealed() {
+    let key = [7u8; 32];
+    let mut p = test_prompt("s1");
+    p.name = "Vault".into();
+    p.secret = true;
+    p.text = secret_encrypt("hidden text", &key);
+    p.variants = vec![secret_encrypt("hidden variant", &key)];
+    let mut plain = test_prompt("s2");
+    plain.name = "Plain".into();
+    plain.text = "visible".into();
+    let json = to_json(&[p.clone(), plain]);
+    assert_eq!(json.matches("secret").count(), 1, "the flag is written for the confidential entry only");
+    let data = parse_json_data(&json).unwrap();
+    let mut store = bare_import_store();
+    assert_eq!(append_imported_prompts(&mut store, data.prompts), 2);
+    let back = store.prompts.iter().find(|x| x.name == "Vault").unwrap();
+    assert!(back.secret, "the entry arrives confidential");
+    assert_eq!(back.text, p.text, "its text stays sealed");
+    assert_eq!(secret_decrypt(&back.text, &key).unwrap(), "hidden text");
+    assert!(!store.prompts.iter().find(|x| x.name == "Plain").unwrap().secret);
+}
+
+#[test]
+fn import_ignores_a_secret_flag_on_text_that_is_not_sealed() {
+    let json = r#"[{"name":"Fake","text":"plain words","secret":true}]"#;
+    let data = parse_json_data(json).unwrap();
+    let mut store = bare_import_store();
+    append_imported_prompts(&mut store, data.prompts);
+    assert!(!store.prompts[0].secret, "plain text with the flag set is imported as a plain entry");
+}
+
+#[test]
+fn csv_and_txt_exports_never_carry_confidential_entries() {
+    assert!(secrets_exportable("json", true));
+    assert!(!secrets_exportable("json", false));
+    assert!(!secrets_exportable("csv", true));
+    assert!(!secrets_exportable("txt", true));
 }

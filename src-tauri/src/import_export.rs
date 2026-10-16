@@ -360,6 +360,10 @@ pub(crate) struct ExportPrompt {
     pub(crate) font_size: u32,
     #[serde(default)]
     pub(crate) favorite: bool,
+    // Written only for a confidential entry, which then carries its sealed
+    // text and variants as they are.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) secret: bool,
     #[serde(default)]
     pub(crate) tags: Vec<String>,
     #[serde(default)]
@@ -388,6 +392,7 @@ pub(crate) fn to_json(prompts: &[Prompt]) -> String {
             font: p.font.clone(),
             font_size: p.font_size,
             favorite: p.favorite,
+            secret: p.secret,
             tags: p.tags.clone(),
             notes: p.notes.clone(),
             variants: p.variants.clone(),
@@ -428,6 +433,7 @@ pub(crate) fn parse_json_data(content: &str) -> Result<ImportData, String> {
             variants: item.variants,
             rotate_mode: item.rotate_mode,
             favorite: item.favorite,
+            secret: item.secret,
         });
     }
     Ok(data)
@@ -438,6 +444,12 @@ pub(crate) fn parse_json_data(content: &str) -> Result<ImportData, String> {
 // again -- `false` (the default, matching a fresh install's "aus") drops it from
 // the export entirely rather than silently shipping ciphertext nobody asked for.
 // Pure and unit-testable apart from export_prompts' own file-dialog/format side effects.
+// Only the JSON export carries the confidential flag, so CSV and TXT never ship
+// sealed text: an import of those would read it back as a plain entry.
+pub(crate) fn secrets_exportable(format: &str, include_secrets: bool) -> bool {
+    include_secrets && format == "json"
+}
+
 pub(crate) fn filter_export_secrets(prompts: Vec<Prompt>, include_secrets: bool) -> Vec<Prompt> {
     if include_secrets {
         prompts
@@ -465,7 +477,7 @@ pub(crate) async fn export_prompts(
             }
             _ => store.prompts.clone(),
         };
-        let selected = filter_export_secrets(selected, include_secrets.unwrap_or(false));
+        let selected = filter_export_secrets(selected, secrets_exportable(&format, include_secrets.unwrap_or(false)));
         // A placeholder is a fill-in-at-copy-time thing; an export has no copy
         // moment to fill it in at, so it gets resolved here instead of leaving
         // the raw {#{...}#} syntax in the exported file. Each source is only
@@ -576,6 +588,8 @@ pub(crate) struct ImportedPrompt {
     // Only ever true coming from a JSON file (the one format that also
     // exports this) -- CSV/TXT parsers always set this false.
     pub(crate) favorite: bool,
+    // Only ever true coming from a JSON file; honoured for sealed text only.
+    pub(crate) secret: bool,
 }
 
 // "a,b , c" -> ["a", "b", "c"]. Used by both import parsers; empty parts drop out.
@@ -761,6 +775,7 @@ pub(crate) fn parse_txt(content: &str) -> ImportData {
             variants,
             rotate_mode,
             favorite: false,
+            secret: false,
         });
     }
     data
@@ -819,6 +834,7 @@ pub(crate) fn parse_csv_data(content: &str) -> ImportData {
                 variants,
                 rotate_mode: row.get(16).map(|v| v.trim().to_string()).unwrap_or_default(),
                 favorite: false,
+                secret: false,
             });
     }
     data
@@ -930,6 +946,9 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
         // entry point into a rotating prompt already goes through.
         let variants = sanitize_variants(item.variants);
         let rotate_mode = sanitize_rotate_mode(item.rotate_mode, &variants);
+        // A JSON file keeps an entry confidential when its text and every
+        // variant are still sealed; anything else arrives as a plain entry.
+        let secret = item.secret && looks_sealed(&item.text) && variants.iter().all(|v| looks_sealed(v));
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
@@ -972,11 +991,7 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
             // action picks up any picture this entry carries, same as an
             // ordinary pre-existing entry.
             image_text: String::new(),
-            // A confidential flag never round-trips through an import file
-            // (the exporter either drops the entry or leaves it sealed and
-            // unreadable as plain fields) -- an imported row always starts
-            // out of the vault.
-            secret: false,
+            secret,
         };
         store.prompts.push(prompt);
         count += 1;
@@ -1264,6 +1279,7 @@ pub(crate) fn folder_file_item(name: String, tags: Vec<String>, content: &str) -
         variants: variants.iter().map(|v| upgrade_placeholders(v)).collect(),
         rotate_mode: String::new(),
         favorite: false,
+        secret: false,
     }
 }
 

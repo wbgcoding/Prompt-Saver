@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Salvează mai întâi modificările.",
     secretExportTitle: "Intrări confidențiale în acest export",
     secretExportMsg: "Acest export include {n} intrări confidențiale. Dacă sunt păstrate, rămân criptate și necesită parola seifului pentru a fi citite din nou. Dacă sunt excluse, nu apar deloc.",
+    secretExportSkipMsg: "{n} intrări confidențiale nu pot rămâne criptate în acest format, deci sunt excluse. Exportă ca JSON pentru a le păstra criptate.",
     secretExportInclude: "Păstrează-le criptate",
     secretExportExclude: "Exclude-le",
     editorSecretLabel: "Confidențial",

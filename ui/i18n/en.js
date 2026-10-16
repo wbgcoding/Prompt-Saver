@@ -844,6 +844,7 @@ export default {
     secretNeedsSaveFirst: "Save your changes first.",
     secretExportTitle: "Confidential entries in this export",
     secretExportMsg: "This export includes {n} confidential entries. Kept, they stay encrypted and need the vault password to read again. Left out, they are skipped entirely.",
+    secretExportSkipMsg: "{n} confidential entries cannot stay encrypted in this format, so they are left out. Export as JSON to keep them encrypted.",
     secretExportInclude: "Keep them encrypted",
     secretExportExclude: "Leave them out",
     editorSecretLabel: "Confidential",

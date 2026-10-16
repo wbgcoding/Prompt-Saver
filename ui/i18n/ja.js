@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "先に変更を保存してください。",
     secretExportTitle: "このエクスポート内の機密項目",
     secretExportMsg: "このエクスポートには{n}件の機密項目が含まれます。保持すると暗号化されたまま残り、再度読むには保管庫パスワードが必要です。除外すると全く含まれません。",
+    secretExportSkipMsg: "この形式では{n}件の機密項目を暗号化したまま保てないため、除外されます。暗号化したまま残すには JSON で書き出してください。",
     secretExportInclude: "暗号化のまま保持",
     secretExportExclude: "除外する",
     editorSecretLabel: "機密",

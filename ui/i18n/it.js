@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Salva prima le tue modifiche.",
     secretExportTitle: "Voci riservate in questa esportazione",
     secretExportMsg: "Questa esportazione include {n} voci riservate. Se mantenute, restano cifrate e serve la password del caveau per rileggerle. Se escluse, non compaiono affatto.",
+    secretExportSkipMsg: "{n} voci riservate non possono restare cifrate in questo formato, quindi vengono escluse. Esporta in JSON per mantenerle cifrate.",
     secretExportInclude: "Mantieni cifrate",
     secretExportExclude: "Escludile",
     editorSecretLabel: "Riservato",

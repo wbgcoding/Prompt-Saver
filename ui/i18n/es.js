@@ -957,6 +957,7 @@ export default {
     secretNeedsSaveFirst: "Guarda tus cambios primero.",
     secretExportTitle: "Entradas confidenciales en esta exportación",
     secretExportMsg: "Esta exportación incluye {n} entradas confidenciales. Si se conservan, siguen cifradas y hace falta la contraseña de bóveda para volver a leerlas. Si se excluyen, no aparecen en absoluto.",
+    secretExportSkipMsg: "{n} entradas confidenciales no pueden seguir cifradas en este formato, así que se omiten. Exporta como JSON para conservarlas cifradas.",
     secretExportInclude: "Conservar cifradas",
     secretExportExclude: "Excluirlas",
     editorSecretLabel: "Confidencial",
