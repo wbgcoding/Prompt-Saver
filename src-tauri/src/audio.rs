@@ -1,11 +1,9 @@
-// WASAPI capture only: no knowledge of the video encoder or the feeder
-// thread. Each capture thread owns exactly one endpoint (system loopback
-// on the default render device, or the microphone on the default -- or a
-// chosen -- capture device), converts every packet to the fixed target
-// format and pushes it onto a shared queue. A device that disappears
-// mid-recording (AUDCLNT_E_DEVICE_INVALIDATED) ends only that thread and
-// marks the queue "lost" -- the recording itself, and the other audio
-// source if any, are unaffected.
+// WASAPI capture only: no knowledge of the video encoder or the feeder thread. Each capture
+// thread owns one endpoint (system loopback on the default render device, or the microphone on
+// the default or a chosen capture device), converts every packet to the fixed target format and
+// pushes it onto a shared queue. A device that disappears mid-recording
+// (AUDCLNT_E_DEVICE_INVALIDATED) ends only that thread and marks the queue "lost"; the
+// recording and the other audio source are unaffected.
 use super::{audio_convert_to_target, AudioQueueShared, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -17,9 +15,8 @@ use windows::Win32::Media::Audio::{
 };
 
 // WAVE_FORMAT_IEEE_FLOAT / WAVE_FORMAT_EXTENSIBLE (mmreg.h) and the
-// KSDATAFORMAT_SUBTYPE_IEEE_FLOAT GUID (ksmedia.h) -- like
-// AUDCLNT_E_DEVICE_INVALIDATED below, not exposed by the windows crate's
-// enabled features, so defined directly from their documented values.
+// KSDATAFORMAT_SUBTYPE_IEEE_FLOAT GUID (ksmedia.h): not exposed by the windows crate's enabled
+// features, so defined from their documented values.
 const WAVE_FORMAT_IEEE_FLOAT: u16 = 3;
 const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: windows::core::GUID =
@@ -36,10 +33,8 @@ pub struct MicDevice {
     pub name: String,
 }
 
-// Enumerates active capture (microphone) endpoints for the settings
-// dropdown. Best-effort: any failure just yields an empty list, so a
-// broken audio stack degrades to "use the default device" rather than
-// failing the whole settings dialog.
+// Enumerates active capture (microphone) endpoints for the settings dropdown. Best-effort: a
+// failure yields an empty list, so a broken audio stack falls back to the default device.
 pub fn list_mic_devices() -> Vec<MicDevice> {
     let mut out = Vec::new();
     unsafe {
@@ -110,12 +105,10 @@ pub fn spawn_capture(
                 let in_channels = (*wave_format).nChannels as u32;
                 let in_rate = (*wave_format).nSamplesPerSec;
                 let in_bits = (*wave_format).wBitsPerSample;
-                // GetMixFormat's shared-mode result is WAVEFORMATEXTENSIBLE in
-                // virtually every real case; a 32-bit-per-sample stream is not
-                // always IEEE float -- some audio drivers report 32-bit
-                // *integer* PCM, which decoded as float would be full-scale
-                // noise. wFormatTag == WAVE_FORMAT_EXTENSIBLE means the real
-                // sample type is in Format.SubFormat, not the outer tag.
+                // GetMixFormat's shared-mode result is WAVEFORMATEXTENSIBLE in practice, and a 32-bit stream
+                // is not always IEEE float: some drivers report 32-bit integer PCM, which decoded as float
+                // would be full-scale noise. With WAVE_FORMAT_EXTENSIBLE the real sample type is in
+                // Format.SubFormat.
                 let in_is_float = if (*wave_format).wFormatTag == WAVE_FORMAT_EXTENSIBLE {
                     let ext = wave_format as *const WAVEFORMATEXTENSIBLE;
                     std::ptr::addr_of!((*ext).SubFormat).read_unaligned() == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
@@ -174,9 +167,8 @@ pub fn spawn_capture(
                 if e.code() != AUDCLNT_E_DEVICE_INVALIDATED {
                     super::append_crash_log(&format!("recording audio ({label}): {e}"));
                 }
-                // Any failure ends this source's capture, not only an unplugged
-                // device: a missing default or chosen device, or a refused
-                // start, must reach the bar as well instead of a silent track.
+                // Any failure ends this source's capture, not only an unplugged device (a missing device or
+                // a refused start), and must reach the bar instead of leaving a silent track.
                 queue.mark_lost();
             }
         })
