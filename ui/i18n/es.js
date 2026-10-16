@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "Contraseña incorrecta",
     errPasswordRequired: "Introduce una contraseña",
     errVaultLocked: "Los prompts confidenciales están bloqueados. Desbloquéalos primero.",
+    errVaultWrongKey: "Esta entrada se bloqueó con otra contraseña. Desbloquéala con esa contraseña para editarla.",
     errVaultCorrupt: "Los datos confidenciales están dañados y no se pueden leer",
     errSafetySnapshot: "No se restauró nada: no se pudo hacer una copia de seguridad de tus datos actuales",
     errCopyStore: "No se pudieron copiar tus datos a la carpeta nueva",

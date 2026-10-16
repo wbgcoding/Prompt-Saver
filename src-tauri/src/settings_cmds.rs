@@ -130,19 +130,16 @@ pub(crate) fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> 
         .map(|p| {
             let mut s = SlimPrompt::from(p);
             if p.secret {
-                match secret_key {
-                    Some(key) => {
-                        // Same upgrade as reveal_secret_text: the window must see the
-                        // spelling it can resolve, whatever the sealed text still holds.
-                        s.text = upgrade_placeholders(&secret_decrypt(&p.text, &key).unwrap_or_default());
-                        s.variants = p
-                            .variants
-                            .iter()
-                            .map(|v| upgrade_placeholders(&secret_decrypt(v, &key).unwrap_or_default()))
-                            .collect();
+                // A ciphertext the session key does not open (sealed under another
+                // vault's salt) is sent as locked too, never as an empty open entry
+                // an editor save could overwrite.
+                match reveal_secret_text(p, secret_key) {
+                    Ok((text, variants)) => {
+                        s.text = text;
+                        s.variants = variants;
                         s.locked = false;
                     }
-                    None => {
+                    Err(_) => {
                         s.text = String::new();
                         s.variants = Vec::new();
                         s.locked = true;

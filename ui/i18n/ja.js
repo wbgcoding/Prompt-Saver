@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "パスワードが違います",
     errPasswordRequired: "パスワードを入力してください",
     errVaultLocked: "機密プロンプトはロックされています。先にロックを解除してください。",
+    errVaultWrongKey: "この項目は別のパスワードでロックされています。編集するには、そのパスワードでロックを解除してください。",
     errVaultCorrupt: "機密データが破損していて読み取れません",
     errSafetySnapshot: "何も復元されませんでした。現在のデータの安全用コピーを作成できませんでした",
     errCopyStore: "データを新しいフォルダーにコピーできませんでした",

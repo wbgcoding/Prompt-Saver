@@ -6220,6 +6220,22 @@ fn an_edit_without_text_keeps_a_confidential_prompts_ciphertext() {
     assert_eq!((text.as_str(), variants.as_slice()), ("new", &["v".to_string()][..]));
 }
 
+// An entry sealed under another vault's key shows as locked and refuses a save,
+// so its original ciphertext survives until the right password opens it.
+#[test]
+fn an_entry_sealed_with_another_key_stays_locked_and_refuses_an_edit() {
+    let (mine, theirs) = ([7u8; 32], [9u8; 32]);
+    let mut p = image_text_prompt("s", "");
+    p.secret = true;
+    p.text = secret_encrypt("their secret", &theirs);
+    let slim = slim_prompts(std::slice::from_ref(&p), Some(mine));
+    assert!(slim[0].locked && slim[0].text.is_empty() && slim[0].variants.is_empty());
+    assert_eq!(edited_text_and_variants(&p, Some("typed".into()), None, Some(mine)), Err("secret-wrong-key".to_string()));
+    assert_eq!(secret_decrypt(&p.text, &theirs).unwrap(), "their secret");
+    let slim = slim_prompts(std::slice::from_ref(&p), Some(theirs));
+    assert!(!slim[0].locked && slim[0].text == "their secret");
+}
+
 // The direct hotkey and auto-rotate writes must not carry the cached text.
 #[test]
 fn the_direct_prompt_writes_never_send_the_cached_text() {

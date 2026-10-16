@@ -1434,6 +1434,7 @@ export default {
     errWrongPassword: "Wrong password",
     errPasswordRequired: "Enter a password",
     errVaultLocked: "Confidential prompts are locked. Unlock them first.",
+    errVaultWrongKey: "This entry was locked with a different vault password. Unlock it with that password to edit it.",
     errVaultCorrupt: "The confidential data is damaged and cannot be read",
     errSafetySnapshot: "Nothing was restored: a safety copy of your current data could not be made",
     errCopyStore: "Your data could not be copied to the new folder",

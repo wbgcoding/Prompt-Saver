@@ -1434,6 +1434,7 @@ export default {
     errWrongPassword: "Falsches Passwort",
     errPasswordRequired: "Gib ein Passwort ein",
     errVaultLocked: "Vertrauliche Prompts sind gesperrt. Entsperre sie zuerst.",
+    errVaultWrongKey: "Dieser Eintrag wurde mit einem anderen Passwort gesperrt. Entsperre ihn mit diesem Passwort, um ihn zu bearbeiten.",
     errVaultCorrupt: "Die vertraulichen Daten sind beschädigt und können nicht gelesen werden",
     errSafetySnapshot: "Es wurde nichts wiederhergestellt: Von deinen aktuellen Daten konnte keine Sicherheitskopie angelegt werden",
     errCopyStore: "Deine Daten konnten nicht in den neuen Ordner kopiert werden",

@@ -1149,6 +1149,11 @@ pub(crate) fn edited_text_and_variants(
     let Some(key) = secret_key else {
         return Err("secret-locked".to_string());
     };
+    // The stored ciphertext must open with this key: a different vault's entry would
+    // otherwise be replaced for good by whatever the editor shows.
+    if reveal_secret_text(p, Some(key)).is_err() {
+        return Err("secret-wrong-key".to_string());
+    }
     Ok((
         text.map_or_else(|| p.text.clone(), |t| secret_encrypt(&t, &key)),
         variants.map_or_else(|| p.variants.clone(), |v| v.iter().map(|s| secret_encrypt(s, &key)).collect()),

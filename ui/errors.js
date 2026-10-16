@@ -98,6 +98,7 @@ export const ERROR_MSG_KEYS = {
   "password-required": "errPasswordRequired",
   "locked": "errVaultLocked",
   "secret-locked": "errVaultLocked",
+  "secret-wrong-key": "errVaultWrongKey",
   "corrupt-secret": "errVaultCorrupt",
   "corrupt-vault": "errVaultCorrupt",
   "safety-snapshot-failed: {e}": "errSafetySnapshot",

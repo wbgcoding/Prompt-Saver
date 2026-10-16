@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "Nieprawidłowe hasło",
     errPasswordRequired: "Wpisz hasło",
     errVaultLocked: "Poufne prompty są zablokowane. Najpierw je odblokuj.",
+    errVaultWrongKey: "Ten wpis zablokowano innym hasłem. Odblokuj go tym hasłem, aby go edytować.",
     errVaultCorrupt: "Poufne dane są uszkodzone i nie można ich odczytać",
     errSafetySnapshot: "Nic nie zostało przywrócone: nie udało się wykonać kopii zapasowej bieżących danych",
     errCopyStore: "Nie udało się skopiować danych do nowego folderu",

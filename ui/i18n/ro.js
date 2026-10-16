@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "Parolă greșită",
     errPasswordRequired: "Introdu o parolă",
     errVaultLocked: "Prompturile confidențiale sunt blocate. Deblochează-le mai întâi.",
+    errVaultWrongKey: "Această intrare a fost blocată cu altă parolă. Deblocheaz-o cu acea parolă ca să o poți edita.",
     errVaultCorrupt: "Datele confidențiale sunt deteriorate și nu pot fi citite",
     errSafetySnapshot: "Nu s-a restaurat nimic: nu s-a putut face o copie de siguranță a datelor curente",
     errCopyStore: "Datele tale nu au putut fi copiate în dosarul nou",

@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "Yanlış parola",
     errPasswordRequired: "Bir parola gir",
     errVaultLocked: "Gizli promptlar kilitli. Önce kilidi aç.",
+    errVaultWrongKey: "Bu kayıt başka bir parolayla kilitlenmiş. Düzenlemek için o parolayla kilidini aç.",
     errVaultCorrupt: "Gizli veriler bozuk ve okunamıyor",
     errSafetySnapshot: "Hiçbir şey geri yüklenmedi: Mevcut verilerin güvenlik kopyası oluşturulamadı",
     errCopyStore: "Verilerin yeni klasöre kopyalanamadı",

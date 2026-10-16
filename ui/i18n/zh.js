@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "密码错误",
     errPasswordRequired: "请输入密码",
     errVaultLocked: "机密提示词已锁定，请先解锁。",
+    errVaultWrongKey: "此条目是用另一个密码锁定的。请用该密码解锁后再编辑。",
     errVaultCorrupt: "机密数据已损坏，无法读取",
     errSafetySnapshot: "未恢复任何内容：无法为当前数据创建安全副本",
     errCopyStore: "无法将你的数据复制到新文件夹",

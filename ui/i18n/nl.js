@@ -1427,6 +1427,7 @@ export default {
     errWrongPassword: "Onjuist wachtwoord",
     errPasswordRequired: "Voer een wachtwoord in",
     errVaultLocked: "Vertrouwelijke prompts zijn vergrendeld. Ontgrendel ze eerst.",
+    errVaultWrongKey: "Deze invoer is vergrendeld met een ander wachtwoord. Ontgrendel hem met dat wachtwoord om hem te bewerken.",
     errVaultCorrupt: "De vertrouwelijke gegevens zijn beschadigd en kunnen niet worden gelezen",
     errSafetySnapshot: "Er is niets hersteld: er kon geen veiligheidskopie van je huidige gegevens worden gemaakt",
     errCopyStore: "Je gegevens konden niet naar de nieuwe map worden gekopieerd",
