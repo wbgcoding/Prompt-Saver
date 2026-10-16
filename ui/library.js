@@ -1162,11 +1162,14 @@ export function batchErrorToast(e) {
 }
 // Returns whether the batch went through (same contract as doBatch), so the
 // shared tag/archive/delete helpers never report success over a failure.
-export async function doGridBatch(action, extra = {}) {
-  const ids = [...gridSelected];
-  if (!ids.length) return false;
+// The backend call of a batch action plus the same change on the local prompt list,
+// shared by the grid and the library selection. False = the backend refused (the
+// error is already toasted) and nothing changed locally.
+async function mirrorBatch(action, ids, extra = {}) {
   const idset = new Set(ids);
   try {
+    // The backend returns only settings (no prompt echo), so a batch over image-heavy
+    // prompts does not re-serialise every base64 blob over IPC.
     assignSettings(await invoke("batch_prompts", {
       ids, action,
       color: extra.color ?? null,
@@ -1187,6 +1190,13 @@ export async function doGridBatch(action, extra = {}) {
     const key = tagKey(extra.tag);
     for (const p of prompts) if (idset.has(p.id)) p.tags = (p.tags || []).filter((t) => tagKey(t) !== key);
   }
+  return true;
+}
+
+export async function doGridBatch(action, extra = {}) {
+  const ids = [...gridSelected];
+  if (!ids.length) return false;
+  if (!(await mirrorBatch(action, ids, extra))) return false;
   clearGridSelection();
   await renderGrid(true);
   return true;
@@ -1214,32 +1224,7 @@ export async function doBatch(action, extra = {}) {
   const ids = [...libSelected];
   if (!ids.length) return false;
   const idset = new Set(ids);
-  try {
-    // Backend now returns ONLY settings (no prompt echo): so a batch over
-    // image-heavy prompts no longer re-serialises every base64 blob over IPC.
-    assignSettings(await invoke("batch_prompts", {
-      ids, action,
-      color: extra.color ?? null,
-      favorite: extra.favorite ?? null,
-      viewId: extra.viewId ?? null,
-      tag: extra.tag ?? null,
-    }));
-  } catch (e) { batchErrorToast(e); return false; }
-  // Mirror the change onto the local prompt list ourselves.
-  if (action === "delete") assignPrompts(prompts.filter((p) => !idset.has(p.id)));
-  else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
-  else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
-  else if (action === "tag-add") {
-    const key = tagKey(extra.tag);
-    for (const p of prompts) {
-      if (idset.has(p.id) && !(p.tags || []).some((t) => tagKey(t) === key)) {
-        p.tags = [...(p.tags || []), extra.tag];
-      }
-    }
-  } else if (action === "tag-remove") {
-    const key = tagKey(extra.tag);
-    for (const p of prompts) if (idset.has(p.id)) p.tags = (p.tags || []).filter((t) => tagKey(t) !== key);
-  }
+  if (!(await mirrorBatch(action, ids, extra))) return false;
   // The grid sits hidden behind the library modal: rebuilding it (a full fit-text
   // pass) is deferred until the library closes.
   gridDirty = true;
