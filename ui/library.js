@@ -371,7 +371,9 @@ export function computeLibSearchScore(p) {
 // Text nodes only, never markup, so a name or preview can not inject anything.
 function markHits(el, str, q) {
   el.textContent = "";
-  const low = str.toLowerCase();
+  // Folded per character and only where the length stays: toLowerCase() on the whole
+  // string turns U+0130 into two code units and would shift every later index.
+  const low = Array.from(str, (ch) => { const l = ch.toLowerCase(); return l.length === ch.length ? l : ch; }).join("");
   let at = 0;
   for (let i = low.indexOf(q); q && i >= 0; i = low.indexOf(q, at)) {
     if (i > at) el.appendChild(document.createTextNode(str.slice(at, i)));
