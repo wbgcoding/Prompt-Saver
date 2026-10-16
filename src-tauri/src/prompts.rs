@@ -2,12 +2,10 @@ use super::*;
 
 // ---------- Prompt commands ----------
 
-// Async: clones one prompt that may carry a large base64 image; off the UI thread.
-// The editor, duplicate and draft-recovery paths all call this expecting the
-// real, editable text -- never ciphertext -- so a confidential entry is
-// decrypted here with the session key, or the call is refused outright while
-// the vault is locked rather than handing back gibberish a save could then
-// overwrite the real ciphertext with.
+// Async: clones one prompt that may carry a large base64 image, off the UI thread. Callers
+// expect the real editable text, so a confidential entry is decrypted with the session key,
+// or refused while the vault is locked rather than handing back ciphertext a save could
+// then overwrite.
 #[tauri::command]
 pub(crate) async fn get_prompt(state: State<'_, Db>, id: String) -> Result<Option<Prompt>, String> {
     let store = lock(&state);
@@ -60,18 +58,12 @@ pub(crate) fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Opti
     None
 }
 
-// Places every id from `ids` that isn't already in `layout` into a free cell,
-// counting `extra_occupied` (e.g. a grid folder's own cell, which lives
-// outside `layout`) as taken too. All-or-nothing: if there isn't room for
-// every id, nothing is placed and `layout` is left exactly as it was, so a caller
-// that already removed these ids from somewhere else can react to the failure
-// instead of stranding them.
-// `folder_members` are ids already living inside a grid folder of this view --
-// they need no cell of their own, so they never count against the need and
-// never get a layout entry. A stray layout entry left over for one of them
-// (e.g. from before it joined the folder) is dropped once there is room to
-// process the batch, so an old, inconsistent save heals itself here instead of
-// quietly wasting a cell the grid never shows as occupied.
+// Places every id from ids not already in layout into a free cell, counting extra_occupied
+// (e.g. a grid folder's own cell) as taken. All-or-nothing: if there is no room for every
+// id, nothing is placed and layout is unchanged, so a caller that already removed the ids
+// elsewhere can react. folder_members are ids already inside a grid folder of this view:
+// they need no cell and never get a layout entry, and a stray entry for one is dropped once
+// the batch fits, so an inconsistent old save heals.
 pub(crate) fn place_ids_in_view(
     layout: &mut std::collections::HashMap<String, [u32; 2]>,
     ids: &[String],
@@ -133,10 +125,8 @@ pub(crate) fn view_capacity_deficit(
     need.saturating_sub(free)
 }
 
-// Drops `ids` from every layout size a view has ever been resized to, and from
-// its authoritative `members` list -- what a cross-view move's source side does
-// once the target has durably accepted the same ids (batch_prompts "moveView"),
-// so a prompt dragged onto another view's tab never lingers behind in this one.
+// Drops ids from every layout size a view has had and from its members list: the source
+// side of a cross-view move (batch_prompts "moveView") once the target accepted the ids.
 pub(crate) fn strip_ids_from_view(view: &mut View, ids: &[String]) {
     for layout in view.layouts.values_mut() {
         for id in ids {
@@ -146,14 +136,11 @@ pub(crate) fn strip_ids_from_view(view: &mut View, ids: &[String]) {
     view.members.retain(|m| !ids.contains(m));
 }
 
-// Mutation + save core shared by batch_prompts' "addView", "removeView" and
-// "moveView" actions -- kept free of AppHandle so the rollback below can be
-// proven in a unit test. `save` commits `settings` exactly like save_settings
-// does in production and reports whether it landed; on `false` this restores
-// `settings.views` to what it held before the mutation and reports
-// "save-failed", the same contract batch_prompts already gives its other
-// actions for a failed write. A missing view is a silent no-op, matching what
-// the inline arms did before this was pulled out.
+// Mutation and save core for batch_prompts' addView, removeView and moveView, free of
+// AppHandle so the rollback is unit-testable. save commits settings like save_settings does
+// and reports whether it landed; on false this restores settings.views and reports
+// "save-failed", the contract batch_prompts gives its other actions. A missing view is a
+// silent no-op.
 pub(crate) fn apply_view_batch_action(
     settings: &mut Settings,
     action: &str,
@@ -164,9 +151,8 @@ pub(crate) fn apply_view_batch_action(
 ) -> Result<(), String> {
     match action {
         "addView" | "removeView" => {
-            // A grid folder occupies a cell via `tile_folders`, deliberately outside
-            // `view.layouts` (it is not a layout entry, it is the folder's own `cell`
-            // field) -- read it before `views` is borrowed mutably below.
+            // A grid folder occupies a cell via tile_folders, outside view.layouts. Read it before
+            // views is borrowed mutably.
             let folder_cells: std::collections::HashSet<(u32, u32)> = settings
                 .tile_folders
                 .iter()
@@ -203,12 +189,8 @@ pub(crate) fn apply_view_batch_action(
             }
             Ok(())
         }
-        // doGridMove used to call addView then removeView as two separate
-        // IPC round-trips (two separate saves) - a crash between them left the
-        // prompt placed in both views. Both layouts now change in the SAME
-        // in-memory settings before the single save below, so a failure (or a
-        // crash) can only ever be seen before or after the whole move, never
-        // mid-way.
+        // Both layouts change in the same in-memory settings before the single save, so a failure
+        // or crash is seen only before or after the whole move, never midway.
         "moveView" => {
             let folder_cells: std::collections::HashSet<(u32, u32)> = settings
                 .tile_folders
@@ -345,16 +327,11 @@ pub(crate) fn store_attached_file_in(files_dir: &std::path::Path, path: &str, st
 }
 
 // Remove copies in <data>/files that no prompt references any more. Gated by the
-// cleanupFiles flag (default on); only ever touches files inside our own store
-// folder, so a user's originals elsewhere are never affected.
-//
-// Split into a cheap in-memory step (the referenced-file set, computed
-// while the store lock is held) and this slow filesystem sweep (run AFTER the
-// lock is released). The combined version used to run the whole fs::read_dir +
-// remove_file scan while still holding the store mutex, freezing every other
-// window's command on a large attachments folder. Callers: build the set with
-// `orphan_cleanup_enabled` + `orphan_referenced_set` inside their locked block,
-// then call this once the lock is dropped.
+// cleanupFiles flag (default on) and only touches files in our own store folder. Split into
+// a cheap in-memory step (the referenced set, computed under the store lock) and this slow
+// filesystem sweep, which must run after the lock is released so a large attachments folder
+// cannot freeze other windows. Callers build the set with orphan_cleanup_enabled +
+// orphan_referenced_set inside their locked block, then call this once the lock is dropped.
 pub(crate) fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
     sweep_orphan_files_in(&data_dir(app).join("files"), referenced, || {
         app.try_state::<Db>().map(|state| {
@@ -386,12 +363,11 @@ pub(crate) fn sweep_orphan_files_in(
     if candidates.is_empty() {
         return;
     }
-    // `referenced` is a snapshot from before the lock was released, and add/update copy
-    // a NEW attachment into this same folder BEFORE the prompt that references it is in
-    // the store (StagedCopies registers those copies as pending for the whole window).
-    // Re-check every candidate against the store's CURRENT state and the pending set right
-    // before deleting it: one more cheap in-memory HashSet build (no filesystem work under
-    // the lock, so the whole point of splitting this sweep out still holds).
+    // referenced is a snapshot from before the lock was released, and add/update copy a new
+    // attachment into this folder before its prompt is in the store (StagedCopies registers
+    // those as pending). Re-check every candidate against the store's current state and the
+    // pending set right before deleting: one more in-memory HashSet build, no filesystem work
+    // under the lock.
     let Some(live) = live_now() else { return };
     for path in candidates {
         if !live.contains(&norm(&path.to_string_lossy())) && !pending_attachments_contain(&path.to_string_lossy()) {
@@ -404,22 +380,10 @@ pub(crate) fn orphan_cleanup_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("cleanupFiles").copied().unwrap_or(true)
 }
 
-// Recordings sit in <data>/recordings from the moment WGC finishes writing
-// until the post-capture menu decides attach/save/discard -- attach then
-// either copies the file into <data>/files (storeFiles on, covered by
-// sweep_orphan_files above) or leaves file_path pointing straight at this
-// folder (storeFiles off). Either way a recording the user never decided on
-// (app closed with the post-capture menu still open, or before it ever
-// showed) would sit here forever with nothing else to clean it up. Age-gated
-// like sweep_stale_temp_files, not an immediate sweep like sweep_orphan_files
-// above -- a recording still open in that very menu is legitimately
-// unreferenced by any prompt yet, so only files older than STALE_TEMP_FILE_AGE
-// are fair game. Runs once at startup, the same "crash/abnormal-exit
-// leftovers" spot sweep_stale_temp_files already runs from.
-// An mp4 that never reached its stop path has no top-level "moov" atom --
-// a crash/abnormal-exit leftover, not just "maybe still in use". Walks only the
-// box headers (size + fourcc), never the payload; no ffmpeg needed. size==1
-// means a 64-bit "largesize" follows; size==0 means the box runs to EOF.
+// An mp4 that never reached its stop path has no top-level "moov" atom, so it is a crash
+// leftover rather than merely in use. Walks only box headers (size + fourcc), never the
+// payload, and needs no ffmpeg. size==1 means a 64-bit largesize follows; size==0 means the
+// box runs to EOF.
 pub(crate) fn mp4_has_moov(path: &std::path::Path) -> bool {
     use std::io::{Read, Seek, SeekFrom};
     let Ok(mut f) = fs::File::open(path) else { return false };
@@ -444,13 +408,11 @@ pub(crate) fn mp4_has_moov(path: &std::path::Path) -> bool {
             n => n,
         };
         if box_size < 8 {
-            return false; // malformed -- stop rather than loop forever
+            return false; // malformed: stop rather than loop forever
         }
-        // A moov box's declared size running past the actual file length
-        // means the process crashed or was killed mid-write, right after the
-        // header landed but before its payload did -- accepting the header
-        // alone as "moov present" let exactly the truncated recordings this
-        // check exists to catch slip through as healthy.
+        // A moov box whose declared size runs past the file length means a crash right after the
+        // header landed, so accepting the header alone would let truncated recordings pass as
+        // healthy.
         if is_moov {
             return pos.saturating_add(box_size) <= len;
         }
@@ -466,6 +428,12 @@ pub(crate) fn recording_is_broken(path: &std::path::Path) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("mp4")) && !mp4_has_moov(path)
 }
 
+// Removes recordings in <data>/recordings that nobody decided on. They sit there from the
+// moment WGC finishes writing until the post-capture menu decides attach, save or discard;
+// one never decided on (app closed with the menu open) would otherwise stay forever.
+// Age-gated like sweep_stale_temp_files rather than immediate, since a recording open in
+// that menu is legitimately unreferenced: only files older than STALE_TEMP_FILE_AGE
+// qualify. Runs once at startup.
 pub(crate) fn sweep_stale_recordings(
     app: &AppHandle,
     referenced: &std::collections::HashSet<String>,
@@ -476,19 +444,14 @@ pub(crate) fn sweep_stale_recordings(
     sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced, &[], broken_sweep_on, broken_grace, retention_age)
 }
 
-// Split out from sweep_stale_recordings so the actual sweep logic is testable
-// against a plain tempdir -- no AppHandle needed, same split as
-// convert_recording/convert_recording_blocking above. Three independent
-// reasons to remove a file: it is old AND nobody has decided on it yet, it is
-// a broken (moov-less) mp4 past a much shorter grace period, or it is past
-// the retention window (90 days unless changed) -- either way every path in
-// `protected` (the currently recording session's own output + mic sidecar,
-// plus the video editor's currently open source + its own sidecar, if any)
-// is excluded unconditionally, never by age or state, because deleting a
-// file mid-capture or out from under an open editor would be a far worse bug
-// than the one this sweep exists to fix. The retention window only ever
-// touches an UNREFERENCED file, same as the other two reasons -- a recording
-// still attached to a saved prompt is never a candidate, no matter its age.
+// Split out from sweep_stale_recordings so it is testable against a plain tempdir. Three
+// independent reasons to remove a file: it is old and nobody has decided on it, it is a
+// broken (moov-less) mp4 past a much shorter grace period, or it is past the retention
+// window (90 days unless changed). Every path in protected (the current recording's output
+// and mic sidecar, the video editor's open source and its sidecar) is excluded
+// unconditionally, since deleting a file mid-capture or under an open editor is far worse.
+// Retention only touches unreferenced files: a recording attached to a saved prompt is
+// never a candidate.
 pub(crate) fn sweep_stale_recordings_in(
     dir: &Path,
     referenced: &std::collections::HashSet<String>,
@@ -506,13 +469,10 @@ pub(crate) fn sweep_stale_recordings_in(
         if !path.is_file() || protected.iter().any(|p| p == &path) || camera::is_kept_abandoned(&path) {
             continue;
         }
-        // A "<name>.mic.wav" sidecar is referenced whenever its own
-        // recording is -- the mp4 may already be attached to a prompt while
-        // the editor has not yet consolidated the two into one two-track file.
-        // A "<name>.cam.json" sidecar follows the same rule for its own
-        // video (webm or mp4) -- without this, a camera recording's sidecar
-        // aged out and vanished an hour after it was taken even though the
-        // recording itself was still attached to a saved prompt.
+        // A "<name>.mic.wav" sidecar is referenced whenever its recording is (the mp4 may be
+        // attached while the editor has not yet merged the two tracks). A "<name>.cam.json" sidecar
+        // follows the same rule for its video (webm or mp4), or it would age out while the
+        // recording is still attached.
         let is_referenced = referenced.contains(&norm(&path.to_string_lossy()))
             || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())))
             || keys_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())))
@@ -533,9 +493,8 @@ pub(crate) fn sweep_stale_recordings_in(
     (count, bytes)
 }
 
-// Startup's own one-shot result (Db is not managed yet at that point in
-// setup(), and no window exists to toast into) -- the frontend collects it
-// once, early in its own init, via take_recording_sweep_notice().
+// Startup's one-shot result: Db is not managed yet in setup() and no window exists to toast
+// into, so the frontend collects it early in its init via take_recording_sweep_notice().
 pub(crate) static PENDING_SWEEP_NOTICE: Mutex<Option<(u32, u64)>> = Mutex::new(None);
 
 #[tauri::command]
@@ -607,14 +566,11 @@ pub(crate) fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
     (count, bytes)
 }
 
-// A discarded recording sits in its folder's own "verworfen" subfolder
-// -- unconditionally stale-eligible past recDiscardKeepH, no "referenced"
-// check needed (a discarded recording is by definition attached to nothing).
-// recDiscardKeepH <= 0 disables this leg entirely, keeping every discard
-// around until someone clears it by hand. Runs against BOTH places a working
-// recording can live (data_dir's own recordings folder, and the current
-// recordingDir, default or custom) -- discard_recording_file itself accepts
-// either, so the trash this sweeps must cover both too.
+// A discarded recording sits in its folder's "verworfen" subfolder and is stale-eligible
+// past recDiscardKeepH with no referenced check (a discarded recording is attached to
+// nothing). recDiscardKeepH <= 0 disables this leg. Covers both places a working recording
+// can live (data_dir's recordings folder and the current recordingDir), since
+// discard_recording_file accepts either.
 pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let (keep_h, custom) = {
@@ -637,10 +593,9 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
     (count, bytes)
 }
 
-// The discarded-recordings row's own on-demand trigger. sweep_recordings_now
-// below answers for the recordings row instead -- it also runs this same
-// sweep as part of its combined total, so a dedicated command here keeps the
-// two rows from double-reporting or clearing each other's numbers.
+// The discarded-recordings row's on-demand trigger. sweep_recordings_now answers for the
+// recordings row and also runs this sweep in its combined total, so a dedicated command
+// keeps the two rows from double-reporting.
 #[tauri::command]
 pub(crate) fn sweep_discarded_recordings_now(app: AppHandle) -> (u32, u64) {
     sweep_discarded_recordings(&app)
@@ -661,9 +616,7 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             count += 1;
             bytes += size;
             let _ = fs::remove_file(path.with_extension("mic.wav"));
-            // A discarded take's key-overlay sidecar used to be
-            // left behind here, orphaned in the trash forever once its video
-            // was purged.
+            // The key-overlay sidecar goes with its video.
             let _ = fs::remove_file(path.with_extension("keys.json"));
             let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
         }
@@ -671,21 +624,17 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
     (count, bytes)
 }
 
-// "Jetzt aufräumen" -- runs the same sweep on demand and always reports
-// what it did, even when that is nothing: an explicit request needs an answer
-// either way, unlike the silent background sweep above.
+// The "clean up now" button: runs the same sweep on demand and always reports what it did,
+// even nothing, unlike the silent background sweep.
 #[tauri::command]
 pub(crate) fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
     sweep_recordings_now_result(&app)
 }
 
-// Every path the sweep must never touch beyond what `referenced` already
-// covers: the actively-recording session's own output and mic sidecar (a
-// session in progress has no db entry yet), and the video editor's currently
-// open source and its own not-yet-muxed-in sidecar -- neither used to be
-// excluded, so a recording left open in the editor (or its sidecar, on any
-// recording) for longer than the stale/broken grace period was fair game for
-// the very next sweep.
+// Every path the sweep must never touch beyond what referenced covers: the active
+// recording's output and mic sidecar (no db entry yet), and the video editor's open source
+// and its not-yet-muxed sidecar, which would otherwise be fair game after the stale/broken
+// grace period.
 pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = active_recording_path(app) {
@@ -774,10 +723,8 @@ pub(crate) fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
     None
 }
 
-// A trashed prompt still owns its files until it is actually purged:
-// leaving trash out of this scan would let an UNRELATED cleanup pass
-// (triggered by some other prompt's add/delete) sweep away a file a trashed
-// prompt still needs to be restorable.
+// A trashed prompt owns its files until purged: leaving trash out of this scan would let an
+// unrelated cleanup sweep away a file a trashed prompt needs to be restorable.
 pub(crate) fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<String> {
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
     store
@@ -790,11 +737,9 @@ pub(crate) fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<
         .collect()
 }
 
-// Async: persisting all prompts (base64 images) to SQLite must not block the UI
-// thread: a sync command runs on it and froze the window while saving.
-// Every field the frontend's editor form can set arrives as its own parameter,
-// mirroring update_prompt's shape one to one -- a struct wrapper would just move
-// the same field list one level down.
+// Async: persisting all prompts (base64 images) to SQLite must not block the UI thread.
+// Every field the editor form can set arrives as its own parameter, mirroring update_prompt
+// one to one.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn add_prompt(
@@ -829,9 +774,8 @@ pub(crate) async fn add_prompt(
     // placeholder spelling; the stored prompt never does.
     let text = upgrade_placeholders(&text);
     let variants = variants.map(|v| v.iter().map(|s| upgrade_placeholders(s)).collect::<Vec<String>>());
-    // The slow steps (copying a large attachment, ffprobe, OCR) run before the
-    // store lock is taken, so every other window keeps working meanwhile. The
-    // lock is taken again only to validate and insert.
+    // The slow steps (copying a large attachment, ffprobe, OCR) run before the store lock is
+    // taken so other windows keep working; the lock is retaken only to validate and insert.
     let (store_files, ocr_index_on, max_chars) = {
         let store = lock(&state);
         (
@@ -855,9 +799,7 @@ pub(crate) async fn add_prompt(
         None => (0, 0, 0, 0),
     };
     let image_value = image.unwrap_or_default();
-    // Read once and indexed once, right here, on purpose: a search index that
-    // costs an OCR pass on every render would be exactly the defect this is
-    // meant not to be.
+    // Read and indexed once, here: an OCR pass on every render would defeat the search index.
     let image_text = resolved_image_text(&image_value, ocr_index_on, |img| ocr_index_text(img, max_chars));
     let prompt = {
         let mut store = lock(&state);
@@ -917,9 +859,8 @@ pub(crate) async fn add_prompt(
         } else {
             prompt
         };
-        // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
-        // folder priority: so a cell handed out without excluding them saves fine and
-        // then never draws.
+        // A grid folder owns its cell outside view.layouts and the renderer prefers the folder, so a
+        // cell handed out without excluding folder cells saves fine and never draws.
         let folder_cells = active_view_folder_cells(&store.settings);
         let view = store.settings.active_view_mut();
         if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
@@ -929,13 +870,9 @@ pub(crate) async fn add_prompt(
         view.members.push(prompt.id.clone());
         store.prompts.push(prompt.clone());
         if !save_prompts(&app, &store) {
-            // Nothing actually reached disk (or the JSON fallback) - undo the
-            // in-memory add and report it, instead of handing back an id the
-            // editor will believe is safely saved. The layout entry above was
-            // never persisted (save_settings below is skipped too), but left in
-            // memory it would keep its cell occupied for the next add. `members`
-            // gets the same undo so it never names an id that store.prompts no
-            // longer has.
+            // Nothing reached disk (or the JSON fallback): undo the in-memory add and report it instead
+            // of handing back an id the editor believes is saved. The layout entry was never persisted,
+            // but left in memory it would keep its cell occupied; members gets the same undo.
             store.prompts.pop();
             let view = store.settings.active_view_mut();
             view.members.retain(|m| *m != prompt.id);
@@ -972,11 +909,10 @@ pub(crate) struct NewExample {
     pub(crate) image: String,
 }
 
-// Seeds the three onboarding examples exactly once, on a genuinely fresh install:
-// checked and flipped atomically under the same lock so two racing calls (e.g. a
-// double invoke from a slow first paint) can never seed twice. A library that is
-// merely empty again after the user deleted everything does NOT reseed: that is
-// exactly what `examples_seeded` remembers.
+// Seeds the three onboarding examples once, on a genuinely fresh install. Checked and
+// flipped atomically under one lock so racing calls (a double invoke from a slow first
+// paint) cannot seed twice. A library emptied again by the user does not reseed;
+// examples_seeded remembers.
 #[tauri::command]
 pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Vec<NewExample>) -> Result<Vec<Prompt>, String> {
     let created = {
@@ -1034,14 +970,11 @@ pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, e
             created.push(prompt);
         }
         store.settings.examples_seeded = true;
-        // A failed save must not hand the UI prompts that never reached disk:
-        // roll every in-memory change back (view placement included) so a restart
-        // does not silently disagree with what was just shown. The two saves are
-        // rolled back independently: if save_prompts already landed the new prompts,
-        // leaving them in store.prompts is what keeps memory matching disk: undoing
-        // them here too would make the NEXT unrelated save silently erase a write
-        // that already succeeded, and (since examples_seeded would go back to false)
-        // let a retry seed a second, duplicate batch on top of the first.
+        // A failed save must not hand the UI prompts that never reached disk: roll back every
+        // in-memory change (view placement included). The two saves roll back independently: if
+        // save_prompts landed the new prompts, they stay in store.prompts so memory matches disk,
+        // otherwise the next unrelated save would erase a successful write and a retry would seed a
+        // duplicate batch.
         let prompts_ok = save_prompts(&app, &store);
         let settings_ok = save_settings(&app, &store.settings);
         if !prompts_ok || !settings_ok {
@@ -1068,10 +1001,10 @@ pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, e
     Ok(created)
 }
 
-// Of `ids` (normally settings.example_prompt_ids), which are still unedited: no
-// entry in `seeds` (old install, seeded before this field existed) counts as
-// unchanged, same as an id whose prompt is already gone some other way. Shared by
-// dismiss_example_prompts and example_prompts_pending so the two can never disagree.
+// Of ids (normally settings.example_prompt_ids), which are still unedited. No entry in
+// seeds (seeded before the field existed) counts as unchanged, as does an id whose prompt
+// is already gone. Shared by dismiss_example_prompts and example_prompts_pending so they
+// cannot disagree.
 pub(crate) fn examples_still_pristine<'a>(
     ids: impl IntoIterator<Item = &'a String>,
     seeds: &HashMap<String, u64>,
@@ -1090,10 +1023,9 @@ pub(crate) fn examples_still_pristine<'a>(
         .collect()
 }
 
-// "Remove examples": deletes exactly the ids seed_example_prompts recorded and
-// still not edited by the user, through the same batch-delete path (→ trash) a
-// manual multi-select delete would use, so nothing about this is a special,
-// less-safe deletion.
+// "Remove examples": deletes exactly the ids seed_example_prompts recorded that the user has
+// not edited, through the same batch-delete path (to trash) as a manual multi-select
+// delete.
 #[tauri::command]
 pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
     let (ids_to_delete, taken_ids, taken_seeds) = {
@@ -1126,11 +1058,10 @@ pub(crate) fn example_prompts_pending(state: State<Db>) -> usize {
     examples_still_pristine(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
 }
 
-// A save request carries the image only when the user actually touched it: no field
-// means "leave the stored picture alone", and the only way to clear one is the
-// editor's remove button, which sends an explicit empty string. Images no longer
-// ride along with every read of the prompt list, so a save must never be able to
-// mistake "not loaded here" for "the user deleted it".
+// A save carries the image only when the user touched it: no field means leave the stored
+// picture alone, and the editor's remove button sends an explicit empty string. Images do
+// not ride along with every read of the list, so a save must not mistake "not loaded here"
+// for "deleted".
 pub(crate) fn merge_image(stored: &str, incoming: Option<String>) -> String {
     match incoming {
         Some(img) => img,
@@ -1182,8 +1113,7 @@ fn slim_one(state: &State<'_, Db>, p: &Prompt) -> SlimPrompt {
     slim_prompts(std::slice::from_ref(p), key).remove(0)
 }
 
-// Async: same reason as add_prompt; the SQLite write stays off the UI thread.
-// Same shape as add_prompt, for the same reason -- one parameter per editable field.
+// Async: same reason as add_prompt, and one parameter per editable field.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn update_prompt(
@@ -1191,15 +1121,13 @@ pub(crate) async fn update_prompt(
     state: State<'_, Db>,
     id: String,
     name: String,
-    // Absent text/variants = keep what is stored. A write that only changes one
-    // flag (a hotkey, the auto-rotate switch) sends neither, so it can never
-    // replace a confidential entry's real text with whatever its cache held.
+    // Absent text/variants keeps what is stored, so a write that changes one flag (a hotkey,
+    // auto-rotate) cannot replace a confidential entry's real text with a cache.
     text: Option<String>,
     color: String,
-    // Absent = keep whatever is stored. The editor only sends this field when the
-    // user actually changed the picture, so an image that never finished loading
-    // can no longer come back as an empty string and erase the stored one; an
-    // explicit `Some("")` is the "remove image" click and nothing else.
+    // Absent keeps the stored image. The editor sends it only when the picture changed, so an
+    // image that never loaded cannot erase the stored one; an explicit Some("") is the
+    // remove-image click.
     image: Option<String>,
     show_image: Option<bool>,
     copy_image: Option<bool>,
@@ -1224,11 +1152,10 @@ pub(crate) async fn update_prompt(
     // Upgraded before anything below (the version snapshot included) sees the text.
     let text = text.map(|t| upgrade_placeholders(&t));
     let variants = variants.map(|v| sanitize_variants(v.iter().map(|s| upgrade_placeholders(s)).collect()));
-    // Copying an attachment, probing it and OCR-ing a new picture all happen
-    // before the store lock is taken, against a short snapshot of what the
-    // prompt holds now. The locked section below uses those results only when
-    // the prompt still holds exactly that (a concurrent edit falls back to doing
-    // the work inline, as before).
+    // Copying an attachment, probing it and OCR-ing a new picture happen before the store lock,
+    // against a short snapshot of what the prompt holds. The locked section uses those results
+    // only if the prompt still holds exactly that; a concurrent edit falls back to doing the
+    // work inline.
     let (store_files, staged_ocr_on, staged_ocr_max, staged_cur) = {
         let store = lock(&state);
         let cur = store.prompts.iter().find(|p| p.id == id).map(|p| (p.image.clone(), p.file_path.clone(), p.icon_path.clone()));
@@ -1282,29 +1209,23 @@ pub(crate) async fn update_prompt(
             }
             None => None,
         };
-        // Read before the mutable prompt borrow below (a MutexGuard can't be
-        // split into disjoint field borrows) -- only actually run if the
-        // attachment turns out to have changed.
+        // Read before the mutable prompt borrow (a MutexGuard cannot be split into disjoint field
+        // borrows); only run if the attachment changed.
         let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
         let ocr_max_chars = OCR_INDEX_MAX_CHARS;
-        // Read history settings before the mutable prompt borrow (a MutexGuard
-        // can't be split into disjoint field borrows).
+        // Read before the mutable prompt borrow, same reason.
         let hist_on = history_enabled(&store.settings);
         let hist_cap = history_cap(&store.settings);
-        // Same "read before the mutable prompt borrow" rule as ffprobe/ocr/hist
-        // above -- needed below to re-encrypt a confidential entry's edited text
-        // instead of overwriting its ciphertext with the editor's plain value.
+        // Read before the mutable prompt borrow too: needed to re-encrypt a confidential entry's
+        // edited text instead of overwriting its ciphertext.
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
-                // Full pre-edit snapshot so a failed save can roll the live entry
-                // back instead of leaving the UI showing unsaved changes as if they
-                // had taken (they would silently revert on the next restart). Also
-                // doubles as the version-history snapshot source below.
+                // Full pre-edit snapshot, so a failed save can roll the live entry back instead of leaving
+                // unsaved changes on screen that revert on restart. Also the version-history source.
                 let original = p.clone();
-                // The staged results above are valid only for the state they were
-                // computed against.
+                // The staged results are valid only for the state they were computed against.
                 let staged_valid = staged_cur.as_ref().is_some_and(|(i, f, c)| *i == p.image && *f == p.file_path && *c == p.icon_path);
                 // A confidential entry's text/variants must never land in storage
                 // as whatever the editor sent (see edited_text_and_variants).
@@ -1315,10 +1236,9 @@ pub(crate) async fn update_prompt(
                 p.variants = variants;
                 p.rotate_mode = sanitize_rotate_mode(rotate_mode, &p.variants);
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
-                // Same rule as the attachment path above: only a real change to the
-                // picture re-indexes it. Cleared the moment the picture is gone,
-                // re-run (only while ocrIndex is on) the moment it is replaced --
-                // an old picture's leftover text must never survive under a new one.
+                // Only a real change to the picture re-indexes it: cleared when the picture is gone, re-run
+                // (while ocrIndex is on) when replaced, so an old picture's text never survives under a new
+                // one.
                 let image_changed = image.as_deref().is_some_and(|v| v != p.image);
                 p.image = merge_image(&p.image, image);
                 if image_changed {
@@ -1329,9 +1249,8 @@ pub(crate) async fn update_prompt(
                 }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
-                // A real change to either path re-measures the attachment -- a save
-                // that never touched it (every other field edit) must not re-run
-                // ffprobe/image::image_dimensions on every keystroke-triggered save.
+                // A real change to either path re-measures the attachment; a save that never touched it
+                // must not re-run ffprobe on every save.
                 let attachment_changed = file_path.as_deref().is_some_and(|v| v != p.file_path)
                     || icon_path.as_deref().is_some_and(|v| v != p.icon_path);
                 if let Some(fp) = file_path { p.file_path = fp; }
@@ -1379,20 +1298,14 @@ pub(crate) async fn update_prompt(
                     return Err("save-failed".into());
                 }
                 staged_copies.commit();
-                // Snapshot the PRE-edit name/text/variants only once the
-                // edit is durably saved: inserting it before save_prompts (the old
-                // order) left a version row for an edit that never actually happened
-                // whenever the save then failed, and could push real history out past
-                // hist_cap for nothing. Entries ARE content, so editing
-                // only entry 2 of a rotating prompt (name/text untouched) must still
-                // get a row or a restore could never bring that entry back. rotate_mode
-                // is deliberately excluded (order/random is a setting, not content).
+                // Snapshot the pre-edit name/text/variants only once the edit is durably saved: inserting
+                // earlier left a version row for an edit that never happened when the save failed, and
+                // could push real history past hist_cap. Entries are content, so editing only entry 2 of a
+                // rotating prompt still gets a row. rotate_mode is excluded (order/random is a setting).
                 if hist_on && (original.name != clone.name || original.text != clone.text || original.variants != clone.variants) {
                     match db_conn(&app) {
-                        // A failure here loses one version snapshot, not the edit itself
-                        // (which is already durably saved above): not worth failing the
-                        // whole edit over, but silent would mean a restore point just
-                        // vanishes with no trace of why.
+                        // A failure loses one version snapshot, not the saved edit; not worth failing the edit, but
+                        // logged so a missing restore point is traceable.
                         Some(c) => {
                             if let Err(e) = db_add_version(&c, &id, now_secs(), &original.name, &original.text, &original.variants, hist_cap) {
                                 append_crash_log(&format!("version history insert failed for prompt {id}: {e}"));
@@ -1401,13 +1314,9 @@ pub(crate) async fn update_prompt(
                         None => append_crash_log(&format!("version history insert skipped for prompt {id}: no DB connection")),
                     }
                 }
-                // Only sweep the old attachment once the new reference is durably
-                // saved -- otherwise a failed save leaves the DB pointing at a file the
-                // sweep just deleted, with no fallback to recover it from.
-                // Only the cheap in-memory part runs while the lock is held; the
-                // actual filesystem sweep happens below, once the lock is released.
-                // A save that touched neither attachment nor picture cannot have
-                // orphaned a file, so it skips the directory scan.
+                // Sweep the old attachment only once the new reference is durably saved, or a failed save
+                // leaves the DB pointing at a deleted file. Only the cheap in-memory part runs under the
+                // lock; a save that touched neither attachment nor picture skips the directory scan.
                 let orphan_scan = (attachment_changed || image_changed)
                     .then(|| orphan_cleanup_enabled(&store).then(|| orphan_referenced_set(&store)))
                     .flatten();
@@ -1452,10 +1361,9 @@ pub(crate) async fn update_prompt(
 // List a prompt's version snapshots (newest first).
 #[tauri::command]
 pub(crate) async fn list_versions(app: AppHandle, state: State<'_, Db>, prompt_id: String) -> Result<Vec<PromptVersion>, String> {
-    // Snapshots taken while the entry was confidential hold ciphertext, and they stay
-    // that way after it is made plain again; the history panel shows and restores
-    // plain text, so every sealed one is opened here or refused while the vault is
-    // locked, whatever the entry's flag says now.
+    // Snapshots taken while the entry was confidential hold ciphertext and stay that way after
+    // it is made plain. The history panel shows and restores plain text, so every sealed one is
+    // opened here, or refused while the vault is locked.
     let (key, secret) = {
         let store = lock(&state);
         let secret = store.prompts.iter().find(|p| p.id == prompt_id).is_some_and(|p| p.secret);
@@ -1498,22 +1406,17 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
         let (text, variants) = open_snapshot(&text, &variants, secret_key)?;
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
             let original = p.clone();
-            // 35a: the undo snapshot of the CURRENT state must itself succeed before
-            // overwriting it: silently proceeding on failure would make a restore
-            // that can never itself be undone, breaking the "nothing is ever lost"
-            // promise this command exists for.
+            // The undo snapshot of the current state must itself succeed before overwriting it, or a
+            // restore could not be undone and "nothing is ever lost" would break.
             let snapshot_ok = db_conn(&app)
                 .map(|c| db_add_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants, cap).is_ok())
                 .unwrap_or(false);
             if !snapshot_ok {
                 return Err("snapshot-failed".into());
             }
-            // A snapshot taken before the entry ever became confidential holds
-            // plain text; one taken afterwards holds ciphertext already readable
-            // with the current vault key. Either way the entry stays confidential
-            // after a restore, so a plain-text snapshot is encrypted here instead
-            // of landing on disk as-is, and an already-ciphertext one is kept
-            // rather than encrypted a second time.
+            // A snapshot from before the entry became confidential holds plain text; a later one holds
+            // ciphertext readable with the current vault key. The entry stays confidential after a
+            // restore, so plain text is encrypted here and ciphertext is kept as is.
             let (text, variants) = if p.secret {
                 let Some(key) = secret_key else {
                     return Err("secret-locked".to_string());
@@ -1525,12 +1428,10 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             };
             p.name = name;
             p.text = text;
-            // The restored list is our own history, but re-validate anyway (a
-            // version predating MAX_ROTATE_VARIANTS, however unlikely, must not
-            // slip a too-long list past the same floor every other entry point has).
+            // Re-validate the restored list anyway (a version predating MAX_ROTATE_VARIANTS must not
+            // slip a too-long list past the shared floor).
             p.variants = sanitize_variants(variants);
-            // A restore that lands on zero entries must not leave "random" mode
-            // stranded on an empty list (same invariant as everywhere else).
+            // A restore landing on zero entries must not leave "random" mode on an empty list.
             p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
             p.rotate_auto = sanitize_rotate_auto(p.rotate_auto, &p.variants);
             // What the stored entry holds (sealed for a confidential one) is what the
@@ -1545,9 +1446,8 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
                     clone.variants = clone.variants.iter().map(|v| reveal_if_sealed(v, &key)).collect();
                 }
             }
-            // 35a/38: a failed save must roll the live entry back, same pattern as
-            // update_prompt (7): otherwise the UI shows a restored prompt that
-            // silently reverts to the pre-restore text on the next launch.
+            // A failed save rolls the live entry back, as in update_prompt, or the UI shows a restored
+            // prompt that reverts on the next launch.
             if !save_prompts(&app, &store) {
                 if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == pid) {
                     *slot = original;
@@ -1566,12 +1466,9 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
     Ok(restored.map(|(opened, _)| opened))
 }
 
-// The prompt "restore as new" builds from a version snapshot. Name and text/variants
-// come from the version itself; colour, image and tags come from the CURRENT prompt
-// instead, because prompt_versions never stored them (see PromptVersion): there is
-// nothing "older" to restore for any of the three. Everything else starts fresh, the
-// same as any other new entry, so this stays a small addition next to add_prompt
-// rather than a second copy of its whole field list.
+// The prompt "restore as new" builds from a version snapshot. Name and text/variants come
+// from the version; colour, image and tags from the current prompt, since prompt_versions
+// never stored them. Everything else starts fresh as for any new entry.
 pub(crate) fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
     let variants = sanitize_variants(version_variants.iter().map(|s| upgrade_placeholders(s)).collect());
     let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
@@ -1621,11 +1518,10 @@ pub(crate) fn seal_restored_prompt(prompt: &mut Prompt, key: &[u8; 32]) {
     prompt.variants = prompt.variants.iter().map(|v| secret_encrypt(v, key)).collect();
 }
 
-// Keeps a version snapshot AND the current entry: unlike restore_version (which
-// overwrites), this adds a brand-new entry so the two can be compared side by side.
-// The whole thing is one backend command, not a form the frontend prefills and the
-// user then has to save by hand, so it reuses add_prompt's own grid-placement path
-// and never fires an event add_prompt itself would not.
+// Keeps a version snapshot and the current entry: unlike restore_version this adds a new
+// entry so the two can be compared side by side. One backend command (not a form the
+// frontend prefills), reusing add_prompt's grid-placement path and firing no event
+// add_prompt would not.
 #[tauri::command]
 pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>, version_id: i64, suffix: String) -> Result<Option<Prompt>, String> {
     let created = {
@@ -1652,9 +1548,8 @@ pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>,
                 seal_restored_prompt(&mut prompt, &k);
             }
         }
-        // Same placement as add_prompt: next free cell of the active view, which in
-        // practice is the view the user was looking at when they opened this
-        // prompt's history: landing the copy right where the original lives.
+        // Same placement as add_prompt: next free cell of the active view, normally the view whose
+        // history was open.
         let folder_cells = active_view_folder_cells(&store.settings);
         let view = store.settings.active_view_mut();
         if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
@@ -1708,12 +1603,10 @@ pub(crate) fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorit
 
 // Async: keeps the prompt-table rewrite off the UI thread.
 #[tauri::command]
-// "Delete" moves a prompt into the trash table instead of removing it: media
-// files and version history stay exactly as they were, untouched until a real
-// purge (purge_prompt/empty_trash, or the retention sweep). Everything else here
-// (views, floating, folders, hotkeys, tray) is unchanged from the old hard-delete:
-// those are all app-level associations, not part of the prompt's own content, and
-// a restored prompt gets a fresh placement rather than trying to replay them.
+// "Delete" moves a prompt into the trash table: media files and version history stay
+// untouched until a real purge (purge_prompt, empty_trash or the retention sweep). Views,
+// floating, folders, hotkeys and tray are app-level associations released as before; a
+// restored prompt gets a fresh placement.
 pub(crate) async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
     let changed = {
         let mut store = lock(&state);
@@ -1738,11 +1631,8 @@ pub(crate) async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: Stri
         store.settings.video_prefs.remove(&id);
         store.normalize_folders(); // And out of whatever folder held it
         if let Some(pos) = moved {
-            // prompts+trash now move in one transaction, so a failed write can no
-            // longer strand the prompt in neither table. Report success only once it
-            // actually committed - on failure, undo the in-memory move (the trash
-            // entry AND the settings housekeeping above) instead of reporting success
-            // for a move that never reached disk.
+            // prompts and trash move in one transaction. Report success only once it committed; on
+            // failure undo the in-memory move (the trash entry and the settings housekeeping above).
             if !save_prompts_and_trash(&app, &store) {
                 if !store.trash.is_empty() {
                     let mut p = store.trash.remove(0);
@@ -1810,12 +1700,12 @@ pub(crate) fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -
     moved
 }
 
-// Batch operations: apply one action to many prompts in a SINGLE store pass
-// (no per-item save loop, so 100+ selected prompts never stall the UI). Returns the
-// fresh state so the caller re-renders once. Actions: delete / favorite / color /
-// addView / removeView / tag-add / tag-remove.
-// One flag per independent batch action the library toolbar can trigger; splitting
-// this into several commands would just move the argument count into call-site count.
+// Batch operations: apply one action to many prompts in a single store pass (no per-item
+// save loop, so 100+ selected prompts never stall the UI). Returns the fresh state so the
+// caller re-renders once. Actions: delete, favorite, color, addView, removeView, tag-add,
+// tag-remove.
+// One flag per independent batch action the library toolbar can trigger; splitting into
+// several commands would only move the argument count to the call sites.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn batch_prompts(
@@ -1838,14 +1728,10 @@ pub(crate) async fn batch_prompts(
             let original_settings = store.settings.clone();
             let moved = move_batch_to_trash(&mut store, &ids, now_secs());
             if !moved.is_empty() {
-                // Same atomic prompts+trash write as delete_prompt/restore_prompt,
-                // found while fixing those two: batch delete had the identical
-                // stranded-prompt risk. On failure, undo the batch move instead of
-                // reporting success for a save that never reached disk. The moved
-                // prompts go back at the END of store.prompts rather than their exact
-                // original scattered indices - this is a failure-recovery path only,
-                // and the grid position the user actually sees lives in
-                // view.layouts, not the prompts Vec's own order.
+                // Same atomic prompts+trash write as delete_prompt/restore_prompt. On failure undo the batch
+                // move instead of reporting success. The prompts go back at the end of store.prompts, not
+                // their original indices: this is a recovery path, and the visible grid position lives in
+                // view.layouts.
                 if !save_prompts_and_trash(&app, &store) {
                     store.trash.drain(0..moved.len());
                     store.prompts.extend(moved);
@@ -1909,21 +1795,16 @@ pub(crate) async fn batch_prompts(
             let vid = view_id.unwrap_or_default();
             apply_view_batch_action(&mut store.settings, &action, &ids, &vid, "", |s| save_settings(&app, s))?;
         }
-        // doGridMove used to call addView then removeView as two separate
-        // IPC round-trips (two separate save_settings) - a crash between them left
-        // the prompt placed in both views. Both layouts now change in the SAME
-        // in-memory settings before the single save below, so a failure (or a
-        // crash) can only ever be seen before or after the whole move, never
-        // mid-way.
+        // Both layouts change in the same in-memory settings before the single save, so a failure
+        // or crash is seen only before or after the whole move, never midway.
         "moveView" => {
             let to_id = view_id.unwrap_or_default();
             let from_id = from_view_id.unwrap_or_default();
             apply_view_batch_action(&mut store.settings, &action, &ids, &to_id, &from_id, |s| save_settings(&app, s))?;
         }
-        // Adding a tag a prompt already carries, or removing one it never had, is
-        // not an error -- both just leave that prompt untouched. Casing follows
-        // whatever the library already uses for this tag (canonical_tags), same
-        // rule the single-prompt editor applies.
+        // Adding a tag a prompt already carries, or removing one it never had, just leaves that
+        // prompt untouched. Casing follows the library's existing tag (canonical_tags), like the
+        // single-prompt editor.
         "tag-add" | "tag-remove" => {
             let name = valid_tag_name(&tag.unwrap_or_default())?;
             let known = canonical_tags(&store.prompts);
@@ -1972,10 +1853,8 @@ pub(crate) async fn batch_prompts(
         rearm_hotkeys(&app); // The deleted prompts give their accelerators back
         sync_float_windows(&app); // Folders left too small dissolve
     }
-    // A floating button's own pill/folder window reads view membership too
-    // (pill folders group by view) -- moving or copying a prompt between
-    // views, including dragging a tile onto a view tab, must reach it the
-    // same way any other settings change does.
+    // A floating pill or folder window reads view membership too (pill folders group by view),
+    // so moving or copying a prompt between views must reach it like any other settings change.
     if matches!(action.as_str(), "addView" | "removeView" | "moveView") {
         notify_float_settings(&app);
     }
