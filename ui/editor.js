@@ -1378,7 +1378,16 @@ export async function confirmModal() {
       // The image field only travels when it actually changed: an untouched
       // picture is left to the backend, and "" only ever means the remove button.
       if (image !== (modalState.imageOpened || "")) args.image = image;
-      saved = await invoke("update_prompt", args);
+      try {
+        saved = await invoke("update_prompt", args);
+      } catch (err) {
+        if (String(err) !== "secret-locked") throw err;
+        // The vault key ran out while the dialog was open: nothing typed is lost,
+        // so ask for the password and save once more. A cancelled unlock keeps
+        // the dialog as it is.
+        if (!(await ensureSecretVaultUnlocked())) return;
+        saved = await invoke("update_prompt", args);
+      }
       // Save can turn rotateAuto off (or drop it below two entries) while a
       // session for THIS prompt happens to be armed: end it now instead of
       // waiting for the next paste to notice, same as the tile menu's own toggle.
@@ -1387,6 +1396,11 @@ export async function confirmModal() {
     }
   } catch (err) {
     const errStr = String(err);
+    // A still-locked vault is no hotkey problem either.
+    if (errStr === "secret-locked") {
+      toast(t("secretWrongPassword"));
+      return;
+    }
     // save-failed has no hotkey involved - route it through the same friendly
     // message the persist-failed event uses, instead of hotkeyMessage's fallback
     // of showing the raw error code verbatim.
