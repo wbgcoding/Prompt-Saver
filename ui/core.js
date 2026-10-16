@@ -19,8 +19,8 @@ export const { convertFileSrc } = window.__TAURI__.core;
 export const invoke = orderedInvoke;
 export { serialInvoke };
 export const { listen, emit } = window.__TAURI__.event;
-// The screenshot editor's resize grip needs the main window's own resize-drag,
-// the same documented v2 API floating.js/folder.js already use for startDragging().
+// The screenshot editor's resize grip needs the main window's own resize-drag (the same v2
+// API floating.js and folder.js use for startDragging()).
 export const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;
 
 export const $ = (id) => document.getElementById(id);
@@ -74,7 +74,6 @@ export const modal = {
   mdPreview: $("modal-md-preview"),
   mdWrap: $("modal-md-wrap"),
   notesText: $("modal-notes-text"),
-  // Tags/hotkey/history share one collapsible now.
   advanced: $("modal-advanced"),
   advancedHead: $("modal-advanced-head"),
   advancedBody: $("modal-advanced-body"),
@@ -85,7 +84,6 @@ export const modal = {
   hotkeyErr: $("modal-hotkey-err"),
   hotkeyAction: $("modal-hotkey-action"),
   hotkeyActionRow: $("modal-hotkey-action-row"),
-  // Rotating prompts.
   rotateToggleRow: $("modal-rotate-toggle-row"),
   rotateSwitch: $("modal-rotate-switch"),
   rotateList: $("modal-rotate-list"),
@@ -99,8 +97,8 @@ export const modal = {
 
 export const DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT;
 export const INPUT_MAX = 160; // keep in sync with .input max-height
-// Grid-dimension and view-count limits are expert values: val("gridMax") /
-// val("maxViews"). The backend keeps a hard ceiling of 100 for both.
+// Grid-dimension and view-count limits are expert values (val("gridMax") / val("maxViews")).
+// The backend keeps a hard ceiling of 100 for both.
 export const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip shows
 export let BUBBLE_MS = 950; // "Copied!" bubble lifetime (expert-tunable)
 export function assignBUBBLE_MS(v) { BUBBLE_MS = v; }
@@ -127,13 +125,12 @@ export function assignDrag(v) { drag = v; }
 
 export const gridTags = new Set(); // same idea, independent selection for the grid
 
-// Single-slot undo for a destructive action outside the editors (which have their
-// own undo stack already). A new destructive action always replaces whatever was
-// pending: there is no history, just the one most recent thing.
+// Single-slot undo for a destructive action outside the editors (which have their own undo
+// stack). A new destructive action replaces whatever was pending; there is no history.
 export let pendingUndo = null; // { restore }
-// Grid bulk selection: its own Set, independent of the library's libSelected.
-// Folder tiles are excluded: a folder stands for several prompts, and "select,
-// then recolor/move/delete" has no single obvious meaning for the group itself.
+// Grid bulk selection: its own Set, independent of the library's libSelected. Folder tiles
+// are excluded: a folder stands for several prompts, and "select, then recolor/move/delete"
+// has no single obvious meaning for the group.
 export let gridSelected = new Set();
 
 export let toastTimer = null;
@@ -153,9 +150,8 @@ export function syncEdgeFade(bar) {
   else delete bar.dataset.fade;
 }
 
-// A status line that carries a live value ("Version 1.6.0", a port, a host) is
-// remembered as key + token + value, so applyI18n can draw it again after a
-// language switch instead of leaving the old language standing.
+// A status line that carries a live value ("Version 1.6.0", a port, a host) is remembered as
+// key + token + value, so applyI18n can redraw it after a language switch.
 export function setStatusText(el, key, token, value) {
   if (!el) return;
   el.dataset.statusKey = key;
@@ -186,10 +182,8 @@ export const ICON_ADD_SQUARE =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8.5v7M8.5 12h7"/></svg>';
 export const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
-// The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not
-// centered in its 24x24 viewBox (its true bounds sit low and to the left),
-// which read as an off-center glyph in the toast's centered icon badge even
-// though the badge itself centers correctly. Shifted to bound [4,20]x[4.5,19.5].
+// The glyph is shifted to bound [4,20]x[4.5,19.5] so it sits centered in the toast's icon
+// badge.
 export const ICON_UNDO =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 4.5 4 9.5l5 5M4 9.5h11a5 5 0 0 1 0 10h-4"/></svg>';
 // Same triangle the expert menu's own caution line uses, so a warning looks like a
@@ -205,11 +199,10 @@ export const ICON_DOWN =
 export const ICON_KEYBOARD =
   '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M5.5 9h1.6v1.6H5.5V9Zm3.2 0h1.6v1.6H8.7V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9ZM5.5 12.2h1.6v1.6H5.5v-1.6Zm3.2 0h1.6v1.6H8.7v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6ZM5.5 15.4h11.6V17H5.5v-1.6Z"/></svg>';
 
-// Icon markup handed out as ready-made nodes. Assigning the same SVG string to
-// innerHTML re-parses it every time, which a list of hundreds of rows pays for
-// once per icon per row; parsing each icon once and copying the result is the
-// same markup for a fraction of the work. Only worth it inside a long loop:
-// a one-off button is clearer with a plain innerHTML.
+// Icon markup handed out as ready-made nodes. Assigning the same SVG string to innerHTML
+// re-parses it every time, which a list of hundreds of rows pays for once per icon per row;
+// parsing once and copying is the same markup for a fraction of the work. Only worth it
+// inside a long loop.
 export const iconNodes = new Map();
 export function putIcon(el, svg) {
   let node = iconNodes.get(svg);
@@ -224,12 +217,11 @@ export function putIcon(el, svg) {
   return el;
 }
 
-// A per-row action icon has to be a <span>, not a real <button>: it sits
-// nested inside the row's own <button> (library/journal rows), and HTML
-// forbids nesting one button in another. This is the keyboard half a real
-// button would give for free: joins the tab order and turns Enter/Space into
-// the same click the element already handles. Call once, right after wiring
-// the element's own "click" listener.
+// A per-row action icon has to be a <span>, not a <button>: it sits nested inside the row's
+// own <button> (library/journal rows), and HTML forbids nesting buttons. This supplies the
+// keyboard half a real button would give: joins the tab order and turns Enter/Space into the
+// click the element already handles. Call once, right after wiring the element's own "click"
+// listener.
 export function makeKeyboardActivatable(el) {
   el.tabIndex = 0;
   el.setAttribute("role", "button");
@@ -244,8 +236,8 @@ export function makeKeyboardActivatable(el) {
 
 export let LANG = "en";
 export let DICT = EN;
-// A language that was stored before it was retired has no option left, which would
-// leave the select blank; show what the app actually falls back to instead.
+// A language stored before it was retired has no option left, which would leave the select
+// blank; show what the app falls back to instead.
 export function setLangSelect() {
   const sel = document.getElementById("lang-select");
   if (!sel) return;
@@ -262,38 +254,38 @@ export async function setLang(pref) {
   if (seq !== langSeq) return;
   LANG = code; DICT = dict;
 }
-// {app} stands for the product name in every translation, so no string spells it.
-// Filling it here means callers never have to pass it.
+// {app} stands for the product name in every translation, so no string spells it; callers
+// never pass it.
 export const t = (key) =>
   applyTerms(String(DICT[key] ?? EN[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
 
-// buildMediaBar (media.js) is shared with the floating pill, which has no
-// synchronous access to t(): so it takes plain resolved strings, not keys.
+// buildMediaBar (media.js) is shared with the floating pill, which has no synchronous access
+// to t(), so it takes resolved strings, not keys.
 export const mediaBarLabels = () => ({
   play: t("mediaPlay"), pause: t("mediaPause"),
   loopOn: t("mediaLoopOn"), loopOff: t("mediaLoopOff"),
   mute: t("mediaMute"), unmute: t("mediaUnmute"),
 });
 
-// The product name never appears in the markup: every [data-brand] element (the
-// <title> and the header label) is filled from ui/brand.js. Runs at load, before
-// the first backend round trip, so the header is never briefly blank.
+// The product name never appears in the markup: every [data-brand] element (the <title> and
+// the header label) is filled from ui/brand.js. Runs at load, before the first backend round
+// trip, so the header is never briefly blank.
 export const applyBrand = () => {
   document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = APP_NAME; });
 };
 
-// shortcuts.js has no i18n state of its own -- every call here binds it to
-// this window's own t()/LANG, so every call site just names the action.
+// shortcuts.js has no i18n state of its own; every call here binds it to this window's t()
+// and LANG.
 export const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
 export const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
 export const shortcutSections = (scopes) => sectionsForScopesRaw(scopes, t, LANG);
 // Every window that has keys of its own, in the order the overview lists them.
 export const ALL_SHORTCUT_SCOPES = ["mainWindow", "library", "launcher", "tray", "vars", "floating", "snipOverlay", "recBar", "camera"];
 
-// Tile color palette ("" = default surface), full spectrum, one modal row.
-// Empty = no color; the rest are hue-sorted and fill two rows of ten with the
-// "none" and custom swatches. The user can recolor the palette (expert menu);
-// COLORS holds the live set, DEFAULT_COLORS the shipped fallback.
+// Tile color palette ("" = default surface), full spectrum, one modal row. Empty = no color;
+// the rest are hue-sorted and fill two rows of ten with the "none" and custom swatches. The
+// user can recolor the palette (expert menu); COLORS holds the live set, DEFAULT_COLORS the
+// shipped fallback.
 export const DEFAULT_COLORS = [
   "",
   "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
@@ -308,8 +300,8 @@ export const PALETTE_LEN = DEFAULT_COLORS.length - 1; // editable hues (index 0 
 export const EMPTY_VALUE = "\u2013";
 export const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-// The pending "finish hiding" step of the last hideToast(). A toast shown inside
-// that window (an Undo whose restore fails) must cancel it, or it hides the new one.
+// The pending "finish hiding" step of the last hideToast(). A toast shown inside that window
+// (an Undo whose restore fails) must cancel it, or it hides the new one.
 let toastHideTimer = null;
 export function hideToast() {
   toastEl.classList.remove("show");
@@ -320,23 +312,20 @@ export function hideToast() {
 // Default toast icon (checkmark badge). Static, developer-controlled SVG.
 export const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
 
-// Relative luminance -> the ink that stays readable on `hex`. Switched off
-// (autoInk), the text is always white; switched on, black only above the
-// expert-tunable inkThreshold (a relative luminance in percent). Its default
-// sits just above the point where black and white reach the same contrast, so
-// the better one wins and a colour that white text only reaches with a shadow
-// gets black text instead.
+// Relative luminance to the ink that stays readable on `hex`. With autoInk off the text is
+// always white; on, black only above the expert-tunable inkThreshold (a relative luminance in
+// percent). Its default sits just above the point where black and white reach the same
+// contrast, so a colour that white text only reaches with a shadow gets black text instead.
 export function readableInk(hex) {
   if (hexLuminance(hex) === null) return "#fff";
   if (!flag("autoInk")) return "#fff";
   return inkFor(hex, val("inkThreshold") / 100) === "#000000" ? "#000" : "#fff";
 }
 
-// White ink stays white up to the user's threshold (a deliberate look), but
-// on a colour past the contrast crossover it gets a dark halo so it reads.
-// The halo can be switched off (inkHalo) or dialed in strength
-// (inkHaloStrength, percent). The second alpha keeps the same ratio to the
-// first at any strength (0.7 to 0.85 was the original fixed look).
+// White ink stays white up to the user's threshold (a deliberate look), but on a colour past
+// the contrast crossover it gets a dark halo so it reads. The halo can be switched off
+// (inkHalo) or dialed in strength (inkHaloStrength, percent); the second alpha keeps the same
+// ratio to the first at any strength.
 export const INK_HALO_RATIO = 0.7 / 0.85;
 export function inkShadow(hex) {
   if (!flag("inkHalo")) return "none";
@@ -347,23 +336,16 @@ export function inkShadow(hex) {
   return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
 }
 
-// Optional action: { label, onClick } adds a button and keeps the toast longer.
-// `tint` (a #rrggbb) paints the icon badge in that colour: the colour picker uses it so the
-// picked colour is visible next to its value.
-// Every toast is now the same themed card (icon badge + message), matching the
-// update notification, so nothing looks like the old flat pill.
-// `chips` is a second, independent action slot: a row of small pill buttons
-// (e.g. the three colour notations) instead of the single `.toast-btn`. Kept
-// separate from `action` rather than folding it in, so every existing single-action
-// caller (undo, update-available, …) is untouched.
-// `duration` overrides the computed auto-hide delay (ms) for this one call --
-// the background language-update notices use their own fixed duration
-// (OCR_LANG_NOTICE_MS) instead of the generic TOAST_MS/action-bonus math below. Every existing
-// caller omits it and keeps the old behaviour.
-// Named (not the pill/folder windows' shared COPIED_MS=900 -- this toast
-// chip flash has always run shorter; unifying the value would be a behaviour change).
+// Optional action: { label, onClick } adds a button and keeps the toast longer. `tint` (a
+// #rrggbb) paints the icon badge in that colour: the colour picker uses it so the picked
+// colour is visible next to its value. `chips` is a second, independent action slot: a row of
+// small pill buttons (e.g. the three colour notations) instead of the single `.toast-btn`.
+// `duration` overrides the computed auto-hide delay (ms) for this one call; the background
+// language-update notices use their own fixed duration (OCR_LANG_NOTICE_MS).
+// Shorter than the pill and folder windows' shared copied duration (900 ms): this toast chip
+// flash is brief by design.
 export const CHIP_COPIED_MS = 400;
-// Fixed layout and timing values that used to be expert settings.
+// Fixed layout and timing values.
 export const HEADER_PAD_Y = 10; // px, vertical padding of the header bar
 export const TILE_FOLDER_ZONE = 55; // % of a tile that means "drop into a folder"
 export const KB_FOCUS_FADE_MS = 2000; // delay before the keyboard focus ring fades
@@ -376,8 +358,8 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   clearTimeout(toastHideTimer);
   toastEl.textContent = "";
   const hasChips = !!(chips && chips.length);
-  // Only actionable toasts capture clicks; plain ones stay click-through so they
-  // never block the UI underneath. The card layout lives on the base .toast now.
+  // Only actionable toasts capture clicks; plain ones stay click-through so they never block
+  // the UI underneath.
   toastEl.classList.toggle("actionable", !!action || hasChips);
   toastEl.classList.toggle("update", !!(action && action.variant === "update"));
   toastEl.classList.toggle("tinted", !!tint);
@@ -414,10 +396,9 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
       chip.textContent = c.label;
       chip.classList.toggle("is-current", !!c.current); // the one on the clipboard
       chip.setAttribute("aria-pressed", String(!!c.current));
-      // Copies again without closing the toast: comparing/re-picking a different
-      // notation is the whole point, unlike the single-action button above. The
-      // clicked chip becomes "current" too: it is now what sits on the clipboard,
-      // and the row must show exactly one such chip at a time.
+      // Copies again without closing the toast (comparing or re-picking a notation is the point).
+      // The clicked chip becomes "current" too: it is now on the clipboard, and the row shows
+      // exactly one such chip.
       chip.addEventListener("click", () => {
         c.onClick();
         for (const other of row.children) {
@@ -435,14 +416,14 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   void toastEl.offsetWidth;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  // A toast carrying an action button or chips needs longer to read/click than a
-  // plain message. It is the plain duration plus a fixed bonus (12000ms in all).
+  // A toast carrying an action button or chips needs longer to read and click than a plain
+  // message: the plain duration plus a fixed bonus (12000ms in all).
   toastTimer = setTimeout(hideToast, duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
 }
 
-// Logs the error and returns the text the user is shown for it. A string with no
-// translation is never shown raw: the user gets the generic "something went wrong"
-// text and the raw string goes to the error log.
+// Logs the error and returns the text the user is shown for it. A string with no translation
+// is never shown raw: the user gets the generic "something went wrong" text and the raw
+// string goes to the error log.
 export function errText(err) {
   const msg = errMessage(err, t);
   logErrorLogEntry(msg, String(err));
@@ -452,9 +433,8 @@ export function errToast(err) {
   toast(errText(err));
 }
 
-// Best-effort label for which part of the app an error most likely belongs to,
-// read from what is on screen right now rather than tagging each of errToast's
-// many call sites individually.
+// Best-effort label for which part of the app an error most likely belongs to, read from
+// what is on screen rather than tagging each of errToast's many call sites.
 export function currentErrorOrigin() {
   const openOverlay = document.querySelector(".overlay:not(.hidden)[id]");
   if (openOverlay) return openOverlay.id;
@@ -462,8 +442,8 @@ export function currentErrorOrigin() {
   return "main";
 }
 
-// Fire-and-forget: a failure to log the log itself must never show another
-// error (recursing back into errToast) or block the toast the user is waiting on.
+// Fire-and-forget: a failure to log the log itself must never show another error (recursing
+// into errToast) or block the toast the user is waiting on.
 export function logErrorLogEntry(text, raw) {
   invoke("log_error", { text, origin: currentErrorOrigin(), raw }).catch(() => {});
 }
@@ -480,9 +460,8 @@ export async function runPendingUndo() {
     errToast(err);
   }
 }
-// Shows `msg` with an Undo button wired to `restore`: unless the Undo time is Off,
-// in which case it is a plain toast and nothing is armed (an off setting must mean
-// nothing is kept around to undo, not just a hidden button).
+// Shows `msg` with an Undo button wired to `restore`. With the Undo time Off it is a plain
+// toast and nothing is armed (an off setting means nothing is kept around to undo).
 export function undoToast(msg, restore) {
   if (val("undoToastMs") <= 0) { toast(msg); return; }
   pendingUndo = { restore };
@@ -495,10 +474,9 @@ export function errUndoToast(err, restore) {
   undoToast(errText(err), restore);
 }
 
-// For the actions that cannot go to the trash and have nothing to bring them back
-// but the Undo toast (a deleted view, a merged tag): with the Undo time Off nothing
-// would be kept, so ask first. With Undo on, the toast is the safety net and this
-// resolves true at once.
+// For actions that cannot go to the trash and have nothing to bring them back but the Undo
+// toast (a deleted view, a merged tag): with the Undo time Off nothing would be kept, so ask
+// first. With Undo on, the toast is the safety net and this resolves true at once.
 export async function confirmIfNoUndo(opts) {
   if (val("undoToastMs") > 0) return true;
   return !!(await confirmDialog(opts));
@@ -527,8 +505,8 @@ export function disarmButton(btn, label) {
 }
 
 // A brand may ship a feature the other way round than this app does (see
-// brands/<slug>.json "flagDefaults"). A stored value always wins, so the default
-// only decides what an untouched install starts with.
+// brands/<slug>.json "flagDefaults"). A stored value always wins; the default only decides
+// what an untouched install starts with.
 export const shipsOn = (key) => {
   const v = FLAG_DEFAULTS[key];
   return typeof v === "boolean" ? v : !isOptFlag(key);
@@ -536,8 +514,8 @@ export const shipsOn = (key) => {
 export const optFlag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) === true;
 // Current state + label key, whichever kind of flag this is.
 export const flagState = (key) => (isOptFlag(key) ? optFlag(key) : flag(key));
-// A sub-toggle counts as off while its own parent is off, so everything hanging off
-// it disappears with the whole branch instead of surviving as an orphan row.
+// A sub-toggle counts as off while its own parent is off, so everything hanging off it
+// disappears with the whole branch instead of surviving as an orphan row.
 export const gateOpen = (gate, seen) => {
   if (!gate) return true;
   const inv = gate[0] === "!";
@@ -558,8 +536,8 @@ export const val = (key) => {
   const v = Number.isFinite(raw) ? raw : cfg.def;
   // 0 is this setting's "unlimited" stop, below its slider minimum on purpose.
   if (cfg.topUnlimited && v === 0) return 0;
-  // Clamp to the setting's own range so no stored/imported value can push a
-  // slider-bounded setting out of bounds (grid geometry etc. stays always valid).
+  // Clamp to the setting's own range so no stored or imported value can push a slider-bounded
+  // setting out of bounds (grid geometry stays valid).
   if (cfg.stops) {
     return Math.min(cfg.stops[cfg.stops.length - 1], Math.max(cfg.stops[0], v));
   }
@@ -570,9 +548,8 @@ export const val = (key) => {
 };
 export const txt = (key) => settings.ui_texts?.[key] || "";
 
-// Wraps a command that reports no real progress of its own (backup, import)
-// with an indeterminate taskbar entry -- "something is happening" is all that
-// can honestly be shown without a percentage to work from.
+// Wraps a command that reports no real progress of its own (backup, import) with an
+// indeterminate taskbar entry; without a percentage that is all that can honestly be shown.
 export async function withTaskbarBusy(op, fn) {
   invoke("set_taskbar_progress", { op, state: "indeterminate" }).catch(() => {});
   try {
@@ -585,13 +562,13 @@ export async function withTaskbarBusy(op, fn) {
 // Expert-menu action buttons (id -> handler); populated by the features that own them.
 export const EXPERT_ACTIONS = {};
 
-// ---- Favorites view: a live, auto-sized grid of every starred prompt.
+// ---- Favorites view: a live, auto-sized grid of every starred prompt. ----
 // Enabled by favViewButton (off by default); the header star toggles it.
 export let favView = false; // currently showing the favorites grid
 export function assignFavView(v) { favView = v; }
 
-// A greyed clear-X inside a text field: brightens on hover, empties the field on
-// click. Wraps the input so the button can sit at its right edge.
+// A greyed clear-X inside a text field: brightens on hover, empties the field on click.
+// Wraps the input so the button can sit at its right edge.
 export const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M7 7l10 10M17 7 7 17"/></svg>';
 // Dialog icons: a stack of records for the data take-over, a padlock for the
 // password prompt.
@@ -600,23 +577,20 @@ export const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4"
 
 export const ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap
 
-// Anything drawn while its picture was still loading tags itself with the id it is
-// waiting for, and only those elements are rebuilt when the bytes land. Re-rendering
-// the whole grid instead would tear down whatever else is going on at that moment:
-// a live colour preview, a half-finished drag: for a background arrival.
+// Anything drawn while its picture was still loading tags itself with the id it is waiting
+// for, and only those elements are rebuilt when the bytes land. Re-rendering the whole grid
+// would tear down whatever else is going on (a live colour preview, a half-finished drag).
 export const IMG_WAIT = "imgWait"; // dataset key: the prompt id this element is waiting for
 
 // ---- Video tiles: YouTube-style hover bar ----
-// Video tiles keep their DOM element across grid re-renders: rebuilding
-// would restart playback. Reparenting the cached wrapper does not.
+// Video tiles keep their DOM element across grid re-renders because rebuilding would restart
+// playback; reparenting the cached wrapper does not.
 export const videoCache = new Map(); // prompt id -> { src, wrap }
 
-// Library/journal thumbnails used to get a fresh <img> with a reassigned
-// base64 src on EVERY render (search re-renders the whole row list on every
-// keystroke), forcing the browser to re-decode the same blob each time. One cache
-// per panel: library and journal can both stay mounted at once (see the video
-// IntersectionObserver comment above), so a single shared cache would rip a thumb
-// out of whichever panel isn't rendering right now.
+// Library and journal thumbnails are cached per panel so a search re-render (every keystroke)
+// does not force the browser to re-decode the same base64 blob. Both panels can stay mounted
+// at once (see the video IntersectionObserver comment), so a single shared cache would rip a
+// thumb out of whichever panel is not rendering.
 export const libThumbCache = new Map(); // prompt id -> { key, el }
 export const journalThumbCache = new Map();
 export function pruneThumbCache(cache) {
@@ -630,17 +604,17 @@ export let memberDrag = null;
 export function assignMemberDrag(v) { memberDrag = v; }
 
 // ---- Arming a folder while a tile is dragged ----
-// The OUTER band of a tile keeps the plain swap; the middle makes a folder, but only
-// after a short dwell, so a quick swap can never turn into one by accident.
+// The outer band of a tile keeps the plain swap; the middle makes a folder, but only after a
+// short dwell, so a quick swap never turns into one by accident.
 export let folderArm = null;
 export function assignFolderArm(v) { folderArm = v; }
 
 export const TB_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7"/></svg>';
 
-// Search re-renders the whole result list, which for a large library means rebuilding
-// every row (and re-decoding every image thumbnail): far too much to do on each
-// keystroke. The field itself stays live; only the list waits for a short pause in
-// typing. Short enough to feel immediate, long enough that a fast typist renders once.
+// Search re-renders the whole result list, which for a large library means rebuilding every
+// row (and re-decoding every thumbnail), far too much per keystroke. The field stays live;
+// only the list waits for a short pause in typing: short enough to feel immediate, long
+// enough that a fast typist renders once.
 export const SEARCH_DEBOUNCE_MS = 120;
 // ms may be a getter, so a caller can read a live value on every keystroke instead
 // of one baked in when the debounced wrapper was created.
@@ -664,8 +638,7 @@ export let libraryTab = "prompts"; // "prompts" | "history"
 export function assignLibraryTab(v) { libraryTab = v; }
 
 // ---- Custom color picker (theme-styled popup with SV field + hue bar) ----
-// Shared with the video editor through colorpop.js, the one implementation
-// both windows load.
+// Shared with the video editor through colorpop.js.
 export let colorPop, openColorPop, closeColorPop;
 export function wireColorPop() {
   ({ el: colorPop, open: openColorPop, close: closeColorPop } = createColorPop());
