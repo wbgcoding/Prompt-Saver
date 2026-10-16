@@ -22,6 +22,7 @@ function extractBlock(marker) {
 }
 const code = [
   extractBlock("async function resolveVarsList("),
+  extractBlock("async function peekResolveCommit("),
   extractBlock("async function copyResolved("),
 ].join("\n");
 

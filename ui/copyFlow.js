@@ -49,7 +49,9 @@ export function markCopied(id) {
 // back to the stored text and must not be followed by a commit). `afterResolve` runs
 // right after the placeholders are answered, cancelled or not. Resolves to copyFn's
 // result, false when cancelled.
-export async function peekResolveCommit(p, copyFn, { afterResolve, resolve = resolveVars } = {}) {
+export async function peekResolveCommit(p, copyFn, opts) {
+  const afterResolve = opts?.afterResolve;
+  const resolve = opts?.resolve ?? resolveVars;
   const rotating = (p.variants || []).length > 0;
   const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
   const rawText = peek ? peek.text : p.text;
