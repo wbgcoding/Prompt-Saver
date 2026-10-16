@@ -20540,3 +20540,10 @@ fn update_waits_for_a_recording_or_a_running_job() {
     assert_eq!(update_blocker(true, false, 2), Some("recording-active"));
     assert_eq!(update_blocker(false, false, 0), None);
 }
+
+#[test]
+fn quit_counts_a_live_recording_as_a_running_job() {
+    assert_eq!(quit_blockers(0, false), 0, "nothing running quits at once");
+    assert_eq!(quit_blockers(0, true), 1, "a recording alone asks first");
+    assert_eq!(quit_blockers(2, true), 3);
+}

@@ -473,7 +473,9 @@ pub(crate) fn do_full_exit(handle: &AppHandle) {
 // confirm dialog lives in its webview, so asking while it is still hidden
 // (minimized to tray) would leave the question unseen.
 pub(crate) fn request_app_quit(app: &AppHandle) {
-    let running = bg_ops_running_count();
+    // A live recording is lost as an unplayable file when the process just
+    // ends, so it counts as a running job and gets the same question.
+    let running = quit_blockers(bg_ops_running_count(), recording_active(app) || REC_STARTING.load(Ordering::SeqCst));
     if running > 0 && !QUIT_CONFIRMED.load(Ordering::SeqCst) {
         show_main(app);
         let _ = app.emit_to("main", "bg-quit-requested", running);
@@ -482,12 +484,36 @@ pub(crate) fn request_app_quit(app: &AppHandle) {
     }
 }
 
+pub(crate) fn quit_blockers(jobs: usize, recording: bool) -> usize {
+    jobs + usize::from(recording)
+}
+
 // Called only after the main window's own dialog asked "N jobs are still
 // running, cancel them and quit?" and the user said yes. Cancels every
 // cancelable job (backup/import have no cancel of their own -- see
 // cancel_all_bg_ops) and then quits for real.
 #[tauri::command]
 pub(crate) async fn confirm_quit_with_running_ops(app: AppHandle) {
+    // The take is finished properly first (the encoder writes its index), and
+    // only then does the shutdown go on.
+    #[cfg(windows)]
+    {
+        let app2 = app.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            // A "finish and continue" switch in flight holds the session out of the
+            // state for a moment; wait it out before asking for the stop.
+            for _ in 0..25 {
+                if recording_active(&app2) || !REC_STARTING.load(Ordering::SeqCst) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            if recording_active(&app2) {
+                let _ = stop_recording_now(&app2);
+            }
+        })
+        .await;
+    }
     cancel_all_bg_ops();
     // The workers only see the cancel flag on their next progress line; give them a
     // moment to stop ffmpeg and remove their staged file before the process ends
