@@ -1608,6 +1608,7 @@ export default {
     recBarMuteMic: "Mikrofonu kapat",
     recBarUnmuteMic: "Mikrofonu aç",
     recBarMicLost: "Mikrofon bağlantısı kesildi: kayıt mikrofonsuz devam ediyor",
+    recBarSystemLost: "Sistem sesi kullanılamıyor: kayıt sistem sesi olmadan devam ediyor",
     pickFailed: "Renk kopyalanamadı. Lütfen tekrar deneyin.",
     colorCopied: "Renk kopyalandı",
     flagColorPicker: "Renk seçici (damlalık)",
