@@ -321,7 +321,9 @@ export function bindCapture() {
     closeRecMorePop();
     recModal.classList.add("hidden");
     recPreview.classList.add("hidden");
+    recPreview.pause();
     recPreview.removeAttribute("src");
+    recPreview.load(); // removing the attribute alone neither stops playback nor frees the file
     recStatus.classList.remove("rec-status-cancellable");
     recStatus.onclick = null;
     pendingRecPath = "";
