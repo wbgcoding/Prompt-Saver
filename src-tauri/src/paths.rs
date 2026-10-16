@@ -52,10 +52,8 @@ pub(crate) fn portable_data_dir() -> Option<PathBuf> {
 // Files that make up a store, in copy order.
 pub(crate) const STORE_FILES: [&str; 3] = ["data.db", "prompts.json", "settings.json"];
 
-// The installed copy's store, if this is a portable run and one exists elsewhere.
-// Nothing is copied here: the app asks first (see `takeover_offer`), in its own
-// window, so the question inherits the theme and language instead of being a bare
-// system box before anything is loaded.
+// The installed copy's store, if this is a portable run and one exists elsewhere. Nothing is
+// copied here: the app asks first (see `takeover_offer`) in its own, themed window.
 pub(crate) fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> Option<PathBuf> {
     let src = std::env::var_os("APPDATA")
         .map(PathBuf::from)
@@ -67,10 +65,9 @@ pub(crate) fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> 
     STORE_FILES.iter().any(|f| src.join(f).exists()).then_some(src)
 }
 
-// One-time move of the store out of the old identifier-based folder
-// (brand::LEGACY_DATA_FOLDER) into DATA_FOLDER, so the rename never loses data.
-// Both the identifier folder Tauri resolves and the frozen legacy name are tried:
-// the second one survives even if Tauri ever changes how app_data_dir is built.
+// One-time move of the store out of the old identifier-based folder (brand::LEGACY_DATA_FOLDER)
+// into DATA_FOLDER. Both the folder Tauri resolves and the frozen legacy name are tried, so
+// it survives a change in how app_data_dir is built.
 pub(crate) fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
     if new.join("data.db").exists() {
         return;
@@ -121,9 +118,7 @@ pub(crate) fn resolve_datapath_redirect(base: PathBuf) -> PathBuf {
     base
 }
 
-// Effective store location. A "datapath" pointer file in the canonical dir can
-// redirect the store to a user-chosen folder (expert menu); on anything missing
-// or invalid it falls back to the canonical dir, so data is never lost.
+// Effective store location: the canonical dir, redirected by a valid "datapath" file.
 pub(crate) fn data_dir(app: &AppHandle) -> PathBuf {
     let resolved = resolve_datapath_redirect(default_data_dir(app));
     // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_DATA_DIR`.
@@ -131,13 +126,9 @@ pub(crate) fn data_dir(app: &AppHandle) -> PathBuf {
     resolved
 }
 
-// The command line's own copy of default_data_dir(): the same portable/APPDATA
-// resolution, minus the AppHandle-only fallback (app.path().app_data_dir(),
-// which default_data_dir only reaches when APPDATA itself is unset) and the
-// legacy-folder migration (a no-op the moment data.db already exists, which it
-// does for every install a command-line launch would ever find). A launch with
-// no AppHandle in reach at all -- there is no window to build one for -- can
-// still resolve the exact folder an ordinary launch would use.
+// The command line's own copy of default_data_dir(): the same portable/APPDATA resolution
+// without the AppHandle-only fallback and the legacy-folder migration (a no-op once data.db
+// exists, as it does for any install a command-line launch would find). Needs no window.
 pub(crate) fn default_data_dir_headless() -> PathBuf {
     if is_portable() {
         if let Some(dir) = portable_data_dir() {
@@ -158,15 +149,13 @@ pub(crate) fn data_dir_headless() -> PathBuf {
     resolve_datapath_redirect(default_data_dir_headless())
 }
 
-// The store's JSON files (prompts.json / settings.json: the DB-write fallback and the
-// legacy pre-SQLite format) hold full prompt bodies and private notes, so they are
-// DPAPI-sealed exactly like the SQLite rows. `dec_str` passes an un-prefixed value
-// through unchanged, which is what still lets a genuinely old plaintext install be
-// migrated in; it is re-sealed the next time it is written.
-// "Missing" (nothing there yet, safe to treat as empty) and "unreadable" (a file IS
-// there but DPAPI/JSON decoding failed: wrong Windows account, corruption) are
-// different situations: a caller that folds both into a bare default silently
-// replaces real, still-present data with an empty one.
+// The store's JSON files (the DB-write fallback and the legacy pre-SQLite format) hold full
+// prompt bodies and private notes, so they are DPAPI-sealed like the SQLite rows. `dec_str`
+// passes an un-prefixed value through, so an old plaintext install still migrates and is
+// re-sealed on its next write.
+// "Missing" (safe to treat as empty) and "unreadable" (a file is there but DPAPI/JSON decoding
+// failed: wrong Windows account, corruption) are different: folding both into a bare default
+// would silently replace real data with an empty one.
 pub(crate) enum SealedRead<T> {
     Missing,
     Unreadable,
@@ -184,10 +173,9 @@ pub(crate) fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> 
     }
 }
 
-// Every import reads a file the user picked (which may have come from someone else)
-// fully into memory before parsing, so a wrong pick (a disk image, a video) has to fail
-// with a clear message instead of exhausting memory. Mirrors the cap the decompression
-// path already applies via `inflate_capped`.
+// Every import reads a user-picked file (possibly from someone else) fully into memory, so a
+// wrong pick (a disk image, a video) must fail with a clear message instead of exhausting
+// memory. Mirrors the cap `inflate_capped` applies.
 pub(crate) const MAX_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 pub(crate) const MAX_THEME_BYTES: u64 = 4 * 1024 * 1024; // a theme is a handful of colour values
 
@@ -195,9 +183,8 @@ pub(crate) fn size_error(max: u64) -> String {
     format!("file is too large; the limit is {} MB", max / (1024 * 1024))
 }
 
-// For the one case that cannot read the bytes itself: the image handed to Windows'
-// text recognizer is opened by Windows, so measuring it up front is the only check
-// available: and a plausible reject message is worth more there than none.
+// For the one case that cannot read the bytes itself: the image given to Windows' text
+// recognizer is opened by Windows, so measuring it up front is the only check available.
 pub(crate) fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
     let len = fs::metadata(path).map_err(|e| e.to_string())?.len();
     if len > max {
@@ -210,11 +197,9 @@ pub(crate) fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), 
     Ok(())
 }
 
-// One open, one read, one decision. Measuring the file and then reading it means
-// two separate opens: the file can grow (or be swapped for a different one)
-// in between, and the limit then describes a file that is no longer the one being
-// read. Reading one byte past the limit is what makes "too large" provable from
-// the bytes actually in hand.
+// One open, one read, one decision: measuring and then reading would open the file twice, and
+// it could grow or be swapped in between. Reading one byte past the limit proves "too large"
+// from the bytes actually in hand.
 pub(crate) fn read_file_capped(path: &std::path::Path, max: u64) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
@@ -226,20 +211,15 @@ pub(crate) fn read_file_capped(path: &std::path::Path, max: u64) -> Result<Vec<u
     Ok(buf)
 }
 
-// The text counterpart, for the Markdown sync folder: the files there belong to the
-// user and nothing stops one of them from being enormous, while the folder is
-// rescanned on a timer. Anything past the limit is skipped rather than read into
-// memory on every single cycle.
+// The text counterpart, for the Markdown sync folder: those files belong to the user and the
+// folder is rescanned on a timer, so anything past the limit is skipped instead of read every cycle.
 pub(crate) fn read_text_capped(path: &std::path::Path, max: u64) -> Option<String> {
     String::from_utf8(read_file_capped(path, max).ok()?).ok()
 }
 
-// Atomic write: temp file then rename, so a crash never truncates data. Returns
-// whether the data actually reached disk, so callers can log a persist failure.
-// The JSON pair is only the fallback for a failed database write. Once the
-// database has accepted the same rows, a file left over from an earlier failed
-// write is stale and would be read back as the truth on the next launch (see
-// load_store), overwriting what was just saved.
+// The JSON pair is only the fallback for a failed database write. Once the database has
+// accepted the same rows, a leftover file from an earlier failed write is stale and would be
+// read back as the truth on the next launch (see load_store).
 pub(crate) fn drop_stale_fallback(dir: &Path, file: &str) {
     let path = dir.join(file);
     if path.exists() {
@@ -247,6 +227,7 @@ pub(crate) fn drop_stale_fallback(dir: &Path, file: &str) {
     }
 }
 
+// Atomic write: returns whether the data reached disk, so callers can log a persist failure.
 pub(crate) fn write_sealed_json<T: Serialize>(path: &Path, data: &T) -> bool {
     match serde_json::to_string(data).map(|j| enc_str(&j)) {
         Ok(json) => write_bytes_atomic(path, json.as_bytes()).is_ok(),
@@ -254,28 +235,22 @@ pub(crate) fn write_sealed_json<T: Serialize>(path: &Path, data: &T) -> bool {
     }
 }
 
-// Never truncate an existing file in place: a crash or a cloud-sync client
-// reading mid-write would otherwise see a valid frontmatter head with a truncated
-// body, and a later poll then imports that as truth. Temp-then-rename next to the
-// target. The temp name keeps the caller's whole file name and appends
-// ".tmp-<id>", so its extension is never the caller's own (path.md ->
-// path.md.tmp-<id>): a filter that only touches one specific extension
-// (sync_sweep_orphans' ".md" check) leaves a leftover temp file alone if the
-// rename is ever interrupted.
+// Never truncate an existing file in place: a crash or a cloud-sync client reading mid-write
+// would see a valid head with a truncated body and import it as truth. Temp-then-rename next
+// to the target. The temp name appends ".tmp-<id>" to the whole file name (path.md ->
+// path.md.tmp-<id>), so a filter on one extension (sync_sweep_orphans' ".md") leaves an
+// interrupted write's temp file alone.
 pub(crate) fn write_file_atomic(path: &Path, content: &str) -> bool {
     write_bytes_atomic(path, content.as_bytes()).is_ok()
 }
 
-// The same, for bytes that are not necessarily text (a conflict copy keeps a file
-// exactly as it was, whatever encoding an editor saved it in), and with the
-// reason when it fails. The data is flushed to disk before the rename, the
-// rename replaces an existing target in one step, and on any error the temp file
-// is removed and the old target is left exactly as it was.
+// The same for bytes that are not necessarily text (a conflict copy keeps a file exactly as
+// saved), with the reason on failure. Data is flushed before the rename, the rename replaces
+// the target in one step, and on any error the temp file is removed and the old target stays.
 //
-// A symlink as the target is followed: the file it points at is replaced, the link
-// stays. Where the folder or the file does not allow the replace (no right to
-// create files there, a file held open without delete sharing), the write falls
-// back to writing the file in place, which is what it did before.
+// A symlink target is followed: the file it points at is replaced, the link stays. Where the
+// replace is not allowed (no right to create files there, a file held open without delete
+// sharing), it falls back to writing in place.
 pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let is_link = fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
     let target = if is_link {
