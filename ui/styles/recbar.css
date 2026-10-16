@@ -73,7 +73,8 @@
 /* The triangle names what it warns about, so it grows to fit its word. */
 .rec-audio.rec-hotkey-warn { width: auto; align-items: center; gap: 4px; }
 .rec-audio.rec-hotkey-warn:not(.hidden) { display: inline-flex; }
-.rec-warn-text { font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* The warning red mixed toward the bar's ink keeps the small label readable on dark bars. */
+.rec-warn-text { font-size: 11px; font-weight: 600; white-space: nowrap; color: color-mix(in srgb, var(--danger) 60%, var(--menu-fg)); }
 
 
 /* Sets the destructive Discard button apart from the actions that keep the take. */
