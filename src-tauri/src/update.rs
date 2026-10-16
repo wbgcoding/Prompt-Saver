@@ -202,21 +202,14 @@ pub(crate) fn run_update_check(app: AppHandle) {
     update_check_tick(&app);
 }
 
-// Toggle an expert feature flag (enabled = feature on).
-// Returns Err only where switching the feature ON has a hard precondition that
-// failed (today: the safety backup prompt-sync takes before it first writes); the
-// flag is then left OFF, so the UI and the store never disagree.
-// Runs off the main thread: switching the receiver on or wider waits for its
-// port to bind, and the activation backup takes as long as the library is large.
-// The live effects of a switch changing that do not depend on the store lock: the
-// window capture exclusion, the collected error list and a running auto-advance
-// session. Shared by the settings window and the command line / receiver, so a
-// `settings set` takes effect without a restart there too.
+// The live effects of a flag switch that do not depend on the store lock: the window
+// capture exclusion, the collected error list and a running auto-advance session. Shared by
+// the settings window and the command line / receiver, so a `settings set` takes effect
+// without a restart there too.
 pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
-    // Capture exclusion applies live to every open window. Never hold the store
-    // lock across window API calls (deadlock risk). The flag says "allow
-    // screenshots", so the exclusion is its OPPOSITE: passing it straight through
-    // is what made the switch work backwards.
+    // Capture exclusion applies live to every open window; never hold the store lock across
+    // window API calls (deadlock risk). The flag says "allow screenshots", so the exclusion is
+    // its opposite.
     if key == ALLOW_SCREENSHOT_KEY {
         apply_capture_exclusion_all(app, !enabled);
     }
@@ -234,6 +227,11 @@ pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
     let _ = app;
 }
 
+// Toggle an expert feature flag. Err only where switching it ON has a hard precondition
+// that failed (e.g. the safety backup prompt-sync takes before its first write); the flag
+// is then left OFF so the UI and the store never disagree. Runs off the main thread:
+// switching the receiver on or wider waits for its port to bind, and the activation backup
+// takes as long as the library is large.
 #[tauri::command(async)]
 pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
     let is_clip = key == "clipWatcher";
@@ -267,25 +265,20 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         notify_float_settings(&app);
         return result;
     }
-    // Turning this ON while demo mode is active is exactly the condition
-    // enable_demo_mode/disable_demo_mode's own real-instance check exists to
-    // prevent (second review, finding 4): a second process that starts once
-    // this is allowed would keep resolving the redirect per write like the
-    // first, so once either flips it, the other's ordinary writes land in
-    // whichever store it does not belong in. Defense in depth alongside that
-    // check, not a replacement for it -- this one is a settings read, not
-    // proof of anything actually running.
+    // Turning this on while demo mode is active is what enable_demo_mode/disable_demo_mode's
+    // real-instance check exists to prevent: a second process started once this is allowed
+    // would resolve the redirect per write like the first, so once either flips it, the other's
+    // writes land in the wrong store. Defense in depth next to that check; this one is only a
+    // settings read, not proof that an instance runs.
     if key == "allowMultipleInstances" && enabled {
         let store = lock(&state);
         if store.settings.ui_flags.get("demoMode").copied().unwrap_or(false) {
             return Err("demo-mode-active".to_string());
         }
     }
-    // The activation work below (a full backup, then one file per prompt) takes
-    // as long as the library is large. It runs on a SNAPSHOT taken under a short
-    // lock rather than with the lock held, the way spawn_sync_write_all already
-    // does: otherwise every copy, every save and every other window waits for
-    // the whole thing to finish.
+    // The activation work below (a full backup, then one file per prompt) takes as long as the
+    // library is large, so it runs on a snapshot taken under a short lock, like
+    // spawn_sync_write_all: otherwise every copy, save and other window would wait for it.
     let clear_ocr_index = key == "ocrIndex" && !enabled;
     let snapshot = {
         let mut store = lock(&state);
@@ -307,10 +300,9 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
             store.settings.ui_flags.insert("promptSync".to_string(), false);
             save_settings(app, &store.settings);
         };
-        // Safety net before the very first sync run ever touches this library:
-        // same shape a manual backup would take, so a bad first sync is always
-        // recoverable. Without it there is nothing to fall back on, so a failure
-        // here ABORTS the activation instead of syncing unprotected.
+        // Safety net before the first sync run touches this library: the same backup a manual one
+        // takes, so a bad first sync is recoverable. A failure here aborts the activation instead
+        // of syncing unprotected.
         let keep = settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).max(1.0) as usize;
         let gfs = gfs_from_settings(&settings);
         if let Err(e) = do_backup(&app, keep, gfs) {
@@ -318,25 +310,23 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
             abort(&app, &state);
             return Err(format!("sync-backup-failed: {e}"));
         }
-        // Synchronous and immediate on purpose (unlike spawn_sync_write_all
-        // below) - this is a one-time, user-initiated activation, not a hot
-        // save path, and the point is the folder really exists before this
-        // command returns "on". If it does not, the activation failed and has
-        // to say so rather than leave a switch on over an empty folder.
+        // Synchronous and immediate on purpose (unlike spawn_sync_write_all): this is a one-time,
+        // user-initiated activation and the folder must really exist before the command returns
+        // "on". If it does not, the activation fails visibly instead of leaving the switch on over
+        // an empty folder.
         let failed = sync_write_all_impl(&app, &prompts, &settings);
         if failed > 0 {
             abort(&app, &state);
             return Err(format!("sync-write-failed: {failed}"));
         }
-        // The poll loop ends itself the moment it next finds the feature off, so
-        // switching it back on needs a fresh one - the claim inside start_sync_poll
-        // makes this safe even if one somehow were still winding down.
+        // The poll loop ends itself when it next finds the feature off, so switching back on needs
+        // a fresh one; the claim inside start_sync_poll makes this safe even if one is still
+        // winding down.
         start_sync_poll(app.clone());
     }
     apply_flag_effects(&app, &key, enabled);
-    // The window itself now always runs (started at boot) since the
-    // auto-advance session needs it independently of this toggle; on/off just
-    // changes what on_clipboard_update does with each event, checked live.
+    // The window itself always runs (started at boot) because the auto-advance session needs
+    // it; the toggle only changes what on_clipboard_update does with each event, checked live.
     let _ = is_clip;
     // Switching the feature off unregisters every prompt accelerator but keeps
     // the stored ones, so switching it back on restores them all.
@@ -347,10 +337,9 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     if is_tray {
         apply_tray_menu(&app);
     }
-    // Switching folders off puts every member back on screen as its own pill (the
-    // folders themselves are kept, so switching it on again restores them). Opening
-    // and closing windows inline from a command is the documented way to deadlock
-    // WebView2, hence the hop onto the runtime.
+    // Switching folders off puts every member back on screen as its own pill (the folders are
+    // kept, so switching on restores them). Opening and closing windows inline from a command
+    // deadlocks WebView2, hence the hop onto the runtime.
     if is_folders {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
@@ -397,9 +386,8 @@ pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value:
     if is_error_log_cap {
         ERROR_LOG_KEEP_BYTES.store((value.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
     }
-    // A new update interval counts from the last check, so the running job picks it
-    // up now instead of after its old wait. The job itself still does nothing while
-    // Auto update is off.
+    // A new update interval counts from the last check, so the running job picks it up now
+    // instead of after its old wait. The job still does nothing while Auto update is off.
     if key == "updateCheckH" {
         scheduler::retime("update-check", update_check_interval(&app));
     }
@@ -407,13 +395,11 @@ pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value:
     Ok(())
 }
 
-// Settings that name a folder the backend itself writes into or deletes from.
-// A generic setter (this one) or a settings/backup import must never be able
-// to point one of these at an arbitrary folder -- each is changed only
-// through its own dedicated command (set_screenshot_dir, set_video_export_dir,
-// set_recording_dir, set_sync_dir), so a subverted renderer calling the
-// generic string setter, or a hostile imported settings file, cannot grant
-// itself write or delete authority over a folder of its choosing.
+// Settings that name a folder the backend itself writes into or deletes from. The generic
+// setter and a settings/backup import must never point one at an arbitrary folder: each
+// changes only through its own command (set_screenshot_dir, set_video_export_dir,
+// set_recording_dir, set_sync_dir), so a subverted renderer or a hostile imported settings
+// file cannot grant itself write or delete authority over a folder of its choosing.
 pub(crate) const PROTECTED_FOLDER_KEYS: [&str; 4] = ["screenshotDir", "videoExportDir", "recordingDir", "syncDir"];
 
 pub(crate) fn is_protected_folder_key(key: &str) -> bool {
@@ -441,9 +427,9 @@ pub(crate) fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: 
     notify_float_settings(&app);
 }
 
-// Dedicated setter for the screenshot save folder -- the expert menu's
-// "Change" button calls pick_folder for the dialog, then this with its
-// result. Kept out of the generic set_ui_text path; see PROTECTED_FOLDER_KEYS.
+// Dedicated setter for the screenshot save folder: the expert menu's "Change" button calls
+// pick_folder, then this. Kept out of the generic set_ui_text path (see
+// PROTECTED_FOLDER_KEYS).
 #[tauri::command]
 pub(crate) fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
     let value = accept_dir_setting(&dir, Path::new(&default_screenshot_dir()), "screenshot")?;
@@ -455,11 +441,9 @@ pub(crate) fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) 
     Ok(())
 }
 
-// Dedicated setter for the video editor's export folder -- same shape as
-// set_screenshot_dir above, and for the same reason. There is no separate
-// built-in default folder here (empty already means "next to the source
-// file"), so accept_dir_setting's default check is a no-op past the empty
-// case above it.
+// Dedicated setter for the video editor's export folder, like set_screenshot_dir and for
+// the same reason. There is no built-in default folder (empty means "next to the source
+// file"), so accept_dir_setting's default check is a no-op past the empty case.
 #[tauri::command]
 pub(crate) fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
     let value = accept_dir_setting(&dir, Path::new(""), "videoExport")?;
@@ -536,18 +520,17 @@ pub(crate) const RELEASE_NOTES_MAX_BYTES: u64 = 2 * 1024 * 1024;
 #[derive(Serialize, Clone)]
 pub(crate) struct WhatsNewSection {
     pub(crate) version: String,
-    // Raw Markdown, including its own "## <version>" heading. The frontend
-    // renders it node by node, the same safe path the update-changelog dialog
-    // already uses, never through innerHTML.
+    // Raw Markdown including its own "## <version>" heading. The frontend renders it node by
+    // node (the safe path the update-changelog dialog uses), never through innerHTML.
     pub(crate) markdown: String,
 }
 
 #[derive(Serialize, Clone)]
 pub(crate) struct WhatsNewResult {
     pub(crate) sections: Vec<WhatsNewSection>,
-    // The version boundary the sections were computed from, None for "fresh
-    // install" or "current version only". Echoed back to whats_new_refresh so
-    // a GitHub refresh reproduces the exact same range.
+    // The version boundary the sections were computed from; None for a fresh install or
+    // "current version only". Echoed back to whats_new_refresh so a GitHub refresh reproduces
+    // the same range.
     pub(crate) since: Option<String>,
 }
 
@@ -585,11 +568,9 @@ pub(crate) fn version_eq(a: &str, b: &str) -> bool {
     !version_newer(a, b) && !version_newer(b, a)
 }
 
-// The three cases the acceptance test names: unchanged version shows nothing,
-// a version jump shows every section strictly after `since` up to and
-// including `current`, and an unknown/absent `since` (fresh install, or a
-// caller that only ever wants the current entry) shows the current version
-// only.
+// Unchanged version shows nothing; a version jump shows every section after `since` up to
+// and including `current`; an unknown or absent `since` (fresh install, or a caller wanting
+// only the current entry) shows the current version only.
 pub(crate) fn sections_for_update(all: &[WhatsNewSection], since: Option<&str>, current: &str) -> Vec<WhatsNewSection> {
     match since {
         Some(v) if version_eq(v, current) => Vec::new(),
@@ -609,10 +590,9 @@ pub(crate) fn whats_new_check_impl(all: &[WhatsNewSection], last_seen: &str, cur
     sections_for_update(all, since, current)
 }
 
-// Startup check: what changed since the version this install last showed.
-// Marks the current version as seen immediately, regardless of whether the
-// caller ever displays the result, matching the toast, which never returns
-// once its version is marked seen.
+// Startup check: what changed since the version this install last showed. Marks the
+// current version as seen immediately, whether or not the caller displays the result, like
+// the toast, which never returns once marked seen.
 #[tauri::command(async)]
 pub(crate) fn whats_new_check(app: AppHandle, state: State<Db>) -> WhatsNewResult {
     let all = parse_release_notes(EMBEDDED_RELEASE_NOTES);
@@ -745,11 +725,10 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
     if !valid_update_url(&url) {
         return Err("invalid update source".to_string());
     }
-    // The URL shape check above only proves the download stays inside our own repo's
-    // release path: it says nothing about the version. Re-assert the release tag
-    // embedded in that same pinned path is actually newer than what's installed, so
-    // an older release reachable at a valid, pinned-repo URL (a stale link, a rolled-back
-    // asset) can never be installed as an "update".
+    // The shape check above only proves the download stays inside our repo's release path, not
+    // the version. Re-assert that the release tag in the pinned path is newer than what is
+    // installed, so an older release at a valid URL (stale link, rolled-back asset) can never
+    // be installed as an update.
     if !update_url_is_newer_release(&url) {
         return Err("this release is not newer than the installed version".to_string());
     }
@@ -773,9 +752,8 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
     Ok(())
 }
 
-// The blocking body of `install_update` above, split out so it can run inside
-// `spawn_blocking` without an `AppHandle` (not needed here) crossing the
-// boundary.
+// The blocking body of `install_update`, split out so it runs in spawn_blocking without an
+// AppHandle crossing the boundary.
 pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     let resp = download_agent().get(&url)
         .set("User-Agent", brand::USER_AGENT)
@@ -792,19 +770,17 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     if bytes.len() as u64 >= UPDATE_MAX_BYTES {
         return Err("installer too large / truncated".to_string());
     }
-    // Sanity-check the download is actually a Windows executable (PE "MZ" header)
-    // before we ever run it: a corruption/wrong-format guard, not authentication
-    // on its own. The real integrity check is the SHA-256 verification directly
-    // below.
+    // Sanity-check the download is a Windows executable (PE "MZ" header): a corruption or
+    // wrong-format guard, not authentication. The real integrity check is the SHA-256
+    // verification below.
     if bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return Err("downloaded file is not a valid installer".to_string());
     }
-    // Integrity: the SHA-256 published beside the installer in the release
-    // (`<installer>.sha256`, same pinned path) must be present AND match. Fail closed:
-    // an installer we cannot authenticate is never executed, so a hash file that is
-    // missing, unreadable or malformed aborts the update just like a mismatch does.
-    // Every release publishes the hash (see `release:publish` in package.json); if one
-    // ever does not, the update is done by hand rather than unverified.
+    // Integrity: the SHA-256 published beside the installer (`<installer>.sha256`, same pinned
+    // path) must be present and match. Fail closed: an installer we cannot authenticate is
+    // never executed, so a missing, unreadable or malformed hash file aborts the update like a
+    // mismatch. Every release publishes the hash (`release:publish` in package.json); if one
+    // ever does not, the update is done by hand.
     let want = ureq::get(&format!("{}.sha256", url))
         .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(30))
