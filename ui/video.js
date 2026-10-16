@@ -649,6 +649,9 @@ function timelinePlan() {
     }
     if (seg.b > a) plan.push({ type: "main", a, b: seg.b });
   }
+  // A position past the current total (the end was trimmed or cut away after the insert)
+  // lands at the end instead of vanishing from the preview and the export; atMs stays as stored.
+  for (; cutIdx < cutClips.length; cutIdx++) plan.push({ type: "clip", op: cutClips[cutIdx] });
   for (const c of endClips) plan.push({ type: "clip", op: c });
   return plan;
 }

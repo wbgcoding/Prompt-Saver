@@ -275,6 +275,17 @@ expect("double frame preview puts its outline inside the border", src.includes("
   expect("clip length and speed combine", e === "enable='between(t,7.500,8.500)'", e);
 }
 
+// A cut-position clip whose stored position now lies past the end (trimmed away
+// after the insert) is placed at the end, not dropped from the plan.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high" });
+  const clip = { tool: "clip", position: "cut", atMs: 30000, missing: false, hasAudio: false, path: "C:/x/clip.mp4", durationMs: 5000 };
+  sb.VE = baseState([clip, { tool: "trim", startMs: 0, endMs: 10000 }]);
+  const plan = vm.runInContext("timelinePlan()", sb);
+  expect("a clip past the total goes to the end", plan.length === 2 && plan[1].type === "clip" && plan[1].op.atMs === 30000, JSON.stringify(plan.map((e) => e.type)));
+  expect("the total counts that clip", vm.runInContext("totalOutMs()", sb) === 15000);
+}
+
 // With every recorded track muted (or turned down), the inserted clip's sound
 // still plays at full level: it gets its own host instead of a muted track.
 {
