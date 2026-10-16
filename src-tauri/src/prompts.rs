@@ -1395,7 +1395,11 @@ pub(crate) async fn update_prompt(
                 // sweep just deleted, with no fallback to recover it from.
                 // Only the cheap in-memory part runs while the lock is held; the
                 // actual filesystem sweep happens below, once the lock is released.
-                let orphan_scan = orphan_cleanup_enabled(&store).then(|| orphan_referenced_set(&store));
+                // A save that touched neither attachment nor picture cannot have
+                // orphaned a file, so it skips the directory scan.
+                let orphan_scan = (attachment_changed || image_changed)
+                    .then(|| orphan_cleanup_enabled(&store).then(|| orphan_referenced_set(&store)))
+                    .flatten();
                 let scale = float_scale_of(&store.settings, &id);
                 Some((clone, scale, rebind, orphan_scan))
             }
