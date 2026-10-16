@@ -1608,6 +1608,7 @@ export default {
     recBarMuteMic: "Microfoon dempen",
     recBarUnmuteMic: "Dempen van microfoon opheffen",
     recBarMicLost: "Microfoon losgekoppeld: opname gaat verder zonder microfoon",
+    recBarSystemLost: "Systeemgeluid niet beschikbaar: opname gaat verder zonder systeemgeluid",
     pickFailed: "Kleur kopiëren is mislukt. Probeer het opnieuw.",
     colorCopied: "Kleur gekopieerd",
     flagColorPicker: "Kleurenkiezer (pipet)",
