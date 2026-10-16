@@ -949,6 +949,33 @@ pub(crate) fn cancel_all_exports() {
     }
 }
 
+// The sources the video editor currently has open or was just offered: only
+// these (besides the app's own recordings and work copies) may be exported.
+fn open_editor_source_paths(app: &AppHandle) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(pending) = app.try_state::<VideoEditorPending>() {
+        out.push(pending.lock().0.clone());
+    }
+    if let Some(offered) = VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        out.push(offered.0.clone());
+    }
+    out
+}
+
+// Whether `src` may feed an export: one of the app's own recordings, a work
+// copy the editor made of an opened file, or exactly the file the editor was
+// handed. A renderer-supplied path outside those is never read.
+pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Path, editor_sources: &[String], src: &Path) -> bool {
+    if is_own_recording_source(allowed_dirs, src) || is_editor_work_copy_in(temp_root, src) {
+        return true;
+    }
+    let Ok(canon) = fs::canonicalize(src) else { return false };
+    editor_sources
+        .iter()
+        .filter(|s| !s.is_empty())
+        .any(|s| fs::canonicalize(s).is_ok_and(|c| c == canon))
+}
+
 // Progress reuses "recording-convert-progress" / ConvertProgressPayload --
 // convert_recording's own event -- rather than a second progress channel; the
 // editor window listens to the same event name while an export is in flight.
@@ -964,6 +991,11 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     let src = PathBuf::from(&req.src_path);
     if !src.is_file() {
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
+    }
+    let editor_sources = open_editor_source_paths(&app);
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    if !export_source_is_allowed(&recording_source_dirs(&app, &state), &own_temp_dir, &editor_sources, &src) {
+        return Err("source-not-allowed".to_string());
     }
     let dst = PathBuf::from(&req.dest_path);
     // The export panel's own "File name" field types straight into

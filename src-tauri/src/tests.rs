@@ -20615,3 +20615,33 @@ fn recording_status_stats_the_file_after_the_session_lock_is_released() {
     assert!(lock_at < scope_end && scope_end < stat_at, "metadata must run after the lock block ends");
     assert!(!body.contains("metadata(&session"), "never stat through the locked session");
 }
+
+#[test]
+fn export_source_is_allowed_only_for_own_recordings_work_copies_and_the_open_editor_file() {
+    let root = std::env::temp_dir().join(format!("ps-exportsrc-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let rec_dir = root.join("recs");
+    let temp_root = root.join("tmp");
+    let work = temp_root.join(format!("{}-openedit-1-2", brand::TEMP_PREFIX));
+    let elsewhere = root.join("elsewhere");
+    for d in [&rec_dir, &work, &elsewhere] {
+        fs::create_dir_all(d).unwrap();
+    }
+    let rec = rec_dir.join("rec-1.mp4");
+    let copy = work.join("clip.mp4");
+    let opened = elsewhere.join("opened.mp4");
+    let foreign = elsewhere.join("private.mp4");
+    for f in [&rec, &copy, &opened, &foreign] {
+        fs::write(f, b"v").unwrap();
+    }
+    let dirs = [rec_dir.clone()];
+    let editor = vec![String::new(), opened.to_string_lossy().to_string()];
+    assert!(export_source_is_allowed(&dirs, &temp_root, &editor, &rec));
+    assert!(export_source_is_allowed(&dirs, &temp_root, &[], &copy), "an editor work copy");
+    assert!(export_source_is_allowed(&dirs, &temp_root, &editor, &opened), "the file the editor was handed");
+    assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, &foreign), "any other readable video");
+    assert!(!export_source_is_allowed(&dirs, &temp_root, &[], &opened), "nothing handed to the editor");
+    assert!(!export_source_is_allowed(&dirs, &temp_root, &[String::new()], &foreign));
+    assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, &elsewhere.join("gone.mp4")));
+    let _ = fs::remove_dir_all(&root);
+}
