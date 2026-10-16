@@ -193,9 +193,13 @@ export function bindCapture() {
         setRecordBtnState("recording");
       } catch (err) {
         // A refused start leaves no recording: close any bar and put the
-        // record button back before the single error toast.
-        invoke("hide_rec_bar").catch(() => {});
-        setRecordBtnState("idle");
+        // record button back before the single error toast. "recording-busy"
+        // means one is still running (a continue is switching its file), so
+        // its bar and button stay as they are.
+        if (!String(err).includes("recording-busy")) {
+          invoke("hide_rec_bar").catch(() => {});
+          setRecordBtnState("idle");
+        }
         errToast(err);
         return;
       }
