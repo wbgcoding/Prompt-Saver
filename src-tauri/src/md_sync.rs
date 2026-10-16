@@ -1544,18 +1544,7 @@ pub(crate) fn sync_poll_apply(
             // view membership below. Either way the settings are dirty.
             settings_changed = true;
             if !placed {
-                let folder_cells = active_view_folder_cells(&store.settings);
-                let view = store.settings.active_view_mut();
-                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-                    let key = grid_key(view.cols, view.rows);
-                    view.layouts.entry(key).or_default().insert(id.clone(), cell);
-                }
-                // Members is the authoritative list: a prompt with a cell but no
-                // membership is purged by the next grid rebuild, and one without a
-                // free cell still belongs to the view (shown as overflow).
-                if !view.members.contains(&id) {
-                    view.members.push(id);
-                }
+                seat_restored_in_active_view(&mut store.settings, &id);
             }
             changed = true;
         } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {

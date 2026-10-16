@@ -37,12 +37,7 @@ pub(crate) fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
     let Some(vid) = settings.views.get(settings.active_index()).map(|v| v.id.clone()) else {
         return Vec::new();
     };
-    settings
-        .tile_folders
-        .iter()
-        .filter(|f| f.view_id == vid)
-        .map(|f| f.cell)
-        .collect()
+    folder_cells_in_view(settings, &vid)
 }
 
 // Same, but also treats `extra` cells (e.g. another grid folder's own cell, which
