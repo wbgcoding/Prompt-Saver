@@ -2,10 +2,10 @@ use super::*;
 
 // ---------- Disk space check (recording start, mid-recording, export) ----------
 
-// Walks up to the nearest existing ancestor: the destination folder may not exist
-// yet (a fresh recordings or export folder), but the drive it will land on always
-// does. GetDiskFreeSpaceExW resolves whichever drive the given path sits on --
-// never a fixed "C:\" -- so a target on a secondary drive is checked correctly.
+// Walks up to the nearest existing ancestor: the destination folder may not exist yet (a
+// fresh recordings or export folder), but the drive it will land on does. GetDiskFreeSpaceExW
+// resolves whichever drive the path sits on, never a fixed "C:\", so a target on a secondary
+// drive is checked correctly.
 #[cfg(windows)]
 pub(crate) fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
     use std::os::windows::ffi::OsStrExt;
@@ -31,10 +31,9 @@ pub(crate) fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
     Ok(free_available)
 }
 
-// The drive letter a path resolves under ("C:"), for the disk-space warning
-// message. Empty when the path has no such prefix -- never happens for the
-// absolute paths this app always deals in; a message missing the drive is
-// harmless either way.
+// The drive letter a path resolves under ("C:"), for the disk-space warning message. Empty
+// when the path has no such prefix, which does not happen for the absolute paths this app
+// deals in; a message missing the drive is harmless either way.
 pub(crate) fn drive_label(path: &std::path::Path) -> String {
     match path.components().next() {
         Some(std::path::Component::Prefix(p)) => p.as_os_str().to_string_lossy().into_owned(),
@@ -42,9 +41,8 @@ pub(crate) fn drive_label(path: &std::path::Path) -> String {
     }
 }
 
-// Bitrate times time, with a flat surcharge for whichever audio track(s) are
-// active (matches REC_AUDIO_KBPS) -- good enough for a warning
-// message, not a byte-exact prediction.
+// Bitrate times time, with a flat surcharge for the active audio track(s) (matches
+// REC_AUDIO_KBPS): good enough for a warning message, not a byte-exact prediction.
 pub(crate) fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_active: bool) -> u64 {
     let total_kbps = video_kbps as u64 + if audio_active { 192 } else { 0 };
     let bytes_per_sec = (total_kbps * 1000) / 8;
@@ -61,8 +59,7 @@ pub(crate) struct RecDiskWarning {
     pub(crate) est_seconds: u64,
 }
 
-// Pure so the threshold decision itself has a real unit test, not just its
-// AppHandle/Db wiring (same reasoning as estimate_export_bytes above it).
+// Pure so the threshold decision has a unit test beyond the AppHandle/Db wiring.
 pub(crate) fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f64, video_kbps: u32, audio_active: bool) -> Option<RecDiskWarning> {
     let free_mb = free_bytes / (1024 * 1024);
     if free_mb as f64 >= warn_mb {
@@ -105,9 +102,8 @@ pub(crate) struct ExportDiskWarning {
     pub(crate) needed_mb: u64,
 }
 
-// needed_bytes already includes whatever headroom the caller wants (see
-// check_export_disk_space: the estimate plus a working-file margin) -- this
-// function only compares it against what is actually free.
+// needed_bytes already includes the headroom the caller wants (see check_export_disk_space:
+// the estimate plus a working-file margin); this only compares it against what is free.
 pub(crate) fn export_disk_warning(drive: String, free_bytes: u64, needed_bytes: u64) -> Option<ExportDiskWarning> {
     let free_mb = free_bytes / (1024 * 1024);
     let needed_mb = needed_bytes / (1024 * 1024);
@@ -124,8 +120,8 @@ pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_k
     let free = free_space_bytes(dest).ok()?;
     let est = estimate_export_bytes(&format, video_kbps, lossless_quality, duration_ms);
     let needed = est.bytes.or(est.high_bytes).unwrap_or(0);
-    // A generous margin rather than a byte-exact one -- covers filesystem
-    // overhead and any working file ffmpeg creates alongside the final output.
+    // A generous margin rather than a byte-exact one: covers filesystem overhead and any working
+    // file ffmpeg creates alongside the final output.
     let needed_with_margin = needed + needed / 5;
     export_disk_warning(drive_label(dest), free, needed_with_margin)
 }
@@ -136,10 +132,9 @@ pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_k
     None
 }
 
-// The batch-export dialog's own version of the check above: the same
-// per-file estimate, summed over every selected recording instead of just
-// one, because a batch's real risk is running out of space partway through
-// the third or fourth file, not the first.
+// The batch-export dialog's version of the check above: the same per-file estimate summed
+// over every selected recording, because a batch's real risk is running out of space partway
+// through a later file, not the first.
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, durations_ms: Vec<u64>) -> Option<ExportDiskWarning> {
@@ -162,10 +157,9 @@ pub(crate) fn check_export_disk_space_batch(dest_dir: String, format: String, vi
     None
 }
 
-// The target half of what start_recording resolves from the picker -- its
-// own function since finish_and_continue_recording never resolves a target
-// this way at all (it reopens against RecSession.target, whatever the
-// running session is ACTUALLY capturing right now, not a fresh pick).
+// The target half of what start_recording resolves from the picker. A separate function
+// because finish_and_continue_recording never resolves a target this way: it reopens against
+// RecSession.target, whatever the running session is capturing now.
 #[cfg(windows)]
 pub(crate) fn resolve_recording_target(
     target_kind: &str, target_id: i64, region_x: i32, region_y: i32, region_w: u32, region_h: u32,
@@ -180,23 +174,17 @@ pub(crate) fn resolve_recording_target(
     }
 }
 
-// Everything BUT the target that start_recording reads from the settings
-// store to build one recording::start() call -- pulled out so
-// finish_and_continue_recording can reopen with EXACTLY the same resolved
-// settings the just-finished part used, instead of duplicating this whole
-// block a second time and risking the two drifting apart. Settings are
-// re-read fresh here rather than copied from the finishing session on
-// purpose: a value the user changed WHILE recording (bitrate, mic device,
-// canvas mode, ...) is meant to take effect starting at the next part, the
-// same way it already would have at the very first start_recording call.
+// Everything but the target that start_recording reads from the settings store to build one
+// recording::start() call, pulled out so finish_and_continue_recording reopens with the same
+// resolved settings instead of a duplicated block that could drift. Settings are re-read fresh
+// on purpose: a value the user changed while recording (bitrate, mic device, canvas mode, ...)
+// takes effect from the next part, as it would at the first start_recording call.
 #[cfg(windows)]
 pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64, f64, f64) {
-    // recCursor ships ON -- only an explicit false switches it off.
-    // recAudioSystem and recAudioMic both ship ON now -- the mic is
-    // captured by default too (into its own track, see start()'s both_active
-    // path), just not audible unless the user brings it up in the editor
-    // afterward. A stored user value (from before this change, or an explicit
-    // opt-out) still wins either way.
+    // recCursor ships on; only an explicit false switches it off. recAudioSystem and recAudioMic
+    // both ship on too: the mic is captured by default into its own track (see start()'s
+    // both_active path) but is not audible until the user brings it up in the editor. A stored
+    // user value (including an explicit opt-out) wins either way.
     let audio = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         recording::AudioConfig {
@@ -207,49 +195,42 @@ pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::Au
         }
     };
     let show_cursor = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("recCursor") != Some(&false);
-    // The quality step (small/high/lossless) only picks the slider's own default in
-    // the UI -- the native H.264 encoder always takes this bitrate as-is. "Lossless"
-    // is produced afterward by convert_recording's CRF-0 re-encode, so this value's
-    // exact size barely matters on that step (see the recQuality tooltip).
+    // The quality step (small/high/lossless) only picks the slider's default in the UI; the
+    // native H.264 encoder always takes this bitrate as is. "Lossless" is produced afterward by
+    // convert_recording's CRF-0 re-encode, so this value's size barely matters for that step (see
+    // the recQuality tooltip).
     let video_kbps =
         db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32;
-    // Every monitor gets capped to this fps regardless of its actual refresh rate
-    // unless overridden here -- a 60/144Hz screen otherwise always recorded at 30.
+    // Every monitor is capped to this fps regardless of its refresh rate unless overridden here;
+    // a 60/144Hz screen would otherwise always record at 30.
     let video_fps =
         db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recFps").copied().unwrap_or(30.0).clamp(10.0, 60.0) as u32;
-    // The canvas a Window recording uses. Defaults to the window's own size
-    // (today's original behaviour, resize-unsafe) rather than every display --
-    // the "every display" candidate chain is opt-in via this same setting,
-    // offered reactively the first time a recording actually hits the resize
-    // problem (see the recording-captured payload's resize_crop_at_ms). No
-    // expert-menu row for this setting yet (a future menu writes it directly).
+    // The canvas a Window recording uses. It defaults to the window's own size (resize-unsafe)
+    // rather than every display; the "every display" candidate chain is opt-in via this setting,
+    // offered the first time a recording hits the resize problem (see the recording-captured
+    // payload's resize_crop_at_ms). No expert-menu row yet (a future menu writes it directly).
     let canvas_mode = {
         let raw = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
         sanitize_canvas_mode(&raw).to_string()
     };
     // One fixed ceiling governs both the width and the height of the canvas.
     let canvas_ceiling = (REC_CANVAS_MAX_PX, REC_CANVAS_MAX_PX);
-    // The mid-recording disk-space watch's own threshold -- see
-    // check_recording_disk_space for the same value used before the start.
+    // The mid-recording disk-space watch's threshold; check_recording_disk_space uses the same
+    // value before the start.
     let disk_warn_mb = REC_DISK_WARN_MB;
-    // Optional safety nets, both off (0) unless the user sets them -- unrelated
-    // to recMaxMb's own older, display-only ETA threshold (see rec_size_eta),
-    // which keeps its own separate 8000 default so adding these rows changes
-    // nothing about what is already shown today.
+    // Optional safety nets, both off (0) unless the user sets them. Unrelated to recMaxMb's older
+    // display-only ETA threshold (see rec_size_eta), which keeps its own 8000 default.
     let max_min = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recMaxMin").copied().unwrap_or(0.0).max(0.0);
     let max_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recMaxMb").copied().unwrap_or(0.0).max(0.0);
     (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
 }
 
-// start_recording's own check-then-act window: rec_can_start passes while
-// RecordingState is still empty, then the actual capture start runs on a
-// blocking thread and only publishes the session into RecordingState once it
-// returns -- a second start racing through that gap used to see the same
-// empty state and pass the same check, so both requests ran the capture
-// start. Claimed together with the rec_can_start check, under the same
-// RecordingState lock, and released by RecStartingGuard on every exit path
-// (an early return, a panic, or a normal finish) so a refused or failed start
-// never leaves the next one locked out for good.
+// start_recording's check-then-act window: rec_can_start passes while RecordingState is still
+// empty, then the capture start runs on a blocking thread and publishes the session only when
+// it returns, so a second start racing through that gap would see the same empty state and
+// pass the same check. The claim is taken together with the rec_can_start check under the
+// same RecordingState lock, and released by RecStartingGuard on every exit path (early
+// return, panic, normal finish) so a refused or failed start never locks out the next one.
 #[cfg(windows)]
 pub(crate) static REC_STARTING: AtomicBool = AtomicBool::new(false);
 
@@ -289,8 +270,8 @@ pub(crate) async fn start_recording(
     let _rec_starting_guard = RecStartingGuard;
     let target = resolve_recording_target(&target_kind, target_id, region_x, region_y, region_w, region_h)?;
     let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) = resolve_recording_settings(&db);
-    // Read once, before the blocking capture start -- keyOverlay's
-    // default is off, so the common case installs no hook at all.
+    // Read once, before the blocking capture start; keyOverlay defaults to off, so the common
+    // case installs no hook.
     let (key_overlay_on, key_overlay_hold_ms, key_overlay_shortcuts_only) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         (keylog::enabled(&g.settings.ui_flags), keylog::HOLD_MS, keylog::shortcuts_only(&g.settings.ui_flags))
@@ -309,25 +290,21 @@ pub(crate) async fn start_recording(
     let session = match session {
         Ok(s) => s,
         Err(e) => {
-            // A refused start (the encoder rejected the type, the target is
-            // gone) must leave nothing behind: no control bar, and the
-            // composer's record button back to idle. recording::start has
+            // A refused start (the encoder rejected the type, the target is gone) must leave nothing
+            // behind: no control bar, and the composer's record button back to idle. recording::start has
             // already deleted the empty output file.
             super::rec_bar::hide_rec_bar(app.clone());
             let _ = app.emit("recording-cancelled", ());
             return Err(e);
         }
     };
-    // Started BEFORE the session is published: a stop/cancel racing in the
-    // instant after publish used to see an already-live recording with no
-    // key-overlay capture yet, since maybe_start ran only after that publish
-    // -- the hook ended up installed with nothing recording (the stop found
-    // no session-scoped capture to tear down its own way) and the NEXT
-    // recording's own maybe_start then silently no-op'd against it, "never a
-    // second hook" mistaking the orphan for an already-running one.
+    // Started before the session is published: a stop/cancel racing in right after the publish
+    // would otherwise see a live recording with no key-overlay capture yet, leaving the hook
+    // installed with nothing recording, and the next recording's maybe_start would no-op against
+    // that orphan ("never a second hook") and miss its keys.
     keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms(), key_overlay_shortcuts_only);
-    // Region only -- Monitor/Window recordings keep the OS capture border
-    // and never get an outline window at all (see outline_rect_for_target).
+    // Region only: Monitor/Window recordings keep the OS capture border and get no outline window
+    // (see outline_rect_for_target).
     let outline = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         rec_outline_request(&g.settings, recording::outline_rect_for_target(target))
@@ -336,11 +313,11 @@ pub(crate) async fn start_recording(
         show_rec_outline(&app, rect, &color);
     }
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
-    // A fresh recording never inherits an earlier chain's already-closed
-    // parts -- only finish_and_continue_recording ever adds to this list.
+    // A fresh recording never inherits an earlier chain's closed parts; only
+    // finish_and_continue_recording adds to this list.
     REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    // The stop/pause hotkeys are only ever live while a recording runs --
-    // this is the transition into that state. Same for the tray's two extra rows.
+    // The stop/pause hotkeys are live only while a recording runs, and this is the transition into
+    // that state. The same goes for the tray's two extra rows.
     rearm_hotkeys(&app);
     apply_tray_menu(&app);
     Ok(())
@@ -363,9 +340,9 @@ pub(crate) async fn start_recording(
     Err("recording is only available on Windows".to_string())
 }
 
-// One target switch at a time: the first-frame wait runs without the recording
-// lock, so a second pick (or the same one twice) would start another capture whose
-// commit could land after the newer one and leave the older pick as the final target.
+// One target switch at a time: the first-frame wait runs without the recording lock, so a
+// second pick (or the same one twice) would start another capture whose commit could land
+// after the newer one and leave the older pick as the final target.
 #[cfg(windows)]
 static SWITCH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
@@ -378,15 +355,12 @@ impl Drop for SwitchInFlightGuard {
     }
 }
 
-// Swaps a running recording's own source rather than starting a new
-// one -- the control bar's target-switch button, only ever enabled (see
-// RecordingStatus::target_switch_enabled) for a window recording using a
-// placement canvas. Only a "window" pick is accepted: a monitor or region
-// target never fits an already-built placement canvas the same way, and this
-// feature never rebuilds the encoder to accommodate one. A failure here
-// leaves the current recording completely untouched and is also broadcast as
-// an event, since the caller (the separate control-bar window) has nowhere
-// of its own to show it.
+// Swaps a running recording's source rather than starting a new one: the control bar's
+// target-switch button, enabled (see RecordingStatus::target_switch_enabled) only for a window
+// recording using a placement canvas. Only a "window" pick is accepted; a monitor or region
+// target never fits an already-built placement canvas, and the encoder is never rebuilt for
+// one. A failure leaves the current recording untouched and is also broadcast as an event,
+// since the separate control-bar window has nowhere to show it.
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn switch_recording_target(
@@ -413,18 +387,17 @@ pub(crate) async fn switch_recording_target(
     }
     let _switch_guard = SwitchInFlightGuard;
     let new_hwnd = target_id as isize;
-    // The window's OWN rect only names its corner -- what target_fits_canvas
-    // needs is the display it sits on, the same shape monitor_rect_at already
-    // gives window_canvas_candidates for the "current display" tier.
+    // The window's own rect only names its corner; target_fits_canvas needs the display it sits
+    // on, as monitor_rect_at gives window_canvas_candidates for the "current display" tier.
     let new_monitor = external_window_rect(new_hwnd).and_then(|(l, t, _, _)| monitor_rect_at(l, t));
-    // spawn_blocking cannot borrow the request-scoped State -- re-fetched from
-    // the cloned, 'static AppHandle instead, same as stop_recording_now does.
+    // spawn_blocking cannot borrow the request-scoped State, so it is re-fetched from the cloned
+    // 'static AppHandle, as stop_recording_now does.
     let app2 = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let rstate = app2.state::<RecordingState>();
-        // The lock is held only to read the session and to swap the handles; the
-        // wait for the new capture's first frame runs without it, so status
-        // polls, hotkeys and the tray menu are never stalled by a slow window.
+        // The lock is held only to read the session and to swap the handles; the wait for the new
+        // capture's first frame runs without it, so status polls, hotkeys and the tray menu are never
+        // stalled by a slow window.
         let pending = {
             let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
             let session = guard.as_ref().ok_or_else(|| "no active recording".to_string())?;
@@ -441,9 +414,8 @@ pub(crate) async fn switch_recording_target(
             let _ = app.emit("recording-target-switch-failed", e);
         }
         Ok(()) => {
-            // The control bar follows (and auto-stops with) the window it was
-            // started for: it has to move on to the new one, or closing the old
-            // window would end a recording that no longer shows it.
+            // The control bar follows (and auto-stops with) the window it was started for: it must move
+            // on to the new one, or closing the old window would end a recording that no longer shows it.
             *REC_BAR_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = ("window".to_string(), new_hwnd);
             let following = REC_BAR_FOLLOWING.load(Ordering::SeqCst);
             spawn_rec_bar_follow(app.clone(), new_hwnd);
@@ -467,23 +439,19 @@ pub(crate) async fn switch_recording_target(app: AppHandle, rstate: State<'_, Re
 #[cfg(windows)]
 pub(crate) enum ContinueOutcome {
     Continued(Box<recording::RecSession>, RecordingContinuedPayload),
-    // The switch itself failed after the old file was already closed for
-    // good -- there is no way back to "still recording" from there, so this
-    // names the finished take instead of a failed no-op (the String is the
-    // error the command itself still returns to the caller).
+    // The switch failed after the old file was already closed for good, with no way back to "still
+    // recording", so this names the finished take instead of a failed no-op (the String is the
+    // error the command still returns to the caller).
     StoppedInstead(String),
 }
 
-// The "finish and continue" button: closes the running file exactly like
-// Stop does, then immediately opens the next one with the SAME target, audio
-// sources and canvas/resolution settings -- so a long recording can be split
-// into playable parts without setting anything up again. No target/settings
-// parameters are taken at all: both come straight off the session that is
-// being closed (RecSession.target, kept current across a live target switch;
-// the rest exactly as resolve_recording_settings resolved it at that
-// session's own start), never re-read from the store, so a value the user
-// changes mid-recording only takes effect starting at the NEXT recording,
-// same as before this button existed.
+// The "finish and continue" button: closes the running file like Stop, then opens the next
+// one with the same target, audio sources and canvas/resolution settings, so a long recording
+// splits into playable parts without setting anything up again. It takes no target or
+// settings parameters: both come off the session being closed (RecSession.target, kept
+// current across a live target switch; the rest as resolve_recording_settings resolved them
+// at that session's start), so a value changed mid-recording only takes effect at the next
+// recording.
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn finish_and_continue_recording(
@@ -491,9 +459,8 @@ pub(crate) async fn finish_and_continue_recording(
     rstate: State<'_, RecordingState>,
     db: State<'_, Db>,
 ) -> Result<RecordingContinuedPayload, String> {
-    // Read once, same as start_recording -- keyOverlay's setting is not
-    // re-resolved off the closing session (it carries no copy of it), and
-    // restarting capture for the continuation part needs it.
+    // Read once, as in start_recording: keyOverlay's setting is not re-resolved off the closing
+    // session (it carries no copy), and restarting capture for the continuation part needs it.
     let (key_overlay_on, key_overlay_hold_ms, key_overlay_shortcuts_only) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         (keylog::enabled(&g.settings.ui_flags), keylog::HOLD_MS, keylog::shortcuts_only(&g.settings.ui_flags))
@@ -505,18 +472,16 @@ pub(crate) async fn finish_and_continue_recording(
             *guard = Some(s);
             return Err("nothing to stop".to_string());
         }
-        // The riskiest moment for a file switch is right after the encoder
-        // has barely begun -- the frontend keeps this same button dead for
-        // the first five seconds too; this is the backend's own refusal in
-        // case that guard is ever bypassed (a stale button state, a direct
-        // call).
+        // The riskiest moment for a file switch is right after the encoder has barely begun. The
+        // frontend keeps this button dead for the first five seconds too; this is the backend's own
+        // refusal in case that guard is bypassed (a stale button state, a direct call).
         if now_ms().saturating_sub(s.started_at_ms) < 5_000 {
             *guard = Some(s);
             return Err("recording-too-young-to-continue".to_string());
         }
-        // The state stays empty for the whole stop-and-restart below, which looks
-        // idle to a start request: holding the start claim until the new session
-        // is published keeps a second capture from starting in that gap.
+        // The state stays empty for the whole stop-and-restart below, which looks idle to a start
+        // request: holding the start claim until the new session is published keeps a second capture
+        // from starting in that gap.
         if REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
             *guard = Some(s);
             return Err("recording-busy".to_string());
@@ -524,9 +489,8 @@ pub(crate) async fn finish_and_continue_recording(
         s
     };
     let _rec_starting_guard = RecStartingGuard;
-    // Every part after the first keeps the very FIRST file's own name stem,
-    // never the previous part's already-numbered one -- read once, before
-    // this call's own finished part is pushed further down.
+    // Every part keeps the first file's name stem, not the previous part's already-numbered
+    // one; read before this part is pushed onto the list.
     let base_path = {
         let parts = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner());
         match parts.first() {
@@ -542,17 +506,14 @@ pub(crate) async fn finish_and_continue_recording(
     let app2 = app.clone();
     let closure_result: Result<ContinueOutcome, String> = tauri::async_runtime::spawn_blocking(move || {
         let switch_start = std::time::Instant::now();
-        // Mark the switch instant before touching the old capture at all --
-        // every key from here on belongs to the switch itself or to the part
-        // about to open, never to the part that is about to close. Fixing
-        // this at the exact instant it happens (rather than after
-        // recording::stop returns, which can take a moment to flush the
-        // encoder) is what keeps the old part's own last keys from bleeding
-        // in and the new part's clock from starting late.
+        // Mark the switch instant before touching the old capture: keys from here on belong to the
+        // switch or the new part. Taken before recording::stop returns (the encoder flush can take a
+        // moment) so the old part's last keys do not bleed in and the new part's clock does not
+        // start late.
         let switch_instant_ms = keylog::mono_ms();
         keylog::cut_off_at(switch_instant_ms);
-        // The bar's mute and pause state belongs to the take, not to one file:
-        // read it off the closing session so the next part starts the same way.
+        // The bar's mute state belongs to the take, not one file: read it off the closing session
+        // so the next part starts the same way.
         let carry_system_muted = session.system_queue.as_ref().is_some_and(|q| q.is_muted());
         let carry_mic_muted = session.mic_queue.as_ref().is_some_and(|q| q.is_muted());
         let carry_paused = session.phase == RecPhase::Paused;
@@ -576,39 +537,23 @@ pub(crate) async fn finish_and_continue_recording(
                         q.set_muted(true);
                     }
                 }
-                // The new part's own clock zero point: the instant its
-                // capture actually came up, not `switch_instant_ms` (that
-                // one only marks when the OLD capture was cut off, taken
-                // BEFORE recording::stop -- encoder/capture setup inside
-                // recording::start above can easily take longer than that,
-                // which used to make every part-2-onward sidecar's offsets
-                // early by the whole switch duration). Keys typed in
-                // between the two instants are never captured by either
-                // side at all: the old capture is cut off, and this one's
-                // hook does not exist until maybe_start below installs it.
+                // The new part's clock zero is the instant its capture came up, not switch_instant_ms
+                // (taken before recording::stop; setup in recording::start can take longer, which would
+                // shift every offset early). Keys typed in between are captured by neither side: the old
+                // capture is cut off and the new hook is installed by maybe_start below.
                 let new_start_ms = keylog::mono_ms();
-                // Close out the part that just finished -- its own
-                // sidecar, timed from ITS OWN start -- before the new capture
-                // for the continuation part begins. The old code never
-                // stopped/restarted keylog across this switch at all: the one
-                // hook+consumer pair (maybe_start is a no-op while a capture
-                // is already running) just kept going, so every earlier
-                // part's sidecar was empty and the very LAST part's sidecar
-                // ended up holding the whole chain's keys, timed from the
-                // FIRST part's start.
+                // Close out the part that just finished (its own sidecar, timed from its own start) before
+                // the continuation capture begins. maybe_start is a no-op while a hook is running, so
+                // without this the last part's sidecar would hold the whole chain's keys.
                 keylog::maybe_stop_and_write(&path);
                 keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms, key_overlay_shortcuts_only);
                 if carry_paused {
                     do_pause_recording(&mut new_session);
                 }
-                // The switch worked -- this part is now an interim one with no
-                // result dialog of its own, so its crop (if any) runs right away
-                // in the background instead of waiting on
-                // PENDING_REC_CROP/REC_CROP_CANCEL, which stay reserved for the
-                // take's FINAL file and its own visible cancel button. A real,
-                // per-job cancel flag (not "never cancelled") lets a whole-take
-                // cancel stop this cleanly instead of racing its own delete
-                // against ffmpeg still reading the very file being removed.
+                // The switch worked, so this part is interim with no result dialog: its crop runs now in
+                // the background instead of via PENDING_REC_CROP/REC_CROP_CANCEL, which stay reserved for
+                // the final file. A per-job cancel flag lets a whole-take cancel stop it cleanly instead
+                // of racing the delete against ffmpeg still reading the file.
                 if needs_crop {
                     if let Some(ffmpeg) = ffmpeg_search_path(&app2) {
                         let crop_path = path.clone();
@@ -622,9 +567,8 @@ pub(crate) async fn finish_and_continue_recording(
                         });
                         match spawned {
                             Ok(handle) => {
-                                // The thread removes its own entry when it ends, which can
-                                // happen before this push: finished ones are dropped here
-                                // so none stays in the list for good.
+                                // The thread removes its own entry when it ends, possibly before this push, so finished
+                                // handles are dropped here.
                                 let mut crops = REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner());
                                 crops.retain(|(_, h)| !h.is_finished());
                                 if !handle.is_finished() {
@@ -649,9 +593,8 @@ pub(crate) async fn finish_and_continue_recording(
                 }))
             }
             Err(start_err) => {
-                // This file becomes the take's final one after all -- same
-                // crop/result path a real stop uses, with every earlier part
-                // folded in. Same for the key-overlay sidecar.
+                // This file becomes the final one after all: same crop/result path as a real stop, with
+                // every earlier part folded in, and the key-overlay sidecar written.
                 keylog::maybe_stop_and_write(&path);
                 if needs_crop {
                     let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
@@ -678,9 +621,8 @@ pub(crate) async fn finish_and_continue_recording(
     .map_err(|e| e.to_string())?;
     match closure_result {
         Err(e) => {
-            // recording::stop itself failed -- practically unreachable (it
-            // folds every internal failure into encode_error instead), but if
-            // it ever does, the old session is already gone either way.
+            // recording::stop failed, which is practically unreachable (it folds failures into
+            // encode_error); the old session is gone either way.
             hide_rec_outline(&app);
             rearm_hotkeys(&app);
             apply_tray_menu(&app);
@@ -753,9 +695,8 @@ pub(crate) fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>
     Err("recording is only available on Windows".to_string())
 }
 
-// Mid-recording mute for either source, from the rec bar's own two audio
-// buttons. `source` is "system" or "mic"; muting a source that was never
-// active this session is a no-op (there is no queue to flip).
+// Mid-recording mute for either source, from the rec bar's audio buttons. `source` is
+// "system" or "mic"; muting a source that was never active is a no-op.
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) fn set_audio_muted(rstate: State<'_, RecordingState>, source: String, muted: bool) -> Result<(), String> {
@@ -781,13 +722,10 @@ pub(crate) fn set_audio_muted(rstate: State<'_, RecordingState>, source: String,
     Err("recording is only available on Windows".to_string())
 }
 
-// Shared by the Stop-button command below and the auto-stop path (the
-// rec-bar's follow thread, when the recorded window itself closes mid-
-// recording): keep the file instead of leaving a dead session running
-// against a capture source that is already gone.
-// Plain blocking call, not async -- the follow thread is already its own
-// dedicated OS thread, so there is no tokio worker to protect here; the
-// actual command below still off-loads through spawn_blocking for that.
+// Shared by the Stop command and the auto-stop path (the rec-bar's follow thread, when the
+// recorded window closes): keeps the file instead of leaving a dead session running. A
+// plain blocking call: the follow thread is its own OS thread, and the command reaches this
+// through spawn_blocking.
 #[cfg(windows)]
 pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String> {
     let rstate = app.state::<RecordingState>();
@@ -816,21 +754,17 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     // also when the stop failed.
     hide_rec_outline(app);
     let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = stopped?;
-    // Stops the key-overlay hook (if it was running at all) and writes
-    // its sidecar next to this recording.
+    // Stops the key-overlay hook, if running, and writes its sidecar.
     keylog::maybe_stop_and_write(&path);
-    // A crop is only worth running when the union of every placed frame is
-    // strictly smaller than the canvas it was placed on -- a window that
+    // Crop only when the union of every placed frame is smaller than the canvas; a window that
     // used the whole canvas leaves nothing to trim.
     let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
     if needs_crop {
         let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
         *pending = Some((path.clone(), crop_rect.unwrap()));
     }
-    // Every earlier part a "finish and continue" chain already closed --
-    // empty for a plain recording, since nothing but that button ever adds
-    // to this list. Taken (not just read) so the next recording starts clean
-    // even if start_recording's own clear were ever skipped.
+    // Parts an earlier "finish and continue" chain closed (empty for a plain recording). Taken,
+    // not read, so the next recording starts clean.
     let parts = std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()));
     let payload = RecordingStoppedPayload {
         path: path.to_string_lossy().to_string(),
@@ -845,17 +779,15 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     // The earlier parts wait for the result dialog's decision: registered before
     // the sweep below so it cannot take an old part.
     *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
-    // The stop/pause hotkeys give up their combination the instant nothing
-    // is recording, on every end path this function serves (button, hotkey,
-    // auto-stop). Same for the tray's two extra rows.
+    // The stop/pause hotkeys and the tray's two extra rows go away the moment nothing is
+    // recording, on every end path (button, hotkey, auto-stop).
     rearm_hotkeys(app);
     apply_tray_menu(app);
-    // The moment a previous crash's leftover is provably not the file
-    // that just finished -- this recording is gone from RecordingState by now.
+    // Safe now: this recording is already gone from RecordingState, so a leftover cannot be
+    // the file that just finished.
     sweep_recordings_and_notify(app);
-    // Mirrors the screenshot flow's "snip-captured": the recording bar is its
-    // own window, so the main window learns the recording is ready to attach
-    // through this event rather than a direct call across windows.
+    // Mirrors the screenshot flow's "snip-captured": the recording bar is its own window, so
+    // the main window learns of the result through this event.
     let _ = app.emit("recording-captured", payload.clone());
     Ok(payload)
 }
@@ -913,13 +845,9 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
         recording::cancel(session)?;
         // A cancelled take never gets a key-overlay sidecar either.
         keylog::discard();
-        // A cancel discards the WHOLE take, not just its current file -- every
-        // earlier part a "finish and continue" chain already closed goes with
-        // it. Every interim crop still running against one of those files is
-        // signalled and joined FIRST, so deleting them can never race an
-        // ffmpeg process still reading the very file being removed (a delete
-        // that fails because the file is still open, or one that "succeeds"
-        // only for the crop's own rename to recreate it right after).
+        // A cancel discards the whole take: every part a "finish and continue" chain closed goes
+        // too. Interim crops still running are signalled and joined first so the delete cannot
+        // race an ffmpeg process still reading the file.
         stop_and_join_interim_crops(&REC_INTERIM_CROPS);
         // Best-effort from here: a missing file (already moved/deleted by the
         // user) is not a reason to fail an otherwise-successful cancel.
@@ -935,9 +863,8 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
     rearm_hotkeys(&app);
     apply_tray_menu(&app);
     sweep_recordings_and_notify(&app); // same moment as a normal stop, see above
-    // The composer's record button has no other way to learn a cancel
-    // happened (that click lives in the rec-bar, a different window) --
-    // symmetric with stop's own "recording-captured".
+    // The composer's record button learns of a cancel only through this event (that click
+    // lives in the rec-bar window), like stop's "recording-captured".
     let _ = app.emit("recording-cancelled", ());
     Ok(())
 }
