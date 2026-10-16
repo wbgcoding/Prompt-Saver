@@ -1,15 +1,11 @@
-// Camera recording. A getUserMedia preview window whose stream is
-// encoded client-side by the browser's own MediaRecorder (webm, VP8+Opus --
-// the one container every WebView2 release plays back the same way) and
-// handed to this module only as finished bytes, the same division of labour
-// the screen recorder never had to make because it captures through Windows
-// Graphics Capture instead of a web API.
+// Camera recording. A getUserMedia preview window whose stream is encoded in the page by
+// MediaRecorder (webm, VP8+Opus: the one container every WebView2 release plays back the
+// same way) and handed to this module only as finished bytes.
 //
-// The one piece that genuinely has to live in Rust is the WebView2
-// permission prompt: nothing ever answers it on its own, so a plain
-// getUserMedia call from the page just hangs forever with no error and no
-// picture. install_permission_handler below is that answer, camera-only
-// and microphone-only, and only for this one window.
+// The one piece that has to live in Rust is the WebView2 permission prompt: nothing answers
+// it on its own, so a plain getUserMedia call would hang with no error.
+// install_permission_handler is that answer, for camera and microphone only, in this one
+// window.
 
 use crate::{lock, recording_dir, sidecar_path, Db, RecordingState, CAM_SIDECAR_EXT};
 use base64::Engine as _;
@@ -23,22 +19,16 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 pub struct CamSession {
     pub output_path: PathBuf,
-    // The screen recording active when this take began, if any -- carried
-    // through to the finish result so the frontend can decide whether a
-    // dual-open (camera as an overlay on that same screen recording) makes
-    // sense, without a second round trip to ask what was running back then
-    // (it may already have stopped). The alignment offset itself is never
-    // stored here -- see camera_screen_elapsed_ms, read live at the moment
-    // the camera actually starts, not reconstructed later from this.
+    // The screen recording active when this take began, if any, carried to the finish result
+    // so the frontend can decide on a dual-open (camera overlay on that recording) without a
+    // second round trip (it may have stopped by then). The alignment offset is not stored
+    // here: camera_screen_elapsed_ms reads it live when the camera actually starts.
     pub companion_path: Option<PathBuf>,
-    // Set by camera_mark_finishing, called the instant camera.js's onstop
-    // handler begins -- before it awaits the chunks still in flight. Without
-    // this, Alt+F4/taskbar-close/app-quit landing in that narrow window
-    // looked exactly like an abandoned, still-recording session and deleted
-    // a take that was, for all practical purposes, already done. Carries the
-    // same two values camera_finish_recording takes as parameters, so the
-    // window-destroyed handler can finish the sidecar itself when the
-    // graceful IPC call never gets to run.
+    // Set by camera_mark_finishing the instant camera.js's onstop handler begins, before it
+    // awaits the chunks still in flight. Without it, Alt+F4, taskbar close or an app quit in
+    // that window looks like an abandoned session and deletes a take that is practically done.
+    // Carries the two values camera_finish_recording takes, so the window-destroyed handler can
+    // finish the sidecar itself when the graceful IPC call never runs.
     pub finishing: Option<(u64, Option<u64>)>,
 }
 
@@ -47,24 +37,19 @@ pub struct CameraState(pub Mutex<Option<CamSession>>);
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
 pub struct CamSidecar {
     pub start_ms: u64,
-    // The screen recording's own pause-aware active-timeline position at the
-    // moment this camera take started -- already the final overlay offset,
-    // never a wall-clock value to subtract against anything else. None when
-    // no screen recording was running yet.
+    // The screen recording's pause-aware active-timeline position when this camera take
+    // started: already the final overlay offset, not a wall-clock value. None when no screen
+    // recording was running.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overlay_start_ms: Option<u64>,
 }
 
-// Sits next to the recording as its own extension, exactly like the
-// key-overlay sidecar (the shared sidecar_path) -- so a Save/Copy/discard that
-// already knows how to move or drop a `.keys.json` alongside its video needs
-// the same one-line addition for `.cam.json`, never a parallel code path.
-// The mirror of rec_engine.rs's own mic_sidecar_video_path, for the same reason: a
-// `.cam.json` sitting in the recordings folder next to a video the library
-// still references must count as referenced too, or the background sweep
-// treats it as an ownerless orphan and removes it after an hour -- even
-// though the video it belongs to is still very much in use. The camera's
-// container is webm, never mp4, so this tries both instead of assuming one.
+// Sits next to the recording with its own extension, like the key-overlay sidecar (shared
+// sidecar_path), so Save/Copy/discard moving or dropping a `.keys.json` needs the same
+// one-line addition for `.cam.json`. The mirror of rec_engine.rs's mic_sidecar_video_path:
+// a `.cam.json` next to a video the library still references must count as referenced, or
+// the sweep removes it as an orphan after an hour. The camera's container is webm, never
+// mp4, so both are tried.
 pub fn sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".cam.json")?;
@@ -77,14 +62,11 @@ pub fn sidecar_video_path(path: &Path) -> Option<PathBuf> {
     None
 }
 
-// rec-cam-YYYY-MM-DD_HHMMSS.<ext>, optionally with a "-2", "-3", ... suffix
-// -- the screen recorder's own rec_filename shape with one extra segment, so
-// a folder listing sorts the two side by side and both still pass the
-// "starts with rec-" prefix discard_recording_file requires before it will
-// ever delete a file. The suffix only ever appears when the plain name is
-// already taken (two takes starting in the same second, or one immediately
-// restarted after the last one's file did not get cleaned up) -- n=0 keeps
-// today's exact filename so nothing else about it changes.
+// rec-cam-YYYY-MM-DD_HHMMSS.<ext>, with a "-2", "-3", ... suffix only when the plain name
+// is taken (two takes in the same second, or a restart after a file was not cleaned up).
+// It is the screen recorder's rec_filename shape plus one segment, so a folder listing
+// sorts the two together and both pass the "rec-" prefix discard_recording_file requires
+// before deleting. n=0 is the plain name.
 pub fn cam_filename(when: (i32, u32, u32, u32, u32, u32), ext: &str, n: u32) -> String {
     let (year, month, day, hour, minute, second) = when;
     if n == 0 {
@@ -105,9 +87,8 @@ fn local_time_parts() -> (i32, u32, u32, u32, u32, u32) {
     (1970, 1, 1, 0, 0, 0)
 }
 
-// Claims a filename atomically (create_new -- never truncates a file that is
-// already there) and tries the next suffixed name on a collision instead of
-// silently overwriting whatever a same-second take already left behind.
+// Claims a filename atomically (create_new never truncates an existing file) and tries the
+// next suffixed name on a collision instead of overwriting a same-second take.
 fn create_unique(dir: &Path, mut name_for: impl FnMut(u32) -> String) -> std::io::Result<PathBuf> {
     for n in 0..1000 {
         let path = dir.join(name_for(n));
@@ -129,10 +110,9 @@ pub struct CamBeginResult {
 
 
 
-// Pure so the "does the dual-open make sense yet" decision has its own test
-// too: a companion still recording is mid-write, not a real file to open,
-// and one whose recording ended without a companion path at all (or whose
-// file vanished since) has nothing to align against.
+// Pure, so the dual-open decision has its own test: a companion still recording is
+// mid-write, not a file to open, and one with no path (or a vanished file) has nothing to
+// align against.
 fn resolve_finish_companion(
     companion: Option<PathBuf>,
     screen_still_active: bool,
@@ -144,19 +124,12 @@ fn resolve_finish_companion(
     companion.filter(|p| file_exists(p))
 }
 
-// The screen recording's own pause-aware active-timeline position, read
-// LIVE at the exact moment MediaRecorder actually starts (camera.js calls
-// this right before recorder.start(), the same moment it stamps its own
-// cam_start_ms). A wall-clock timestamp cannot stand in for this: a pause in
-// the screen recording between its own start and the camera's advances
-// wall-clock time without advancing the screen recording's own output
-// timeline, so subtracting two wall-clock stamps overstates the offset by
-// however long the pause lasted. Reading the pause-aware clock live, right
-// when the camera joins, sidesteps that entirely -- the value handed back
-// here already IS the overlay's start offset, not a raw timestamp to
-// subtract anything from (see camera_finish_recording, which writes it
-// straight into the sidecar, and ui/video.js's addAlignedCameraOverlay,
-// which reads it straight back out).
+// The screen recording's pause-aware active-timeline position, read live when
+// MediaRecorder actually starts (camera.js calls this right before recorder.start()). A
+// wall-clock difference cannot stand in: a pause in the screen recording advances
+// wall-clock time but not its output timeline, overstating the offset. The returned value
+// already is the overlay's start offset (written straight into the sidecar by
+// camera_finish_recording, read back by addAlignedCameraOverlay in ui/video.js).
 #[tauri::command]
 pub fn camera_screen_elapsed_ms(rstate: State<'_, RecordingState>) -> Option<u64> {
     #[cfg(windows)]
@@ -171,11 +144,10 @@ pub fn camera_screen_elapsed_ms(rstate: State<'_, RecordingState>) -> Option<u64
     }
 }
 
-// Starts a new camera take: picks the file name and remembers whether a
-// screen recording is already running (and its own start) so the finish
-// result can decide on a dual-open and its alignment. The camera's own
-// actual start is never guessed here -- see camera_finish_recording, which
-// takes it from the caller at the moment MediaRecorder really started.
+// Starts a new camera take: picks the file name and remembers whether a screen recording
+// is running (and its start) so the finish result can decide on a dual-open. The camera's
+// own start comes from the caller in camera_finish_recording, when MediaRecorder really
+// started.
 #[tauri::command]
 pub async fn camera_begin_recording(
     db: State<'_, Db>,
@@ -202,9 +174,8 @@ pub async fn camera_begin_recording(
             None
         }
     };
-    // The slot is checked and filled under one lock, so a second begin can
-    // never replace a live session (and orphan its file) between the check
-    // and the store.
+    // Checked and filled under one lock, so a second begin can never replace a live session
+    // (and orphan its file) in between.
     let mut slot = cam.0.lock().unwrap_or_else(|e| e.into_inner());
     if slot.is_some() {
         return Err("a camera recording is already active".to_string());
@@ -228,12 +199,10 @@ fn take_matching(slot: &mut Option<CamSession>, path: &Path) -> Result<CamSessio
     }
 }
 
-// MediaRecorder hands the page a Blob in timesliced chunks; each one is
-// appended as it arrives instead of buffering the whole take in the
-// renderer, so a long camera take never has to hold its entire size in
-// memory at once. Bytes travel as base64 (camera.js encodes, this decodes)
-// instead of a JSON array of numbers -- about a third bigger than raw
-// instead of three to four times bigger, for every chunk of every take.
+// MediaRecorder hands the page a Blob in timesliced chunks; each is appended as it arrives
+// so a long take never sits in renderer memory. Bytes travel as base64 (camera.js encodes,
+// this decodes): about a third bigger than raw, instead of three to four times for a JSON
+// number array.
 #[tauri::command]
 pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
     // Decoded before the lock is taken: the synchronous finish commands wait on it.
@@ -250,29 +219,20 @@ pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, byte
 #[derive(Serialize)]
 pub struct CamFinishResult {
     path: String,
-    // Only set when the companion screen recording has ALREADY stopped by
-    // the time this camera take finishes -- still recording means its file
-    // is mid-write, and the editor's dual-open must wait for it to be a
-    // real, playable file rather than open a half-finished one. The
-    // alignment offset never travels alongside this -- it already lives in
-    // the camera's own sidecar (see camera_finish_recording), which the
-    // editor reads directly instead of trusting a second copy carried
-    // across the whole call chain in memory.
+    // Only set when the companion screen recording has already stopped by the time this take
+    // finishes: one still recording is mid-write, and the editor's dual-open must wait for a
+    // playable file. The alignment offset does not travel here; it lives in the camera's
+    // sidecar (see camera_finish_recording), which the editor reads directly.
     #[serde(skip_serializing_if = "Option::is_none")]
     companion_path: Option<String>,
 }
 
-// cam_start_ms is the real MediaRecorder start (Date.now() in camera.js, the
-// moment recorder.start() actually ran) -- not a value this module invented
-// at begin time, which is what let the overlay always land at startMs 0
-// regardless of how long the camera took to actually start recording.
-// screen_elapsed_ms is camera_screen_elapsed_ms's own return value, read by
-// camera.js at that exact same moment -- the final overlay offset, already
-// pause-aware, written straight into the sidecar below.
-// Writes the sidecar for a session that is finishing one way or another --
-// shared between camera_finish_recording's own graceful path and the
-// window-destroyed handler's fallback when that graceful call never gets to
-// run (see CamSession::finishing).
+// Writes the sidecar for a session that is finishing one way or another: shared by
+// camera_finish_recording's graceful path and the window-destroyed fallback (see
+// CamSession::finishing). cam_start_ms is the real MediaRecorder start (Date.now() in
+// camera.js when recorder.start() ran), not a begin-time guess. screen_elapsed_ms is
+// camera_screen_elapsed_ms's value read at that same moment: the final, pause-aware
+// overlay offset, written straight into the sidecar.
 fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) {
     let sidecar = CamSidecar { start_ms: cam_start_ms, overlay_start_ms: screen_elapsed_ms };
     if let Ok(json) = serde_json::to_string(&sidecar) {
@@ -308,9 +268,8 @@ pub fn camera_finish_recording(
     })
 }
 
-// Pure so a mismatched path being silently ignored (same as a finish/discard
-// call racing a session that already moved on) has its own test independent
-// of a real CameraState/Tauri harness.
+// Pure, so a mismatched path being ignored (like a finish/discard racing a session that
+// moved on) is testable without a Tauri harness.
 fn mark_finishing(session: &mut Option<CamSession>, path: &Path, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) {
     if let Some(s) = session.as_mut() {
         if s.output_path == path {
@@ -319,20 +278,17 @@ fn mark_finishing(session: &mut Option<CamSession>, path: &Path, cam_start_ms: u
     }
 }
 
-// Called the instant onstop begins, before camera.js awaits the chunks still
-// in flight -- marks the session as finishing rather than still-recording,
-// so a window destroyed in that window finishes the take instead of
-// deleting it (see CamSession::finishing and the Destroyed handler in
-// open_camera_window).
+// Called the instant onstop begins, before camera.js awaits the chunks in flight: marks the
+// session as finishing, so a window destroyed meanwhile finishes the take instead of
+// deleting it (see CamSession::finishing and the Destroyed handler in open_camera_window).
 #[tauri::command]
 pub fn camera_mark_finishing(cam: State<'_, CameraState>, path: String, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) {
     let mut guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
     mark_finishing(&mut guard, Path::new(&path), cam_start_ms, screen_elapsed_ms);
 }
 
-// The cancel path: whatever bytes made it to disk are discarded with the
-// slot, same as keylog::discard -- a cancelled take leaves neither a
-// half-written video nor a sidecar behind for the library to trip over.
+// The cancel path: bytes on disk are discarded with the slot, like keylog::discard,
+// leaving neither a half-written video nor a sidecar.
 #[tauri::command]
 pub fn camera_discard_recording(cam: State<'_, CameraState>, path: String) -> Result<(), String> {
     let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
@@ -372,10 +328,8 @@ pub fn read_sidecar(path: &Path) -> Option<CamSidecar> {
     serde_json::from_str(&data).ok()
 }
 
-// The editor's counterpart to keylog's read_key_sidecar: the durable, on-disk
-// source of truth for a camera take's own start, read back by
-// addAlignedCameraOverlay in ui/video.js when it lines the overlay up
-// against the screen recording's own start.
+// The editor's counterpart to keylog's read_key_sidecar: the durable source of truth for a
+// camera take's start, read by addAlignedCameraOverlay in ui/video.js.
 #[tauri::command]
 pub fn read_camera_sidecar(path: String) -> Option<CamSidecar> {
     read_sidecar(Path::new(&path))
@@ -415,11 +369,9 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
     crate::set_capture_exclusion(&win, excluded);
     install_permission_handler(&app, &win)?;
-    // Alt+F4, the taskbar close, or the app quitting outright all skip
-    // camera.js's own close-button handler (discardRecording), leaving a
-    // half-written file and an active session behind with nothing to ever
-    // clean it up. This is the window's own last chance to do the same
-    // cleanup the close button does, straight from the session state.
+    // Alt+F4, the taskbar close or an app quit skip camera.js's close-button handler
+    // (discardRecording) and would leave a half-written file and an active session. This is the
+    // window's last chance to do the same cleanup from the session state.
     let cleanup_app = app.clone();
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
@@ -438,23 +390,18 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
     Ok(())
 }
 
-// WebView2 documents PermissionRequestedEventArgs::Uri as the requesting
-// ORIGIN -- which, depending on the runtime version, can arrive as a bare
-// origin (no path at all) or as a full URL with the page's own path on it.
-// Tauri's WebviewUrl::App resolves every page of this app to a fixed
-// scheme+host (never the real OS hostname), so an EXACT compare against
-// that origin, not a substring, is what makes this safe: `contains(...)`
-// would both false-negative on a bare origin (blocking the camera outright)
-// and false-positive on a look-alike host that merely contains the string
-// "camera.html" somewhere in a longer, attacker-shaped URL.
+// WebView2's PermissionRequestedEventArgs::Uri is the requesting origin, which depending
+// on the runtime arrives bare or as a full URL with the page's path. Tauri's
+// WebviewUrl::App resolves every page to a fixed scheme+host, so an exact compare against
+// that origin (not `contains`) is what makes this safe: a substring check would block a
+// bare origin and accept a look-alike host with "camera.html" somewhere in the URL.
 const APP_ORIGINS: [&str; 2] = ["https://tauri.localhost", "http://tauri.localhost"];
 
 fn permission_uri_is_camera_page(uri: &str) -> bool {
     for origin in APP_ORIGINS {
         let Some(rest) = uri.strip_prefix(origin) else { continue };
-        // The character right after the origin must end it cleanly (start of
-        // a path, a query, a fragment, or nothing at all) -- otherwise the
-        // "origin" match was really just a prefix of a longer host, e.g.
+        // The character after the origin must end it cleanly (a path, query, fragment or nothing);
+        // otherwise it was a prefix of a longer host such as
         // "https://tauri.localhost.evil.example/camera.html".
         if !(rest.is_empty() || rest.starts_with(['/', '?', '#'])) {
             return false;
@@ -465,13 +412,11 @@ fn permission_uri_is_camera_page(uri: &str) -> bool {
     false
 }
 
-// Answers the WebView2 camera/microphone permission prompt for this window
-// only, allowing exactly those two kinds, from exactly this app's own camera
-// page, and nothing else. with_webview runs its closure on the main thread
-// asynchronously, so camera.js waits for the camera-permission-ready event
-// (emitted once the handler is actually attached) before it ever calls
-// getUserMedia -- calling it any earlier would race the still-unanswered
-// prompt and hang with no error.
+// Answers the WebView2 camera/microphone permission prompt for this window only: exactly
+// those two kinds, from exactly this app's camera page, nothing else. with_webview runs its
+// closure asynchronously on the main thread, so camera.js waits for
+// camera-permission-ready (emitted once the handler is attached) before calling
+// getUserMedia; earlier it would race the unanswered prompt and hang.
 #[cfg(windows)]
 fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Result<(), String> {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -484,8 +429,8 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
     let app_check = app.clone();
     win.with_webview(move |webview| {
         let Ok(core) = (unsafe { webview.controller().CoreWebView2() }) else {
-            // No working permission answer -- leaving the prompt unanswered is
-            // safer than allowing every permission kind to get camera through.
+            // No working permission answer: leaving the prompt unanswered is safer than allowing every
+            // kind.
             return;
         };
         let mut token = 0i64;
@@ -493,16 +438,12 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
             let Some(args) = args else { return Ok(()) };
             let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
             unsafe { args.PermissionKind(&mut kind)? };
-            // Every refusal below -- the wrong kind, the switch off, or the
-            // wrong origin -- sets an explicit DENY rather than just
-            // returning: leaving the state untouched lets WebView2 fall back
-            // to its own prompt UI, and a user accepting THAT could still get
-            // saved into the shared profile.
+            // Every refusal below (wrong kind, switch off, wrong origin) sets an explicit DENY instead
+            // of returning: untouched state lets WebView2 show its own prompt UI, and an acceptance
+            // there could be saved into the shared profile.
             let allow = if kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA || kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
-                // Re-checked here, not just once when the window was opened:
-                // the switch can be turned off while this window still sits
-                // open, and the next getUserMedia call must stop being
-                // auto-allowed the moment it is.
+                // Re-checked on each request, not just at window open: the switch can be turned off while
+                // the window is open, and the next getUserMedia call must stop being auto-allowed.
                 let enabled = app_check
                     .try_state::<Db>()
                     .map(|db| lock(&db).settings.ui_flags.get("cameraRecord") == Some(&true))
@@ -519,12 +460,9 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
             };
             let state = if allow { COREWEBVIEW2_PERMISSION_STATE_ALLOW } else { COREWEBVIEW2_PERMISSION_STATE_DENY };
             unsafe { args.SetState(state)? };
-            // Never let WebView2 remember this decision in the shared
-            // profile -- every app window shares one WebView2 environment, so
-            // a saved decision here (allow OR deny) could otherwise answer a
-            // LATER, different request the same way without this handler --
-            // installed on the camera window's controller only -- ever
-            // running again.
+            // Never let WebView2 remember this decision in the shared profile: every app window shares
+            // one WebView2 environment, so a saved allow or deny could answer a later, different
+            // request without this handler (installed on the camera window only) running.
             if let Ok(args3) = args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
                 unsafe {
                     let _ = args3.SetSavesInProfile(false);
@@ -654,8 +592,7 @@ mod tests {
 
     #[test]
     fn a_look_alike_host_never_matches() {
-        // The old contains("camera.html") check would have let a URL like
-        // this one through, treating a merely-similar host as the real app.
+        // A merely similar host must never be treated as the real app.
         assert!(!permission_uri_is_camera_page("https://tauri.localhost.evil.example/camera.html"));
         assert!(!permission_uri_is_camera_page("https://nottauri.localhost/camera.html"));
     }
