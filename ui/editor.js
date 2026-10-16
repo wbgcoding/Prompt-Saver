@@ -1365,8 +1365,8 @@ export async function confirmModal() {
       // Nothing to save yet: keep the dialog (and everything else typed into it)
       // and point at the missing text, like a missing name does.
       if (!text) { if (!rotating) focusModalText(); return; }
-      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
-      if (saved && modalState.reSecret) await invoke("set_prompt_secret", { id: saved.id, secret: true }).catch((e) => errToast(e));
+      // A recreated confidential entry is sealed by the backend before its first write.
+      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto, secret: modalState.reSecret ? true : undefined });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;

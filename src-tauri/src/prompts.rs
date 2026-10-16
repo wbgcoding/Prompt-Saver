@@ -821,6 +821,9 @@ pub(crate) async fn add_prompt(
     variants: Option<Vec<String>>,
     rotate_mode: Option<String>,
     rotate_auto: Option<bool>,
+    // Create the entry already confidential: sealed before its first write, so the
+    // plain text never reaches the database, a backup or the Markdown sync folder.
+    secret: Option<bool>,
 ) -> Result<Prompt, String> {
     // Text from outside (a pasted prompt, an old client) may still use the retired
     // placeholder spelling; the stored prompt never does.
@@ -905,6 +908,14 @@ pub(crate) async fn add_prompt(
             media_size_bytes,
             image_text,
             secret: false,
+        };
+        let prompt = if secret == Some(true) {
+            let Some(key) = secret_session_key(secret_timeout_min(&store.settings)) else {
+                return Err("secret-locked".to_string());
+            };
+            secret_convert_prompt(&prompt, true, &key)?.unwrap_or(prompt)
+        } else {
+            prompt
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority: so a cell handed out without excluding them saves fine and
