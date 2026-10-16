@@ -358,7 +358,14 @@ pub(crate) fn md_is_ours(fields: &HashMap<String, String>) -> bool {
     ["name", "color", "tags", "notes"].iter().all(|k| fields.contains_key(*k))
 }
 
+#[cfg(test)]
 pub(crate) fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
+    apply_md_with_tags(base, content, &HashMap::new())
+}
+
+// `known` is the library's tag casing, so a tag spelled differently in the file lands
+// on the casing the library already uses.
+pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<String, String>) -> Option<Prompt> {
     let (fields, body) = parse_frontmatter(content)?;
     if !md_is_ours(&fields) {
         return None;
@@ -371,18 +378,9 @@ pub(crate) fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt>
         p.color.clone_from(v);
     }
     if let Some(v) = fields.get("tags") {
-        // Same rules every other way into the app enforces (length, character set,
-        // how many per prompt): a hand-written file is an entry point like any
-        // other, and a tag that breaks them would sit in the library unfixable.
-        // Leniently: a bad tag is dropped, it never costs the whole file its text.
-        let mut seen = std::collections::HashSet::new();
-        p.tags = v
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty() && s.chars().count() <= MAX_TAG_LEN && tag_chars_ok(s))
-            .filter(|s| seen.insert(tag_key(s)))
-            .take(MAX_TAGS_PER_PROMPT)
-            .collect();
+        // A hand-written file is an entry point like any other: a bad tag is dropped,
+        // it never costs the whole file its text.
+        p.tags = lenient_import_tags(v.split(',').map(str::to_string).collect(), known);
     }
     if let Some(v) = fields.get("notes") {
         p.notes = if fields.contains_key("notes_enc") { md_unescape_notes(v) } else { v.clone() };
@@ -1530,7 +1528,7 @@ pub(crate) fn sync_poll_apply(
                 // for a live prompt, and a later restore keeps this one as a copy.
                 continue;
             }
-            let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
+            let Some(np) = apply_md_with_tags(&sync_blank_prompt(stem), &content, &canonical_tags(&store.prompts)) else { continue };
             let id = np.id.clone();
             store.prompts.push(np);
             let (placed, folders_touched_here) = fields
@@ -1559,7 +1557,7 @@ pub(crate) fn sync_poll_apply(
             if unchanged {
                 continue; // a concurrent edit already made this file's content current
             }
-            if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
+            if let Some(updated) = apply_md_with_tags(&store.prompts[idx], &content, &canonical_tags(&store.prompts)) {
                 // A file that only moved or recoloured a tile leaves the prompt itself
                 // as it was: replacing it would count as a change, save the prompts and
                 // write every file again for nothing.

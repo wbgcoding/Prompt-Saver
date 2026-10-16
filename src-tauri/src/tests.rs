@@ -5637,6 +5637,15 @@ fn incoming_tags_obey_the_same_rules_as_every_other_way_in() {
 }
 
 #[test]
+fn incoming_tags_take_the_casing_the_library_already_uses() {
+    let p = sync_test_prompt();
+    let known = HashMap::from([(tag_key("Work"), "Work".to_string())]);
+    let content = "---\nname: n\ncolor: \ntags: work, WORK, fresh\nnotes: \n---\nbody\n";
+    let out = apply_md_with_tags(&p, content, &known).expect("valid frontmatter");
+    assert_eq!(out.tags, ["Work", "fresh"]);
+}
+
+#[test]
 fn md_roundtrip_survives_umlauts_emoji_separators_and_the_rotation_marker() {
     let mut p = sync_test_prompt();
     p.name = "Grüße; Ümläute 🎉".into();
