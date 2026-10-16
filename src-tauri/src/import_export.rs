@@ -505,6 +505,7 @@ pub(crate) fn strip_formula_guard(s: String) -> String {
     s
 }
 
+// Minimal CSV reader for our own export format (quoted fields, ';' delimiter).
 pub(crate) fn parse_csv(content: &str) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row = Vec::new();
