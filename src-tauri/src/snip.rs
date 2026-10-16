@@ -1,14 +1,12 @@
 use super::*;
 
-// ---------- Snipping tool ----------
-// open_snip freezes the active monitor, shows a transparent overlay window for
-// the user to mark a region, then capture_region crops the frozen image,
-// copies it to the clipboard, saves a PNG and hands the crop to the main UI.
+// Snipping tool: open_snip freezes the active monitor and shows a transparent overlay for
+// the user to mark a region; capture_region crops the frozen image, copies it to the
+// clipboard, saves a PNG and hands the crop to the main UI.
 
-// One frozen monitor: its capture plus its global physical origin and size.
-// image is Arc'd so the background JPEG encode and the stored capture share one
-// buffer instead of each owning an ~80 MB copy of the frozen desktop: every
-// reader (crop_rgb/crop_rgba/sample_frozen) only ever borrows it.
+// One frozen monitor: its capture plus its global physical origin and size. image is an Arc
+// so the background JPEG encode and the stored capture share one buffer instead of two
+// ~80 MB copies; readers only borrow it.
 pub(crate) struct MonitorCap {
     pub(crate) image: Arc<image::RgbaImage>,
     pub(crate) x: i32,
@@ -18,10 +16,9 @@ pub(crate) struct MonitorCap {
 }
 pub(crate) struct SnipState(pub(crate) Mutex<Vec<MonitorCap>>);
 
-// Arms the NEXT capture_region call to run OCR instead of a normal screenshot
-// save/copy. Single-shot by construction -- close_all_snip resets it the moment
-// any snip session actually ends (a successful capture, a cancel, or a window
-// click), so it can never leak into a later, unrelated screenshot.
+// Arms the next capture_region call to run OCR instead of a normal screenshot. Single-shot:
+// close_all_snip resets it when any snip session ends, so it never leaks into a later
+// screenshot.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SnipMode {
     Capture,
@@ -29,10 +26,9 @@ pub(crate) enum SnipMode {
 }
 pub(crate) struct SnipModeState(pub(crate) Mutex<SnipMode>);
 
-// Overlay preview prepared in the background the instant the desktop is frozen,
-// so the (heavy) JPEG encode overlaps WebView creation instead of running after
-// it. None = still encoding, Some(None) = encode failed, Some(Some) = ready.
-// Each ready entry carries the session generation its encode belonged to.
+// Overlay preview prepared in the background as soon as the desktop is frozen, so the JPEG
+// encode overlaps WebView creation. None = encoding, Some(None) = failed, Some(Some) =
+// ready; each ready entry carries its session generation.
 pub(crate) type SnipPreviewSlot = Option<(u64, Option<SnipBg>)>;
 #[derive(Clone)]
 pub(crate) struct SnipPreview(pub(crate) Arc<Mutex<SnipPreviewSlot>>);
@@ -47,9 +43,8 @@ pub(crate) fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, g
     true
 }
 
-// True while a snip session is on screen (between open_snip and capture/cancel).
-// The overlay window itself is kept alive and reused, so this flag: not the
-// window's existence: is what tells open_snip a snip is already in progress.
+// True while a snip session is on screen. The overlay window is kept alive and reused, so
+// this flag, not the window's existence, tells open_snip a snip is in progress.
 pub(crate) static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // True once the running session's overlay was put on screen (snip_present or the
@@ -61,10 +56,9 @@ pub(crate) fn watchdog_should_reveal(session_active: bool, presented: bool) -> b
     session_active && !presented
 }
 
-// Bumped by begin_capture every time a session starts. A capture that is already
-// running when the session is cancelled (and maybe a new one started) compares the
-// number it saw at its start, so it can tell that its session is gone and must not
-// copy, save, announce or close anything.
+// Bumped by begin_capture whenever a session starts. A capture still running after its
+// session was cancelled compares the number it saw at its start and must then not copy,
+// save, announce or close anything.
 pub(crate) static SNIP_GEN: AtomicU64 = AtomicU64::new(0);
 
 // True while the session a capture started in is still the running one.
@@ -80,17 +74,13 @@ pub(crate) fn snip_session_current(gen_at_start: u64) -> bool {
 // snip. Both share the freeze + overlay pipeline; only the overlay's mode differs.
 pub(crate) static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-// The running recording-target pick is for a live target switch on an
-// already-running recording, not for starting a new one -- read once by
-// recorder_target_picked to mark its emitted event so the two very different
-// listeners (start a recording vs. swap its source) never both react to it.
+// The running recording-target pick is a live target switch, not a new recording. Read once
+// by recorder_target_picked so the start and swap listeners never both react.
 pub(crate) static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
 
-// The labels of the app windows begin_capture actually hid for this session (the
-// ones that were visible beforehand), so the end of the session restores exactly
-// those and nothing else: a snip started with screenshots allowed, or a window that
-// was already hidden (main closed to the tray, a pill hidden on purpose), is never
-// popped up by a snip.
+// Labels of the app windows begin_capture actually hid (those visible beforehand), so the
+// session end restores exactly those: a window hidden on purpose is never popped up by a
+// snip.
 pub(crate) static SNIP_HID_APP: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 pub(crate) fn restore_app_windows_after_snip(app: &AppHandle) {
@@ -110,9 +100,9 @@ pub(crate) fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
         .collect()
 }
 
-// Bring a snip's result to the main window (editor, result dialog, OCR text): the
-// restore pass no longer shows a main window that was hidden before the snip, so
-// the paths that hand something to main show it themselves.
+// Bring a snip's result (editor, result dialog, OCR text) to the main window. The restore
+// pass does not show a main window that was hidden before the snip, so these paths show it
+// themselves.
 pub(crate) fn reveal_main_for_snip_result(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
@@ -121,10 +111,8 @@ pub(crate) fn reveal_main_for_snip_result(app: &AppHandle) {
     }
 }
 
-// End the current snip session: HIDE (never close) the reusable overlay so its
-// warm WebView2 survives for the next snip, bring the app's own windows back, and
-// drop the temp preview. Closing the overlay is what forced every snip to pay the
-// full WebView2 cold-start: keeping it alive is the whole speed win.
+// End the current snip session: hide (never close) the reusable overlay so its warm WebView2
+// survives for the next snip, restore the app's windows and drop the temp preview.
 pub(crate) fn close_all_snip(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
@@ -132,33 +120,28 @@ pub(crate) fn close_all_snip(app: &AppHandle) {
         }
     }
     restore_app_windows_after_snip(app);
-    // Ending a session invalidates every capture still running for it at once, so a
-    // late one never ends, copies or announces on behalf of the next session. Done
-    // before the preview is removed: a preview encode finishing between the two would
-    // otherwise still pass its generation check and register a file nobody removes.
+    // Ending a session invalidates every capture still running for it. Done before the preview
+    // is removed: an encode finishing between the two would pass its generation check and
+    // register a file nobody removes.
     SNIP_GEN.fetch_add(1, Ordering::SeqCst);
     remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     SNIP_PRESENTED.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
-    // The frozen geometry belongs to the session that just ended; a later reveal
-    // must never place the overlay with it.
+    // The frozen geometry belongs to the ended session.
     if let Some(state) = app.try_state::<SnipState>() {
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
-    // Every path that ends a snip session (capture, cancel, window click)
-    // funnels through here, so this is the one place that can guarantee OCR mode
-    // never survives past the session it was armed for.
+    // Every path that ends a session funnels through here, so OCR mode cannot outlive the
+    // session it was armed for.
     if let Some(m) = app.try_state::<SnipModeState>() {
         *m.0.lock().unwrap_or_else(|e| e.into_inner()) = SnipMode::Capture;
     }
 }
 
-// Hide the app's own windows (the main window and floating pills) around a snip,
-// so a screenshot never contains the app itself (this also reveals whatever the
-// main window was covering, e.g. Task Manager). Returns the labels that were
-// visible beforehand and are now hidden: that is the set the end of the session
-// restores, and begin_capture skips its post-hide settle delay when it is empty.
+// Hide the app's own windows (main and floating pills) around a snip so a screenshot never
+// contains the app. Returns the labels that were visible and are now hidden: the restore
+// set, and begin_capture skips its settle delay when it is empty.
 pub(crate) fn hide_app_windows(app: &AppHandle) -> Vec<String> {
     let mut before: Vec<(String, bool)> = Vec::new();
     for (label, win) in app.webview_windows() {
@@ -170,16 +153,14 @@ pub(crate) fn hide_app_windows(app: &AppHandle) -> Vec<String> {
     windows_to_restore(&before)
 }
 
-// A folder window is always-on-top exactly like a pill, and every other caller that
-// hides float- windows for a screenshot already pairs it with folder-: missing it
-// left an open folder sitting in the snip capture.
+// A folder window is always-on-top like a pill; an open folder would otherwise show up in
+// the snip capture.
 pub(crate) fn is_snip_hidden_label(label: &str) -> bool {
     label == "main" || label.starts_with("float-") || label.starts_with("folder-")
 }
 
-// Show the windows hide_app_windows put away. The main window also comes out of
-// any minimized state and gets the focus, so finishing or cancelling a snip never
-// leaves it behind other windows, which reads as the app having minimized itself.
+// Show the windows hide_app_windows put away. The main window also leaves minimized state
+// and gets focus, so ending a snip never leaves it behind other windows.
 pub(crate) fn show_app_windows(app: &AppHandle, labels: &[String]) {
     for label in labels {
         if let Some(win) = app.get_webview_window(label) {
@@ -228,16 +209,11 @@ pub(crate) fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
     Some(path.to_string_lossy().into_owned())
 }
 
-// Crash-mid-session leftovers in the OS temp dir are never cleaned by anything
-// else: the snip preview only ever deletes its own immediate predecessor (that
-// bookkeeping is in-memory only, lost on a crash or a plain restart), and
-// update.cmd deletes the installer + itself but never its own staging folder.
-// Swept at startup and then on a slow cadence, since these are rare leftovers
-// from an abnormal exit, not a live resource any running instance still needs.
-// A snip preview lives only for the few minutes between taking a screenshot and
-// saving/discarding it, so anything older than this was abandoned (a crash, a
-// kill) rather than in active use: well short of catching a file another,
-// concurrently running instance ("Allow multiple instances") is using right now.
+// Leftovers from a crash mid-session sit in the OS temp dir and nothing else cleans them:
+// the snip preview only deletes its own in-memory-tracked predecessor, and update.cmd leaves
+// its staging folder. Swept at startup and then slowly.
+// A snip preview lives minutes, so anything older than this was abandoned, while a file
+// another running instance ("Allow multiple instances") uses is far younger.
 pub(crate) const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
 // How often the sweep repeats while the app keeps running.
 pub(crate) const STALE_TEMP_SWEEP_SECS: u64 = 6 * 3600;
@@ -249,14 +225,12 @@ pub(crate) fn sweep_stale_temp_files() {
 // The sweep over an explicit temp root, so a test can point it at a folder of
 // its own instead of the shared one.
 pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
-    // This process's own live preview is exempt whatever its age says. A modal
-    // left open past the stale age is unusual but perfectly legitimate, and the
-    // repeat sweeps mean the file is no longer guaranteed to be young.
+    // This process's own live preview is exempt whatever its age: a modal can legitimately stay
+    // open past the stale age.
     let live_preview = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let snip_prefix = format!("{}-snip-", brand::TEMP_PREFIX);
     let update_prefix = format!("{}-update-", brand::SLUG);
-    // Each of these dirs holds a staged ~8 MB MicrosoftEdgeWebview2Setup.exe that
-    // nothing else ever deletes once the bootstrapper has run or been declined.
+    // Each holds a staged ~8 MB MicrosoftEdgeWebview2Setup.exe that nothing else deletes.
     let wv2_prefix = format!("{}-wv2-", brand::SLUG);
     let is_stale = |e: &fs::DirEntry| {
         e.metadata()
@@ -277,26 +251,21 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
         }
     }
 
-    // OCR leftovers (a crop/page image and its install-result json) live one level
-    // down, in the app's own TEMP_DIR subfolder -- the same folder the versioned
-    // pdfium cache (`pdfium_cache_path`) lives in. Only the ocr-* names below are
-    // ever touched here; the pdfium-<version>.dll cache is swept separately, by
-    // version, in `sweep_stale_pdfium_dlls` -- never by age here.
+    // OCR leftovers (crop/page image, install-result json) live one level down in the app's
+    // TEMP_DIR subfolder, next to the versioned pdfium cache. Only ocr-* names are touched here;
+    // the pdfium dlls are swept by version in sweep_stale_pdfium_dlls.
     let ocr_dir = dir.join(brand::TEMP_DIR);
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
-        // 126 gave voice dictation its own CapKind::Speech leftovers in this same
-        // folder ("-voice-..."), never added here -- an install/listing result,
-        // script or DISM log for a language pack sat forever regardless of age.
+        // Voice dictation leftovers (install/listing results, scripts, DISM logs) live in the same
+        // folder.
         let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
         let voice_prefix = format!("{}-voice-", brand::TEMP_PREFIX);
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             let is_ours = name.starts_with(&ocr_prefix) || name.starts_with(&voice_prefix);
             let is_ocr_png = is_ours && name.ends_with(".png");
-            // Result files of the two elevated PowerShell runs (installing a pack,
-            // listing the packs), and the DISM log/scratch redirect. Each
-            // script deletes itself in its own `finally`, so a .ps1 here is only
-            // ever one left behind by a hard kill mid-run.
+            // Result files of the two elevated PowerShell runs (install, list) and the DISM log. Each
+            // script deletes itself, so a .ps1 here was left by a hard kill.
             let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
@@ -304,12 +273,9 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
         }
     }
 
-    // filmstrip_cache_dir's own comment used to claim this folder rode
-    // along with the OCR/voice cleanup above -- it never did, since that loop
-    // only ever matches flat files by name prefix, never a subdirectory. Each
-    // (recording, requested thumbnail count) pair gets its own cache
-    // subdirectory that nothing ever revisits once the recording is gone,
-    // renamed, or re-encoded, so without this the folder only ever grows.
+    // Each (recording, thumbnail count) pair gets its own cache subdirectory that nothing
+    // revisits once the recording is gone, renamed or re-encoded. The flat-file loop above
+    // never matches directories.
     let thumb_dir = ocr_dir.join("video-thumbs");
     if let Ok(entries) = fs::read_dir(&thumb_dir) {
         for e in entries.flatten() {
@@ -319,10 +285,8 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
         }
     }
 
-    // Working copies of a file opened for editing from outside the app
-    // (never the original) -- one directory per open, holding exactly one
-    // copy. The editor itself never deletes this once the window is closed,
-    // so without this sweep the folder would only ever grow.
+    // Working copies of a file opened for editing from outside the app (never the original),
+    // one directory per open. The editor never deletes them when it closes.
     let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
     // Still frames cut out of a video land in the same folder; a crash or kill
     // mid-extraction leaves the frame behind.
@@ -364,14 +328,10 @@ pub(crate) fn remove_own_temp_leftovers() {
     remove_own_temp_leftovers_in(&std::env::temp_dir(), std::process::id());
 }
 
-// The "Copy to clipboard" export's own throwaway files, in the same
-// TEMP_DIR subfolder the OCR/voice leftovers above use. Kept separate from
-// sweep_stale_temp_files because its max age (CLIP_EXPORT_TTL_SECS, one
-// hour) differs from the fixed
-// STALE_TEMP_FILE_AGE every other class above uses.
-// (count, bytes) removed -- the temporary-exports row's cleanup button
-// reports what this actually did, same reasoning as sweep_recordings_now's
-// own on-demand result.
+// The "Copy to clipboard" export's throwaway files, in the same TEMP_DIR subfolder.
+// Separate from sweep_stale_temp_files because its max age (CLIP_EXPORT_TTL_SECS) differs
+// from STALE_TEMP_FILE_AGE. Returns (count, bytes) removed, so the temporary-exports
+// cleanup button can report what it did.
 pub(crate) fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
     sweep_clip_export_temp_in(&std::env::temp_dir().join(brand::TEMP_DIR), age)
 }
@@ -403,9 +363,8 @@ pub(crate) fn sweep_clip_export_temp_in(dir: &Path, age: Duration) -> (u32, u64)
     (count, bytes)
 }
 
-// The overview row's amount readout for the same folder sweep_clip_export_temp cleans --
-// every "-clipexport-" file regardless of age, so the overview row can show
-// what is there right now, not just what the next sweep would remove.
+// Amount readout for the folder sweep_clip_export_temp cleans: every -clipexport- file
+// regardless of age.
 pub(crate) fn clip_export_temp_stats() -> (u64, u64) {
     clip_export_temp_stats_in(&std::env::temp_dir().join(brand::TEMP_DIR))
 }
@@ -471,14 +430,11 @@ pub(crate) struct SnipBg {
     // The last picked colours as #rrggbb, newest first. Handed over with the
     // session so the overlay page never has to keep history state of its own.
     pub(crate) pick_history: Vec<String>,
-    // Run the overlay as a recording-target picker instead: same window
-    // hover/drag-region mechanics as a screenshot, but a click/drag resolves a
-    // recording target instead of capturing an image.
+    // Run the overlay as a recording-target picker: same hover and drag mechanics, but a click
+    // or drag resolves a recording target instead of capturing an image.
     pub(crate) record: bool,
-    // Stitched-canvas origin in true virtual-desktop physical pixels. The
-    // overlay's own coordinates are canvas-relative (see SnipWindow); the
-    // recorder needs true absolute coordinates to resolve which monitor a
-    // region belongs to.
+    // Stitched-canvas origin in true virtual-desktop physical pixels. The overlay's coordinates
+    // are canvas-relative; the recorder needs absolute ones to resolve a monitor.
     pub(crate) origin_x: i32,
     pub(crate) origin_y: i32,
 }
@@ -500,8 +456,6 @@ pub(crate) struct SnipWindow {
     pub(crate) width: u32,
     pub(crate) height: u32,
 }
-
-// ---- Fast screen capture via GDI (one BitBlt; no per-monitor DXGI setup) ----
 
 // Capture a screen rectangle (global physical px) with GDI BitBlt. Immediate (no
 // DXGI latency) and includes every visible window: elevated ones too.
@@ -530,9 +484,8 @@ pub(crate) fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<imag
     #[repr(C)]
     struct BmInfo { header: BmHeader, colors: [u32; 3] }
     const SRCCOPY: u32 = 0x00CC_0020;
-    // Reject non-positive or absurdly large rects: keep w*h*4 a sane allocation so
-    // a spoofed/extreme virtual-screen metric can never abort the process on OOM.
-    // 300M px ≈ 1.2 GB RGBA: far above any real multi-monitor desktop.
+    // Reject non-positive or absurdly large rects so w*h*4 stays a sane allocation. 300M px is
+    // about 1.2 GB RGBA, far above any real desktop.
     if w <= 0 || h <= 0 || (w as u64) * (h as u64) > 300_000_000 {
         return None;
     }
@@ -577,9 +530,8 @@ pub(crate) fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<imag
         if got == 0 {
             return None;
         }
-        // GDI returns BGRA; convert to RGBA and force opaque alpha. Parallelized:
-        // a multi-monitor capture is tens of millions of pixels, so a serial swap
-        // was a big slice of the freeze time.
+        // GDI returns BGRA; convert to RGBA with opaque alpha, in parallel (a multi-monitor capture
+        // is tens of millions of pixels).
         use rayon::prelude::*;
         buf.par_chunks_exact_mut(4).for_each(|px| {
             px.swap(0, 2);
@@ -644,18 +596,16 @@ pub(crate) fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
     Ok((canvas, min_x, min_y))
 }
 
-// A monitor's global physical origin -> where its capture starts inside the
-// stitched frozen image. The virtual desktop's origin is negative as soon as a
-// monitor sits left of or above the primary, so this shift: not any DPI scale
-// factor: is what makes a pixel on a differently scaled second monitor address
-// the byte the capture actually holds. Every frozen coordinate is physical.
+// A monitor's global physical origin to where its capture starts in the stitched image. The
+// virtual desktop origin is negative once a monitor sits left of or above the primary, so
+// this shift, not a DPI scale, addresses the right byte. Every frozen coordinate is
+// physical.
 pub(crate) fn stitch_offset(global: i32, origin: i32) -> i64 {
     (global - origin) as i64
 }
 
-// ---------- colour picker ----------
-// Same freeze + overlay as the snipping tool; the overlay just runs in pick mode.
-// The picked value goes to the CLIPBOARD ONLY: no prompt, no copy history.
+// Colour picker: same freeze and overlay as the snipping tool, in pick mode. The picked
+// value goes to the clipboard only, with no prompt or copy history.
 
 // Loupe magnification + output notation, straight from the expert menu.
 pub(crate) struct PickCfg {
@@ -688,11 +638,10 @@ pub(crate) fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
     format!("#{:02X}{:02X}{:02X}", r, g, b)
 }
 
-// The last picked colours, newest first. Recorded here rather than in the
-// overlay page, because this is the side that knows what actually reached the
-// clipboard: a hidden or reloaded webview cannot lose the list. Kept in memory
-// for the running session, mirrored into `ui_texts["pickHistory"]` (comma-joined
-// hex) so it survives a restart; the mirror is the only thing ever written to disk.
+// The last picked colours, newest first. Recorded here, not in the overlay page, because
+// this side knows what reached the clipboard and a reloaded webview cannot lose it. In
+// memory for the session, mirrored into ui_texts["pickHistory"] (comma-joined hex) so it
+// survives a restart.
 pub(crate) const PICK_HISTORY_DEFAULT: usize = 5;
 pub(crate) const PICK_HISTORY_CAP: usize = 20;
 pub(crate) static PICK_HISTORY: Mutex<Vec<[u8; 3]>> = Mutex::new(Vec::new());
@@ -747,12 +696,10 @@ pub(crate) fn load_pick_history(settings: &Settings) {
     }
 }
 
-// RGB -> HSL as rounded integers (degrees, percent, percent). Grey has no hue, so
-// it reports 0°/0%; the hue wraps so 360° is always written as 0°.
-// clippy::float_cmp (pedantic): every `==` below compares a value straight out of
-// f64::max/min against one of its own unmodified inputs -- max()/min() return one
-// of their arguments bit-for-bit, no arithmetic happens in between, so this is
-// exact identity, not the "drifted after computation" case the lint warns about.
+// RGB to HSL as rounded integers (degrees, percent, percent). Grey reports hue 0; 360 is
+// written as 0.
+// clippy::float_cmp: each == below compares a value from f64::max/min against one of its
+// own unmodified inputs, which is exact identity.
 #[allow(clippy::float_cmp)]
 pub(crate) fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
     let (rf, gf, bf) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
@@ -830,16 +777,14 @@ pub(crate) struct ColorPick {
     pub(crate) hsl: String,
 }
 
-// Longest tile edge the overlay may ask for. The loupe needs a few dozen pixels
-// around the cursor, so this is generous: but it is also the cap that stops a
-// bogus request from allocating a desktop-sized buffer.
+// Longest tile edge the overlay may ask for: generous for the loupe, and the cap that stops
+// a bogus request from allocating a desktop-sized buffer.
 pub(crate) const PICK_TILE_MAX: u32 = 512;
 
-// Hand the overlay ONE patch of the frozen desktop as packed RGB (3 bytes per
-// pixel, row order). The loupe samples locally, so it caches a patch and only asks
-// again when the cursor nears its edge: shipping the whole desktop instead cost a
-// ~58 MB transfer on a multi-monitor setup, which is what made the picker slow to
-// open. Empty outside a pick session or for a rect that is not fully on the frame.
+// Hand the overlay one patch of the frozen desktop as packed RGB. The loupe caches a patch
+// and asks again only near its edge; shipping the whole desktop cost ~58 MB on multi-monitor
+// setups and made the picker slow to open. Empty outside a pick session or for a rect not
+// fully on the frame.
 #[tauri::command]
 pub(crate) fn pick_tile(state: State<SnipState>, x: u32, y: u32, width: u32, height: u32) -> tauri::ipc::Response {
     if !PICK_ACTIVE.load(Ordering::SeqCst) || width > PICK_TILE_MAX || height > PICK_TILE_MAX {
@@ -933,10 +878,9 @@ pub(crate) fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<Str
     Ok(text)
 }
 
-// Where and how the idle, pre-warmed snip overlay sits: a few pixels, far outside
-// every monitor, with an opaque dark native backdrop. Should anything ever show it
-// while no snip is running, it is then a speck nobody can see, never the default
-// 800x600 white rectangle at the system's default spot on the main screen.
+// Where the idle, pre-warmed snip overlay sits: a few pixels far outside every monitor with
+// an opaque dark backdrop, so if anything shows it outside a snip it is an invisible speck,
+// not a default 800x600 white window.
 pub(crate) struct SnipPrewarmSpec {
     pub(crate) width: u32,
     pub(crate) height: u32,
@@ -964,10 +908,9 @@ pub(crate) fn park_idle_snip_overlay(app: &AppHandle) {
     park_snip_window(&win);
 }
 
-// Hidden, tiny and far off-screen: the resting place of the overlay between
-// snips. A session ends with this too, so a hidden overlay never keeps the full
-// desktop size it had for the last snip; the next snip sets its bounds again
-// before it reveals the window.
+// Hidden, tiny and far off-screen: the overlay's resting place between snips. A session
+// ends with this too, so a hidden overlay never keeps the last snip's desktop size; the
+// next snip sets its bounds before revealing.
 pub(crate) fn park_snip_window(win: &tauri::WebviewWindow) {
     let spec = snip_prewarm_spec();
     let _ = win.hide();
@@ -975,12 +918,10 @@ pub(crate) fn park_snip_window(win: &tauri::WebviewWindow) {
     let _ = win.set_position(PhysicalPosition::new(spec.x, spec.y));
 }
 
-// Build the (hidden) snip overlay window: borderless WS_POPUP, no shadow,
-// always-on-top. It is born tiny and off-screen (snip_prewarm_spec); every real
-// snip sets the full desktop bounds before it reveals the window. Created once
-// and reused across snips so the WebView2 cold-start is paid a single time. A
-// Destroyed handler clears the session and restores the app's windows if the
-// overlay is ever torn down.
+// Build the hidden snip overlay: borderless WS_POPUP, no shadow, always-on-top, born tiny
+// and off-screen (snip_prewarm_spec). Created once and reused so the WebView2 cold start
+// is paid once. A Destroyed handler clears the session and restores the app's windows if
+// the overlay is ever torn down.
 pub(crate) fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     let spec = snip_prewarm_spec();
     let win = WebviewWindowBuilder::new(app, "snip-0", WebviewUrl::App("snip.html".into()))
@@ -1018,14 +959,11 @@ pub(crate) fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow,
     Ok(win)
 }
 
-// Freeze the desktop and open a single overlay spanning all screens. The
-// frontend maps the cursor by ratio against the displayed frozen image, so the
-// selection is pixel-exact on any DPI mix AND can be dragged across monitors.
-//
-// Speed: the preview JPEG is encoded on a background thread the moment the
-// desktop is frozen, so it runs CONCURRENTLY with WebView creation rather than
-// serially after it; the overlay window is built hidden and only revealed once
-// its frozen image has decoded (snip_present), so it never flashes up blank.
+// Freeze the desktop and open one overlay spanning all screens. The frontend maps the
+// cursor by ratio against the displayed frozen image, so selection is pixel-exact on any
+// DPI mix and can cross monitors. The preview JPEG is encoded on a background thread right
+// after the freeze, concurrently with WebView creation, and the overlay is revealed only
+// once its image has decoded (snip_present), so it never flashes blank.
 #[tauri::command]
 pub(crate) async fn open_snip(
     app: AppHandle,
@@ -1035,10 +973,8 @@ pub(crate) async fn open_snip(
     begin_capture(app, state, preview, false, false).await
 }
 
-// The very same freeze + overlay, opened in colour-pick mode. Reusing the
-// pipeline is what makes the picker pixel-exact and DPI-correct for free: the
-// frozen frame is taken BEFORE the overlay shows, so the overlay is never in its
-// own capture source.
+// The same freeze and overlay in colour-pick mode. The frozen frame is taken before the
+// overlay shows, so the overlay is never in its own capture.
 #[tauri::command]
 pub(crate) async fn open_picker(
     app: AppHandle,
@@ -1056,10 +992,9 @@ pub(crate) async fn open_picker(
     begin_capture(app, state, preview, true, false).await
 }
 
-// The same overlay, opened as a recording-target picker: a click on a
-// window or a dragged region resolves the recording target instead of
-// capturing an image. No on/off check here -- the screenRecord feature toggle
-// already gates whether the composer button that calls this even shows.
+// The same overlay as a recording-target picker: a click on a window or a dragged region
+// resolves the recording target. No on/off check: the screenRecord feature toggle already
+// gates the button that calls this.
 #[tauri::command]
 pub(crate) async fn open_recorder(
     app: AppHandle,
@@ -1073,10 +1008,9 @@ pub(crate) async fn open_recorder(
     begin_capture(app, state, preview, false, true).await
 }
 
-// The same picker again, opened FROM the running recording's own control bar
-// to swap its source instead of starting a new recording -- the only
-// difference from open_recorder is the flag recorder_target_picked reads to
-// mark its result as a switch, not a start.
+// The same picker opened from the running recording's control bar to swap its source.
+// Differs from open_recorder only in the flag recorder_target_picked reads to mark its
+// result as a switch.
 #[tauri::command]
 pub(crate) async fn open_recorder_switch(
     app: AppHandle,
@@ -1136,10 +1070,9 @@ pub(crate) async fn begin_capture(
             (cfg, hist_max, snip_delay, capture_hides_app_windows(capture_excluded(settings)))
         })
         .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: PICK_LOUPE_CELLS }, PICK_HISTORY_DEFAULT, 0, true));
-    // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
-    // webview un-throttles DURING the freeze+encode below. Without this head start the
-    // icon path (overlay idle a while) lags behind a retry (whose webview was just
-    // on-screen, still awake). The reuse path re-parks it full off-screen, then emits.
+    // Wake the overlay's WebView2 (off-screen) so a long-idle, background-throttled webview
+    // un-throttles during the freeze and encode below. The reuse path re-parks it full
+    // off-screen, then emits.
     if let Some(win) = app.get_webview_window("snip-0") {
         let _ = win.set_size(PhysicalSize::new(2, 2));
         let _ = win.set_position(PhysicalPosition::new(-32000, -32000));
@@ -1183,8 +1116,7 @@ pub(crate) async fn begin_capture(
         return Ok(());
     }
     let (total_w, total_h) = canvas.dimensions();
-    // Arc'd so the preview encode (worker thread) and the stored capture (full-res
-    // crops) share one buffer instead of each paying for their own ~80 MB copy.
+    // Arc so the preview encode (worker thread) and the stored capture share one buffer.
     let canvas = Arc::new(canvas);
     let enc_img = canvas.clone();
     *state.0.lock().unwrap_or_else(|e| e.into_inner()) = vec![MonitorCap {
@@ -1232,17 +1164,14 @@ pub(crate) async fn begin_capture(
         preview_slot_store(&mut slot.lock().unwrap_or_else(|e| e.into_inner()), gen_now, gen, bg);
     });
 
-    // Reuse the overlay if it already exists. A long-idle HIDDEN WebView2 is heavily
-    // background-throttled (clamped timers, paused rAF/IPC): THAT, not cold-start, is
-    // why the first snip lagged behind a retry (whose webview was shown moments ago).
-    // So wake it WITHOUT a flash: show it 2×2 off-screen, which flips the page to
-    // "visible" and resumes its JS at full speed. snip_present (fired on the frozen
-    // image's onload, now prompt) sizes + moves it on-screen, so the reveal is instant
-    // and flash-free. Same path for the first snip and every retry → same speed.
+    // Reuse the overlay if it exists. A long-idle hidden WebView2 is heavily
+    // background-throttled (clamped timers, paused rAF/IPC), which is why the first snip lagged
+    // behind a retry. Wake it without a flash: show it 2x2 off-screen, which resumes its JS at
+    // full speed; snip_present then sizes and moves it on-screen.
     if let Some(win) = app.get_webview_window("snip-0") {
-        // Park it at FULL size but just off-screen (below everything), shown so the
-        // webview un-throttles and paints. snip_present then only MOVES it on-screen:
-        // no resize, no DPI re-assert: so the reveal can't flicker.
+        // Park it at full size just off-screen, shown so the webview un-throttles and paints.
+        // snip_present then only moves it on-screen, with no resize or DPI re-assert, so the reveal
+        // cannot flicker.
         let _ = win.set_size(PhysicalSize::new(total_w, total_h));
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y + total_h as i32 + 100));
         let _ = win.show();
@@ -1251,9 +1180,9 @@ pub(crate) async fn begin_capture(
         return Ok(());
     }
 
-    // Pre-warm missed (first snip happened before startup pre-warm built it): build
-    // the overlay now, paying the WebView2 cold-start once. SNIP_ACTIVE is already
-    // set, so the page's load-time snip_should_begin check drives this session.
+    // The startup pre-warm has not built the overlay yet: build it now, paying the WebView2
+    // cold start once. SNIP_ACTIVE is already set, so the page's load-time snip_should_begin
+    // check drives this session.
     let win = match build_snip_window(&app) {
         Ok(w) => w,
         Err(e) => {
@@ -1288,9 +1217,8 @@ pub(crate) async fn reveal_snip(app: &AppHandle) -> bool {
     };
     SNIP_PRESENTED.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window("snip-0") {
-        // Already full-size (parked off-screen on reuse), so this moves it on-screen in
-        // one shot: no resize, no re-assert → no flicker. The frozen image is already
-        // decoded (snip_present fires on its onload). set_size covers the cold path.
+        // Already full size (parked off-screen on reuse), so this moves it on-screen in one shot
+        // with no resize or re-assert. set_size covers the cold path.
         let _ = win.set_size(PhysicalSize::new(total_w, total_h));
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y));
         let _ = win.show();
@@ -1406,19 +1334,16 @@ pub(crate) fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWin
     out
 }
 
-// The colour picker shows the frozen desktop as the reference for the colour it is
-// about to copy, so its background must not carry JPEG's subsampled chroma: below
-// quality 90 the encoder halves the colour resolution, which is exactly the "washed
-// out" look. 92 keeps full chroma (4:4:4).
+// The colour picker shows the frozen desktop as the reference for the colour it copies, so
+// its background must keep full chroma: below quality 90 the encoder subsamples chroma and
+// the image looks washed out. 92 keeps 4:4:4.
 pub(crate) const PICK_Q: u8 = 92;
-// The screenshot overlay shows the same frozen desktop at native resolution, and
-// coloured text on it smears under subsampled chroma just the same, so it uses the
-// same full-chroma quality. Fixed, not a setting.
+// The screenshot overlay uses the same full-chroma quality, since coloured text smears under
+// subsampled chroma. Fixed, not a setting.
 pub(crate) const SNIP_PREVIEW_Q: u8 = PICK_Q;
-// Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
-// size + encode time: a full-res PNG data URL used to stall the whole app on save.
-// Default for the expert-tunable snipSaveQuality (read in finalize_capture) --
-// so a screenshot and its post-edit re-export share one visible quality.
+// Saved-button JPEG quality: crisp text but still a fraction of a PNG's size and encode
+// time. Default for the expert-tunable snipSaveQuality (read in finalize_capture), so a
+// screenshot and its post-edit re-export share one visible quality.
 pub(crate) const SNIP_SAVE_Q: u8 = 90;
 
 // Encode RGBA bytes to a JPEG for the overlay preview. jpeg-encoder = SIMD baseline JPEG,
@@ -1433,11 +1358,8 @@ pub(crate) fn encode_snip_jpeg(rgba: &[u8], w: u32, h: u32, quality: u8) -> Opti
     Some(buf)
 }
 
-// The screenshot format setting's file extension and data-URL mime type --
-// one place for both, so a fifth format never needs updating in two spots
-// that could drift apart. Any value other than the four named ones (an old
-// setting from before this list existed, a hand-edited settings file) falls
-// back to png, the current default.
+// File extension and data-URL mime for the screenshot format setting, in one place. Any
+// other value (an old or hand-edited setting) falls back to png.
 pub(crate) fn screenshot_format_ext(format: &str) -> &'static str {
     match format {
         "jpeg" => "jpg",
@@ -1470,12 +1392,10 @@ pub(crate) fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
     }
 }
 
-// Encodes a screenshot in whichever of the four formats the setting names.
-// JPEG keeps the fast SIMD path above; the other four go through the image
-// crate, already linked for thumbnails elsewhere. All four are written
-// lossless -- the image crate's own WebP encoder only ever writes lossless
-// VP8L, it has no lossy/quality mode to plug snipSaveQuality into, so quality
-// only ever applies to JPEG (see screenshot_format_needs_quality below).
+// Encodes a screenshot in the format the setting names. JPEG keeps the fast SIMD path
+// above; the others go through the image crate and are written lossless (its WebP encoder
+// writes only lossless VP8L), so quality applies to JPEG only (see
+// screenshot_format_needs_quality).
 pub(crate) fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_quality: u8) -> Option<Vec<u8>> {
     if screenshot_format_needs_quality(format) {
         return encode_snip_jpeg(rgba, w, h, jpeg_quality);
@@ -1493,31 +1413,25 @@ pub(crate) fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_
     Some(buf)
 }
 
-// Whether the quality slider means anything for this format -- JPEG only
-// (see encode_screenshot's own comment on why WebP does not qualify too,
-// despite the image crate technically supporting it as a target format).
+// Whether the quality slider means anything for this format: JPEG only (see
+// encode_screenshot).
 pub(crate) fn screenshot_format_needs_quality(format: &str) -> bool {
     format == "jpeg"
 }
 
-// A screenshot's own data URL is always PNG or whatever the format setting
-// already was when it was captured (see finalize_capture) -- both the "Save
-// as" dialog and a later "save to folder" toggle can still ask for a
-// DIFFERENT format than what is already encoded (the setting changed since
-// capture, or the save dialog's own per-operation choice), so both decode
-// back to raw pixels first and re-encode fresh rather than writing the
-// existing bytes under a new, wrong extension. Lossless start to lossless
-// end never loses anything; only landing on jpeg is ever lossy, exactly once.
+// A screenshot's data URL is PNG or whatever format was set when it was captured. "Save
+// as" and a later "save to folder" can ask for a different format, so both decode back to
+// pixels and re-encode instead of writing the existing bytes under a wrong extension. Only
+// landing on jpeg is lossy, and only once.
 pub(crate) fn reencode_screenshot_bytes(bytes: &[u8], format: &str, quality: u8) -> Result<Vec<u8>, String> {
     let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
     let (w, h) = (img.width(), img.height());
     encode_screenshot(&img.into_rgba8().into_raw(), w, h, format, quality).ok_or_else(|| "encode failed".to_string())
 }
 
-// Hand the overlay its frozen-desktop preview. The encode was started in
-// open_snip the instant the desktop was frozen; here we just wait for it (the
-// slot is usually already filled, so this returns near-instantly) and hand it
-// over. index is kept for the existing single-overlay call signature.
+// Hand the overlay its frozen-desktop preview. The encode started in open_snip right after
+// the freeze, so the slot is usually already filled. index is kept for the existing
+// single-overlay call signature.
 #[tauri::command]
 pub(crate) async fn snip_background(preview: State<'_, SnipPreview>, index: usize) -> Result<Option<SnipBg>, String> {
     let _ = index;
@@ -1540,12 +1454,11 @@ pub(crate) fn snip_cancel(app: AppHandle, state: State<SnipState>) {
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
-// The recording overlay's window-click / region-drag resolved to a target:
-// close the overlay (same cleanup as a real screenshot) and hand the
-// target to the main window, which runs the countdown and opens the control
-// bar. `x`/`y`/`width`/`height` are stitched-canvas-relative for "window"
-// (unused there) and absolute virtual-desktop physical pixels for "region"
-// (the caller adds SnipBg's origin_x/origin_y before calling this).
+// The recording overlay's window click or region drag resolved to a target: close the
+// overlay (same cleanup as a screenshot) and hand the target to the main window, which runs
+// the countdown and opens the control bar. x/y/width/height are stitched-canvas-relative
+// for "window" (unused) and absolute virtual-desktop physical pixels for "region" (the
+// caller adds SnipBg's origin).
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) fn recorder_target_picked(
@@ -1573,9 +1486,8 @@ pub(crate) fn recorder_target_picked(
         }
         _ => return Err("invalid recording target".to_string()),
     };
-    // A pick opened from the running recording's own bar (open_recorder_switch)
-    // is meant to swap that recording's source, not start a second one -- see
-    // REC_SWITCH_PICK's own doc comment for why this needs a flag at all.
+    // A pick opened from the running recording's bar (open_recorder_switch) swaps that
+    // recording's source instead of starting a second one (see REC_SWITCH_PICK).
     if REC_SWITCH_PICK.swap(false, Ordering::SeqCst) {
         payload["forSwitch"] = serde_json::json!(true);
     }
@@ -1585,12 +1497,10 @@ pub(crate) fn recorder_target_picked(
     Ok(())
 }
 
-// Which monitor a region belongs to (its HMONITOR, per Win32 convention), and
-// the region's origin relative to that monitor's own top-left -- what
-// RecTarget::Region needs, since WGC captures a whole monitor and the crop
-// happens in software. Same raw-extern style as set_capture_exclusion /
-// window_is_protected, rather than pulling in more `windows` crate features
-// for two calls used nowhere else.
+// Which monitor a region belongs to (its HMONITOR) and the region's origin relative to that
+// monitor's top-left, which RecTarget::Region needs since WGC captures a whole monitor and
+// the crop happens in software. Raw extern calls like set_capture_exclusion and
+// window_is_protected, instead of more windows crate features for two calls.
 #[cfg(windows)]
 pub(crate) fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(i64, i32, i32), String> {
     #[repr(C)]
@@ -1614,10 +1524,9 @@ pub(crate) fn resolve_region_monitor(x: i32, y: i32, _w: u32, _h: u32) -> Result
     Ok((0, x, y))
 }
 
-// Arms (or disarms) OCR mode for the very next capture_region call, called by
-// the frontend right before it opens the capture overlay for the "Screenshot" entry
-// of the OCR menu. close_all_snip is what guarantees this never stays armed past
-// that one session.
+// Arms (or disarms) OCR mode for the next capture_region call, right before the frontend
+// opens the overlay for the OCR menu's "Screenshot" entry. close_all_snip ensures it never
+// stays armed past that session.
 #[tauri::command]
 pub(crate) fn set_snip_mode(state: State<'_, SnipModeState>, mode: String) -> Result<(), String> {
     *state.0.lock().unwrap_or_else(|e| e.into_inner()) = if mode == "ocr" { SnipMode::Ocr } else { SnipMode::Capture };
@@ -1668,10 +1577,9 @@ pub(crate) fn data_url_bytes(data_url: &str) -> Vec<u8> {
     base64_decode(b64.trim())
 }
 
-// Save a screenshot data URL into Pictures\Screenshots now (result dialog: the
-// user enabled folder-saving after the shot was taken, or an edit changed the
-// image after an earlier auto-save). Returns the path. `format` overrides the
-// screenshotFormat setting for this one save -- None uses the setting as-is.
+// Save a screenshot data URL into Pictures\Screenshots now (result dialog: folder-saving was
+// enabled after the shot, or an edit changed the image after an auto-save). Returns the
+// path. format overrides the screenshotFormat setting for this one save.
 #[tauri::command]
 pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
@@ -1739,10 +1647,9 @@ pub(crate) async fn save_screenshot_as(
         .map_err(|e| e.to_string())??;
     let (out_bytes, format) = out_bytes;
     let ext = screenshot_format_ext(&format);
-    // A file opened for editing from outside the app suggests its own origin
-    // folder and stem (never the origin's own extension -- the edited copy keeps whatever
-    // format the save dialog itself is offering) instead of the usual
-    // "Screenshot-<stamp>" name built for a fresh capture.
+    // A file opened for editing from outside the app suggests its own origin folder and stem
+    // (not its extension, which follows the format the dialog offers) instead of the usual
+    // "Screenshot-<stamp>" name.
     let name = match default_name {
         Some(n) if !n.trim().is_empty() => format!("{}.{}", n.trim(), ext),
         _ => format!("Screenshot-{}.{}", local_stamp(), ext),
@@ -1762,10 +1669,9 @@ pub(crate) async fn save_screenshot_as(
     }
 }
 
-// Delete a previously auto-saved screenshot (result dialog: folder-saving turned
-// off). Safety: only ever removes our own Screenshot-*.<one of the five
-// screenshot formats> (or the legacy <brand>-*.png a much older version wrote,
-// back when the format itself was never a choice) files.
+// Delete a previously auto-saved screenshot (result dialog: folder-saving turned off). Only
+// removes our own Screenshot-* files in one of the five screenshot formats, or the legacy
+// <brand>-*.png an older version wrote.
 #[tauri::command]
 pub(crate) async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bool, String> {
     let p = std::path::Path::new(&path);
@@ -1793,9 +1699,8 @@ pub(crate) async fn delete_screenshot_file(state: State<'_, Db>, path: String) -
     Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
-// Screenshot editor "Copy" / re-apply-to-clipboard after "Apply": the
-// edited image never goes through finalize_capture, so it needs its own thin
-// path onto the existing copy_image_to_clipboard helper.
+// Screenshot editor "Copy" / re-apply to clipboard after "Apply": the edited image never
+// goes through finalize_capture, so it has its own thin path onto copy_image_to_clipboard.
 #[tauri::command]
 pub(crate) fn copy_image_data(data_url: String) -> bool {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
@@ -1818,27 +1723,20 @@ pub(crate) fn default_sync_dir(app: AppHandle) -> String {
     sync_default_dir(&app).to_string_lossy().to_string()
 }
 
-// How long a folder picked through a native dialog stays usable by the
-// set_*_dir command it was picked for -- long enough to cover the confirm
-// dialog some of those flows show (a data-dir move, a sync-dir switch)
-// before the setter call lands, without leaving the grant valid forever: a
-// subverted renderer replaying an old pick after this window closes gets the
-// same stable error as one that never showed the user a picker at all.
+// How long a folder picked in a native dialog stays usable by the set_*_dir command it was
+// picked for: long enough to cover a confirm dialog (data-dir move, sync-dir switch), not
+// forever, so a subverted renderer replaying an old pick gets the same error as one that
+// never showed a picker.
 pub(crate) const PICKER_GRANT_TTL: Duration = Duration::from_secs(10 * 60);
 // Bounded so a compromised renderer spamming the picker cannot grow this
 // forever; the oldest grant is dropped once the cap is hit.
 pub(crate) const PICKER_GRANT_MAX: usize = 16;
 
-// Every folder the user actually picked through pick_folder/pick_export_folder,
-// each spendable exactly once by the matching set_*_dir command -- the only
-// authority those commands accept besides their own built-in default, closing
-// the gap where a subverted renderer could call a setter directly with any
-// path it likes and have the backend write files there on its say alone.
-// Each grant also carries the PURPOSE of the setting it was picked for
-// (screenshot, videoExport, recording, sync, data, export): a folder picked
-// for one setting no longer authorizes a different setter, so a subverted
-// renderer cannot pick a folder through one dialog and spend the grant on an
-// unrelated command that never showed the user that folder at all.
+// Every folder the user picked through pick_folder/pick_export_folder, each spendable once
+// by the matching set_*_dir command: the only authority those commands accept besides their
+// built-in default, so a subverted renderer cannot call a setter with any path it likes.
+// Each grant also carries the purpose of the setting it was picked for (screenshot,
+// videoExport, recording, sync, data, export) and authorizes no other setter.
 pub(crate) static PICKER_GRANTS: Mutex<Vec<(PathBuf, String, SystemTime)>> = Mutex::new(Vec::new());
 
 pub(crate) fn picker_grant_key(path: &Path) -> PathBuf {
@@ -1857,11 +1755,9 @@ pub(crate) fn grant_picked_dir(path: &Path, purpose: &str) {
     grants.push((key, purpose.to_string(), SystemTime::now()));
 }
 
-// Spends a grant for `dir` if one exists for `purpose` and has not expired.
-// Consuming it (rather than just checking) means only the legitimate setter
-// call that follows the picker can ever use it -- a captured dir string
-// cannot be replayed for a second write once that call has gone through, and
-// a grant picked for a different purpose is never a match.
+// Spends a grant for dir if one exists for purpose and has not expired. Consuming it means
+// only the setter call that follows the picker can use it: a captured dir string cannot be
+// replayed, and a grant for another purpose never matches.
 pub(crate) fn consume_granted_dir(dir: &Path, purpose: &str) -> bool {
     let key = picker_grant_key(dir);
     let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -1874,12 +1770,9 @@ pub(crate) fn consume_granted_dir(dir: &Path, purpose: &str) -> bool {
     }
 }
 
-// Shared gate for every set_*_dir command below: an empty string or the
-// feature's own built-in default always resets it (nothing to authorize
-// there), and any other path must be one the user just picked through
-// pick_folder/pick_export_folder for THIS setting's own purpose in this same
-// flow -- never a raw string the renderer made up on its own, and never a
-// grant picked for a different setting.
+// Shared gate for every set_*_dir command: an empty string or the feature's built-in default
+// always resets it; any other path must be one the user just picked for this setting's
+// purpose, never a string the renderer made up or a grant for another setting.
 pub(crate) fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -> Result<String, String> {
     let trimmed = dir.trim();
     if trimmed.is_empty() {
@@ -1895,12 +1788,9 @@ pub(crate) fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -
     Err("dir-not-picked".to_string())
 }
 
-// The native dialog's own title for each `purpose` pick_folder can be called
-// for, so the user always sees what the folder they are about to choose will
-// be used for -- the pick is informed consent, not a blind grant a renderer
-// could point at any purpose string it likes. An unknown purpose has no
-// title here on purpose: pick_folder below treats that as a reason to refuse
-// the pick outright, before any dialog opens.
+// The native dialog title for each purpose pick_folder accepts, so the user sees what the
+// folder will be used for. An unknown purpose has no title on purpose: pick_folder refuses
+// it before any dialog opens.
 pub(crate) fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
     let de = lang == "de";
     match purpose {
@@ -1913,13 +1803,10 @@ pub(crate) fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static 
     }
 }
 
-// Native folder picker (used by the expert screenshot-dir + data-dir options).
-// `purpose` names the setting this pick is for (screenshot, videoExport,
-// recording, sync, data) so the grant it leaves behind can only be spent by
-// that one setter -- see PICKER_GRANTS above. An unknown purpose gets no
-// dialog and no grant at all: folder_picker_title is the only source of
-// truth for which purposes exist, so a renderer cannot invent a new one and
-// have the backend show a folder pick it never labeled for the user.
+// Native folder picker (expert screenshot-dir and data-dir options). purpose names the
+// setting the pick is for, so its grant can be spent only by that setter (see
+// PICKER_GRANTS). An unknown purpose gets no dialog and no grant: folder_picker_title is the
+// only source of truth, so a renderer cannot invent a purpose.
 #[tauri::command]
 pub(crate) async fn pick_folder(app: AppHandle, win: tauri::Window, state: State<'_, Db>, purpose: String) -> Result<Option<String>, String> {
     let lang = resolve_lang(&lock(&state).settings.language);
@@ -1948,9 +1835,8 @@ pub(crate) fn current_data_dir(app: AppHandle) -> String {
 // at another app's folder full of same-named files (settings.json / data.db).
 pub(crate) static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-// Plain recursive copy: used to bring backups/ along on a data-dir move/adopt,
-// which only ever copied the store files themselves (data.db/prompts.json/
-// settings.json), leaving the Backup panel showing 0 snapshots at the new location.
+// Plain recursive copy, used to bring backups/ along on a data-dir move or adopt so the
+// Backup panel is not empty at the new location.
 pub(crate) fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
@@ -2008,17 +1894,14 @@ pub(crate) fn data_dir_cleanup_allowed(dir: &Path, last_old: Option<&Path>, live
     last_old.is_some_and(|p| p == dir)
 }
 
-// The disk half of a data-folder move, kept free of the AppHandle so the ORDER of
-// its steps can be tested: flush the live state into the folder being left, copy
-// the store across, point future launches at the new folder: and only once all of
-// that has landed, mark the old folder as the one delete_data_dir may clean. Every
-// step aborts the move, with that permission left unset: until the copy is
-// complete, the old folder can still be the only place the current data exists, so
-// offering to delete it would be offering to delete the data itself.
-// `flush` persists the live store into `current`; `rebind` is called once the file
-// the process will write to is a different one. Returns whether the target already
-// held a store that was adopted as it is: the live store in memory then describes
-// the OTHER library and must be reloaded from the new folder.
+// The disk half of a data-folder move, free of the AppHandle so the order of its steps is
+// testable: flush the live state into the folder being left, copy the store across, point
+// future launches at the new folder, and only then mark the old folder as the one
+// delete_data_dir may clean. Any failed step aborts the move with that permission unset,
+// since until the copy is complete the old folder may hold the only copy. flush persists the
+// live store into `current`; rebind runs once the process writes to a different file.
+// Returns whether the target already held a store that was adopted as is; the in-memory
+// store then describes the other library and must be reloaded.
 pub(crate) fn move_store_dir(
     current: &Path,
     new: &Path,
@@ -2032,25 +1915,20 @@ pub(crate) fn move_store_dir(
         return Ok(false);
     }
     flush()?;
-    // Adopt an existing store in the target; otherwise copy ours across. Abort
-    // before writing the redirect pointer if the copy fails, so a launch can
-    // never be pointed at a truncated store.
-    // Every file the store can consist of, not just the database: a prompts.json or
-    // settings.json left behind by a failed DB write is the ONLY copy of that change,
-    // and delete_data_dir removes the old folder right after this.
+    // Adopt an existing store in the target, otherwise copy ours across, aborting before the
+    // redirect pointer is written so a launch is never pointed at a truncated store. All store
+    // files are copied: a prompts.json or settings.json from a failed DB write may be the only
+    // copy of that change, and delete_data_dir removes the old folder right after.
     let adopted = new.join("data.db").exists();
     if !adopted {
         let mut landed = false;
         copy_store_files(current, new, &mut landed).map_err(|e| format!("copy store: {}", e))?;
-        // Bring local backup history along -- otherwise the Backup panel shows 0
-        // snapshots at the new location, and the old (still full) backups/ folder,
-        // now invisible from there, is exactly what the next cleanup dialog offers
-        // to delete. Best-effort: the store copy above is the critical part and has
-        // already succeeded by this point.
+        // Bring the local backup history along, or the Backup panel shows no snapshots at the new
+        // location while the old backups/ folder is offered for deletion. Best-effort; the store
+        // copy above is the critical part.
         let old_backups = current.join("backups");
-        // The new folder could itself be a descendant of old_backups (a user browsing
-        // into it and picking, say, its own backups/ subfolder): copying a directory
-        // into its own descendant recurses into what it just created and never stops.
+        // The new folder may itself sit inside old_backups; copying a directory into its own
+        // descendant would recurse forever.
         if old_backups.is_dir() && !new.starts_with(&old_backups) {
             if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
                 append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
@@ -2086,16 +1964,14 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     if path_matches_configured_dir(&new, &current) {
         return Ok(old);
     }
-    // Flush the live state into the folder we are leaving, and treat a failure as a
-    // failure of the whole move: the copy below would otherwise carry a stale store
-    // to the new folder while the cleanup afterwards deletes the only place the
-    // newer state could have been recovered from.
+    // Flush the live state into the folder being left; a failure fails the whole move, since
+    // the copy would otherwise carry a stale store while the cleanup deletes the only place the
+    // newer state existed.
     let mut flush = || -> Result<(), String> {
         {
             let store = lock(&state);
-            // A locked store refuses prompt writes on purpose: rows it could not
-            // read are still in the file, and the copy below brings them along
-            // untouched. That is not a failed flush.
+            // A locked store refuses prompt writes on purpose; its unreadable rows are still in the
+            // file and the copy brings them along. That is not a failed flush.
             if !store.prompts_locked && !save_prompts(&app, &store) {
                 return Err("the prompts could not be saved to the folder being left".to_string());
             }
@@ -2110,25 +1986,21 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
         }
         Ok(())
     };
-    // From the next db_conn on, "the database" is a different file: either the
-    // store just copied across or one already living there. Neither is described by
-    // what the old folder's rows hashed to.
+    // From the next db_conn on, "the database" is a different file (just copied or already
+    // there), which the old folder's row hashes do not describe.
     let mut rebind = || lock(&state).forget_written_rows();
     let adopted = move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind)?;
     if adopted {
-        // The folder already held a library. The session's in-memory store belongs to
-        // the one just left, and data_dir() points here already: left as it is, the
-        // next settings flush or prompt edit would write that state over this store
-        // (or merge both libraries). Load what is really in the new folder instead.
+        // The folder already held a library, and data_dir() points here: the in-memory store from
+        // the folder just left would be written over it (or merge both libraries). Load what is
+        // really in the new folder.
         let fresh = load_store(&app);
         let mut store = lock(&state);
         end_session_if_vault_changed(&store.settings, &fresh.settings);
         *store = fresh;
     }
-    // The lock decision was made for the folder just left; re-run it for the one
-    // just entered, exactly like a fresh load_store() would, so a move into (or
-    // out of) a folder someone else already holds a fresh lock on takes effect
-    // immediately instead of waiting for the next restart.
+    // Re-run the lock decision for the folder just entered, like a fresh load_store(), so a
+    // move into or out of a folder someone else holds takes effect at once.
     let enabled = data_dir_lock_enabled(&lock(&state).settings);
     acquire_data_dir_lock(&new, enabled);
     Ok(old)
