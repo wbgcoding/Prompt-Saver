@@ -29,8 +29,7 @@ pub(crate) const FLOAT_SCALE_MAX: f64 = 8.0;
 
 pub(crate) fn float_scale_of(settings: &Settings, id: &str) -> f64 {
     let s = settings.float_scale.get(id).copied().unwrap_or(1.0);
-    // Same range set_float_scale accepts. A narrower one here silently shrank the
-    // "L" preset and every freely resized pill back down on the next start.
+    // Same range set_float_scale accepts, so a stored scale is never clamped differently on load.
     if s.is_finite() { s.clamp(FLOAT_SCALE_MIN, FLOAT_SCALE_MAX) } else { 1.0 }
 }
 
@@ -56,10 +55,9 @@ pub(crate) fn is_image_prompt(p: &Prompt) -> bool {
     p.show_image && (!p.image.is_empty() || media_path(&p.file_path) || media_path(&p.icon_path))
 }
 
-// Every file dialog is parented to the window that opened it: that window is
-// blocked (and only that window) until the dialog closes, so a second dialog
-// can never stack on top of it, and a satellite window (e.g. the video
-// editor) never loses focus to "main" behind the dialog's back.
+// Every file dialog is parented to the window that opened it: only that window is blocked,
+// so a second dialog never stacks on top and a satellite window (e.g. the video editor)
+// keeps focus.
 pub(crate) fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
     let dlg = rfd::FileDialog::new();
     let chosen = resolve_dialog_parent_label(|l| app.get_webview_window(l).is_some(), label);
@@ -69,9 +67,8 @@ pub(crate) fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
     }
 }
 
-// Pure label choice: the requested window if it is open, else "main" as a
-// fallback, else nobody. Kept apart from the AppHandle lookup so the choice
-// itself is unit-testable without a live Tauri app.
+// Pure label choice: the requested window if open, else "main", else nobody. Kept apart
+// from the AppHandle lookup so it is unit-testable.
 pub(crate) fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Option<&str> {
     if exists(label) {
         Some(label)
@@ -86,9 +83,8 @@ pub(crate) fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
     file_dialog_for(app, "main")
 }
 
-// A pill or folder window is built hidden and shown by this once its page has
-// loaded: a window shown at creation sits on screen as an empty rectangle for as
-// long as WebView2 needs to start, which at a slow boot is long enough to be seen.
+// Pill and folder windows are built hidden and shown here once the page has loaded: a
+// window shown at creation sits on screen as an empty rectangle while WebView2 starts.
 fn reveal_when_loaded(win: tauri::WebviewWindow, payload: tauri::webview::PageLoadPayload<'_>) {
     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
         reveal_float_window(&win);
@@ -225,8 +221,8 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         .build();
 
     if let Ok(win) = win {
-        // Transparent native backdrop: resizing never flashes a white/opaque
-        // rectangle behind the rounded pill (mirrors apply_window_bg for main).
+        // Transparent native backdrop so resizing never flashes an opaque rectangle behind the
+        // rounded pill.
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
@@ -236,11 +232,9 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         let pid = prompt.id.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
-                // Fires for every pixel during a drag: never block the move
-                // loop on a busy store; the next event carries the position.
-                // A drag is the user placing the pill themselves, so it
-                // always becomes the new real position AND ends parking --
-                // there is nothing left to return to once they have moved it.
+                // Fires for every pixel of a drag, so never block on a busy store; the next event carries
+                // the position. A drag is the user placing the pill, so it becomes the real position and
+                // ends parking.
                 let screen = screen_id_at(&app2, p.x, p.y);
                 if let Some(state) = app2.try_state::<Db>() {
                     if let Ok(mut store) = state.try_lock() {
@@ -299,10 +293,8 @@ pub(crate) fn folders_on(settings: &Settings) -> bool {
     settings.ui_flags.get("folders") != Some(&false)
 }
 
-// Pill and folder windows read the settings ONCE, when they open. Without this every
-// expert change (pill folders, drag-out, opacity, cooldown …) would only reach the
-// windows opened afterwards: i.e. a feature switched on while pills are on screen
-// looked dead until a restart.
+// Pill and folder windows read the settings once, when they open; this tells the open ones
+// to re-read after an expert change.
 pub(crate) fn notify_float_settings(app: &AppHandle) {
     for label in app.webview_windows().keys() {
         if label.starts_with("float-") || label.starts_with("folder-") {
@@ -341,12 +333,10 @@ impl Rect {
     }
 }
 
-// Which pill the just-dropped one landed on: the NEAREST centre within `radius` whose
-// box ALSO really overlaps. Both conditions matter: the radius alone would fire for a
-// pill that merely sits nearby, the overlap alone for a long text pill whose far end
-// happens to touch. A short drag ends up far from every other pill and matches
-// nothing, which is what keeps a normal nudge from creating a folder. A centre
-// distance exactly equal to the radius still counts as a hit.
+// Which pill the just-dropped one landed on: the nearest centre within `radius` whose box
+// also overlaps. The radius alone would match a pill that merely sits nearby, the overlap
+// alone a long text pill whose far end touches; a short nudge matches nothing, so it
+// creates no folder. A distance exactly equal to the radius counts as a hit.
 pub(crate) fn merge_target(dragged: Rect, others: &[(String, Rect)], radius: f64) -> Option<&str> {
     let (cx, cy) = dragged.center();
     let mut best: Option<(f64, &str)> = None;
@@ -395,12 +385,10 @@ pub(crate) struct FolderLayout {
     pub(crate) pop: (f64, f64),  // popover offset inside the window
 }
 
-// Grow the folder window around its icon. The icon NEVER moves: it is what the user
-// clicked: so the popover goes on the first side with room (below, above, right,
-// left) and is then slid along its free axis until it lies inside the work area.
-// Everything is physical pixels of ONE monitor: pass that monitor's work rect and the
-// sizes already scaled by its factor, and edge flipping works the same on a second
-// screen at another DPI.
+// Grow the folder window around its icon. The icon never moves (it is what the user
+// clicked): the popover goes on the first side with room (below, above, right, left) and
+// slides along its free axis until it lies inside the work area. All values are physical
+// pixels of one monitor: pass that monitor's work rect and sizes scaled by its factor.
 pub(crate) fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> FolderLayout {
     let side = if icon.bottom() + gap + pop_h <= work.bottom() {
         FolderSide::Below
@@ -419,12 +407,10 @@ pub(crate) fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: 
     };
     // A popover larger than the work area can only start at its edge.
     let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
-    // The popover is ALIGNED with the icon's leading edge, never centred on it. A
-    // centred popover is wider than the icon on both sides, so the window ORIGIN moves
-    // left: and the icon has to be pushed right by the same amount inside it, one
-    // frame later. That one frame is the sideways jump on right-click. Aligned, the
-    // origin stays exactly where it was whenever the popover fits below/right, which
-    // is the normal case.
+    // The popover is aligned with the icon's leading edge, never centred: a centred one is
+    // wider than the icon on both sides, so the window origin would move left and the icon
+    // jump right one frame later. Aligned, the origin stays put whenever the popover fits
+    // below/right.
     let pop = match side {
         FolderSide::Below | FolderSide::Above => {
             let x = fit(icon.x, work.x, work.right() - pop_w);
@@ -471,13 +457,11 @@ pub(crate) fn clamp_to_work(work: Rect, w: f64, h: f64, x: f64, y: f64) -> (f64,
     )
 }
 
-// Fan a set of pills apart so none of them ends up hidden under another. Each pill
-// keeps its old position as a WISH; dropping one pill onto another is what created the
-// folder in the first place, so those wishes sit on top of each other and a dissolved
-// folder would look like a single pill. A taken box pushes the next one outward on a
-// growing ring (step: a bit more than half the pill, so a few rings clear even a large
-// media pill) until it lands free, and the result is clamped onto the work area.
-// Pure and deterministic: same input, same layout.
+// Fan a set of pills apart so none ends up hidden under another. Each pill's old position
+// is a wish; pills dropped onto each other formed the folder, so a dissolved folder's
+// wishes coincide. A taken box pushes the next one outward on a growing ring (step a bit
+// over half a pill) until it lands free, then it is clamped to the work area. Pure and
+// deterministic.
 pub(crate) fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f64, f64)> {
     const RINGS: i32 = 10;
     let mut placed: Vec<Rect> = taken.to_vec();
@@ -516,12 +500,9 @@ pub(crate) fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect)
     out
 }
 
-// A screen's identity: its name, resolution and offset in the virtual
-// desktop, hashed down to a short stable string. Two screens with the same
-// dimensions at the same virtual-desktop position but a different name
-// (a different physical monitor happening to land where an old one used to
-// be) must never compare equal, which is exactly why the name is part of
-// the hash and the position/size alone are not.
+// A screen's identity: name, resolution and virtual-desktop offset, hashed to a short
+// stable string. The name is part of the hash so a different physical monitor landing at
+// an old one's position never compares equal.
 pub(crate) fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -530,11 +511,9 @@ pub(crate) fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> Str
     format!("{:016x}", hasher.finish())
 }
 
-// One monitor as the pure, testable functions below need it: its identity
-// plus its bounds. `tauri::Monitor` cannot be built outside a real window,
-// so every live caller reduces its real monitor list to this shape first --
-// which is also what lets resolve_float_spot below be unit-tested with a
-// mocked screen list instead of a real one.
+// One monitor as the pure functions below need it: identity plus bounds. tauri::Monitor
+// cannot be built outside a real window, so live callers reduce their monitor list to this
+// shape, which also lets resolve_float_spot be tested with a mocked list.
 pub(crate) type ScreenRect = (String, i32, i32, i32, i32); // (identity, x, y, width, height)
 
 pub(crate) fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
@@ -551,9 +530,8 @@ pub(crate) fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
         .collect()
 }
 
-// The identity of whichever current screen contains (x, y), or empty if
-// none does (point off every monitor, which a live cursor/window position
-// should not normally be, but a probe failure must never panic).
+// The identity of the screen containing (x, y), or empty if none does (a probe failure
+// must never panic).
 pub(crate) fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
     screen_snapshot(app)
         .into_iter()
@@ -562,21 +540,16 @@ pub(crate) fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
         .unwrap_or_default()
 }
 
-// Where a saved floating position actually ends up today: unchanged if its
-// screen is still there, parked on the main screen (the first entry of
-// `screens`, always the primary monitor -- see screen_snapshot's caller)
-// otherwise. NEVER mutates `pos` -- the caller keeps the stored position and
-// screen id exactly as saved and only places the window at the returned
-// point, so a screen that comes back finds its pill exactly where it left
-// it. `taken` is every other window's current box, so several pills parked
-// in the same pass fan out instead of stacking.
+// Where a saved floating position ends up today: unchanged if its screen is still there,
+// else parked on the main screen (the first entry of `screens`, always the primary
+// monitor). Never mutates `pos`: the caller keeps the stored position and screen id and
+// only places the window at the returned point, so a screen that comes back finds its pill
+// where it was. `taken` is every other window's box, so several pills parked in one pass
+// fan out instead of stacking.
 //
-// A `pos.screen` of "" (saved before this field existed) falls back to
-// plain coordinate containment -- today's behaviour -- so an ordinary
-// upgrade never parks a button nothing has actually moved. Once a screen id
-// is recorded, only that exact screen coming back counts as "still home";
-// a different monitor that happens to cover the same point does not (a
-// different identity with the same dimensions parks, per spec).
+// A `pos.screen` of "" (saved before the field existed) falls back to plain coordinate
+// containment, so an upgrade never parks an unmoved button. Once a screen id is recorded,
+// only that exact screen counts as home; a different monitor covering the same point parks.
 pub(crate) fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], taken: &[Rect]) -> (f64, f64, bool) {
     if screens.is_empty() {
         // A failed monitor probe must never look like "every screen is gone".
@@ -599,10 +572,9 @@ pub(crate) fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRec
     (x, y, true)
 }
 
-// Which parked ids have been parked longer than `cleanup_h` hours -- pure so
-// the cleanup rule is testable without a real clock. `cleanup_h <= 0` is the
-// switch's off position (the default): nothing ever ages out, matching
-// floatParkCleanupH's own "0 = off" convention.
+// Which parked ids have been parked longer than `cleanup_h` hours. Pure so the rule is
+// testable without a clock; `cleanup_h <= 0` is the off position (floatParkCleanupH's
+// "0 = off").
 pub(crate) fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration>, cleanup_h: f64) -> Vec<String> {
     if cleanup_h <= 0.0 {
         return Vec::new();
@@ -611,10 +583,10 @@ pub(crate) fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration
     parked.iter().filter(|(_, age)| **age >= limit).map(|(id, _)| id.clone()).collect()
 }
 
-// Bring the folder list back to its invariants: only real prompt ids, no prompt in two
-// folders (the first folder listing it wins), a sane scale, and no folder left with
-// fewer than two members: that one dissolves, and its pill simply reappears at the
-// free position it kept all along. Runs on load and after every mutation. Idempotent.
+// Restore the folder list's invariants: only real prompt ids, no prompt in two folders
+// (the first wins), a sane scale, and no folder with fewer than two members (it dissolves
+// and its pill reappears at the free position it kept). Runs on load and after every
+// mutation; idempotent.
 pub(crate) fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
@@ -685,19 +657,14 @@ pub(crate) struct FolderExpand(pub(crate) Mutex<HashMap<String, Rect>>);
 // on restart, never written to settings.
 pub(crate) struct HiddenFloats(pub(crate) Mutex<std::collections::HashSet<String>>);
 
-// A pill/folder currently parked (its saved screen is not among today's
-// monitors), and when this run of the app first noticed. In memory only --
-// the parked MARKER and the cleanup clock both reset on restart, never the
-// underlying position or screen id in Settings, which nothing here ever
-// touches. Presence in the map is what floating.js/folder.js ask for to
-// show the "off a screen that is not here right now" marker; the age is
-// what the floatParkCleanupH sweep compares against its own setting.
+// A pill/folder currently parked (its saved screen is not among today's monitors) and when
+// this run first noticed. In memory only: the marker and cleanup clock reset on restart,
+// while the position and screen id in Settings are never touched. floating.js/folder.js ask
+// for presence to show the marker; the age is what the floatParkCleanupH sweep compares.
 pub(crate) struct ParkedFloats(pub(crate) Mutex<HashMap<String, std::time::Instant>>);
 
-// Records or clears one id's parked state. A fresh park keeps its own
-// first-seen instant if it was already parked, so re-syncing a still-parked
-// window (any other settings change re-runs sync_float_windows) never resets
-// its own cleanup clock.
+// Records or clears one id's parked state. An already-parked id keeps its first-seen
+// instant, so re-syncing (any settings change) never resets its cleanup clock.
 pub(crate) fn mark_parked(app: &AppHandle, id: &str, parked: bool) {
     if let Some(state) = app.try_state::<ParkedFloats>() {
         let mut map = state.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -752,10 +719,9 @@ pub(crate) fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect 
     }
 }
 
-// A window's box in physical desktop pixels.
-// The window box in physical pixels. On Windows this reads the HWND directly: the
-// live merge hint polls it while the OS move loop owns the pointer, and a plain Win32
-// read needs nothing from the stalled event loop.
+// A window's box in physical pixels. On Windows this reads the HWND directly: the live
+// merge hint polls it while the OS move loop owns the pointer, and a plain Win32 read
+// needs nothing from the stalled event loop.
 #[cfg(windows)]
 pub(crate) fn window_rect_native(win: &tauri::WebviewWindow) -> Option<Rect> {
     #[repr(C)]
@@ -818,8 +784,8 @@ pub(crate) fn work_rect_at(app: &AppHandle, x: f64, y: f64) -> Rect {
     }
 }
 
-// Move AND resize in one OS call, in physical pixels (same reason as
-// set_float_bounds_native: two calls leave a visibly wrong intermediate frame).
+// Move and resize in one OS call, in physical pixels (two calls leave a visibly wrong
+// intermediate frame).
 pub(crate) fn set_bounds_phys(win: &tauri::WebviewWindow, r: Rect) {
     let (x, y) = (r.x.round() as i32, r.y.round() as i32);
     let (w, h) = (r.w.round().max(1.0) as i32, r.h.round().max(1.0) as i32);
@@ -877,10 +843,9 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         let fid = folder.id.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
-                // While the folder is open the window origin is NOT the icon, so the
-                // stored position follows the icon, not the grown box. A drag is the
-                // user placing the folder themselves, so it always becomes the new
-                // real position AND ends parking.
+                // While the folder is open the window origin is not the icon, so the stored position
+                // follows the icon. A drag is the user placing the folder, so it becomes the real position
+                // and ends parking.
                 let off = folder_expansion(&app2, &fid).unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
                 let icon_x = p.x + off.x.round() as i32;
                 let icon_y = p.y + off.y.round() as i32;
@@ -913,9 +878,8 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
         let store = lock(&state);
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
         let (mut want_pills, mut want_folders) = float_window_plan(&store.settings, &ids);
-        // "Hide for now" drops the id from the plan, which the stale-window
-        // loop below then closes if it was already open: the same one filter
-        // both closes it now and keeps it from reopening until the next launch.
+        // "Hide for now" drops the id from the plan, so the stale-window loop below closes an
+        // open window and it stays closed until the next launch.
         if let Some(hidden) = app.try_state::<HiddenFloats>() {
             let hidden = hidden.0.lock().unwrap_or_else(|e| e.into_inner());
             want_pills.retain(|id| !hidden.contains(id));
@@ -963,11 +927,10 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
     }
 }
 
-// Expert action "Bring every floating window back to the main screen": the
-// emergency exit once a run of monitor changes has left positions and screen
-// identities not worth untangling by hand. Every pill and folder, parked or
-// not, gets a fresh spread-out spot on the main screen and forgets its old
-// screen identity -- there is nothing left to return to after this runs.
+// Expert action "Bring every floating window back to the main screen": the emergency exit
+// when monitor changes have left positions not worth untangling. Every pill and folder,
+// parked or not, gets a fresh spread-out spot on the main screen and forgets its old
+// screen identity.
 #[tauri::command]
 pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
     // Monitor and window queries wait for the main thread, so they run before
@@ -1024,10 +987,9 @@ pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result
     Ok(())
 }
 
-// "Hide for now": a pill or folder id (both flat strings from different id
-// spaces, never colliding), dismissed until the app restarts. NOT the permanent
-// unpin (toggle_floating/dissolve_float_folder): the entry in settings.floating
-// / float_folders stays untouched, so it comes right back on the next launch.
+// "Hide for now": a pill or folder id (separate id spaces, never colliding), dismissed
+// until restart. Not the permanent unpin (toggle_floating/dissolve_float_folder):
+// settings.floating / float_folders stay untouched.
 #[tauri::command]
 pub(crate) async fn hide_float_for_now(app: AppHandle, id: String) {
     if let Some(state) = app.try_state::<HiddenFloats>() {
@@ -1040,11 +1002,10 @@ pub(crate) async fn hide_float_for_now(app: AppHandle, id: String) {
 // (sync commands run on the main thread, which WebView2 needs free).
 #[tauri::command]
 pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
-    // "Pinned" is what `settings.floating` says, never whether a window happens to be
-    // open right now: a pill inside a folder has no window of its own, and one that was
-    // dismissed with "hide until restart" is still pinned with its window already gone.
-    // Deciding from the window would re-open such a pill on a click the menu had just
-    // labelled "remove". The folder check is what takes a member out of its folder too.
+    // "Pinned" is what `settings.floating` says, never whether a window is open: a pill inside
+    // a folder has no window, and one hidden until restart is still pinned. Deciding from the
+    // window would reopen such a pill on a click the menu labelled "remove". The folder check
+    // also takes a member out of its folder.
     let pinned = {
         let store = lock(&state);
         store.settings.floating.contains_key(&id)
@@ -1065,11 +1026,9 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
         }
         close_floating_window(&app, &id);
         sync_float_windows(&app); // a folder left with one member dissolves
-        // The main window keeps its own settings.floating mirror for the tile
-        // context menu's pin/unpin label (see cacheFloatingState in gridFolders.js) --
-        // notify_float_settings deliberately excludes it, so a pill unpinning
-        // ITSELF here would otherwise leave that mirror stale until the next
-        // full get_state, showing "Remove" on a tile that has no pill anymore.
+        // The main window keeps its own settings.floating mirror for the tile menu's pin/unpin
+        // label (cacheFloatingState in gridFolders.js); notify_float_settings excludes it, so
+        // without this event the mirror would show "Remove" on a tile whose pill is gone.
         let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": false }));
         Ok(false)
     } else {
@@ -1079,10 +1038,8 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
         };
         match prompt {
             Some(p) => {
-                // HiddenFloats is never cleared anywhere else: re-pinning a pill
-                // that was previously "hidden until restart" must take it out, or the
-                // next sync_float_windows (triggered by literally any other settings
-                // change) immediately closes it again.
+                // HiddenFloats is cleared nowhere else: re-pinning must take the id out, or the next
+                // sync_float_windows (any settings change) closes the pill again.
                 if let Some(hs) = app.try_state::<HiddenFloats>() {
                     hs.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
                 }
@@ -1196,14 +1153,12 @@ pub(crate) fn capture_excluded(settings: &Settings) -> bool {
     settings.ui_flags.get(ALLOW_SCREENSHOT_KEY) != Some(&true)
 }
 
-// Keep our own windows out of OTHER capture tools (Snipping Tool, Print Screen,
-// Game Bar, and our own window picker): when excluded the window
-// stays fully visible to the user but is omitted from any screen capture. Our own
-// snip already hides these windows before grabbing, so this never affects it.
-// WDA_EXCLUDEFROMCAPTURE needs Windows 10 2004+; on older builds the call simply
-// fails and the window stays capturable. No WDA_MONITOR fallback: a black
-// rectangle in screenshots is worse than the window simply showing, and 2004+
-// covers every supported system.
+// Keep our own windows out of other capture tools (Snipping Tool, Print Screen, Game Bar,
+// our window picker): an excluded window stays visible to the user but is omitted from
+// captures. Our own snip hides these windows first, so it is unaffected.
+// WDA_EXCLUDEFROMCAPTURE needs Windows 10 2004+; on older builds the call fails and the
+// window stays capturable. No WDA_MONITOR fallback, since a black rectangle in screenshots
+// is worse.
 #[cfg(windows)]
 pub(crate) fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
     #[link(name = "user32")]
