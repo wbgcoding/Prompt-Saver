@@ -1,16 +1,13 @@
 use super::*;
 
-// Unfinished screenshot/video editor work, remembered so closing the window by
-// accident does not lose it. One row per (kind, target) pair -- kind is "snip"
-// or "video", target the absolute source path, so `id` is simply their join and
-// an upsert never needs a separate existence check. `ops` is whatever JSON the
-// editor itself produced; this side never parses it, so a version embedded IN
-// that JSON (the caller's job, not this table's) is free to change without a
-// migration here. size/mtime are the file's own stat at save time -- load only
-// ever matches on the exact triple, so a changed source file simply misses
-// rather than restoring onto content it was never drawn against.
-// The (size, mtime) triple save_edit_state/load_edit_state key on -- a plain
-// stat, not opened or read, so this stays cheap enough to call on every open.
+// Unfinished screenshot/video editor work, remembered so closing the window by accident
+// does not lose it. One row per (kind, target): kind is "snip" or "video", target the source
+// path. `ops` is the editor's own JSON, never parsed here (its embedded version can change
+// without a migration). size/mtime are the file's stat at save time; load matches on the
+// exact triple, so a changed source file misses instead of restoring onto other content.
+
+// The (size, mtime) pair save_edit_state/load_edit_state key on: a plain stat, cheap enough
+// to call on every open.
 #[tauri::command]
 pub(crate) async fn stat_file(path: String) -> Result<(i64, i64), String> {
     let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
@@ -23,10 +20,9 @@ pub(crate) async fn stat_file(path: String) -> Result<(i64, i64), String> {
     Ok((meta.len() as i64, mtime))
 }
 
-// Rows are keyed by a hash of the file path and carry the path and the ops
-// sealed, so the table no longer lists recording paths or text overlay
-// contents in clear. A row an earlier version wrote (plain "kind:path" id,
-// plain columns) is still found through its legacy id and read as is.
+// Rows are keyed by a hash of the file path and carry the path and ops sealed, so the table
+// does not list recording paths or text overlay contents in clear. A row in the legacy form
+// (plain "kind:path" id, plain columns) is still found through its legacy id.
 pub(crate) fn edit_state_id(kind: &str, target: &str) -> String {
     use sha2::{Digest, Sha256};
     format!("{kind}:{:x}", Sha256::digest(target.as_bytes()))
@@ -43,7 +39,7 @@ pub(crate) fn edit_state_write(conn: &Connection, kind: &str, target: &str, size
         params![edit_state_id(kind, target), kind, enc_str(target), size, mtime, enc_str(ops), updated_at],
     )
     .map_err(|e| e.to_string())?;
-    // The state now lives under the hashed id; drop an old plain-path row for it.
+    // Drop the legacy plain-path row for the same state.
     let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![edit_state_legacy_id(kind, target)]);
     Ok(())
 }
@@ -89,9 +85,8 @@ pub(crate) fn edit_state_read(conn: &Connection, kind: &str, target: &str, size:
             .ok();
         if let Some((ops, stored_target, updated_at)) = row {
             let plain_ops = dec_str(&ops);
-            // A row an earlier version wrote in clear is sealed the first time it is
-            // read: rewritten under the hashed id (the legacy row is dropped), keeping
-            // its own timestamp so the retention clock does not restart.
+            // A row stored in clear is sealed the first time it is read: rewritten under the hashed id
+            // (the legacy row is dropped), keeping its timestamp so the retention clock does not restart.
             if !ops.starts_with(ENC_PREFIX) || !stored_target.starts_with(ENC_PREFIX) {
                 let _ = edit_state_write(conn, kind, target, size, mtime, &plain_ops, updated_at);
                 let hashed = edit_state_id(kind, target);
@@ -120,11 +115,9 @@ pub(crate) async fn save_edit_state(app: AppHandle, kind: String, target: String
 pub(crate) async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64) -> Result<Option<String>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
     let Some((id, ops)) = edit_state_read(&conn, &kind, &target, size, mtime) else { return Ok(None) };
-    // Malformed JSON, or a "v" this build does not recognise, must never reach the
-    // editor -- it would try to replay operations it cannot make sense of. Decided
-    // here rather than in JS, so there is exactly one place "usable" is defined;
-    // discarded silently to the caller (an empty editor is the safe outcome) but
-    // logged, so a real corruption pattern is still visible somewhere.
+    // Malformed JSON or an unknown "v" must never reach the editor, which would try to replay
+    // operations it cannot understand. Decided here so "usable" is defined in one place; the
+    // caller gets an empty editor, and the discard is logged so real corruption stays visible.
     let is_known_version = edit_state_ops_version(&ops) == Some(1);
     if !is_known_version {
         // The file name only: the full path would put the recording location back into
@@ -152,12 +145,9 @@ pub(crate) async fn discard_edit_state(app: AppHandle, kind: String, target: Str
 }
 
 // ---- Editor draft autosave ----
-// A single row (id = "current"), because only one prompt editor modal is ever
-// open at a time -- no need for a table keyed per entry. prompt_id is the target
-// entry's id for an edit, or "neu" for a still-unsaved new entry, matching the
-// modal's own "create" mode having no real id yet. Only the text side is
-// drafted (name/text/variants); an attached image is never re-derived from a
-// crash draft, it stays with the prompt itself.
+// A single row (id = "current"): only one prompt editor modal is open at a time. prompt_id
+// is the edited entry's id, or "neu" for a still-unsaved new entry. Only the text side
+// (name/text/variants) is drafted; an attached image stays with the prompt itself.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct EditorDraft {
@@ -224,10 +214,8 @@ pub(crate) async fn discard_editor_draft(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// Shared by delete_prompt and batch_prompts's "delete" branch: a draft outlives
-// the modal that wrote it, so it must not outlive the entry it belongs to
-// either. `matches` decides on the draft's own prompt_id, so a single-delete and
-// a batch-delete can both reuse this without building a one-off HashSet lookup.
+// Shared by delete_prompt and batch_prompts's "delete" branch: a draft outlives the modal
+// that wrote it, so it must not outlive its entry. `matches` decides on the draft's own prompt_id.
 pub(crate) fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) -> bool) {
     let target: Option<String> = conn
         .query_row("SELECT prompt_id FROM editor_drafts WHERE id = 'current'", [], |r| r.get(0))
@@ -239,15 +227,11 @@ pub(crate) fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) 
     }
 }
 
-// Periodic cleanup for edit_state, run through the existing job scheduler rather
-// than a hand-rolled thread (same reasoning as recording-sweep above): a row
-// disappears once its own source file is gone -- deleted from the library, swept
-// out of the recordings folder, or moved to the "verworfen" folder and then aged
-// out of it -- without this needing its own hook into any of those three call
-// sites. keep_days = 0 means "never expire by age" (same convention as
-// trashRetentionDays), a missing file is removed on the next tick regardless.
-// `exists` is a parameter so a test can run this against paths that were never
-// meant to be real files on the runner's own disk.
+// Periodic cleanup for edit_state, run through the job scheduler. A row disappears once its
+// source file is gone (deleted from the library, swept from the recordings folder, or aged
+// out of the "verworfen" folder) without hooks into those call sites. keep_days = 0 means
+// "never expire by age" (like trashRetentionDays); a missing file is removed on the next tick
+// regardless. `exists` is a parameter so a test can use paths that are not real files.
 pub(crate) fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_days: f64) -> usize {
     let cutoff = (now_ms() / 1000) as i64 - (keep_days.max(0.0) * 86400.0) as i64;
     let mut stmt = match conn.prepare("SELECT id, target, updated_at FROM edit_state") {
@@ -285,29 +269,22 @@ pub(crate) fn sweep_edit_state_tick(app: &AppHandle) {
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(app));
 }
 
-// The edit-states row's on-demand trigger -- runs the same rule the
-// periodic tick applies, so a click always removes exactly what the next
-// silent tick would have. No byte figure: sweep_edit_state_conn only ever
-// reports a row count, and this reuses it unchanged rather than risking its
-// own tested return shape for a "nice to have" number.
+// The edit-states row's on-demand trigger: runs the same rule as the periodic tick, so a
+// click removes exactly what the next tick would have. It returns a row count only, since
+// sweep_edit_state_conn reports nothing more.
 #[tauri::command]
 pub(crate) fn sweep_edit_states_now(app: AppHandle) -> u32 {
     let Some(conn) = db_conn(&app) else { return 0 };
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(&app)) as u32
 }
 
-// Emergency purge: something sensitive (a password) ended up in the clipboard inbox
-// and may be sitting inside one or more ROTATING SNAPSHOTS too, DPAPI-sealed but
-// still on disk. clip_inbox_clear only ever touched the live DB: this walks every
-// backup folder, opens its snapshot, deletes clip_inbox rows if any, and VACUUMs so
-// the bytes are actually overwritten (a bare DELETE leaves them in SQLite's free
-// pages until something else reuses that space). Returns how many snapshots had
-// something to remove, for the confirmation toast.
+// Emergency purge: something sensitive (a password) in the clipboard inbox may also sit in
+// the rotating backup snapshots, DPAPI-sealed but on disk. This walks every backup folder,
+// opens its snapshot, deletes clip_inbox rows if any, and VACUUMs so the bytes are really
+// overwritten (a bare DELETE leaves them in SQLite's free pages). Returns (purged, failed):
+// a snapshot that could not be opened, or a scrub not confirmed written back, must never be
+// folded into "nothing to purge", so the caller can tell which backups may still hold the data.
 #[tauri::command]
-// Returns (purged, failed). This is an emergency privacy wipe: a snapshot this
-// could not even open, or a scrub that could not be confirmed written back, must
-// never be folded into "nothing to purge here"; the caller has to be able to
-// tell the user which backups may still hold what they just tried to erase.
 pub(crate) async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<(usize, usize), String> {
     Ok(purge_clip_inbox_from_backups_impl(&backups_dir(&app)))
 }
@@ -337,9 +314,7 @@ pub(crate) fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usiz
         let staged = if is_gz {
             match gunzip_to(&db, &staged_tmp) {
                 Ok(()) => staged_tmp.clone(),
-                // Could not even look inside -- must count as a failure, not as
-                // "nothing to purge", since it might hold exactly what this is
-                // meant to scrub.
+                // Could not even look inside: count as a failure, since it might hold exactly what this scrubs.
                 Err(_) => {
                     failed += 1;
                     continue;
@@ -405,12 +380,10 @@ pub(crate) async fn set_float_bounds(
         if let Some(win) = app.get_webview_window(&flabel(&id)) {
             let w = width.clamp(48.0, 8000.0);
             let h = height.clamp(48.0, 8000.0);
-            // OPT-IN, and only the pill menu asks for it: that placement picks a side
-            // that fits and falls back to "below" when none does, which used to push
-            // the buttons off the screen edge. Every other caller has already worked
-            // out the exact box it wants: a live edge-resize computes the origin from
-            // the size it is about to set, so clamping it here moved the window out
-            // from under the cursor on every frame near a screen edge.
+            // OPT-IN, and only the pill menu asks for it: that placement picks a side that fits and
+            // falls back to "below" when none does. Every other caller has already worked out its exact
+            // box (a live edge-resize computes the origin from the size it is about to set), and clamping
+            // would move the window out from under the cursor near a screen edge.
             let (x, y) = if clamp.unwrap_or(false) {
                 let dpi = win.scale_factor().unwrap_or(1.0);
                 let work = work_rect_at(&app, x * dpi, y * dpi);
