@@ -1,26 +1,17 @@
-// Application backend (Tauri v2). Local SQLite storage, clipboard, import/export,
-// multiple views, frameless floating quick-copy windows. No network by default:
-// the only outbound calls are the switchable update check and, only when
-// WebView2 itself is missing, its consented runtime download. The one inbound
-// exception is the local remote-access receiver (remote.rs) -- off by default,
-// password-protected, loopback-only unless its own separate switch is on.
+// Application backend (Tauri v2). Local SQLite storage, clipboard, import/export, multiple
+// views, frameless floating quick-copy windows. No network by default: the only outbound
+// calls are the switchable update check and, only when WebView2 itself is missing, its
+// consented runtime download. The one inbound exception is the local remote-access receiver
+// (remote.rs), off by default, password-protected, loopback-only unless its own separate
+// switch is on.
 
-// clippy::pedantic and clippy::nursery were run once as a deliberately
-// stricter pass, not adopted as standing lints. Together they raised ~1080
-// warnings, almost all pure style noise for this codebase specifically: heavy
-// Win32 FFI and image-processing code makes hundreds of `as` casts
-// (cast_possible_truncation/sign_loss/wrap/lossless) intentional and already
-// domain-bounded; most Tauri #[tauri::command] handlers correctly take their
-// serde-deserialized arguments by value (needless_pass_by_value); and the rest
-// (redundant_closure_for_method_calls, use_self, uninlined_format_args, ...) is
-// cosmetic with no behavioural difference. Turning all of that on would mean a
-// ~1000-site rewrite of an already-shipping file for zero bug-fixing value and
-// real regression risk. One genuinely worth a look, clippy::float_cmp, was
-// checked at its two real hits (rgb_to_hsl) and is a documented false positive
-// there, not a bug. clippy::significant_drop_tightening (62 hits: a lock held
-// longer than the critical section needs) is the one category with real
-// contention/freeze relevance -- the worst offenders are sampled by the
-// blocking-call audit rather than by a lint sweep.
+// clippy::pedantic and clippy::nursery are not enabled: they raise ~1000 warnings that are
+// mostly style noise here (Win32 FFI and image code make `as` casts intentional and
+// domain-bounded, and #[tauri::command] handlers correctly take serde arguments by value).
+// clippy::float_cmp's two hits (rgb_to_hsl) are documented false positives.
+// clippy::significant_drop_tightening (a lock held longer than the critical section needs) is
+// the category with real contention relevance; the worst offenders are sampled by the
+// blocking-call audit rather than a lint sweep.
 
 pub mod brand;
 mod camera;
@@ -107,36 +98,34 @@ use copy::*;
 mod rec_bar;
 use rec_bar::*;
 
-// ---- Auto-paste: track the last EXTERNAL foreground window so a copied prompt
-// can be pasted straight into it. A WinEvent hook records every foreground change;
-// WINEVENT_SKIPOWNPROCESS drops our own windows, so the stored handle is always the
-// app the user was working in (covers grid tiles, library rows AND the no-activate
-// floating pills, whose click never steals foreground).
+// ---- Auto-paste: track the last external foreground window so a copied prompt can be
+// pasted straight into it. A WinEvent hook records every foreground change;
+// WINEVENT_SKIPOWNPROCESS drops our own windows, so the stored handle is the app the user
+// was working in (grid tiles, library rows and the no-activate floating pills, whose click
+// never steals foreground).
 #[cfg(windows)]
 mod autopaste;
 
 mod clip;
 use clip::*;
 
-// ---- Clipboard watcher: a message-only window with AddClipboardFormatListener
-// (event-driven, no polling). New external TEXT is appended to the clip_inbox table;
-// our own copies and consecutive duplicates are skipped. Off by default; toggling it
-// registers/unregisters the listener with no leaked handle.
-// The SAME window also carries the auto-advance delayed-rendering session (Strg+V
-// AND right-click-Paste both end up requesting CF_UNICODETEXT, which is the one thing
-// Windows tells us about): deliberately one window, one thread for the whole session.
+// ---- Clipboard watcher: a message-only window with AddClipboardFormatListener (event-driven,
+// no polling). New external text is appended to the clip_inbox table; our own copies and
+// consecutive duplicates are skipped. Off by default; toggling registers/unregisters the
+// listener with no leaked handle.
+// The same window carries the auto-advance delayed-rendering session (Ctrl+V and
+// right-click Paste both request CF_UNICODETEXT, the one thing Windows tells us about):
+// deliberately one window and one thread for the whole session.
 #[cfg(windows)]
 mod clipwatch;
 
 // ---- Windows session end (logoff, shutdown, restart) ----
 //
-// Windows tells a top-level window its session is ending and then takes the
-// process down: no window close, no app exit event, nothing else of ours runs
-// after it. The collected counter writes have to land right there. The clipboard
-// watcher's window cannot do it: that one is message-only, and Windows never
-// sends session messages to those: so the main window's own window procedure is
-// chained instead: this one answers the two session messages and hands every
-// other message straight on to the original.
+// Windows tells a top-level window its session is ending and then takes the process down;
+// nothing else of ours runs after that, so the collected counter writes have to land right
+// there. The clipboard watcher's window cannot do it (it is message-only, and Windows sends
+// no session messages to those), so the main window's own window procedure is chained: it
+// answers the two session messages and hands every other message to the original.
 #[cfg(windows)]
 mod sessionend;
 
@@ -158,22 +147,20 @@ use capture::*;
 mod ocr_cmds;
 use ocr_cmds::*;
 
-// Windows.Media.Ocr binding. Deliberately goes through the file system for the
-// bitmap load (StorageFile -> BitmapDecoder -> SoftwareBitmap) rather than
-// IMemoryBufferByteAccess buffer wrangling -- that keeps this module almost
-// entirely free of unsafe code; the one unsafe call is COM's own RoInitialize.
+// Windows.Media.Ocr binding. It goes through the file system for the bitmap load
+// (StorageFile -> BitmapDecoder -> SoftwareBitmap) rather than IMemoryBufferByteAccess, which
+// keeps this module almost free of unsafe code; the one unsafe call is COM's RoInitialize.
 #[cfg(windows)]
 mod ocr;
 
 mod voice_cmds;
 use voice_cmds::*;
 
-// Windows.Media.SpeechRecognition binding. Same shape as mod ocr: COM init
-// confined to the thread that calls into WinRT, no unsafe outside RoInitialize.
-// Unlike OCR, the actual recognition session runs on ONE long-lived thread it
-// owns for its whole lifetime (started by voice_start, see start_session) --
-// never spawn_blocking, which would starve the tokio pool for a session that
-// can run for minutes.
+// Windows.Media.SpeechRecognition binding. Same shape as mod ocr: COM init confined to the
+// thread that calls into WinRT, no unsafe outside RoInitialize. Unlike OCR, the recognition
+// session runs on one long-lived thread it owns for its whole lifetime (started by
+// voice_start, see start_session), never spawn_blocking, which would starve the tokio pool
+// for a session that can run for minutes.
 #[cfg(windows)]
 mod voice;
 
@@ -183,18 +170,14 @@ use rec_engine::*;
 #[cfg(windows)]
 mod audio;
 
-// System-wide key capture for the recording's "keys" overlay. Only
-// active while a recording is running AND the keyOverlay setting is on -- the
-// low-level keyboard hook this installs exists nowhere else in the process,
-// and comes down the instant the recording stops, is cancelled, or the
-// process itself ends (a hook is thread/process-scoped in Windows, so a
-// crash already removes it for free). Privacy: only a virtual-key id, its
-// down/up edge and a timestamp relative to the recording's start are ever
-// stored -- never a character, never the focused element's text, never a
-// window title. A focused password field (UI Automation's IsPassword as the
-// primary signal, the classic ES_PASSWORD edit style as a second one, any
-// detection failure treated as a password field) produces a gap instead of
-// events for as long as it stays focused.
+// System-wide key capture for the recording's "keys" overlay. Active only while a recording
+// runs and the keyOverlay setting is on; the low-level keyboard hook exists nowhere else and
+// comes down when the recording stops, is cancelled, or the process ends (a hook is
+// process-scoped, so a crash removes it too). Privacy: only a virtual-key id, its down/up
+// edge and a timestamp relative to the recording's start are stored, never a character, the
+// focused element's text or a window title. A focused password field (UI Automation's
+// IsPassword first, the ES_PASSWORD edit style second, any detection failure treated as a
+// password field) produces a gap instead of events while it stays focused.
 #[cfg(windows)]
 mod keylog;
 
@@ -239,52 +222,41 @@ use webview2::*;
 
 // ---- One dedicated thread per periodic background job ----
 //
-// Each recurring chore (settings flush, auto-backup, update check, a
-// language-pack watcher, ...) gets its own thread that spends its idle time
-// inside `recv_timeout` on a private control channel: woken early only by its
-// own re-time/stop message, never by another job's. A chore that hangs (a
-// stuck PowerShell capability query, a slow disk) therefore blocks only itself;
-// every other chore keeps firing on its own schedule regardless.
+// Each recurring chore (settings flush, auto-backup, update check, a language-pack watcher,
+// ...) gets its own thread that idles in `recv_timeout` on a private control channel, woken
+// early only by its own re-time/stop message. A chore that hangs (a stuck PowerShell
+// capability query, a slow disk) blocks only itself.
 //
-// Only genuinely periodic work belongs here: the `loop { sleep(fixed); work(); }`
-// shape, with nothing else feeding it. Event-driven threads stay where they are:
-// the clipboard watcher runs a Win32 message pump and has to own its thread, and
-// the tray rebuild is a one-shot debounce that fires per burst, not on a cadence.
+// Only genuinely periodic work belongs here: the `loop { sleep(fixed); work(); }` shape.
+// Event-driven threads stay where they are: the clipboard watcher runs a Win32 message pump
+// and has to own its thread, and the tray rebuild is a one-shot debounce per burst.
 //
-// Registering is a `register_periodic(name, first_delay, interval, job)` call
-// from anywhere; it spawns the job's thread. A job that reads its own interval
-// out of the settings calls `retime(name, interval)` at the end of each run, so
-// a changed setting takes effect from the next wait onward: the new interval
-// still counts from the job's last run, exactly as before this was split across
-// threads.
+// Register with `register_periodic(name, first_delay, interval, job)` from anywhere. A job
+// that reads its own interval from the settings calls `retime(name, interval)` at the end of
+// each run, so a changed setting applies from the next wait on; the interval still counts
+// from the job's last run.
 mod scheduler;
 
-// How long app close waits for the timer thread to leave a running job before
-// going ahead without it.
+// How long app close waits for the timer thread to leave a running job before going ahead
+// without it.
 pub(crate) const SCHEDULER_STOP_WAIT_MS: u64 = 500;
 
 pub fn run() {
-    // A launch whose own arguments name one of the command line's subcommands
-    // never becomes a window at all: answered by the already-running instance
-    // over its own named pipe, or -- nothing running -- executed standalone
-    // against the store directly. Neither path needs WebView2, a Tauri app or
-    // the single-instance plugin below, so this has to run before all three.
+    // A launch whose own arguments name one of the command line's subcommands never becomes a
+    // window: it is answered by the running instance over its named pipe or, with nothing running,
+    // executed standalone against the store. Neither path needs WebView2, a Tauri app or the
+    // single-instance plugin below, so this runs before all three.
     if let Some(code) = cli::dispatch_from_launch_args() {
         std::process::exit(code);
     }
-    // A plain second launch (double-click, autostart, the tray shortcut) or a
-    // promptsaver:// link settles here instead of trusting the
-    // single-instance plugin below to notice on its own: that plugin forwards
-    // and exits unconditionally, with no way to tell "the running instance
-    // brought up a window" from "the running instance is hung and never will"
-    // -- exactly how prompt-saver.exe was once found running with zero
-    // top-level windows and no way back short of killing it by hand. This
-    // pings the same pipe cli.rs answers CLI commands on, with its own short
-    // timeout, and only falls through to the plugin's mutex-based detection
-    // (or, with nothing listening at all, straight into this process's own
-    // setup) for a live instance to actually forward the link to. A link's
-    // own ping never raises a window and its HandedOff is turned back into
-    // Primary, so it can never end this launch here on its own.
+    // A plain second launch (double-click, autostart, the tray shortcut) or a promptsaver:// link
+    // settles here instead of trusting the single-instance plugin below, which forwards and exits
+    // unconditionally and cannot tell "the running instance brought up a window" from "the
+    // running instance is hung and never will". This pings the pipe cli.rs answers CLI commands
+    // on, with its own short timeout, and only falls through to the plugin's mutex-based
+    // detection (or, with nothing listening, into this process's own setup) for a live instance
+    // to forward the link to. A link's ping never raises a window and its HandedOff turns back
+    // into Primary, so it cannot end this launch here on its own.
     if !early_allow_multiple_instances() {
         let argv: Vec<String> = std::env::args().skip(1).collect();
         if let cli::LaunchDecision::HandedOff = cli::resolve_second_launch(&argv) {
@@ -295,27 +267,24 @@ pub fn run() {
     if !ensure_webview2() {
         return;
     }
-    // Surface panics on stderr (dev console) AND append a no-PII line to a local
-    // crash log, so a failure in the field leaves a diagnosable trace.
+    // Surface panics on stderr (dev console) and append a no-PII line to a local crash log, so a
+    // failure in the field leaves a diagnosable trace.
     std::panic::set_hook(Box::new(|info| {
         eprintln!("{}", info);
         append_crash_log(&info.to_string());
     }));
 
     let mut builder = tauri::Builder::default();
-    // Only one instance app-wide (keyed by app identifier, independent of the exe
-    // location) unless the user opted into "Allow multiple instances" (expert menu,
-    // default off): then this plugin is left out entirely, since it enforces the
-    // limit itself before .setup() ever runs (there is no AppHandle yet to consult
-    // the setting the normal way; early_allow_multiple_instances() peeks the DB
-    // directly for exactly this reason). A second launch, when the plugin IS
-    // attached, closes itself and focuses the first instance.
+    // One instance app-wide (keyed by app identifier, independent of the exe location) unless the
+    // user opted into "Allow multiple instances" (expert menu, default off), in which case this
+    // plugin is left out entirely: it enforces the limit before .setup() runs, when there is no
+    // AppHandle to consult the setting, so early_allow_multiple_instances() peeks the DB directly.
+    // A second launch, when the plugin is attached, closes itself and focuses the first instance.
     if !early_allow_multiple_instances() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            // A promptsaver:// link relaunching this already-running instance
-            // takes the exact same route a second command-line launch does --
-            // handled here instead of stealing the window's focus first for a
-            // link whose whole point is to copy quietly in the background.
+            // A promptsaver:// link relaunching this running instance takes the same route as a second
+            // command-line launch, instead of stealing the window's focus for a link meant to copy
+            // quietly in the background.
             let scheme_url = remote::find_scheme_arg(&args).map(str::to_string);
             let is_copy_link = scheme_url.as_deref().is_some_and(remote::is_copy_link);
             if let Some(url) = &scheme_url {
@@ -327,16 +296,16 @@ pub fn run() {
         }));
     }
     builder
-        // The app hotkey summons the window + quick-launcher; a prompt hotkey
-        // copies that prompt wherever the user is.
+        // The app hotkey summons the window and quick-launcher; a prompt hotkey copies that prompt
+        // wherever the user is.
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         return;
                     }
-                    // Read the owner out first: the handler must not call back into
-                    // the app while the lookup lock is held.
+                    // Read the owner out first: the handler must not call back into the app while the lookup lock
+                    // is held.
                     let owner = app.try_state::<HotkeyTargets>().and_then(|targets| {
                         let list = targets.0.lock().unwrap_or_else(|e| e.into_inner());
                         list.iter().find(|(sc, _)| sc == shortcut).map(|(_, o)| o.clone())
@@ -353,8 +322,8 @@ pub fn run() {
         )
         .setup(|app| {
             let handle = app.handle().clone();
-            // Before load_store: a sealing failure during the very first read/resave
-            // should already be able to reach a window, once one exists.
+            // Before load_store: a sealing failure during the first read/resave should already be able to
+            // reach a window, once one exists.
             {
                 let h = handle.clone();
                 *SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()) =
@@ -363,23 +332,21 @@ pub fn run() {
                     }));
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
-            // Registered in the CANONICAL dir (never the "datapath" redirect,
-            // which demo mode itself flips) so enable_demo_mode/
-            // disable_demo_mode can tell a real second running instance apart
-            // from the allowMultipleInstances setting -- see
-            // other_instance_running's own comment.
+            // Registered in the canonical dir (never the "datapath" redirect, which demo mode flips) so
+            // enable_demo_mode/disable_demo_mode can tell a real second running instance from the
+            // allowMultipleInstances setting (see other_instance_running).
             register_running_instance(&default_data_dir(&handle));
             let store = load_store(&handle);
-            // A one-off pass over whatever the log already holds -- see its own
-            // comment for why this cannot just check today's own account name.
+            // A one-off pass over whatever the log already holds (see its own comment for why it cannot
+            // just check today's account name).
             scrub_user_paths_from_crash_log();
-            // Seed the crash-log rotation cap from whatever was persisted, before
-            // anything below can possibly call append_crash_log.
+            // Seed the crash-log rotation cap from the persisted value before anything can call
+            // append_crash_log.
             if let Some(kb) = store.settings.ui_values.get("errorLogKeepKb").copied() {
                 ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
             }
-            // Ditto, for undecided AND broken recordings -- Db is not managed
-            // yet at this point, so this reads straight off the just-loaded `store`.
+            // The same for undecided and broken recordings. Db is not managed yet, so this reads off the
+            // just-loaded `store`.
             {
                 let referenced = orphan_referenced_set(&store);
                 let broken_on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
@@ -425,12 +392,11 @@ pub fn run() {
             app.manage(camera::CameraState(Mutex::new(None))); // live camera-recording session
             app.manage(remote::RemoteApiState::new());
             app.manage(remote::PendingLaunchUrl(Default::default()));
-            // Same "never starts without a password" rule start() enforces on
-            // every caller; harmless to call unconditionally at every boot.
+            // Same "never starts without a password" rule start() enforces on every caller; harmless to
+            // call unconditionally at every boot.
             let _ = remote::start(handle.clone());
-            // A promptsaver:// link that started this very process (the app was
-            // not already running yet) waits in PendingLaunchUrl until the main
-            // window's script asks for it -- see run_pending_launch_url.
+            // A promptsaver:// link that started this process (the app was not running) waits in
+            // PendingLaunchUrl until the main window's script asks for it; see run_pending_launch_url.
             if let Some(url) = std::env::args().skip(1).find(|a| a.starts_with("promptsaver://")) {
                 if let Ok(mut g) = handle.state::<remote::PendingLaunchUrl>().0.lock() {
                     *g = Some(url);
@@ -441,22 +407,20 @@ pub fn run() {
             #[cfg(windows)]
             autopaste::install_hook();
 
-            // The message-only window is harmless to run unconditionally (same
-            // reasoning as the sync poll below): on_clipboard_update itself checks the
-            // clipWatcher opt-in on every event, and the auto-advance session needs this
-            // window regardless of that flag.
+            // The message-only window is harmless to run unconditionally: on_clipboard_update checks the
+            // clipWatcher opt-in on every event, and the auto-advance session needs this window
+            // regardless of that flag.
             #[cfg(windows)]
             clipwatch::start(handle.clone());
 
-            // The default sync folder used to be called differently. Anyone who was
-            // syncing into it without ever picking a folder of their own keeps it,
-            // now as an explicit choice, so nothing moves under them unannounced.
+            // The default sync folder used to have another name. Anyone syncing into it without picking a
+            // folder keeps it as an explicit choice, so nothing moves under them unannounced.
             if let Some(state) = handle.try_state::<Db>() {
                 let legacy = data_dir(&handle).join(SYNC_LEGACY_DIR_NAME);
                 let adopted = {
                     let mut store = lock(&state);
-                    // Checked here as well as inside, so that every later start is a
-                    // map lookup and not a settings write for nothing.
+                    // Checked here as well as inside, so every later start is a map lookup, not a pointless
+                    // settings write.
                     if store.settings.ui_texts.contains_key(SYNC_LEGACY_MARK) {
                         None
                     } else {
@@ -473,23 +437,18 @@ pub fn run() {
                 }
             }
 
-            // Prompt-folders-as-Markdown: harmless to call unconditionally at setup;
-            // if the feature is off this loop checks once and ends itself immediately
-            // rather than ticking forever for nothing. set_ui_flag starts a fresh one
-            // when the feature is switched back on.
+            // Prompt-folders-as-Markdown: harmless to call unconditionally at setup. If the feature is
+            // off the loop checks once and ends instead of ticking forever; set_ui_flag starts a fresh
+            // one when it is switched back on.
             start_sync_poll(handle.clone());
 
-            // One shared poll instead of every window running its own -
-            // see start_missing_files_poll.
+            // One shared poll instead of every window running its own; see start_missing_files_poll.
             start_missing_files_poll(handle.clone());
 
-            // Take a backup whenever the newest one is older than the interval --
-            // a short delay after start (backupStartDelayS, 0-300s, default 20 --
-            // long enough for the window and store to settle, short enough that a
-            // backup due at launch no longer waits out a full BACKUP_CHECK_SECS
-            // tick), then on every tick for as long as the app runs. The settings
-            // are re-read each round, so switching auto-backup off or changing the
-            // interval takes effect without a restart. Off the UI thread so it
+            // Take a backup whenever the newest one is older than the interval: after a short delay
+            // (backupStartDelayS, 0-300s, default 20, long enough for the window and store to settle),
+            // then on every tick while the app runs. Settings are re-read each round, so switching
+            // auto-backup off or changing the interval applies without a restart. Off the UI thread so it
             // never delays the first paint.
             {
                 let h = handle.clone();
@@ -501,9 +460,8 @@ pub fn run() {
                 );
             }
 
-            // Keeps our own data-folder lock fresh for as long as this process
-            // owns it -- a no-op while read-only or while the dataDirLock
-            // toggle is off, see refresh_data_dir_lock/acquire_data_dir_lock.
+            // Keeps our own data-folder lock fresh while this process owns it; a no-op while read-only or
+            // with the dataDirLock toggle off (see refresh_data_dir_lock/acquire_data_dir_lock).
             {
                 let h = handle.clone();
                 scheduler::register_periodic(
@@ -514,8 +472,8 @@ pub fn run() {
                 );
             }
 
-            // Self-heal a rec-bar window that exists but somehow ended up
-            // invisible while its recording is still running -- see rec_bar_heal_tick.
+            // Self-heal a rec-bar window that exists but ended up invisible while its recording is still
+            // running; see rec_bar_heal_tick.
             {
                 let h = handle.clone();
                 scheduler::register_periodic(
@@ -529,11 +487,9 @@ pub fn run() {
             // Answers a second, command-line launch of this same exe -- see cli.rs.
             cli::install_server(&handle);
 
-            // "Only at startup" left a crashed recording's leftover sitting for
-            // however long the app happened to stay open next -- the same flaw as any
-            // other startup-only sweep. First delay = one full interval since the
-            // startup sweep above just ran; each round re-times itself off the
-            // fixed REC_SWEEP_EVERY_MIN interval.
+            // A startup-only sweep would leave a crashed recording's leftover for however long the app
+            // stays open. First delay = one full interval since the startup sweep above; each round
+            // re-times itself off the fixed REC_SWEEP_EVERY_MIN interval.
             {
                 let h = handle.clone();
                 scheduler::register_periodic("recording-sweep", recording_sweep_interval(), recording_sweep_interval(), move || {
@@ -542,10 +498,9 @@ pub fn run() {
                 });
             }
 
-            // Remembered unfinished-edit rows for a file that is gone, or old enough
-            // to age out -- see sweep_edit_state_tick. A daily tick is plenty: unlike
-            // stale recording files these cost a few bytes each, so leaving one a
-            // little longer than strictly necessary is harmless.
+            // Remembered unfinished-edit rows for a file that is gone or old enough to age out (see
+            // sweep_edit_state_tick). A daily tick is plenty: unlike stale recording files these cost a
+            // few bytes each.
             {
                 let h = handle.clone();
                 scheduler::register_periodic("edit-state-sweep", Duration::from_secs(60), Duration::from_secs(86400), move || {
@@ -553,11 +508,9 @@ pub fn run() {
                 });
             }
 
-            // A pill/folder parked long enough (floatParkCleanupH, default 0/off)
-            // loses only its view -- exactly the existing "hide for now" mechanism,
-            // never the entry in settings.floating/float_folders and never its
-            // screen id, so it is still there (and still returns on its own) the
-            // moment that screen comes back.
+            // A pill/folder parked long enough (floatParkCleanupH, default 0/off) loses only its view,
+            // the existing "hide for now" mechanism, never its entry in settings.floating/float_folders or
+            // its screen id, so it returns on its own when that screen comes back.
             {
                 let h = handle.clone();
                 scheduler::register_periodic("float-park-cleanup", Duration::from_secs(60), Duration::from_secs(60), move || {
@@ -602,10 +555,8 @@ pub fn run() {
                 });
             }
 
-            // Re-arm the app hotkey plus every prompt accelerator. Each
-            // registration is a round trip to the main thread, so this runs on a
-            // worker: the first paint never waits for it, however many prompts
-            // carry a hotkey.
+            // Re-arm the app hotkey plus every prompt accelerator. Each registration is a round trip to
+            // the main thread, so this runs on a worker and the first paint never waits for it.
             {
                 let h = handle.clone();
                 std::thread::spawn(move || {
@@ -621,17 +572,13 @@ pub fn run() {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
-                // A pill/folder left fully off-screen by an unplugged monitor is
-                // never dropped here any more -- sync_float_windows() below (via
-                // open_floating/open_folder_window) parks it on the main screen
-                // instead, keeping its real position and screen id untouched so
-                // it returns on its own once that screen is back.
-                // Always-on-top and the window background are applied inside
-                // build_main_window, so a rebuilt window arrives dressed the
-                // same way this one does.
-                // The window is revealed by the frontend (show_main_window) once
-                // the first layout pass is done: no visible text re-sizing.
-                // Safety net: show after 1.5s even if the frontend never calls.
+                // A pill/folder left fully off-screen by an unplugged monitor is parked on the main screen by
+                // sync_float_windows() below (via open_floating/open_folder_window), keeping its real
+                // position and screen id so it returns once that screen is back.
+                // Always-on-top and the window background are applied inside build_main_window, so a rebuilt
+                // window arrives dressed the same way.
+                // The frontend reveals the window (show_main_window) once the first layout pass is done, so
+                // there is no visible text re-sizing. Safety net: show after 1.5s even if it never calls.
                 if !start_hidden {
                     let h = handle.clone();
                     std::thread::spawn(move || {
@@ -647,10 +594,9 @@ pub fn run() {
                 if let Some(state) = handle.try_state::<Db>() {
                     state.lock().unwrap_or_else(|e| e.into_inner()).settings.window = Some(geom);
                 }
-                // Event wiring (Moved/Resized/ThemeChanged/CloseRequested/Destroyed)
-                // already happened inside build_main_window -- the single place
-                // that registers it, whether this is the window Tauri just created
-                // from tauri.conf.json or one rebuilt after the process outlived it.
+                // Event wiring (Moved/Resized/ThemeChanged/CloseRequested/Destroyed) already happened inside
+                // build_main_window, the single place that registers it, for the window Tauri created from
+                // tauri.conf.json and one rebuilt after the process outlived it.
             }
 
             // System tray: left-click or "Open" restores; "Quit" exits for real.
@@ -687,15 +633,12 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        // This handler runs on the event-loop thread, so it takes
-                        // no lock: the store can be held for a long time by a backup
-                        // or an index run, and waiting for it here froze every
-                        // window. A worker reads the flag and builds the plan; the
-                        // warm menu window is then moved and filled on the main
-                        // thread (building a webview window from inside this
-                        // handler never returns).
-                        // The native popup owns the click while trayCustomMenu is
-                        // off (apply_tray_menu detaches its menu while it is on).
+                        // This handler runs on the event-loop thread, so it takes no lock: the store can be held for a
+                        // long time by a backup or an index run, and waiting for it here froze every window. A worker
+                        // reads the flag and builds the plan; the warm menu window is then moved and filled on the
+                        // main thread (building a webview window from inside this handler never returns).
+                        // The native popup owns the click while trayCustomMenu is off (apply_tray_menu detaches its
+                        // menu while it is on).
                         let app2 = tray.app_handle().clone();
                         tauri::async_runtime::spawn(async move {
                             let prep = tauri::async_runtime::spawn_blocking({
@@ -717,9 +660,8 @@ pub fn run() {
             tray.build(app)?;
             apply_tray_menu(&handle); // Adds the quick-copy sections if they are on
 
-            // Refresh autostart and the address scheme registrations (also follows
-            // the exe when it moved). Nothing is removed here and another copy's
-            // entry is never touched.
+            // Refresh the autostart and address-scheme registrations (also follows the exe when it
+            // moved). Nothing is removed here and another copy's entry is never touched.
             let demo = data_dir_is_demo(&handle, &data_dir(&handle));
             reconcile_windows_state(autostart, start_min, url_scheme_on, demo);
             // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
@@ -727,8 +669,8 @@ pub fn run() {
             // A read-only instance never writes into the folder another machine owns.
             if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
                 remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
-                // Temp files of an interrupted atomic write, in the data folder and in
-                // the markdown sync folder (which other computers would otherwise get).
+                // Temp files of an interrupted atomic write, in the data folder and in the markdown sync
+                // folder (which other computers would otherwise get).
                 sweep_atomic_temps(&data_dir(&handle), Duration::from_secs(3600));
                 if let Some(state) = handle.try_state::<Db>() {
                     let sync_dir = sync_dir_path(&handle, &lock(&state).settings);
@@ -743,18 +685,16 @@ pub fn run() {
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
 
-            // Pre-warm the snip overlay shortly after launch (off the startup hot
-            // path) so even the FIRST screenshot opens instantly: the WebView2
-            // cold-start is paid here in the background, not on first use.
+            // Pre-warm the snip overlay shortly after launch (off the startup hot path) so the first
+            // screenshot opens instantly: the WebView2 cold start is paid here in the background.
             let h_pw = handle.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(600)).await;
                 let h = h_pw.clone();
                 let _ = h_pw.run_on_main_thread(move || {
                     if h.get_webview_window("snip-0").is_none() {
-                        // Just build it (hidden) so the first snip skips WebView2
-                        // cold-start. Waking it from throttle + its first paint are
-                        // handled by the off-screen show on the reuse path in open_snip.
+                        // Build it hidden so the first snip skips the WebView2 cold start. Waking it from throttle and
+                        // its first paint are handled by the off-screen show on the reuse path in open_snip.
                         let _ = build_snip_window(&h);
                     }
                 });
@@ -769,9 +709,8 @@ pub fn run() {
                     let h = h_pw.clone();
                     let _ = h_pw.run_on_main_thread(move || prewarm_tray_window(&h));
                 }
-                // The overlay must stay invisible while idle: look again a few
-                // times through the slow part of a boot and put it away if
-                // anything showed it (a no-op while it is hidden or in use).
+                // The overlay must stay invisible while idle: look a few times through the slow part of a
+                // boot and put it away if anything showed it (a no-op while hidden or in use).
                 for wait_ms in [0u64, 2500, 10000] {
                     tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
                     let h = h_pw.clone();
@@ -788,16 +727,14 @@ pub fn run() {
                     update_check_interval(&handle),
                     move || {
                         update_check_tick(&h2);
-                        // Expert-tunable interval, re-read after every round: the
-                        // change takes effect from the next wait onward.
+                        // Expert-tunable interval, re-read after every round; a change applies from the next wait.
                         scheduler::retime("update-check", update_check_interval(&h2));
                     },
                 );
             }
 
-            // Lands the collected rotation-pointer / usage-counter writes once
-            // the copying has been quiet for SETTINGS_QUIET_MS. A round with
-            // nothing owed costs one uncontended mutex.
+            // Lands the collected rotation-pointer and usage-counter writes once copying has been quiet
+            // for SETTINGS_QUIET_MS. A round with nothing owed costs one uncontended mutex.
             {
                 let h = handle.clone();
                 scheduler::register_periodic(
@@ -808,9 +745,8 @@ pub fn run() {
                 );
             }
 
-            // Sweep the temp dir again now and then, not only at launch: an
-            // instance left running for days otherwise never collects the
-            // leftovers a crashed sibling dropped after it started.
+            // Sweep the temp dir now and then, not only at launch: an instance left running for days would
+            // otherwise never collect what a crashed sibling dropped after it started.
             scheduler::register_periodic(
                 "temp-sweep",
                 Duration::from_secs(STALE_TEMP_SWEEP_SECS),
@@ -828,8 +764,8 @@ pub fn run() {
                 );
             }
 
-            // OCR language-pack "updatable" watcher -- delayed, silent when
-            // there is nothing to do, never runs at window build.
+            // OCR language-pack "updatable" watcher: delayed, silent when there is nothing to do, never
+            // run at window build.
             #[cfg(windows)]
             {
                 start_lang_update_watcher(handle.clone(), ocr::CapKind::Ocr);
