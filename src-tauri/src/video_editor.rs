@@ -1,12 +1,9 @@
 use super::*;
 
-// ---------- Video editor (242-245) ----------
-//
-// probe/mux/filmstrip/waveform/still-frame are read-only or one-shot helper
-// commands the editor window calls while a recording is open; export_video is
-// the ONE additional entry point into ffmpeg beyond convert_recording above,
-// sharing run_ffmpeg_to_staged so there is never a second argument-building /
-// progress / cancel implementation.
+// Video editor: probe, mux, filmstrip, waveform and still-frame helpers are read-only or
+// one-shot commands the editor calls while a recording is open. export_video is the one
+// additional ffmpeg entry point beyond convert_recording, sharing run_ffmpeg_to_staged so
+// there is a single argument-building, progress and cancel implementation.
 
 #[derive(serde::Serialize)]
 pub(crate) struct RecordingProbe {
@@ -17,22 +14,16 @@ pub(crate) struct RecordingProbe {
     pub(crate) has_audio: bool,
     pub(crate) has_mic_track: bool,
     pub(crate) mic_sidecar: Option<String>,
-    // The lossless "-c copy" fast path only ever produces a valid mp4 if
-    // every mapped stream is already a codec mp4 can carry as-is -- a source
-    // dragged in from elsewhere (e.g. a webm/VP9 file) fails ffmpeg outright
-    // when the export path blindly assumes "trim-only" means "safe to copy".
+    // The lossless "-c copy" fast path only yields a valid mp4 when every mapped stream is a
+    // codec mp4 can carry (a webm/VP9 source dragged in from elsewhere fails otherwise).
     pub(crate) stream_copy_safe: bool,
-    // Whether this recording has a key-overlay sidecar (see `keylog`) --
-    // the video editor only offers the "keys" overlay's presets once it
-    // knows there is something to show.
+    // Whether the recording has a key-overlay sidecar (see keylog); the editor offers the keys
+    // presets only then.
     pub(crate) has_keys_sidecar: bool,
 }
 
-// The text-overlay font list used to hardcode "C:/Windows/Fonts/..." --
-// every export failed outright on a system where Windows itself is installed
-// on a different drive. `SystemRoot` (or `windir`, same value under a different
-// name) is what Windows itself sets this from, so it is the one thing that can
-// never disagree with where the machine actually put its Fonts folder.
+// The text-overlay font list is built from SystemRoot (or windir), which Windows sets
+// itself, so exports work when Windows is installed on another drive.
 #[tauri::command]
 pub(crate) fn windows_fonts_dir() -> String {
     let root = std::env::var("SystemRoot")
@@ -53,12 +44,9 @@ pub(crate) async fn probe_recording(app: AppHandle, path: String) -> Result<Reco
         .map_err(|e| e.to_string())?
 }
 
-// Checks one extra video source (an inserted overlay or section clip, the
-// video editor's "Add a video" path) before the user builds anything on top
-// of it. Unlike probe_recording above, a failure here comes back as the same
-// classified JSON envelope export_video's own errors use, so the editor's
-// existing ffErr* messages (see classify_ffmpeg_error) cover this path too
-// instead of a second, separate wording for the same three failure shapes.
+// Checks one extra video source (an inserted overlay or section clip) before the user
+// builds on it. A failure comes back as the same classified JSON envelope export_video
+// uses, so the editor's ffErr* messages (see classify_ffmpeg_error) cover this path too.
 #[tauri::command]
 pub(crate) async fn probe_extra_video_source(app: AppHandle, path: String) -> Result<RecordingProbe, String> {
     let src = PathBuf::from(&path);
@@ -140,15 +128,9 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
     })
 }
 
-// The key-overlay editor's own data fetch -- a plain read of the sidecar
-// JSON `keylog::write_sidecar` produced, or None when this recording never
-// captured one (the setting was off, or it predates this feature). Read via
-// a command like every other file access the frontend makes, never a direct
-// filesystem call from the webview.
-// The one place a key-sidecar JSON file is turned into a KeySidecar --
-// shared by the actual read command below and by the copy-safety check that
-// runs before a sidecar follows its recording into an editor working copy,
-// so both ever accept exactly the same shape of file.
+// The one place a key-sidecar JSON file becomes a KeySidecar, shared by the read command and
+// the copy-safety check that runs before a sidecar follows its recording into an editor
+// working copy, so both accept the same shape.
 #[cfg(windows)]
 pub(crate) fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
     // dec_str passes an old unsealed file through unchanged.
@@ -163,6 +145,10 @@ pub(crate) fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> 
     parse_key_sidecar(std::str::from_utf8(&bytes).ok()?)
 }
 
+// The key-overlay editor's data fetch: a plain read of the sidecar JSON
+// keylog::write_sidecar produced, or None when the recording never captured one (setting
+// off, or older). A command like every other file access, never a direct filesystem call
+// from the webview.
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
@@ -178,13 +164,10 @@ pub(crate) async fn read_key_sidecar(path: String) -> Option<()> {
     None
 }
 
-// Duration/width/height/size for a media attachment (file_path or icon_path),
-// measured once when the attachment is set and stored on the Prompt -- never
-// recomputed on every render. A still image goes through the
-// `image` crate (already a dependency), a video through ffprobe the same way
-// probe_recording_blocking does. Nothing here returns an error: a value that
-// could not be determined comes back as 0, which the caller and the frontend
-// both already treat as "unknown, show nothing" rather than a placeholder.
+// Duration, width, height and size for a media attachment (file_path or icon_path),
+// measured once when the attachment is set and stored on the Prompt, never on render. A
+// still goes through the image crate, a video through ffprobe. Nothing returns an error: an
+// unknown value is 0, which callers and the frontend treat as "show nothing".
 pub(crate) fn probe_media_meta(ffprobe: Option<&Path>, path: &Path) -> (u64, u32, u32, u64) {
     let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     if let Ok(img) = image::image_dimensions(path) {
@@ -198,15 +181,8 @@ pub(crate) fn probe_media_meta(ffprobe: Option<&Path>, path: &Path) -> (u64, u32
     (0, 0, 0, size)
 }
 
-// The one-time catch-up for an entry that has never been measured, or whose
-// first measurement failed (the source briefly locked, a network drive asleep): the
-// library/history call this the first time such a row is actually shown, never
-// during the render itself, so a long list is never held up waiting on ffprobe.
-// A no-op (Ok(None), nothing saved) when the entry already carries a
-// measurement, has no video/image attachment, or still cannot be read.
-//
-// The answer holds the four media fields only: the stored prompt of a confidential
-// entry carries ciphertext, and the window merges this answer over its decrypted copy.
+// Only the four media fields: a confidential entry's stored prompt carries ciphertext, and
+// the window merges this answer over its decrypted copy.
 #[derive(serde::Serialize)]
 pub(crate) struct MediaMeta {
     media_duration_ms: u64,
@@ -215,6 +191,10 @@ pub(crate) struct MediaMeta {
     media_size_bytes: u64,
 }
 
+// One-time catch-up for an entry never measured or whose first measurement failed (source
+// briefly locked, network drive asleep): called the first time such a row is shown, never
+// during render. A no-op (Ok(None), nothing saved) when the entry already has a
+// measurement, has no video or image attachment, or is still unreadable.
 #[tauri::command]
 pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Option<MediaMeta>, String> {
     let media_path = {
@@ -242,7 +222,7 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
             .await
             .map_err(|e| e.to_string())?;
     if duration_ms == 0 && width == 0 && size == 0 {
-        return Ok(None); // still unreadable -- nothing changed, nothing to save
+        return Ok(None); // still unreadable: nothing changed, nothing to save
     }
     let mut store = lock(&state);
     let updated = match store.prompts.iter_mut().find(|p| p.id == id) {
@@ -266,11 +246,10 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
     Ok(updated)
 }
 
-// Consolidates a recording's mic sidecar (see mic_sidecar_video_path / the
-// recording engine's mic_wav_writer_loop) into a genuine second AAC track,
-// once, the first time the editor opens a recording that still has one.
-// Non-fatal to the caller: the video keeps playing system-audio-only if this
-// fails, and the sidecar is left in place to retry on the next open.
+// Consolidates a recording's mic sidecar (see mic_sidecar_video_path and the recording
+// engine's mic_wav_writer_loop) into a second AAC track, once, the first time the editor
+// opens a recording that still has one. Non-fatal: on failure the video plays
+// system-audio-only and the sidecar stays for a retry.
 #[tauri::command]
 pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_path: String, sidecar_path: String) -> Result<(), String> {
     let video = PathBuf::from(&video_path);
@@ -278,14 +257,10 @@ pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_pa
     if !video.is_file() || !sidecar.is_file() {
         return Err("recording or mic sidecar not found".to_string());
     }
-    // mux_mic_track_blocking below replaces `video` in place and deletes
-    // `sidecar` on success -- both need to be proven to belong to this app
-    // before either is touched. The video must be one of our own
-    // recordings, and the sidecar must be exactly THAT video's own mic
-    // capture, never an unrelated second path that just happens to sit in
-    // the same allowed folder.
-    // The editor's working copy of an opened file counts too: it is the app's own
-    // throwaway file, and its mic track is what that copy was given a sidecar for.
+    // mux_mic_track_blocking replaces video in place and deletes sidecar on success, so both
+    // must be proven to belong to this app first: the video one of our recordings, the sidecar
+    // exactly that video's own mic capture. The editor's working copy of an opened file counts
+    // too (its mic track is what that copy's sidecar is for).
     if !is_own_recording_source(&recording_source_dirs(&app, &state), &video) && !is_editor_work_copy(&video) {
         return Err("source-not-allowed".to_string());
     }
@@ -310,14 +285,9 @@ pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path
         .arg(sidecar)
         .args(["-map", "0:v", "-map", "0:a?", "-map", "1:a", "-c:v", "copy", "-c:a:0", "copy", "-c:a:1", "aac", "-b:a:1"])
         .arg(format!("{audio_kbps}k"))
-        // No -shortest -- the mic writer can stop a moment before the
-        // video does (its own thread, its own shutdown timing), and -shortest
-        // takes the SHORTEST mapped stream as the output length, which
-        // permanently truncated the video's tail to match. Without it ffmpeg
-        // instead runs until every mapped stream is exhausted, so the mic
-        // track just ends a little early inside a video-length file -- the
-        // one-sided failure mode that actually matches "the mic dropped out",
-        // instead of "the recording lost its ending".
+        // No -shortest: the mic writer can stop slightly before the video, and -shortest would
+        // permanently truncate the video's tail to match. Without it the mic track just ends a
+        // little early inside a video-length file.
         .arg(&staged);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
@@ -338,13 +308,9 @@ pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path
     Ok(())
 }
 
-// Thumbnail cache keyed by (path, mtime, requested count) so re-opening the
-// same, unchanged recording at the same zoom level never re-extracts. `count`
-// is part of the key because each thumbnail's timestamp is spaced across
-// the clip AS A FRACTION OF count -- thumb 0 of 40 and thumb 0 of 12 are
-// different moments in the recording, so reusing one count's files for
-// another silently produced a filmstrip that only covered part of the clip.
-// Swept by age in sweep_stale_temp_files, not here.
+// Thumbnail cache keyed by (path, mtime, requested count). count is in the key because each
+// thumbnail's timestamp is a fraction of count, so reusing one count's files for another
+// covered only part of the clip. Swept by age in sweep_stale_temp_files.
 pub(crate) fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
     let mtime = fs::metadata(src).ok()?.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -356,9 +322,8 @@ pub(crate) fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
     Some(std::env::temp_dir().join(brand::TEMP_DIR).join("video-thumbs").join(format!("{key:x}")))
 }
 
-// No duration parameter -- the frontend calls this with just {path, count};
-// the editor already ran probe_recording before ever reaching the timeline,
-// so ffprobe is known to be present by the time this can be called.
+// No duration parameter: the editor already ran probe_recording before reaching the
+// timeline, so ffprobe is known to be present.
 #[tauri::command]
 pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32) -> Result<Vec<String>, String> {
     let src = PathBuf::from(&path);
@@ -435,12 +400,10 @@ pub(crate) async fn generate_waveform_peaks(app: AppHandle, path: String, track:
 
 pub(crate) const WAVEFORM_TIMEOUT: Duration = Duration::from_secs(120);
 
-// Peaks built while the decoded audio streams in: one running maximum per bucket, so
-// the memory used is the bucket count, not the length of the recording (8 kHz mono
-// s16 is 57.6 MB per hour). The bucket edges are the ones `pcm_s16le_to_peaks` uses
-// for a buffer of `total_samples`, so both give the same peaks for the same audio.
-// Samples past the announced total (a duration that was a little short) fold into the
-// last bucket instead of being lost.
+// Peaks built while the decoded audio streams in: one running maximum per bucket, so memory
+// is the bucket count, not the recording length (8 kHz mono s16 is 57.6 MB per hour). Bucket
+// edges match pcm_s16le_to_peaks for a buffer of total_samples. Samples past the announced
+// total fold into the last bucket.
 pub(crate) struct PeakAccumulator {
     buckets: usize,
     per_bucket: f64,
@@ -552,9 +515,8 @@ pub(crate) fn generate_waveform_peaks_blocking(ffmpeg: &Path, ffprobe: Option<&P
     Ok(acc.finish())
 }
 
-// Running max tracked as u16: i16::MIN.unsigned_abs() is 32768, one past
-// i16::MAX, so a signed running max would silently wrap on exactly that
-// sample -- normalizing by dividing the u16 max by 32768.0 sidesteps it.
+// The running max is a u16: i16::MIN.unsigned_abs() is 32768, one past i16::MAX, so a signed
+// max would wrap on exactly that sample. Normalized by dividing by 32768.0.
 pub(crate) fn pcm_s16le_to_peaks(pcm: &[u8], buckets: u32) -> Vec<f32> {
     let sample_count = pcm.len() / 2;
     if sample_count == 0 || buckets == 0 {
@@ -597,13 +559,9 @@ pub(crate) async fn extract_still_frame(app: AppHandle, state: State<'_, Db>, pa
     Ok(if saved.is_empty() { None } else { Some(saved) })
 }
 
-// Same screenshotFormat setting the snip tool uses -- "Einzelbild exportieren"
-// is a screenshot in every sense but where its pixels come from. ffmpeg
-// encodes the still directly (no round trip through the image crate): the
-// format-appropriate extension picks its encoder, -q:v is JPEG's own quality
-// knob (meaningless, and unset, for every lossless target), and -lossless 1
-// keeps WebP consistent with encode_screenshot's own image-crate WebP, which
-// has no lossy mode to diverge from in the first place.
+// Same screenshotFormat setting as the snip tool. ffmpeg encodes the still directly: the
+// extension picks the encoder, -q:v is JPEG's quality knob (unset for lossless targets), and
+// -lossless 1 keeps WebP lossless like encode_screenshot's WebP.
 pub(crate) fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &str) -> Result<Vec<u8>, String> {
     use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
@@ -649,64 +607,46 @@ pub(crate) fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, 
     bytes
 }
 
-// Export request built entirely by the frontend from its own operation list:
-// filter_chain/audio_map are raw -filter_complex fragments the
-// frontend compiles, ending in the fixed output labels below when present --
-// this backend never builds a filter graph itself, only wires the two fragments
-// together and maps their outputs. export_video first checks each fragment
-// against export_graph (allowed filters, readable files).
-//   filter_chain: ends with [vout] if present, else the source video stream
-//                 is mapped unfiltered.
-//   audio_map:    ends with [aout] if present, else the source audio (if any)
-//                 is mapped unfiltered. Never sent (and never mapped) for gif
-//                 -- the GIF container carries no audio at all.
-// trim_start_ms/trim_end_ms apply BEFORE any filter graph: trim_start_ms
-// becomes an input-side "-ss" (exact and, for the lossless_copy fast path,
-// keyframe-snapped by ffmpeg itself), trim_end_ms becomes an output-side
-// "-t <duration>" -- so a plain trim/cut with no other operation and
-// lossless_copy=true never touches a filter graph or re-encodes at all.
+// Export request built by the frontend from its own operation list. filter_chain and
+// audio_map are raw -filter_complex fragments; this backend only wires them together and
+// maps their outputs, after export_video has checked each against export_graph (allowed
+// filters, readable files).
+//   filter_chain: ends with [vout] if present, else the source video is mapped unfiltered.
+//   audio_map:    ends with [aout] if present, else the source audio (if any) is mapped
+//                 unfiltered. Never sent for gif, which carries no audio.
+// trim_start_ms is an input-side "-ss" (keyframe-snapped for lossless_copy) and trim_end_ms
+// an output-side "-t <duration>", both applied before any filter graph, so a plain trim with
+// lossless_copy never touches a filter graph or re-encodes.
 #[derive(serde::Deserialize)]
 pub(crate) struct ExportRequest {
     pub(crate) src_path: String,
     pub(crate) dest_path: String,
     pub(crate) filter_chain: Option<String>,
     pub(crate) audio_map: Option<String>,
-    // Every media file the graph reads besides the source (overlay pictures and
-    // videos, inserted clips, extra audio). The backend only lets a movie=/amovie=
-    // source open the source itself or one of these.
+    // Every media file the graph reads besides the source (overlay pictures and videos, inserted
+    // clips, extra audio). A movie=/amovie= source may only open the source itself or one of these.
     #[serde(default)]
     pub(crate) media_paths: Vec<String>,
     pub(crate) lossless_copy: bool,
-    // Distinct from lossless_copy (the stream-copy fast path) -- this is
-    // "Lossless" picked as a re-encode QUALITY tier, which has no bitrate of
-    // its own to map to and used to silently fall back to a fixed, lossy
-    // 8000kbps. True whenever the quality dropdown is on "lossless", even
-    // when some other op (crop, overlay, ...) still forces a real re-encode.
+    // "Lossless" picked as a re-encode quality tier, distinct from lossless_copy (the
+    // stream-copy fast path). True whenever the quality dropdown is on "lossless", even when
+    // another op (crop, overlay, ...) still forces a real re-encode.
     pub(crate) lossless_quality: bool,
     pub(crate) format: String,
     pub(crate) video_kbps: Option<u32>,
     pub(crate) trim_start_ms: Option<u64>,
     pub(crate) trim_end_ms: Option<u64>,
-    // The finished export's own expected length, in the caller's own words --
-    // never read by export_video_blocking itself, only by export_video's own
-    // progress wrapper, to turn a raw "ms encoded so far" reading into the
-    // percent the header's running-jobs list actually shows.
+    // The finished export's expected length. Only export_video's progress wrapper reads it, to
+    // turn "ms encoded so far" into the percent shown in the running-jobs list.
     pub(crate) total_ms: u64,
 }
 
-// Each export owns the generation number it was handed at start. Cancelling
-// used to store a single "cancel whichever generation is current" value
-// (a plain AtomicU64) -- correct as long as at most one export ever ran at
-// once. A batch export can run several generations at the same time
-// (the batch window can be wider than one), so a single slot is no longer enough: two jobs
-// running together would fight over it, and cancelling one would either miss
-// or wrongly cancel the other. A set of cancelled generations fixes this --
-// each generation is cancelled (or not) independently, and a finished job
-// removes its own entry so the set never grows unbounded.
+// Each export owns the generation number it was handed at start. Batch exports can run
+// several generations at once, so cancellation is a set of cancelled generations rather than
+// one slot; a finished job removes its own entry so the set stays small.
 pub(crate) static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
-// The generation of the export the video editor itself has in flight (0 =
-// none). The editor's Cancel must hit exactly this one, not whichever
-// generation a batch export reserved last.
+// The generation of the export the video editor itself has in flight (0 = none), so its
+// Cancel hits exactly that one and not a batch export's.
 pub(crate) static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
@@ -715,12 +655,9 @@ pub(crate) fn video_export_cancelled() -> &'static Mutex<std::collections::HashS
     SET.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
-// The one folder an export command is allowed to write into this session,
-// remembered from the last real folder dialog the backend itself ran
-// (`pick_export_folder`'s picked directory) -- an export command never trusts
-// a `dest_path` string from the IPC call on its own, since that call could in
-// principle be made with any argument at all rather than the one a dialog
-// actually returned.
+// The one folder exports may write into this session: the directory last picked in a folder
+// dialog the backend ran itself. An export command never trusts a dest_path from the IPC
+// call alone, since that call could be made with any argument.
 pub(crate) static LAST_EXPORT_DEST_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 pub(crate) fn remember_export_dest_dir(dir: &Path) {
@@ -729,15 +666,10 @@ pub(crate) fn remember_export_dest_dir(dir: &Path) {
     }
 }
 
-// A bounded set of files this session's own export_video calls have actually
-// written -- the backend's own proof that a given path is one of its own
-// outputs, so `save_recording_as` can also accept moving one of THESE without
-// widening the "rec-" recording-folder rule that command otherwise enforces
-// (an export can land anywhere the export-destination gate authorized, not
-// only inside a recording folder, so that rule alone would refuse "Save as"
-// after every export whose target was not itself a recording folder).
-// Bounded so a very long session cannot grow this without limit; the oldest
-// entry is dropped once the cap is hit, same shape as PICKER_GRANTS above.
+// A bounded set of files this session's export_video calls wrote: the backend's proof that
+// a path is one of its own outputs, so save_recording_as can move it without widening its
+// "rec-" recording-folder rule (an export can land in any folder the destination gate
+// authorized). The oldest entry is dropped at the cap, like PICKER_GRANTS above.
 pub(crate) const EXPORT_OUTPUT_MAX: usize = 64;
 pub(crate) static EXPORT_OUTPUTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
@@ -755,9 +687,8 @@ pub(crate) fn is_known_export_output(path: &Path) -> bool {
     EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).contains(&canon)
 }
 
-// Moves a file and, when it was one of this session's own export outputs,
-// carries that proof over to its new place (and drops the old entry), so the
-// same export can be moved again from where it landed.
+// Moves a file and carries its export-output proof over to the new path (dropping the old
+// entry), so the same export can be moved again from where it landed.
 pub(crate) fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Result<()> {
     let old = if is_known_export_output(src) { fs::canonicalize(src).ok() } else { None };
     move_file(src, dst)?;
@@ -768,58 +699,35 @@ pub(crate) fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Res
     Ok(())
 }
 
-// What export_video should add to EXPORT_OUTPUTS once ffmpeg finishes: the
-// path export_video_blocking's own Ok result names, never the caller's
-// originally requested dest_path. When that name was already taken,
-// export_video_blocking's own reserve_unique_dest_path rename lands the real file at
-// a sibling instead -- recording the requested path there would remember a
-// file this export never wrote, while the file that actually exists stays
-// unrecognized by save_recording_as.
+// What export_video remembers once ffmpeg finishes: the path export_video_blocking returned,
+// not the requested dest_path, since reserve_unique_dest_path may have renamed the file to a
+// sibling when that name was taken.
 pub(crate) fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf> {
     result.as_ref().ok().map(PathBuf::from)
 }
 
-// Whether `dest`'s containing folder is one this session is actually allowed
-// to export into: the folder from the last save dialog the backend ran for
-// this purpose, the standing `videoExportDir` preference (itself only ever
-// set from that same dialog, in an earlier session), or the source file's own
-// folder -- but ONLY when that source file already lives inside a folder this
-// app controls (its recording folder or the configured export folder).
-// Without that restriction an IPC-supplied src_path naming any existing file
-// at all would authorize that file's own parent as an export destination,
-// handing out write authority over whatever folder happens to contain it;
-// with it, the fallback only ever covers the ordinary "convert/export a
-// recording back next to itself" case. Everything is compared canonicalized
-// so a relative segment or a different letter case cannot be used to step
-// outside the folder that was actually picked.
-// A name typed into the export panel's "File name" field must stay one
-// path segment -- none of Windows' own reserved filename characters, and no
-// ".." (which needs no separator of its own to still mean "walk up a level"
-// on top of a picked/typed folder). Empty or "."/".." alone are refused the
-// same way. The frontend already blocks all of this live as the field is
-// typed; this is the same rule re-applied to whatever dest_path arrives.
-// Windows reserved device names, matched case-insensitively against the part
-// of the stem before its first dot -- "CON.take2" is just as reserved as
-// "CON" itself. Kept in sync by hand with ui/exportName.js's own copy.
+// Windows reserved device names, matched case-insensitively against the stem before its
+// first dot ("CON.take2" is as reserved as "CON"). Keep in sync with ui/exportName.js.
 pub(crate) const EXPORT_RESERVED_STEMS: [&str; 22] = [
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4",
     "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
+// A typed "File name" must stay one path segment: none of Windows' reserved filename
+// characters, no "..", and not empty or "." alone. The frontend blocks this live; the same
+// rule is re-applied to whatever dest_path arrives.
 pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
         return false;
     }
-    // A bare ".." inside a longer name (e.g. "v1..2") cannot climb anywhere --
-    // it only means "walk up a level" without separators of its own around
-    // it, which the exact "." / ".." checks above already cover on their own.
+    // A ".." inside a longer name (e.g. "v1..2") cannot climb anywhere; only the exact "." and
+    // ".." names are refused above.
     if trimmed.chars().any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || (c as u32) < 0x20) {
         return false;
     }
-    // Trailing whitespace is already gone after the trim above; a trailing
-    // dot survives it and Windows silently drops it from the real file name,
-    // so it gets its own check here.
+    // A trailing dot survives the trim above and Windows silently drops it from the real file
+    // name.
     if trimmed.ends_with('.') {
         return false;
     }
@@ -827,9 +735,8 @@ pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
     !EXPORT_RESERVED_STEMS.contains(&first_segment.as_str())
 }
 
-// A suggested file name from free text (a theme name, say): characters Windows does
-// not allow in a name become "-", and a result the validator above still refuses
-// (empty, "..", a reserved device name) falls back to `fallback`.
+// A suggested file name from free text (a theme name, say): characters Windows does not
+// allow become "-", and a result the validator above refuses falls back to `fallback`.
 pub(crate) fn export_file_name_from(name: &str, fallback: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -839,12 +746,9 @@ pub(crate) fn export_file_name_from(name: &str, fallback: &str) -> String {
     if export_file_name_is_valid(&cleaned) { cleaned } else { fallback.to_string() }
 }
 
-// Exporting a file over itself would ask ffmpeg to read and overwrite the
-// same file mid-run; refused outright rather than relying on reserve_unique_dest_path
-// to save it by silently picking a different name. dest need not exist yet
-// (that is the normal case for a fresh export), so only its parent folder is
-// canonicalized; the file name itself is compared case-insensitively, the way
-// Windows treats two names that differ only in case as the same file.
+// Exporting a file over itself would have ffmpeg read and overwrite one file, so it is
+// refused rather than left to reserve_unique_dest_path. dest need not exist, so only its
+// parent is canonicalized; names compare case-insensitively, as Windows does.
 pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     let Ok(src_canon) = fs::canonicalize(src) else { return false };
     let dest_parent = dest.parent().unwrap_or_else(|| Path::new("."));
@@ -854,8 +758,14 @@ pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     combined.to_string_lossy().eq_ignore_ascii_case(&src_canon.to_string_lossy())
 }
 
-// Split from `export_dest_dir_is_authorized` below so the actual decision is
-// a plain function of paths and can be unit-tested without a running app.
+// Whether dest's folder is one this session may export into: the folder from the last save
+// dialog the backend ran, the standing videoExportDir preference, or the source file's own
+// folder, but only when that source already lives in a folder the app controls (recording
+// folder or configured export folder). Without that restriction an IPC-supplied src_path
+// naming any file would authorize its parent as a destination. Everything is compared
+// canonicalized so relative segments or letter case cannot step outside the picked folder.
+// Split from export_dest_dir_is_authorized so the decision is a plain function of paths and
+// testable without a running app.
 pub(crate) fn export_dest_dir_is_authorized_against(
     dest: &Path,
     src: &Path,
@@ -866,8 +776,8 @@ pub(crate) fn export_dest_dir_is_authorized_against(
 ) -> bool {
     let Some(dest_dir) = dest.parent() else { return false };
     let Ok(canon_dest_dir) = fs::canonicalize(dest_dir) else { return false };
-    // The app's own temp folder, where clip_export_path puts the throwaway
-    // file a "copy to clipboard" export writes before it goes on the clipboard.
+    // The app's own temp folder, where clip_export_path writes the file a "copy to clipboard"
+    // export produces.
     if own_temp_dir.is_some_and(|t| fs::canonicalize(t).is_ok_and(|c| c == canon_dest_dir)) {
         return true;
     }
@@ -899,8 +809,8 @@ pub(crate) fn export_dest_dir_is_authorized_against(
 pub(crate) fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
     let last_picked = LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let configured = lock(state).settings.ui_texts.get("videoExportDir").cloned();
-    // A fresh capture still sits in <data>/recordings when the editor opens it,
-    // so that folder counts as a recording folder here just like recordingDir.
+    // A fresh capture still sits in <data>/recordings when the editor opens it, so that folder
+    // counts as a recording folder here.
     let trusted_src_dirs = recording_source_dirs(app, state);
     let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
     export_dest_dir_is_authorized_against(
@@ -913,10 +823,8 @@ pub(crate) fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, D
     )
 }
 
-// The single-editor "Cancel" button: cancels the export the editor itself
-// started (it only ever has one in flight), never a batch job that reserved a
-// later generation in the meantime. Nothing in flight means nothing to cancel,
-// so no stale entry is left behind either.
+// The editor's Cancel: cancels the export the editor itself started, never a batch job that
+// reserved a later generation. Nothing in flight leaves no stale entry behind.
 pub(crate) fn cancel_editor_export_in(editor_gen: &AtomicU64) {
     let gen = editor_gen.load(Ordering::SeqCst);
     if gen != 0 {
@@ -929,23 +837,17 @@ pub(crate) fn cancel_export() {
     cancel_editor_export_in(&EDITOR_EXPORT_GEN);
 }
 
-// The batch-export list's per-row cancel button: targets one specific
-// job by the generation number embedded in its bg-ops id ("export-<gen>"),
-// leaving every other job in the batch running.
+// Per-row cancel of the batch list: targets one job by the generation in its bg-ops id
+// ("export-<gen>") and leaves the rest running.
 #[tauri::command]
 pub(crate) fn cancel_export_job(generation: u64) {
     video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(generation);
 }
 
-// Global cancel (app quit, cancel_all_bg_ops below) must stop every export
-// currently in flight, not just the most recent one -- unlike cancel_export()
-// above, whose "whichever is current" is correct ONLY because the editor
-// never has more than one export of its own running. A batch can have
-// several generations running at once (a wider batch window); scanning the
-// bg-ops registry for every still-running "export" row is how every one of
-// them gets cancelled instead of just the last one, which is what the app-quit
-// path actually needs. The current generation is also inserted directly, in
-// case a brand new export's own bg-ops row has not been written yet.
+// Global cancel (app quit, cancel_all_bg_ops) stops every export in flight, not just the
+// current one: a batch can have several generations running, found by scanning the bg-ops
+// registry for running "export" rows. The current generation is added directly in case its
+// row is not written yet.
 pub(crate) fn cancel_all_exports() {
     let running_gens: Vec<u64> = bg_ops()
         .lock()
@@ -988,13 +890,9 @@ pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Pat
         .any(|s| fs::canonicalize(s).is_ok_and(|c| c == canon))
 }
 
-// Progress reuses "recording-convert-progress" / ConvertProgressPayload --
-// convert_recording's own event -- rather than a second progress channel; the
-// editor window listens to the same event name while an export is in flight.
-// The taskbar/running-jobs registry is updated from RIGHT HERE, inside the
-// progress closure and around the result, rather than by the editor window's
-// own JS calling set_taskbar_progress -- so a job keeps reporting correctly
-// even once the window that started it has closed.
+// Progress reuses convert_recording's "recording-convert-progress" event. The taskbar and
+// running-jobs registry are updated here rather than by the editor window's JS, so a job
+// keeps reporting after the window that started it has closed.
 #[tauri::command]
 pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) -> Result<String, String> {
     if !is_video_format(&req.format) {
@@ -1010,11 +908,8 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
         return Err("source-not-allowed".to_string());
     }
     let dst = PathBuf::from(&req.dest_path);
-    // The export panel's own "File name" field types straight into
-    // req.dest_path's own file name -- checked again here rather than
-    // trusted from the frontend's own matching validation, same reasoning as
-    // export_dest_dir_is_authorized just below: the path ultimately
-    // comes from user input.
+    // The file name is checked again here rather than trusted from the frontend's matching
+    // validation, since dest_path ultimately comes from user input.
     let file_name_ok = dst.file_name().and_then(|n| n.to_str()).is_some_and(export_file_name_is_valid);
     if !file_name_ok {
         return Err("export destination not recognized".to_string());
@@ -1030,10 +925,8 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     EDITOR_EXPORT_GEN.store(my_gen, Ordering::SeqCst);
-    // Own registry key per job (not just "export"), so a batch of exports
-    // running together each show as their own row instead of overwriting one
-    // shared entry -- "export" itself stays the kind the frontend groups
-    // and labels by.
+    // Own registry key per job so a batch shows one row per export; "export" stays the kind the
+    // frontend groups and labels by.
     let id = format!("export-{my_gen}");
     let target = req.dest_path.clone();
     let total_ms = req.total_ms.max(1);
@@ -1080,18 +973,10 @@ pub(crate) struct BatchExportResult {
     pub(crate) failed: usize,
 }
 
-// One batch item's whole outcome: missing source is rejected the same way
-// export_video itself rejects it, otherwise it runs through the exact same
-// export_video_blocking every single export uses. AppHandle-free like that
-// function, on purpose -- a batch of several recordings needs a real, fast,
-// deterministic test proving three in gives three files out and one
-// deliberately broken source does not stop the other two, with no Tauri app
-// needed, and this is the one place both that test and the real async
-// command call into, so neither can drift from the other.
-// `my_gen` is reserved by the caller (VIDEO_EXPORT_GEN.fetch_add), not by this
-// function, so a batch caller can build its bg-ops id and register the
-// "running" row before the job even starts -- same reasoning as
-// export_video_blocking's own `my_gen` parameter.
+// One batch item's outcome: a missing source is rejected as export_video rejects it,
+// otherwise it runs through export_video_blocking. AppHandle-free so a test can prove three
+// sources give three files and one broken source does not stop the others. my_gen is
+// reserved by the caller so its bg-ops row can be registered before the job starts.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_batch_job_blocking(
     ffmpeg: &Path, src_path: &str, dest_path: &str, total_ms: u64, format: &str, lossless_quality: bool, video_kbps: Option<u32>, my_gen: u64,
@@ -1123,10 +1008,8 @@ pub(crate) fn run_batch_job_blocking(
 
 pub(crate) type ExportJoinHandle = tauri::async_runtime::JoinHandle<Result<String, String>>;
 
-// Awaits one in-flight export and records its outcome in the bg-ops registry
-// -- pulled out of export_recordings_batch below so the concurrency-window
-// loop and the final drain (after the last item is spawned) share the exact
-// same bookkeeping instead of two near-identical copies.
+// Awaits one in-flight export and records its outcome in the bg-ops registry; shared by the
+// concurrency loop and the final drain.
 pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<bool, String> {
     // A panicked export task fails that one item like any encode error does; the
     // rest of the batch still runs and the item's row does not stay "running".
@@ -1148,15 +1031,10 @@ pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, gen
 // How many recordings a batch export encodes at once.
 pub(crate) const EXPORT_PARALLEL: usize = 1;
 
-// One format/quality/target choice (from the one export dialog the batch
-// opens up front instead of one per file) applied to every selected
-// recording. Runs them with a concurrency window (EXPORT_PARALLEL, one at a
-// time) rather than all at once -- ffmpeg is single-threaded-decode-bound
-// enough that four truly parallel encodes already make a normal machine
-// unpleasant to use. A source file that fails to open, or an encode that
-// fails partway, only counts against that one file -- every other job in the
-// batch still runs; one bad recording must never take the rest of the batch
-// down with it.
+// One format/quality/target choice from the batch dialog, applied to every selected
+// recording with a concurrency window of EXPORT_PARALLEL. ffmpeg decoding is heavy enough
+// that four parallel encodes make a normal machine unpleasant. A source that fails to open
+// or an encode that fails only counts against that file; the rest of the batch still runs.
 #[tauri::command]
 pub(crate) async fn export_recordings_batch(
     app: AppHandle,
@@ -1193,9 +1071,8 @@ pub(crate) async fn export_recordings_batch(
             failed += 1;
             continue;
         }
-        // Reserved up front (not inside run_batch_job_blocking) so this
-        // command's own bg-ops "running" row appears the instant the job is
-        // queued, before its spawn_blocking thread is even scheduled.
+        // Reserved up front so the bg-ops "running" row appears the instant the job is queued,
+        // before its spawn_blocking thread is scheduled.
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let id = format!("export-{my_gen}");
         let target = item.dest_path.clone();
@@ -1226,19 +1103,16 @@ pub(crate) async fn export_recordings_batch(
 
 #[derive(serde::Serialize)]
 pub(crate) struct ExportSizeEstimate {
-    // A plain bitrate-based format gets a single number; the three
-    // image-based formats below get a low/high bracket instead, since their
-    // real size depends far more on motion and color count than on a fixed
-    // bitrate. Exactly one of the two shapes is ever filled in.
+    // A plain bitrate-based format gets a single number; the three image-based formats get a
+    // low/high bracket, since their size depends on motion and colour count more than on a
+    // bitrate. Exactly one of the two shapes is filled in.
     pub(crate) bytes: Option<u64>,
     pub(crate) low_bytes: Option<u64>,
     pub(crate) high_bytes: Option<u64>,
 }
 
-// Mirrors export_video_blocking's own per-format "-b:a" settings above
-// exactly, so the estimate can never quietly drift from what the encoder
-// actually burns into the file. gif is always silent (-an),
-// hence 0 -- they never reach this function anyway (see the match below).
+// Mirrors export_video_blocking's per-format "-b:a" settings so the estimate cannot drift
+// from what the encoder writes. gif is silent (-an) and never reaches this function.
 pub(crate) fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
     match format {
         "mp4" if lossless_quality => 320,
@@ -1248,17 +1122,15 @@ pub(crate) fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
     }
 }
 
-// Pure and window-free so the formula itself has a real unit test, not just
-// its wiring. A plain stream-copy ("lossless" trim-only) export has no
-// bitrate of its own to estimate from at all -- the frontend never calls
-// this for that case (see isLosslessCopy() in video.js), the same way this
-// function never claims to know what a copy would weigh.
+// Pure and window-free so the formula has a unit test. A plain stream-copy export has no
+// bitrate to estimate from; the frontend never calls this for it (see isLosslessCopy() in
+// video.js).
 pub(crate) fn estimate_export_bytes(format: &str, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> ExportSizeEstimate {
     let secs = duration_ms as f64 / 1000.0;
     match format {
         "gif" => {
-            // A static, few-color clip can run under 5 KB/s; fast full-frame
-            // motion easily exceeds 300 kbps once palette dithering kicks in.
+            // A static, few-colour clip can run under 5 KB/s; fast full-frame motion exceeds 300 kbps
+            // once palette dithering kicks in.
             let low = (secs * 30_000.0 / 8.0).round() as u64;
             let high = (secs * 300_000.0 / 8.0).round() as u64;
             ExportSizeEstimate { bytes: None, low_bytes: Some(low), high_bytes: Some(high) }
@@ -1301,14 +1173,12 @@ pub(crate) fn export_video_blocking(
     }
     let plain_copy = req.lossless_copy && req.filter_chain.is_none() && req.audio_map.is_none();
     if plain_copy {
-        // Without an explicit -map, ffmpeg's own default stream selection
-        // keeps only its single "best" audio stream -- a muxed-in mic track
-        // (the file's second audio stream) silently vanished on every
-        // lossless trim-only export even though nothing asked to remove it.
+        // Without an explicit -map, ffmpeg keeps only its single "best" audio stream, and a muxed-in
+        // mic track (the second audio stream) would vanish on a lossless trim-only export.
         output_args.extend(["-map", "0:v", "-map", "0:a?", "-c", "copy"].map(String::from));
     } else {
-        // GIF carries no audio at all -- never map or filter an audio stream
-        // into it, even if the frontend sent one.
+        // GIF carries no audio: never map or filter an audio stream into it, even if the frontend
+        // sent one.
         let is_silent = req.format == "gif";
         let mut graphs = Vec::new();
         if let Some(v) = &req.filter_chain {
@@ -1330,12 +1200,9 @@ pub(crate) fn export_video_blocking(
             output_args.push(if req.audio_map.is_some() { "[aout]".to_string() } else { "0:a?".to_string() });
         }
         match req.format.as_str() {
-            // "Lossless" has no bitrate of its own -- forcing it through
-            // the bitrate branch below silently produced an ordinary 8000kbps
-            // re-encode while still calling itself lossless. A real re-encode
-            // that must stay lossless uses -crf 0 instead (same setting the
-            // recording-conversion path already uses for its own mp4+lossless
-            // case), never a bitrate target.
+            // "Lossless" has no bitrate of its own; the bitrate branch below would produce an ordinary
+            // 8000kbps re-encode that still calls itself lossless. A lossless re-encode uses -crf 0, as
+            // the recording-conversion path does for mp4.
             "mp4" if req.lossless_quality => {
                 output_args.extend(["-c:v", "libx264", "-crf", "0", "-preset", "veryfast"].map(String::from));
                 output_args.extend(["-c:a", "aac", "-b:a", "320k"].map(String::from));
@@ -1356,13 +1223,12 @@ pub(crate) fn export_video_blocking(
                 output_args.extend(["-b:v".to_string(), format!("{kbps}k")]);
                 output_args.extend(["-c:a", "libopus"].map(String::from));
             }
-            // The GIF preset's own filter_chain already ends in a palettegen +
-            // paletteuse pair producing [vout]; -an drops any audio outright.
+            // The GIF preset's filter_chain already ends in a palettegen + paletteuse pair producing
+            // [vout]; -an drops any audio.
             "gif" => {
                 output_args.push("-an".to_string());
             }
-            // avi: the same codec family as mp4, repackaged into a container an
-            // older program handles better.
+            // avi: the mp4 codec family in a container older programs handle better.
             "avi" => {
                 output_args.extend(["-c:v", "mpeg4"].map(String::from));
                 let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
@@ -1374,13 +1240,10 @@ pub(crate) fn export_video_blocking(
     }
     let is_cancelled = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen);
     let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress)?;
-    // dest_path is the frontend's deterministic "<stem>-edit.<ext>" guess
-    // -- exporting the same source in the same format twice must not silently
-    // replace the first result, so the final name is only ever claimed if
-    // free. reserve_unique_dest_path (unlike the plain unique_dest_path used
-    // by the app's other save paths) makes that claim atomic: a file that
-    // shows up at the winning name between the free-name search and the
-    // rename below would otherwise get silently overwritten.
+    // dest_path is the frontend's "<stem>-edit.<ext>" guess, and exporting the same source twice
+    // must not replace the first result. reserve_unique_dest_path claims the final name
+    // atomically, unlike unique_dest_path, so a file appearing at the winning name before the
+    // rename below cannot be overwritten.
     let dir = dst.parent().unwrap_or_else(|| Path::new("."));
     let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stem = dst.file_stem().and_then(|e| e.to_str()).unwrap_or("export");
@@ -1390,9 +1253,8 @@ pub(crate) fn export_video_blocking(
         ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
     if let Err(e) = fs::rename(&staged, &final_dst) {
-        // Clean up our own empty placeholder, never a file some other writer
-        // might have claimed in its place -- reserve_unique_dest_path already
-        // ruled that out, so final_dst is still ours to remove here.
+        // Remove our own empty placeholder; reserve_unique_dest_path guarantees final_dst is still
+        // ours, never a file another writer claimed.
         let _ = fs::remove_file(&final_dst);
         let _ = fs::remove_file(&staged);
         let text = e.to_string();
@@ -1401,32 +1263,25 @@ pub(crate) fn export_video_blocking(
     Ok(final_dst.to_string_lossy().to_string())
 }
 
-// The video editor window (own label, one instance) and its own chrome:
-// decorations(false)+transparent(true)+resizable(true), same shape as the
-// main window's own (custom HTML titlebar drawn by video.html itself), not
-// the fixed-size borderless-pill pattern the other satellite windows use.
+// The video editor window (own label, one instance): decorations(false), transparent and
+// resizable, with a custom HTML titlebar drawn by video.html, unlike the fixed-size
+// borderless-pill satellite windows.
 pub(crate) const VIDEO_WIN_LABEL: &str = "video-editor";
 pub(crate) const VIDEO_WIN_W: u32 = 1100;
 pub(crate) const VIDEO_WIN_H: u32 = 720;
 pub(crate) const VIDEO_WIN_MIN_W: u32 = 760;
 pub(crate) const VIDEO_WIN_MIN_H: u32 = 520;
 
-// Holds the recording path the (single) editor window should be showing, plus
-// the origin folder to suggest on save when that path is a working copy made
-// of a file opened from elsewhere for editing (empty for every other caller --
-// a fresh recording or "Edit video" on an existing attachment, both of which
-// keep editing the real file in place, same as before this point).
-// Same pull pattern as VarPrompt/var_window_payload: a push at window-build
-// time would race the webview's first frame, so the window asks for its own
-// target once booted (video_editor_source), and again whenever
-// "video-editor-load" fires for an already-open window.
-// The third slot (overlay_path) is the camera dual-open: a camera recording
-// whose companion screen recording has already finished lands here instead
-// of staying empty, so the editor can add it as a video overlay itself
-// instead of asking the user to pick it by hand. Its alignment offset is
-// never carried alongside it here -- it lives in the camera recording's own
-// sidecar (camera::CamSidecar::overlay_start_ms), which
-// ui/video.js's addAlignedCameraOverlay reads directly.
+// Holds the recording path the single editor window should show, the origin folder to
+// suggest on save when that path is a working copy of a file opened from elsewhere (empty
+// otherwise), and overlay_path. Pull pattern as VarPrompt/var_window_payload: a push at
+// window-build time would race the webview's first frame, so the window asks for its target
+// once booted (video_editor_source) and again on "video-editor-load" for an already-open
+// window.
+// overlay_path is the camera dual-open: a camera recording whose companion screen recording
+// has finished, so the editor can add it as a video overlay itself. Its alignment offset
+// lives in the camera sidecar (camera::CamSidecar::overlay_start_ms), which ui/video.js's
+// addAlignedCameraOverlay reads directly.
 pub(crate) struct VideoEditorPending(pub(crate) Mutex<(String, String, String)>);
 impl VideoEditorPending {
     pub(crate) fn new() -> Self {
@@ -1449,9 +1304,9 @@ pub(crate) struct VideoEditorSource {
     pub(crate) request_id: Option<u64>,
 }
 
-// A source offered to an editor that is already open. It only becomes the
-// editor's pending source once the editor takes it; until then the old source
-// stays protected and a page that is still booting pulls this one instead.
+// A source offered to an already-open editor. It becomes the pending source only once the
+// editor takes it; until then the old source stays protected and a page still booting pulls
+// this one.
 pub(crate) static VE_PENDING_REQUEST: Mutex<Option<(String, String, String)>> = Mutex::new(None);
 static VE_LOAD_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
 static VE_LOAD_ACKS: Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<String>>>> = Mutex::new(None);
@@ -1493,10 +1348,9 @@ pub(crate) fn video_editor_load_ack(request_id: u64, state: String) {
     }
 }
 
-// Opens the editor for one recording. A second call while it is already open
-// just re-targets the existing window instead of stacking a second editor.
-// origin_dir is Some only for a copy made of an externally opened file --
-// see open_file_in_editor.
+// Opens the editor for one recording; a second call re-targets the open window instead of
+// stacking another. origin_dir is Some only for a copy of an externally opened file (see
+// open_file_in_editor).
 #[tauri::command]
 pub(crate) async fn open_video_editor(
     app: AppHandle,
@@ -1509,14 +1363,12 @@ pub(crate) async fn open_video_editor(
         return Err("recording file not found".to_string());
     }
     let origin_dir = origin_dir.unwrap_or_default();
-    // An overlay path that no longer exists (a race with its own cleanup, or
-    // simply never really there) is silently dropped rather than handed to
-    // the editor, which would otherwise show it as a broken overlay op.
+    // An overlay path that no longer exists is dropped rather than shown as a broken overlay op.
     let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
     let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path.clone()) };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
-        // The open editor may still refuse (unsaved edits kept), so the new
-        // source is only offered here and becomes pending once it is taken.
+        // The open editor may still refuse (unsaved edits kept), so the source is only offered here
+        // and becomes pending once taken.
         let id = VE_LOAD_REQUEST_SEQ.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(id, tx);
