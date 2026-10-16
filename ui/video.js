@@ -33,13 +33,12 @@ const $ = (id) => document.getElementById(id);
 // The shared confirm dialog; this window never offers a copy-to-clipboard prompt,
 // so its toast hook stays empty.
 initDialogs({ t, toast: () => {} });
-// The shared custom-colour popup -- see colorRow() below.
+// The shared custom-colour popup (see colorRow()).
 const { el: colorPop, open: openColorPop, close: closeColorPop } = createColorPop();
 
 // ---------------------------------------------------------------- constants
 
-// Progress while exporting arrives on the same event the recording converter
-// already uses -- one pipeline, one event name.
+// Export progress arrives on the same event the recording converter uses.
 const EXPORT_PROGRESS_EVENT = "recording-convert-progress";
 
 const SPEED_STEPS = [0.25, 0.5, 1, 1.5, 2, 4];
@@ -56,9 +55,8 @@ const NUM_FIELD_BIG_STEP = 10;
 const UNDO_MAX_DEFAULT = 40;      // undo steps kept
 const MIN_CLIP_MS = 100;          // shortest trim/cut range that still means something
 const RECT_MIN_PX = 16;           // smallest draggable rectangle, in source pixels
-// Colour choices offered for text and frame overlays. Same palette the rest of
-// the app starts from; a custom colour beyond these goes through the one
-// shared popup (colorRow()'s own "custom" swatch), never a second picker.
+// Colour choices offered for text and frame overlays; a custom colour goes through the shared
+// popup (colorRow()'s "custom" swatch), never a second picker.
 const OVERLAY_COLORS = ["#ffffff", "#000000", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#ec4899"];
 const FONT_FILES = [
   ["segoeui", "segoeui.ttf"],
@@ -67,17 +65,14 @@ const FONT_FILES = [
   ["consola", "consola.ttf"],
   ["georgia", "georgia.ttf"],
 ];
-// The live preview draws text with the browser's own font shaping
-// (drawtext's fontfile is only reachable by ffmpeg at export time), so each
-// id gets the closest real CSS family instead.
+// The live preview draws text with the browser's own font shaping (drawtext's fontfile is only
+// reachable by ffmpeg at export time), so each id gets the closest real CSS family.
 const FONT_CSS = {
   segoeui: '"Segoe UI", sans-serif', arial: "Arial, sans-serif", arialbd: "Arial, sans-serif",
   consola: "Consolas, monospace", georgia: "Georgia, serif",
 };
-// This was hardcoded per-entry as "C:/Windows/Fonts/..." -- broke every
-// text-overlay export on a system where Windows itself lives on another
-// drive. Resolved once from the backend (which reads SystemRoot/windir);
-// this fallback only covers the sliver of time before that resolves.
+// Windows fonts folder, resolved once from the backend (SystemRoot/windir) because Windows may
+// live on another drive; this fallback only covers the time before that resolves.
 let fontsDir = "C:/Windows/Fonts";
 invoke("windows_fonts_dir").then((d) => { if (d) fontsDir = d; }).catch(() => {});
 const EXPORT_KBPS = { high: 12000, small: 4000, lossless: null };
@@ -86,19 +81,16 @@ const EXPORT_KBPS = { high: 12000, small: 4000, lossless: null };
 const SILENT_FORMATS = new Set(["gif"]);
 const formatHasAudio = (fmt) => !SILENT_FORMATS.has(fmt);
 const formatExt = (fmt) => fmt;
-// A length above which a GIF tends to balloon in size -- shown as a
-// warning, never enforced (trimming or a smaller size is the user's call).
+// A length above which a GIF tends to balloon in size: shown as a warning, never enforced.
 const SILENT_FORMAT_LENGTH_WARN_MS = 10000;
-// Unlike the length warning, this one IS enforced: the same three formats
-// never encode above this on their long side, on top of whatever scale op
-// the user set -- it only ever shrinks, never upscales.
+// Enforced, unlike the length warning: these formats never encode above this on their long
+// side (on top of any scale op); it only shrinks, never upscales.
 const MAX_SILENT_DIM = 1280;
 
 // ---------------------------------------------------------------- state
 
-// Populated once the boot IIFE below fetches it; read by numberInput() and
-// the wheel-toggle setup for the static crop/speed/fade fields so both agree
-// with applySettings() on the numFieldWheel flag instead of throwing.
+// Populated once the boot IIFE fetches it; read by numberInput() and the wheel-toggle setup
+// so both agree with applySettings() on the numFieldWheel flag.
 let settings = null;
 
 // The largest number of extra video sources (overlays and sections combined)
@@ -130,18 +122,17 @@ const VE = {
   zoom: 20,             // timeline pixels per second
   playhead: 0,          // ms on the source timeline
   drag: null,           // active pointer gesture on the preview or the timeline
-  // The mic track starts muted in the editor/export (the recording
-  // itself is untouched, still full) -- one click on ve-mute-mic mixes it in.
+  // The mic track starts muted (the recording itself is untouched); one click on ve-mute-mic
+  // mixes it in.
   audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } },
   hasSys: true,
   hasMic: false,
-  // The recording's key-overlay sidecar (events/gaps/hold_ms), or null when
-  // it never captured one -- loaded once per source in loadRecording(), see
-  // applyProbe()'s has_keys_sidecar check.
+  // The recording's key-overlay sidecar (events/gaps/hold_ms), or null when none was captured;
+  // loaded in loadRecording().
   keySidecar: null,
-  // The source file's own size/mtime as of the last successful load or save,
-  // stamped once per loadRecording() -- edit_state matches on this exact triple,
-  // never re-stat'd mid-session so a transient touch elsewhere cannot invalidate it.
+  // The source file's size/mtime as of the last successful load or save, stamped once per
+  // loadRecording(). edit_state matches on this exact triple and it is never re-stat'd
+  // mid-session, so a transient touch elsewhere cannot invalidate it.
   editStateSize: 0,
   editStateMtime: 0,
   loadGen: 0,           // bumped on every loadRecording() call; a stale call's
@@ -156,10 +147,8 @@ const VE = {
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
   destDir: "",          // remembered folder from "Export to…", persisted across videos
   exportNameOverride: null, // a plain file name typed into ve-export-name
-  // Spatial zoom/pan of the preview picture itself, distinct from `zoom`
-  // above (the timeline's pixels-per-second). 1 = fit-to-stage, the only level
-  // that existed before; panPx is a plain CSS-pixel offset, independent of
-  // zoom, applied on top of the video's own fit-to-stage scaling.
+  // Spatial zoom/pan of the preview picture itself, distinct from `zoom` (the timeline's pixels
+  // per second). 1 = fit-to-stage; panPx is a CSS-pixel offset applied on top of the fit scaling.
   previewZoom: 1,
   panPx: { x: 0, y: 0 },
   // Fixed editor defaults. applySettings() only overrides the overlay values
@@ -187,9 +176,8 @@ const VE = {
 let TXT_READY = false;
 let TX = null; // the text lookup, set once the language has loaded
 let LANG = "en";
-// Resolves once loadTexts() has landed, so a modal built entirely at open-time
-// (t() calls read once, never revisited) can wait for real strings instead of
-// risking raw i18n keys if it opens before the lazy i18n import has resolved.
+// Resolves once loadTexts() has landed, so a modal built entirely at open time can wait for
+// real strings instead of showing raw i18n keys.
 let textsReady = null;
 
 // English is fetched at once as the fallback; the active language follows once
@@ -270,9 +258,8 @@ function fmtTime(ms) {
   return `${pad(m, 2)}:${pad(s, 2)}.${pad(v % 1000, 3)}`;
 }
 
-// Shows or hides the collapsible "technical details" row under the export
-// status line -- empty `raw` (a non-ffmpeg error, or success) just hides it,
-// closed, ready for the next failure.
+// Shows or hides the collapsible "technical details" row under the export status line; an
+// empty `raw` (a non-ffmpeg error, or success) hides it.
 function showExportErrorDetails(raw) {
   const box = $("ve-export-error-details");
   box.classList.toggle("hidden", !raw);
@@ -343,15 +330,10 @@ function pushOp(op, opts) {
   afterOpsChanged(opts);
 }
 
-// Ops that may exist only once (trim, crop, speed, fade, scale) and an overlay
-// being re-edited replace their predecessor rather than stacking.
-//
-// The replaced value is kept on the new op as `_prev` instead of just
-// being dropped -- otherwise a second crop/spotlight drag silently erased the
-// first drag from history, and one undo afterward removed the operation
-// entirely instead of stepping back to it. See undo()/redo() for the other
-// half: they walk this chain one link at a time rather than treating a
-// replacing op as an ordinary push/pop.
+// Ops that may exist only once (trim, crop, speed, fade, scale) and an overlay being re-edited
+// replace their predecessor rather than stacking. The replaced value is kept on the new op as
+// `_prev`, so a second crop/spotlight drag stays in history and one undo steps back to it
+// instead of removing the operation. undo()/redo() walk this chain one link at a time.
 function pushReplacing(match, op, opts) {
   const prev = VE.ops.find(match) || null;
   // The floor is a count-based boundary into VE.ops; removing entries below it
@@ -365,10 +347,8 @@ function pushReplacing(match, op, opts) {
   pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
 }
 
-// A replacing op's own `_prev` chain grows one link per re-edit of the SAME
-// operation (dragging one rectangle a thousand times keeps a thousand linked
-// copies alive otherwise, unbounded by VE.undoMax since it never touches
-// VE.ops directly) -- cut it at the same depth VE.ops itself is capped to.
+// A replacing op's `_prev` chain grows one link per re-edit of the same operation and never
+// touches VE.ops, so VE.undoMax does not bound it; cut it at the same depth.
 function capPrevChain(op, max) {
   let node = op, depth = 1;
   while (node._prev && depth < max) { node = node._prev; depth++; }
@@ -380,11 +360,9 @@ function capPrevChain(op, max) {
 // (the sort is stable).
 const overlayStack = () => opsOf("overlay").sort((a, b) => (a.z || 0) - (b.z || 0));
 
-// Removing an operation is one undo step too. A "removal" marker is pushed
-// after the entries are taken out; it remembers each removed op and its slot, so
-// undo puts them back exactly where they were and redo takes them out again.
-// The marker is bookkeeping only: it never shows in the list, is never saved and
-// no export step looks at it.
+// Removing an operation is one undo step too. A "removal" marker is pushed after the entries
+// are taken out and remembers each removed op and its slot, so undo restores them in place and
+// redo removes them again. It is bookkeeping only: never listed, saved or exported.
 function removeOps(match) {
   const removed = [];
   VE.ops.forEach((o, at) => { if (o.tool !== "removal" && match(o)) removed.push({ op: o, at }); });
@@ -434,11 +412,10 @@ function redo() {
   afterOpsChanged();
 }
 
-// A value commit inside the overlay editor or a rect drag on the currently
-// open overlay passes keepEditor: true -- everything still updates except the
-// two panels that would otherwise tear down and rebuild the very field the
-// user is typing in (renderOverlayEditor, renderEditFields). syncOverlayFields
-// keeps that panel's OTHER inputs current instead (see VE.ovFields).
+// A value commit inside the overlay editor or a rect drag on the open overlay passes
+// keepEditor: true: everything updates except the two panels (renderOverlayEditor,
+// renderEditFields) that would rebuild the field being typed in. syncOverlayFields keeps that
+// panel's other inputs current (see VE.ovFields).
 function afterOpsChanged(opts) {
   const keep = opts && opts.keepEditor;
   VE.dirty = true;
@@ -464,19 +441,16 @@ function afterOpsChanged(opts) {
   updateNudgeHint();
 }
 
-// Shown only while an overlay is selected -- the arrow keys quietly change
-// job at that point (nudging the overlay instead of stepping frames), and a
-// silent behaviour switch is still a silent behaviour switch.
+// Shown only while an overlay is selected, because the arrow keys then nudge the overlay
+// instead of stepping frames.
 function updateNudgeHint() {
   $("ve-nudge-hint").classList.toggle("hidden", !VE.selOv);
 }
 
-// Writes the current op's values into the overlay editor's own inputs without
-// touching the DOM node the user may still be focused on -- the inputs are
-// registered in VE.ovFields by renderOverlayEditor() while it builds the panel.
-// Number fields whose text the user has typed but not committed yet. Only
-// these keep their text across a refresh; any programmatic change (reset,
-// handle drag, undo, redo, preset) rewrites every other field, focused or not.
+// Writes the current op's values into the overlay editor's inputs without touching the node
+// the user may be focused on (registered in VE.ovFields by renderOverlayEditor()).
+// Number fields whose text is typed but not committed keep their text across a refresh; any
+// programmatic change (reset, handle drag, undo, redo, preset) rewrites every other field.
 const uncommittedFields = new Set();
 document.addEventListener("input", (e) => {
   if (e.target instanceof HTMLInputElement) uncommittedFields.add(e.target);
@@ -495,8 +469,8 @@ function syncOverlayFields() {
   if (!op) return;
   for (const key in fields) {
     const { input, getValue } = fields[key];
-    // A plain <input> contains itself, so this also covers the old case where
-    // `input` was the field itself rather than a numberField() wrapper.
+    // A plain <input> contains itself, which also covers `input` being the field itself rather
+    // than a numberField() wrapper.
     if (isUncommitted(input)) continue;
     const value = getValue(op);
     if (value == null) continue;
@@ -534,9 +508,8 @@ function extraClipCount() {
 function renderOps() {
   const list = $("ve-ops-list");
   list.innerHTML = "";
-  // Section clips are their own kind of thing (a whole inserted file, not a
-  // filter applied to the source) and get their own list in the overlays
-  // panel (renderClipList) instead of a line here.
+  // Section clips are a whole inserted file rather than a filter, and get their own list
+  // (renderClipList) instead of a line here.
   const shown = VE.ops.filter((op) => op.tool !== "clip" && op.tool !== "removal");
   if (!shown.length) {
     const empty = document.createElement("p");
@@ -570,14 +543,11 @@ function renderOps() {
 
 // ---------------------------------------------------------------- timeline maths
 
-// keptSegments()'s own scratch storage, reused across every call instead of
-// a fresh map/filter/sort array chain each time -- tick() (the playback
-// render loop) calls this at least once per frame and a second time through
-// nextKept() while stepping over a cut, so its garbage used to grow with how
-// long a session played, not with anything about the video itself. Every
-// caller only ever reads the numbers back synchronously within its own call
-// (nothing stores the array or a segment object past that), so reusing the
-// same storage across calls never leaks a stale value anywhere.
+// keptSegments()'s scratch storage, reused across calls instead of building a fresh array
+// chain each time: tick() (the playback render loop) calls it at least once per frame, so the
+// garbage would otherwise grow with playback time. Every caller reads the numbers back
+// synchronously and never stores the array or a segment past its own call, so reuse never
+// leaks a stale value.
 const KEPT_CUTS_BUF = [];
 const KEPT_SEGMENTS_BUF = [];
 
@@ -609,15 +579,12 @@ const speedRate = () => {
   return op ? clamp(op.rate, 0.1, 10) : 1;
 };
 
-// The kept parts of the MAIN source, in viewing order, interleaved with every
-// inserted video section (tool "clip"): one entry per piece of the finished
-// export, `{ type: "main", a, b }` (source milliseconds, exactly a
-// keptSegments() entry) or `{ type: "clip", op }` (a whole other file).
-// "At the current position" (position "cut") splits whichever kept segment
-// contains it; its own `atMs` is an OUTPUT-timeline offset recorded once at
-// insertion time (see clipAtMsFromPlayhead), so two clips inserted at
-// different moments keep their own relative order even as earlier edits
-// change the source-timeline math around them.
+// The kept parts of the main source in viewing order, interleaved with every inserted video
+// section (tool "clip"): one entry per piece of the export, `{ type: "main", a, b }` (source ms,
+// a keptSegments() entry) or `{ type: "clip", op }` (a whole other file). Position "cut" (the
+// current position) splits the kept segment containing it; its `atMs` is an output-timeline
+// offset recorded at insertion (see clipAtMsFromPlayhead), so clips inserted at different
+// moments keep their relative order as earlier edits change the source-timeline math.
 function timelinePlan() {
   const segs = keptSegments();
   const rate = speedRate();
@@ -660,14 +627,12 @@ function planEntryOutMs(entry) {
   return entry.type === "main" ? (entry.b - entry.a) / speedRate() : entry.op.durationMs / speedRate();
 }
 
-// Source milliseconds -> milliseconds in the exported clip. Overlay time ranges
-// are picked on the source timeline (that is what the user sees) but ffmpeg's
-// `enable` expressions run on the output timeline, so every range goes through
-// this on the way into the filter graph. The walk follows timelinePlan(), so
-// the length of every inserted section clip that sits before the point is
-// counted (overlays are applied after the clips are concatenated in). A point
-// exactly on the start of a kept stretch lands after the clips in front of it
-// when it opens a range, and before them when it closes one (atEnd).
+// Source ms -> ms in the exported clip. Overlay ranges are picked on the source timeline but
+// ffmpeg's `enable` expressions run on the output timeline, so every range goes through this
+// on its way into the filter graph. The walk follows timelinePlan(), so the length of every
+// section clip before the point counts (overlays are applied after the clips are concatenated).
+// A point exactly on the start of a kept stretch lands after the clips in front of it when it
+// opens a range and before them when it closes one (atEnd).
 function outMs(srcMs, atEnd) {
   const rate = speedRate();
   let acc = 0;
@@ -683,9 +648,8 @@ function outMs(srcMs, atEnd) {
   return acc;
 }
 
-// Includes every inserted section clip's own length -- the one change that
-// makes every OTHER reader of totalOutMs() (the duration readout, fade end
-// time, the export progress total) correct again once a clip is inserted.
+// Includes every inserted section clip's length, so the duration readout, fade end time and
+// export progress total stay correct after a clip is inserted.
 const totalOutMs = () => timelinePlan().reduce((sum, e) => sum + planEntryOutMs(e), 0);
 
 // Playback preview: a position inside a cut region (or outside the trim range)
@@ -814,12 +778,9 @@ function renderRegions() {
   } else {
     sel.classList.add("hidden");
   }
-  // renderRegions() is the one function every VE.sel mutation already
-  // calls (mark in/out, a timeline drag, clearing it) -- syncing the overlay
-  // editor's "Use selection" button here, cheaply, instead of only from the
-  // clear-selection handler, means a freshly made selection enables it
-  // immediately even while that editor panel is already open, without
-  // rebuilding the whole panel on every pointermove of a selection drag.
+  // renderRegions() is called on every VE.sel mutation (mark in/out, timeline drag, clear), so
+  // syncing the overlay editor's "Use selection" button here enables it immediately while that
+  // panel is open, without rebuilding the panel on every pointermove.
   document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
 }
 
@@ -854,10 +815,8 @@ async function loadStrip() {
   // filmstrip is the most expensive call this window makes.
   if (VE.stripCount && want <= VE.stripCount * 1.6) return;
   VE.stripCount = want;
-  // This call can still be in flight when the user switches source
-  // again -- without checking the generation on return, a slow filmstrip for
-  // the OLD video could land after the new one's own (faster) call and
-  // silently paint the wrong recording's thumbnails.
+  // This call can still be in flight when the user switches source; the generation check on
+  // return stops a slow filmstrip for the old video from painting over the new one's.
   const myGen = VE.loadGen;
   try {
     const paths = await invoke("generate_filmstrip", { path: VE.src, count: want });
@@ -943,14 +902,10 @@ const toSource = (clientX, clientY) => {
 
 // ---------------------------------------------------------------- preview zoom/pan
 //
-// Zooming alone never let you land on an exact spot -- this adds the missing
-// half, a plain CSS transform on the <video> element. videoBox()/toSource()
-// above need no changes for it: both already read the video element's LIVE
-// bounding rect, which reflects any transform automatically, so a crop/overlay
-// rectangle stays correctly placed and draggable at any zoom/pan without a
-// second coordinate system. 1 = fit-to-stage, the only level that existed
-// before and the floor here too -- shrinking further would just add more
-// letterboxing, never show more of the picture.
+// A plain CSS transform on the <video> element. videoBox()/toSource() need no changes: both
+// read the video element's live bounding rect, which reflects the transform, so crop/overlay
+// rectangles stay placed and draggable at any zoom/pan. 1 = fit-to-stage and the floor:
+// shrinking further would only add letterboxing.
 const PREVIEW_ZOOM_MIN = 1;
 const PREVIEW_ZOOM_MAX = 8;
 
@@ -1004,12 +959,10 @@ function resetPreviewZoom() {
 $("ve-stage").addEventListener("wheel", (e) => {
   if (!VE.w) return;
   e.preventDefault();
-  // Keep the source point under the cursor fixed instead of always zooming
-  // to the stage centre: read it before and after the zoom (toSource() always
-  // reflects the live, already-transformed bounding rect) and slide panPx by
-  // the difference, converted back to CSS pixels via the new live scale --
-  // panPx is a CSS translate applied AFTER the scale in the same transform,
-  // so it moves the picture in already-scaled screen pixels, not source ones.
+  // Keep the source point under the cursor fixed instead of zooming to the stage centre: read it
+  // before and after the zoom (toSource() reflects the live transformed rect) and slide panPx by
+  // the difference, converted via the new live scale. panPx is a CSS translate applied after the
+  // scale, so it moves the picture in already-scaled screen pixels.
   const before = toSource(e.clientX, e.clientY);
   setPreviewZoom(VE.previewZoom * (e.deltaY < 0 ? VE.zoomStepFactor : 1 / VE.zoomStepFactor));
   const after = toSource(e.clientX, e.clientY);
@@ -1021,18 +974,14 @@ $("ve-stage").addEventListener("wheel", (e) => {
   applyPreviewTransform();
 }, { passive: false });
 
-// Pan: middle-click always (matches the screenshot editor), plain left-drag
-// only once actually zoomed in -- at zoom 1 a left-drag on empty stage space
-// was always a no-op and stays one, rather than arming a grab cursor that
-// then visibly does nothing. Space is already Play/Pause in this window
-// (unlike the screenshot editor), so it is deliberately not a pan modifier
-// here. A click that lands on a crop/overlay rectangle is left alone entirely
-// -- $("ve-rects")'s own pointerdown owns that drag.
+// Pan: middle-click always (as in the screenshot editor), plain left-drag only once zoomed in,
+// so at zoom 1 an empty-stage drag arms no useless grab cursor. Space is Play/Pause in this
+// window, so it is not a pan modifier. A click on a crop/overlay rectangle is left to
+// $("ve-rects")'s own pointerdown.
 $("ve-stage").addEventListener("pointerdown", (e) => {
   if (!VE.w || (e.button !== 0 && e.button !== 1)) return;
-  // A second mouse button pressed while a rect/trim/select/scrub drag is
-  // already in progress fires another pointerdown for the same pointer --
-  // without this it would steal capture and silently overwrite that drag.
+  // A second mouse button pressed during a rect/trim/select/scrub drag fires another pointerdown
+  // for the same pointer; without this guard it would steal capture and overwrite that drag.
   if (VE.drag) return;
   if (e.target.closest(".ve-rect")) return;
   if (e.target.closest("#ve-preview-zoom")) return; // the zoom pill/reset button sits inside the stage
@@ -1058,9 +1007,8 @@ $("ve-preview-zoom-reset").addEventListener("click", resetPreviewZoom);
 $("ve-preview-zoom-in").addEventListener("click", () => setPreviewZoom(VE.previewZoom * VE.zoomStepFactor));
 $("ve-preview-zoom-out").addEventListener("click", () => setPreviewZoom(VE.previewZoom / VE.zoomStepFactor));
 
-// Thin accent-coloured lines shown only while a rect/overlay drag is actually
-// snapped to an edge or centre -- created once and toggled hidden the rest of
-// the time, the same idea as the screenshot editor's own live-canvas guides.
+// Thin accent-coloured lines shown only while a rect/overlay drag is snapped to an edge or
+// centre; created once and toggled hidden, like the screenshot editor's own guides.
 const veGuideX = document.createElement("div");
 veGuideX.className = "ve-snap-guide ve-snap-guide-x hidden";
 const veGuideY = document.createElement("div");
@@ -1087,13 +1035,12 @@ function renderSnapGuides(vb) {
   }
 }
 
-// Every rectangle is snapped to even numbers while it is being dragged, not at
-// export time -- so the numbers on screen are already the numbers ffmpeg gets.
+// Rectangles snap to even numbers while dragged, so the numbers on screen are the numbers
+// ffmpeg gets.
 function snapRect(rect) {
-  // Clamping an already-even width/height against an ODD source
-  // dimension can land back on an odd number (e.g. even(641)=642, clamped
-  // down to the odd ceiling 641) -- ffmpeg's yuv420p output needs both to
-  // stay even, so the ceiling itself must already be even before clamping.
+  // Clamping an even width/height against an odd source dimension can land on an odd number
+  // (even(641)=642, clamped to 641), but ffmpeg's yuv420p output needs both even, so the
+  // ceiling itself is made even first.
   const wMax = Math.max(2, VE.w - (VE.w % 2));
   const hMax = Math.max(2, VE.h - (VE.h % 2));
   const w = clamp(even(rect.w), 2, wMax);
@@ -1113,20 +1060,16 @@ function rectFor(op) {
   return null;
 }
 
-// Arrow-key move/resize for the selected overlay, mirroring the mouse drag in
-// the "ve-rects" handlers below one step at a time. Ctrl changes the size
-// instead of the position -- meaningless for a text overlay (a bare x/y, no
-// rect), so that combination is simply a no-op there rather than guessing at
-// what "bigger" would mean for it.
+// Arrow-key move/resize for the selected overlay, one step at a time like the mouse drag in
+// the "ve-rects" handlers below. Ctrl changes the size instead of the position; a text
+// overlay has no rect, so that combination is a no-op there.
 function nudgeSelectedOverlay(op, e) {
   const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
   const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
   const rect = rectFor(op);
-  // A crop/image/frame/pixelate/spotlight rect must stay on even coordinates
-  // (see snapRect above) -- rounding the resulting x/y/w/h AFTER adding an odd
-  // step would silently double every other press instead of moving by the
-  // requested amount, so the step itself is rounded up to the nearest even
-  // number first for those. Text has no such rect and no such constraint.
+  // Rect-based overlays (crop/image/frame/pixelate/spotlight) must stay on even coordinates (see
+  // snapRect), and rounding after adding an odd step would skip every other press, so the step
+  // is rounded up to an even number first. Text has no rect and no such constraint.
   const rawAmount = e.shiftKey ? NUM_FIELD_BIG_STEP : VE.numFieldStep;
   const amount = rect ? Math.max(2, even(rawAmount)) : rawAmount;
   let patch;
@@ -1141,12 +1084,10 @@ function nudgeSelectedOverlay(op, e) {
   pushReplacing((o) => o.id === op.id, { ...op, ...patch }, { keepEditor: true });
 }
 
-// The frame itself (its four edges plus both centres) counts as one target,
-// then every other crop/overlay adds its own edges and centre -- the op
-// currently being dragged is excluded so it never snaps to its own last
-// committed position. A text overlay has no rect, only a point, which
-// snapMove treats as a zero-size target (all three candidate lines collapse
-// onto that one point).
+// The frame itself (four edges plus both centres) is one target, and every other crop/overlay
+// adds its own edges and centre. The op being dragged is excluded so it never snaps to its
+// own last committed position. A text overlay is a point, which snapMove treats as a
+// zero-size target.
 function veSnapTargets(excludeOp) {
   const targets = [{ x: 0, y: 0, w: VE.w, h: VE.h }];
   for (const op of VE.ops) {
@@ -1206,19 +1147,14 @@ function renderRects() {
   renderOverlayLive(vb);
 }
 
-// Every overlay actually active at the current playhead, drawn as close
-// to its real exported look as the browser can manage -- not just an edit
-// outline. The enable/disable check above compares against op.startMs and
-// op.endMs directly (both on the source timeline, same as VE.playhead), but
-// a video overlay's own clip position still needs the outMs() conversion:
-// see the comment where it is used below.
+// Every overlay active at the current playhead, drawn as close to its exported look as the
+// browser manages, not just an outline. The enable check compares against op.startMs/op.endMs
+// directly (source timeline, like VE.playhead); a video overlay's own clip position needs the
+// outMs() conversion (see below).
 //
-// VE.liveEls keeps one DOM node per overlay id across frames instead of
-// rebuilding the whole layer every tick: an image overlay used to mean a
-// fresh <img src=...> sixty times a second, a pixelate overlay two fresh
-// <canvas> elements -- both wear patterns behind "the preview works at first
-// and then stops". buildLiveOverlayEl() now updates a passed-in element in
-// place when the same overlay already has one.
+// VE.liveEls keeps one DOM node per overlay id across frames instead of rebuilding the layer
+// every tick (a fresh <img> or two <canvas> elements per frame made the preview stall).
+// buildLiveOverlayEl() updates a passed-in element in place when the overlay already has one.
 function renderOverlayLive(vb) {
   const layer = $("ve-overlay-live");
   if (!VE.dur) { layer.innerHTML = ""; VE.liveEls.clear(); return; }
@@ -1262,12 +1198,10 @@ function renderOverlayLive(vb) {
   }
 }
 
-// `reuse`, when given, is the SAME element returned for this overlay last
-// frame -- every branch updates it in place instead of allocating a fresh
-// node, and resets whatever an earlier variant (frame style, text background)
-// might have left behind. The pixelate canvas is the one element that must
-// still be redrawn every frame regardless, since it samples the live video,
-// but its own scratch canvas is cached on it rather than reallocated.
+// `reuse`, when given, is the element returned for this overlay last frame: every branch
+// updates it in place instead of allocating, and resets whatever an earlier variant (frame
+// style, text background) left behind. The pixelate canvas is still redrawn every frame since
+// it samples the live video, but its scratch canvas is cached on it.
 function buildLiveOverlayEl(op, vb, reuse) {
   const rectStyle = (el, rect) => {
     el.style.left = `${vb.left + rect.x * vb.scale}px`;
@@ -1285,26 +1219,22 @@ function buildLiveOverlayEl(op, vb, reuse) {
     return img;
   }
   if (op.kind === "video") {
-    // A missing source (the file moved or was deleted) never had a live
-    // preview to begin with, same as the export chain skipping it outright.
+    // A missing source (file moved or deleted) has no live preview, and the export chain skips it too.
     if (op.missing) return null;
     const el = reuse instanceof HTMLVideoElement ? reuse : document.createElement("video");
     el.className = "ve-live ve-live-video";
     rectStyle(el, op.rect);
     el.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
-    // Muted in the preview even when the export mixes its audio in (see
-    // buildAudioChain) -- a second, unsynced audio source playing alongside
-    // the main clip would only ever sound wrong here.
+    // Muted in the preview even when the export mixes its audio in (see buildAudioChain): a
+    // second, unsynced audio source would only sound wrong.
     el.muted = true;
     el.playsInline = true;
     const src = convertFileSrc(op.path);
     if (el.dataset.ovSrc !== src) { el.src = src; el.dataset.ovSrc = src; }
-    // The export shifts this overlay's picture (setpts, see the export
-    // filter builder) so its own first frame lands on the output at
-    // op.startMs, matching the adelay already applied to its audio. The
-    // preview mirrors that: the overlay plays from its own beginning once
-    // the playhead reaches the overlay's start, both mapped through outMs()
-    // so a variable-speed timeline lines up the same way it does in export.
+    // The export shifts this overlay's picture (setpts, see the export filter builder) so its
+    // first frame lands on the output at op.startMs, matching the adelay on its audio. The
+    // preview mirrors that: the overlay plays from its beginning once the playhead reaches its
+    // start, both mapped through outMs() so a variable-speed timeline lines up as in export.
     let t = (outMs(clamp(VE.playhead, 0, VE.dur)) - outMs(clamp(op.startMs, 0, VE.dur))) / 1000;
     if (t < 0) t = 0;
     if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;
@@ -1326,9 +1256,8 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.style.outline = "";
     el.style.boxShadow = "";
     if (op.style === "double") {
-      // Approximates the second, inset drawbox with an outline instead of a
-      // truly separate inner box. A negative offset moves it inside the
-      // border: -3t with width t covers inset 2t..3t, where the export draws it.
+      // Approximates the second, inset drawbox with an outline: a negative offset moves it inside
+      // the border (-3t with width t covers inset 2t..3t, where the export draws it).
       el.style.outline = `${px}px solid ${op.color}`;
       el.style.outlineOffset = `${-3 * px}px`;
     } else if (op.style === "soft") {
@@ -1364,11 +1293,9 @@ function buildLiveOverlayEl(op, vb, reuse) {
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     rectStyle(canvas, op.rect);
-    // Down-sample the live video frame to the real block grid, then blow it
-    // back up with smoothing off -- the same two-step mosaic buildVideoChain()
-    // asks ffmpeg for, just done in a canvas instead of a filter graph. The
-    // small sampling canvas is cached on the element itself so it is
-    // resized, not reallocated, from one frame to the next.
+    // Down-sample the live video frame to the real block grid, then blow it back up with smoothing
+    // off: the same two-step mosaic buildVideoChain() asks ffmpeg for. The small sampling canvas
+    // is cached on the element, so it is resized rather than reallocated per frame.
     const bw = Math.max(1, Math.round(op.rect.w / op.blockPx)), bh = Math.max(1, Math.round(op.rect.h / op.blockPx));
     try {
       const tiny = canvas._veTiny || (canvas._veTiny = document.createElement("canvas"));
@@ -1379,19 +1306,16 @@ function buildLiveOverlayEl(op, vb, reuse) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(tiny, 0, 0, bw, bh, 0, 0, w, h);
     } catch {
-      // A frame that is not yet decoded (seek in flight) -- skip this tick,
-      // the next one draws once the video element has something to sample.
+      // A frame not yet decoded (seek in flight): skip this tick, the next one draws.
     }
     return canvas;
   }
   if (op.kind === "spotlight") {
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-spotlight") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-spotlight";
-    // Covers the whole painted picture and cuts the clear rect out with
-    // clip-path instead of an oversized box-shadow spread -- some GPUs on
-    // real hardware silently drop a 9999px shadow spread during compositing,
-    // which left the dim invisible while the drag border still rendered fine.
-    // clip-path paints an ordinary shape, so it has no such spread to drop.
+    // Covers the whole painted picture and cuts the clear rect out with clip-path instead of an
+    // oversized box-shadow spread: some GPUs drop a 9999px spread when compositing, which left the
+    // dim invisible while the drag border still rendered.
     el.style.left = `${vb.left}px`;
     el.style.top = `${vb.top}px`;
     el.style.width = `${vb.width}px`;
@@ -1405,9 +1329,8 @@ function buildLiveOverlayEl(op, vb, reuse) {
     return el;
   }
   if (op.kind === "keys") {
-    // A plain outline plus its preset name -- the actual per-key layout and
-    // press highlighting is what the export's ffmpeg filters draw; the live
-    // preview only needs to show where and how big the overlay sits.
+    // A plain outline plus its preset name; the per-key layout and press highlighting is drawn by
+    // the export's ffmpeg filters, so the preview only shows where and how big the overlay sits.
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-keys") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-keys";
     rectStyle(el, op.rect);
@@ -1464,9 +1387,8 @@ $("ve-rects").addEventListener("pointermove", (e) => {
   if (!drag || drag.kind !== "rect") return;
   const vb = videoBox();
   const point = { x: (e.clientX - vb.clientLeft) / vb.scale, y: (e.clientY - vb.clientTop) / vb.scale };
-  // Alt disables snapping for the duration of the drag, same as in the
-  // screenshot editor. Tolerance is kept in source pixels, like the drag math
-  // itself, by dividing the on-screen setting through the same box scale.
+  // Alt disables snapping for the drag, as in the screenshot editor. Tolerance is in source
+  // pixels like the drag math, so the on-screen setting is divided by the box scale.
   const tol = !e.altKey && VE.snapOn ? VE.snapTolPx / vb.scale : 0;
   const targets = tol ? veSnapTargets(drag.op) : null;
   VE.guide = null;
@@ -1535,9 +1457,8 @@ function endRectDrag() {
   op.rect = { ...drag.orig };
   if (op.tool === "crop") {
     const rect = snapRect(raw);
-    // A click-release with no actual movement (or one that snaps right
-    // back to where it started) must not count as an edit -- it used to
-    // still push a fresh undo step and wipe the redo stack for nothing.
+    // A click-release with no movement (or one that snaps back to where it started) is not an
+    // edit and must not push an undo step or wipe the redo stack.
     if (rectsEqual(rect, drag.orig)) { op.rect = rect; renderRects(); return; }
     pushReplacing((o) => o.tool === "crop", { tool: "crop", rect });
   } else {
@@ -1592,10 +1513,8 @@ function keepPlayheadVisible() {
   else if (x > right - 20) view.scrollLeft = Math.max(0, x - view.clientWidth + 60);
 }
 
-// A single throw used to kill this loop forever (requestAnimationFrame was its
-// own last statement): the playhead, the time display and the live overlay
-// all froze silently for the rest of the session. Reported once, never per
-// frame, and the loop always re-arms itself in the finally below.
+// A single throw must not kill this loop for good (the playhead, time display and live overlay
+// would freeze). Reported once, never per frame; the loop always re-arms itself in the finally below.
 let tickErrorReported = false;
 function noteTickError(err) {
   if (tickErrorReported) return;
@@ -1604,10 +1523,9 @@ function noteTickError(err) {
   toast(t("veTickError"));
 }
 
-// Cut regions are skipped seamlessly during playback, so the preview is the
-// finished clip and not the raw capture with markers drawn on it. A frame loop
-// rather than the video's own timeupdate event: that fires roughly four times a
-// second, which is long enough to see a cut region play before it is skipped.
+// Cut regions are skipped seamlessly during playback, so the preview is the finished clip. A
+// frame loop rather than the video's timeupdate event, which fires about four times a second,
+// long enough to see a cut region play before it is skipped.
 function tick() {
   try {
     if (VE.dur) {
@@ -1853,12 +1771,10 @@ function renderScalePresets() {
   updateScaleCurrent();
 }
 
-// The one place a scale op becomes literal pixels: a fixed-height preset
-// gives its own size whether that is smaller or larger than the source (a
-// region recording is often below 720 px, and refusing to enlarge would turn
-// every preset into "keep original"). Only a preset equal to the source
-// height needs no op at all and stays "keep original". A percent value always
-// applies as typed.
+// The one place a scale op becomes literal pixels: a fixed-height preset gives its own size,
+// smaller or larger than the source (a region recording is often below 720 px, and refusing to
+// enlarge would make every preset "keep original"). Only a preset equal to the source height
+// needs no op. A percent value applies as typed.
 function scaleForHeightPreset(h) {
   if (!VE.w || !VE.h || h === VE.h) return null;
   return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
@@ -1952,9 +1868,8 @@ function centeredRect(fraction) {
 }
 
 async function addOverlay(kind) {
-  // Same race as startAddVideo: this runs off a button live from the first
-  // paint, and builds its default text and error wording with t() at click
-  // time, so it needs the lazy i18n import landed before it reads any of it.
+  // Same race as startAddVideo: a button live from first paint that builds text with t() at
+  // click time needs the lazy i18n import landed first.
   if (!TXT_READY) await textsReady;
   const range = defaultRange();
   const base = { tool: "overlay", id: newId(), kind, ...range };
@@ -1989,10 +1904,8 @@ async function addOverlay(kind) {
 
 // ---------------------------------------------------------------- add a video
 
-// At most EXTRA_CLIPS_MAX extra sources, each checked with ffprobe once,
-// right here, before the user builds anything on it -- an unreadable file is
-// rejected with the same wording an export failure already uses, never a
-// second, separate message for the same three failure shapes.
+// At most EXTRA_CLIPS_MAX extra sources, each checked with ffprobe once up front, so an
+// unreadable file is rejected right away with the same wording an export failure uses.
 async function pickExtraVideo() {
   if (extraClipCount() >= EXTRA_CLIPS_MAX) {
     toast(t("veClipLimit").replace("{n}", String(EXTRA_CLIPS_MAX)));
@@ -2011,20 +1924,17 @@ async function pickExtraVideo() {
   }
 }
 
-// A camera recording opened alongside its companion screen recording lands
-// here as an aligned overlay instead of through the normal file-picker path
-// (createVideoOverlay above). Placed as a bottom-right picture-in-picture
-// rather than centered, the usual spot for a webcam layer.
+// A camera recording opened alongside its companion screen recording lands here as an aligned
+// overlay instead of through the file picker (createVideoOverlay above), placed bottom-right as
+// picture-in-picture, the usual spot for a webcam layer.
 //
-// Alignment: the camera's own sidecar (the durable, on-disk value
-// camera_finish_recording wrote) already carries the final overlay offset --
-// the screen recording's own pause-aware position at the moment the camera
-// started, read live by the Rust side rather than reconstructed here from
-// two wall-clock stamps (a paused span between the two starts would
-// otherwise inflate the offset by however long it lasted).
+// Alignment: the camera's sidecar (written by camera_finish_recording) already carries the
+// final overlay offset, read live by the Rust side from the screen recording's pause-aware
+// position when the camera started. Reconstructing it from two wall-clock stamps would inflate
+// it by any paused span between the starts.
 //
-// `gen` is the load generation the call belongs to: a second recording opened
-// while one of the two awaits below is pending must not receive this overlay.
+// `gen` is the load generation the call belongs to: a second recording opened while one of the
+// awaits below is pending must not receive this overlay.
 async function addAlignedCameraOverlay(path, gen) {
   if (!path) return;
   if (VE.ops.some((o) => o.tool === "overlay" && o.kind === "video" && o.path === path)) return;
@@ -2076,11 +1986,9 @@ function createVideoOverlay({ path, probe }) {
   showPanel("ve-panel-overlays");
 }
 
-// Projects VE.playhead (a source millisecond, possibly inside a cut region)
-// onto the OUTPUT-cumulative axis timelinePlan() splits a "cut"-position
-// clip against, so "at the current position" means what it shows on screen.
-// A playhead sitting inside a cut region lands on the next kept segment's
-// own start instead of nowhere.
+// Projects VE.playhead (a source ms, possibly inside a cut region) onto the output-cumulative
+// axis timelinePlan() splits a "cut"-position clip against, so "at the current position" means
+// what it shows on screen. A playhead inside a cut region lands on the next kept segment's start.
 function clipAtMsFromPlayhead() {
   const segs = keptSegments();
   const rate = speedRate();
@@ -2149,10 +2057,8 @@ function menuButton(label, onClick, id) {
   return b;
 }
 
-// A second, generic popover for the "Add a video" flow -- appended after
-// ovCtxPop above, so document.querySelector('.ctx') still finds that one
-// first while it is the only one ever open during a plain overlay-row
-// right-click.
+// A second, generic popover for the "Add a video" flow, appended after ovCtxPop so
+// document.querySelector('.ctx') still finds that one first while it is the only one open.
 const addVideoPop = document.createElement("div");
 addVideoPop.id = "ve-add-video-pop";
 addVideoPop.className = "ctx hidden";
@@ -2174,14 +2080,12 @@ function showClipPositionMenu(picked, x, y) {
   placePopoverAt(addVideoPop, x, y);
 }
 
-// Both destinations share one selection path: pick and validate the file
-// once, then choose where it goes.
+// Both destinations share one selection path: pick and validate the file once, then choose
+// where it goes.
 //
-// The limit toast and the whole menu below it are t() calls made at click
-// time, same risk as the restore-edit-state dialog: the button is live the
-// moment the window paints, well before the lazy i18n import behind it has
-// necessarily landed, so a click that fast would otherwise freeze raw i18n
-// keys into the toast and the popup.
+// The limit toast and the menu below are t() calls made at click time: the button is live from
+// first paint, before the lazy i18n import has necessarily landed, so a fast click would
+// otherwise freeze raw i18n keys into the toast and popup.
 async function startAddVideo(x, y) {
   if (!TXT_READY) await textsReady;
   const picked = await pickExtraVideo();
@@ -2194,17 +2098,13 @@ async function startAddVideo(x, y) {
   placePopoverAt(addVideoPop, x, y);
 }
 
-// A fresh push at the end, never spliced next to the source -- undo() always
-// pops the last entry, so anything inserted mid-array would make undo remove
-// the wrong operation.
+// A fresh push at the end, never spliced next to the source: undo() pops the last entry, so a
+// mid-array insert would make undo remove the wrong operation.
 function duplicateOverlay(op) {
   const offset = VE.ovDupOffsetPx;
   const dup = { ...op, id: newId() };
-  // A duplicate is a brand new op, not a continuation of the original's own
-  // undo history -- without this, duplicating an overlay that had already
-  // been dragged, resized or nudged before copies its _prev chain along with
-  // it, and a single undo afterward steps that chain back instead of
-  // removing the duplicate outright.
+  // A duplicate is a brand new op, not a continuation of the original's undo history: copying
+  // the _prev chain would make a single undo step that chain back instead of removing the duplicate.
   delete dup._prev;
   delete dup.z;
   if (dup.rect) dup.rect = snapRect({ ...dup.rect, x: dup.rect.x + offset, y: dup.rect.y + offset });
@@ -2293,9 +2193,8 @@ function fieldRow(labelText, control) {
   return label;
 }
 
-// Thin positional-args shim over the shared numberField() so the overlay
-// editor's call sites below stay short -- the actual click/hold/wheel/preset
-// behaviour lives in floatShared.js, not here.
+// Thin positional-args shim over the shared numberField() (click/hold/wheel/preset behaviour
+// lives in floatShared.js).
 function numberInput(value, min, max, step, onChange, presets) {
   return numberField({
     value, min, max, step, presets, onChange,
@@ -2343,9 +2242,8 @@ function colorRow(current, onPick) {
     btn.addEventListener("click", () => onPick(hex));
     wrap.appendChild(btn);
   }
-  // The shared custom-colour popup: shows the current colour when it is not
-  // one of the fixed presets above, same swatch pattern editor.js's own
-  // buildSwatches() uses for tag/tile colours.
+  // The shared custom-colour popup: shows the current colour when it is not one of the fixed
+  // presets above, using the same swatch pattern as editor.js's buildSwatches().
   const isCustom = !!current && !OVERLAY_COLORS.some((c) => c.toLowerCase() === String(current).toLowerCase());
   const custom = document.createElement("button");
   custom.type = "button";
@@ -2369,14 +2267,11 @@ function commitOverlay(op, changes) {
   rememberOverlayValues(op.kind, changes);
 }
 
-// Keeps the colour/thickness/opacity/font size a kind was last given as the
-// starting point for the next overlay of that same kind -- in the ordinary
-// settings store (set_ui_text/set_ui_value), not the per-file edit state,
-// since it belongs to the user rather than to the file being edited. Also
-// updates the live VE.ov*Default fields right away: set_ui_text/set_ui_value
-// only broadcast "settings-changed" to the floating-pill and pill-folder
-// windows (see notify_float_settings in the backend), never to this one, so
-// waiting for that event would leave the very same session one overlay behind.
+// Keeps the colour/thickness/opacity/font size a kind was last given as the starting point for
+// the next overlay of that kind, in the settings store (set_ui_text/set_ui_value) rather than
+// the per-file edit state, since it belongs to the user. Also updates the live VE.ov*Default
+// fields at once: those commands only broadcast "settings-changed" to the floating-pill and
+// pill-folder windows (see notify_float_settings), never to this one.
 function rememberOverlayValues(kind, changes) {
   if (kind === "text") {
     if (changes.color !== undefined) {
@@ -2418,12 +2313,10 @@ function rememberOverlayValues(kind, changes) {
   }
 }
 
-// Registers an overlay-editor input so a later keepEditor commit can refresh
-// it in place (see syncOverlayFields) instead of rebuilding the panel.
-// `control` is what a caller focuses/reads the value of -- the plain input
-// itself, or a numberField() wrapper -- so the [data-ov-field] marker (used
-// to find "the opacity field" etc.) goes on the actual <input> inside it,
-// not the wrapper div, which is neither focusable nor has a `.value`.
+// Registers an overlay-editor input so a later keepEditor commit can refresh it in place (see
+// syncOverlayFields) instead of rebuilding the panel. `control` is what a caller focuses or
+// reads (the input itself or a numberField() wrapper), so the [data-ov-field] marker goes on
+// the actual <input>, which is focusable and has a `.value`, unlike the wrapper div.
 function ovTrack(key, control, getValue) {
   const focusEl = control.matches("input") ? control : control.querySelector("input") || control;
   focusEl.dataset.ovField = key;
@@ -2540,10 +2433,8 @@ function renderOverlayEditor() {
     box.appendChild(fieldRow(t("veOvStyle"), ovTrack("style", selectInput(
       [["solid", t("veOvStyleSolid")], ["double", t("veOvStyleDouble")], ["soft", t("veOvStyleSoft")]],
       op.style, (v) => commitOverlay(op, { style: v })), (o) => o.style)));
-    // A full rebuild rather than commitOverlay's usual keepEditor path: a
-    // swatch click never holds text-typing focus the way the other fields in
-    // this panel can, so there is nothing to protect, and the row's own
-    // selected-swatch highlight only ever comes from a fresh render.
+    // A full rebuild instead of keepEditor: a swatch click never holds typing focus, and the
+    // selected-swatch highlight only comes from a fresh render.
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
     box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }), [25, 50, 75, 100]), (o) => String(o.opacity))));
   }
@@ -2558,10 +2449,8 @@ function renderOverlayEditor() {
       fieldRow(t("veCropX"), ovTrack("x", numberInput(op.x, 0, VE.w, 1, (v) => commitOverlay(op, { x: v })), (o) => String(o.x))),
       fieldRow(t("veCropY"), ovTrack("y", numberInput(op.y, 0, VE.h, 1, (v) => commitOverlay(op, { y: v })), (o) => String(o.y))));
     box.appendChild(pos);
-    // A full rebuild rather than commitOverlay's usual keepEditor path: a
-    // swatch click never holds text-typing focus the way the other fields in
-    // this panel can, so there is nothing to protect, and the row's own
-    // selected-swatch highlight only ever comes from a fresh render.
+    // A full rebuild instead of keepEditor: a swatch click never holds typing focus, and the
+    // selected-swatch highlight only comes from a fresh render.
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
     box.appendChild(fieldRow(t("veOvTextBack"), selectInput(
       [["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
@@ -2618,21 +2507,19 @@ function renderOverlayEditor() {
 
 // ---------------------------------------------------------------- filter graph
 
-// A path inside a filter option passes two parsing levels, and only one spelling
-// survives both: wrapped in single quotes with exactly ONE backslash before the
-// drive colon. Checked against the shipped ffmpeg build; unquoted, unescaped and
-// double-escaped all fail with "Invalid argument". The caller supplies the quotes.
+// A path inside a filter option passes two parsing levels and only one spelling survives both:
+// wrapped in single quotes with exactly one backslash before the drive colon (checked against
+// the shipped ffmpeg build; unquoted, unescaped and double-escaped all fail with "Invalid
+// argument"). The caller supplies the quotes.
 function ffPath(path) {
   return String(path).replace(/\\/g, "/").replace(/:/g, "\\:");
 }
 
-// The same two levels for drawtext's own text, plus one thing the parser simply
-// cannot express: an ASCII apostrophe is silently dropped by every escape form
-// ffmpeg accepts (the documented quote-escape-requote spelling renders "its", not
-// "it's"). It becomes the typographic apostrophe instead, which is the character
-// a caption wants anyway, rather than disappearing from the finished video.
-// Backslashes are doubled before colons are escaped, or the escape's own
-// backslash would be doubled in turn.
+// The same two levels for drawtext's own text, plus one thing the parser cannot express: an
+// ASCII apostrophe is silently dropped by every escape form ffmpeg accepts (the
+// quote-escape-requote spelling renders "its", not "it's"), so it becomes the typographic
+// apostrophe. Backslashes are doubled before colons are escaped, or the escape's own backslash
+// would be doubled in turn.
 function ffText(text) {
   return String(text)
     .replace(/\r?\n/g, " ")
@@ -2653,14 +2540,11 @@ function enableExpr(op) {
   return `enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`;
 }
 
-// A video overlay that is set to play once (not repeat) has nothing left to
-// show once its own footage runs out -- capping the configured end at its
-// own duration keeps `movie=` from being asked for frames past the end of
-// its file, which is how a not-looping overlay near the end of a longer
-// range used to break the whole export instead of just stopping early.
-// The overlay's footage plays at native speed on the OUTPUT clock, so the cap
-// is added to the start AFTER both ends went through outMs(): a speed change
-// or a cut inside the range must not stretch or shrink the footage's own length.
+// A video overlay set to play once has nothing to show after its own footage ends; capping the
+// configured end at its duration keeps `movie=` from being asked for frames past the end of its
+// file (which broke the whole export). The footage plays at native speed on the output clock,
+// so the cap is added to the start after both ends went through outMs(): a speed change or cut
+// inside the range must not stretch or shrink the footage's length.
 function videoOverlayWindowOutMs(op) {
   const aOut = outMs(clamp(op.startMs, 0, VE.dur));
   const bOut = outMs(clamp(op.endMs, 0, VE.dur), true);
@@ -2709,12 +2593,10 @@ function scaleTarget() {
   return scaleOp ? { w: scaleOp.w, h: scaleOp.h } : null;
 }
 
-// One inserted section clip's own video, fps- and size-normalized to the
-// MAIN video's own values: two files rarely share a resolution or frame
-// rate, and concat of mismatched streams either fails outright or drifts
-// against its audio. `movie=` opens the file fresh, so this needs no second
-// `-i` on the ffmpeg command line -- see the Rust test for the exact
-// fragment this produces against a real ffmpeg run.
+// One inserted section clip's video, fps- and size-normalized to the main video's: two files
+// rarely share a resolution or frame rate, and concat of mismatched streams either fails or
+// drifts against its audio. `movie=` opens the file fresh, so no second `-i` is needed (see
+// the Rust test for the fragment this produces against a real ffmpeg run).
 function clipVideoLabel(op, label, parts, fps) {
   const src = label(), out = label();
   parts.push(`movie='${ffPath(op.path)}'[${src}]`);
@@ -2724,10 +2606,9 @@ function clipVideoLabel(op, label, parts, fps) {
 
 // ---------------------------------------------------------------- keys overlay
 //
-// The "keys" overlay burns VE.keySidecar's timestamped key-down/key-up
-// events into a static or semi-static keyboard picture. Every physical key
-// gets equal width here (no attempt at real keycap proportions) -- close
-// enough for "which key", which is all a viewer needs.
+// The "keys" overlay burns VE.keySidecar's timestamped key-down/key-up events into a static or
+// semi-static keyboard picture. Every key gets equal width (no real keycap proportions),
+// enough for "which key".
 
 function keyLabel(vk) {
   if (vk >= 0x41 && vk <= 0x5a) return String.fromCharCode(vk);
@@ -2791,10 +2672,9 @@ function keysGridRects(rows, rect) {
   return out;
 }
 
-// Every [down, up] span for one key across the whole sidecar, held visible
-// for holdMs past release -- a key still down when the recording ends (or
-// the sidecar's own log simply stops) stays visible until the last known
-// timestamp plus the hold, never forever.
+// Every [down, up] span for one key across the whole sidecar, held visible for holdMs past
+// release; a key still down when the log ends stays visible until the last known timestamp
+// plus the hold, never forever.
 function keyPressSpans(vk, holdMs) {
   const events = (VE.keySidecar && VE.keySidecar.events) || [];
   const spans = [];
@@ -2810,10 +2690,9 @@ function keyPressSpans(vk, holdMs) {
   return spans;
 }
 
-// Clips every span into this overlay's own active range and onto the OUTPUT
-// timeline, exactly like enableExpr() does for every other overlay kind --
-// the sidecar's timestamps are source-relative, the same space op.startMs/
-// op.endMs already live in.
+// Clips every span into this overlay's active range and onto the output timeline, like
+// enableExpr() does for every other overlay kind (the sidecar's timestamps are source-relative,
+// like op.startMs/op.endMs).
 function keysEnable(op, spans) {
   const clipped = spans
     .map(([s, e]) => [Math.max(s, op.startMs), Math.min(e, op.endMs)])
@@ -2828,10 +2707,9 @@ function keysFontFile() {
   return ffPath(`${fontsDir}/${font[1]}`);
 }
 
-// Greedy interval assignment: each press span gets the first slot free since
-// its own start, or (an overlapping run past maxSlots) the oldest slot again
-// rather than being dropped -- a real, if occasionally crowded, timeline
-// instead of missing keys.
+// Greedy interval assignment: each press span gets the first slot free since its start, or (an
+// overlapping run past maxSlots) the oldest slot again rather than being dropped: a crowded
+// timeline beats missing keys.
 function pressedSpans(op, maxSlots) {
   const holdMs = (VE.keySidecar && VE.keySidecar.hold_ms) || 400;
   const events = (VE.keySidecar && VE.keySidecar.events) || [];
@@ -2856,9 +2734,8 @@ function pressedSpans(op, maxSlots) {
   return spans;
 }
 
-// Produces the plain drawbox/drawtext filter strings this overlay adds to
-// the chain -- called once per op from buildVideoChain(), same as every
-// other overlay kind's own inline branch, just factored out for length.
+// Produces the drawbox/drawtext filter strings this overlay adds to the chain; called once per
+// op from buildVideoChain(), factored out for length.
 function buildKeysFilters(op) {
   const filters = [];
   const font = keysFontFile();
@@ -2999,12 +2876,10 @@ function buildVideoChain() {
     } else if (op.kind === "video") {
       const src = label(), scaled = label(), out = label();
       const loopArg = videoOverlayLoopArg(op);
-      // movie= decodes from its own t=0 in lockstep with the output timeline,
-      // so without a shift the picture at the overlay's start would show
-      // whatever the clip holds at that OUTPUT time instead of its own
-      // beginning. The setpts shift moves the clip's first frame to land at
-      // the same startOutSec used for its audio's adelay below, so picture
-      // and sound stay in sync.
+      // movie= decodes from its own t=0 in lockstep with the output timeline, so without a shift the
+      // picture at the overlay's start would show the clip at that output time instead of its
+      // beginning. The setpts shift moves the clip's first frame to the same startOutSec used for its
+      // audio's adelay below, keeping picture and sound in sync.
       const startOutSec = (outMs(clamp(op.startMs, 0, VE.dur)) / 1000).toFixed(3);
       parts.push(`movie='${ffPath(op.path)}'${loopArg}[${src}]`);
       parts.push(`[${src}]setpts=PTS-STARTPTS+${startOutSec}/TB,scale=${op.rect.w}:${op.rect.h}:force_original_aspect_ratio=decrease,pad=${op.rect.w}:${op.rect.h}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=${(clamp(op.opacity, 5, 100) / 100).toFixed(2)}[${scaled}]`);
@@ -3082,10 +2957,9 @@ function buildVideoChain() {
   return parts.join(";");
 }
 
-// A silent placeholder matching one inserted clip's own (native, pre-speed)
-// length. Without it, the sys/mic tracks below would run short of the video
-// by exactly that clip's length and drift out of sync with everything after
-// it.
+// A silent placeholder matching one inserted clip's native (pre-speed) length; without it the
+// sys/mic tracks would run short of the video by that length and drift out of sync with
+// everything after.
 function silentGapLabel(entry, label, parts) {
   return silentSpanLabel(entry.op.durationMs, label, parts);
 }
@@ -3187,11 +3061,9 @@ function buildAudioChain() {
     outs.push(cur);
   }
 
-  // Each video overlay's own audio is a separate branch, delayed to land at
-  // its start on the OUTPUT timeline, rather than folded into the sys/mic
-  // tracks above -- those already carry a silent gap for every inserted
-  // clip, and doubling an overlay's sound into them as well would mix it in
-  // twice.
+  // Each video overlay's audio is a separate branch, delayed to land at its start on the output
+  // timeline, rather than folded into the sys/mic tracks, which already carry a silent gap for
+  // every inserted clip; folding it in would mix it twice.
   for (const op of videoOverlaysWithAudio) {
     const { aOut: startOutMs, endOut } = videoOverlayWindowOutMs(op);
     const durSec = (endOut - startOutMs) / 1000;
@@ -3260,9 +3132,8 @@ function destPath() {
   if (VE.destOverride) return VE.destOverride;
   const format = exportFormat();
   const name = `${exportNameStem()}.${formatExt(format)}`;
-  // A file opened for editing from outside the app suggests ITS OWN folder
-  // over the standing videoExportDir preference -- that preference is about
-  // where every ordinary recording export lands, not about this one-off copy.
+  // A file opened for editing from outside the app suggests its own folder over the standing
+  // videoExportDir preference, which is about ordinary recording exports, not this one-off copy.
   const dir = VE.originDir || VE.destDir;
   if (dir) return `${dir.replace(/[\\/]+$/, "")}/${name}`;
   const cut = VE.src.replace(/[/\\]+$/, "");
@@ -3275,10 +3146,8 @@ function destPath() {
 // a chain of ifs so a future format only ever needs one new entry here.
 const FORMAT_NOTE_KEY = { gif: "veGifNote", avi: "veAviNote" };
 
-// Builds everything the note can say without asking the backend anything --
-// unchanged from before the size estimate was added, so all 13 existing call
-// sites keep their instant synchronous DOM update. The size estimate (the
-// note's third, backend-computed element) is patched in afterwards by
+// Builds everything the note can say without asking the backend, so the DOM update stays
+// instant and synchronous. The size estimate (backend-computed) is patched in afterwards by
 // refreshExportSizeNote.
 function buildExportNoteBase(format) {
   const notes = [];
@@ -3322,10 +3191,9 @@ async function refreshExportSizeNote(format) {
   $("ve-export-note").textContent = notes.join(" ");
 }
 
-// The one place that decides whether Export/Copy-to-clipboard may be
-// clicked at all -- an invalid or empty file name joins the existing
-// "still exporting"/"ffmpeg missing" reasons rather than replacing them, so
-// none of those call sites has to know about the other two.
+// The one place that decides whether Export/Copy-to-clipboard may be clicked: an invalid or
+// empty file name joins the "still exporting"/"ffmpeg missing" reasons, so no call site has to
+// know about the others.
 function applyExportGate() {
   const valid = exportNameIsValid($("ve-export-name").value);
   $("ve-export-name").classList.toggle("invalid", !valid);
@@ -3388,10 +3256,9 @@ function setProgress(pct) {
   $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
 }
 
-// toClipboard runs the very same export into a throwaway temp file
-// instead of the normal destination, then puts that file on the clipboard for
-// pasting elsewhere -- see clip_export_path/sweep_clip_export_temp on the
-// Rust side for where and when that temp file goes away.
+// toClipboard runs the same export into a throwaway temp file instead of the normal
+// destination, then puts that file on the clipboard (see clip_export_path/sweep_clip_export_temp
+// in the backend for where and when the temp file goes away).
 async function startExport(toClipboard) {
   if (VE.exporting) return;
   if (!VE.ffmpeg) { toast(t("recFfmpegMissingHint")); return; }
@@ -3419,12 +3286,10 @@ async function startExport(toClipboard) {
   showExportErrorDetails("");
   exportEta.reset();
   setProgress(0);
-  // A source opened from outside the app (or a library attachment) has a
-  // destination the backend never authorized through a picker or a saved
-  // preference -- retried at most once, with a folder the user just chose
-  // through the export-folder dialog, rather than failing outright. A
-  // clipboard export never lands here: its destination is always the app's
-  // own temp folder.
+  // A source opened from outside the app (or a library attachment) has a destination the backend
+  // never authorized through a picker or saved preference; retried at most once with a folder
+  // the user just chose in the export-folder dialog. A clipboard export never lands here: its
+  // destination is always the app's temp folder.
   let destRetried = false;
   try {
     for (;;) {
@@ -3435,10 +3300,8 @@ async function startExport(toClipboard) {
         audio_map: lossless ? null : buildAudioChain(),
         media_paths: lossless ? [] : exportMediaPaths(),
         lossless_copy: lossless,
-        // Distinct from lossless_copy -- this is the "Lossless" QUALITY tier,
-        // which forces a real re-encode (see isLosslessCopy above) that must
-        // itself stay lossless (-crf 0) rather than falling back to an ordinary
-        // bitrate target with nothing to map "lossless" to.
+        // Distinct from lossless_copy: the "Lossless" quality tier forces a real re-encode (see
+        // isLosslessCopy) that must stay lossless (-crf 0) instead of falling back to a bitrate target.
         lossless_quality: exportQuality() === "lossless",
         format,
         video_kbps: lossless ? null : videoKbps(),
@@ -3472,10 +3335,9 @@ async function startExport(toClipboard) {
         // Only when nothing was edited while it ran: a later edit is not in the file.
         const covered = exportCoveredEdits(gen, rev);
         if (covered) VE.dirty = false;
-        // A finished export means nothing here is "unfinished" any more -- clear the
-        // remembered row so reopening this recording later never offers to restore
-        // work that already made it out. Continued editing after this point simply
-        // gets a fresh row from the next autosave tick, same as any other edit.
+        // A finished export leaves nothing "unfinished": clear the remembered row so reopening this
+        // recording never offers to restore work that already made it out. Later edits get a fresh row
+        // from the next autosave tick.
         if (covered && VE.editStateKeepOn && src) {
           invoke("discard_edit_state", { kind: "video", target: src }).catch(() => {});
         }
@@ -3517,11 +3379,9 @@ async function startExport(toClipboard) {
   } catch (err) {
     noteFfmpeg(err);
     const raw = String(err);
-    // A user cancel is not a failure and never shows the error UI at all; a
-    // still-missing ffmpeg already has its own dedicated warning banner from
-    // noteFfmpeg() above. Everything else is a real ffmpeg (or filesystem)
-    // failure, translated by the one shared classifier -- never its raw text
-    // as the headline, only reachable underneath in "Technical details".
+    // A user cancel is not a failure and never shows the error UI; a missing ffmpeg already has its
+    // banner from noteFfmpeg(). Everything else is a real ffmpeg or filesystem failure, translated
+    // by the shared classifier, with the raw text only under "Technical details".
     if (!stillHere()) {
       // the editor moved on to another recording; nothing of this one to show
     } else if (raw.includes("cancel")) {
@@ -3606,12 +3466,10 @@ $("ve-redo").addEventListener("click", redo);
 $("ve-play").addEventListener("click", togglePlay);
 $("ve-to-start").addEventListener("click", () => seek(keptSegments()[0].a));
 $("ve-to-end").addEventListener("click", () => seek(keptSegments().slice(-1)[0].b));
-// Stepping by a fixed frameMs() from an arbitrary (scrubbed) playhead
-// position drifts further from the real frame grid every press instead of
-// landing on it -- snap to the actual previous/next frame boundary instead.
-// The small epsilon absorbs float error from a non-integer frame duration
-// (e.g. 29.97fps) so a playhead already sitting exactly on a boundary still
-// advances by one whole frame rather than getting stuck restating it.
+// Stepping by a fixed frameMs() from a scrubbed playhead drifts off the frame grid, so snap to
+// the real previous/next frame boundary. The small epsilon absorbs float error from a
+// non-integer frame duration (e.g. 29.97fps), so a playhead already on a boundary still
+// advances a whole frame.
 function stepFrame(dir) {
   const fm = frameMs();
   const eps = fm / 100;
@@ -3657,9 +3515,9 @@ $("ve-zoom-in").addEventListener("click", () => setZoom(VE.zoom * TIMELINE_ZOOM_
 $("ve-zoom-out").addEventListener("click", () => setZoom(VE.zoom / TIMELINE_ZOOM_STEP));
 $("ve-zoom-fit").addEventListener("click", () => setZoom(fitZoom()));
 
-// Hold the button (or V) to peek at the source without overlays, fades or
-// the scale target, or tap it to lock that view on until pressed again --
-// the current cut still applies, this only ever touches the live preview.
+// Hold the button (or V) to peek at the source without overlays, fades or the scale target, or
+// tap it to lock that view until pressed again. The current cut still applies; this only
+// touches the live preview.
 const veOriginalToggle = makeHoldOrTapToggle((shown) => {
   $("ve-overlay-live").classList.toggle("hidden", shown);
   $("ve-rects").classList.toggle("hidden", shown);
@@ -3684,11 +3542,9 @@ $("ve-trim-end-val").addEventListener("change", () => {
   setTrim(trim ? trim.startMs : 0, ms);
 });
 
-// Decorate the static crop/speed/fade fields with the shared mouse-only
-// stepper BEFORE wiring their own change listeners below, so this control's
-// clamp runs first and the domain listener always reads an already-clamped
-// value. Each keeps its id, so every existing $(id) lookup and listener
-// elsewhere in this file keeps working unchanged.
+// Decorate the static crop/speed/fade fields with the shared mouse-only stepper before wiring
+// their own change listeners, so its clamp runs first and the domain listener reads an
+// already-clamped value. Each keeps its id, so existing $(id) lookups and listeners still work.
 const numFieldDec = t("numFieldDecrease");
 const numFieldInc = t("numFieldIncrease");
 const numFieldList = t("numFieldPresets");
@@ -3773,9 +3629,8 @@ for (const id of ["ve-fade-in", "ve-fade-out"]) {
   });
 }
 
-// The Edit tab's width/height/percent fields and the Export tab's read-only
-// summary are two faces of the one same "scale" op -- this is the only
-// place that ever writes it, literally, with no size guard of any kind.
+// The Edit tab's width/height/percent fields and the Export tab's read-only summary are two
+// faces of the one "scale" op; this is the only place that writes it, with no size guard.
 function setScaleOp(w, h) {
   if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
   const cw = even(clamp(Math.round(w), 16, 7680));
@@ -3826,10 +3681,9 @@ $("ve-add-video").addEventListener("click", (e) => {
   startAddVideo(r.left, r.bottom);
 });
 
-// A recording without a microphone track leaves those two controls switched off
-// and says why, rather than offering a slider that could not change anything.
-// An export format that drops audio entirely (gif) does the same
-// to BOTH tracks' controls, on top of whichever per-track reason already applies.
+// A recording without a microphone track leaves those controls off and says why, instead of
+// offering a slider that could change nothing. An export format that drops audio (gif) does
+// the same to both tracks' controls, on top of any per-track reason.
 function updateAudioLabels() {
   const silent = SILENT_FORMATS.has(exportFormat());
   for (const [id, key] of [["ve-mute-mic", "veMuteMic"], ["ve-vol-mic", "veVolumeMic"]]) {
@@ -3848,9 +3702,8 @@ function updateAudioLabels() {
   }
 }
 
-// Reflects VE.audio in the two mute buttons/sliders -- needed on every load
-// since resetForNewSource() changes the state without any click happening to
-// trigger audioControl()'s own listener.
+// Reflects VE.audio in the mute buttons/sliders; needed on every load because
+// resetForNewSource() changes the state without a click triggering audioControl()'s listener.
 function updateVolumeValueText(volId) {
   $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", () => $(volId).value));
 }
@@ -3885,21 +3738,18 @@ fillVideoFormatSelect($("ve-export-format"));
 for (const id of ["ve-export-format", "ve-export-quality"]) {
   attachSelectPicker($(id));
   $(id).addEventListener("change", () => {
-    // A full manual destination names its own extension -- picking a
-    // different container format makes that extension wrong, so the format
-    // dropdown is the one control that drops back to the auto-named file
-    // (still inside a remembered "Export to…" folder, if any).
+    // A full manual destination names its own extension, so picking a different container format
+    // makes it wrong: the format dropdown alone drops back to the auto-named file (still inside a
+    // remembered "Export to…" folder).
     if (id === "ve-export-format") VE.destOverride = null;
     persistExportSettings();
     updateExportNote();
   });
 }
 
-// A plain file name, checked live as it is typed -- an override here
-// wins over the auto "<source stem>-edit" guess but stays under the full-path
-// field below, same as picking a folder (destPath() reads it through
-// exportNameStem()). Typing a full path directly into that field still takes
-// over completely, same as before.
+// A plain file name, checked live as typed. It wins over the auto "<source stem>-edit" guess
+// but stays under the full-path field below, like picking a folder (destPath() reads it through
+// exportNameStem()). Typing a full path into that field still takes over completely.
 $("ve-export-name").addEventListener("input", () => {
   VE.exportNameOverride = $("ve-export-name").value;
   VE.destOverride = null;
@@ -3907,8 +3757,8 @@ $("ve-export-name").addEventListener("input", () => {
   $("ve-export-dest").title = destPath();
   applyExportGate();
 });
-// The target field is a real input now -- typing a full path directly
-// is itself a manual override, same as picking one via the dialog below.
+// The target field is an input: typing a full path is a manual override, like picking one via
+// the dialog below.
 $("ve-export-dest").addEventListener("change", () => {
   const value = $("ve-export-dest").value.trim();
   VE.destOverride = value || null;
@@ -3919,11 +3769,9 @@ $("ve-export-choose-folder").addEventListener("click", async () => {
   if (!folder) return;
   VE.destDir = folder;
   VE.destOverride = null; // the auto filename moves into the new folder
-  // The backend only accepts this folder from the setter call that follows
-  // its own picker in the same flow, so it is sent here, once, rather than
-  // through persistExportSettings below, which resends the unchanged
-  // VE.destDir on every unrelated format/quality/scale change and would
-  // just be refused on every call after the first.
+  // The backend only accepts this folder from the setter call that follows its own picker in the
+  // same flow, so it is sent here once rather than via persistExportSettings, which resends the
+  // unchanged VE.destDir on every unrelated change and would be refused after the first.
   invoke("set_video_export_dir", { dir: folder }).catch(() => {});
   persistExportSettings();
   updateExportNote();
@@ -3964,11 +3812,9 @@ $("ve-export-saveas").addEventListener("click", async () => {
 function persistExportSettings() {
   invoke("set_ui_text", { key: "videoExportFormat", value: exportFormat() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportQuality", value: exportQuality() }).catch(() => {});
-  // A custom free-typed size has no discrete preset to remember -- it falls
-  // back to "keep original" as the safe default for the next session.
+  // A custom free-typed size has no preset to remember; it falls back to "keep original" next session.
   invoke("set_ui_text", { key: "videoExportScale", value: currentScalePresetKey() || "" }).catch(() => {});
-  // videoExportDir itself is NOT resent here -- see the choose-folder handler
-  // above, which is the only place VE.destDir actually changes.
+  // videoExportDir is not resent here; the choose-folder handler above is the only place VE.destDir changes.
 }
 
 // ---------------------------------------------------------------- keyboard
@@ -3976,12 +3822,10 @@ function persistExportSettings() {
 async function closeWindow() {
   let discarded = false;
   if (VE.exporting) {
-    // Three-way choice: keep it running in the background (the export is
-    // Rust-driven now, so it survives this window closing), cancel it and
-    // close, or stay put. "Keep running" is the safe default (Enter key);
-    // cancelling is the third, click-only choice.
-    // With the edit state not kept, edits made after the export started would
-    // be lost on close, so say so too.
+    // Three-way choice: keep it running in the background (the export is backend-driven and
+    // survives this window closing), cancel it and close, or stay put. "Keep running" is the
+    // default (Enter). With the edit state not kept, edits made after the export started would be
+    // lost on close, so that is said too.
     const unsaved = VE.dirty && !VE.editStateKeepOn ? ` ${t("veCloseUnsaved")}` : "";
     const choice = await confirmDialog({
       title: t("veCloseTitle"),
@@ -4004,10 +3848,9 @@ async function closeWindow() {
     if (editStateTimer) { clearInterval(editStateTimer); editStateTimer = null; }
     if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
   } else {
-    // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety
-    // net for a close this cannot intercept (the native titlebar button skips this
-    // function entirely); this just shaves off the last few seconds for the path
-    // that does go through it.
+    // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety net for a close
+    // this cannot intercept (the native titlebar button skips this function); this just saves the
+    // last few seconds.
     await saveEditStateNow();
   }
   appWin.close().catch(() => {});
@@ -4042,9 +3885,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     e.preventDefault();
     if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
-    // A selected overlay only gives up the arrow keys, never the whole
-    // window -- closing here would throw away every edit made so far just
-    // because something happened to be selected.
+    // A selected overlay only gives up the arrow keys, never the window: closing here would throw
+    // away every edit just because something is selected.
     if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return; }
     closeWindow();
     return;
@@ -4057,15 +3899,14 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
-  // Preview zoom: Ctrl+Plus/Minus/0, matching the screenshot editor's canvas
-  // zoom keys -- plain +/- stay the timeline zoom below, unchanged.
+  // Preview zoom: Ctrl+Plus/Minus/0, like the screenshot editor's canvas zoom; plain +/- stay the
+  // timeline zoom below.
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); setPreviewZoom(VE.previewZoom / VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); resetPreviewZoom(); return; }
 
-  // A focused trim handle takes its own arrow keys instead of stepping the
-  // playhead -- otherwise the two handles below would be reachable by Tab but
-  // never actually movable without a mouse.
+  // A focused trim handle takes its own arrow keys instead of stepping the playhead, or the
+  // handles would be reachable by Tab but not movable without a mouse.
   const focusedId = document.activeElement && document.activeElement.id;
   if (focusedId === "ve-trim-a" || focusedId === "ve-trim-b") {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -4079,9 +3920,8 @@ document.addEventListener("keydown", (e) => {
     }
   }
 
-  // While an overlay is selected the arrow keys move/resize it instead of
-  // stepping frames -- frame-stepping moves to comma/period instead, the way
-  // other editing programs free up the arrow keys once something is picked.
+  // While an overlay is selected the arrow keys move/resize it instead of stepping frames;
+  // frame-stepping moves to comma/period.
   const selectedOverlay = VE.selOv && VE.ops.find((o) => o.id === VE.selOv);
   if (selectedOverlay) {
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
@@ -4127,9 +3967,9 @@ document.addEventListener("keyup", (e) => {
 // ---------------------------------------------------------------- loading
 
 function resetForNewSource() {
-  // A confirm still open from the previous source (the restore question) must
-  // not stay up over the new one, and its waiting caller must be released
-  // (it sees the load generation has moved on and does nothing).
+  // A confirm still open from the previous source (the restore question) must not stay up over
+  // the new one, and its waiting caller is released (it sees the load generation moved on and
+  // does nothing).
   dismissConfirm();
   VE.ops = [];
   VE.redo = [];
@@ -4138,8 +3978,7 @@ function resetForNewSource() {
   VE.selOv = null;
   veOriginalToggle.reset();
   updateNudgeHint();
-  // The live-preview nodes belong to the OLD source's overlays; a new source
-  // starts with none, so any leftover node would otherwise show a stale
+  // The live-preview nodes belong to the old source's overlays; leftovers would show a stale
   // image/text/pixelate sampled from a video that is no longer loaded.
   $("ve-overlay-live").innerHTML = "";
   VE.liveEls.clear();
@@ -4149,23 +3988,19 @@ function resetForNewSource() {
   VE.playhead = 0;
   VE.dirty = false;
   VE.lastExport = "";
-  // A full manual "Save as…" path (or a typed file name) names THIS source's
-  // file, so a newly loaded video starts fresh with both; the remembered
-  // destination FOLDER (VE.destDir) is a standing preference and survives
-  // across videos.
+  // A full manual "Save as…" path (or typed file name) names this source's file, so a newly
+  // loaded video starts fresh with both; the remembered destination folder (VE.destDir) is a
+  // standing preference and survives across videos.
   VE.destOverride = null;
   VE.exportNameOverride = null;
-  // Mic starts muted on every newly loaded video, same reasoning as the
-  // module-level default above.
+  // Mic starts muted on every newly loaded video, like the module-level default.
   VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } };
   syncAudioButtons();
   showPanel(`ve-panel-${VE.defaultPanel || "edit"}`);
-  // Probe/geometry were only ever set by applyProbe() on success, never
-  // cleared here -- if probing the NEW source then fails (no ffmpeg, a
-  // corrupt file, ...), applyProbe(null) skips its own assignment entirely
-  // and every one of these silently kept the PREVIOUS video's values: wrong
-  // crop bounds, wrong duration/frame math, wrong audio-track availability,
-  // all attributed to a source they no longer describe.
+  // Probe and geometry are only set by applyProbe() on success; if probing the new source fails
+  // (no ffmpeg, a corrupt file), applyProbe(null) skips its assignment, so they are cleared here
+  // or they would keep the previous video's values (wrong crop bounds, duration/frame math,
+  // audio-track availability).
   VE.probe = null;
   VE.keySidecar = null;
   VE.dur = 0;
@@ -4174,9 +4009,8 @@ function resetForNewSource() {
   VE.h = 0;
   VE.hasSys = true;
   VE.hasMic = false;
-  // A leftover zoom/pan from the previous video would otherwise apply to a
-  // brand-new source of a different resolution/aspect ratio, showing the
-  // wrong region of the picture (or none of it) as soon as it loads.
+  // A leftover zoom/pan from the previous video would apply to a new source of a different
+  // resolution or aspect ratio and show the wrong region.
   VE.previewZoom = 1;
   VE.panPx = { x: 0, y: 0 };
   applyPreviewTransform();
@@ -4187,15 +4021,11 @@ function resetForNewSource() {
 
 // ---------------------------------------------------------------- edit state
 //
-// Remembers unfinished edits (cuts, overlays) across closing and reopening the
-// SAME recording, so an accidental close does not throw the work away. Keyed by
-// the source file's own (size, mtime) as of the load that produced these ops --
-// a changed file never matches, so this can never restore ops drawn against
-// content that is no longer there. The video editor is the only place this
-// applies today: the screenshot editor (see snipEditor.js) works on an in-memory
-// image, an opened file included (the original is never touched), so it has no
-// state keyed to a file; the Rust side already accepts kind="snip" should that
-// ever be added.
+// Remembers unfinished edits (cuts, overlays) across closing and reopening the same recording.
+// Keyed by the source file's (size, mtime) as of the load that produced these ops, so a changed
+// file never matches and ops drawn against content that is gone are never restored. Only the
+// video editor uses this; the screenshot editor (snipEditor.js) works on an in-memory image and
+// has no file-keyed state, though the backend already accepts kind="snip".
 let editStateTimer = null;
 // Seconds between two autosaves of the unfinished edit state.
 const EDIT_STATE_SAVE_SECS = 30;
@@ -4220,9 +4050,7 @@ async function saveEditStateNow() {
       ops: JSON.stringify({ v: 1, ops: VE.ops.filter((o) => o.tool !== "removal") }),
     });
   } catch (_) {
-    // Best-effort: a failed autosave tick is not worth bothering the user with,
-    // the next tick (or the periodic Rust-side sweep on a truly broken store)
-    // tries again.
+    // Best-effort: a failed autosave tick is not worth bothering the user; the next tick tries again.
   }
 }
 
@@ -4277,9 +4105,8 @@ async function checkEditState(path, myGen) {
   // Rust already filters an unreadable "v" before this ever arrives; this local
   // check costs nothing and keeps this function correct even if that changes.
   if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.ops)) return;
-  // The dialog's title, message and buttons are all t() calls made once at open
-  // time -- opening it before loadTexts() has landed would freeze raw i18n keys
-  // into a modal that never re-renders.
+  // The dialog's title, message and buttons are t() calls made once at open time; opening before
+  // loadTexts() has landed would freeze raw i18n keys into a modal that never re-renders.
   if (!TXT_READY) await textsReady;
   if (VE.loadGen !== myGen) return;
   const ok = await askRestoreEditState(parsed.ops.length);
@@ -4289,10 +4116,9 @@ async function checkEditState(path, myGen) {
     VE.floor = 0;
     VE.redo = [];
     afterOpsChanged();
-    // A restored extra source that is no longer where it was gets marked
-    // missing rather than silently skipped. Best-effort, and never awaited --
-    // the editor opens with a stale badge state for a moment rather than
-    // waiting on a stat per extra source first.
+    // A restored extra source that is no longer where it was gets marked missing rather than
+    // silently skipped. Best-effort and never awaited, so the editor opens with a stale badge for
+    // a moment instead of waiting on a stat per source.
     refreshExtraSourceAvailability(myGen);
   } else {
     // Only an explicit "start fresh" answer drops the saved state; a dialog that
@@ -4314,12 +4140,9 @@ function askRestoreEditState(opCount) {
 
 async function loadRecording(path, originDir, overlayPath) {
   if (!path) return;
-  // Two "Edit video" clicks in quick succession (this recording, then
-  // another before the first has finished probing/muxing) had no way to tell
-  // a stale call's own late result apart from the current one -- whichever
-  // async chain happened to finish LAST won, even if it was the older, no
-  // longer relevant one. Every await below re-checks this before touching
-  // any shared state.
+  // Two "Edit video" clicks in quick succession (another recording before the first finished
+  // probing/muxing) must not let the older chain's late result win, so every await below
+  // re-checks this generation before touching shared state.
   const myGen = ++VE.loadGen;
   VE.src = path;
   resetForNewSource();
@@ -4363,9 +4186,8 @@ async function loadRecording(path, originDir, overlayPath) {
   videoEl.load();
 
   applyProbe(probe);
-  // The key-overlay sidecar, when this recording captured one -- fetched
-  // once per load, same shape as the probe itself. Failing to read it just
-  // leaves the "keys" overlay with nothing to show, never a hard error.
+  // The key-overlay sidecar, when this recording captured one, fetched once per load like the
+  // probe. Failing to read it just leaves the "keys" overlay with nothing to show.
   VE.keySidecar = null;
   if (probe && probe.has_keys_sidecar) {
     try {
@@ -4426,10 +4248,8 @@ videoEl.addEventListener("loadedmetadata", () => {
 });
 
 window.addEventListener("resize", () => {
-  // A pan saved against the old stage size can land outside the new one once
-  // the window shrinks (fitBoxSize/clampPan both read the stage's current,
-  // live size) -- re-clamp before the next render instead of leaving the
-  // picture stuck partly or wholly outside the visible stage.
+  // A pan saved against the old stage size can land outside the new one once the window shrinks
+  // (fitBoxSize/clampPan read the live stage size); re-clamp before the next render.
   if (VE.previewZoom !== 1) { VE.panPx = clampPan(VE.panPx, VE.previewZoom); applyPreviewTransform(); }
   renderRects();
   layoutTrack();
@@ -4449,10 +4269,8 @@ listen("video-editor-load", async (e) => {
   const reqId = typeof e.payload === "object" ? e.payload?.request_id : null;
   const ack = (state) => { if (reqId != null) invoke("video_editor_load_ack", { requestId: reqId, state }).catch(() => {}); };
   if (!path || path === VE.src) { ack(path ? "accepted" : "refused"); return; }
-  // Switching source (clicking "Edit video" on another tile while this
-  // window is already open) used to jump straight to loadRecording(), silently
-  // discarding whatever was unsaved -- the same case closeWindow() already
-  // guards, reusing its exact confirm.
+  // Switching source ("Edit video" on another tile while this window is open) must not silently
+  // discard unsaved edits: it guards the same case closeWindow() does, with its exact confirm.
   if (VE.ops.length && VE.dirty) {
     ack("asking");
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
@@ -4480,20 +4298,18 @@ function applySettings(settings) {
   // The export dialog opens on the user's own last choice.
   $("ve-export-format").value = normRecFormat(texts.videoExportFormat);
   $("ve-export-quality").value = texts.videoExportQuality || "high";
-  // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed
-  // yet) -- a scale preset needs the source size to turn into real pixels, so
-  // it is deferred to VE.pendingScaleKey and consumed once VE.w/VE.h are known.
-  // A scale op the user (or an earlier default) already set is left alone, same
-  // as the fade-default guard just below.
+  // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed), and a scale
+  // preset needs the source size to become pixels, so it is deferred to VE.pendingScaleKey and
+  // consumed once they are known. A scale op the user (or an earlier default) already set is
+  // left alone, like the fade-default guard below.
   const scaleDef = texts.videoExportScale ?? "";
   if (!opOf("scale")) {
     if (VE.w && VE.h) applyScalePresetKey(scaleDef);
     else VE.pendingScaleKey = scaleDef;
   }
   VE.destDir = texts.videoExportDir || "";
-  // Only while fade isn't already applied -- once it is, these fields hold the
-  // user's own per-export values and a stray settings-changed elsewhere (any
-  // setting, anywhere) must never overwrite what they just typed.
+  // Only while fade isn't already applied: once it is, these fields hold the user's per-export
+  // values, and a settings-changed event must never overwrite what they just typed.
   if (!opOf("fade")) {
     $("ve-fade-in").value = VE.fadeMsDefault;
     $("ve-fade-out").value = VE.fadeMsDefault;
@@ -4508,9 +4324,8 @@ function applySettings(settings) {
   // (not the per-file edit state) because it belongs to the user, not the file.
   VE.ovTextColorDefault = HEX_RE.test(texts.veOvLastTextColor || "") ? texts.veOvLastTextColor : VE.ovColorDefault;
   VE.ovFrameColorDefault = HEX_RE.test(texts.veOvLastFrameColor || "") ? texts.veOvLastFrameColor : VE.ovColorDefault;
-  // Kept as the raw remembered number (or null), resolved against VE.h only
-  // once a new overlay is actually created -- VE.h is still 0 the first time
-  // this function runs, before applyProbe() lands.
+  // Kept as the raw remembered number (or null) and resolved against VE.h only when an overlay
+  // is created, since VE.h is still 0 the first time this runs.
   const lastTextFontPx = Number(values.veOvLastTextFontPx);
   VE.ovLastTextFontPx = Number.isFinite(lastTextFontPx) && lastTextFontPx > 0 ? Math.round(lastTextFontPx) : null;
   const lastThickness = Number(values.veOvLastFrameThickness);
@@ -4540,10 +4355,9 @@ function applySettings(settings) {
   textsReady = loadTexts(settings).catch(() => {});
   renderSpeedSteps();
   renderScalePresets();
-  // The recording is PULLED, not pushed: a push would race the webview's first
-  // frame, which is why the placeholder window does the same. The
-  // "video-editor-load" event covers the other case: opening a second recording
-  // into a window that is already up.
+  // The recording is pulled, not pushed (a push would race the webview's first frame, as for the
+  // placeholder window). The "video-editor-load" event covers a second recording opened into a
+  // window that is already up.
   let path = "";
   let originDir = "";
   let overlayPath = "";
