@@ -402,6 +402,9 @@ pub(crate) struct RecordingStatus {
     // silence in place of the mic track; the control bar surfaces this once
     // as a warning state on the mic indicator the first time it flips true.
     pub(crate) mic_lost: bool,
+    // The same for the system (loopback) capture: no render device, or the
+    // stream could not start. The track is silence; the bar says so.
+    pub(crate) system_lost: bool,
     // Whether the rec bar's own mute buttons currently have each source
     // silenced. Always false for a source that was never active this session.
     pub(crate) audio_system_muted: bool,
@@ -515,6 +518,7 @@ pub(crate) async fn recording_status(
         audio_system: session.audio_system,
         audio_mic: session.audio_mic,
         mic_lost: session.mic_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
+        system_lost: session.system_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
         audio_system_muted: session.system_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
         audio_mic_muted: session.mic_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
         encode_error: recording::encode_error(session),

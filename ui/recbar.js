@@ -107,21 +107,25 @@ function applyPaused(p) {
 // whether the button can be used at all; mid-recording muting sits on top
 // (audio_system_muted/audio_mic_muted), toggled by clicking the button.
 // mic_lost can flip true mid-recording if the device gets unplugged, and latches.
-let lastAudio = { system: false, mic: false, systemMuted: false, micMuted: false, micLost: false };
-function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_muted, mic_lost }) {
+// system_lost is the same for the loopback capture (no render device, init refused).
+let lastAudio = { system: false, mic: false, systemMuted: false, micMuted: false, micLost: false, systemLost: false };
+function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_muted, mic_lost, system_lost }) {
   lastAudio = {
     system: !!audio_system, mic: !!audio_mic,
-    systemMuted: !!audio_system_muted, micMuted: !!audio_mic_muted, micLost: !!mic_lost,
+    systemMuted: !!audio_system_muted, micMuted: !!audio_mic_muted, micLost: !!mic_lost, systemLost: !!system_lost,
   };
   audioSysEl.classList.remove("hidden");
-  audioSysEl.classList.toggle("on", lastAudio.system && !lastAudio.systemMuted);
-  audioSysEl.disabled = !lastAudio.system;
+  audioSysEl.classList.toggle("on", lastAudio.system && !lastAudio.systemMuted && !lastAudio.systemLost);
+  audioSysEl.classList.toggle("lost", lastAudio.system && lastAudio.systemLost);
+  audioSysEl.disabled = !lastAudio.system || lastAudio.systemLost;
   audioMicEl.classList.remove("hidden");
   audioMicEl.classList.toggle("on", lastAudio.mic && !lastAudio.micMuted && !lastAudio.micLost);
   audioMicEl.classList.toggle("lost", lastAudio.mic && lastAudio.micLost);
   audioMicEl.disabled = !lastAudio.mic || lastAudio.micLost;
   if (!tx) return;
-  const sysLabel = !lastAudio.system
+  const sysLabel = lastAudio.systemLost
+    ? tx("recBarSystemLost")
+    : !lastAudio.system
     ? tx("recBarSystemAudioOff")
     : (lastAudio.systemMuted ? tx("recBarUnmuteSystemAudio") : tx("recBarMuteSystemAudio"));
   if (sysLabel) { audioSysEl.title = sysLabel; audioSysEl.setAttribute("aria-label", sysLabel); }
@@ -133,12 +137,12 @@ function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_mut
   if (micLabel) { audioMicEl.title = micLabel; audioMicEl.setAttribute("aria-label", micLabel); }
 }
 audioSysEl.addEventListener("click", async () => {
-  if (!lastAudio.system) return;
+  if (!lastAudio.system || lastAudio.systemLost) return;
   const next = !lastAudio.systemMuted;
   try { await invoke("set_audio_muted", { source: "system", muted: next }); } catch { return; }
   applyAudio({
     audio_system: lastAudio.system, audio_mic: lastAudio.mic,
-    audio_system_muted: next, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,
+    audio_system_muted: next, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost, system_lost: lastAudio.systemLost,
   });
 });
 audioMicEl.addEventListener("click", async () => {
@@ -147,7 +151,7 @@ audioMicEl.addEventListener("click", async () => {
   try { await invoke("set_audio_muted", { source: "mic", muted: next }); } catch { return; }
   applyAudio({
     audio_system: lastAudio.system, audio_mic: lastAudio.mic,
-    audio_system_muted: lastAudio.systemMuted, audio_mic_muted: next, mic_lost: lastAudio.micLost,
+    audio_system_muted: lastAudio.systemMuted, audio_mic_muted: next, mic_lost: lastAudio.micLost, system_lost: lastAudio.systemLost,
   });
 });
 
@@ -424,7 +428,7 @@ function loadTexts() {
       applyTargetSwitch(switchEnabled);
       applyAudio({
         audio_system: lastAudio.system, audio_mic: lastAudio.mic,
-        audio_system_muted: lastAudio.systemMuted, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,
+        audio_system_muted: lastAudio.systemMuted, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost, system_lost: lastAudio.systemLost,
       });
       applyDiskLow(lastDiskLow);
     })
