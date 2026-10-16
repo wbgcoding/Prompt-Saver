@@ -1,20 +1,15 @@
 // promptsaver:// links and the local remote-access receiver.
 //
-// Both give another program, or a clicked link, a way to reach this app
-// without a real command line. Neither implements its own copy of the
-// command set: a link's "copy" and every remote-receiver request run
-// through cli::run_in_process, the exact function an already-running
-// instance's own command-line pipe uses (see cli.rs). A store-side rule
-// added there later -- a locked entry, a disabled command, a new validation
-// -- protects the URL scheme and the receiver automatically, with nothing in
-// this file aware of it. "open" is the one new action, because putting the
-// real window in front of the user was never something the headless CLI
-// needed.
+// Both let another program or a clicked link reach this app without a real command line.
+// Neither implements its own command set: a link's "copy" and every receiver request run
+// through cli::run_in_process, the function the running instance's command-line pipe uses
+// (see cli.rs), so a store-side rule added there (a locked entry, a disabled command, a new
+// validation) covers both automatically. "open" is the one extra action, since the headless
+// CLI never needed to put the real window in front of the user.
 //
-// Both are off by default and stay off until a setting turns them on: the
-// receiver additionally refuses to start at all without a password already
-// set (see `start`), and a link's first "open" and first "copy" each ask for
-// a one-time, native confirmation before ever acting.
+// Both are off by default. The receiver also refuses to start without a password already set
+// (see `start`), and a link's first "open" and first "copy" each ask for a one-time native
+// confirmation before acting.
 
 use crate::{data_dir, ERROR_LOG_MAX, error_log_enabled, lock, record_error_log, save_settings, show_main, Db, Settings};
 use rand::RngCore;
@@ -49,9 +44,8 @@ fn remote_api_enabled(settings: &Settings) -> bool {
 fn network_filter_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("remoteNetworkFilter") == Some(&true)
 }
-// What a reset that turned the stored flags off still owes the outside world:
-// the receiver keeps its socket until stopped and the address scheme stays in
-// the registry until removed.
+// What a reset that turned the stored flags off still owes the outside world: the receiver
+// keeps its socket until stopped and the address scheme stays in the registry until removed.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ResetSideEffects {
     pub stop_receiver: bool,
@@ -171,8 +165,8 @@ fn from_hex(s: &str) -> Option<Vec<u8>> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
 }
 
-// 24 random bytes -- long enough that guessing it is not the weak point of
-// anything else here, short enough to type by hand if the copy ever fails.
+// 24 random bytes: long enough that guessing is not the weak point, short enough to type by
+// hand if the copy fails.
 pub(crate) fn generate_password() -> String {
     let mut buf = [0u8; 24];
     rand::thread_rng().fill_bytes(&mut buf);
@@ -185,10 +179,9 @@ pub(crate) fn hash_password(password: &str) -> String {
     to_hex(&Sha256::digest(password.as_bytes()))
 }
 
-// Both sides are hashed to a fixed 32 bytes first specifically so a length
-// mismatch (which WOULD be a fast, non-constant check) can never happen on
-// real input -- only on a corrupt stored hash, never on anything an attacker
-// controls.
+// Both sides are hashed to a fixed 32 bytes first, so a length mismatch (a fast,
+// non-constant-time check) can only come from a corrupt stored hash, never from attacker
+// input.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -208,9 +201,8 @@ fn verify_password(candidate: &str, stored_hash_hex: &str) -> bool {
     }
 }
 
-// A freshly generated (or regenerated) password is shown to the user exactly
-// once, through this one-shot slot -- never logged, never returned from a
-// settings getter, never put in a URL.
+// A freshly generated password is shown exactly once through this one-shot slot; never
+// logged, returned from a settings getter or put in a URL.
 static LAST_SHOWN_PASSWORD: Mutex<Option<String>> = Mutex::new(None);
 
 pub(crate) fn stash_shown_password(password: String) {
@@ -224,14 +216,12 @@ pub(crate) fn remote_api_take_shown_password() -> Option<String> {
 
 // ---------- Durable remote-access changes ----------
 //
-// Every change to the receiver's own settings goes through one of these
-// cores, which take the save as a closure so the failure paths can be proven
-// without an AppHandle. The rule is asymmetric on purpose: anything that
-// opens the receiver up (switching it on, a new password, wider ranges) is
-// rolled back and refused when the write does not land, so a restart can never
-// bring back something the user was not told about. Anything that closes it
-// (switching it off) still takes effect at once and only reports that the
-// choice was not saved.
+// Every change to the receiver's settings goes through one of these cores, which take the
+// save as a closure so failure paths are provable without an AppHandle. The rule is
+// asymmetric on purpose: anything that opens the receiver up (switching it on, a new
+// password, wider ranges) is rolled back and refused when the write does not land, so a
+// restart cannot bring back something the user was not told about. Anything that closes it
+// (switching it off) takes effect at once and only reports that the choice was not saved.
 
 pub(crate) const ERR_SAVE_FAILED: &str = "save-failed";
 pub(crate) const ERR_NETWORK_OFF_NOT_SAVED: &str = "remote-network-off-not-saved";
@@ -282,10 +272,10 @@ pub(crate) struct SwitchResult {
     pub error: Option<String>,
 }
 
-// The `remoteApi` switch. On: flag plus (the very first time) a password hash
-// are saved together; a failed write restores both and starts nothing. Off:
-// the flag goes off in memory and the receiver is told to stop whatever the
-// write does; a failed write is reported as ERR_OFF_NOT_SAVED.
+// The `remoteApi` switch. On: the flag and (the first time) a password hash are saved
+// together; a failed write restores both and starts nothing. Off: the flag goes off in memory
+// and the receiver is told to stop whatever the write does; a failed write is reported as
+// ERR_OFF_NOT_SAVED.
 pub(crate) fn apply_remote_switch(settings: &mut Settings, enabled: bool, mut save: impl FnMut(&Settings) -> bool) -> SwitchResult {
     if !enabled {
         settings.ui_flags.insert("remoteApi".to_string(), false);
@@ -313,9 +303,9 @@ pub(crate) fn apply_remote_switch(settings: &mut Settings, enabled: bool, mut sa
     SwitchResult { action: SwitchAction::Start, password: minted, error: None }
 }
 
-// A new password replaces the stored hash. When the write fails the old hash
-// is put back and the caller must stop the receiver: the user was never shown
-// the new password, and the disk still holds the old one.
+// A new password replaces the stored hash. If the write fails the old hash is restored and
+// the caller must stop the receiver: the user was never shown the new password, and the
+// disk still holds the old one.
 pub(crate) fn regenerate_password_core(settings: &mut Settings, mut save: impl FnMut(&Settings) -> bool) -> Result<String, String> {
     if !remote_api_enabled(settings) {
         return Err("remote access is off".to_string());
@@ -372,8 +362,8 @@ pub(crate) fn set_remote_api_flag(app: &AppHandle, state: &State<Db>, enabled: b
             // the port was really usable.
             if let Err(e) = start(app.clone()).and_then(|_| wait_bound(app)) {
                 stop(app);
-                // The receiver did not come up: the switch must not stay on, and
-                // a password nobody was shown must not stay on record.
+                // The receiver did not come up: the switch must not stay on, and a password nobody was shown
+                // must not stay on record.
                 let mut store = lock(state);
                 store.settings.ui_flags.insert("remoteApi".to_string(), false);
                 if result.password.is_some() {
@@ -402,12 +392,11 @@ pub(crate) struct NetworkResult {
     pub error: Option<String>,
 }
 
-// The `remoteNetworkFilter` switch while the receiver may be running. Widening
-// it is asymmetric on purpose, like the receiver's own switch: the identity is
-// made first, then the flag is set and saved once, and any failure leaves both
-// memory and disk as they were and restarts nothing. Narrowing it back to
-// loopback takes effect whatever the write does (the receiver is restarted bound
-// to loopback) and a failed write is reported as not saved.
+// The `remoteNetworkFilter` switch while the receiver may be running. Widening is
+// asymmetric like the receiver's own switch: the identity is made first, then the flag is
+// set and saved once, and any failure leaves memory and disk as they were and restarts
+// nothing. Narrowing back to loopback takes effect whatever the write does (the receiver
+// restarts bound to loopback) and a failed write is reported as not saved.
 pub(crate) fn apply_network_switch(
     settings: &mut Settings,
     enabled: bool,
@@ -453,9 +442,9 @@ pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool
     };
     if result.restart {
         if let Err(e) = restart_receiver(app).and_then(|_| wait_bound(app)) {
-            // Widening that could not start goes back to the old, narrower mode and
-            // runs again in it. Narrowing never goes back: the flag stays off and
-            // the receiver stays down, so a failure cannot open it to the network.
+            // A widening that could not start goes back to the old, narrower mode and runs again in it.
+            // Narrowing never goes back: the flag stays off and the receiver stays down, so a failure
+            // cannot open it to the network.
             {
                 let mut store = lock(state);
                 restore_flag(&mut store.settings, "remoteNetworkFilter", flag_after_failed_restart(enabled, old));
@@ -475,8 +464,8 @@ pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool
     }
 }
 
-// The port is fixed for the life of one run, so a new value only takes effect
-// through a restart: needed when the receiver is on and the value really moved.
+// The port is fixed for one run, so a new value takes effect only through a restart: needed
+// when the receiver is on and the value really moved.
 pub(crate) fn needs_receiver_restart(key: &str, old: Option<f64>, new: f64, settings: &Settings) -> bool {
     key == "remotePort" && port_from(old) != port_from(Some(new)) && remote_api_enabled(settings)
 }
@@ -492,10 +481,9 @@ pub(crate) fn probe_port(ip: Ipv4Addr, port: u16) -> Result<(), String> {
     })
 }
 
-// Stores a new `remotePort`. When the running receiver would have to move, the
-// new port is probed first and a port that cannot be bound leaves the stored
-// value untouched; a failed write puts the old value back. Ok(true) means the
-// receiver has to be restarted.
+// Stores a new `remotePort`. When the running receiver would have to move, the new port is
+// probed first and one that cannot be bound leaves the stored value untouched; a failed
+// write restores the old value. Ok(true) means the receiver must be restarted.
 pub(crate) fn commit_port_value(
     settings: &mut Settings,
     value: f64,
@@ -535,9 +523,9 @@ fn wait_bound(app: &AppHandle) -> Result<(), String> {
     Err(ERR_PORT_UNAVAILABLE.to_string())
 }
 
-// The `remotePort` branch of set_ui_value, run after the new value was saved.
-// A receiver that cannot come up on the new port goes back to the old value
-// and the old run; the error reaches the UI.
+// The `remotePort` branch of set_ui_value, run after the new value was saved. A receiver
+// that cannot come up on the new port goes back to the old value and run; the error reaches
+// the UI.
 pub(crate) fn apply_port_change(app: &AppHandle, state: &State<Db>, old: Option<f64>) -> Result<(), String> {
     if let Err(e) = restart_receiver(app).and_then(|_| wait_bound(app)) {
         crate::append_crash_log(&format!("remote access: the new port could not be used: {e}"));
@@ -617,10 +605,10 @@ pub(crate) fn remote_tls_renew(app: AppHandle, state: State<Db>) -> Result<Strin
     fingerprint.ok_or_else(|| "no-certificate".to_string())
 }
 
-// The expert switch for the certificate lifetime: flag and a new certificate
-// with that lifetime are saved in one write (see `set_short_lived_core`), then
-// the receiver restarts like after a manual renewal. Only this command sets the
-// flag; the generic setters, the command line and imports all refuse it.
+// The expert switch for the certificate lifetime: the flag and a new certificate with that
+// lifetime are saved in one write (see `set_short_lived_core`), then the receiver restarts
+// as after a manual renewal. Only this command sets the flag; the generic setters, the
+// command line and imports refuse it.
 #[tauri::command]
 pub(crate) fn remote_tls_set_short_lived(app: AppHandle, state: State<Db>, enabled: bool) -> Result<String, String> {
     let names = crate::remote_tls::host_names();
@@ -666,11 +654,9 @@ fn ipv4_in_cidr(ip: Ipv4Addr, network: u32, prefix: u32) -> bool {
     (u32::from(ip) & mask) == (network & mask)
 }
 
-// Loopback is always allowed (that is the receiver's default, and its
-// fallback the instant the network switch goes back off). Anything else
-// needs the switch on AND a matching range -- IPv6 ranges are not supported
-// by the filter, so an IPv6 peer that is not loopback never matches, fail
-// closed rather than guess.
+// Loopback is always allowed (the receiver's default and its fallback when the network
+// switch goes off). Anything else needs the switch on and a matching range. IPv6 ranges are
+// not supported, so a non-loopback IPv6 peer never matches: fail closed rather than guess.
 pub(crate) fn peer_allowed(peer: IpAddr, filter_on: bool, ranges: &[String]) -> bool {
     if peer.is_loopback() {
         return true;
@@ -707,9 +693,9 @@ impl Default for PeerState {
     }
 }
 
-// Past this many tracked peers, entries that are neither locked out nor inside
-// their rate window are dropped. A peer is tracked before it has authenticated, so
-// without a bound a LAN peer cycling addresses could grow the table without limit.
+// Past this many tracked peers, entries that are neither locked out nor inside their rate
+// window are dropped. A peer is tracked before it authenticates, so without a bound a LAN
+// peer cycling addresses could grow the table without limit.
 const MAX_TRACKED_PEERS: usize = 1024;
 
 fn prune_peers(peers: &mut HashMap<IpAddr, PeerState>, now: Instant) {
@@ -760,10 +746,8 @@ impl RemoteGuard {
         }
     }
 
-    // true = still within the per-minute allowance for this peer (and it was
-    // just counted); false = the request is over the limit. A limit of 0
-    // means the setting's unlimited stop: no throttle at all, and the peer's
-    // own window never even needs tracking.
+    // true = still within this peer's per-minute allowance (and counted); false = over the
+    // limit. A limit of 0 is the setting's unlimited stop: no throttle, and no window is tracked.
     fn check_rate(&self, ip: IpAddr, limit: u32) -> bool {
         if limit == 0 {
             return true;
@@ -779,8 +763,8 @@ impl RemoteGuard {
         entry.count_in_window <= limit
     }
 
-    // Returns true exactly when this failure is the one that just triggered
-    // the lockout (so the caller can log the distinction).
+    // Returns true exactly when this failure triggered the lockout, so the caller can log the
+    // distinction.
     fn record_auth_failure(&self, ip: IpAddr) -> bool {
         let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
         let entry = peers.entry(ip).or_default();
@@ -804,18 +788,17 @@ impl RemoteGuard {
 
 // ---------- Managed state: the running receiver, if any ----------
 
-// One receiver run: its own shutdown signal and the task that owns the
-// listener. Nothing is shared between runs, so a stop can never leave a
-// pending wake-up behind for the next start.
+// One receiver run: its own shutdown signal and the task that owns the listener. Nothing is
+// shared between runs, so a stop cannot leave a pending wake-up for the next start.
 #[derive(Default)]
 struct RunSlot {
     cancel: Option<oneshot::Sender<()>>,
     join: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
-// Hands out runs one at a time. A new run cancels the previous one and gets
-// its task handle, so it can wait for the port to be free; the generation
-// only tells a late-finishing run that it is no longer the current one.
+// Hands out runs one at a time. A new run cancels the previous one and gets its task handle
+// so it can wait for the port to be free; the generation tells a late-finishing run it is no
+// longer current.
 pub(crate) struct RunController {
     generation: AtomicU64,
     slot: Mutex<RunSlot>,
@@ -861,9 +844,8 @@ impl RunController {
     }
 }
 
-// The body of one run: wait for the previous run to be gone, bind, serve until
-// this run's own signal, release the port. Returns without binding when the
-// run was cancelled while it waited.
+// The body of one run: wait for the previous run to be gone, bind, serve until this run's
+// signal, release the port. Returns without binding if cancelled while waiting.
 async fn serve_run<F>(
     ticket: RunTicket,
     addr: SocketAddr,
@@ -880,8 +862,8 @@ async fn serve_run<F>(
         tokio::select! {
             _ = &mut prev => {}
             _ = &mut cancel => {
-                // Cancelled while waiting: still wait for the older run, so a
-                // chain of starts and stops never lets two tasks near the port.
+                // Cancelled while waiting: still wait for the older run, so a chain of starts and stops never
+                // lets two tasks near the port.
                 let _ = prev.await;
                 on_finished(false);
                 return;
@@ -943,9 +925,8 @@ pub(crate) fn remote_api_status(app: AppHandle) -> serde_json::Value {
     })
 }
 
-// The banner's off switch: the receiver stops whether or not "off" could be
-// written; a failed write comes back as an error so the user knows a restart
-// may bring it back.
+// The banner's off switch: the receiver stops whether or not "off" could be written; a
+// failed write comes back as an error so the user knows a restart may bring it back.
 #[tauri::command]
 pub(crate) fn remote_api_stop_now(app: AppHandle, state: State<Db>) -> Result<(), String> {
     let result = {
@@ -959,11 +940,9 @@ pub(crate) fn remote_api_stop_now(app: AppHandle, state: State<Db>) -> Result<()
     }
 }
 
-// Starts the receiver if the setting is on and a password already exists;
-// otherwise leaves it not running. This is the ONE place that rule is
-// enforced, so every caller (boot, the expert-menu switch, a future one)
-// gets it for free just by calling start() instead of binding a socket
-// itself.
+// Starts the receiver if the setting is on and a password already exists, otherwise leaves it
+// not running. The one place this rule is enforced, so every caller (boot, the expert-menu
+// switch) gets it by calling start() instead of binding a socket itself.
 pub(crate) fn start(app: AppHandle) -> Result<(), String> {
     let settings = {
         let db: State<Db> = app.state();
@@ -978,8 +957,8 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
         return Ok(());
     };
     let (bind_ip, tls) = bind_plan(&settings);
-    // With the network switch on the receiver speaks only TLS. The identity is
-    // made (and stored) before anything is bound; when that fails nothing starts.
+    // With the network switch on the receiver speaks only TLS. The identity is made (and stored)
+    // before anything is bound; if that fails nothing starts.
     let acceptor = if tls {
         match prepare_acceptor(&app) {
             Ok(a) => Some(a),
@@ -996,8 +975,8 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
         return Ok(()); // already running
     }
     let port = remote_port(&settings);
-    // The bind address is fixed for the lifetime of a run; the peer allow-list
-    // itself is re-read fresh on every connection (see handle_connection).
+    // The bind address is fixed for a run; the peer allow-list is re-read on every connection
+    // (see handle_connection).
     let addr = SocketAddr::from((bind_ip, port));
     let guard = state.guard.clone();
     let runs = state.runs.clone();
@@ -1032,9 +1011,8 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
                 tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2, acceptor2, runs2, generation).await });
             },
             move |current| {
-                // A run that is no longer the current one must not touch the
-                // shared status: its stop() already published "not running",
-                // and a newer run owns `running` and `port` now.
+                // A run that is no longer current must not touch the shared status: its stop() already
+                // published "not running", and a newer run owns `running` and `port`.
                 if current {
                     let state: State<RemoteApiState> = app_done.state();
                     state.running.store(false, Ordering::SeqCst);
@@ -1047,8 +1025,8 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// The stored identity (made and saved first when it is missing or unreadable)
-// turned into a handshake acceptor.
+// The stored identity (made and saved first when missing or unreadable) turned into a
+// handshake acceptor.
 fn prepare_acceptor(app: &AppHandle) -> Result<TlsAcceptor, String> {
     let names = crate::remote_tls::host_names();
     let (id, source) = {
@@ -1066,8 +1044,8 @@ fn prepare_acceptor(app: &AppHandle) -> Result<TlsAcceptor, String> {
     Ok(TlsAcceptor::from(crate::remote_tls::build_server_config(&id)?))
 }
 
-// Tells the main window that the certificate was replaced on its own, so it can
-// show the same notice as after a manual renewal.
+// Tells the main window the certificate was replaced on its own, so it shows the same notice
+// as after a manual renewal.
 fn announce_tls_renewed(app: &AppHandle) {
     let _ = app.emit("remote-tls-renewed", ());
 }
@@ -1095,10 +1073,9 @@ struct HttpRequest {
     body: Vec<u8>,
 }
 
-// Deliberately not a general HTTP/1.1 implementation: one request per
-// connection, Content-Length only (no chunked transfer, no keep-alive). That
-// is everything a local companion client needs, and it is a much smaller
-// surface to get right than a real HTTP server would be.
+// Deliberately not a general HTTP/1.1 implementation: one request per connection,
+// Content-Length only (no chunked transfer, no keep-alive). That is all a local companion
+// client needs, with a much smaller surface than a real HTTP server.
 async fn read_request<S: AsyncRead + Unpin>(stream: &mut S) -> Result<HttpRequest, u16> {
     let deadline = tokio::time::sleep(READ_TIMEOUT);
     tokio::pin!(deadline);
@@ -1188,9 +1165,8 @@ fn status_text(status: u16) -> &'static str {
     }
 }
 
-// No Access-Control-* header is ever sent -- a browser page that ignores the
-// Origin/Referer refusal below and tries anyway still cannot read the
-// response, because nothing here ever opts it in.
+// No Access-Control-* header is ever sent, so a browser page that ignores the Origin/Referer
+// refusal below still cannot read the response.
 async fn write_response<S: AsyncWrite + Unpin>(stream: &mut S, status: u16, body: &[u8]) {
     let head = format!(
         "HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -1206,10 +1182,9 @@ fn json_err(msg: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({"error": msg})).unwrap_or_default()
 }
 
-// The request-shape checks that need no app state and no password: method,
-// path, and the cross-site headers a browser adds on its own and a genuine
-// caller never sends. Pulled out of handle_connection so each one has a
-// direct test instead of only being reachable through a live connection.
+// The request-shape checks that need no app state or password: method, path, and the
+// cross-site headers a browser adds on its own and a genuine caller never sends. Pulled out
+// of handle_connection so each has a direct test.
 enum ShapeRejection {
     Method,
     Path,
@@ -1223,20 +1198,17 @@ fn reject_request_shape(req: &HttpRequest) -> Option<ShapeRejection> {
     if req.path != "/api" {
         return Some(ShapeRejection::Path);
     }
-    // No permissive CORS header is ever sent (see write_response), and this
-    // is the other half of refusing a web page outright: a browser attaches
-    // Origin or Referer on its own, a same-machine or same-LAN caller never
-    // does, so either header's mere presence is refused before the password
-    // is even checked.
+    // The other half of refusing a web page (no CORS header is sent, see write_response): a
+    // browser attaches Origin or Referer itself while a same-machine or same-LAN caller never
+    // does, so either header is refused before the password is checked.
     if req.headers.contains_key("origin") || req.headers.contains_key("referer") {
         return Some(ShapeRejection::CrossSite);
     }
     None
 }
 
-// The request-shape and password checks that need no app state: a verdict as
-// the HTTP status to answer with. A missing stored hash is a 401 too, like a
-// wrong password.
+// The request-shape and password checks that need no app state: a verdict as the HTTP status
+// to answer with. A missing stored hash is a 401, like a wrong password.
 fn authorize(req: &HttpRequest, stored_hash: Option<&str>) -> Result<(), u16> {
     if let Some(rejection) = reject_request_shape(req) {
         return Err(match rejection {
@@ -1255,9 +1227,8 @@ fn authorize(req: &HttpRequest, stored_hash: Option<&str>) -> Result<(), u16> {
     Ok(())
 }
 
-// A refused peer is answered in plain HTTP. In TLS mode that would be garbage
-// to a TLS client (and a plaintext answer is exactly what TLS mode never
-// sends), so the connection is just closed.
+// A refused peer is answered in plain HTTP. In TLS mode that would be garbage to a TLS
+// client (and TLS mode never sends plaintext), so the connection is just closed.
 async fn refuse_before_request<S: AsyncWrite + Unpin>(stream: &mut S, tls: bool, status: u16, message: &str) {
     if !tls {
         write_response(stream, status, &json_err(message)).await;
@@ -1266,8 +1237,8 @@ async fn refuse_before_request<S: AsyncWrite + Unpin>(stream: &mut S, tls: bool,
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
-// The TLS handshake, bounded. A plaintext client, a client that does not trust
-// us, or one that stalls all end up as Err before a single request byte is read.
+// The TLS handshake, bounded: a plaintext client, a client that does not trust us, or one
+// that stalls all end as Err before any request byte is read.
 async fn tls_accept_within(
     acceptor: &TlsAcceptor,
     stream: TcpStream,
@@ -1283,8 +1254,8 @@ async fn tls_accept(acceptor: &TlsAcceptor, stream: TcpStream) -> Result<tokio_r
     tls_accept_within(acceptor, stream, HANDSHAKE_TIMEOUT).await
 }
 
-// Switch off: loopback, plain HTTP (traffic never leaves the machine). Switch
-// on: every interface, TLS only, for local and remote clients alike.
+// Switch off: loopback, plain HTTP (traffic never leaves the machine). Switch on: every
+// interface, TLS only.
 fn bind_plan(settings: &Settings) -> (Ipv4Addr, bool) {
     if network_filter_enabled(settings) {
         (Ipv4Addr::UNSPECIFIED, true)
@@ -1305,9 +1276,8 @@ async fn handle_connection(
     let ip = peer.ip();
     let access = ReceiverAccess::read(&app);
     let tls = acceptor.is_some();
-    // Checked before a single byte of the actual request is read -- an
-    // address outside the loopback default (or outside the configured
-    // ranges, with the network switch on) never gets that far.
+    // Checked before any request byte is read: an address outside loopback (or outside the
+    // configured ranges with the network switch on) never gets that far.
     if !peer_allowed(ip, access.network_filter, &access.ranges) {
         log_remote_if(access.log, "remoteApi", "remote access: refused a connection from a disallowed address");
         return;
@@ -1331,9 +1301,9 @@ async fn handle_connection(
     }
 }
 
-// What the live access fields say about this peer right before a request is
-// authorized: None when its address is no longer allowed, otherwise the stored
-// password hash as it is now (itself None when no password is configured).
+// What the live access fields say about this peer right before a request is authorized:
+// None when its address is no longer allowed, otherwise the stored password hash as it is
+// now (itself None when no password is configured).
 pub(crate) fn live_access(access: &ReceiverAccess, ip: IpAddr) -> Option<Option<String>> {
     if !peer_allowed(ip, access.network_filter, &access.ranges) {
         return None;
@@ -1358,10 +1328,9 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
             return;
         }
     };
-    // The settings were read before the handshake and the request read, up to
-    // twenty seconds ago. A password regenerated or a range narrowed since (neither
-    // restarts the receiver) must apply to this request, so both are checked again
-    // against the live settings right before authorizing.
+    // The settings were read before the handshake and request read, up to twenty seconds ago. A
+    // regenerated password or narrowed range (neither restarts the receiver) must apply to this
+    // request, so both are checked again against the live settings before authorizing.
     let access = ReceiverAccess::read(&app);
     let Some(stored_hash) = live_access(&access, ip) else {
         log_remote_if(access.log, "remoteApi", "remote access: refused a connection from a disallowed address");
@@ -1395,8 +1364,8 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
         }
     };
     let cmd_name = argv[0].clone();
-    // A connection accepted before a stop, a restart or a renewed certificate
-    // belongs to a run that no longer exists: it must not execute anything.
+    // A connection accepted before a stop, restart or renewed certificate belongs to a run that
+    // no longer exists and must not execute anything.
     if !runs.current(generation) {
         log_remote_if(access.log, "remoteApi", "remote access: a request from a stopped receiver was not run");
         write_response(&mut stream, 503, &json_err("receiver restarted")).await;
@@ -1423,10 +1392,8 @@ enum SchemeAction {
     Copy(String),
 }
 
-// `promptsaver://open/<id>` or `promptsaver://copy/<id>` only -- no other
-// verb, no query string, no extra path segment. Anything else, including an
-// id that fails the same pattern the CLI and the receiver already enforce,
-// is not a link this app recognizes.
+// `promptsaver://open/<id>` or `promptsaver://copy/<id>` only: no other verb, query string or
+// extra path segment, and the id must pass the pattern the CLI and receiver enforce.
 fn parse_scheme_url(raw: &str) -> Option<SchemeAction> {
     let rest = raw.strip_prefix("promptsaver://")?;
     let (kind, id) = rest.split_once('/')?;
@@ -1443,9 +1410,8 @@ fn parse_scheme_url(raw: &str) -> Option<SchemeAction> {
     }
 }
 
-// A registered protocol's target always arrives as its own whole argv entry
-// (Windows does not glue it to anything else), so this only ever has to find
-// one, never assemble it from parts.
+// A registered protocol's target arrives as its own whole argv entry (Windows does not glue
+// it to anything), so this only finds one and never assembles it.
 pub(crate) fn find_scheme_arg(args: &[String]) -> Option<&str> {
     args.iter().map(String::as_str).find(|a| a.starts_with("promptsaver://"))
 }
@@ -1454,11 +1420,10 @@ pub(crate) fn is_copy_link(url: &str) -> bool {
     matches!(parse_scheme_url(url), Some(SchemeAction::Copy(_)))
 }
 
-// A promptsaver:// link that started this process itself (nobody was running
-// yet) has nowhere to go until the main window's script has its listeners in
-// place -- emitting straight into .setup() lands before ui/main.js calls
-// listen("edit-prompt", ...) and the event is simply gone. The link waits
-// here instead, and the script asks for it once it is ready.
+// A promptsaver:// link that started this process has nowhere to go until the main window's
+// script has its listeners in place: emitting from .setup() lands before ui/main.js calls
+// listen("edit-prompt", ...) and the event is lost. The link waits here, and the script asks
+// for it once ready.
 pub(crate) struct PendingLaunchUrl(pub Mutex<Option<String>>);
 
 #[tauri::command]
@@ -1488,9 +1453,8 @@ pub(crate) fn handle_launch_url(app: &AppHandle, url: &str) {
     }
 }
 
-// A flag that is missing means "never asked yet" -- ask once (a native
-// dialog, so this works even before any window is showing), remember the
-// answer either way, and never ask again for that kind of link.
+// A missing flag means "never asked yet": ask once (a native dialog, so it works before any
+// window shows), remember the answer either way, and never ask again for that kind of link.
 fn consent(app: &AppHandle, settings: &Settings, flag_key: &str, kind: &str) -> bool {
     if let Some(v) = settings.ui_flags.get(flag_key) {
         return *v;
@@ -1511,18 +1475,15 @@ fn handle_open(app: &AppHandle, settings: &Settings, id: String) {
         guard.prompts.iter().any(|p| p.id == id)
     };
     if !exists {
-        // Fails quietly: no dialog, no window, and above all no new entry --
-        // a link naming an id that does not exist must never create one.
+        // Fails quietly: no dialog, no window, and no new entry for an id that does not exist.
         log_remote(settings, "urlScheme", "a promptsaver://open link named an id that does not exist");
         return;
     }
     if !consent(app, settings, "urlSchemeOpenAllowed", "open") {
         return;
     }
-    // Reuses the exact path a normal in-app "edit" click takes (see
-    // edit_prompt_request) -- a locked entry's own unlock screen, once that
-    // exists, is already reached this same way, so this link cannot bypass
-    // it by construction.
+    // Reuses the path a normal in-app "edit" click takes (see edit_prompt_request), so a locked
+    // entry's unlock screen is reached the same way and this link cannot bypass it.
     show_main(app);
     let _ = app.emit("edit-prompt", id);
 }
@@ -1550,18 +1511,16 @@ fn handle_copy(app: &AppHandle, settings: &Settings, id: String) {
     });
 }
 
-// A plain Yes/No native dialog -- rfd is already a dependency (file/folder
-// pickers, the WebView2 offer) and this works even when no window exists
-// yet, which a webview confirm() cannot.
+// A plain Yes/No native dialog (rfd is already a dependency); unlike a webview confirm() it
+// works when no window exists yet.
 fn confirm_native(lang: &str, kind: &str) -> bool {
     let (title, msg) = scheme_consent_texts(lang, kind);
     rfd::MessageDialog::new().set_level(rfd::MessageLevel::Info).set_title(&title).set_description(&msg).set_buttons(rfd::MessageButtons::YesNo).show()
         == rfd::MessageDialogResult::Yes
 }
 
-// Native-dialog strings live here, the same way tray_labels()/webview2_dialog()
-// already do for other pre-webview text, rather than in ui/i18n.js -- this
-// dialog can fire before any webview page has loaded.
+// Native-dialog strings live here, like tray_labels()/webview2_dialog(), not in ui/i18n.js,
+// since this dialog can fire before any webview page has loaded.
 fn scheme_consent_texts(lang: &str, kind: &str) -> (String, String) {
     let app = crate::brand::DISPLAY_NAME;
     let (title, open_msg, copy_msg): (&str, &str, &str) = match lang {
@@ -1627,9 +1586,9 @@ fn scheme_consent_texts(lang: &str, kind: &str) -> (String, String) {
 
 // ---------- promptsaver:// registry registration ----------
 //
-// HKCU\Software\Classes needs no elevation and takes precedence over any
-// machine-wide entry for the signed-in user, so this covers the portable
-// build (no installer to do it at setup time) and the installed one alike.
+// HKCU\Software\Classes needs no elevation and takes precedence over a machine-wide entry
+// for the signed-in user, so it covers the portable build (no installer) and the installed
+// one alike.
 
 #[cfg(windows)]
 fn classes_key() -> Result<winreg::RegKey, String> {
@@ -1670,8 +1629,8 @@ pub(crate) fn apply_url_scheme_registration(_enabled: bool) -> Result<(), String
     Err("the address scheme is only supported on Windows".to_string())
 }
 
-// The registered open command as it stands now (None = not registered), so a
-// failed change can put back exactly what was there.
+// The registered open command as it stands (None = not registered), so a failed change can
+// put back exactly what was there.
 #[cfg(windows)]
 pub(crate) fn url_scheme_command() -> Result<Option<String>, String> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
@@ -1797,17 +1756,14 @@ mod tests {
     fn wrong_password_is_rejected() {
         let hash = hash_password("correct horse battery staple");
         assert!(!verify_password("wrong password entirely", &hash));
-        // Same length as the real one -- proves the check is not merely a
-        // length shortcut.
+        // Same length as the real one, proving the check is not just a length shortcut.
         assert!(!verify_password("correct horse battery staplf", &hash));
     }
 
     #[test]
     fn nothing_verifies_against_an_empty_stored_hash() {
-        // A receiver with no password configured has nothing to compare
-        // against; the caller (handle_connection) refuses before ever
-        // calling verify_password, but the function itself must also never
-        // treat an empty stored value as a match for anything.
+        // With no password configured there is nothing to compare against. handle_connection
+        // refuses before calling verify_password, but an empty stored value must also never match.
         assert!(!verify_password("anything", ""));
         assert!(!verify_password("", ""));
     }
@@ -1828,8 +1784,8 @@ mod tests {
 
     #[test]
     fn outside_address_is_refused_when_filter_is_off() {
-        // TEST-NET-3 (RFC 5737) -- a real, non-loopback address standing in
-        // for "somewhere outside this machine", never dialled for real.
+        // TEST-NET-3 (RFC 5737): a non-loopback address standing in for "outside this machine",
+        // never dialled.
         let outside = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5));
         assert!(!peer_allowed(outside, false, &["203.0.113.0/24".to_string()]));
     }
@@ -1881,8 +1837,7 @@ mod tests {
         assert!(!guard.check_rate(ip, 5));
     }
 
-    // The slider's rightmost "unlimited" stop is stored as 0, and that must
-    // skip the throttle entirely -- old code always applied a cap here.
+    // The slider's rightmost "unlimited" stop is stored as 0 and must skip the throttle.
     #[test]
     fn a_zero_limit_never_throttles() {
         let guard = RemoteGuard::new();
@@ -1923,8 +1878,7 @@ mod tests {
             guard.record_auth_failure(ip);
         }
         guard.record_auth_success(ip);
-        // Nine more failures after a success must not reach the lockout --
-        // the counter really was reset, not merely paused.
+        // Nine more failures after a success must not reach the lockout: the counter was reset.
         let mut triggered = false;
         for _ in 0..9 {
             triggered = guard.record_auth_failure(ip);
@@ -1935,9 +1889,8 @@ mod tests {
 
     #[test]
     fn concurrent_rate_checks_never_lose_a_count() {
-        // Proves the shared counter is not racy under real concurrency: N
-        // tasks each register exactly one request, and the guard's own
-        // bookkeeping must show exactly N counted, no more, no fewer.
+        // The shared counter must not be racy: N tasks each register one request and the guard must
+        // count exactly N.
         let guard = Arc::new(RemoteGuard::new());
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let n = 200u32;
@@ -2044,9 +1997,7 @@ mod tests {
 
     #[test]
     fn no_stored_password_hash_means_password_hash_hex_returns_none() {
-        // This is the exact condition start() checks before it ever binds a
-        // socket -- proving it here proves the receiver cannot come up
-        // without a password on record.
+        // The condition start() checks before binding a socket: no password on record, no receiver.
         let settings = Settings::default();
         assert!(password_hash_hex(&settings).is_none());
     }
@@ -2369,9 +2320,8 @@ mod tests {
         tokio_rustls::TlsConnector::from(Arc::new(cfg))
     }
 
-    // A responder built from the same pieces the receiver uses: handshake,
-    // read_request, authorize, write_response. `calls` counts requests that
-    // were parsed, i.e. got past the handshake.
+    // A responder built from the receiver's own pieces (handshake, read_request, authorize,
+    // write_response). `calls` counts requests that were parsed, i.e. got past the handshake.
     async fn spawn_responder(acceptor: Option<TlsAcceptor>, stored: Option<String>, calls: Arc<AtomicUsize>) -> SocketAddr {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
         let addr = listener.local_addr().unwrap();
