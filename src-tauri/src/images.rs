@@ -4,9 +4,8 @@ use super::*;
 
 pub(crate) const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-// Reverse lookup built once at compile time: base64_decode runs over whole images and
-// every sealed settings/prompt line at startup, so an O(64) scan per byte (the linear
-// alphabet search this replaced) was real, measurable work: this makes it O(1).
+// Reverse lookup built at compile time: base64_decode runs over whole images and every sealed
+// settings/prompt line at startup, so the lookup has to be O(1) per byte.
 pub(crate) const fn build_b64_decode_table() -> [u8; 256] {
     let mut table = [0xFFu8; 256];
     let mut i = 0;
@@ -144,10 +143,8 @@ pub(crate) fn scale_and_encode(img: image::DynamicImage) -> String {
     }
 }
 
-// Async: dialogs and clipboard reads run off the main thread; the window
-// stays responsive and the pickers open without a noticeable delay; the read
-// and image conversion below run on a blocking worker so they never occupy
-// the async runtime.
+// Async so dialogs and clipboard reads run off the main thread; the read and image conversion
+// run on a blocking worker so they never occupy the async runtime.
 #[tauri::command]
 pub(crate) async fn get_clipboard_image() -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -255,11 +252,9 @@ pub(crate) fn pdfium_cache_path() -> PathBuf {
         .join(format!("pdfium-{APP_VERSION}.dll"))
 }
 
-// Every app version writes its own pdfium-<version>.dll (the cache key changes
-// with APP_VERSION so an update never loads a stale binary), but nothing ever
-// removed the PREVIOUS version's copy -- it just accumulated forever across
-// updates. Best-effort, called whenever the current version's cache path is about
-// to be used; never lets a sweep failure block the actual pdfium lookup.
+// Each app version writes its own pdfium-<version>.dll (so an update never loads a stale
+// binary); this removes the previous versions' copies. Best-effort, called when the current
+// cache path is about to be used, and a failure never blocks the pdfium lookup.
 pub(crate) fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
     let Some(dir) = current.parent() else { return };
     let Some(keep) = current.file_name() else { return };
@@ -309,15 +304,12 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     Some(cached)
 }
 
-// Render one page of a PDF to a preview image (data URL). Returns None if pdfium
-// is unavailable or the file cannot be read: the caller then keeps the PDF as a
-// plain file attachment without a preview. `page` is clamped against the
-// actual page count here, not by the caller: the stored number and the file can
-// disagree (a shorter PDF re-attached at the same path), and clamping is what
-// keeps that case showing the last page instead of nothing at all. Loading and
-// rendering run on a blocking worker so they never occupy the async runtime;
-// pdfium's own types are not `Send` and are created and dropped entirely
-// inside the closure, so only the `PathBuf` and `page` cross the boundary.
+// Render one page of a PDF to a preview image (data URL), or None if pdfium is unavailable or
+// the file cannot be read (the caller then keeps a plain attachment). `page` is clamped to
+// the real page count here: the stored number and the file can disagree (a shorter PDF
+// re-attached at the same path), and clamping shows the last page instead of nothing. Loading
+// and rendering run on a blocking worker; pdfium's types are not `Send`, so they are created
+// and dropped inside the closure and only the `PathBuf` and `page` cross the boundary.
 #[tauri::command]
 pub(crate) async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<String> {
     use pdfium_render::prelude::*;
@@ -358,11 +350,9 @@ pub(crate) fn is_text_preview_ext(path: &str) -> bool {
         .unwrap_or(false)
 }
 
-// Reads up to `max` bytes of a file. Unlike read_file_capped (which fails the
-// whole read once the file is longer than the limit), this keeps the leading
-// slice and reports separately whether the file continues past it -- exactly
-// what a preview needs: something to show plus a truncation notice, never a
-// hard error just because the attachment is long.
+// Reads up to `max` bytes of a file. Unlike read_file_capped, which fails once the file
+// exceeds the limit, this keeps the leading slice and reports whether the file continues, so
+// a preview can show a truncation notice instead of an error.
 pub(crate) fn read_bytes_preview(path: &std::path::Path, max: u64) -> Result<(Vec<u8>, bool), String> {
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
@@ -375,13 +365,10 @@ pub(crate) fn read_bytes_preview(path: &std::path::Path, max: u64) -> Result<(Ve
     Ok((buf, truncated))
 }
 
-// Decodes a byte slice as UTF-8 text for the preview. A cut made at an
-// arbitrary byte offset can land inside a multi-byte character; that shows up
-// as a `Utf8Error` with no `error_len()` (an incomplete trailing sequence, not
-// a real encoding fault), and is trimmed back to the last full character
-// instead of being reported as unreadable. Any other UTF-8 error means the
-// file itself is not text, and is never guessed at -- a wrong guess would
-// show the wrong thing with total confidence.
+// Decodes a byte slice as UTF-8 text for the preview. A cut at an arbitrary byte offset can
+// split a multi-byte character (a `Utf8Error` with no `error_len()`); that is trimmed back to
+// the last full character. Any other UTF-8 error means the file is not text and is never
+// guessed at.
 pub(crate) fn decode_text_preview(mut buf: Vec<u8>) -> Option<String> {
     match std::str::from_utf8(&buf) {
         Ok(s) => Some(s.to_string()),
@@ -400,10 +387,8 @@ pub(crate) struct AttachTextPreview {
     pub(crate) readable: bool,
 }
 
-// Plain-text preview for a .txt/.md/.json/.csv attachment. Reads
-// with a size cap so an oversized file cannot stall the UI, and never renders
-// the text as markup -- the caller puts it into the DOM as plain text, one way
-// for all four formats.
+// Plain-text preview for a .txt/.md/.json/.csv attachment, read with a size cap so a huge file
+// cannot stall the UI. The caller puts it into the DOM as plain text, never as markup.
 #[tauri::command]
 pub(crate) async fn attachment_text_preview(path: String, max_kb: u32) -> Result<AttachTextPreview, String> {
     if !is_text_preview_ext(&path) {
@@ -422,16 +407,10 @@ pub(crate) async fn attachment_text_preview(path: String, max_kb: u32) -> Result
     .map_err(|e| e.to_string())?
 }
 
-// IDs of prompts whose attached file OR media icon is gone. Still directly
-// invokable for a one-off "I just fixed/replaced a file, recheck now" refresh
-// (the main window after an edit, floating.js whenever a pill's prompt data reloads) -
-// the AMBIENT every-few-seconds refresh is start_missing_files_poll below.
-// async + spawn_blocking: the lock was already released before stat'ing
-// (below) so it never blocked other DB ops, but Path::exists() on a slow or
-// unreachable network path is a genuinely blocking syscall -- with a plain fn,
-// every 5s poll (and the direct-invoke refresh) still tied up an IPC dispatch
-// worker for however long that stat took. spawn_blocking moves it to a thread
-// meant for exactly this instead.
+// IDs of prompts whose attached file or media icon is gone. Also invokable directly for a
+// one-off recheck after an edit or when a floating pill reloads its prompt data; the ambient
+// refresh is start_missing_files_poll below. Async with spawn_blocking: Path::exists() on a
+// slow or unreachable network path blocks, and must not tie up an IPC dispatch worker.
 #[tauri::command]
 pub(crate) async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, String> {
     // Snapshot ids + paths under the lock, then stat OUTSIDE it: a slow or dead
@@ -455,11 +434,8 @@ pub(crate) async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, S
     .map_err(|e| e.to_string())
 }
 
-// the main window and every open floating.js pill window used to each run their own
-// 5-second missing_files poll - N pills meant N+1 redundant full-library stat
-// scans every cycle, all of which could block on the same slow or unreachable
-// network path. One backend-side timer runs the check once and pushes the
-// result to every window instead.
+// One backend timer runs the missing-files check and pushes the result to every window, so
+// open pills do not each run their own full-library stat scan against a possibly slow path.
 pub(crate) const MISSING_FILES_POLL_SECS: u64 = 5;
 pub(crate) fn start_missing_files_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
