@@ -12,12 +12,10 @@ static WATCHER_STOP: AtomicBool = AtomicBool::new(false);
 static LAST_OWN: AtomicU64 = AtomicU64::new(0);
 static LAST_INSERTED: AtomicU64 = AtomicU64::new(0);
 
-// Auto-advance session state. All ticks are GetTickCount() units (u32,
-// wraps every ~49.7 days: every comparison below uses wrapping_sub for that
-// reason). SELF_READ brackets our OWN clipboard_text()/on_clipboard_update()
-// reads so they can never be mistaken for a real paste. OWN_EMPTY brackets our
-// own EmptyClipboard calls so WM_DESTROYCLIPBOARD can tell "we re-armed" from
-// "another app just took ownership".
+// Auto-advance session state. Ticks are GetTickCount() units (u32, wraps every ~49.7 days,
+// so comparisons use wrapping_sub). SELF_READ brackets our own clipboard reads so they are
+// never mistaken for a paste; OWN_EMPTY brackets our own EmptyClipboard calls so
+// WM_DESTROYCLIPBOARD can tell a re-arm from another app taking ownership.
 static SELF_READ: AtomicBool = AtomicBool::new(false);
 static OWN_EMPTY: AtomicBool = AtomicBool::new(false);
 static SESSION: Mutex<Option<AutoSession>> = Mutex::new(None);
@@ -44,8 +42,7 @@ const WM_RENDERALLFORMATS: u32 = 0x0306;
 const WM_DESTROYCLIPBOARD: u32 = 0x0307;
 const WM_APP_ARM: u32 = 0x8001;
 const WM_APP_REARM: u32 = 0x8002;
-// Force-end the active session (e.g. the user flips the per-tile Auto switch
-// off mid-session) and deliver real data instead of leaving a dangling promise.
+// Force-end the active session (e.g. the tile's Auto switch flipped off) and deliver real data.
 const WM_APP_END: u32 = 0x8003;
 const CF_UNICODETEXT: u32 = 13;
 // A copied text past this many characters never reaches the inbox: it would sit
@@ -95,7 +92,6 @@ extern "system" {
     fn DestroyWindow(hwnd: isize) -> i32;
     fn RegisterClipboardFormatW(name: *const u16) -> u32;
     fn IsClipboardFormatAvailable(format: u32) -> i32;
-    // Delayed-rendering primitives.
     fn OpenClipboard(hwnd: isize) -> i32;
     fn CloseClipboard() -> i32;
     fn EmptyClipboard() -> i32;
@@ -151,10 +147,8 @@ pub fn note_own(text: &str) {
     LAST_OWN.store(text_hash(text.trim()), Ordering::Relaxed);
 }
 
-// The stored value of a DWORD-payload clipboard format, or None if the format is
-// absent or its memory block could not be read. Never called while WE hold the
-// clipboard open -- on_clipboard_update only reaches this after the source has
-// already closed it.
+// The value of a DWORD-payload clipboard format, or None if absent or unreadable. Only
+// called after the source has closed the clipboard, never while we hold it open.
 fn read_dword_format(fmt: u32) -> Option<u32> {
     if fmt == 0 || unsafe { IsClipboardFormatAvailable(fmt) } == 0 {
         return None;
@@ -222,9 +216,8 @@ pub(crate) fn should_store(text: &str, min: usize, skip_secrets: bool) -> bool {
 }
 
 fn on_clipboard_update() {
-    // Our own delayed-rendering promise is never inbox material, and reading
-    // it here would itself trigger WM_RENDERFORMAT: without this the collector
-    // would render its own promise on every update.
+    // Our own delayed-rendering promise is never inbox material, and reading it would itself
+    // trigger WM_RENDERFORMAT.
     if unsafe { GetClipboardOwner() } == WATCHER_HWND.load(Ordering::Acquire) {
         return;
     }
@@ -249,12 +242,9 @@ fn on_clipboard_update() {
     if !enabled {
         return;
     }
-    // Respect the clipboard opt-out formats password managers set so their copied
-    // secrets never land in monitors / history. The first is a plain "present at
-    // all" marker (KeePass, 1Password, …); the other two are Windows' own
-    // clipboard-history/cloud-sync opt-outs, an explicit 0 meaning "do not
-    // include" -- a source setting neither still relies entirely on the guess
-    // below.
+    // Honour the opt-out formats password managers set: a plain "present at all" marker
+    // (KeePass, 1Password, ...) and Windows' own clipboard-history/cloud-sync opt-outs, where an
+    // explicit 0 means "do not include". Sources setting none of them rely on the heuristic below.
     unsafe {
         let excl = RegisterClipboardFormatW(wide("ExcludeClipboardContentFromMonitorProcessing").as_ptr());
         if excl != 0 && IsClipboardFormatAvailable(excl) != 0 {
@@ -268,10 +258,9 @@ fn on_clipboard_update() {
             }
         }
     }
-    // Text only: image/file clipboard payloads are ignored. Bracketed with
-    // SELF_READ in case ownership changed between the guard above and here.
-    // The block is measured first; an unmeasurable one (clipboard busy) is left to
-    // the reader below, which has its own retry and fails on its own.
+    // Text only; image/file payloads are ignored. Bracketed with SELF_READ in case ownership
+    // changed since the guard above. The block is measured first; an unmeasurable one (clipboard
+    // busy) is left to the reader below, which has its own retry.
     if let Some(bytes) = clipboard_text_block_size() {
         if !text_block_within_limit(bytes) {
             return;
@@ -299,11 +288,9 @@ fn on_clipboard_update() {
     let _ = app.emit("clip-inbox-changed", ());
 }
 
-// Writes `text` as CF_UNICODETEXT into whatever clipboard bracket is
-// currently open (the caller decides who opened it). Ownership of the
-// GMEM_MOVEABLE block passes to Windows only when SetClipboardData SUCCEEDS:
-// on every other way out of here the block is still ours and has to be freed,
-// or a rotating prompt on auto-advance leaks one per paste.
+// Writes `text` as CF_UNICODETEXT into the clipboard bracket the caller has open. Ownership
+// of the GMEM_MOVEABLE block passes to Windows only when SetClipboardData succeeds; on every
+// other path it is still ours and must be freed, or a rotating prompt leaks one per paste.
 unsafe fn set_unicode_text(text: &str) {
     let units = wide(text);
     let bytes = units.len() * std::mem::size_of::<u16>();
@@ -345,9 +332,9 @@ pub(crate) fn read_text_self() -> String {
     read.unwrap_or_default()
 }
 
-// (Re-)claim ownership and promise CF_UNICODETEXT without delivering real
-// data yet: used both for the very first arm (is_first) and every re-arm after
-// a render. Must run on the window thread (posted here, never called directly).
+// (Re-)claim ownership and promise CF_UNICODETEXT without delivering data yet; used for the
+// first arm (is_first) and every re-arm after a render. Must run on the window thread (posted
+// here, never called directly).
 fn open_and_promise(hwnd: isize, is_first: bool) {
     // A session that ended while this message was queued (a foreign copy, the
     // end message, the timeout) must not empty the clipboard it no longer owns.
@@ -356,14 +343,10 @@ fn open_and_promise(hwnd: isize, is_first: bool) {
     }
     let opened = unsafe { OpenClipboard(hwnd) != 0 };
     if !opened {
-        // Another app has the clipboard open right now: do not spin, end the
-        // session either way. On the very first arm nothing has ever reached the
-        // real clipboard yet (the promise itself is what failed), so fall back to
-        // a plain untracked write instead of leaving a "successful" copy empty:
-        // same fallback `arm()` already uses when the watcher thread is not even
-        // running. A re-arm failure keeps the text already delivered by the last
-        // render as-is, but must still tell the UI the session is gone, or the
-        // tile badge is stuck "active" forever.
+        // Another app has the clipboard open: do not spin, end the session. On the first arm nothing
+        // has reached the real clipboard yet, so fall back to a plain untracked write (as arm() does
+        // when the watcher is not running). A failed re-arm keeps the text already delivered, but
+        // must tell the UI the session is gone, or the tile badge stays "active".
         let dropped = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(session) = dropped {
             if is_first {
@@ -546,10 +529,9 @@ fn handle_app_end() {
     emit_active(&session.id, false);
 }
 
-// Called from the app's normal copy path (put_text) once a prompt has been
-// judged auto-eligible. `resolved` is the frontend's once-per-copy placeholder
-// resolution; empty for a prompt with no placeholders, where every
-// render instead falls back to the raw rotation_next() text.
+// Called from the normal copy path (put_text) once a prompt is judged auto-eligible.
+// `resolved` is the frontend's once-per-copy placeholder resolution; empty for a prompt
+// without placeholders, where each render falls back to the raw rotation_next() text.
 pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool) {
     note_own(text);
     let old_id = {
