@@ -812,6 +812,7 @@ export default {
     pathDefault: "デフォルト",
     pathChange: "変更…",
     dataDirConfirm: "新しい場所を設定しました。適用するには {app} を再起動してください。古いフォルダーのデータを今すぐ削除しますか？",
+    dataDirCleanFailed: "以前のフォルダーを整理できませんでした。",
     snipKeepBtn: "ボタンとして保存",
     viewColor: "色",
     noClipboardFile: "クリップボードにファイルがありません。",

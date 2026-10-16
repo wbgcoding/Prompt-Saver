@@ -812,6 +812,7 @@ export default {
     pathDefault: "Predeterminado",
     pathChange: "Cambiar…",
     dataDirConfirm: "Nueva ubicación establecida: reinicia {app} para aplicarla. ¿Eliminar ahora los datos de la carpeta anterior?",
+    dataDirCleanFailed: "No se pudo limpiar la carpeta anterior.",
     snipKeepBtn: "Guardar como botón",
     viewColor: "Color",
     noClipboardFile: "No hay ningún archivo en el portapapeles.",

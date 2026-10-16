@@ -885,6 +885,7 @@ export default {
     pathDefault: "Default",
     pathChange: "Change…",
     dataDirConfirm: "New location set. Restart {app} to apply it. Delete the data in the old folder now?",
+    dataDirCleanFailed: "The old folder could not be cleaned up.",
     snipKeepBtn: "Save as button",
     flagScreenshot: "Screenshot tool",
     autoUpdate: "Auto update",

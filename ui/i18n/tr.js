@@ -812,6 +812,7 @@ export default {
     pathDefault: "Varsayılan",
     pathChange: "Değiştir…",
     dataDirConfirm: "Yeni konum ayarlandı: uygulamak için {app}'ı yeniden başlatın. Eski klasördeki veriler şimdi silinsin mi?",
+    dataDirCleanFailed: "Eski klasör temizlenemedi.",
     snipKeepBtn: "Düğme olarak kaydet",
     viewColor: "Renk",
     noClipboardFile: "Panoda dosya yok.",

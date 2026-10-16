@@ -885,6 +885,7 @@ export default {
     pathDefault: "Standard",
     pathChange: "Ändern…",
     dataDirConfirm: "Neuer Speicherort gesetzt. {app} neu starten, um ihn anzuwenden. Daten im alten Ordner jetzt löschen?",
+    dataDirCleanFailed: "Der alte Ordner konnte nicht geleert werden.",
     snipKeepBtn: "Als Button speichern",
     flagScreenshot: "Screenshot-Werkzeug",
     autoUpdate: "Automatische Updates",

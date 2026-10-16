@@ -812,6 +812,7 @@ export default {
     pathDefault: "Predefinito",
     pathChange: "Cambia…",
     dataDirConfirm: "Nuova posizione impostata. Riavvia {app} per applicarla. Eliminare ora i dati nella vecchia cartella?",
+    dataDirCleanFailed: "Non è stato possibile ripulire la cartella precedente.",
     snipKeepBtn: "Salva come pulsante",
     viewColor: "Colore",
     noClipboardFile: "Nessun file negli appunti.",

@@ -980,18 +980,25 @@ export const EXPERT_PATHS = {
       if (!(await confirmSyncFolderChoice(dir))) return;
       let oldPath;
       try { oldPath = await invoke("set_data_dir", { dir }); } catch (e) { errToast(e); return; }
-      currentDataDir = dir;
+      // A respelled path of the folder in use is no move: the backend hands back the
+      // same current folder, and then there is nothing to offer to delete.
+      const nowDir = await invoke("current_data_dir").catch(() => dir);
+      const moved = nowDir !== oldPath;
+      currentDataDir = moved ? dir : oldPath;
       renderExpert();
       refreshDataDirLock(); // the new folder may already carry another machine's fresh lock
       // Offer to delete the old data (default = keep). Message notes the restart.
-      if (oldPath && oldPath !== dir) {
+      if (moved && oldPath && oldPath !== dir) {
         const del = await confirmDialog({
           title: t("valDataDir"),
           message: t("dataDirConfirm"),
           confirmLabel: t("delete"),
           cancelLabel: t("dataDirKeep"),
         });
-        if (del) await invoke("delete_data_dir", { path: oldPath }).catch(() => {});
+        if (del) {
+          const removed = await invoke("delete_data_dir", { path: oldPath }).catch(() => false);
+          if (!removed) toast(t("dataDirCleanFailed"));
+        }
       }
     },
   },

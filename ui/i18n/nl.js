@@ -812,6 +812,7 @@ export default {
     pathDefault: "Standaard",
     pathChange: "Wijzigen…",
     dataDirConfirm: "Nieuwe locatie ingesteld. Herstart {app} om deze toe te passen. Gegevens in de oude map nu verwijderen?",
+    dataDirCleanFailed: "De oude map kon niet worden opgeruimd.",
     snipKeepBtn: "Opslaan als knop",
     viewColor: "Kleur",
     noClipboardFile: "Geen bestand op het klembord.",

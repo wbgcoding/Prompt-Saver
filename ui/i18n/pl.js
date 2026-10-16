@@ -812,6 +812,7 @@ export default {
     pathDefault: "Domyślny",
     pathChange: "Zmień…",
     dataDirConfirm: "Ustawiono nową lokalizację. Uruchom ponownie {app}, aby ją zastosować. Usunąć teraz dane w starym folderze?",
+    dataDirCleanFailed: "Nie udało się wyczyścić poprzedniego folderu.",
     snipKeepBtn: "Zapisz jako przycisk",
     viewColor: "Kolor",
     noClipboardFile: "Brak pliku w schowku.",

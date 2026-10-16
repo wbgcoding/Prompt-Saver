@@ -812,6 +812,7 @@ export default {
     pathDefault: "Padrão",
     pathChange: "Alterar…",
     dataDirConfirm: "Novo local definido. Reinicie o {app} para aplicá-lo. Excluir agora os dados da pasta antiga?",
+    dataDirCleanFailed: "Não foi possível limpar a pasta anterior.",
     snipKeepBtn: "Salvar como botão",
     viewColor: "Cor",
     noClipboardFile: "Nenhum arquivo na área de transferência.",
