@@ -139,7 +139,7 @@ pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
 // failure leaves nothing behind (nothing is written until the hash is verified).
 #[tauri::command]
 pub(crate) async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
-    let _claim = FlagClaim::take(&FFMPEG_DOWNLOAD_RUNNING).ok_or_else(|| "busy".to_string())?;
+    let _claim = FlagClaim::take(&FFMPEG_DOWNLOAD_RUNNING).ok_or_else(|| "ffmpeg-busy".to_string())?;
     // Only the claim holder may clear a cancel request.
     FFMPEG_DOWNLOAD_CANCEL.store(false, Ordering::SeqCst);
     push_bg_op(&app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);

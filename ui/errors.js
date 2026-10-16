@@ -40,7 +40,7 @@ export const ERROR_MSG_KEYS = {
   "portable-update-manual": "errUpdatePortableManual",
   "recording-active": "errUpdateRecordingActive",
   "jobs-running": "errUpdateJobsRunning",
-  "busy": "ffmpegDownloadBusy",
+  "ffmpeg-busy": "ffmpegDownloadBusy",
   "save-failed": "persistFailed",
   "remote-off-not-saved": "remoteOffNotSaved",
   "remote-tls-short-lived-has-own-command": "remoteTlsShortLivedOwnCommand",
