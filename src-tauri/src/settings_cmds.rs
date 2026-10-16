@@ -20,12 +20,11 @@ pub(crate) fn get_settings(state: State<Db>) -> Settings {
     webview_settings(&lock(&state).settings)
 }
 
-// What the window needs from a prompt to draw it: every field of `Prompt` except
-// the image itself. A stored image is a PNG data URL of up to ~400 KB, and sending
-// all of them again on every grid rebuild was the single most expensive thing the
-// app did. `has_image` tells the tile an image exists, `image_rev` changes whenever
-// the stored image does: so a copy already cached in the window knows when it went
-// stale. The bytes themselves come from `prompt_image`, one prompt at a time.
+// What the window needs from a prompt to draw it: every field of `Prompt` except the image
+// itself. A stored image is a PNG data URL of up to ~400 KB, too costly to resend on every
+// grid rebuild. `has_image` tells the tile an image exists; `image_rev` changes whenever the
+// stored image does, so a cached copy knows when it went stale. The bytes come from
+// `prompt_image`, one prompt at a time.
 #[derive(Serialize)]
 pub(crate) struct SlimPrompt {
     pub(crate) id: String,
@@ -67,11 +66,9 @@ pub(crate) struct SlimPrompt {
 
 impl From<&Prompt> for SlimPrompt {
     fn from(p: &Prompt) -> Self {
-        // Destructured rather than read field by field on purpose: a field added to
-        // `Prompt` later breaks this line until someone decides whether the window
-        // needs it, instead of silently never arriving there. image_text is the one
-        // deliberate exception, bound to `_`: it is a search index, never handed to
-        // the frontend at all.
+        // Destructured on purpose: a field added to `Prompt` breaks this line until someone decides
+        // whether the window needs it. image_text is the deliberate exception, bound to `_`: it is a
+        // search index and never reaches the frontend.
         let Prompt {
             id, name, text, color, image, show_image, copy_image, file_path, pdf_page,
             icon_path, caption, caption_size, font, font_size, favorite, tags, notes,
@@ -116,14 +113,11 @@ impl From<&Prompt> for SlimPrompt {
     }
 }
 
-// `secret_key` is the already-checked, already-timeout-tested session key (see
-// secret_session_key): None means locked (no key, or the timeout expired).
-// A confidential prompt's ciphertext never reaches the frontend while locked:
-// text/variants are blanked instead of sent as-is, so a locked entry cannot be
-// searched, previewed or copied from the window's own JSON state. Unlocked, the
-// real text is decrypted here and flows exactly like any other prompt from that
-// point on (search finds it, the tile copies it): nothing else needs to know
-// the entry was ever confidential.
+// `secret_key` is the already-checked session key (see secret_session_key): None means locked
+// (no key, or the timeout expired). A confidential prompt's ciphertext never reaches the
+// frontend while locked: text/variants are blanked, so a locked entry cannot be searched,
+// previewed or copied from the window's JSON state. Unlocked, the text is decrypted here and
+// flows like any other prompt.
 pub(crate) fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> Vec<SlimPrompt> {
     prompts
         .iter()
@@ -183,10 +177,8 @@ pub(crate) async fn prompt_image(state: State<'_, Db>, id: String) -> Result<Str
         .unwrap_or_default())
 }
 
-// The quick launcher only ever reads id/name/text/color, on a surface that has to
-// be ready the instant its hotkey fires: cloning a whole prompt each (tags, notes,
-// entries and all) was exactly the wrong cost to pay there. The four fields are
-// small strings, so cloning just those is the actual saving.
+// The quick launcher only reads id/name/text/color on a surface that must be ready the instant
+// its hotkey fires, so only those four small strings are cloned instead of whole prompts.
 #[derive(Serialize)]
 pub(crate) struct LauncherItem {
     pub(crate) id: String,
