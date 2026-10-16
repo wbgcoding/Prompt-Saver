@@ -1608,6 +1608,7 @@ export default {
     recBarMuteMic: "Silenciar el micrófono",
     recBarUnmuteMic: "Activar el micrófono",
     recBarMicLost: "Micrófono desconectado: la grabación continúa sin él",
+    recBarSystemLost: "Audio del sistema no disponible: la grabación continúa sin él",
     pickFailed: "No se pudo copiar el color. Inténtalo de nuevo.",
     colorCopied: "Color copiado",
     flagColorPicker: "Selector de color (cuentagotas)",
