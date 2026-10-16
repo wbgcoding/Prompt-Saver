@@ -20514,3 +20514,20 @@ fn csv_and_txt_exports_never_carry_confidential_entries() {
     assert!(!secrets_exportable("csv", true));
     assert!(!secrets_exportable("txt", true));
 }
+
+#[test]
+fn import_drops_only_the_invalid_tags() {
+    let known = HashMap::new();
+    let long = "x".repeat(MAX_TAG_LEN + 1);
+    let tags = lenient_import_tags(vec!["Clients, 2025".into(), "Work".into(), long, "work".into(), "  ".into(), "Home".into()], &known);
+    assert_eq!(tags, vec!["Work".to_string(), "Home".to_string()], "good tags survive, bad and duplicate ones go");
+}
+
+#[test]
+fn import_truncates_an_over_long_note_on_a_char_boundary() {
+    let note = "\u{e4}".repeat(MAX_NOTES_LEN + 25);
+    let kept = lenient_import_note(&note);
+    assert_eq!(kept.chars().count(), MAX_NOTES_LEN);
+    assert!(kept.chars().all(|c| c == '\u{e4}'));
+    assert_eq!(lenient_import_note("short note"), "short note");
+}

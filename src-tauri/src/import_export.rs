@@ -925,6 +925,29 @@ pub(crate) async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Resu
 // each parsed item and appends it, skipping one that is an exact duplicate of
 // one already present (so the original is kept, no duplicate buttons). A
 // malformed tag or note on one item never aborts the whole batch.
+// A foreign file is an entry point like any other, but one bad tag must not
+// cost the entry its other tags: invalid names are dropped one by one.
+pub(crate) fn lenient_import_tags(raw: Vec<String>, known: &HashMap<String, String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let valid: Vec<String> = raw
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.chars().count() <= MAX_TAG_LEN && tag_chars_ok(s))
+        .filter(|s| seen.insert(tag_key(s)))
+        .take(MAX_TAGS_PER_PROMPT)
+        .collect();
+    sanitize_tags(valid, known).unwrap_or_default()
+}
+
+// An over-long note is cut at the limit (on a character boundary) rather than
+// dropped whole.
+pub(crate) fn lenient_import_note(raw: &str) -> String {
+    sanitize_notes(raw).unwrap_or_else(|_| {
+        let text = raw.replace("\r\n", "\n").replace('\r', "\n");
+        text.trim().chars().take(MAX_NOTES_LEN).collect()
+    })
+}
+
 pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
     let mut seen: std::collections::HashSet<String> = store
         .prompts
@@ -938,7 +961,7 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
         if !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image)) {
             continue; // duplicate of an existing (or earlier imported) prompt
         }
-        let tags = sanitize_tags(item.tags, &known).unwrap_or_default();
+        let tags = lenient_import_tags(item.tags, &known);
         for t in &tags {
             known.entry(tag_key(t)).or_insert_with(|| t.clone());
         }
@@ -969,7 +992,7 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
             favorite: item.favorite,
             tags,
             // A note from a foreign file must not abort the import either.
-            notes: sanitize_notes(&item.notes).unwrap_or_default(),
+            notes: lenient_import_note(&item.notes),
             // A CSV/TXT file carries prompt content, never machine-local bindings
             //: nor the per-binding paste choice that belongs to one.
             hotkey: String::new(),
