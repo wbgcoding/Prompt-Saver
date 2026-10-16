@@ -8,14 +8,12 @@ import { recordToolUsage } from "./management.js";
 import { autoPasteNow } from "./tiles.js";
 
 // ---- OCR + voice language pack management, one shared dialog ----
-// #ocr-langs-modal serves both OCR and voice dictation language packs -- same
-// markup, same flow (Windows-reported capability list, elevated listing/install),
-// just pointed at a different set of Tauri commands and settings keys. `kind`
-// ("ocr" | "speech") selects which.
-// *_capabilities() lists every capability Windows knows about (installed AND
-// not) with size/version straight from Windows -- a different list from
-// ocrLangsCache/voiceLangsCache above, which are only the installed set actually
-// used to pick a recognition language.
+// #ocr-langs-modal serves both OCR and voice dictation packs: same markup and flow
+// (Windows-reported capability list, elevated listing/install), pointed at different Tauri
+// commands and settings keys. `kind` ("ocr" | "speech") selects which. *_capabilities()
+// lists every capability Windows knows about (installed and not) with size and version,
+// unlike ocrLangsCache/voiceLangsCache, which hold only the installed set used to pick a
+// recognition language.
 export const LANG_CMDS = {
   ocr: {
     capabilities: "ocr_capabilities", elevate: "ocr_capabilities_elevate",
@@ -30,12 +28,12 @@ export const LANG_CMDS = {
     languages: "voice_languages",
   },
 };
-// Per-kind dialog state, kept independent so switching which dialog is open
-// never loses the other's in-flight scan or install polls.
+// Per-kind dialog state, so switching which dialog is open never loses the other's in-flight
+// scan or install polls.
 export const LANG_DIALOG = {
-  // installing: the names whose elevated install was launched and has not reported
-  // back yet. It outlives the dialog (only the pollers stop on close), so a reopened
-  // dialog still knows the row is busy. installChain marks the one live poller per name.
+  // installing: the names whose elevated install was launched and has not reported back. It
+  // outlives the dialog (only the pollers stop on close), so a reopened dialog still knows the
+  // row is busy. installChain marks the one live poller per name.
   ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
   speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
 };
@@ -46,21 +44,20 @@ export function openLangsModal(kind) {
   $("ocr-langs-hint").textContent = t(kind === "speech" ? "voiceLangsHint" : "ocrLangsHint");
   $("ocr-langs-modal").classList.remove("hidden");
   const st = LANG_DIALOG[kind];
-  // A scan started on a previous open (or from the elevation retry button)
-  // may still be running server-side -- resume polling it instead of the dialog
-  // silently doing nothing until the user re-elevates from scratch.
+  // A scan started on a previous open (or from the elevation retry button) may still be running
+  // server-side; resume polling it instead of doing nothing until the user re-elevates.
   if (st.elevRunning) { renderLangsLoading(kind); pollElevatedCaps(kind); }
   else loadLangCaps(kind, false);
-  // Installs started before the dialog was closed keep running as OS processes:
-  // pick their result polling back up.
+  // Installs started before the dialog was closed keep running as OS processes; pick their
+  // result polling back up.
   for (const name of st.installing) pollLangInstall(kind, name);
 }
 export function closeLangsModal() {
   $("ocr-langs-modal").classList.add("hidden");
   const st = LANG_DIALOG[langDialogKind];
-  // Installs and an elevated scan are OS processes and keep running regardless
-  // -- only the polling loop (and the DOM it repaints) needs to stop while
-  // nobody is looking. elevRunning itself is left set so reopening resumes.
+  // Installs and an elevated scan are OS processes and keep running; only the polling loop (and
+  // the DOM it repaints) stops while nobody is looking. elevRunning stays set so reopening
+  // resumes.
   for (const id of Object.values(st.installTimers)) clearTimeout(id);
   st.installTimers = {};
   st.installChain = {};
@@ -73,12 +70,11 @@ export async function loadLangCaps(kind, force) {
     st.cache = await invoke(LANG_CMDS[kind].capabilities, { force: !!force });
     st.checked = Math.floor(Date.now() / 1000);
   } catch (e) {
-    // Listing is supposed to need no elevated rights, but some Windows builds
-    // require it even for this read-only query -- an honest inline reason
-    // (plus a retry) beats a blank dialog or a generic error toast.
-    // ANY failure here comes back this same way now (backend no longer tries
-    // to classify by HResult/message text, which varies by machine/locale) --
-    // "code|raw text" so the raw PowerShell/DISM reason can still be shown.
+    // Listing is meant to need no elevated rights, but some Windows builds require it even for
+    // this read-only query: an inline reason (plus a retry) beats a blank dialog or a generic
+    // toast. Any failure comes back as "code|raw text" (the backend does not classify by
+    // HResult/message text, which varies by machine and locale), so the raw PowerShell/DISM
+    // reason can still be shown.
     const s = String(e);
     if (s.startsWith("ocr-caps-need-elevation")) {
       renderLangsRetry(kind, t("ocrLangsNeedElevation"), s.slice(s.indexOf("|") + 1));
@@ -87,9 +83,9 @@ export async function loadLangCaps(kind, force) {
   }
   renderLangsBody(kind);
 }
-// Runs the capability listing through the UAC prompt on machines that refuse it
-// to a normal user. Same shape as an install: explain first, launch, then poll
-// the result the elevated process writes.
+// Runs the capability listing through the UAC prompt on machines that refuse it to a normal
+// user. Same shape as an install: explain first, launch, then poll the result the elevated
+// process writes.
 export async function startElevatedCapsScan(kind) {
   const ok = await confirmDialog({
     title: t("ocrElevateTitle"),
@@ -103,10 +99,9 @@ export async function startElevatedCapsScan(kind) {
   try {
     await invoke(LANG_CMDS[kind].elevate);
   } catch (e) {
-    // A launch failure also gets the notice+retry pair, not a dead end --
-    // except when the account cannot elevate at all: that gets its own
-    // explanation instead, with no retry button, because trying again can
-    // never succeed.
+    // A launch failure also gets the notice+retry pair, not a dead end, except when the account
+    // cannot elevate at all: that gets its own explanation with no retry button, since trying
+    // again can never succeed.
     const err = String(e);
     if (err === "ocr-elevate-no-rights") {
       renderLangsRetry(kind, `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}`, null, true);
@@ -119,10 +114,9 @@ export async function startElevatedCapsScan(kind) {
   st.elevLeft = 60;
   pollElevatedCaps(kind);
 }
-// Polls the elevated process's result file a few seconds apart. Re-entrant: can
-// be called again after the dialog was closed and reopened without losing
-// the two-minute budget already spent (elevLeft lives on LANG_DIALOG, not in a
-// closure local, so it survives that close/reopen).
+// Polls the elevated process's result file a few seconds apart. Re-entrant: it can be called
+// again after the dialog was closed and reopened without losing the two-minute budget already
+// spent (elevLeft lives on LANG_DIALOG, not in a closure local).
 export function pollElevatedCaps(kind) {
   const st = LANG_DIALOG[kind];
   const tick = async () => {
@@ -151,14 +145,11 @@ export function renderLangsLoading(kind) {
   loading.textContent = t("ocrLangsScanning");
   body.appendChild(loading);
 }
-// Notice text and its retry button are always built together, in one
-// place -- a failure (launch or the two-minute poll timeout alike) can no
-// longer replace the body with text only and strand the user without a way
-// to try again. `details` is the raw PowerShell/DISM text behind a
-// translated reason like `message` -- shown collapsed so it never crowds out
-// the actual instruction, but never silently dropped either. `noRetry` drops
-// the button entirely: set when the account can never elevate, where another
-// attempt cannot succeed and offering one would just be misleading.
+// Notice text and its retry button are always built together, so a failure (launch or the
+// two-minute poll timeout) never leaves the user with text only and no way to retry.
+// `details` is the raw PowerShell/DISM text behind a translated reason like `message`, shown
+// collapsed so it does not crowd out the instruction. `noRetry` drops the button: set when the
+// account can never elevate and another attempt cannot succeed.
 export function renderLangsRetry(kind, message, details, noRetry) {
   if (langDialogKind !== kind) return;
   const body = $("ocr-langs-body");
@@ -214,7 +205,7 @@ export function langRow(kind, cap) {
   const size = installed ? cap.install_size : cap.download_size;
   const sizeEl = document.createElement("div");
   sizeEl.className = "lang-row-size";
-  // Windows does not always report a size -- never guess one, show the dash instead.
+  // Windows does not always report a size; never guess one, show the dash.
   sizeEl.textContent = size == null ? EMPTY_VALUE : fmtBytes(size, LANG);
   const chip = document.createElement("span");
   chip.className = installed ? "lang-row-chip installed" : "lang-row-chip";
@@ -234,9 +225,9 @@ export function langRow(kind, cap) {
   if (note) {
     const hint = document.createElement("span");
     hint.className = "ocr-lang-note";
-    // "no-rights" is the account-can-never-elevate case, its own text below;
-    // any other string is the backend's own reason (a real install failure);
-    // `true` is the calm "you declined the rights prompt" case.
+    // "no-rights" is the account-can-never-elevate case with its own text below; any other string
+    // is the backend's reason (a real install failure); `true` is the calm "you declined the
+    // rights prompt" case.
     hint.textContent =
       note === "no-rights" ? `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}` : typeof note === "string" ? note : t("ocrElevateCancelled");
     actions.appendChild(hint);
@@ -247,8 +238,7 @@ export function langRow(kind, cap) {
   btn.className = "ghost-btn";
   const busy = st.installing.has(cap.name) || !!st.installTimers[cap.name] || !!st.installPending[cap.name];
   btn.disabled = busy;
-  // The size sits INSIDE the button label on purpose -- nobody should start a
-  // download blind.
+  // The size sits inside the button label on purpose, so nobody starts a download blind.
   btn.textContent = busy
     ? t("ocrLangsInstalling")
     : t("ocrLangsDownloadBtn").replace("{size}", () => cap.download_size == null ? EMPTY_VALUE : fmtBytes(cap.download_size, LANG));
@@ -256,9 +246,9 @@ export function langRow(kind, cap) {
   actions.appendChild(btn);
   return row;
 }
-// Every path that can lead to an elevated install goes through here first:
-// explain the language, its size and that Windows will ask for admin rights
-// once, BEFORE that prompt ever appears. No exceptions.
+// Every path that can lead to an elevated install goes through here first: explain the
+// language, its size and that Windows will ask for admin rights once, before that prompt
+// appears.
 export async function startLangInstall(kind, cap) {
   const st = LANG_DIALOG[kind];
   const size = cap.download_size == null ? EMPTY_VALUE : fmtBytes(cap.download_size, LANG);
@@ -270,46 +260,39 @@ export async function startLangInstall(kind, cap) {
   });
   if (!ok) return;
   delete st.installErrors[cap.name];
-  // Marks the row busy for the WHOLE gap, including the elevated install()
-  // call itself (which blocks until the user answers the UAC prompt) -- set
-  // synchronously, before any await, so a second click on the still-enabled
-  // button can't start a second concurrent elevated install for the same
-  // language while the first one is still waiting on Windows.
+  // Marks the row busy for the whole gap, including the elevated install() call (which blocks
+  // until the user answers the UAC prompt). Set synchronously before any await, so a second
+  // click on the still-enabled button cannot start a second concurrent elevated install.
   st.installPending[cap.name] = true;
   renderLangsBody(kind);
   try {
     await invoke(LANG_CMDS[kind].install, { name: cap.name });
   } catch (e) {
     delete st.installPending[cap.name];
-    // A declined UAC prompt is not an error: a calm inline note on the row,
-    // no error tone, the row stays "not installed". An account that cannot
-    // elevate at all gets its own note instead, and no download button --
-    // clicking it again can never work.
+    // A declined UAC prompt is not an error: a calm inline note on the row, the row stays "not
+    // installed". An account that cannot elevate gets its own note and no download button.
     const err = String(e);
     if (err === "ocr-elevate-no-rights") st.installErrors[cap.name] = "no-rights";
     else if (err === "ocr-elevate-cancelled") st.installErrors[cap.name] = true;
     else errToast(e);
-    // Every branch above just deleted installPending -- the row rendered disabled
-    // ("Installing...") right before the await must be repainted regardless of
-    // which branch ran, or the button stays stuck disabled until the dialog is
-    // closed and reopened.
+    // Every branch above deleted installPending; the row rendered disabled ("Installing...")
+    // before the await must be repainted whichever branch ran, or the button stays disabled until
+    // the dialog is reopened.
     renderLangsBody(kind);
     return;
   }
   delete st.installPending[cap.name];
-  // Arm the poller (marks the row busy) BEFORE repainting, or the render still
-  // reads installTimers[cap.name] as empty and shows an enabled Download button --
-  // a second click then starts a second UAC-elevated install.
+  // Arm the poller (marks the row busy) before repainting, or the render sees an empty
+  // installTimers[cap.name] and shows an enabled Download button, and a second click starts a
+  // second UAC-elevated install.
   pollLangInstall(kind, cap.name);
   renderLangsBody(kind);
 }
-// *_install_language() only resolves once the elevated process has LAUNCHED,
-// not once it finished -- poll the result file ourselves, a few seconds apart,
-// until it stops being null.
-// A result file that never becomes readable (permanently corrupt, or wiped
-// from under the install) used to look exactly like "still running" forever --
-// polled every 3s with no way out. ~10 minutes is generous for even a large,
-// slow-connection language pack, so hitting this is always a real stuck state.
+// *_install_language() resolves once the elevated process has launched, not finished; poll
+// the result file ourselves, a few seconds apart, until it stops being null. A result file
+// that never becomes readable (corrupt, or wiped under the install) would look like "still
+// running" forever, so the polling has a limit: ~10 minutes is generous even for a large
+// language pack on a slow connection, so hitting it is always a real stuck state.
 export const MAX_LANG_INSTALL_POLLS = 200;
 export function pollLangInstall(kind, name) {
   const st = LANG_DIALOG[kind];
@@ -318,17 +301,15 @@ export function pollLangInstall(kind, name) {
   const chain = {};
   st.installChain[name] = chain;
   let attempts = 0;
-  // setTimeout re-armed after each result, not setInterval -- the callback
-  // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
-  // itself (two install_result calls, or two clearInterval/repaint races).
+  // setTimeout re-armed after each result, not setInterval: the callback awaits an invoke, and
+  // a reply slower than the 3s tick would overlap itself.
   const tick = async () => {
     attempts++;
     let res;
     try { res = await invoke(LANG_CMDS[kind].installResult, { name }); } catch (_) { res = undefined; }
-    // The dialog was closed (and maybe reopened, with a fresh poller) while that
-    // answer was on its way: this chain is stale and must not re-arm itself. A
-    // terminal answer is still handled, though: the backend already deleted the
-    // result and dropped its nonce, so no later poll will ever see it again.
+    // The dialog was closed (and maybe reopened with a fresh poller) while that answer was on its
+    // way: this chain is stale and must not re-arm itself. A terminal answer is still handled,
+    // since the backend already deleted the result and dropped its nonce.
     const stale = st.installChain[name] !== chain;
     if (res == null) {
       if (stale) return;
@@ -355,22 +336,20 @@ export function pollLangInstall(kind, name) {
       await loadLangCaps(kind, true); // force -- also drops the backend's own cache
       return;
     }
-    // A real failure (e.g. Windows Home / policy blocked) -- the reason belongs
-    // in the row, never a silent failure. The backend's own internal keys are
-    // translated here; anything else is a raw Windows exception message, shown
-    // exactly as Windows worded it since there is no way to pre-translate that.
+    // A real failure (e.g. Windows Home or policy blocked): the reason belongs in the row. The
+    // backend's internal keys are translated here; anything else is a raw Windows exception
+    // message, shown as Windows worded it.
     st.installErrors[name] = res.error === "install-result-unreadable" ? t("ocrInstallResultUnreadable") : (res.error || true);
     renderLangsBody(kind);
   };
   st.installTimers[name] = setTimeout(tick, 3000);
 }
-// Thin OCR-flavoured wrapper so the expert-action entry below keeps working
-// unchanged -- the generalization lives entirely behind `kind`.
+// Thin OCR-flavoured wrapper so the expert-action entry below keeps working.
 export function openOcrLangsModal() { openLangsModal("ocr"); }
 export function openVoiceLangsModal() { openLangsModal("speech"); }
 
-// "ocr-no-language"/"voice-no-language" always have the same fix: open this
-// dialog. Used at every call site that would otherwise show them as a bare errToast().
+// "ocr-no-language" and "voice-no-language" always have the same fix: open this dialog. Used
+// at every call site that would otherwise show them as a bare errToast().
 export function ocrErrToast(err) {
   if (String(err) === "ocr-no-language") {
     toast(t("ocrNoLanguageMsg"), { label: t("ocrLangsManage"), onClick: openOcrLangsModal });
@@ -389,20 +368,17 @@ export let voiceInterim = null; // {start, len} inside voiceTargetEl.value, or n
 export let voiceSuppressInput = false; // true while a programmatic .value write is in flight
 export let voiceResolvedLang = ""; // BCP-47 tag voice_start actually recognized with, for command post-processing
 export let voiceArmCancelled = false; // stopVoice() was called before voice_start's invoke() resolved
-// The just-ended session's target, for one late-arriving voice-text that WinRT's
-// unordered ResultGenerated/Completed handlers let land after voice-stopped
-// already fired -- delivered instead of dropped, but only within the grace
-// window and only to ITS OWN target, never adopted by whatever session (if any)
-// has started in the meantime. Not an expert setting -- internal timing.
+// The just-ended session's target, for one late voice-text that WinRT's unordered
+// ResultGenerated/Completed handlers let land after voice-stopped: delivered instead of
+// dropped, but only within the grace window and only to its own target, never adopted by a
+// session started in the meantime. Internal timing, not an expert setting.
 export let voicePrev = null; // {token, el, caret, lang, hotkey, endedAt, interim} | null
 export const VOICE_LATE_GRACE_MS = 3000;
 
-// The two-letter code voice.js's command tables are keyed by, derived from
-// the BCP-47 tag voice_start resolved to -- NOT the UI's own display
-// language, which can easily differ from what is actually being recognized
-// (e.g. a German UI with only an English speech pack installed). Falls back
-// to the UI language before a session has resolved one at all (the hotkey
-// path's first partial can in rare cases race ahead of it).
+// The two-letter code voice.js's command tables are keyed by, derived from the BCP-47 tag
+// voice_start resolved to, not the UI display language (a German UI may have only an English
+// speech pack). Falls back to the UI language before a session has resolved one (the hotkey
+// path's first partial can race ahead of it).
 export function voiceLangCode() {
   return (voiceResolvedLang || LANG).slice(0, 2).toLowerCase();
 }
@@ -420,9 +396,8 @@ export function setVoiceBtnState(activeBtn, cls) {
     activeBtn.title = t("voiceStopTitle");
   }
 }
-// The button stays in its "arming" in-between state (so a fast double-click
-// cannot start a second session) until the first backend event, of any kind,
-// proves the session is actually alive.
+// The button stays in its "arming" state (so a fast double-click cannot start a second
+// session) until the first backend event proves the session is alive.
 export function resolveVoiceArming() {
   if (voiceState === "arming") {
     voiceState = "listening";
@@ -435,8 +410,8 @@ export function endVoiceUi() {
       token: voiceToken,
       el: voiceTargetEl,
       caret: voiceTargetEl.selectionEnd ?? null,
-      // The live partial still sitting in the field: the final text of this very
-      // session replaces it instead of landing next to it.
+      // The live partial still sitting in the field: the final text of this session replaces it
+      // instead of landing next to it.
       interim: voiceInterim
         ? { start: voiceInterim.start, len: voiceInterim.len, text: voiceTargetEl.value.substr(voiceInterim.start, voiceInterim.len) }
         : null,
@@ -479,53 +454,47 @@ export async function startVoice(target, btn) {
   }
   recordToolUsage("dictation");
   const { id, lang } = res;
-  // A cancel that happened while this call was in flight (voice_start's own
-  // spawn_blocking round trip is not instant) has to stop the session it
-  // just now learned the id of -- stopVoice() itself had nothing to send.
+  // A cancel during this call (voice_start's spawn_blocking round trip is not instant) must
+  // stop the session it just learned the id of; stopVoice() itself had nothing to send.
   if (voiceArmCancelled) {
     voiceArmCancelled = false;
     invoke("voice_stop", { id }).catch(() => {});
-    // Only reset the UI if no backend event has already adopted this session
-    // (see voiceEventIsMine) -- if one has, its own listener owns the reset.
+    // Reset the UI only if no backend event has already adopted this session (see
+    // voiceEventIsMine); if one has, its own listener owns the reset.
     if (voiceSessionId === null && voiceState === "arming") endVoiceUi();
     return;
   }
-  // A session that ended (or was replaced by a newer one) before this reply was
-  // processed has nothing to adopt: a dead id stored while idle would never be
-  // overwritten, and the next stop would be sent to it.
+  // A session that ended (or was replaced) before this reply was processed has nothing to
+  // adopt: a dead id stored while idle would never be overwritten, and the next stop would go
+  // to it.
   if (voiceState === "idle" || myToken !== voiceToken) return;
   if (voiceSessionId === null) voiceSessionId = id;
   voiceResolvedLang = lang || voiceResolvedLang;
 }
 export async function stopVoice() {
   if (voiceState === "arming" && voiceSessionId === null) {
-    // Nothing to send yet -- voice_start hasn't resolved with an id. Mark the
-    // cancel and let startVoice() finish the job the moment it does.
+    // Nothing to send yet: voice_start has not resolved with an id. Mark the cancel and let
+    // startVoice() finish the job when it does.
     voiceArmCancelled = true;
     return;
   }
   if (!voiceSessionId) return;
   try { await invoke("voice_stop", { id: voiceSessionId }); } catch (_) {}
-  // The UI resets from the voice-stopped event the backend always sends back,
-  // not here -- the button never claims "off" before the session (and its
-  // mic) has actually finished.
+  // The UI resets from the voice-stopped event the backend always sends back, not here, so the
+  // button never claims "off" before the session (and its mic) has finished.
 }
-// True if a token-tagged backend event belongs to the session currently
-// starting or running. voiceToken is chosen by the frontend and sent to
-// voice_start itself, so it is known before any event can possibly arrive --
-// unlike the backend-assigned id, it is never adopted from an event. The two
-// WinRT handlers (ResultGenerated, Completed) are not ordered against each
-// other, so a session that already reported voice-stopped can still deliver
-// one more voice-text after that -- its token no longer matches here and it
-// falls to deliverLateVoiceText instead of being silently misattributed to
-// whatever session (if any) is now starting.
+// True if a token-tagged backend event belongs to the session currently starting or running.
+// voiceToken is chosen by the frontend and sent to voice_start, so it is known before any
+// event can arrive (unlike the backend-assigned id). The two WinRT handlers (ResultGenerated,
+// Completed) are not ordered against each other, so a session that reported voice-stopped can
+// still deliver one more voice-text; its token no longer matches here and it falls to
+// deliverLateVoiceText instead of being misattributed to a session now starting.
 export function voiceEventIsMine(payload) {
   return voiceState !== "idle" && !!payload && payload.token === voiceToken;
 }
-// A late voice-text for the session endVoiceUi just closed out (see voicePrev)
-// -- delivered to ITS OWN target within VOICE_LATE_GRACE_MS instead of being
-// dropped, and never touches voiceState/voiceSessionId/the buttons, since
-// there is no live session left for this to belong to.
+// A late voice-text for the session endVoiceUi just closed out (see voicePrev): delivered to
+// its own target within VOICE_LATE_GRACE_MS instead of dropped, and never touching
+// voiceState/voiceSessionId/the buttons, since no live session is left.
 export function deliverLateVoiceText(payload) {
   const prev = voicePrev;
   if (!prev || !payload || payload.token !== prev.token) return;
@@ -539,8 +508,8 @@ export function deliverLateVoiceText(payload) {
     lang: (prev.lang || LANG).slice(0, 2).toLowerCase(),
   });
   if (prev.hotkey) {
-    // The buffer was held back because it still carried the live partial of this
-    // very phrase: the final text takes the partial's place and goes out once.
+    // The buffer was held back because it still carried the live partial of this phrase: the
+    // final text takes the partial's place and goes out once.
     const held = voiceHotkeyHold;
     const part = prev.interim;
     if (held && part && held.text.substr(part.start, part.len) === part.text) {
@@ -588,11 +557,11 @@ export async function openVoiceOnlineConsent() {
 }
 export function routeVoiceError(err) {
   const code = String(err);
-  // No error toast for this one -- the fix is always the same, so the first
-  // click just opens the dialog that offers it (the OCR button does the same).
+  // No error toast: the fix is always the same, so the first click just opens the dialog that
+  // offers it (the OCR button does the same).
   if (code === "voice-no-language") { openVoiceLangsModal(); return; }
-  // voice-privacy-off is the same missing consent voice-online-required already
-  // guards against -- Windows' own registry value, so the same dialog fixes it.
+  // voice-privacy-off is the same missing consent voice-online-required guards against (a
+  // Windows registry value), so the same dialog fixes it.
   if (code === "voice-online-required" || code === "voice-privacy-off") { openVoiceOnlineConsent(); return; }
   if (code === "voice-denied") {
     toast(t("voiceDeniedMsg"), { label: t("voiceOpenPrivacy"), onClick: () => invoke("open_privacy_mic").catch(() => {}) });
@@ -601,21 +570,19 @@ export function routeVoiceError(err) {
   const key = { "voice-busy": "voiceErrBusy", "voice-failed": "voiceErrFailed" }[code];
   if (key) toast(t(key)); else errToast(code);
 }
-// Joins a new recognized chunk onto whatever the target already holds: one
-// space, except right after a newline or an opening bracket, and never a
-// second space next to one already there.
+// Joins a new recognized chunk onto the target: one space, except right after a newline or an
+// opening bracket, and never a second space next to one already there.
 export function voiceJoiner(before) {
   if (!before) return "";
   if (/[\n(]$/.test(before)) return "";
   if (/\s$/.test(before)) return "";
   return " ";
 }
-// interim: true for a live voice-partial update (replaced by the next update
-// or the final result), false for the committed voice-text result. The marker
-// (voiceInterim) is what makes a partial replaceable in place instead of
-// piling up duplicate text on every update; tracked per the target element,
-// discarded the moment the user types or moves the cursor themselves (see the
-// discard listeners below), at which point it just stays as plain text.
+// interim: true for a live voice-partial update (replaced by the next update or the final
+// result), false for the committed voice-text. The marker (voiceInterim) makes a partial
+// replaceable in place instead of piling up duplicate text; it is tracked per target element
+// and discarded when the user types or moves the cursor (see the discard listeners below),
+// after which it stays as plain text.
 export function insertVoiceText(text, interim) {
   const el = voiceTargetEl;
   if (!el || el.classList.contains("hidden")) return; // its field disappeared mid-session
@@ -639,9 +606,8 @@ export function insertVoiceText(text, interim) {
   voiceSuppressInput = false;
   voiceInterim = interim ? { start: newStart, len: text.length } : null;
 }
-// Sibling of insertVoiceText for deliverLateVoiceText's one-shot delivery --
-// deliberately does not touch voiceInterim/voiceSuppressInput, since there is
-// no live session left for the discard-tracking those belong to.
+// Sibling of insertVoiceText for deliverLateVoiceText's one-shot delivery; it does not touch
+// voiceInterim/voiceSuppressInput, since no live session is left to track.
 export function insertLateVoiceText(el, text, at) {
   const value = el.value;
   const joiner = voiceJoiner(value.slice(0, at));
@@ -649,8 +615,8 @@ export function insertLateVoiceText(el, text, at) {
   el.selectionStart = el.selectionEnd = at + joiner.length + text.length;
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
-// The recognized text is still ours to lay claim to right up until the user
-// visibly acts on the field themselves -- then the interim span is just text.
+// The recognized text is ours until the user visibly acts on the field; then the interim span
+// is just text.
 export function voiceWatchDiscard(el) {
   if (!el) return;
   const discard = () => { if (voiceInterim && voiceTargetEl === el) voiceInterim = null; };
@@ -660,16 +626,13 @@ export function voiceWatchDiscard(el) {
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key)) discard();
   });
 }
-// The global dictation hotkey has no visible field to dictate into (the window is
-// never brought forward), so it targets this detached textarea instead --
-// never added to the DOM, but a real element, so it rides the exact same
-// insertVoiceText/voiceJoiner pipeline as the two visible buttons rather than
-// a second copy of it.
+// The global dictation hotkey has no visible field (the window is never brought forward), so
+// it targets this detached textarea. It is never added to the DOM but rides the same
+// insertVoiceText/voiceJoiner pipeline as the two visible buttons.
 export const voiceHotkeyBuffer = document.createElement("textarea");
-// A hotkey session that stopped while its buffer still held a live partial: the
-// final text for that phrase can arrive just after voice-stopped, so the delivery
-// waits for it (up to VOICE_LATE_GRACE_MS) instead of sending the partial and then
-// the final as a second text.
+// A hotkey session that stopped while its buffer still held a live partial: the final text
+// for that phrase can arrive just after voice-stopped, so delivery waits for it (up to
+// VOICE_LATE_GRACE_MS) instead of sending the partial and then the final as a second text.
 let voiceHotkeyHold = null; // {text, timer} | null
 export function flushVoiceHotkeyHold() {
   const held = voiceHotkeyHold;
@@ -690,16 +653,16 @@ export async function deliverVoiceHotkeyText(text) {
     autoGrow(inputEl);
     return;
   }
-  // clipboard and paste both copy first -- paste then adds the same
-  // paste-into-previous-app step a prompt hotkey already uses.
+  // Clipboard and paste both copy first; paste then adds the paste-into-previous-app step a
+  // prompt hotkey already uses.
   try { await invoke("copy_text", { text }); } catch (e) { errToast(e); return; }
   if (target === "paste") await autoPasteNow(null);
   else toast(t("copied"));
 }
 
 export function bindDictation() {
-  // Voice dictation: the two buttons (composer, edit dialog) share one wiring
-  // helper and one event pipeline -- see the section above for all of it.
+  // Voice dictation: the two buttons (composer, edit dialog) share one wiring helper and one
+  // event pipeline (see the section above).
   wireVoiceButton($("voice-btn"), () => inputEl);
   wireVoiceButton(modal.voiceBtn, () => modal.text);
   voiceWatchDiscard(inputEl);
@@ -735,8 +698,7 @@ export function bindDictation() {
     endVoiceUi();
     routeVoiceError(payload.code);
   });
-  // The global hotkey toggled a session ON (a toggle OFF is handled entirely
-  // on the Rust side, no event needed for that direction).
+  // The global hotkey toggled a session ON (toggling OFF is handled on the Rust side).
   listen("voice-hotkey-toggle", () => {
     if (voiceState !== "idle") return;
     flushVoiceHotkeyHold();
