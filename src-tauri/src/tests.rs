@@ -12404,6 +12404,20 @@ fn an_import_that_swaps_the_vault_keys_ends_the_unlocked_session() {
 }
 
 #[test]
+fn adopting_another_store_ends_the_session_only_when_its_vault_differs() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    let (settings, _, _) = vault_fixture();
+    let foreign = foreign_backup(true).settings;
+    for (new, expect_locked) in [(&foreign, true), (&settings, false)] {
+        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(SecretSession { key: [7u8; 32], unlocked_at: std::time::Instant::now() });
+        end_session_if_vault_changed(&settings, new);
+        assert_eq!(secret_session_key(0).is_none(), expect_locked);
+    }
+    *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+#[test]
 fn a_data_restore_moves_the_vault_keys_along_with_the_prompts() {
     let dir = std::env::temp_dir();
     let target = dir.join(format!("{}-test-restore-vaultdata-target.db", brand::SLUG));

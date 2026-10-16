@@ -784,6 +784,14 @@ pub(crate) fn vault_keys_differ(a: &Settings, b: &Settings) -> bool {
     [SECRET_SALT_KEY, SECRET_VERIFY_KEY].iter().any(|k| a.ui_texts.get(*k) != b.ui_texts.get(*k))
 }
 
+// The session key belongs to the salt it was derived from: whenever another store
+// replaces the settings, a key from the old salt must not outlive the swap.
+pub(crate) fn end_session_if_vault_changed(old: &Settings, new: &Settings) {
+    if vault_keys_differ(old, new) {
+        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
 // Removes every denied row from a settings block that came from a file.
 pub(crate) fn drop_machine_rows(incoming: &mut Settings) {
     incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
@@ -1044,9 +1052,7 @@ pub(crate) fn run_import(
     // The session key belongs to the salt it was derived from: once the import
     // installed another salt, the old key would decrypt nothing and would seal
     // new confidential prompts against a verifier that no longer matches.
-    if vault_keys_differ(&original_settings, &store.settings) {
-        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    }
+    end_session_if_vault_changed(&original_settings, &store.settings);
     Ok((count, dropped, backup_pw_dropped, vault_mismatch))
 }
 

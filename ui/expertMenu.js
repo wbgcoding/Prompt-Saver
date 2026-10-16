@@ -12,7 +12,7 @@ import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
-import { hideSettings, syncSettingsControls } from "./settingsPanel.js";
+import { hideSettings, reloadEverything, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
 import { openStats, toggleShortLivedCert } from "./management.js";
@@ -985,6 +985,8 @@ export const EXPERT_PATHS = {
       const nowDir = await invoke("current_data_dir").catch(() => dir);
       const moved = nowDir !== oldPath;
       currentDataDir = moved ? dir : oldPath;
+      // An adopted library replaces the one the window shows, and its vault starts locked.
+      if (moved) await reloadEverything().catch((e) => errToast(e));
       renderExpert();
       refreshDataDirLock(); // the new folder may already carry another machine's fresh lock
       // Offer to delete the old data (default = keep). Message notes the restart.

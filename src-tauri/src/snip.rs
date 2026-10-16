@@ -2121,7 +2121,9 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
         // next settings flush or prompt edit would write that state over this store
         // (or merge both libraries). Load what is really in the new folder instead.
         let fresh = load_store(&app);
-        *lock(&state) = fresh;
+        let mut store = lock(&state);
+        end_session_if_vault_changed(&store.settings, &fresh.settings);
+        *store = fresh;
     }
     // The lock decision was made for the folder just left; re-run it for the one
     // just entered, exactly like a fresh load_store() would, so a move into (or

@@ -802,7 +802,9 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
                 let _ = fs::remove_file(dir.join("data.db-wal"));
                 let _ = fs::remove_file(dir.join("data.db-shm"));
                 let fresh = load_store(&app);
-                *lock(&state) = fresh;
+                let mut store = lock(&state);
+                end_session_if_vault_changed(&store.settings, &fresh.settings);
+                *store = fresh;
             }
             return Err(e);
         }
@@ -820,7 +822,10 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
         let _ = fs::remove_file(dir.join("data.db-shm"));
         // One lock for both steps: taking it twice would deadlock.
         let fresh = load_store(&app);
-        *lock(&state) = fresh;
+        let mut store = lock(&state);
+        end_session_if_vault_changed(&store.settings, &fresh.settings);
+        *store = fresh;
+        drop(store);
     }
     if remember {
         if let Some(src) = src {
