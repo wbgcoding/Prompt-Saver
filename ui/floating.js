@@ -432,7 +432,9 @@ function applyPrompt(p) {
       ensureVideoPlaying();
     } else {
       videoEl.classList.add("hidden");
+      videoEl.pause();
       videoEl.removeAttribute("src");
+      videoEl.load(); // the attribute alone neither stops playback nor frees the file
       const src = p.image || convertFileSrc(showPath);
       imgEl.onload = () => onRatio(imgEl.naturalWidth / imgEl.naturalHeight);
       imgEl.onerror = () => onRatio(1); // broken image: still size the pill
@@ -441,7 +443,9 @@ function applyPrompt(p) {
     }
   } else {
     videoEl.classList.add("hidden");
+    videoEl.pause();
     videoEl.removeAttribute("src");
+    videoEl.load();
     imgEl.classList.add("hidden");
     imgEl.removeAttribute("src");
     pill.classList.remove("has-image");

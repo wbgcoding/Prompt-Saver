@@ -975,12 +975,16 @@ export function syncModalImageUi(mode) {
         });
       };
       modal.img.src = image || convertFileSrc(previewPath);
+      modal.video.pause();
       modal.video.removeAttribute("src");
+      modal.video.load();
     }
     modal.showImage.classList.toggle("active", showImage);
     modal.showText.classList.toggle("active", !showImage);
   } else {
+    modal.video.pause();
     modal.video.removeAttribute("src");
+    modal.video.load();
   }
   modal.fileWrap.classList.toggle("hidden", !filePath);
   const fileHint = $("modal-file-hint");
@@ -1230,7 +1234,10 @@ export function closeModal() {
   closeTagSuggest();
   closeTagPop();
   modal.root.classList.add("hidden");
-  modal.video.removeAttribute("src"); // stop a playing preview
+  // Removing the attribute alone neither stops the playback nor releases the file.
+  modal.video.pause();
+  modal.video.removeAttribute("src");
+  modal.video.load();
   // An orderly close -- save or deliberate cancel/discard, every caller funnels
   // through here -- drops the autosave draft right away rather than leaving it
   // for the boot-time recovery check to find and offer back for nothing.
