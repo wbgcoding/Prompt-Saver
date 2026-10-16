@@ -23,10 +23,9 @@ export function assignLibQuery(v) { libQuery = v; }
 // awaits, so a query set right after the click would be wiped.
 let libPresetQuery = null;
 export function presetLibQuery(q) { libPresetQuery = q; }
-// Ids whose recognized image text matched the last query sent to
-// search_image_text, and the (trimmed, lowercased) query they were fetched
-// for -- image_text itself never reaches the frontend, so this is the only
-// trace of a hit computeLibSearchScore ever sees.
+// Ids whose recognized image text matched the last query sent to search_image_text, and the
+// (trimmed, lowercased) query they were fetched for. image_text never reaches the frontend,
+// so this is the only trace of a hit computeLibSearchScore sees.
 export let imageHitIds = new Set();
 export let imageHitQuery = "";
 // Type filters are ADDITIVE and identical in both windows: an empty set means every
@@ -44,7 +43,7 @@ export let libDisplayOrder = [];      // ids in current display order (for range
 export let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
 
 // ---- Prompt library (all prompts, click to edit) ----
-// Classify a prompt for the library type filter / thumbnails.
+// Classify a prompt for the library type filter and thumbnails.
 export function promptType(p) {
   if (PDF_EXT.test(p.file_path)) return "pdf";
   const kind = p.file_path ? mediaKind(p.file_path) : p.icon_path ? mediaKind(p.icon_path) : "";
@@ -55,8 +54,8 @@ export function promptType(p) {
   return "text";
 }
 
-// Library display name: fall back to a type label ("Bild" etc.) so saved
-// images/screenshots/files are never shown blank.
+// Library display name: falls back to a type label so saved images, screenshots and files
+// are never shown blank.
 export const LIB_TYPE_LABEL = { image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
 export function libLabel(p) {
   if (p.name) return p.name;
@@ -68,8 +67,8 @@ export function libLabel(p) {
 export function thumbSrc(p) {
   const stored = imageOf(p);
   if (stored) return stored;
-  // A stored image outranks any path preview: while it is still loading, show
-  // nothing rather than briefly swapping in the attachment's own thumbnail.
+  // A stored image outranks any path preview: while it loads, show nothing rather than briefly
+  // swapping in the attachment's own thumbnail.
   if (hasImage(p)) return "";
   const path = mediaKind(p.file_path) === "image" || mediaKind(p.file_path) === "gif"
     ? p.file_path
@@ -85,9 +84,8 @@ export function videoSrc(p) {
   return "";
 }
 
-// Only the videos currently scrolled into view play: keeps a long list cheap.
-// Library and journal each get their own observer so opening one panel never
-// pauses the other's still-mounted video thumbnails.
+// Only videos scrolled into view play, which keeps a long list cheap. Library and journal
+// each get their own observer so one panel never pauses the other's mounted video thumbnails.
 export let _libObs = null;
 export let _journalObs = null;
 export function assignJournalObs(v) { _journalObs = v; }
@@ -109,12 +107,10 @@ export function thumbDot(p) {
   return dot;
 }
 
-// Shared row preview for library + journal: a looping muted inline video for
-// video prompts, an image for image/gif/stored-image prompts, else a color dot.
-// `cache` reuses the element across re-renders of the SAME panel instead of
-// re-decoding the same base64 blob on every keystroke: appending an already-
-// mounted node just reparents it, so an id whose thumb type stays the same never
-// gets a fresh <img>/<video>.
+// Shared row preview for library and journal: a looping muted inline video for video
+// prompts, an image for image/gif/stored-image prompts, else a color dot. `cache` reuses the
+// element across re-renders of the same panel so the same base64 blob is not re-decoded on
+// every keystroke.
 export function thumbEl(p, cache) {
   if (!flag("imagePreview")) return thumbDot(p);
   const vsrc = flag("libraryVideoPreview") ? videoSrc(p) : "";
@@ -128,10 +124,8 @@ export function thumbEl(p, cache) {
   }
   const cached = cache.get(p.id);
   if (cached && cached.key === key) {
-    // renderLibrary/renderJournal build a FRESH IntersectionObserver every
-    // render (disconnecting the old one) -- a cache hit must re-observe with the
-    // current one, or a video that survives a re-render (e.g. the search field)
-    // stops being paused/started by scroll after the first refresh.
+    // Each render builds a fresh IntersectionObserver (disconnecting the old one), so a cache hit
+    // must re-observe with the current one or a surviving video stops following scroll.
     if (vsrc && _activeVidObs) _activeVidObs.observe(cached.el);
     return cached.el;
   }
@@ -159,9 +153,8 @@ export function thumbEl(p, cache) {
 }
 
 // ---- Media metadata: duration badge + resolution/size tooltip ----
-// Library and copy history only, by explicit request -- buildTile (the main
-// grid's own thumbEl caller) never wraps its thumbnail with this and never
-// reads media_duration_ms/media_width/media_height/media_size_bytes.
+// Library and copy history only; buildTile (the main grid) never wraps its thumbnail with
+// this and never reads the media_* fields.
 
 export const mediaDurationLabel = (ms) => {
   const s = Math.round(ms / 1000);
@@ -169,9 +162,9 @@ export const mediaDurationLabel = (ms) => {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 };
 
-// Wraps a library/history thumbnail with its duration badge when the entry
-// carries a measured video length. Returns the thumb unchanged otherwise, so a
-// caller can always write `row.append(mediaThumb(p, thumbEl(p, cache)), body)`.
+// Wraps a thumbnail with its duration badge when the entry carries a measured video length,
+// otherwise returns it unchanged, so a caller can always write
+// `row.append(mediaThumb(p, thumbEl(p, cache)), body)`.
 export function mediaThumb(p, thumb) {
   if (!flag("mediaMeta") || !p.media_duration_ms) return thumb;
   const wrap = document.createElement("span");
@@ -183,8 +176,8 @@ export function mediaThumb(p, thumb) {
   return wrap;
 }
 
-// Resolution + file size line for the library/history tooltip. "" = nothing to
-// add -- a value that could not be measured shows nothing, never a placeholder.
+// Resolution and file size line for the tooltip. "" = nothing to add: a value that could not
+// be measured shows nothing, never a placeholder.
 export function mediaTipLine(p) {
   if (!flag("mediaMeta")) return "";
   const parts = [];
@@ -193,13 +186,12 @@ export function mediaTipLine(p) {
   return parts.join(" · ");
 }
 
-// The one-time catch-up for a row that has never been measured, or whose first
-// measurement failed: fires at most once per id per session and never blocks
-// the render -- the backend call is fire-and-forget, and the panel only
-// re-renders once it actually comes back with something to show.
+// The one-time catch-up for a row never measured, or whose first measurement failed: at most
+// once per id per session, fire-and-forget, and the panel re-renders only once it comes back
+// with something to show.
 export const mediaMetaBackfilled = new Set();
-// One pending repaint per render function: a library full of unmeasured rows
-// answers N times, and each answer used to rebuild the whole list.
+// One pending repaint per render function: a library full of unmeasured rows answers N
+// times, and each answer would otherwise rebuild the whole list.
 const backfillRepaint = new Map();
 function scheduleBackfillRepaint(rerender) {
   clearTimeout(backfillRepaint.get(rerender));
@@ -226,8 +218,8 @@ export function maybeBackfillMediaMeta(p, rerender) {
 }
 
 // ---- Additive type filters, shared by the library and the copy history ----
-// Nothing picked = every type. "All" clears the set, every other chip toggles itself,
-// so PDF and File can be shown together. The pick is stored per window.
+// Nothing picked = every type. "All" clears the set, every other chip toggles itself, so PDF
+// and File can be shown together. The pick is stored per window.
 export const typeFilterOf = (key) => new Set((settings.ui_texts?.[key] || "").split(",").filter(Boolean));
 
 export function paintTypeChips(box, set) {
@@ -249,9 +241,8 @@ export function toggleTypeFilter(set, type, box, key) {
 // A prompt passes when no type is picked, or when its own type is among them.
 export const typeAllowed = (set, p) => set.size === 0 || set.has(promptType(p));
 
-// ---- Fuzzy search: tiered scoring (exact > prefix > fuzzy) over the same
-// fields the plain search used. Fuzzy only kicks in when no substring hit exists,
-// so the common case short-circuits and stays cheap on 1000+ prompts.
+// ---- Fuzzy search: tiered scoring (exact > prefix > fuzzy). Fuzzy only kicks in when no
+// substring hit exists, so the common case stays cheap on 1000+ prompts. ----
 export function fuzzyMaxTyposFor(term) {
   return term.length <= 5 ? 1 : 2;
 }
@@ -275,12 +266,11 @@ export function editDistWithin(a, b, max) {
   }
   return prev[lb];
 }
-// Weighted match score for the active query. score 0 = no match; fuzzy = true when
-// only the typo-tolerant tier matched (rendered dimmed).
-// Per-render memo: libSearchScore is called for every prompt in the filter, TWICE
-// per comparison in the sort, and once more per row for the fuzzy class. Fuzzy mode
-// runs bounded edit-distance over every token, so recomputing 3×/keystroke lagged.
-// Cache is cleared at the top of each renderLibrary (see below).
+// Weighted match score for the active query. score 0 = no match; fuzzy = true when only the
+// typo-tolerant tier matched (rendered dimmed).
+// Per-render memo: libSearchScore runs for every prompt in the filter, twice per comparison
+// in the sort and once more per row, and fuzzy mode runs bounded edit distance over every
+// token. Cleared at the top of each renderLibrary.
 export let libScoreCache = new Map();
 export function libSearchScore(p) {
   const hit = libScoreCache.get(p.id);
@@ -289,11 +279,10 @@ export function libSearchScore(p) {
   libScoreCache.set(p.id, res);
   return res;
 }
-// Whether a prompt satisfies one tag:/var: condition from the search query.
-// tag: matches a tag's own identity (tagKey), case-insensitive, not a
-// substring -- the plain search already does substring matching over tag
-// text. var: matches a placeholder's name, read the same way the variable
-// dialog itself reads it (VAR_RE over the body, then the "|options" split).
+// Whether a prompt satisfies one tag:/var: condition from the search query. tag: matches a
+// tag's identity (tagKey) case-insensitively, not as a substring (the plain search already
+// does that). var: matches a placeholder's name, read as the variable dialog reads it (VAR_RE
+// over the body, then the "|options" split).
 export function searchConditionMet(c, p) {
   let hit;
   if (c.prefix === "tag") {
@@ -307,29 +296,26 @@ export function searchConditionMet(c, p) {
 export function computeLibSearchScore(p) {
   const rawInput = libQuery.trim().toLowerCase();
   if (!rawInput) return { score: 1, fuzzy: false, entryIndex: 0 };
-  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard
-  // conditions, pulled out before anything else runs -- a prompt that fails
-  // one of them is out, whatever the rest of the query would otherwise have
-  // scored it. parseSearchQuery leaves everything else untouched.
+  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard conditions pulled
+  // out first: a prompt that fails one is out whatever the rest of the query would score.
   const { rest, conditions } = parseSearchQuery(rawInput);
   if (conditions.length && !conditions.every((c) => searchConditionMet(c, p))) {
     return { score: 0, fuzzy: false, entryIndex: 0 };
   }
   const raw = rest;
   if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 }; // only tag:/var: terms given
-  // entryIndex tags which entry a body-field match came from (0 = p.text, the
-  // library row's default preview; 1+ = variants[entryIndex-1]): a rotating
-  // prompt is findable by ANY entry, and the row can then show the one that
-  // actually matched instead of always entry 1 regardless of why it appeared.
-  // The fourth element names the field, so a row can say where its hit came from.
+  // entryIndex says which entry a body-field match came from (0 = p.text, 1+ =
+  // variants[entryIndex-1]), so a rotating prompt is findable by any entry and the row can show
+  // the one that matched. The fourth element names the field, so a row can say where its hit
+  // came from.
   const fields = [[(p.name || "").toLowerCase(), 3, -1, "name"], [(p.text || "").toLowerCase(), 1, 0, "text"], [(p.file_path || "").toLowerCase(), 1, -1, "file"]];
   (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1, "variant"]));
   // A tag is a deliberate label, so it ranks between the name and the body.
   if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1, "tags"]);
   // A note is private context, so it matches but ranks below the prompt body.
   if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1, "notes"]);
-  // A "-word" term excludes any prompt whose searchable text contains it,
-  // checked across every field before anything else runs.
+  // A "-word" term excludes any prompt whose searchable text contains it, checked across every
+  // field first.
   const terms = raw.split(/\s+/).filter(Boolean);
   const isExclude = (t) => t.length > 1 && t[0] === "-";
   const excludes = terms.filter(isExclude).map((t) => t.slice(1));
@@ -363,9 +349,8 @@ export function computeLibSearchScore(p) {
     }
   }
   if (best) return { score: best, fuzzy: true, entryIndex: bestEntry, field: bestKind, q };
-  // Last resort: text recognized inside an attached picture. Only reached
-  // when nothing else -- not even a typo-tolerant match -- found this prompt,
-  // so it never outranks a real match on the name, the body, a tag or a note.
+  // Last resort: text recognized inside an attached picture. Only reached when nothing else
+  // matched, so it never outranks a match on the name, body, a tag or a note.
   if (optFlag("ocrIndex") && imageHitQuery === rawInput && imageHitIds.has(p.id)) {
     return { score: 90, fuzzy: false, entryIndex: 0, fromImage: true };
   }
@@ -389,12 +374,10 @@ function markHits(el, str, q) {
   }
   if (at < str.length) el.appendChild(document.createTextNode(str.slice(at)));
 }
-// The only place image_text is ever read back: a backend lookup, since the
-// state payload never carries it. Fired once per query change (never inside
-// computeLibSearchScore itself, which runs several times per prompt per
-// render) and cached in imageHitIds/imageHitQuery until the query changes
-// again. A stubbed or failing call just means no image hits, never a search
-// that throws.
+// The only place image_text is read back, via a backend lookup (the state payload never
+// carries it). Fired once per query change, never inside computeLibSearchScore (which runs
+// several times per prompt per render), and cached until the query changes. A stubbed or
+// failing call just means no image hits.
 export async function refreshImageHits(rawInput) {
   if (!optFlag("ocrIndex") || !rawInput) {
     imageHitIds = new Set();
@@ -414,9 +397,9 @@ export async function refreshImageHits(rawInput) {
 export function fuzzyTokens(s) {
   return s.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 }
-// A query word matches a field word by substring, whole-word edit distance, or:
-// for longer field words: edit distance against its leading prefix ("cde"→"code",
-// "cde"→"codebase").
+// A query word matches a field word by substring, whole-word edit distance, or, for longer
+// field words, edit distance against its leading prefix ("cde" matches "code" and
+// "codebase").
 export function fuzzyWordHit(qw, vw, max) {
   if (vw.includes(qw)) return true;
   if (editDistWithin(qw, vw, max) <= max) return true;
@@ -424,9 +407,8 @@ export function fuzzyWordHit(qw, vw, max) {
   return false;
 }
 
-// The archive is a reserved tag, not a new prompt field or state -- every other
-// tag-aware path (search, export, backup, sync) already carries it through
-// without needing to know this concept exists.
+// The archive is a reserved tag, not a new prompt field, so every tag-aware path (search,
+// export, backup, sync) carries it without knowing about it.
 export function archiveTagName() {
   return txt("archiveTag") || t("archiveTagName");
 }
@@ -450,8 +432,8 @@ export function isArchived(p) {
   return (p.tags || []).some((t2) => tagKey(t2) === key);
 }
 
-// Browsing without a query leaves an archived prompt out of the list (the show-archive
-// toggle or a typed query brings it back). The header counts follow the same rule.
+// Browsing without a query leaves an archived prompt out of the list; the show-archive toggle
+// or a typed query brings it back. The header counts follow the same rule.
 function archiveHidden() {
   return flag("archiveTag") && !libQuery.trim() && !libShowArchive;
 }
@@ -460,15 +442,14 @@ export function libMatches(p) {
   if (libFav && !p.favorite) return false;
   if (!typeAllowed(libTypes, p)) return false;
   if (!tagMatches(p)) return false;
-  // Browsing without a search query hides an archived prompt unless the show-archive
-  // toggle is on; typing an actual query still finds it, the list is only quieter.
+  // An archived prompt is hidden unless the show-archive toggle is on, but a typed query still
+  // finds it.
   if (archiveHidden() && isArchived(p)) return false;
   return libSearchScore(p).score > 0;
 }
 
-// Saved searches: query text, active tag filters and sort, kept together as one
-// JSON blob in a single settings slot -- no new backend concept needed, the
-// generic set_ui_text command already persists any string.
+// Saved searches: query text, active tag filters and sort, kept as one JSON blob in a single
+// settings slot (the generic set_ui_text command persists any string).
 const SAVED_SEARCH_MAX = 5; // saved searches kept
 export function loadSavedSearches() {
   try {
@@ -483,14 +464,14 @@ export async function persistSavedSearches(list) {
   settings.ui_texts = { ...(settings.ui_texts || {}), savedSearches: value };
   await invoke("set_ui_text", { key: "savedSearches", value }).catch((err) => errToast(err));
 }
-// A long query would blow up the chip row, so the suggested name is a plain
-// truncation of it -- still editable in the same dialog before it is saved.
+// A long query would blow up the chip row, so the suggested name is a plain truncation,
+// editable in the same dialog before saving.
 export function suggestedSearchName(query) {
   const s = query.trim();
   return s.length > 40 ? s.slice(0, 40).trim() + "…" : s;
 }
-// Reordering the saved-search chips: pointer events rather than HTML5 drag-and-drop,
-// which the webview reserves for file drops (same as the view tabs).
+// Reordering the saved-search chips uses pointer events, since the webview reserves HTML5
+// drag-and-drop for file drops (same as the view tabs).
 let savedChipDrag = null;
 let savedChipDragBlockClick = false;
 function endSavedChipDrag() {
@@ -620,9 +601,9 @@ export async function editSavedSearch(index) {
   renderSavedSearches();
 }
 
-// Selected tag chips narrow the list, combined with search and the other
-// filters. AND (default) needs every chip, OR any of them. The grid's own
-// filter (gridTags) reuses this with its own Set instead of the library's.
+// Selected tag chips narrow the list, combined with search and the other filters. AND
+// (default) needs every chip, OR any of them. The grid's own filter (gridTags) reuses this
+// with its own Set.
 export function tagMatches(p, tagSet = libTags) {
   if (!tagsOn() || !tagSet.size) return true;
   const own = new Set((p.tags || []).map(tagKey));
@@ -632,12 +613,10 @@ export function tagMatches(p, tagSet = libTags) {
     : wanted.every((k) => own.has(k));
 }
 
-// "last edited" per prompt: from prompt_versions (a version row is only
-// ever written on a real name/text change, see update_prompt), refetched
-// whenever the library opens or an edit lands while it's already open. A
-// prompt absent from the map has no version row (history off, or never
-// content-edited since creation) and sorts to the end, same as an unused
-// prompt already does under "most used"/"recently used" above.
+// "Last edited" per prompt, from prompt_versions (a version row is only written on a real
+// name/text change, see update_prompt), refetched when the library opens or an edit lands
+// while it is open. A prompt absent from the map has no version row and sorts to the end,
+// like an unused prompt under "most used".
 export let lastEdited = {};
 export async function refreshLastEdited() {
   if (!flag("promptHistory")) { lastEdited = {}; return; }
@@ -654,8 +633,8 @@ export function sortLibraryItems(items) {
   const mode = libSortMode();
   const q = libQuery.trim();
   const nameOf = (p) => libLabel(p).toLowerCase();
-  // One Collator for the whole sort instead of one per pairwise comparison:
-  // localeCompare(str, locale) builds a fresh one internally on every call.
+  // One Collator for the whole sort: localeCompare(str, locale) builds a fresh one on every
+  // call.
   const collator = new Intl.Collator(LANG);
   const byName = (a, b) => collator.compare(nameOf(a), nameOf(b));
   if (mode === "default") {
@@ -664,7 +643,7 @@ export function sortLibraryItems(items) {
     return;
   }
   if (mode === "name") { items.sort(byName); return; }
-  // Usage/recency desc; unused (0) fall last, ties resolve by name: all stable.
+  // Usage/recency descending; unused (0) fall last, ties resolve by name.
   if (mode === "mostUsed") {
     items.sort((a, b) => ((settings.usage?.[b.id] || 0) - (settings.usage?.[a.id] || 0)) || byName(a, b));
   } else if (mode === "recentUsed") {
@@ -689,8 +668,8 @@ export function fillLibrarySort() {
 }
 
 // The library was raised over the statistics dialog by jumpToPrompt. Put it back down;
-// `closeBehind` also dismisses the dialogs underneath (dragging onto the grid needs
-// the grid). Returns true if the library was raised at all.
+// `closeBehind` also dismisses the dialogs underneath (dragging onto the grid needs the
+// grid). Returns true if the library was raised at all.
 export function dropLibraryFront(closeBehind) {
   if (!document.body.classList.contains("library-front")) return false;
   document.body.classList.remove("library-front");
@@ -704,15 +683,14 @@ export function dropLibraryFront(closeBehind) {
 // Close the library and flush any deferred grid rebuild from batch edits.
 export function hideLibrary() {
   libraryEl.classList.add("hidden");
-  // Prompts may have been edited or deleted while the library was up: the
-  // statistics underneath would otherwise still show the old numbers.
+  // Prompts may have been edited or deleted while the library was up; the statistics
+  // underneath would show the old numbers.
   if (dropLibraryFront(false)) renderStatsPanel($("stats-panel"));
   if (gridDirty) { gridDirty = false; renderGrid(true); }
 }
 
-// List/tiles toggle: remembered per active type filter, so switching to
-// "only images" and picking tiles there sticks the next time that same
-// filter is chosen, without forcing tiles everywhere else too.
+// List/tiles toggle, remembered per active type filter: picking tiles under "only images"
+// sticks for that filter without forcing tiles everywhere.
 export function libViewModeKey() {
   return [...libTypes].sort().join(",") || "all";
 }
@@ -736,9 +714,8 @@ export async function toggleLibViewMode() {
   await invoke("set_ui_text", { key: "libraryViewMode", value }).catch((err) => errToast(err));
   renderLibrary();
 }
-// Tiles only build their real thumbnail once scrolled into view -- otherwise a
-// library that is mostly pictures would fetch every one of them the moment it
-// opens, the exact "500 images at once" cost imageOf's own cache exists to avoid.
+// Tiles build their real thumbnail only once scrolled into view; otherwise a mostly-picture
+// library would fetch every image on open (the cost imageOf's cache exists to avoid).
 export let _tileImgObs = null;
 export function makeTileImgObserver(root) {
   return new IntersectionObserver((entries) => {
@@ -820,13 +797,11 @@ export function renderLibrary() {
     return;
   }
   const placed = new Set(Object.keys(layoutOf(activeView())));
-  // A folder member has no layout entry of its own (the folder draws it), so
-  // without this it would show as addable: placing it would silently no-op since
-  // renderGrid always skips ids listed in a folder's members.
+  // A folder member has no layout entry of its own (the folder draws it), so without this it
+  // would show as addable although renderGrid skips ids listed in a folder's members.
   for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
   libDisplayOrder = items.map((p) => p.id); // Range-select uses display order
-  // Batch through a fragment -- appending straight into the live list forced
-  // a reflow per row on a large library.
+  // Batch through a fragment; appending into the live list forced a reflow per row.
   const frag = document.createDocumentFragment();
   for (const p of items) {
     const row = document.createElement("button");
@@ -835,8 +810,8 @@ export function renderLibrary() {
     row.dataset.id = p.id; // In-place selection toggle finds the row by id
     // Dim rows that only matched via the typo-tolerant tier.
     if (libQuery.trim() && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
-    // Selection state (the checkbox itself is a CSS ::before, shown while the
-    // list carries the .selecting class: so toggling select mode never re-renders).
+    // Selection state (the checkbox is a CSS ::before shown while the list has .selecting, so
+    // toggling select mode never re-renders).
     if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
     row.title = libSelectMode ? "" : t("copy");
     const rowTimes = tileTimeLines(p.id);
@@ -849,13 +824,12 @@ export function renderLibrary() {
     const name = document.createElement("span");
     name.className = "lib-name";
     name.textContent = libLabel(p);
-    // A search hit inside entry 2+ shows THAT entry (why the row matched at
-    // all) instead of always entry 1, plus a small "n/total" tag naming it.
+    // A search hit inside entry 2+ shows that entry (why the row matched) plus a small
+    // "n/total" tag naming it.
     const hitEntry = libQuery.trim() ? libSearchScore(p).entryIndex : 0;
     const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
-    // file_path still wins over a variant hit: a file/image prompt can never
-    // actually HAVE variants (the editor gates rotation to text-only prompts), so
-    // hitVariant is never non-null on a prompt that also has a file_path.
+    // file_path still wins over a variant hit: a file/image prompt never has variants (the
+    // editor gates rotation to text-only prompts).
     const text = document.createElement("span");
     text.className = "lib-text";
     text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
@@ -877,8 +851,8 @@ export function renderLibrary() {
       tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
       body.appendChild(tag);
     }
-    // Otherwise this hit would look like a random match, since nothing in
-    // the visible name or body actually contains the query.
+    // Otherwise this hit would look like a random match, since neither the name nor the body
+    // contains the query.
     if (libQuery.trim() && libSearchScore(p).fromImage) {
       const imgTag = document.createElement("span");
       imgTag.className = "lib-image-hit-tag";
@@ -912,9 +886,8 @@ export function renderLibrary() {
       nameRow.appendChild(marks);
     }
 
-    // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.
-    // In tiles mode a not-yet-visible row gets a plain placeholder instead --
-    // _tileImgObs swaps in the real thumbnail once it scrolls into view.
+    // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot. In tiles mode a
+    // not-yet-visible row gets a placeholder that _tileImgObs swaps for the real thumbnail.
     if (tilesMode) {
       const placeholder = document.createElement("span");
       placeholder.className = "lib-thumb lib-tile-placeholder dot";
@@ -927,15 +900,14 @@ export function renderLibrary() {
     row.appendChild(body);
     maybeBackfillMediaMeta(p, renderLibrary);
 
-    // Every row, media rows included, gets the same actions menu a grid tile
-    // has; the image and video editors are entries of that menu.
+    // Every row gets the same actions menu a grid tile has; the image and video editors are
+    // entries of it.
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
       openCtx(p.id, e.clientX, e.clientY);
     });
 
-    // Place on the current layout: drag the row onto the grid, or one click.
     row.addEventListener("pointerdown", (e) => {
       if (libSelectMode) return; // no drag while multi-selecting
       if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav, .lib-delete")) return;
@@ -979,7 +951,6 @@ export function renderLibrary() {
       makeKeyboardActivatable(fav);
       row.appendChild(fav);
     }
-    // Edit icon (rightmost): opens the edit dialog without copying.
     const edit = document.createElement("span");
     edit.className = "icon-btn lib-edit";
     edit.title = t("edit");
@@ -989,7 +960,6 @@ export function renderLibrary() {
     makeKeyboardActivatable(edit);
     row.appendChild(edit);
 
-    // Delete (far right): goes to the trash and shows an Undo toast.
     const del = document.createElement("span");
     del.className = "icon-btn lib-delete";
     del.title = t("delete");
@@ -1005,7 +975,6 @@ export function renderLibrary() {
     makeKeyboardActivatable(del);
     row.appendChild(del);
 
-    // Click copies the prompt (or toggles selection in batch mode).
     row.addEventListener("click", (e) => {
       if (libSelectMode) { toggleLibSelect(p.id, e.shiftKey); return; }
       libraryCopy(p);
@@ -1023,7 +992,7 @@ export function setLibSelectMode(on) {
   btn?.classList.toggle("active", on);
   btn?.setAttribute("aria-pressed", String(on));
   $("lib-batch-bar").classList.toggle("hidden", !on);
-  // Toggle the checkbox column via a class: no list rebuild (instant on 1000s).
+  // Toggle the checkbox column via a class, with no list rebuild.
   $("library-list").classList.toggle("selecting", on);
   if (on) { buildBatchColors(); fillBatchViews(); }
   applyLibSelectionDom();
@@ -1052,7 +1021,6 @@ export function updateBatchBar() {
   const n = libSelected.size;
   $("lib-batch-count").textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
   const bar = $("lib-batch-bar");
-  // Same feature gate as the rest of the tag UI (filter chips, manager button).
   const tagsEnabled = tagsOn();
   $("lib-batch-tag-add").classList.toggle("hidden", !tagsEnabled);
   $("lib-batch-tag-remove").classList.toggle("hidden", !tagsEnabled);
@@ -1063,9 +1031,8 @@ export function updateBatchBar() {
   // Comparing needs exactly two entries, not "one or more".
   $("lib-batch-compare").disabled = n !== 2;
 }
-// Same free-color palette as the editor (buildSwatches + openColorPop)
-// instead of "none" + presets only: no selection is ever marked here since a
-// batch can hold prompts of different colors.
+// Same free-color palette as the editor (buildSwatches + openColorPop). No selection is
+// marked, since a batch can hold prompts of different colors.
 export let batchColorDebounce = 0;
 export function buildBatchColors(wrapId = "lib-batch-colors") {
   const wrap = $(wrapId);
@@ -1073,9 +1040,9 @@ export function buildBatchColors(wrapId = "lib-batch-colors") {
   const run = wrapId === "grid-batch-colors"
     ? (color) => doGridBatch("color", { color })
     : (color) => doBatch("color", { color });
-  // The free picker's SV field fires onPick on every drag frame (fine for the
-  // editor's cheap local-state preview): a batch write per frame would spam
-  // the backend and clear the selection mid-drag, so settle before committing.
+  // The free picker's SV field fires onPick on every drag frame (cheap for the editor's local
+  // preview); a batch write per frame would spam the backend and clear the selection
+  // mid-drag, so settle before committing.
   const debouncedRun = (color) => {
     clearTimeout(batchColorDebounce);
     batchColorDebounce = setTimeout(() => run(color), 200);
@@ -1116,8 +1083,8 @@ export function toggleGridSelect(id) {
   document.body.classList.toggle("grid-selecting", now);
   applyGridSelectionDom();
   updateGridBatchBar();
-  // The composer folds away only at the 0<->1 transition: refit tile text
-  // to the grid's new height then, not on every further checkbox click.
+  // The composer folds away only at the 0<->1 transition: refit tile text then, not on every
+  // checkbox click.
   if (was !== now) fitAllTiles();
 }
 export function applyGridSelectionDom() {
@@ -1130,14 +1097,13 @@ export function updateGridBatchBar() {
   $("grid-batch-bar")?.classList.toggle("hidden", n === 0);
   const count = $("grid-batch-count");
   if (count) count.textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
-  // Favorites and archive hide through their flag classes in the stylesheet; the
-  // tag buttons follow the same gate as every other piece of tag UI.
+  // Favorites and archive hide through flag classes in the stylesheet; the tag buttons follow
+  // the same gate as the rest of the tag UI.
   const tagsEnabled = tagsOn();
   $("grid-batch-tag-add").classList.toggle("hidden", !tagsEnabled);
   $("grid-batch-tag-remove").classList.toggle("hidden", !tagsEnabled);
-  // buildBatchColors() no-ops once already built; fillBatchViews() harmlessly
-  // resets the dropdown to the active view each time, which is the right default
-  // for a selection that just grew.
+  // buildBatchColors() no-ops once built; fillBatchViews() resets the dropdown to the active
+  // view, the right default for a selection that just grew.
   if (n > 0) { buildBatchColors("grid-batch-colors"); fillBatchViews("grid-batch-view"); }
 }
 // True when a dialog other than `selfId` is open, so Escape belongs to the main
@@ -1155,21 +1121,20 @@ export function clearGridSelection() {
   updateGridBatchBar();
   if (was) fitAllTiles(); // composer reappeared: refit tile text to the new height
 }
-// addView is all-or-nothing on the backend now: a full target view rejects
-// the whole batch with this one error string instead of silently dropping ids.
+// addView is all-or-nothing on the backend: a full target view rejects the whole batch with
+// one error string instead of silently dropping ids.
 export function batchErrorToast(e) {
   if (String(e).includes("view-full")) toast(t("gridFull")); else errToast(e);
 }
-// Returns whether the batch went through (same contract as doBatch), so the
-// shared tag/archive/delete helpers never report success over a failure.
-// The backend call of a batch action plus the same change on the local prompt list,
-// shared by the grid and the library selection. False = the backend refused (the
-// error is already toasted) and nothing changed locally.
+// The backend call of a batch action plus the same change on the local prompt list, shared
+// by the grid and the library selection. Returns whether the batch went through (same
+// contract as doBatch); false means the backend refused (already toasted) and nothing
+// changed locally.
 async function mirrorBatch(action, ids, extra = {}) {
   const idset = new Set(ids);
   try {
-    // The backend returns only settings (no prompt echo), so a batch over image-heavy
-    // prompts does not re-serialise every base64 blob over IPC.
+    // The backend returns only settings (no prompt echo), so a batch over image-heavy prompts
+    // does not re-serialise every base64 blob over IPC.
     assignSettings(await invoke("batch_prompts", {
       ids, action,
       color: extra.color ?? null,
@@ -1201,32 +1166,29 @@ export async function doGridBatch(action, extra = {}) {
   await renderGrid(true);
   return true;
 }
-// A real move (not just "also in"): drop the current view's placement first, then
-// place into the target: matches the "a prompt lives in exactly one view"
-// invariant everywhere else in the app relies on.
+// A real move, not just "also in": drop the current view's placement, then place into the
+// target, keeping the invariant that a prompt lives in exactly one view.
 export async function doGridMove(targetViewId) {
   const ids = [...gridSelected];
   if (!ids.length || !targetViewId) return;
   try {
-    // One moveView call - both layouts change in the same backend settings
-    // write, so a crash mid-call can no longer leave a tile placed in both views
-    // (the old addView-then-removeView pair was two separate IPC round-trips).
+    // One moveView call changes both layouts in the same backend settings write, so a crash
+    // mid-call cannot leave a tile placed in both views.
     assignSettings(await invoke("batch_prompts", { ids, action: "moveView", color: null, favorite: null, viewId: targetViewId, fromViewId: settings.active_view }));
   } catch (e) { batchErrorToast(e); return; }
   clearGridSelection();
   await renderGrid(true);
 }
 
-// Returns whether the batch actually went through, so a caller showing its own
-// "done" toast (delete, tag add/remove) never reports success over a failure
-// batchErrorToast already surfaced.
+// Returns whether the batch went through, so a caller showing its own "done" toast never
+// reports success over a failure batchErrorToast already surfaced.
 export async function doBatch(action, extra = {}) {
   const ids = [...libSelected];
   if (!ids.length) return false;
   const idset = new Set(ids);
   if (!(await mirrorBatch(action, ids, extra))) return false;
-  // The grid sits hidden behind the library modal: rebuilding it (a full fit-text
-  // pass) is deferred until the library closes.
+  // The grid sits hidden behind the library modal; rebuilding it is deferred until the library
+  // closes.
   gridDirty = true;
   if (action === "delete") {
     // Remove the deleted rows in place instead of rebuilding the whole list.
@@ -1245,9 +1207,8 @@ export async function doBatch(action, extra = {}) {
   return true;
 }
 
-// Undo for a batch tag add/remove: only the ids the original action actually
-// touched, inverted, so a prompt that already carried the tag before the batch
-// (never "changed") is left alone by the undo too.
+// Undo for a batch tag add/remove: only the ids the original action touched, inverted, so a
+// prompt that already carried the tag before the batch is left alone by the undo too.
 export async function restoreBatchTag(inverseAction, ids, tag) {
   if (!ids.length) return;
   try {
@@ -1288,9 +1249,9 @@ export async function trashPromptWithUndo(id, name) {
 // Undo for a batch delete: every deleted prompt went to the trash, not gone for good.
 // The caller hands in the placement snapshot it took before deleting.
 export async function restoreBatchDelete(ids, placements) {
-  // With the placement snapshot taken before the delete, one command puts every
-  // prompt back where it was (views, cells, pill, folders); without it (the snapshot
-  // call failed) each one falls back to a fresh cell in the active view.
+  // With the placement snapshot taken before the delete, one command puts every prompt back
+  // where it was (views, cells, pill, folders); without it (the snapshot call failed) each one
+  // falls back to a fresh cell in the active view.
   if (placements && placements.length) {
     try {
       const st = await invoke("restore_prompts_batch", { placements });
@@ -1314,9 +1275,9 @@ export async function restoreBatchDelete(ids, placements) {
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
-// The batch tag and archive actions, shared by the library bar and the grid bar:
-// `ids` is the selection of whichever window asked, `run(action, extra)` is its own
-// runner (doBatch or doGridBatch) and returns whether the batch went through.
+// The batch tag and archive actions, shared by the library bar and the grid bar: `ids` is the
+// selection of whichever window asked, `run(action, extra)` its own runner (doBatch or
+// doGridBatch), returning whether the batch went through.
 export async function batchTagAdd(ids, run) {
   if (!ids.length) return;
   const raw = await confirmDialog({
@@ -1364,15 +1325,13 @@ export async function batchArchive(ids, run) {
   }
 }
 
-// Asked only when the export set actually holds a confidential entry, so a
-// store with none never sees this step. `null` means the whole export was
-// cancelled here (never reaches export_prompts); otherwise a plain boolean,
-// default false ("aus") matching the OK button/Enter key.
+// Asked only when the export set holds a confidential entry. `null` means the whole export
+// was cancelled here; otherwise a boolean, default false matching the OK button/Enter key.
 export async function confirmSecretExport(idFilter, format) {
   const n = prompts.filter((p) => p.secret && (!idFilter || idFilter.has(p.id))).length;
   if (!n) return false;
-  // Only the JSON file carries the confidential flag, so the other formats can
-  // only leave these entries out.
+  // Only the JSON file carries the confidential flag; other formats can only leave these
+  // entries out.
   if (format !== "json") {
     const go = await confirmDialog({
       title: t("secretExportTitle"),
@@ -1405,17 +1364,15 @@ export async function batchExport(format, ids) {
   }
 }
 
-// Copy a prompt, filling {?variables} first when applicable: reserved names
-// resolve silently, the rest go through the dialog. Returns false if the copy
-// failed or the user cancelled. The single copy entry point for every path that
-// does not run the dialog's own double-click handling (grid, library, journal).
+// Copy a prompt, filling {?variables} first when applicable: reserved names resolve
+// silently, the rest go through the dialog. Returns false if the copy failed or the user
+// cancelled. The single copy entry point for every path that skips the dialog's own
+// double-click handling (grid, library, journal).
 export async function copyResolved(p) {
-  // Confidential and the vault has no key right now: ask for it before doing
-  // anything else, the same first-access moment the spec describes for a
-  // click on a locked tile. A cancelled/wrong-password prompt just fails the
-  // copy, same as any other cancelled copy.
-  // The cached copy can say "unlocked" after the backend already dropped the key
-  // (the idle timeout): ask before trusting it, and fall back to the locked path.
+  // Confidential and the vault has no key right now: ask for it first, as for a click on a
+  // locked tile. A cancelled or wrong password fails the copy like any cancelled copy.
+  // The cached copy can say "unlocked" after the backend dropped the key (idle timeout), so
+  // ask the backend before trusting it and fall back to the locked path.
   if (p.secret && !p.locked) {
     const st = await invoke("secret_vault_status").catch(() => null);
     if (st && !st.unlocked) {
@@ -1432,14 +1389,13 @@ export async function copyResolved(p) {
     if (!fresh || fresh.locked) return false;
     p = fresh;
   }
-  // Rotating prompt: peek the entry copy_prompt would use, resolve variables
-  // on THAT text (fixes {?...} tokens, if any, in it), then commit only once the
-  // copy actually reaches the clipboard, so a cancelled variable dialog never
-  // burns an entry.
+  // Rotating prompt: peek the entry copy_prompt would use, resolve variables on that text, and
+  // commit only once the copy reaches the clipboard, so a cancelled variable dialog never burns
+  // an entry.
   if ((p.variants || []).length) {
-    // Auto-advance with placeholders in any entry: every entry is filled from one
-    // dialog up front, so the later pastes of the session deliver filled text too.
-    // The backend moves the pointer itself here, so no commit follows.
+    // Auto-advance with placeholders in any entry: every entry is filled from one dialog up
+    // front so later pastes of the session deliver filled text. The backend moves the pointer
+    // itself here, so no commit follows.
     if (p.rotate_auto && flag("rotatingPrompts") && flag("rotateAuto") && anyEntryHasVars(p)) {
       const resolved = await resolveVarsList([p.text, ...p.variants]);
       if (!resolved) return false;
@@ -1448,10 +1404,9 @@ export async function copyResolved(p) {
         return true;
       }
     }
-    // Handing the id over is what lets the backend open an auto-advance session for
-    // an eligible prompt: without it this path copied plain text and the Auto
-    // switch did nothing at all here, while the floating buttons (which copy through
-    // copy_prompt) honoured it.
+    // Handing the id over lets the backend open an auto-advance session for an eligible prompt;
+    // without it the Auto switch would do nothing on this path, unlike the floating buttons
+    // (which copy through copy_prompt).
     const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
     return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch(() => false), {
       resolve: (raw) => (varTokens(p, raw).length ? resolveVars(raw) : raw),
@@ -1465,16 +1420,16 @@ export async function copyResolved(p) {
   return invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
 }
 
-// A blink says "something happened"; the character count says the whole prompt went
-// to the clipboard, which is the doubt a long one leaves.
+// A blink says "something happened"; the character count says the whole prompt reached the
+// clipboard, the doubt a long one leaves.
 export function toastCopied(p) {
   const n = (p?.text || "").length;
   toast(n > 0 ? t("copiedChars").replace("{n}", n.toLocaleString(LANG)) : t("copied"));
 }
 
 export async function libraryCopy(p) {
-  // Prompts that still need input skip the double-click shortcut: they must reach
-  // the dialog (copyResolved) so the variables get asked before copy + auto-paste.
+  // Prompts that still need input skip the double-click shortcut: they must reach the dialog
+  // (copyResolved) so variables are asked before copy and auto-paste.
   if (!dialogTokens(p, await peekRotatedText(p)).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
@@ -1488,9 +1443,7 @@ export function syncLibraryToggle() {
   $("library-close-toggle").checked = flag("closeAfterCopy");
 }
 
-// Library list columns. ONE place decides it: the expert value. The segmented
-// toggle in the library header was a third control for the same number, next to the
-// flag that showed it and the value that capped it.
+// Library list columns: the expert value is the one place that decides it.
 export const libCols = () => Math.min(6, Math.max(1, Math.round(val("libraryCols"))));
 export function syncLibraryCols() {
   $("library-list").style.setProperty("--lib-cols", libCols());
@@ -1536,8 +1489,8 @@ export function bindLibrary() {
   const refreshImageHitsDebounced = debounced(() => refreshImageHits(libQuery.trim().toLowerCase()));
   $("library-q").addEventListener("input", (e) => {
     libQuery = e.target.value;
-    // With picture text search on and a query typed, the lookup renders once its
-    // answer is in; rendering first as well would draw the whole library twice.
+    // With picture text search on and a query typed, the lookup renders once its answer is in;
+    // rendering first too would draw the library twice.
     if (optFlag("ocrIndex") && libQuery.trim()) {
       renderLibraryDebounced.cancel(); // a render queued by an earlier blank query
       refreshImageHitsDebounced();
@@ -1594,8 +1547,8 @@ export function bindLibrary() {
       undoToast(t("batchUnarchiveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-add", changedIds, tag));
     }
   });
-  // Only meaningful at exactly two selected (updateBatchBar disables it
-  // otherwise) -- opens the same compare view a tile's own context menu does.
+  // Only meaningful at exactly two selected (updateBatchBar disables it otherwise); opens the
+  // same compare view as a tile's context menu.
   $("lib-batch-compare").addEventListener("click", () => {
     if (libSelected.size !== 2) return;
     openCompareView([...libSelected]);
@@ -1617,9 +1570,8 @@ export function bindLibrary() {
       setLibSelectMode(false);
     }
   }, true);
-  // Grid batch toolbar wiring: same shape as the library's, its own state.
-  // "All" means every prompt tile of the view on screen; folder tiles carry no
-  // select button and stay out, exactly as a single click on them never selected.
+  // Grid batch toolbar wiring, same shape as the library's with its own state. "All" means
+  // every prompt tile on screen; folder tiles carry no select button and stay out.
   $("grid-batch-all").addEventListener("click", () => {
     for (const tile of gridEl.querySelectorAll(".tile")) {
       if (tile.dataset.id && tile.querySelector(":scope > .tile-select")) gridSelected.add(tile.dataset.id);
