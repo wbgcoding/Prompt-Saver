@@ -362,17 +362,29 @@ pub(crate) fn video_folder_cleanup_preview(state: State<'_, Db>, dir: String, ag
     video_folder_cleanup_preview_impl(&dir, age_days, &configured_recording_dir(&state))
 }
 
-// Deletes exactly the files video_folder_cleanup_preview just listed -- never
-// re-scans with different criteria, so the confirmed list and the
-// actually-deleted files can never drift apart (e.g. a file aging past the
-// threshold between preview and confirm just stays for next time, not a bug).
-pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &Path) -> usize {
+// A single file name of the kind this app writes into the recording folder:
+// no path part at all, the "rec-" stem and a recording extension. IPC callers
+// pass names, so anything path-like (separators, "..", a drive prefix) is out.
+pub(crate) fn is_bare_recording_name(name: &str) -> bool {
+    let p = Path::new(name);
+    p.file_name().and_then(|n| n.to_str()) == Some(name)
+        && name.starts_with("rec-")
+        && p.extension().is_some_and(|e| VIDEO_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
+}
+
+// Deletes only files the confirmation dialog listed (`names`) that are still
+// stale: a file that crossed the age threshold after the list was shown stays
+// for next time, so the user never loses a file they were not shown.
+pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, names: &[String], configured: &Path) -> usize {
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return 0;
     }
     let stale = video_folder_stale(dir, age_days);
     let mut n = 0;
-    for (path, _) in stale {
+    for (path, file) in stale {
+        if !is_bare_recording_name(&file.name) || !names.contains(&file.name) {
+            continue;
+        }
         if fs::remove_file(&path).is_ok() {
             n += 1;
             // The sidecars only mean something next to their video: left behind
@@ -386,8 +398,8 @@ pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &P
 }
 
 #[tauri::command(async)]
-pub(crate) fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usize {
-    video_folder_cleanup_impl(&dir, age_days, &configured_recording_dir(&state))
+pub(crate) fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32, names: Vec<String>) -> usize {
+    video_folder_cleanup_impl(&dir, age_days, &names, &configured_recording_dir(&state))
 }
 
 // The batch-export dialog needs each selected recording's real duration

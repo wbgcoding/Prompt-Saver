@@ -1220,9 +1220,8 @@ export function pathRow(key) {
 
 // The full "asks for an age, lists what that would delete, deletes only after
 // confirmation" flow for the recordingDir cleanup button above. Preview and the
-// real delete share the exact same backend scan (video_folder_cleanup_preview /
-// video_folder_cleanup both call video_folder_stale with the same age), so what
-// is shown here is exactly what gets removed -- never a second, drifting list.
+// real delete share the same backend scan, and the delete also receives the
+// listed names, so only files that were shown (and are still stale) get removed.
 export async function openVideoCleanup(dir) {
   const modal = $("video-cleanup-modal");
   const ageSel = $("video-cleanup-age");
@@ -1233,12 +1232,14 @@ export async function openVideoCleanup(dir) {
   const selectNoneBtn = $("video-cleanup-select-none");
   const exportBtn = $("video-cleanup-export");
   const checks = new Map(); // file name -> its row checkbox, rebuilt on every refresh
+  let shownNames = []; // exactly the names the list on screen shows, sent back on confirm
   const updateExportBtn = () => {
     exportBtn.disabled = ![...checks.values()].some((cb) => cb.checked);
   };
   const refresh = async () => {
     const ageDays = Number(ageSel.value);
     const files = await invoke("video_folder_cleanup_preview", { dir, ageDays }).catch((e) => { errToast(e); return []; });
+    shownNames = files.map((f) => f.name);
     const totalBytes = files.reduce((s, f) => s + f.size, 0);
     summary.textContent = files.length
       ? t("videoCleanupSummary").replace("{n}", files.length).replace("{size}", fmtBytes(totalBytes, LANG))
@@ -1346,7 +1347,7 @@ export async function openVideoCleanup(dir) {
   });
   if (!confirmed) return;
   const ageDays = Number(ageSel.value);
-  const deleted = await invoke("video_folder_cleanup", { dir, ageDays }).catch((e) => { errToast(e); return 0; });
+  const deleted = await invoke("video_folder_cleanup", { dir, ageDays, names: shownNames }).catch((e) => { errToast(e); return 0; });
   toast(t("videoFolderCleanupDone").replace("{n}", () => deleted));
   refreshVideoFolderInfo(dir);
 }

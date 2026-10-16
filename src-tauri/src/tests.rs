@@ -7315,7 +7315,7 @@ fn video_folder_cleanup_preview_and_cleanup_agree_and_only_touch_stale_video_fil
     assert_eq!(preview[0].name, "rec-old-recording.mp4");
     assert_eq!(preview[0].size, 3);
 
-    let deleted = video_folder_cleanup_impl(&dir_s, 30, &dir);
+    let deleted = video_folder_cleanup_impl(&dir_s, 30, &[preview[0].name.clone()], &dir);
     assert_eq!(deleted, 1, "cleanup must delete exactly what the preview listed");
     assert!(!stale.exists(), "the stale video must be gone");
     assert!(fresh.exists(), "a fresh video must survive");
@@ -7337,8 +7337,37 @@ fn video_folder_cleanup_never_touches_a_stale_file_without_the_rec_prefix() {
 
     let dir_s = dir.to_string_lossy().to_string();
     assert!(video_folder_cleanup_preview_impl(&dir_s, 30, &dir).is_empty(), "a non-rec- file must never be previewed for cleanup");
-    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &dir), 0, "a non-rec- file must never be deleted by cleanup");
+    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &["someone-elses-video.mp4".to_string()], &dir), 0, "a non-rec- file must never be deleted by cleanup");
     assert!(foreign.is_file(), "the foreign video must survive untouched");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn video_folder_cleanup_deletes_only_the_listed_names_that_are_still_stale() {
+    let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-listed-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let listed = dir.join("rec-listed.mp4");
+    let unlisted = dir.join("rec-crossed-later.mp4");
+    let fresh = dir.join("rec-fresh.mp4");
+    for f in [&listed, &unlisted, &fresh] {
+        fs::write(f, b"x").unwrap();
+    }
+    backdate(&listed, Duration::from_secs(40 * 24 * 3600));
+    backdate(&unlisted, Duration::from_secs(40 * 24 * 3600));
+    let dir_s = dir.to_string_lossy().to_string();
+    let names = vec![
+        "rec-listed.mp4".to_string(),
+        "rec-fresh.mp4".to_string(),
+        "..\\rec-outside.mp4".to_string(),
+        "sub/rec-x.mp4".to_string(),
+    ];
+    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &names, &dir), 1);
+    assert!(!listed.exists(), "the listed stale file goes");
+    assert!(unlisted.exists(), "a stale file that was not on the confirmed list stays");
+    assert!(fresh.exists(), "a listed file that is no longer stale stays");
+    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &[], &dir), 0, "an empty list deletes nothing");
+    assert!(unlisted.exists());
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -7354,7 +7383,7 @@ fn video_folder_cleanup_refuses_a_dir_that_is_not_the_configured_recording_folde
     let foreign_s = foreign.to_string_lossy().to_string();
 
     assert!(video_folder_cleanup_preview_impl(&foreign_s, 30, &configured).is_empty(), "a foreign folder must never be previewed");
-    assert_eq!(video_folder_cleanup_impl(&foreign_s, 30, &configured), 0, "a foreign folder must never be cleaned");
+    assert_eq!(video_folder_cleanup_impl(&foreign_s, 30, &["not-a-recording.mp4".to_string()], &configured), 0, "a foreign folder must never be cleaned");
     assert!(victim.is_file(), "the file in the foreign folder must survive untouched");
     assert_eq!(video_folder_stats_impl(&foreign_s, &configured), (0, 0), "stats for a foreign folder must read as empty");
 
@@ -19667,7 +19696,7 @@ fn video_folder_cleanup_takes_the_sidecars_of_a_deleted_recording() {
     }
     backdate(&stale, Duration::from_secs(40 * 24 * 3600));
     let dir_s = dir.to_string_lossy().to_string();
-    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &dir), 1);
+    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &["rec-old.mp4".to_string()], &dir), 1);
     assert!(!stale.with_extension("mic.wav").exists());
     assert!(!sidecar_path(&stale, KEYS_SIDECAR_EXT).exists());
     assert!(!sidecar_path(&stale, CAM_SIDECAR_EXT).exists());
