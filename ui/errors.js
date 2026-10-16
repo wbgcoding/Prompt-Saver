@@ -149,6 +149,7 @@ export const ERROR_MSG_KEYS = {
   "write: {}": "errUnpackFailed",
   "zip: {}": "errUnpackFailed",
   "extract: {}": "errUnpackFailed",
+  "extract: panicked": "errUnpackFailed",
   "target dir: {}": "errUnpackFailed",
   "ffmpeg.exe not found inside the downloaded archive": "errUnpackFailed",
   "stage dir: {}": "errUnpackFailed",

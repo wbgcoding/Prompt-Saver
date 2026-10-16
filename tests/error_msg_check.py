@@ -21,7 +21,11 @@ ALLOW = {
         "recording-too-young-to-continue", "source-not-allowed", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
         "view-full:{deficit}", "{RESTART_FAILED_PREFIX}{e}",
-        "not a valid address or range: {part}",
+        "not a valid address or range: {part}", "invalid-exe",
+    ],
+    "an export graph only this app's own UI builds; a refusal shows the generic export failure": [
+        "export graph not allowed: {why}", "export graph not allowed: media file type",
+        "unexpected character in the graph", "unterminated link label",
     ],
     "an input only this app's own UI builds, never a user-typed value": [
         "bad drop position", "bad height", "bad payload", "bad popover size", "bad values",
