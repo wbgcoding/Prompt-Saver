@@ -1608,6 +1608,7 @@ export default {
     recBarMuteMic: "Dezactivează microfonul",
     recBarUnmuteMic: "Activează microfonul",
     recBarMicLost: "Microfonul a fost deconectat: înregistrarea continuă fără el",
+    recBarSystemLost: "Sunetul sistemului nu este disponibil: înregistrarea continuă fără el",
     pickFailed: "Culoarea nu a putut fi copiată. Încearcă din nou.",
     colorCopied: "Culoare copiată",
     flagColorPicker: "Selector de culoare (pipetă)",
