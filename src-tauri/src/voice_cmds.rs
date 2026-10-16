@@ -1,9 +1,8 @@
 use super::*;
 
 // ---------------------------------------------------------------------------
-// Voice dictation commands. Mirrors the ocr_* wrapper shape exactly --
-// a thin, never-cfg-gated `#[tauri::command]` whose BODY branches on
-// `#[cfg(windows)]`, calling into `mod voice` for the real Windows API work.
+// Voice dictation commands: thin, never-cfg-gated `#[tauri::command]` wrappers (same shape
+// as the ocr_* ones) whose body branches on `#[cfg(windows)]` and calls into `mod voice`.
 // ---------------------------------------------------------------------------
 
 pub(crate) static VOICE_SESSION_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -41,13 +40,10 @@ pub(crate) async fn voice_languages() -> Result<Vec<VoiceLang>, String> {
     }
 }
 
-// `lang` is "auto" or an explicit BCP-47 tag; `auto_stop_sec` (0 = off) and
-// `max_sec` are the voiceAutoStopSec/voiceMaxMin expert settings, sent by the
-// frontend the same way ocr_image is sent its expert settings, rather
-// than the backend re-reading them from Db state on every call. `interim`
-// mirrors voiceInterim. Returns the new session id; the recognized text itself
-// only ever travels through the voice-partial/voice-text events, never through
-// this command's return value.
+// `lang` is "auto" or an explicit BCP-47 tag; `auto_stop_sec` (0 = off) and `max_sec` are the
+// voiceAutoStopSec/voiceMaxMin expert settings, sent by the frontend like ocr_image's. `interim`
+// mirrors voiceInterim. Returns the new session id; recognized text only travels through the
+// voice-partial/voice-text events.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn voice_start(
@@ -67,14 +63,10 @@ pub(crate) async fn voice_start(
                 return Err("voice-busy".to_string());
             }
         }
-        // Claim the slot HERE, still holding the same lock the check above just
-        // read -- voice::prepare() below is an await point, and two concurrent
-        // voice_start calls could otherwise both pass the check (nothing yet
-        // recorded either had started), both spawn a session thread, and the
-        // second's handle would silently overwrite the first's, orphaning a
-        // live microphone session voice_stop can never reach again. Cleared on
-        // every early return below, and once more (redundantly, harmlessly)
-        // right after the real handle replaces it on success.
+        // Claim the slot here, under the same lock the check above read: voice::prepare() below is an
+        // await point, so two concurrent voice_start calls could both pass the check, both spawn a
+        // session thread, and the second handle would overwrite the first, orphaning a live
+        // microphone session voice_stop can never reach. Cleared on every early return below.
         if vstate.1.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return Err("voice-busy".to_string());
         }
@@ -91,10 +83,9 @@ pub(crate) async fn voice_start(
                 return Err(e);
             }
         };
-        // Never opens the microphone without consent -- checked BEFORE the session
-        // thread (and therefore Create()) ever starts. A later 0x80045509 from
-        // Windows itself (declined/reset at the OS level after voiceOnlineOk was
-        // already set) is still handled by the session -- see voice-privacy-off.
+        // Never opens the microphone without consent: checked before the session thread (and Create())
+        // starts. A later 0x80045509 from Windows itself (declined at the OS level after voiceOnlineOk
+        // was set) is handled by the session as voice-privacy-off.
         if needs_online && !online_ok {
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err("voice-online-required".to_string());
@@ -106,10 +97,8 @@ pub(crate) async fn voice_start(
         let app2 = app.clone();
         let ended2 = ended.clone();
         let lang2 = resolved_lang.clone();
-        // Set before the session thread starts, not after spawning it -- a
-        // fast failure inside the thread can otherwise race its own
-        // set_tray_recording(false) ahead of this one and leave the tray
-        // tooltip stuck on "recording".
+        // Set before the session thread starts: a fast failure inside the thread could otherwise race
+        // its own set_tray_recording(false) ahead of this one and leave the tooltip on "recording".
         set_tray_recording(&app, true);
         if let Err(e) = std::thread::Builder::new()
             .name("voice-session".into())
@@ -132,17 +121,15 @@ pub(crate) async fn voice_start(
     }
 }
 
-// Whether voice_stop should actually signal the session thread: never for a
-// session that already ended itself (silence/max/error) -- a second StopAsync
-// on an already-Completed session throws (0x80131509). Pure decision, kept
-// separate from the State<> plumbing so it is unit-testable like every other
-// table/decision in this module.
+// Whether voice_stop should signal the session thread: never for a session that already ended
+// itself (silence/max/error), since a second StopAsync on a Completed session throws
+// (0x80131509). Pure decision, so it is unit-testable.
 pub(crate) fn should_send_stop(target: Option<u64>, running_id: u64, already_ended: bool) -> bool {
     (target.is_none() || target == Some(running_id)) && !already_ended
 }
 
-// Beendet sanft (StopAsync, damit der angefangene Satz noch kommt). `id` names
-// the session to stop; None stops whichever is running.
+// Stops gracefully (StopAsync, so the sentence in progress still arrives). `id` names the
+// session to stop; None stops whichever is running.
 #[tauri::command]
 pub(crate) fn voice_stop(vstate: State<'_, VoiceState>, id: Option<u64>) -> Result<(), String> {
     let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -154,11 +141,9 @@ pub(crate) fn voice_stop(vstate: State<'_, VoiceState>, id: Option<u64>) -> Resu
     Ok(())
 }
 
-// Only ever called from the voice-privacy-off dialog,
-// never on startup, never silently. Writes Windows' own online-speech consent
-// registry value AND the app's voiceOnlineOk flag in one step (one consent,
-// both switches) so the very next voice_start proceeds without a second
-// round-trip through this dialog.
+// Only called from the voice-privacy-off dialog, never on startup or silently. Writes Windows'
+// online-speech consent registry value and the app's voiceOnlineOk flag in one step (one
+// consent, both switches), so the next voice_start proceeds without another round trip.
 #[tauri::command]
 pub(crate) async fn voice_enable_online_speech(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
     #[cfg(windows)]
@@ -176,10 +161,8 @@ pub(crate) async fn voice_enable_online_speech(app: AppHandle, state: State<'_, 
     }
 }
 
-// Opens Windows' own microphone privacy page, offered from the voice-denied
-// dialog -- the app cannot grant mic access itself, only point at the one
-// place that can. Same ShellExecuteW call the elevated installer scripts use,
-// just with the plain "open" verb: a settings URI needs no admin rights.
+// Opens Windows' microphone privacy page, offered from the voice-denied dialog: the app cannot
+// grant mic access itself. Plain "open" verb on ShellExecuteW; a settings URI needs no admin rights.
 #[tauri::command]
 pub(crate) fn open_privacy_mic() -> Result<(), String> {
     #[cfg(windows)]
@@ -205,9 +188,8 @@ pub(crate) fn open_privacy_mic() -> Result<(), String> {
     Err("voice is only available on Windows".to_string())
 }
 
-// Cancels whatever session is running, without waiting for it to actually
-// finish -- called on window close/hide and on app exit. A hidden window
-// never keeps listening.
+// Cancels whatever session is running without waiting for it to finish; called on window
+// close/hide and app exit, since a hidden window never keeps listening.
 pub(crate) fn voice_shutdown(app: &AppHandle) {
     if let Some(vs) = app.try_state::<VoiceState>() {
         let guard = vs.0.lock().unwrap_or_else(|e| e.into_inner());
