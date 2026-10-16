@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "ダウンロードしたファイルは有効なインストーラーではありません。後でもう一度更新をお試しください。",
     errUpdaterHashMismatch: "更新は拒否されました：ダウンロード内容がチェックサムと一致しません",
     errUpdateRecordingActive: "録画中です。録画を終えてから更新をインストールしてください。",
+    errRestoreRecordingActive: "録画中です。録画を終えてからバックアップを復元してください。",
     errUpdateJobsRunning: "バックグラウンド処理がまだ実行中です。完了してから更新をインストールしてください。",
     errUpdatePortableManual: "これはポータブル版です。リリースページを開きました。新しいポータブル版の exe をダウンロードして、この exe と置き換えてください。",
     errBackupTooLarge: "このバックアップは512MBを超えるため復元されませんでした",

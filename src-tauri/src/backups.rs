@@ -1038,6 +1038,10 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
         return Err("bad-name".into());
     }
     valid_scope(&scope)?;
+    // The relaunch that follows a restore would cut a running take short.
+    if update_blocker(recording_active(&app), REC_STARTING.load(Ordering::SeqCst), 0).is_some() {
+        return Err("restore-recording-active".into());
+    }
     // A store another machine holds locked is not ours to overwrite.
     if data_dir_write_blocked(&app) {
         return Err("readonly".into());

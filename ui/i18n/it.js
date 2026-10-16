@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "Il file scaricato non è un programma di installazione valido. Riprova l'aggiornamento più tardi.",
     errUpdaterHashMismatch: "Aggiornamento rifiutato: il download non corrisponde al suo checksum",
     errUpdateRecordingActive: "Una registrazione è in corso. Terminala, poi installa l'aggiornamento.",
+    errRestoreRecordingActive: "Una registrazione è in corso. Terminala, poi ripristina il backup.",
     errUpdateJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi installa l'aggiornamento.",
     errUpdatePortableManual: "Questa è la versione portatile. La pagina della release è aperta: scarica il nuovo exe portatile e sostituisci questo.",
     errBackupTooLarge: "Questo backup supera i 512 MB e non è stato ripristinato",

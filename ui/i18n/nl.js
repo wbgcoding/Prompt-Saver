@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "Het gedownloade bestand is geen geldig installatieprogramma. Probeer de update later opnieuw.",
     errUpdaterHashMismatch: "Update geweigerd: de download komt niet overeen met de controlesom",
     errUpdateRecordingActive: "Er loopt een opname. Rond die af en installeer daarna de update.",
+    errRestoreRecordingActive: "Er loopt een opname. Rond die af en herstel daarna de back-up.",
     errUpdateJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en installeer daarna de update.",
     errUpdatePortableManual: "Dit is de draagbare versie. De releasepagina is geopend: download de nieuwe draagbare exe en vervang deze.",
     errBackupTooLarge: "Deze back-up is groter dan 512 MB en is niet hersteld",

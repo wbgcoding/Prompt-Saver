@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "下载的文件不是有效的安装程序。请稍后重试更新。",
     errUpdaterHashMismatch: "更新被拒绝：下载内容与校验和不匹配",
     errUpdateRecordingActive: "正在录制。请先结束录制，再安装更新。",
+    errRestoreRecordingActive: "正在录制。请先结束录制，再恢复备份。",
     errUpdateJobsRunning: "后台任务仍在运行。请等它们完成后再安装更新。",
     errUpdatePortableManual: "这是便携版。已打开发布页面：请下载新的便携版 exe 并替换当前文件。",
     errBackupTooLarge: "此备份超过 512 MB，未能恢复",

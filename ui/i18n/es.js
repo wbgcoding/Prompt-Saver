@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "El archivo descargado no es un instalador válido. Vuelve a intentar la actualización más tarde.",
     errUpdaterHashMismatch: "Actualización rechazada: la descarga no coincide con su suma de comprobación",
     errUpdateRecordingActive: "Hay una grabación en curso. Termínala y luego instala la actualización.",
+    errRestoreRecordingActive: "Hay una grabación en curso. Termínala y luego restaura la copia de seguridad.",
     errUpdateJobsRunning: "Aún hay tareas en segundo plano. Espera a que terminen y luego instala la actualización.",
     errUpdatePortableManual: "Esta es la versión portátil. La página de la versión está abierta: descarga el nuevo exe portátil y reemplaza este.",
     errBackupTooLarge: "Esta copia de seguridad supera los 512 MB y no se restauró",

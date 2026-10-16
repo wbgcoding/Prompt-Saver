@@ -1386,6 +1386,7 @@ export default {
     errUpdaterInvalidInstaller: "The downloaded file is not a valid installer. Try the update again later.",
     errUpdaterHashMismatch: "Update rejected: the download does not match its checksum",
     errUpdateRecordingActive: "A recording is running. Finish it, then install the update.",
+    errRestoreRecordingActive: "A recording is running. Finish it, then restore the backup.",
     errUpdateJobsRunning: "Background jobs are still running. Let them finish, then install the update.",
     errUpdatePortableManual: "This is the portable version. The release page is open: download the new portable exe and replace this one.",
     errBackupTooLarge: "This backup is larger than 512 MB and was not restored",

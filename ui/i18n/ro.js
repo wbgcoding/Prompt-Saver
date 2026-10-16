@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "Fișierul descărcat nu este un program de instalare valid. Încearcă din nou actualizarea mai târziu.",
     errUpdaterHashMismatch: "Actualizare respinsă: descărcarea nu corespunde sumei sale de control",
     errUpdateRecordingActive: "O înregistrare este în curs. Încheie-o, apoi instalează actualizarea.",
+    errRestoreRecordingActive: "O înregistrare este în curs. Încheie-o, apoi restaurează copia de rezervă.",
     errUpdateJobsRunning: "Încă rulează sarcini în fundal. Așteaptă să se termine, apoi instalează actualizarea.",
     errUpdatePortableManual: "Aceasta este versiunea portabilă. Pagina versiunii este deschisă: descarcă noul exe portabil și înlocuiește-l pe acesta.",
     errBackupTooLarge: "Această copie de rezervă depășește 512 MB și nu a fost restaurată",

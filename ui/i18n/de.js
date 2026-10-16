@@ -1386,6 +1386,7 @@ export default {
     errUpdaterInvalidInstaller: "Die heruntergeladene Datei ist kein gültiges Installationsprogramm. Versuche das Update später erneut.",
     errUpdaterHashMismatch: "Update abgelehnt: der Download stimmt nicht mit seiner Prüfsumme überein",
     errUpdateRecordingActive: "Eine Aufnahme läuft. Beende sie und installiere dann das Update.",
+    errRestoreRecordingActive: "Eine Aufnahme läuft. Beende sie und stelle dann das Backup wieder her.",
     errUpdateJobsRunning: "Hintergrundaufgaben laufen noch. Warte, bis sie fertig sind, und installiere dann das Update.",
     errUpdatePortableManual: "Das ist die portable Version. Die Release-Seite ist geöffnet: Lade die neue portable Exe herunter und ersetze diese.",
     errBackupTooLarge: "Diese Sicherung ist größer als 512 MB und wurde nicht wiederhergestellt",

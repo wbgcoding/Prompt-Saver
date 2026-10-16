@@ -1,5 +1,6 @@
-use std::sync::atomic::{AtomicIsize, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::{Condvar, Mutex};
+use std::time::Duration;
 use tauri::AppHandle;
 
 const GWLP_WNDPROC: i32 = -4;
@@ -18,12 +19,48 @@ extern "system" {
 static PREV_PROC: AtomicIsize = AtomicIsize::new(0);
 static APP: Mutex<Option<AppHandle>> = Mutex::new(None);
 
+// How long the session-ending message waits for a running take to be closed. Windows
+// gives the app only a few seconds before it is terminated; the encoder's index is
+// written first inside the stop, so even a stop that outlives the wait has the part
+// that matters behind it.
+const SHUTDOWN_STOP_WAIT: Duration = Duration::from_secs(3);
+static STOP_STARTED: AtomicBool = AtomicBool::new(false);
+static STOP_DONE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+
+// Both session messages of one shutdown arrive here: the first starts the stop on a
+// worker thread (the window thread must not sit in an encoder flush), the second only
+// waits for it again.
+#[cfg(windows)]
+fn finish_recording(app: &AppHandle) {
+    let starting = !STOP_STARTED.load(Ordering::Acquire);
+    if starting {
+        if !super::recording_active(app) {
+            return;
+        }
+        STOP_STARTED.store(true, Ordering::Release);
+        *STOP_DONE.0.lock().unwrap_or_else(|e| e.into_inner()) = false;
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Ok(take) = super::stop_recording_now(&app) {
+                super::save_take_on_quit(&app, &take);
+            }
+            *STOP_DONE.0.lock().unwrap_or_else(|e| e.into_inner()) = true;
+            STOP_STARTED.store(false, Ordering::Release);
+            STOP_DONE.1.notify_all();
+        });
+    }
+    let done = STOP_DONE.0.lock().unwrap_or_else(|e| e.into_inner());
+    let _ = STOP_DONE.1.wait_timeout_while(done, SHUTDOWN_STOP_WAIT, |done| !*done);
+}
+
 unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> isize {
     if msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION {
         // A panic must not unwind across this extern "system" boundary (→ abort).
         let _ = std::panic::catch_unwind(|| {
             let app = APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(app) = app {
+                #[cfg(windows)]
+                finish_recording(&app);
                 super::flush_settings_now(&app);
             }
         });

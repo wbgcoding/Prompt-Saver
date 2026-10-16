@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "İndirilen dosya geçerli bir kurulum dosyası değil. Güncellemeyi daha sonra yeniden deneyin.",
     errUpdaterHashMismatch: "Güncelleme reddedildi: indirilen dosya sağlama toplamıyla eşleşmiyor",
     errUpdateRecordingActive: "Bir kayıt sürüyor. Önce onu bitirin, sonra güncellemeyi yükleyin.",
+    errRestoreRecordingActive: "Bir kayıt sürüyor. Önce onu bitirin, sonra yedeği geri yükleyin.",
     errUpdateJobsRunning: "Arka plan işleri hâlâ çalışıyor. Bitmelerini bekleyin, sonra güncellemeyi yükleyin.",
     errUpdatePortableManual: "Bu taşınabilir sürümdür. Sürüm sayfası açıldı: yeni taşınabilir exe dosyasını indirin ve bunun yerine koyun.",
     errBackupTooLarge: "Bu yedek 512 MB'tan büyük olduğu için geri yüklenmedi",

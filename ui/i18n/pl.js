@@ -1379,6 +1379,7 @@ export default {
     errUpdaterInvalidInstaller: "Pobrany plik nie jest prawidłowym instalatorem. Spróbuj ponowić aktualizację później.",
     errUpdaterHashMismatch: "Aktualizacja odrzucona: pobrany plik nie zgadza się z sumą kontrolną",
     errUpdateRecordingActive: "Trwa nagrywanie. Zakończ je, a potem zainstaluj aktualizację.",
+    errRestoreRecordingActive: "Trwa nagrywanie. Zakończ je, a potem przywróć kopię zapasową.",
     errUpdateJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem zainstaluj aktualizację.",
     errUpdatePortableManual: "To wersja przenośna. Strona wydania jest otwarta: pobierz nowy przenośny plik exe i zastąp nim ten.",
     errBackupTooLarge: "Ta kopia zapasowa przekracza 512 MB i nie została przywrócona",
