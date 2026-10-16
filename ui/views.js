@@ -11,8 +11,8 @@ import { buildSwatches } from "./editor.js";
 import { buildFolderTile, foldersOfView, saveFolder } from "./gridFolders.js";
 
 // ---- Grid-size value picker ----
-// Scrollable popup under a grid-size input: lists every value with a
-// visible scrollbar, highlights and centers the current selection.
+// Scrollable popup under a grid-size input: lists every value with a visible scrollbar,
+// highlights and centers the current selection.
 export const numPop = document.createElement("div");
 
 export let popInput = null;
@@ -40,15 +40,10 @@ export function renderNumPop() {
   if (selected) selected.scrollIntoView({ block: "center" });
 }
 
-// placePopover/placePopoverAt now live in ui/popover.js -- the one placement
-// rule for every popover, dropdown and context menu in THIS window. See that
-// file for why floating.js/folder.js and media.js's volume popup stay separate.
-
 export function openNumPop(input, apply) {
   popInput = input;
   popApply = apply;
-  // Fill first: the placement needs a laid-out list, and so does centering the
-  // selected row.
+  // Fill first: the placement needs a laid-out list, and so does centering the selected row.
   numPop.classList.remove("hidden");
   renderNumPop();
   placePopover(numPop, input.getBoundingClientRect());
@@ -63,8 +58,8 @@ export function closeNumPop(apply) {
   if (apply && done) done();
 }
 
-// Combo behaviour: typing stays possible, focus opens the picker,
-// wheel / arrow keys step through the values, blur or Enter applies.
+// Combo behaviour: typing stays possible, focus opens the picker, wheel and arrow keys step
+// through the values, blur or Enter applies.
 export function attachGridPicker(input, apply) {
   input.addEventListener("focus", () => openNumPop(input, apply));
   // Re-open on click even when the input kept focus after a pick.
@@ -98,8 +93,8 @@ export function activeView() {
 }
 export const gridKeyOf = (v) => `${v.cols}x${v.rows}`;
 export const layoutOf = (v) => v.layouts?.[gridKeyOf(v)] || {};
-// Every OTHER view currently holding this prompt: a client-side scan, no
-// round trip, since every view's layout is already loaded in `settings`.
+// Every other view currently holding this prompt: a client-side scan, since every view's
+// layout is already loaded in `settings`.
 export const viewsContaining = (id, exceptViewId) =>
   settings.views.filter((v) => v.id !== exceptViewId && (v.members || []).includes(id));
 
@@ -116,9 +111,9 @@ export function saveFavLayout(map) {
   invoke("set_ui_text", { key: "favLayout", value }).catch(() => {});
 }
 
-// Star button visibility (setting + expert flag) + pressed state. In the favorites
-// view the grid-size control stays visible (so the size is shown) but read-only:
-// the favorites grid sizes itself.
+// Star button visibility (setting + expert flag) and pressed state. In the favorites view the
+// grid-size control stays visible (so the size is shown) but read-only: the favorites grid
+// sizes itself.
 export function refreshFavViewUi() {
   const btn = $("fav-view-btn");
   if (btn) {
@@ -137,9 +132,9 @@ export function setFavView(on) {
   renderGrid(true);
 }
 
-// Favorites grid with FREE placement inside a grid that always fits the count:
-// a favorite keeps the cell it is dragged to (gaps allowed), but the grid resizes
-// the moment the count changes, and any button now outside it is re-fitted.
+// Favorites grid with free placement inside a grid that always fits the count: a favorite
+// keeps the cell it is dragged to (gaps allowed), the grid resizes when the count changes,
+// and any button now outside it is re-fitted.
 export function renderFavGrid() {
   $("grid-empty").classList.add("hidden"); // this view has its own empty message
   // The overhang banner belongs to a normal view; its Grow button does nothing here.
@@ -209,8 +204,8 @@ export function renderFavGrid() {
   fitAllTiles();
 }
 
-// Move a favorite to the drop cell, swapping with any occupant. Dropping on an
-// empty cell just moves it there and frees the old one: gaps are preserved.
+// Move a favorite to the drop cell, swapping with any occupant. Dropping on an empty cell
+// moves it there and frees the old one, so gaps are preserved.
 export async function placeFav(id, col, row) {
   if (!flag("favViewReorder")) return;
   const layout = favLayoutMap();
@@ -253,8 +248,8 @@ export function normalizeLayout(view) {
       changed = true;
     }
   }
-  // Unplaced prompts stay reachable via the library. No auto-fill: saved
-  // per-grid-size arrangements must stay untouched.
+  // Unplaced prompts stay reachable via the library. No auto-fill, so saved per-grid-size
+  // arrangements stay untouched.
   view.layouts[gridKeyOf(view)] = layout;
   return changed;
 }
@@ -270,13 +265,12 @@ function gridMemberIds(view) {
 }
 
 // ---- Render ----
-// The confidential timeout is lazy on the backend: the key is only dropped when
-// something asks for it, and nothing tells this window. So while decrypted
-// confidential text sits in `prompts`, one refetch is scheduled for the moment
-// the key expires; it brings the locked shape back (empty text, lock badge). The
-// refetch re-arms itself only if the vault is still open. Every render asks again
-// and moves a waiting timer forward when the key now expires sooner (the timeout
-// was shortened in the expert menu).
+// The confidential timeout is lazy on the backend: the key is dropped only when something
+// asks for it, and nothing tells this window. So while decrypted confidential text sits in
+// `prompts`, one refetch is scheduled for the moment the key expires; it brings the locked
+// shape back (empty text, lock badge) and re-arms itself only if the vault is still open.
+// Every render asks again and moves a waiting timer forward when the key now expires sooner
+// (the timeout was shortened in the expert menu).
 let vaultRelockTimer = 0;
 let vaultRelockAt = 0;
 let vaultRelockAsking = false;
@@ -308,8 +302,8 @@ export async function renderGrid(skipFetch = false) {
       assignSettings(s.settings);
       await updateExamplesBanner(); // re-evaluate on every real fetch, not just at startup
     } catch (e) {
-      // IPC hiccup: keep the last good state instead of throwing into the
-      // global handler and leaving a half-rendered grid.
+      // IPC hiccup: keep the last good state instead of throwing into the global handler and
+      // leaving a half-rendered grid.
       errToast(e);
       if (!settings || !prompts) return;
     }
@@ -318,9 +312,8 @@ export async function renderGrid(skipFetch = false) {
   if (favView && !favViewEnabled()) assignFavView(false); // setting switched off underneath us
   if (favView) { renderFavGrid(); return; }
   const view = activeView();
-  // A colored border around the grid itself (expert opt, default off):
-  // reuses the view's own color, kept current on every render so it never
-  // shows a stale color after switching views.
+  // A colored border around the grid itself (expert option, default off) reuses the view's own
+  // color, refreshed on every render so it never shows a stale color after switching views.
   document.documentElement.style.setProperty("--active-view-color", view.color || "transparent");
   if (normalizeLayout(view)) {
     invoke("set_layout", { layout: layoutOf(view) }).catch(() => {});
@@ -345,8 +338,8 @@ export async function renderGrid(skipFetch = false) {
     const cell = layout[p.id];
     if (cell) byCell.set(cellKey(...cell), p);
   }
-  // A folder whose cell fell outside a resized grid (or landed on a taken one)
-  // moves to the first free cell, and that repair is written back.
+  // A folder whose cell fell outside a resized grid (or landed on a taken one) moves to the
+  // first free cell, and that repair is written back.
   const folderAt = new Map();
   for (const f of folders) {
     const [fc, fr] = f.cell || [0, 0];
@@ -382,9 +375,8 @@ export async function renderGrid(skipFetch = false) {
   // First run, nothing anywhere yet: a plain grid explains nothing on its own.
   $("grid-empty").classList.toggle("hidden", prompts.length > 0);
 
-  // Members that belong to this view but have no cell at this grid size (grid
-  // shrunk under them) still belong here: shown as a visible overhang instead
-  // of a silent loss.
+  // Members that belong to this view but have no cell at this grid size (grid shrunk under
+  // them) still belong here: shown as a visible overhang instead of a silent loss.
   const seated = new Set([...byCell.values()].map((p) => p.id));
   const overflowCount = gridMemberIds(view).filter((id) => !seated.has(id) && !inFolder.has(id)).length;
   $("grid-overflow").classList.toggle("hidden", overflowCount === 0);
@@ -401,8 +393,8 @@ export async function renderGrid(skipFetch = false) {
   fitAllTiles();
 }
 
-// Header view switcher: one button per view (switch on click, manage on
-// right-click) plus a trailing "+" to add a view via the name popup.
+// Header view switcher: one button per view (switch on click, manage on right-click) plus a
+// trailing "+" to add a view via the name popup.
 export function renderViews() {
   viewsEl.innerHTML = "";
   // Multi-view disabled (expert menu): no switcher, no add button.
@@ -446,8 +438,8 @@ export function viewTabEl(v) {
     btn.style.setProperty("--view-ink", readableInk(v.color));
     btn.style.setProperty("--ink-shadow", inkShadow(v.color));
   }
-  // The name lives in its own span so the merge preview can shrink it back into the
-  // tab the way a folder tab's spans already do.
+  // The name lives in its own span so the merge preview can shrink it back into the tab like a
+  // folder tab's spans.
   const label = document.createElement("span");
   label.textContent = v.name;
   btn.appendChild(label);
@@ -472,9 +464,8 @@ export const viewById = (id) => settings.views.find((v) => v.id === id);
 // The order the tab bar shows the views in, and the order Ctrl+Tab walks.
 export const viewOrder = () => settings.views;
 
-// ---- Tab-bar order -- the only place that decides it is settings.views
-// itself, so moving a tab is nothing but reordering that one array. A slot is
-// one draggable unit of the bar: a view's own id.
+// ---- Tab-bar order: settings.views is the only place that decides it, so moving a tab is
+// just reordering that array. A slot is one draggable unit of the bar: a view's own id. ----
 export function topLevelSlots() {
   return settings.views.map((v) => ({ viewId: v.id, ids: [v.id] }));
 }
@@ -490,9 +481,8 @@ export async function applyViewOrder(order) {
   renderViews();
 }
 
-// Moves the slot `key` to sit right before/after the slot `targetKey` -- one
-// operation for both the one-step menu move (target = the current neighbour)
-// and an arbitrary drag drop (target = wherever the pointer landed).
+// Moves the slot `key` to sit right before/after the slot `targetKey`: one operation for the
+// one-step menu move (target = the current neighbour) and an arbitrary drag drop.
 export async function moveTopLevelSlot(key, targetKey, side) {
   const slots = topLevelSlots();
   const fromIdx = slots.findIndex((s) => slotKey(s) === key);
@@ -514,8 +504,8 @@ export async function stepTopLevelSlot(key, dir) {
   await moveTopLevelSlot(key, slotKey(slots[targetIdx]), dir < 0 ? "before" : "after");
 }
 
-// The tab context menu's move entries -- greyed out (never hidden) at whichever
-// end already has nothing further to move past.
+// The tab context menu's move entries are greyed out (never hidden) at an end that has
+// nothing further to move past.
 export function moveTabMenuItems(key) {
   const slots = topLevelSlots();
   const idx = slots.findIndex((s) => slotKey(s) === key);
@@ -525,8 +515,8 @@ export function moveTabMenuItems(key) {
   ];
 }
 
-// Builds the checkbox + optional colour dot + name row of a view in the "Also show
-// in" popover.
+// Builds the checkbox + optional colour dot + name row of a view in the "Also show in"
+// popover.
 export function viewRowBase(v, on) {
   const row = document.createElement("button");
   row.type = "button";
@@ -558,15 +548,13 @@ export function openMiniMenu(items, x, y) {
     b.type = "button";
     b.setAttribute("role", "menuitem");
     b.className = it.danger ? "danger" : "";
-    // A move-left/-right entry stays visible at either end of the tab bar,
-    // disabled rather than removed, so the menu does not reflow under the
-    // pointer depending on which tab it was opened on.
+    // A move-left/-right entry stays visible at either end of the tab bar, disabled rather than
+    // removed, so the menu does not reflow under the pointer.
     if (it.disabled) {
       b.disabled = true;
       b.setAttribute("aria-disabled", "true");
     }
-    // The shared folder glyph on a "group into a folder" / "ungroup" entry --
-    // same markup wherever one of the three folder kinds offers it.
+    // The shared folder glyph on a "group into a folder" / "ungroup" entry.
     if (it.icon) {
       b.classList.add("has-icon");
       const ic = document.createElement("span");
@@ -583,8 +571,8 @@ export function openMiniMenu(items, x, y) {
   placePopoverAt(miniMenu, x, y);
 }
 
-// Dragging a tab onto another one reorders them. Pointer events rather than
-// HTML5 drag-and-drop: the webview reserves that for file drops.
+// Dragging a tab onto another one reorders them. Pointer events rather than HTML5
+// drag-and-drop, which the webview reserves for file drops.
 export let tabDrag = null;
 export let tabDragBlockClick = false;
 export function assignTabDragBlockClick(v) { tabDragBlockClick = v; }
@@ -596,21 +584,20 @@ export function makeTabDraggable(el, viewId) {
   });
 }
 
-// A tab-bar button: the same hit test a tab-to-tab drag (below) and a tile-to-tab
-// drag (further down) both call, so hovering either looks and behaves identically.
+// A tab-bar button: the hit test shared by tab-to-tab and tile-to-tab drags, so hovering
+// either looks and behaves identically.
 export const tabDropTarget = (x, y) => document.elementFromPoint(x, y)?.closest(".view-btn") || null;
 
-// Which half of `el` the pointer sits over: the left half drops before the tab,
-// the right half after it.
+// Which half of `el` the pointer sits over: the left half drops before the tab, the right
+// half after it.
 export function tabDropZone(el, x) {
   const rect = el.getBoundingClientRect();
   if (!rect.width) return "after";
   return x - rect.left < rect.width / 2 ? "before" : "after";
 }
 
-// Takes the element explicitly rather than reading it off `tabDrag` -- a
-// pointerup already cleared `tabDrag` to null by the time it cleans up here,
-// so reading through the (now gone) drag state would throw.
+// Takes the element explicitly rather than reading it off `tabDrag`: pointerup has already
+// cleared `tabDrag` by the time it cleans up here.
 export function clearTabDropMark(el) {
   el?.classList.remove("tab-drop", "tab-drop-edge", "tab-drop-before", "tab-drop-after");
 }
@@ -624,11 +611,10 @@ export function markTabDrop(el, zone) {
   el.classList.add("tab-drop-edge", zone === "before" ? "tab-drop-before" : "tab-drop-after");
 }
 
-// ---- Dragging a grid tile onto a view tab -----------------------------
-// The tile's own drag state (`drag`, defined with the grid below) grows a
-// second target next to `tabDrag` above rather than sharing its state: the two
-// gestures start on different elements (a tile vs. a tab) and are never live
-// together, but a tab-to-tab drag must keep working exactly as before.
+// ---- Dragging a grid tile onto a view tab ----
+// The tile's own drag state (`drag`, defined with the grid below) gets a second target next to
+// `tabDrag` rather than sharing its state: the two gestures start on different elements and
+// are never live together.
 export function clearViewDropHover() {
   if (!drag) return;
   drag.viewTarget?.classList.remove("tab-drop");
@@ -656,24 +642,20 @@ export function updateViewDropHover(x, y, copy) {
   drag.ghost?.classList.toggle("will-copy", !!copy && !!hit);
 }
 
-// Serialises view-tab drops: two dragged onto a tab back to back used to both
-// reach the backend, the slower one landing after the faster one already
-// rendered, so its stale source view rode along and left the tile in both
-// views. While one drop's round trip is still open, a second is dropped here
-// instead of sent -- the tile it was carrying simply stays where it was,
-// nothing to undo.
+// Serialises view-tab drops: two dragged onto a tab back to back could both reach the
+// backend, the slower landing after the faster one rendered, so its stale source view rode
+// along and left the tile in both views. While one drop's round trip is open, a second is
+// dropped here instead of sent; its tile stays where it was, nothing to undo.
 export let viewDropBusy = false;
-// Bumped once per accepted drop; a response is only applied while it still
-// carries the newest number, so a call whose answer arrives out of order can
-// never overwrite whatever a later one already put on screen.
+// Bumped once per accepted drop; a response is applied only while it still carries the newest
+// number, so an out-of-order answer cannot overwrite what a later call put on screen.
 export let viewMutationSeq = 0;
 
-// One invoke moves or copies the dragged id(s) into `targetViewId`, then
-// re-renders whatever the source view's grid shows now. A rejected drop (the
-// target is full) leaves both views untouched -- batch_prompts is all-or-nothing.
-// Split from dropTilesOnView so the UI test suite can call it directly with two
-// overlapping, independently-resolved invocations and prove the ordering rule
-// above without racing real timers.
+// One invoke moves or copies the dragged id(s) into `targetViewId`, then re-renders whatever
+// the source view's grid shows now. A rejected drop (the target is full) leaves both views
+// untouched: batch_prompts is all-or-nothing. Split from dropTilesOnView so the UI test suite
+// can call it directly with two overlapping invocations and prove the ordering rule without
+// racing real timers.
 export async function runViewMutation(ids, targetViewId, fromViewId, copy, mySeq) {
   let result;
   try {
@@ -736,8 +718,8 @@ export function openViewModal(view) {
   viewModal.title.textContent = view ? t("editViewTitle") : t("addView").replace(/^\+\s*/, "");
   viewModal.name.value = view ? view.name : "";
   renderViewColor();
-  // Grid size (columns × rows) is editable only for an existing view: a new one
-  // starts at the default and can be resized here afterwards.
+  // Grid size (columns x rows) is editable only for an existing view; a new one starts at the
+  // default and can be resized here afterwards.
   viewModal.gridField.classList.toggle("hidden", !view);
   if (view) {
     const gm = val("gridMax");
@@ -767,11 +749,10 @@ export function closeViewModal() {
   viewModalId = null;
 }
 
-// Undo for a deleted view: rebuilt through the normal view commands (a new id,
-// never the old one) rather than writing the View struct back whole, so members
-// and layouts stay in lockstep the same way any other view mutation keeps them.
-// The per-size layout arrangement itself is not restored, only membership and the
-// current grid size: the members reflow into free cells, same as a resize would.
+// Undo for a deleted view: rebuilt through the normal view commands (a new id, never the old
+// one) rather than writing the View struct back whole, so members and layouts stay in
+// lockstep. The per-size layout arrangement is not restored, only membership and the current
+// grid size: the members reflow into free cells, as a resize would.
 export async function restoreDeletedView(deleted, reactivateId) {
   assignSettings(await invoke("add_view", { name: deleted.name, color: deleted.color || "" }));
   const newId = settings.active_view;
@@ -781,8 +762,8 @@ export async function restoreDeletedView(deleted, reactivateId) {
     try {
       await addAll();
     } catch (e) {
-      // A view that had more members than cells (the overflow row) is all-or-nothing
-      // on the way back in: grow it by the missing rows once, so no member is lost.
+      // A view that had more members than cells (the overflow row) is all-or-nothing on the way
+      // back in: grow it by the missing rows once, so no member is lost.
       const m = String(e).match(/view-full:(\d+)/);
       let restored = false;
       if (m) {
@@ -833,9 +814,8 @@ export async function confirmViewModal() {
   await renderGrid(true);
 }
 
-// A new, empty view with the same name/color/grid size as the source: its
-// tile placements are not copied, since a prompt cannot yet sit in two views at
-// once.
+// A new, empty view with the same name, color and grid size as the source. Tile placements
+// are not copied, since a prompt cannot sit in two views at once.
 export async function duplicateView(v) {
   try {
     assignSettings(await invoke("add_view", { name: `${v.name} (${t("duplicateSuffix")})`, color: v.color || "" }));
@@ -849,8 +829,8 @@ export async function duplicateView(v) {
   await renderGrid(true);
 }
 
-// Writes a new grid size for the view on screen. A refused write (settings locked,
-// read-only data folder) leaves the size boxes showing what the grid really has.
+// Writes a new grid size for the view on screen. A refused write (settings locked, read-only
+// data folder) leaves the size boxes showing what the grid really has.
 async function applyViewGrid(view, cols, rows) {
   try {
     assignSettings(await invoke("set_view_grid", { id: view.id, cols, rows }));
@@ -877,9 +857,8 @@ export function bindViews() {
   attachGridPicker($("qg-cols"), applyQuickGrid);
   attachGridPicker($("qg-rows"), applyQuickGrid);
 
-  // Overhang row: grow the grid one step at a time, capped at
-  // gridMax, until the view has enough cells for every member (or it hits the
-  // cap - the row then just stays, since nothing was lost either way).
+  // Overhang row: grow the grid one step at a time, capped at gridMax, until the view has
+  // enough cells for every member (or it hits the cap, and the row stays; nothing was lost).
   $("grid-overflow-grow").addEventListener("click", async () => {
     if (favView) return;
     const view = activeView();
@@ -898,8 +877,8 @@ export function bindViews() {
 
   // View add / rename / delete popup.
   viewModal.confirm.addEventListener("click", confirmViewModal);
-  // Grid size uses the same dropdown number picker as the main layout; values are
-  // applied on Save, so the pick callback is a no-op here.
+  // Grid size uses the same dropdown number picker as the main layout; values are applied on
+  // Save, so the pick callback is a no-op here.
   attachGridPicker(viewModal.cols, () => {});
   attachGridPicker(viewModal.rows, () => {});
   viewModal.name.addEventListener("keydown", (e) => {
@@ -911,8 +890,8 @@ export function bindViews() {
   });
   // Deletes at once; the Undo toast brings the view back.
   viewModal.delete.addEventListener("click", async () => {
-    // Snapshot before the delete call: `settings` is only replaced once it
-    // resolves, so the pre-delete view is still sitting in the current list.
+    // Snapshot before the delete call: `settings` is replaced only once it resolves, so the
+    // pre-delete view is still in the current list.
     const deleted = settings.views.find((v) => v.id === viewModalId);
     const wasActive = settings.active_view === viewModalId;
     const prevActive = settings.active_view;
@@ -958,21 +937,18 @@ export function bindViews() {
   $("fav-view-btn").addEventListener("click", () => setFavView(!favView));
 }
 
-// Three onboarding examples: placeholder, image, Markdown. Text comes from i18n.js
-// (LANG is already resolved by the time this runs, see applySettingsCore), so each
-// install sees them in its own language instead of freezing whatever the OS locale
-// was on first launch would have to.
+// Three onboarding examples: placeholder, image, Markdown. Text comes from i18n.js (LANG is
+// resolved by the time this runs, see applySettingsCore), so each install sees them in its own
+// language.
 export const EXAMPLES = [
   { name: "example1Name", text: "example1Text", image: "" },
   { name: "example2Name", text: "example2Text", image: EXAMPLE_IMAGE_DATA_URL },
   { name: "example3Name", text: "example3Text", image: "" },
 ];
 
-// The backend re-checks "library still empty AND never seeded before" itself, so
-// this is safe (and cheap) to call unconditionally on every launch: it is a no-op
-// the moment the library holds anything at all, examples included.
-// Returns the prompts it actually seeded (empty when the library already had
-// something, examples included: the backend decides, this only reports back).
+// The backend re-checks "library still empty and never seeded before" itself, so this is safe
+// and cheap to call on every launch. Returns the prompts it seeded (empty when the library
+// already had something; the backend decides).
 export async function seedExamplesIfNeeded() {
   const examples = EXAMPLES.map((e) => ({ name: t(e.name), text: t(e.text), image: e.image }));
   return invoke("seed_example_prompts", { examples }).catch(() => []);
@@ -1006,9 +982,9 @@ export function wireViews() {
   miniMenu.className = "ctx tab-menu hidden";
   miniMenu.setAttribute("role", "menu");
   document.body.appendChild(miniMenu);
-  // Exercised directly by the UI test suite to prove the sequence-number rule
-  // without needing two real drags to race in wall-clock time.
-  // Only the test stub defines __SMOKE_ERRORS__; the shipped window carries no hooks.
+  // Exercised directly by the UI test suite to prove the sequence-number rule without two real
+  // drags racing in wall-clock time. Only the test stub defines __SMOKE_ERRORS__; the shipped
+  // window carries no hooks.
   if (window.__SMOKE_ERRORS__) {
     window.__runViewMutation = runViewMutation;
     window.__nextViewMutationSeq = () => ++viewMutationSeq;
@@ -1027,8 +1003,8 @@ export function wireViews() {
     if (!valid) { markTabDrop(null); return; }
     markTabDrop(valid, tabDropZone(valid, e.clientX));
   });
-  // A press the system cancels (focus loss, a touch turned into a gesture) must not
-  // leave the drag armed: the next pointermove would keep dragging with the button up.
+  // A press the system cancels (focus loss, a touch turned into a gesture) must not leave the
+  // drag armed: the next pointermove would keep dragging with the button up.
   window.addEventListener("pointercancel", () => {
     if (!tabDrag) return;
     const d = tabDrag;
