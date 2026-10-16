@@ -789,6 +789,13 @@ export async function loadHistory(id) {
           mdLastText = null;
           syncModalImageUi(modalState.mode);
           updateLenCounter();
+          // The restore is already stored: the fields it wrote are no unsaved change
+          // (other edits made in the open editor still are).
+          try {
+            const now = JSON.parse(modalSnapshot()), base = JSON.parse(modalInitial);
+            for (const i of [0, 1, 16, 17]) base[i] = now[i]; // name, text, entry list, rotate mode
+            modalInitial = JSON.stringify(base);
+          } catch { modalInitial = modalSnapshot(); }
           toast(t("historyRestored"));
           await renderGrid(true);
           loadHistory(id); // the restore itself added a fresh snapshot
