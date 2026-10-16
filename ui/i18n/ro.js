@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "Curăță acum",
     recSweepDone: "{n} înregistrări deteriorate eliminate, {v} eliberați",
     recContinuePartsSaved: "Părți anterioare ale acestei înregistrări salvate: {n}",
+    recPartsNotSaved: "{n} părți anterioare ale acestei înregistrări nu au putut fi salvate",
     bgTitle: "Sarcini în curs",
     bgNone: "Nimic nu rulează în acest moment.",
     bgKeepRunning: "Continuă rularea în fundal",

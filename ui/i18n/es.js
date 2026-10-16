@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "Limpiar ahora",
     recSweepDone: "Se eliminaron {n} grabaciones dañadas y se liberaron {v}",
     recContinuePartsSaved: "Partes anteriores de esta grabación guardadas: {n}",
+    recPartsNotSaved: "No se pudieron guardar {n} partes anteriores de esta grabación",
     bgTitle: "Tareas en ejecución",
     bgNone: "No hay nada en ejecución en este momento.",
     bgKeepRunning: "Seguir ejecutando en segundo plano",

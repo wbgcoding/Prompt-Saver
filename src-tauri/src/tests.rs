@@ -20348,3 +20348,64 @@ fn start_minimized_never_repoints_another_copys_autostart_entry() {
     assert!(!start_minimized_rewrites_entry(true, RegistryOwner::OtherExe));
     assert!(!start_minimized_rewrites_entry(false, RegistryOwner::ThisExe));
 }
+
+fn part_info(dir: &Path, name: &str) -> RecordingPartInfo {
+    let path = dir.join(name);
+    fs::write(&path, b"video").unwrap();
+    RecordingPartInfo { path: path.to_string_lossy().to_string(), mic_wav_path: None }
+}
+
+#[test]
+fn result_parts_survive_the_sweep_even_when_old() {
+    let dir = std::env::temp_dir().join(format!("ps-test-result-parts-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let part = part_info(&dir, "rec-2026-01-01-00-00-00.mp4");
+    let part_mic = dir.join("rec-2026-01-01-00-00-00.mic.wav");
+    fs::write(&part_mic, b"mic").unwrap();
+    let stray = dir.join("rec-2026-01-01-00-00-09.mp4");
+    fs::write(&stray, b"video").unwrap();
+    for f in [Path::new(&part.path), part_mic.as_path(), stray.as_path()] {
+        backdate(f, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+    }
+    *REC_RESULT_PARTS.lock().unwrap() = vec![part.clone()];
+    let protected = protected_take_paths();
+    REC_RESULT_PARTS.lock().unwrap().clear();
+    let empty = std::collections::HashSet::new();
+    let (count, _) = sweep_stale_recordings_in(&dir, &empty, &protected, false, Duration::from_secs(60), None);
+    assert_eq!(count, 1, "only the file that is no part of the open take goes");
+    assert!(Path::new(&part.path).exists(), "an earlier part waiting in the result dialog stays");
+    assert!(part_mic.exists(), "and so does its mic track");
+    assert!(!stray.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn place_recording_parts_moves_each_part_with_its_name() {
+    let base = std::env::temp_dir().join(format!("ps-test-place-parts-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    let src = base.join("recordings");
+    let dest = base.join("saved");
+    fs::create_dir_all(&src).unwrap();
+    let mut parts = vec![part_info(&src, "rec-2026-01-01-00-00-00_part2.mp4"), part_info(&src, "notes.mp4")];
+    fs::write(src.join("rec-2026-01-01-00-00-00_part2.mic.wav"), b"mic").unwrap();
+    let (saved, failed) = place_recording_parts(&mut parts, std::slice::from_ref(&src), &dest);
+    assert_eq!((saved, failed), (1, 1), "a file that is no recording of ours is refused");
+    assert!(dest.join("rec-2026-01-01-00-00-00_part2.mp4").is_file());
+    assert!(dest.join("rec-2026-01-01-00-00-00_part2.mic.wav").is_file(), "the sidecar travels along");
+    assert_eq!(parts.len(), 1, "a saved part leaves the list, a failed one stays");
+    let _ = fs::remove_dir_all(&base);
+}
+
+#[test]
+fn discard_recording_parts_in_moves_parts_to_the_holding_folder() {
+    let dir = std::env::temp_dir().join(format!("ps-test-discard-parts-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let mut parts = vec![part_info(&dir, "rec-2026-01-01-00-00-00_part2.mp4"), part_info(&dir, "rec-2026-01-01-00-00-00_part3.mp4")];
+    let moved = discard_recording_parts_in(&mut parts, std::slice::from_ref(&dir));
+    assert_eq!(moved, 2);
+    assert!(parts.is_empty());
+    assert!(dir.join("verworfen").join("rec-2026-01-01-00-00-00_part3.mp4").is_file());
+    let _ = fs::remove_dir_all(&dir);
+}

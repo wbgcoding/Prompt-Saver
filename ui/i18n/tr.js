@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "Şimdi temizle",
     recSweepDone: "{n} bozuk kayıt kaldırıldı, {v} alan açıldı",
     recContinuePartsSaved: "Bu kaydın önceki bölümleri kaydedildi: {n}",
+    recPartsNotSaved: "Bu kaydın {n} önceki bölümü kaydedilemedi",
     bgTitle: "Çalışan görevler",
     bgNone: "Şu anda çalışan hiçbir işlem yok.",
     bgKeepRunning: "Arka planda çalıştırmaya devam et",

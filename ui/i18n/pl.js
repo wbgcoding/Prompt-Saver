@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "Wyczyść teraz",
     recSweepDone: "Usunięto uszkodzone nagrania: {n}, zwolniono {v}",
     recContinuePartsSaved: "Zapisane wcześniejsze części tego nagrania: {n}",
+    recPartsNotSaved: "Nie udało się zapisać wcześniejszych części tego nagrania: {n}",
     bgTitle: "Trwające zadania",
     bgNone: "Nic nie jest teraz uruchomione.",
     bgKeepRunning: "Kontynuuj działanie w tle",

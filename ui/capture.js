@@ -278,6 +278,17 @@ export function bindCapture() {
   // -- recCopiedNotSaved is what gates the confirm-before-delete for that case.
   let recSavedOrAttached = false;
   let recCopiedNotSaved = false;
+  // The earlier parts of a "finish and continue" take go where the last file
+  // went; the toast names only what really got saved.
+  async function keepRecParts(besideSaveAs) {
+    try {
+      const [saved, failed] = await invoke("save_recording_parts", { besideSaveAs });
+      if (saved > 0) toast(t("recContinuePartsSaved").replace("{n}", String(saved)));
+      if (failed > 0) toast(t("recPartsNotSaved").replace("{n}", String(failed)));
+    } catch (err) {
+      errToast(err);
+    }
+  }
   // Elide a long path in the middle rather than at the end -- the last
   // segment (the actual folder name) is what tells destinations apart, so it
   // has to stay visible; the title attribute always carries the full path.
@@ -335,6 +346,7 @@ export function bindCapture() {
       const keepH = await invoke("discard_recording_file", { path }).catch(() => null);
       if (keepH != null) toast(t("recDiscardedToast").replace("{hours}", String(Math.round(keepH))));
     }
+    if (shouldDelete) invoke("discard_recording_parts").catch(() => {});
   }
   // needsCrop: the window recording's canvas was bigger than the window
   // ever used (a multi-display canvas) -- trim the black margin first,
@@ -525,13 +537,9 @@ export function bindCapture() {
         },
       }, "", null, 12000);
     }
-    // "Finish and continue" split this recording into several files -- the
-    // result dialog below still only ever opens the LAST one (opening every
-    // part in sequence in the editor is future work), so at least name how
-    // many earlier parts exist and were kept, rather than the split going
-    // unmentioned.
-    const partsCount = e.payload?.parts?.length || 0;
-    if (partsCount > 0) toast(t("recContinuePartsSaved").replace("{n}", String(partsCount)));
+    // "Finish and continue" split this recording into several files. The
+    // dialog opens the LAST one; the backend keeps the earlier parts and they
+    // follow it on Save, Attach or Edit and go to the discard folder with it.
     if (path) openRecModal(path, !!e.payload?.needs_crop);
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());
@@ -562,6 +570,7 @@ export function bindCapture() {
       await invoke("open_video_editor", { srcPath: pendingRecPath });
       recordToolUsage("video_editor");
       recSavedOrAttached = true;
+      keepRecParts(false);
       closeRecModal();
     } catch (err) {
       errToast(err);
@@ -589,6 +598,7 @@ export function bindCapture() {
       adoptRecPath(newPath);
       recSavedOrAttached = true;
       toast(t("recSaved"));
+      await keepRecParts(false);
     } catch (err) {
       errToast(err);
     } finally {
@@ -604,6 +614,7 @@ export function bindCapture() {
       if (newPath) {
         adoptRecPath(newPath);
         recSavedOrAttached = true;
+        await keepRecParts(true);
       }
     } finally {
       recSaveAsBusy = false;
@@ -639,6 +650,7 @@ export function bindCapture() {
     // Attaching counts as "saving": mark it before closeRecModal() so the
     // close path does not delete the file out from under the newly opened editor.
     recSavedOrAttached = true;
+    keepRecParts(false);
     closeRecModal();
     if (path) openFileCreate(path);
   });

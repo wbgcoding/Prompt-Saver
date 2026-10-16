@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "今すぐクリーンアップ",
     recSweepDone: "破損した録画を {n} 件削除し、{v} を解放しました",
     recContinuePartsSaved: "この録画の以前の部分を保存しました：{n}",
+    recPartsNotSaved: "この録画の以前の部分 {n} 件を保存できませんでした",
     bgTitle: "実行中のジョブ",
     bgNone: "現在実行中のジョブはありません。",
     bgKeepRunning: "バックグラウンドで実行を継続",

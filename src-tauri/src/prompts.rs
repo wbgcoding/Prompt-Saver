@@ -699,6 +699,7 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(sidecar_path(&p, KEYS_SIDECAR_EXT)); // the key-overlay sidecar, same lifetime as the mic one
         out.push(p);
     }
+    out.extend(protected_take_paths());
     if let Some(state) = app.try_state::<VideoEditorPending>() {
         let (src, _origin_dir, overlay) = state.lock().clone();
         if !src.is_empty() {
@@ -713,6 +714,38 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
             out.push(sidecar_path(&overlay, CAM_SIDECAR_EXT));
             out.push(overlay);
         }
+    }
+    out
+}
+
+// Earlier parts of a "finish and continue" take that the result dialog is
+// deciding on. None is referenced by a prompt yet and they can be older than
+// the sweep age, so the sweep must leave them alone until the dialog has
+// saved or discarded them.
+pub(crate) static REC_RESULT_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
+
+fn push_recording_with_sidecars(out: &mut Vec<PathBuf>, video: &Path) {
+    out.push(video.with_extension("mic.wav"));
+    #[cfg(windows)]
+    out.push(sidecar_path(video, KEYS_SIDECAR_EXT));
+    out.push(sidecar_path(video, CAM_SIDECAR_EXT));
+    out.push(video.to_path_buf());
+}
+
+// Parts of a chain that is still recording and parts waiting in the result
+// dialog, each with its sidecars.
+pub(crate) fn protected_take_paths() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let parts: Vec<String> = REC_SESSION_PARTS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .chain(REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()).iter())
+        .flat_map(|p| [Some(p.path.clone()), p.mic_wav_path.clone()])
+        .flatten()
+        .collect();
+    for p in parts {
+        push_recording_with_sidecars(&mut out, Path::new(&p));
     }
     out
 }

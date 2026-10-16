@@ -545,10 +545,78 @@ pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win:
         Some(p) => {
             move_tracked_export_output(&src, &p).map_err(|e| e.to_string())?;
             move_mic_sidecar_alongside(&src, &p);
+            *LAST_SAVE_AS_DIR.lock().unwrap_or_else(|e| e.into_inner()) = p.parent().map(Path::to_path_buf);
             Ok(Some(p.to_string_lossy().to_string()))
         }
         None => Ok(None),
     }
+}
+
+// Folder of the latest "Save as" the user picked in the dialog, so the earlier
+// parts of the same take can follow the last file there without the renderer
+// naming a destination.
+pub(crate) static LAST_SAVE_AS_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+// Moves each part into `dest_dir` (name kept, so the part suffix stays) with its
+// sidecars. A part that was saved leaves the list; one that could not be moved
+// stays for another try. Returns (saved, failed).
+pub(crate) fn place_recording_parts(parts: &mut Vec<RecordingPartInfo>, allowed: &[PathBuf], dest_dir: &Path) -> (u32, u32) {
+    let (mut saved, mut failed) = (0u32, 0u32);
+    parts.retain(|part| {
+        let src = Path::new(&part.path);
+        if !is_own_recording_source(allowed, src) {
+            failed += 1;
+            return true;
+        }
+        match place_in_dir(src, dest_dir) {
+            Ok(_) => {
+                saved += 1;
+                false
+            }
+            Err(_) => {
+                failed += 1;
+                true
+            }
+        }
+    });
+    (saved, failed)
+}
+
+// Save/Attach/Edit/Save as in the result dialog: the earlier parts of a
+// "finish and continue" take go where the last file went. `beside_save_as`
+// picks the folder of the latest Save as instead of the recordings folder.
+#[tauri::command]
+pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, beside_save_as: bool) -> Result<(u32, u32), String> {
+    let allowed = recording_source_dirs(&app, &state);
+    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    let dest = if beside_save_as {
+        LAST_SAVE_AS_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_else(|| recording_dir(&custom))
+    } else {
+        recording_dir(&custom)
+    };
+    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+    Ok(place_recording_parts(&mut parts, &allowed, &dest))
+}
+
+// Discard in the result dialog: the earlier parts go to the discard folder like
+// the last file. Returns how many were moved.
+pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, allowed: &[PathBuf]) -> u32 {
+    let mut moved = 0u32;
+    parts.retain(|part| {
+        let ok = discard_recording_file_in(allowed, Path::new(&part.path)).is_some();
+        if ok {
+            moved += 1;
+        }
+        !ok
+    });
+    moved
+}
+
+#[tauri::command]
+pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u32 {
+    let allowed = recording_source_dirs(&app, &state);
+    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+    discard_recording_parts_in(&mut parts, &allowed)
 }
 
 // The folder picker used by the video editor's "choose folder"

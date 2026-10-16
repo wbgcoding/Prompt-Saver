@@ -444,6 +444,7 @@ export default {
     recSweepNowAction: "Jetzt aufräumen",
     recSweepDone: "{n} defekte Aufnahme(n) entfernt, {v} freigegeben",
     recContinuePartsSaved: "Frühere Teile dieser Aufnahme gespeichert: {n}",
+    recPartsNotSaved: "{n} frühere Teile dieser Aufnahme konnten nicht gespeichert werden",
     bgTitle: "Laufende Vorgänge",
     bgNone: "Gerade läuft nichts.",
     bgKeepRunning: "Im Hintergrund weiterlaufen lassen",

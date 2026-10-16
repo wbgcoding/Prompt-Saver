@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "立即清理",
     recSweepDone: "已移除 {n} 个损坏的录制内容，释放了 {v}",
     recContinuePartsSaved: "已保存此录制的早期片段：{n}",
+    recPartsNotSaved: "此录制的 {n} 个早期片段无法保存",
     bgTitle: "运行中的任务",
     bgNone: "当前没有正在运行的任务。",
     bgKeepRunning: "在后台继续运行",

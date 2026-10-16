@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "Pulisci ora",
     recSweepDone: "Rimosse {n} registrazioni danneggiate, liberati {v}",
     recContinuePartsSaved: "Parti precedenti di questa registrazione salvate: {n}",
+    recPartsNotSaved: "Impossibile salvare {n} parti precedenti di questa registrazione",
     bgTitle: "Attività in corso",
     bgNone: "Al momento non c'è nulla in esecuzione.",
     bgKeepRunning: "Continua l'esecuzione in secondo piano",

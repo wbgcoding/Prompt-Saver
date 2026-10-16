@@ -468,6 +468,7 @@ export default {
     recSweepNowAction: "Nu opruimen",
     recSweepDone: "{n} beschadigde opname(n) verwijderd, {v} vrijgemaakt",
     recContinuePartsSaved: "Eerdere delen van deze opname opgeslagen: {n}",
+    recPartsNotSaved: "{n} eerdere delen van deze opname konden niet worden opgeslagen",
     bgTitle: "Lopende taken",
     bgNone: "Er wordt momenteel niets uitgevoerd.",
     bgKeepRunning: "Op de achtergrond blijven uitvoeren",

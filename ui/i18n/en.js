@@ -444,6 +444,7 @@ export default {
     recSweepNowAction: "Clean up now",
     recSweepDone: "{n} broken recording(s) removed, {v} freed",
     recContinuePartsSaved: "Earlier parts of this recording saved: {n}",
+    recPartsNotSaved: "{n} earlier parts of this recording could not be saved",
     bgTitle: "Running jobs",
     bgNone: "Nothing is running right now.",
     bgKeepRunning: "Keep running in the background",

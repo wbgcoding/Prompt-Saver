@@ -668,6 +668,7 @@ pub(crate) async fn finish_and_continue_recording(
                     resize_crop_at_ms,
                     parts,
                 };
+                *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
                 let _ = app2.emit("recording-captured", payload);
                 Ok(ContinueOutcome::StoppedInstead(format!("recording-continue-failed-stopped:{start_err}")))
             }
@@ -838,6 +839,9 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
         resize_crop_at_ms,
         parts,
     };
+    // The earlier parts wait for the result dialog's decision: registered before
+    // the sweep below so it cannot take an old part.
+    *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
     // auto-stop). Same for the tray's two extra rows.
