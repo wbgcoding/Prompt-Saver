@@ -18,15 +18,13 @@ import { maybeDupImportToast, maybeShowSimilarHint } from "./management.js";
 import { hotkeyClearX, openAllShortcuts, openLightbox } from "./windowChrome.js";
 import { attachSelectPicker } from "./selectpop.js";
 
-// Bumped by openModal/closeModal. An async pick/preview started for one editor
-// session (pickReplacementMedia, replaceFile) captures this before its awaits and
-// checks it again after -- `modalState` alone is not enough, since closing and
-// opening a DIFFERENT prompt leaves modalState just as truthy, letting a slow
-// reply from the old prompt land in the new one's editor.
+// Bumped by openModal/closeModal. An async pick/preview started for one editor session
+// (pickReplacementMedia, replaceFile) captures it before its awaits and rechecks after:
+// modalState alone is not enough, since closing and opening a different prompt leaves it just
+// as truthy and a slow reply from the old prompt would land in the new editor.
 export let modalSession = 0;
-// Whatever had keyboard focus right before the editor opened, so closing
-// it returns focus there instead of dropping it to document.body -- without
-// this a keyboard user's next Tab press restarts from the top of the page.
+// Whatever had keyboard focus before the editor opened, so closing returns focus there instead
+// of dropping it to document.body (a keyboard user's next Tab would restart from the top).
 export let modalOpener = null;
 export let modalInitial = ""; // snapshot of the open modal's content (unsaved-change guard)
 export let modalSaving = false; // re-entry guard, a double-click/double-Enter must not fire two saves
@@ -293,12 +291,9 @@ export function varFixedListRow() {
   return wrap;
 }
 
-// ---- Editor draft autosave ----
-// Only the text side (name/text/variants) ever gets drafted -- an attached
-// image is never re-derived from a crash draft, it stays with the prompt
-// itself. One row on the backend (id "current"), since only one editor can be
-// open at a time; the fingerprint check below is what keeps an unchanged tick
-// from writing that row over and over while the user reads rather than types.
+// Only the text side (name/text/variants) is drafted; an attached image stays with the prompt
+// itself. One row on the backend (id "current"), since only one editor is open at a time; the
+// fingerprint check keeps an unchanged tick from rewriting that row while the user reads.
 export function draftEditorFields() {
   if (!modalState) return null;
   // A confidential entry is never drafted: the draft row would hold its revealed text.
@@ -346,9 +341,8 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   varsRevealed = false;
   assignModalState({
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
-    // What the editor opened with. Save compares against it and only sends an
-    // image field when the user really changed the picture: a save must never be
-    // able to clear a stored image just by not having it to hand.
+    // What the editor opened with. Save compares against it and only sends an image field when the
+    // picture really changed, so a save can never clear a stored image just by not having it to hand.
     imageOpened: image,
     // The FULL entry list (entry 0 = what would otherwise be modal.text's value)
     // while rotation is active, empty while it is not.
@@ -420,10 +414,9 @@ function focusOnOpen(mode) {
   modal.name.setSelectionRange(n, n);
 }
 
-// ---- Confidential entries ----
-// Marking a prompt confidential only ever applies to a saved, plain text
-// entry -- an image/file prompt has nothing in `text` worth encrypting, and a
-// brand-new "create" draft has no id yet for set_prompt_secret to act on.
+// Marking a prompt confidential only applies to a saved, plain text entry: an image/file
+// prompt has nothing in `text` worth encrypting, and a new "create" draft has no id yet for
+// set_prompt_secret.
 export function updateSecretToggleUi(mode, secret, copyImage, filePath) {
   const eligible = mode === "edit" && flag("secretPrompts") && !copyImage && !filePath;
   modal.secret.classList.toggle("hidden", !eligible);
@@ -469,10 +462,9 @@ export async function ensureSecretVaultUnlocked() {
   }
 }
 
-// The one click handler for the editor's confidential toggle, on or off alike
-// -- both directions re-encrypt/decrypt the STORED text with the vault key
-// (set_prompt_secret), so any unsaved edit in the field must be saved first or
-// this would silently discard it.
+// The one click handler for the editor's confidential toggle, on or off: both directions
+// re-encrypt/decrypt the stored text with the vault key (set_prompt_secret), so any unsaved
+// edit in the field is saved first or it would be discarded.
 export async function onModalSecretToggle() {
   if (!modalState || modalState.mode !== "edit") return;
   if (modalSnapshot() !== modalInitial) {
@@ -560,43 +552,36 @@ export function scheduleMdPreview() {
   mdTimer = setTimeout(() => renderMdPreview(), 60);
 }
 
-// Bring toolbar, textarea and preview in line with the flags and the picked layout.
-// When `rotating`, the variants list IS the editing surface, so neither the
-// textarea nor the rendered pane may stay in flow. Both used to survive it: the
-// clear-X wrapper as an empty 120px box (the gap above the colour row) and, with
-// on, the preview still rendering entry 1, which read as a stray field.
+// Bring toolbar, textarea and preview in line with the flags and the picked layout. When
+// `rotating`, the variants list is the editing surface, so neither the textarea nor the
+// rendered pane may stay in flow (the clear-X wrapper would remain as an empty 120px box above
+// the colour row, and the preview would render entry 1 as a stray field).
 export function syncMdUi(textVisible, rotating = false) {
   const on = textVisible && !rotating && flag("mdPreview");
   if (!on) mdEditing = false;
-  // ONE field: the rendered pane stands in for the textarea and hands it back on a
-  // click. Two panes side by side was the second thing on screen that did the same
-  // job: there is no layout option any more.
+  // One field: the rendered pane stands in for the textarea and hands it back on a click.
   modal.mdWrap.classList.toggle("hidden", !on || mdEditing);
-  // Hide the WRAPPER, not just the textarea: the clear-X wrapper stays in flow with
-  // an empty box and pushes the rendered pane down, so the field appeared to jump
-  // 19px every time it handed over.
+  // Hide the wrapper, not just the textarea: the clear-X wrapper would stay in flow as an empty
+  // box and push the rendered pane down, making the field jump 19px on every handover.
   const field = modal.text.closest(".clear-wrap-ta") || modal.text;
   if (textVisible) {
     const hide = rotating || (on && !mdEditing);
     field.classList.toggle("hidden", hide);
     modal.text.classList.toggle("hidden", hide);
-    // Tied to `rotating` alone, not the full `hide` -- the mic still dictates
-    // into modal.text's value while its rendered Markdown preview is what's on
-    // screen, and keeping the row's own visibility stable across THAT swap is
-    // what keeps the field from jumping vertically when it hands over.
+    // Tied to `rotating` alone, not the full `hide`: the mic still dictates into modal.text's
+    // value while the rendered preview is on screen, and a stable row visibility across that swap
+    // keeps the field from jumping vertically.
     modal.voiceRow.classList.toggle("hidden", rotating);
   }
-  // Fill the pane whenever the feature is on, visible or not: the first paint must
-  // never depend on the pane already being on screen, or switching to it shows a
-  // blank box until the next keystroke.
+  // Fill the pane whenever the feature is on, visible or not, so the first paint never depends
+  // on the pane already being on screen (else switching to it shows a blank box until the next
+  // keystroke).
   clearTimeout(mdTimer);
   if (on) renderMdPreview(true);
   if (modal.copyFormattedBtn) {
-    // Independent of `on`/`mdEditing` on purpose: if this depended on which of
-    // the two (preview vs. textarea) is showing, the button's own hidden/shown
-    // state would flip exactly when the field hands over, taking space away
-    // from one side and not the other -- the same field-jump class of bug the
-    // wrapper-hiding rule above already exists to avoid.
+    // Independent of `on`/`mdEditing` on purpose: tying it to which of preview/textarea is showing
+    // would flip the button's visibility exactly when the field hands over and cause the same
+    // field jump the wrapper-hiding rule above avoids.
     const cfShow = textVisible && !rotating && flag("copyFormatted") && hasMarkdownSyntax(modal.text.value);
     modal.copyFormattedBtn.classList.toggle("hidden", !cfShow);
   }
@@ -654,10 +639,9 @@ export function focusModalText() {
   modal.text.focus();
 }
 
-// Word-level diff between two texts via a classic LCS backtrack: no
-// dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
-// a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
-// rather than freezing the editor while it opens the history panel.
+// Word-level diff between two texts via a classic LCS backtrack, no dependency. O(n*m) on word
+// count, so a pathologically huge text falls back to plain text (DIFF_WORD_CAP) instead of
+// freezing the editor when the history panel opens.
 export const DIFF_WORD_CAP = 4000;
 export function diffWords(oldText, newText) {
   const tokenize = (s) => (s || "").split(/(\s+)/).filter((t) => t !== "");
@@ -684,11 +668,9 @@ export function diffWords(oldText, newText) {
   while (j < m) out.push({ type: "add", text: b[j++] });
   return out;
 }
-// One word-diff computed once, split into each side's own highlighted tokens --
-// the left side keeps "same"/"del" (what it has that the right does not), the
-// right side keeps "same"/"add" (what it has that the left does not). Both the
-// duplicate finder's own columns and the free "compare two entries" view call
-// this, instead of each running its own comparison.
+// One word-diff computed once, split into each side's highlighted tokens: the left keeps
+// "same"/"del", the right "same"/"add". The duplicate finder's columns and the "compare two
+// entries" view both call this instead of running their own comparison.
 export function splitDiffSides(leftText, rightText) {
   const tokens = diffWords(leftText, rightText);
   if (!tokens) return null; // DIFF_WORD_CAP fallback -- caller shows plain text
@@ -783,9 +765,8 @@ export async function loadHistory(id) {
           // next save writes the still-open (stale) entries back over them.
           modalState.rotateEntries = (p.variants || []).length ? [p.text, ...p.variants] : [];
           modalState.rotateMode = p.rotate_mode || "";
-          // Everything derived from the text is rebuilt from the restored values: the
-          // rendered Markdown pane, the placeholder bar and the entry list (whether the
-          // editor now shows one text field or the rotation list).
+          // Everything derived from the text is rebuilt from the restored values: the rendered Markdown
+          // pane, the placeholder bar and the entry list.
           mdLastText = null;
           syncModalImageUi(modalState.mode);
           updateLenCounter();
@@ -923,10 +904,9 @@ export function syncModalImageUi(mode) {
   // Only a text prompt, and only while the feature is on, ever offers rotation.
   modal.rotateToggleRow.classList.toggle("hidden", !textVisible || !flag("rotatingPrompts"));
   renderRotateUi();
-  // rotationUiOn(), not rotationActive(): with the feature off but the prompt
-  // still holding stored entries, the plain textarea is what must show (entry 0,
-  // editable), or the editor is stuck showing a list with no way back to it (its
-  // own toggle row is hidden too while the feature is off).
+  // rotationUiOn(), not rotationActive(): with the feature off but the prompt still holding
+  // stored entries, the plain textarea (entry 0, editable) must show, or the editor is stuck on
+  // a list with no way back (its toggle row is hidden too).
   const rotating = textVisible && rotationUiOn();
   modal.text.classList.toggle("hidden", !textVisible || rotating);
   modal.voiceRow.classList.toggle("hidden", !textVisible || rotating);
@@ -938,11 +918,10 @@ export function syncModalImageUi(mode) {
   modal.varsBody.classList.add("hidden");
   modal.varsHead.setAttribute("aria-expanded", "false");
   modal.textBar.classList.remove("open");
-  // Tags/hotkey/history share one "Advanced options" collapsible, which always
-  // reopens collapsed. The hotkey row exists for every prompt kind (a hotkey
-  // copies whatever the prompt holds). Version history is offered for every existing
-  // prompt kind: a snapshot also captures name-only changes on an image/file/colour
-  // prompt, so it stays reachable there too. The outer section itself never hides.
+  // Tags/hotkey/history share one "Advanced options" collapsible, which always reopens
+  // collapsed. The hotkey row exists for every prompt kind (a hotkey copies whatever the prompt
+  // holds). Version history is offered for every existing prompt kind: a snapshot also captures
+  // name-only changes on an image/file/colour prompt. The outer section never hides.
   modal.hotkey.classList.toggle("hidden", !promptHotkeysOn());
   showHotkeyError("");
   const histOn = mode === "edit" && flag("promptHistory");
@@ -1024,19 +1003,17 @@ export function syncModalImageUi(mode) {
 // otherwise be modal.text's own value): kept separate from modal.text so the two
 // never fight over which one is "the" source of truth while the switch is on.
 export const rotationActive = () => (modalState?.rotateEntries || []).length > 0;
-// rotationActive() alone answers "does this prompt have stored entries" (used
-// by confirmModal to decide what to preserve on save); this answers "is the rotate
-// list actually the thing shown right now": false while the feature itself is off,
-// even with entries still stored. DISPLAY decisions (which surface to show/hide)
-// must use this one, or a prompt edited while the feature is off gets its rotate
-// list shown with no way back to the textarea (its own toggle row is hidden too).
+// rotationActive() answers "does this prompt have stored entries" (confirmModal uses it to
+// decide what to preserve on save); this answers "is the rotate list actually shown", false
+// while the feature is off even with entries stored. Display decisions must use this one, or a
+// prompt edited while the feature is off shows its rotate list with no way back to the
+// textarea (its toggle row is hidden too).
 export const rotationUiOn = () => rotationActive() && flag("rotatingPrompts");
 
 export function renderRotateUi() {
   if (!modalState) return;
-  // UI-gated, same reasoning as syncModalImageUi -- the list must stay hidden
-  // (in favour of the plain textarea) while the feature itself is off, even with
-  // entries still stored on the prompt.
+  // UI-gated like syncModalImageUi: the list stays hidden in favour of the plain textarea while
+  // the feature is off, even with entries still stored.
   const active = rotationUiOn();
   modal.rotateBadge.classList.toggle("hidden", !active);
   modal.rotateSwitch.checked = active;
@@ -1161,16 +1138,13 @@ export async function loadFilePreview(path, page = 0) {
   return (await invoke("load_image_file", { path }).catch(() => "")) || "";
 }
 
-// The four text attachment kinds a plain-text preview is offered for,
-// alongside the image/PDF preview above. Matches TEXT_PREVIEW_EXT in images.rs
-// -- one list of kinds, kept in agreement on both sides by hand since the two
-// cannot share a source at build time.
+// The four text attachment kinds a plain-text preview is offered for, alongside the image/PDF
+// preview. Matches TEXT_PREVIEW_EXT in images.rs; the two lists cannot share a source at build
+// time, so keep them in agreement by hand.
 export const TEXT_PREVIEW_EXT = /\.(txt|md|json|csv)$/i;
 
-// Fills the attachment's plain-text preview box, or hides it. `textContent`
-// only, never innerHTML -- the four formats this covers (txt/md/json/csv) are
-// shown as literal text, not rendered as markup, even a .md file with real
-// Markdown syntax in it.
+// Fills the attachment's plain-text preview box, or hides it. `textContent` only, never
+// innerHTML: txt/md/json/csv are shown as literal text, even a .md file with Markdown syntax.
 export async function renderAttachTextPreview(path) {
   const box = modal.textAttachPreview;
   if (!box) return;
@@ -1245,16 +1219,15 @@ export function closeModal() {
   modal.video.pause();
   modal.video.removeAttribute("src");
   modal.video.load();
-  // An orderly close -- save or deliberate cancel/discard, every caller funnels
-  // through here -- drops the autosave draft right away rather than leaving it
-  // for the boot-time recovery check to find and offer back for nothing.
+  // An orderly close (save or deliberate cancel/discard; every caller funnels through here)
+  // drops the autosave draft at once instead of leaving it for the boot-time recovery check to
+  // offer back for nothing.
   disarmDraftAutosave();
   if (modalState) invoke("discard_editor_draft").catch(() => {});
   assignModalState(null);
   modalInitial = "";
-  // A tile the editor was opened from can be gone by the time it closes (the
-  // prompt got deleted mid-edit, or a re-render replaced the DOM node) --
-  // focusing a detached element is a harmless no-op, never an error.
+  // A tile the editor was opened from can be gone by the time it closes (deleted mid-edit, or
+  // its DOM node replaced); focusing a detached element is a harmless no-op.
   modalOpener?.focus?.();
   modalOpener = null;
 }
@@ -1294,19 +1267,15 @@ export function startCreate() {
 
 export async function confirmModal() {
   if (!modalState || modalSaving) return;
-  // Saving ends a dictation session targeting this dialog's text field --
-  // one of the five stop paths, so the recognizer never keeps listening into a
-  // field that just closed.
+  // Saving ends a dictation session targeting this dialog's text field (one of the five stop
+  // paths), so the recognizer never keeps listening into a field that just closed.
   if (voiceState !== "idle" && voiceTargetEl === modal.text) stopVoice();
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
-  // While rotating, the real text lives in rotateEntries, not modal.text.
-  // rotationActive() (raw): with the feature off but the prompt still holding
-  // stored entries, they must still be preserved on save, just sourced
-  // from wherever each one actually lives right now: entry 0 from the visible,
-  // editable textarea (rotationUiOn() is false, so THAT is the surface the user just
-  // edited), entries 1..n untouched from modalState (never shown, never editable
-  // while the feature is off).
+  // While rotating, the real text lives in rotateEntries, not modal.text. rotationActive()
+  // (raw): with the feature off but the prompt still holding stored entries, they must still be
+  // preserved on save: entry 0 comes from the visible, editable textarea (the surface the user
+  // just edited), entries 1..n untouched from modalState.
   const rotating = rotationUiOn();
   const hasVariants = rotationActive();
   const rawTexts = rotating
@@ -1389,10 +1358,9 @@ export async function confirmModal() {
         if (!(await ensureSecretVaultUnlocked())) return;
         saved = await invoke("update_prompt", args);
       }
-      // Save can turn rotateAuto off (or drop it below two entries) while a
-      // session for THIS prompt happens to be armed: end it now instead of
-      // waiting for the next paste to notice, same as the tile menu's own toggle.
-      // A no-op on the backend if no session is running for this id.
+      // Save can turn rotateAuto off (or drop it below two entries) while a session for this prompt
+      // is armed: end it now instead of waiting for the next paste to notice, like the tile menu's
+      // own toggle. A no-op on the backend if no session runs for this id.
       if (!rotateAuto) await invoke("rotation_end_auto", { id: modalState.id }).catch(() => {});
     }
   } catch (err) {
@@ -1402,9 +1370,8 @@ export async function confirmModal() {
       toast(t("secretWrongPassword"));
       return;
     }
-    // save-failed has no hotkey involved - route it through the same friendly
-    // message the persist-failed event uses, instead of hotkeyMessage's fallback
-    // of showing the raw error code verbatim.
+    // save-failed has no hotkey involved: route it through the same message the persist-failed
+    // event uses instead of hotkeyMessage's fallback of showing the raw error code.
     toast(errStr === "save-failed" ? t("persistFailed") : hotkeyMessage(errStr)); // keep the modal open so nothing typed is lost
     // A binding the backend refused was never stored, so the field must not keep
     // showing it: drop it and name the reason where it was captured.
@@ -1437,8 +1404,8 @@ export async function confirmModal() {
   // The backend hands back what it really stored. An empty hotkey where one
   // was sent means the OS refused the combination between the check and the save.
   if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
-  // The same near-duplicate check the import path already runs, now also
-  // after creating a prompt by hand: before closeModal() clears modalState.
+  // The near-duplicate check the import path runs, also after creating a prompt by hand; it runs
+  // before closeModal() clears modalState.
   const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
   const wasEdit = modalState.mode === "edit";
   // An edit can change entry count/text: drop the cached rotation state so the
@@ -1450,25 +1417,20 @@ export async function confirmModal() {
   if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
   pollMissingFiles(); // a replaced file clears the error immediately
   if (!libraryEl.classList.contains("hidden")) {
-    // An edit MAY have just changed this prompt's "last edited" rank: the
-    // library stayed open underneath the modal, so the usual refresh-on-open
-    // (library-btn click) never fired for it.
+    // An edit may have changed this prompt's "last edited" rank: the library stayed open
+    // underneath, so the usual refresh-on-open never fired for it.
     if (wasEdit && flag("promptHistory")) await refreshLastEdited();
     renderLibrary();
   }
   if (saved && wasCreate) maybeDupImportToast();
-  // Runs for a create AND an edit, unlike maybeDupImportToast just above --
-  // fired here, after everything the save itself needed is already done, and
-  // never awaited, so a slow scan can only ever delay the hint toast.
+  // Runs for a create and an edit, unlike maybeDupImportToast above; fired after everything the
+  // save needed is done and never awaited, so a slow scan can only delay the hint toast.
   if (saved) maybeShowSimilarHint(saved.id);
 }
 
-// Everything about a prompt except what identifies it and the hotkey (one accelerator,
-// one prompt): opens the normal create dialog prefilled, so the user can review or
-// cancel before anything is saved. Placement then follows the regular create path.
-// A stored prompt as the editor's fields. Both "edit" and "duplicate" go through
-// here so a newly added prompt field can never reach one and be forgotten in the
-// other: each caller then overrides only what genuinely differs between them.
+// A stored prompt as the editor's fields. Both "edit" and "duplicate" go through here, so a
+// newly added prompt field cannot reach one and be forgotten in the other; each caller
+// overrides only what differs between them.
 export function promptToModal(p) {
   const kind = p.file_path ? mediaKind(p.file_path) : "";
   return {
@@ -1493,9 +1455,8 @@ export function promptToModal(p) {
     variants: p.variants || [],
     rotateMode: p.rotate_mode || "",
     rotateAuto: p.rotate_auto || false,
-    // get_prompt already refuses a locked confidential entry outright, so by
-    // the time this runs `secret` (if true) always means "decrypted, editable
-    // text below" -- never leftover ciphertext.
+    // get_prompt refuses a locked confidential entry outright, so `secret` (if true) always means
+    // decrypted, editable text below, never leftover ciphertext.
     secret: p.secret || false,
     title: p.file_path
       ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
@@ -1516,9 +1477,9 @@ export async function duplicatePrompt(id) {
     }
   }
   if (!p) return;
-  // A copy starts unstarred, unbound and not confidential: one accelerator
-  // belongs to one prompt, and turning the copy confidential again is its own
-  // deliberate action, not something a duplicate inherits.
+  // A duplicate carries everything except what identifies the prompt and its hotkey (one
+  // accelerator, one prompt): it opens the create dialog prefilled, so the user can review or
+  // cancel before anything is saved. The copy starts unstarred, unbound and not confidential.
   openModal({
     ...promptToModal(p),
     mode: "create",
@@ -1541,9 +1502,8 @@ export async function editPrompt(id) {
   try {
     p = await invoke("get_prompt", { id });
   } catch (err) {
-    // A confidential entry the vault has no key for right now -- ask for it,
-    // exactly the same first-access moment a copy would ask for it, then
-    // retry the same fetch once instead of just refusing.
+    // A confidential entry the vault has no key for: ask for it, as a copy would at its first
+    // access, then retry the fetch once instead of refusing.
     if (String(err) === "secret-locked" && (await ensureSecretVaultUnlocked())) {
       p = await invoke("get_prompt", { id }).catch((e2) => { errToast(e2); return null; });
     } else {
@@ -1628,10 +1588,9 @@ export function bindEditor() {
       modalState.rotateEntries = [];
     }
     renderRotateUi();
-    // The switch row only exists for a text prompt, so textVisible is true here.
-    // Flipping it has to move the same three surfaces syncModalImageUi does: only
-    // hiding the textarea left the clear-X wrapper (an empty 120px box) and, with
-    // on, the rendered pane still showing entry 1 sitting above the colours.
+    // The switch row only exists for a text prompt, so textVisible is true here. Flipping it has
+    // to move the same three surfaces syncModalImageUi does: hiding only the textarea left the
+    // clear-X wrapper (an empty 120px box) and the rendered pane showing entry 1 above the colours.
     const rotating = rotationActive();
     modal.text.classList.toggle("hidden", rotating);
     modal.voiceRow.classList.toggle("hidden", rotating);
@@ -1640,9 +1599,8 @@ export function bindEditor() {
     syncMdUi(true, rotating);
     scheduleFitText();
     if (!modal.rotateSwitch.checked) modal.text.focus();
-    // This must hide/show the readout on the SAME tick as the toggle: the
-    // rAF-deferred scheduleLenCounter() left it visible for one frame, long enough
-    // for a synchronous check right after the toggle to see it.
+    // Must hide/show the readout on the same tick as the toggle: a rAF-deferred
+    // scheduleLenCounter() left it visible for one frame.
     updateLenCounter();
   });
   modal.rotateAdd.addEventListener("click", () => {
@@ -1778,9 +1736,9 @@ export function bindEditor() {
     scheduleFitText();
     if (open) {
       if (histApplies) loadHistory(modalState?.id);
-      // Scroll the modal's own scroll container to the bottom so the freshly opened
-      // section (and the Save row below it) come fully into view on small windows.
-      // scrollIntoView("nearest") only nudged the already-visible head, hence unreliable.
+      // Scroll the modal's own container to the bottom so the freshly opened section (and the Save
+      // row) come fully into view on small windows; scrollIntoView("nearest") only nudged the
+      // visible head.
       const scroller = modal.advanced.closest(".modal");
       if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
         scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
@@ -1866,10 +1824,9 @@ export function bindEditor() {
     syncModalImageUi(modalState.mode);
   });
 
-  // Re-requests the preview at the chosen page and saves it into pdf_page:
-  // the field only ever shows for a PDF attachment (syncModalImageUi).
-  // Request token -- a fast second page change must not let the slower
-  // older reply land after the newer one and overwrite its already-fresher preview.
+  // Re-requests the preview at the chosen page and saves it into pdf_page (the field only shows
+  // for a PDF attachment, see syncModalImageUi). The request token stops a slower older reply
+  // from overwriting a fresher preview after a fast second change.
   let pdfPageReq = 0;
   modal.pdfPage.addEventListener("change", async () => {
     if (!modalState) return;
@@ -1949,9 +1906,8 @@ export function setupDragDrop() {
       document.body.classList.remove("drag-over");
       const path = e.payload?.paths?.[0];
       if (!path) return;
-      // A drop replaces whatever the editor is showing with a brand-new create
-      // dialog -- if it is already open with unsaved changes, ask first, same as
-      // the X button/backdrop/Escape.
+      // A drop replaces whatever the editor is showing with a new create dialog; if it is open with
+      // unsaved changes, ask first, like the X button/backdrop/Escape.
       confirmDiscardOrProceed(() => openFileCreate(path).catch((err) => errToast(err)));
     }
   }).catch?.(() => {});
