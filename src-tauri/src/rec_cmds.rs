@@ -808,11 +808,14 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
         s
     };
     let _rec_starting_guard = RecStartingGuard;
-    // The outline window (region recordings only, see show_rec_outline) goes
-    // the moment the session is taken, on every end path this function serves
-    // (button, hotkey, auto-stop), even one where recording::stop fails below.
+    // The encoder is closed before any window work: hiding a window waits for
+    // the window thread, which sits in the session-end handler during a Windows
+    // shutdown, and the file must be playable before the process is ended.
+    let stopped = recording::stop(session);
+    // The outline window (region recordings only) goes on every end path,
+    // also when the stop failed.
     hide_rec_outline(app);
-    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = recording::stop(session)?;
+    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = stopped?;
     // Stops the key-overlay hook (if it was running at all) and writes
     // its sidecar next to this recording.
     keylog::maybe_stop_and_write(&path);
