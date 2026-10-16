@@ -91,11 +91,13 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
   ok.classList.toggle("danger-confirm", danger);
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel || t("cancel");
+  let openType = field.type;
   if (input) {
     // Defaults to a masked field; `type: "text"` makes it a plain one-line prompt
     // (renaming a tag), where the reveal eye has nothing to reveal.
     field.type = input.type || "password";
     field.value = input.value || "";
+    openType = field.type;
     field.placeholder = input.placeholder || "";
     eye.innerHTML = input.copy ? COPY_SVG : EYE_SVG;
     eye.title = input.copy ? t("copy") : "";
@@ -134,6 +136,9 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
   return new Promise((resolve) => {
     const done = (val) => {
       root.classList.add("hidden");
+      // The answer is already read: a typed password must not linger in the hidden field.
+      field.value = "";
+      field.type = openType;
       ok.disabled = false;
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
