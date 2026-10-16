@@ -40,7 +40,10 @@ function sandbox() {
     snipEditContextIsOpen: () => false, snipColorPopIsOpen: () => false,
     snipEditDrawShapeSelectionLive() {}, snipEditUpdateNudgeHint() {},
     scalePopOpen: false, snipScalePopIsOpen() { return sb.scalePopOpen; }, closeSnipScalePop() { sb.scalePopOpen = false; sb.scaleClosed = true; },
-    NUM_FIELD_BIG_STEP: 10, snipOriginalToggle: { press() {} }, snipEditWrap: { style: {}, classList: { add() {} } },
+    numPopEsc: false, numPopClosedByEscape: () => sb.numPopEsc,
+    colorPop: { classList: { contains: () => true } }, closeColorPop() {},
+    applied: false, snipEditApply() { sb.applied = true; }, pressed: 0,
+    NUM_FIELD_BIG_STEP: 10, snipOriginalToggle: { press() { sb.pressed++; } }, snipEditWrap: { style: {}, classList: { add() {} } },
   };
   vm.createContext(sb);
   vm.runInContext(extractBlock("function snipEditPushUniqueOp(tool, op) {"), sb);
@@ -130,6 +133,24 @@ function sandbox() {
   sb.snipEditKeydown(ev({ tagName: "INPUT", type: "number" }));
   sb.snipEditKeydown(ev({ tagName: "TEXTAREA" }));
   check("text entry keeps its keys", sb.tools, ["rect", "rect"]);
+}
+// An Escape that only closed a preset list does nothing else; Enter on a button reached
+// by keyboard presses that button instead of applying; Ctrl+V is no original toggle.
+{
+  const sb = sandbox();
+  sb.scalePopOpen = true;
+  sb.numPopEsc = true;
+  sb.snipEditKeydown({ key: "Escape", target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, repeat: false });
+  check("Escape spent on a preset list: popover stays", sb.scaleClosed, undefined);
+  const ev = (target, key, extra = {}) => ({ key, target, preventDefault() {}, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...extra });
+  sb.snipEditKeydown(ev({ tagName: "BUTTON", matches: () => true }, "Enter"));
+  check("Enter on a keyboard-focused button: no apply", sb.applied, false);
+  sb.snipEditKeydown(ev({ tagName: "BUTTON", matches: () => false }, "Enter"));
+  check("Enter after a mouse click on a button: applies", sb.applied, true);
+  sb.snipEditKeydown(ev({ tagName: "BODY" }, "v", { ctrlKey: true }));
+  check("Ctrl+V: no original toggle", sb.pressed, 0);
+  sb.snipEditKeydown(ev({ tagName: "BODY" }, "v"));
+  check("plain V: original toggle", sb.pressed, 1);
 }
 // A nudge folded into the entry below the top is a new edit: it ends the redo branch.
 {

@@ -1,8 +1,8 @@
 import { attachSelectPicker } from "./selectpop.js";
-import { contrastTextColor, makeHoldOrTapToggle, numberField, trapTabWithin } from "./floatShared.js";
+import { contrastTextColor, makeHoldOrTapToggle, numberField, numPopClosedByEscape, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
-import { $, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, withShortcut } from "./core.js";
+import { $, closeColorPop, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, withShortcut } from "./core.js";
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
 import { confirmDialog } from "./dialog.js";
 import { EXPERT_DROPDOWNS } from "./expertMenu.js";
@@ -286,7 +286,10 @@ export function initSnipEditor() {
   function snipEditGetPixelColor(pt) {
     const x = snipEditClamp(Math.round(pt.x), 0, SE.w - 1);
     const y = snipEditClamp(Math.round(pt.y), 0, SE.h - 1);
+    // The crop dim sits on this canvas; the picked colour is the pixel's, not the dimmed one.
+    snipEditRedrawBase(true);
     const d = snipEditBaseCtx.getImageData(x, y, 1, 1).data;
+    snipEditRedrawBase();
     return "#" + [d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, "0")).join("");
   }
 
@@ -716,7 +719,9 @@ export function initSnipEditor() {
     snipEditBaseCv.height = targetH;
     snipEditLiveCv.width = targetW;
     snipEditLiveCv.height = targetH;
-    snipEditPushOp(op);
+    // The selected shape was baked into the image: nothing of it is left to resize or nudge.
+    snipEditDeselectShape();
+    snipEditPushOp(op, null);
     snipEditTrimResizeChain(op);
     snipEditSyncCropFromOps(); // the crop op was rescaled above, the editable box must follow
     snipEditFit();
@@ -1844,7 +1849,9 @@ export function initSnipEditor() {
     if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
+      if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
       if (!snipCtxPop.classList.contains("hidden")) { closeSnipCtxPop(); return; }
+      if (!colorPop.classList.contains("hidden")) { closeColorPop(); return; }
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (snipScalePopIsOpen()) { closeSnipScalePop(); return; }
       if (snipEditContextIsOpen()) { closeSnipEditContext(); return; }
@@ -1861,6 +1868,10 @@ export function initSnipEditor() {
     // Any other field (size, colour hex, select) owns its keys too: a letter
     // typed there must not switch tools, and arrows must move its caret.
     if (snipEditFieldOwnsKeys(e.target)) return;
+    // A button reached by keyboard owns Enter and Space: pressing it must not apply the
+    // editor or start a pan. After a mouse click the focus stays on it, and Enter still applies.
+    const onKeyboardButton = ["BUTTON", "A", "SUMMARY"].includes(e.target?.tagName) && e.target.matches(":focus-visible");
+    if (onKeyboardButton && (e.key === "Enter" || e.key === " ")) return;
     if (e.key === "Enter") {
       e.preventDefault();
       // The untouched full-image box is no crop, so Enter then applies the editor.
@@ -1876,14 +1887,16 @@ export function initSnipEditor() {
     if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
-    if (e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
+    // Ctrl+V and friends are not tool or toggle keys.
+    const plainKey = !(e.ctrlKey || e.metaKey || e.altKey);
+    if (plainKey && e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
       const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : 1;
       snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);
       return;
     }
-    const tdef = SNIP_TOOLS.find((t) => t.key === e.key || (t.key === "-" && e.key === "ß"));
+    const tdef = plainKey && SNIP_TOOLS.find((t) => t.key === e.key || (t.key === "-" && e.key === "ß"));
     if (tdef) { e.preventDefault(); snipEditSetTool(tdef.id); }
   }
   function snipEditKeyup(e) {
@@ -1963,6 +1976,8 @@ export function initSnipEditor() {
     closeSnipCtxPop();
     closeSnipEditContext();
     closeSnipScalePop(); // its Apply would scale a canvas that is gone
+    closeSnipColorPop();
+    closeColorPop(); // the custom picker opened from a swatch outlives the editor otherwise
     // Nothing of the session stays alive behind the hidden editor: the next open starts
     // from a fresh capture anyway.
     SE.img = null;
