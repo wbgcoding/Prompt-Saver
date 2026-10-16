@@ -293,10 +293,8 @@ pub(crate) struct ThemeExport {
     pub(crate) vars: HashMap<String, String>,
 }
 
-// async like every other file-picker command (pick_file_path, pick_folder,
-// pick_backup_file) -- the native save/open dialog can sit open for as long as
-// the user takes, and a plain fn would block the dispatch thread (and every
-// OTHER command waiting on it) for the whole time instead of just this one.
+// async like the other file-picker commands: a native dialog can sit open for as long as the
+// user takes, and a plain fn would block the dispatch thread and every other command waiting on it.
 #[tauri::command]
 pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
     let theme = {
@@ -321,10 +319,8 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
     }
 }
 
-// Reuses save_custom_theme's own validation (name/base/vars) so an imported file
-// is never trusted more than a value typed into the editor by hand: a malformed
-// or hand-edited JSON file gets the exact same rejection a bad manual entry would.
-// async: same reasoning as export_custom_theme above.
+// Reuses save_custom_theme's validation (name/base/vars), so an imported file is never trusted
+// more than a hand-typed value. async for the same reason as export_custom_theme.
 #[tauri::command]
 pub(crate) async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Settings, String> {
     let file = file_dialog(&app).add_filter("JSON", &["json"]).pick_file();
