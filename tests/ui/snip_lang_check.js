@@ -30,7 +30,7 @@ function fakeEl() {
       toggle: (c, on) => { if (on === undefined ? !cls.has(c) : on) cls.add(c); else cls.delete(c); },
       contains: (c) => cls.has(c),
     },
-    addEventListener() {}, removeEventListener() {}, appendChild() {}, setAttribute() {},
+    addEventListener() {}, removeEventListener() {}, appendChild() {}, setAttribute() {}, removeAttribute() {},
     getContext: () => new Proxy({}, { get: () => () => {}, set: () => true }),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
   };
