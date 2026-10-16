@@ -509,7 +509,9 @@ pub(crate) async fn confirm_quit_with_running_ops(app: AppHandle) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
             }
             if recording_active(&app2) {
-                let _ = stop_recording_now(&app2);
+                if let Ok(take) = stop_recording_now(&app2) {
+                    save_take_on_quit(&app2, &take);
+                }
             }
         })
         .await;

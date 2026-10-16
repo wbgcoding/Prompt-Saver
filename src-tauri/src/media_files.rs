@@ -585,6 +585,28 @@ pub(crate) fn place_recording_parts(parts: &mut Vec<RecordingPartInfo>, allowed:
     (saved, failed)
 }
 
+// Quit during a recording: the take is stopped first, and no result dialog will
+// ever ask what to do with it, so it is saved like the dialog's Save would (last
+// file and earlier parts into the recordings folder) instead of being left in
+// the staging folder, where the stale sweep would delete it later.
+pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload) {
+    let state = app.state::<Db>();
+    let allowed = recording_source_dirs(app, &state);
+    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    let dest = recording_dir(&custom);
+    let src = Path::new(&take.path);
+    if src.is_file() && is_own_recording_source(&allowed, src) {
+        if let Err(e) = place_in_dir(src, &dest) {
+            append_crash_log(&format!("quit: recording not saved: {e}"));
+        }
+    }
+    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+    let (_, failed) = place_recording_parts(&mut parts, &allowed, &dest);
+    if failed > 0 {
+        append_crash_log(&format!("quit: {failed} recording part(s) not saved"));
+    }
+}
+
 // Save/Attach/Edit/Save as in the result dialog: the earlier parts of a
 // "finish and continue" take go where the last file went. `beside_save_as`
 // picks the folder of the latest Save as instead of the recordings folder.
