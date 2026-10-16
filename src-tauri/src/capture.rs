@@ -22,18 +22,16 @@ pub(crate) fn clean_app_name(raw: &str) -> String {
     stem.chars().filter(|c| !"<>:\"/\\|?*".contains(*c)).collect::<String>().trim().to_string()
 }
 
-// Encode as JPEG, copy to the clipboard, optionally archive to the folder, close the
-// overlay and notify the UI. JPEG (not PNG): a full-res PNG data URL stalled the save.
-// The encode/clipboard/file-write work runs in spawn_blocking, the same shape as its
-// sibling finalize_ocr_capture -- this used to run inline on the async worker thread,
-// blocking whichever other command happened to land on it for however long the encode
-// and disk write take.
+// Removes a file written by a capture whose session was cancelled meanwhile.
 pub(crate) fn discard_cancelled_file(path: &str) {
     if !path.is_empty() {
         let _ = fs::remove_file(path);
     }
 }
 
+// Encode as JPEG, copy to the clipboard, optionally archive to the folder, close the overlay
+// and notify the UI. JPEG, not PNG: a full-res PNG data URL stalled the save. The
+// encode/clipboard/file-write work runs in spawn_blocking, like finalize_ocr_capture.
 pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
@@ -111,12 +109,9 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
     Ok(())
 }
 
-// OCR settings live in the same expert-menu ui_values/ui_flags as everything
-// else. ocr_image/ocr_region/ocr_image_data receive them straight from the frontend
-// (the UI calls those directly and already knows the live values via val()/flag()),
-// but capture_region's OCR branch has no such call site of its own -- it reads them
-// here instead, the same way finalize_capture just above reads screenshotSave and
-// screenshotDir off the Db state rather than needing them passed in.
+// OCR settings live in the expert-menu ui_values/ui_flags. Other OCR commands get them from
+// the frontend; capture_region's OCR branch has no such call site, so it reads them from the
+// Db state here, as finalize_capture does for screenshotSave and screenshotDir.
 // A crop smaller than this (either side) is upscaled before recognition.
 pub(crate) const OCR_UPSCALE_UNDER_PX: u32 = 300;
 
@@ -131,11 +126,9 @@ pub(crate) fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
         .unwrap_or((OCR_UPSCALE_UNDER_PX, true, "auto".to_string(), true))
 }
 
-// The OCR counterpart to finalize_capture, taken when set_snip_mode armed the
-// session. Recognition can fail (e.g. no language pack installed) -- unlike
-// finalize_capture, that failure runs BEFORE close_all_snip, so the overlay stays
-// open and the caller's showError() can offer a retry with the freeze still in
-// place, instead of silently ending the session on a failed recognition.
+// The OCR counterpart to finalize_capture, used when set_snip_mode armed the session. A failed
+// recognition (e.g. no language pack) happens before close_all_snip, so the overlay stays
+// open and the caller's showError() can offer a retry with the freeze still in place.
 pub(crate) async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, gen: u64, crop: image::RgbaImage) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
@@ -325,12 +318,11 @@ pub(crate) fn show_window(hwnd: isize, cmd: i32) {
     unsafe { ShowWindow(hwnd, cmd); }
 }
 
-// True when the window belongs to a higher-integrity / elevated process (e.g.
-// Task Manager). Such windows block PrintWindow, which can return a misleading
-// part-black image instead of failing cleanly: so we skip the direct path for
-// them and capture via the frozen desktop / minimize workaround, which work
-// regardless of elevation. Heuristic: a medium-integrity caller cannot open an
-// elevated process for PROCESS_QUERY_INFORMATION (access denied).
+// True when the window belongs to a higher-integrity / elevated process (e.g. Task Manager).
+// PrintWindow can return a misleading part-black image for such windows instead of failing, so
+// they are captured via the frozen desktop / minimize workaround, which works regardless of
+// elevation. Heuristic: a medium-integrity caller cannot open an elevated process for
+// PROCESS_QUERY_INFORMATION (access denied).
 #[cfg(windows)]
 pub(crate) fn window_is_protected(id: u32) -> bool {
     #[link(name = "user32")]
@@ -359,14 +351,11 @@ pub(crate) fn window_is_protected(id: u32) -> bool {
     }
 }
 
-// Capture the chosen window. PrintWindow first: it grabs the window's own
-// content, excluding anything stacked on top (clean for normal windows).
-// Protected/elevated windows (e.g. Task Manager) block PrintWindow. If nothing
-// covers the target, crop the frozen desktop (taken with our windows hidden):
-// a GDI grab contains even elevated windows, with no flicker. If other windows
-// DO cover it, the freeze has them baked in, so run the workaround: hide our
-// overlay, minimize the covering windows, grab the now-clear area live, then
-// restore them.
+// Capture the chosen window. PrintWindow first: it grabs the window's own content without
+// anything stacked on top. Protected/elevated windows block it. If nothing covers the
+// target, crop the frozen desktop (taken with our windows hidden; a GDI grab includes even
+// elevated windows). If other windows cover it, the freeze has them baked in, so hide our
+// overlay, minimize the covering windows, grab the cleared area live, then restore them.
 #[tauri::command]
 pub(crate) async fn capture_window(
     app: AppHandle,
@@ -374,10 +363,9 @@ pub(crate) async fn capture_window(
     snip_mode: State<'_, SnipModeState>,
     id: u32,
 ) -> Result<(), String> {
-    // Every one of this function's four capture paths must branch on the armed
-    // OCR mode (set_snip_mode) before calling finalize_capture() unconditionally --
-    // otherwise clicking a WINDOW while OCR mode is armed silently produces a
-    // normal screenshot instead of running OCR.
+    // Each of this function's four capture paths must branch on the armed OCR mode (set_snip_mode)
+    // before calling finalize_capture, or clicking a window in OCR mode would produce a normal
+    // screenshot instead of running OCR.
     let gen = SNIP_GEN.load(Ordering::SeqCst);
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     // Source app name for the button label (best-effort; empty for unknown windows).
