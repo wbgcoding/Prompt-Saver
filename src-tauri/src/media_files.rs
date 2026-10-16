@@ -12,9 +12,12 @@ pub(crate) fn sidecar_path(video: &Path, ext: &str) -> PathBuf {
 
 #[tauri::command]
 pub(crate) fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
-    let (path, origin_dir, overlay_path) = pending.lock().clone();
+    // A source still offered to an open editor wins: a page that boots in the
+    // meantime never got the load event and has to start on it.
+    let offered = VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let (path, origin_dir, overlay_path) = offered.unwrap_or_else(|| pending.lock().clone());
     let overlay_path = if overlay_path.is_empty() { None } else { Some(overlay_path) };
-    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path }) }
+    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path, request_id: None }) }
 }
 
 // ---- Open an existing file (not a fresh capture/recording) in whichever

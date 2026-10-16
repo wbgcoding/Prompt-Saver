@@ -4445,20 +4445,25 @@ listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
   const originDir = typeof e.payload === "object" ? e.payload?.origin_dir : "";
   const overlayPath = typeof e.payload === "object" ? e.payload?.overlay_path : "";
-  if (!path || path === VE.src) return;
+  // The opener waits for this answer: it only treats the switch as done once taken.
+  const reqId = typeof e.payload === "object" ? e.payload?.request_id : null;
+  const ack = (state) => { if (reqId != null) invoke("video_editor_load_ack", { requestId: reqId, state }).catch(() => {}); };
+  if (!path || path === VE.src) { ack(path ? "accepted" : "refused"); return; }
   // Switching source (clicking "Edit video" on another tile while this
   // window is already open) used to jump straight to loadRecording(), silently
   // discarding whatever was unsaved -- the same case closeWindow() already
   // guards, reusing its exact confirm.
   if (VE.ops.length && VE.dirty) {
+    ack("asking");
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
-    if (!ok) return;
+    if (!ok) { ack("refused"); return; }
     // Thrown away on purpose: stop the autosave for the old source and forget what an
     // earlier tick stored, or reopening that recording would offer the work back.
     if (editStateTimer) { clearInterval(editStateTimer); editStateTimer = null; }
     if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
   }
   loadRecording(path, originDir, overlayPath);
+  ack("accepted");
 });
 listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (!VE.exporting || !exportRun || exportRun.gen !== VE.loadGen) return;

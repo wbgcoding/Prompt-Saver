@@ -700,8 +700,13 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(p);
     }
     out.extend(protected_take_paths());
+    let mut editor_sources = Vec::new();
     if let Some(state) = app.try_state::<VideoEditorPending>() {
-        let (src, _origin_dir, overlay) = state.lock().clone();
+        editor_sources.push(state.lock().clone());
+    }
+    // A source offered to the open editor is protected next to the one it shows.
+    editor_sources.extend(VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).clone());
+    for (src, _origin_dir, overlay) in editor_sources {
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));

@@ -20433,3 +20433,22 @@ fn pending_result_file_survives_the_sweep_even_when_old() {
     assert!(!other.exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn editor_decision_follows_the_editors_answer() {
+    use std::sync::mpsc::channel;
+    let short = Duration::from_millis(50);
+    let (tx, rx) = channel::<String>();
+    tx.send("accepted".into()).unwrap();
+    assert_eq!(wait_for_editor_decision(&rx, short, short), EditorLoadDecision::Accepted);
+    tx.send("refused".into()).unwrap();
+    assert_eq!(wait_for_editor_decision(&rx, short, short), EditorLoadDecision::Refused);
+    // A page that is still booting never answers.
+    assert_eq!(wait_for_editor_decision(&rx, short, short), EditorLoadDecision::NoAnswer);
+    // An unsaved-edits question gets the long window; an unanswered one is a refusal.
+    tx.send("asking".into()).unwrap();
+    tx.send("refused".into()).unwrap();
+    assert_eq!(wait_for_editor_decision(&rx, short, short), EditorLoadDecision::Refused);
+    tx.send("asking".into()).unwrap();
+    assert_eq!(wait_for_editor_decision(&rx, short, short), EditorLoadDecision::Refused);
+}

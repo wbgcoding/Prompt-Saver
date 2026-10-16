@@ -1396,6 +1396,54 @@ pub(crate) struct VideoEditorSource {
     pub(crate) origin_dir: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) overlay_path: Option<String>,
+    // Set on a "video-editor-load" for an open editor: it answers with
+    // video_editor_load_ack so the caller learns whether the switch happened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) request_id: Option<u64>,
+}
+
+// A source offered to an editor that is already open. It only becomes the
+// editor's pending source once the editor takes it; until then the old source
+// stays protected and a page that is still booting pulls this one instead.
+pub(crate) static VE_PENDING_REQUEST: Mutex<Option<(String, String, String)>> = Mutex::new(None);
+static VE_LOAD_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
+static VE_LOAD_ACKS: Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<String>>>> = Mutex::new(None);
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum EditorLoadDecision {
+    Accepted,
+    Refused,
+    NoAnswer,
+}
+
+// Waits for the editor's answer. No message within `first` means the page is
+// not up yet (it pulls its source on boot); "asking" means the person is
+// answering an unsaved-edits question, which gets the longer `asked` window,
+// and running out of it counts as a refusal.
+pub(crate) fn wait_for_editor_decision(rx: &std::sync::mpsc::Receiver<String>, first: Duration, asked: Duration) -> EditorLoadDecision {
+    let mut wait = first;
+    let mut asking = false;
+    loop {
+        match rx.recv_timeout(wait) {
+            Ok(s) => match s.as_str() {
+                "accepted" => return EditorLoadDecision::Accepted,
+                "refused" => return EditorLoadDecision::Refused,
+                "asking" => {
+                    wait = asked;
+                    asking = true;
+                }
+                _ => {}
+            },
+            Err(_) => return if asking { EditorLoadDecision::Refused } else { EditorLoadDecision::NoAnswer },
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn video_editor_load_ack(request_id: u64, state: String) {
+    if let Some(tx) = VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&request_id)) {
+        let _ = tx.send(state);
+    }
 }
 
 // Opens the editor for one recording. A second call while it is already open
@@ -1409,7 +1457,7 @@ pub(crate) async fn open_video_editor(
     src_path: String,
     origin_dir: Option<String>,
     overlay_path: Option<String>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
     }
@@ -1418,18 +1466,49 @@ pub(crate) async fn open_video_editor(
     // simply never really there) is silently dropped rather than handed to
     // the editor, which would otherwise show it as a broken overlay op.
     let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
-    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
-    let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path) };
+    let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path.clone()) };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
+        // The open editor may still refuse (unsaved edits kept), so the new
+        // source is only offered here and becomes pending once it is taken.
+        let id = VE_LOAD_REQUEST_SEQ.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(id, tx);
+        let request = (src_path.clone(), origin_dir.clone(), overlay_path);
+        *VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(request.clone());
         let _ = app.emit_to(
             VIDEO_WIN_LABEL,
             "video-editor-load",
-            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt },
+            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt, request_id: Some(id) },
         );
         let _ = win.show();
         let _ = win.set_focus();
-        return Ok(());
+        let decision = tauri::async_runtime::spawn_blocking(move || {
+            wait_for_editor_decision(&rx, Duration::from_secs(2), Duration::from_secs(3600))
+        })
+        .await
+        .unwrap_or(EditorLoadDecision::Refused);
+        if let Some(m) = VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+            m.remove(&id);
+        }
+        let mut slot = VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner());
+        // A newer request replaced this one while it waited: that one decides.
+        let still_mine = slot.as_ref() == Some(&request);
+        if still_mine {
+            *slot = None;
+        }
+        match decision {
+            EditorLoadDecision::Refused => return Ok(false),
+            EditorLoadDecision::Accepted => *pending.lock() = request,
+            // No answer: the page was still booting and pulled the request itself.
+            EditorLoadDecision::NoAnswer => {
+                if still_mine {
+                    *pending.lock() = request;
+                }
+            }
+        }
+        return Ok(true);
     }
+    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
     let excluded = {
         let state: State<Db> = app.state();
@@ -1452,5 +1531,5 @@ pub(crate) async fn open_video_editor(
     let _ = win.set_position(PhysicalPosition::new(geom.x, geom.y));
     let _ = win.show();
     let _ = win.set_focus();
-    Ok(())
+    Ok(true)
 }

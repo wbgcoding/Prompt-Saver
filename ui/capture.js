@@ -574,7 +574,9 @@ export function bindCapture() {
   $("rec-modal-edit").addEventListener("click", async () => {
     if (!pendingRecPath || recSaveBusy || recSaveAsBusy || recCopyBusy) return;
     try {
-      await invoke("open_video_editor", { srcPath: pendingRecPath });
+      const taken = await invoke("open_video_editor", { srcPath: pendingRecPath });
+      // The open editor kept its unsaved work: this take stays here to decide on.
+      if (taken === false) return;
       recordToolUsage("video_editor");
       recSavedOrAttached = true;
       keepRecParts(false);

@@ -1131,6 +1131,7 @@ pub fn run() {
             ffmpeg::crop_recording_to_used_area,
             ffmpeg::cancel_recording_crop,
             video_editor::open_video_editor,
+            video_editor::video_editor_load_ack,
             media_files::video_editor_source,
             video_editor::probe_recording,
             video_editor::probe_extra_video_source,
