@@ -19,8 +19,8 @@ pub(crate) async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<()
     }
 }
 
-// Tunable knobs for the auto-advance clipboard session (the expert menu exposes these in the
-// expert menu; defaults here are what ships until a user overrides them there).
+// Tunable knobs for the auto-advance clipboard session; the defaults here ship until a user
+// overrides them in the expert menu.
 #[cfg(windows)]
 #[derive(Clone, Copy)]
 pub(crate) struct AutoCfg {
@@ -79,13 +79,10 @@ pub(crate) fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_inp
 }
 
 // A DWORD-valued clipboard opt-out format (CanIncludeInClipboardHistory,
-// CanUploadToCloudClipboard) means "present and explicitly 0" = excluded, a nonzero
-// value means the source allows it, and absence means the source never said either
-// way. A value that could not be read at all (format announced but the memory block
-// came back empty) is treated the same as an explicit 0 -- the same fail-closed
-// choice as the secret heuristic below: a copy skipped by mistake costs nothing, a
-// secret kept by mistake costs a lot. Pure so the value-reading rule has its own
-// test without touching a real clipboard.
+// CanUploadToCloudClipboard) excludes the copy when present and explicitly 0; nonzero means the
+// source allows it; absence means it never said. A value that could not be read counts as 0
+// (fail closed: a copy skipped by mistake costs nothing, a secret kept by mistake costs a lot).
+// Pure so the rule can be tested without a real clipboard.
 pub(crate) fn dword_format_excludes(available: bool, value: Option<u32>) -> bool {
     available && value.unwrap_or(0) == 0
 }
@@ -100,12 +97,10 @@ pub(crate) fn is_own_ui_word(candidate: &str) -> bool {
 // Shortest copied text the clipboard collector may take for a password.
 pub(crate) const CLIP_SECRET_MIN_LEN: usize = 8;
 
-// A best-effort guess that freshly copied text is a password rather than a prompt, a
-// sentence or an address: exactly one line, `min_len` to 64 characters, no
-// whitespace, at least three of the four character classes, and not the one word the
-// app's own UI could otherwise trip this on. Getting this wrong toward "skip it" only
-// costs one entry that never reaches the inbox; getting it wrong the other way puts a
-// password into a history file, so every ambiguous case below returns true.
+// A best-effort guess that freshly copied text is a password rather than a prompt, a sentence
+// or an address: exactly one line, `min_len` to 64 characters, no whitespace, at least three of
+// the four character classes, and not the product name. Wrongly skipping costs one inbox entry;
+// wrongly keeping puts a password into a history file, so every ambiguous case returns true.
 pub(crate) fn looks_like_password(text: &str, min_len: usize) -> bool {
     if text.lines().count() != 1 {
         return false;
@@ -156,8 +151,8 @@ pub(crate) fn db_count_clips(conn: &Connection) -> u64 {
 }
 #[tauri::command]
 pub(crate) async fn clip_inbox_dismiss(app: AppHandle, id: i64) -> Result<(), String> {
-    // Privacy-sensitive rows: a swallowed failure here used to always answer
-    // Ok(()) while the entry stayed on disk.
+    // Privacy-sensitive rows: report a failed delete instead of answering Ok while the entry
+    // stays on disk.
     let ok = db_conn(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]).is_ok());
     if !ok {
         append_crash_log(&format!("clip_inbox_dismiss: row {id} could not be removed"));
@@ -188,11 +183,9 @@ pub(crate) struct ClipRestoreItem {
     pub(crate) text: String,
 }
 
-// Undo for "clear clipboard inbox": re-inserts the rows the frontend snapshotted
-// (through the existing clip_inbox_list) before calling clip_inbox_clear, oldest
-// first, through db_add_clip -- the same capped insert a live watcher hit uses,
-// so a restore right after the cap changed still ends up with a valid inbox
-// instead of one longer than the setting now allows.
+// Undo for "clear clipboard inbox": re-inserts the rows the frontend snapshotted (via
+// clip_inbox_list) before clip_inbox_clear, oldest first, through db_add_clip, the same capped
+// insert a live watcher hit uses, so a restore after the cap changed still yields a valid inbox.
 #[tauri::command]
 pub(crate) async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, items: Vec<ClipRestoreItem>) -> Result<(), String> {
     let cap = clip_inbox_cap(&lock(&state).settings);
