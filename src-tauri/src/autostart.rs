@@ -99,12 +99,10 @@ pub(crate) fn autostart_restore(_prior: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-// One stored setting and one piece of Windows state that have to agree. The
-// setting is saved first; the Windows side is changed only once that landed. If
-// either step fails, whichever side did change is put back, so the stored value
-// and the registration both end up as they were and the caller reports an error
-// (the control then reverts). `restore_setting` gets `false` when nothing was
-// written, so it only undoes the in-memory change.
+// One stored setting and one piece of Windows state that must agree. The setting is saved
+// first, the Windows side changed only once that landed. If either step fails, whichever side
+// changed is put back and the caller reports an error (the control then reverts).
+// `restore_setting` gets `false` when nothing was written, so it only undoes the in-memory change.
 pub(crate) fn two_state_change<C, P>(
     ctx: &mut C,
     prior_os: P,
