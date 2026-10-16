@@ -763,6 +763,8 @@ export function renderLibrary() {
     empty.className = "hint";
     empty.textContent = t("libraryEmpty");
     list.appendChild(empty);
+    libDisplayOrder = []; // nothing on screen: select-all and range select must not reuse the last render
+    updateLibraryCount(0);
     return;
   }
   // Hidden filters keep their default state, so this is inert when they are off.
@@ -776,6 +778,7 @@ export function renderLibrary() {
     empty.className = "hint";
     empty.textContent = t("libraryNoResults");
     list.appendChild(empty);
+    libDisplayOrder = [];
     return;
   }
   const placed = new Set(Object.keys(layoutOf(activeView())));
