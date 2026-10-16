@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { orderedInvoke, resolveLang, fillVideoFormatSelect, normRecFormat, runFfmpegDownload, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor } from "./floatShared.js";
+import { orderedInvoke, resolveLang, fillVideoFormatSelect, normRecFormat, runFfmpegDownload, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor, numPopClosedByEscape } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, buildShortcutRows, openShortcutsOverlay, closeShortcutsOverlay } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -4030,6 +4030,7 @@ document.addEventListener("keydown", (e) => {
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") {
     e.preventDefault();
+    if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
     // A selected overlay only gives up the arrow keys, never the whole
     // window -- closing here would throw away every edit made so far just
     // because something happened to be selected.

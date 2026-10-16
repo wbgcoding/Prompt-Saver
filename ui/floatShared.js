@@ -545,9 +545,18 @@ document.addEventListener("pointerdown", (e) => {
   if (activeNumPop.contains(e.target) || e.target === activeNumPopTrigger) return;
   closeActiveNumPop();
 });
+// The Escape that dismissed a preset list is spent: this listener runs first, so a
+// later Escape handler would otherwise see a closed list and act on the same key.
+let numPopEscapeEvent = null;
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && activeNumPop) closeActiveNumPop();
+  if (e.key === "Escape" && activeNumPop) {
+    closeActiveNumPop();
+    numPopEscapeEvent = e;
+  }
 });
+export function numPopClosedByEscape(e) {
+  return numPopEscapeEvent === e;
+}
 
 export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, decreaseAriaKey, increaseAriaKey, presetsAriaKey, onChange, wheelEnabled = true, steppers = true }) {
   const el = input || document.createElement("input");
