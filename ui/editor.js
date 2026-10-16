@@ -1366,6 +1366,7 @@ export async function confirmModal() {
       // and point at the missing text, like a missing name does.
       if (!text) { if (!rotating) focusModalText(); return; }
       saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
+      if (saved && modalState.reSecret) await invoke("set_prompt_secret", { id: saved.id, secret: true }).catch((e) => errToast(e));
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
@@ -1415,6 +1416,23 @@ export async function confirmModal() {
   } finally {
     modalSaving = false;
     modal.confirm.disabled = false;
+  }
+  // The entry vanished while it was open (deleted elsewhere): closing now would
+  // lose everything typed, so the dialog stays and offers the text as a new one.
+  if (!saved && modalState.mode === "edit") {
+    const asNew = await confirmDialog({
+      title: t("editGoneTitle"),
+      message: t("editGoneMsg"),
+      confirmLabel: t("editGoneSaveNew"),
+      danger: false,
+    });
+    if (!asNew) return;
+    // A confidential text stays confidential, which needs the vault open.
+    if (modalState.secret && !(await ensureSecretVaultUnlocked())) return;
+    modalState.reSecret = !!modalState.secret;
+    modalState.mode = filePath ? "file-create" : copyImage ? "image-create" : "create";
+    await confirmModal();
+    return;
   }
   // The backend hands back what it really stored. An empty hotkey where one
   // was sent means the OS refused the combination between the check and the save.
