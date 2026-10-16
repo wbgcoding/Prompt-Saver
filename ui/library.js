@@ -1,5 +1,5 @@
 // The prompt library: search, filters, batch selection, list and tile rendering.
-import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, makeKeyboardActivatable, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, DRAG_THRESHOLD, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, makeKeyboardActivatable, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
@@ -485,6 +485,48 @@ export function suggestedSearchName(query) {
   const s = query.trim();
   return s.length > 40 ? s.slice(0, 40).trim() + "…" : s;
 }
+// Reordering the saved-search chips: pointer events rather than HTML5 drag-and-drop,
+// which the webview reserves for file drops (same as the view tabs).
+let savedChipDrag = null;
+let savedChipDragBlockClick = false;
+function endSavedChipDrag() {
+  const d = savedChipDrag;
+  savedChipDrag = null;
+  if (!d) return null;
+  d.el.classList.remove("tab-dragging");
+  d.target?.classList.remove("drag-over");
+  return d;
+}
+window.addEventListener("pointermove", (e) => {
+  const d = savedChipDrag;
+  if (!d) return;
+  if (!d.moved) {
+    if (Math.abs(e.clientX - d.startX) < DRAG_THRESHOLD && Math.abs(e.clientY - d.startY) < DRAG_THRESHOLD) return;
+    d.moved = true;
+    d.el.classList.add("tab-dragging");
+  }
+  const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lib-saved-search-chip");
+  const next = hit && hit !== d.el ? hit : null;
+  if (next === d.target) return;
+  d.target?.classList.remove("drag-over");
+  d.target = next;
+  next?.classList.add("drag-over");
+});
+window.addEventListener("pointercancel", () => { endSavedChipDrag(); });
+window.addEventListener("pointerup", async () => {
+  const d = endSavedChipDrag();
+  if (!d || !d.moved) return;
+  savedChipDragBlockClick = true; // the click that follows the release must not apply the search
+  setTimeout(() => { savedChipDragBlockClick = false; }, 0);
+  const to = d.target ? Number(d.target.dataset.idx) : NaN;
+  if (!Number.isFinite(to) || to === d.from) return;
+  const cur = loadSavedSearches();
+  const [moved] = cur.splice(d.from, 1);
+  if (!moved) return;
+  cur.splice(to, 0, moved);
+  await persistSavedSearches(cur);
+  renderSavedSearches();
+});
 export function renderSavedSearches() {
   const bar = $("library-saved-searches");
   if (!bar) return;
@@ -495,34 +537,24 @@ export function renderSavedSearches() {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "tag-chip lib-saved-search-chip";
-    chip.draggable = true;
     chip.title = entry.query || entry.name;
     const label = document.createElement("span");
     label.className = "tag-chip-label";
     label.textContent = entry.name;
     chip.appendChild(label);
-    chip.addEventListener("click", () => applySavedSearch(entry));
+    chip.dataset.idx = String(i);
+    chip.addEventListener("click", () => {
+      if (savedChipDragBlockClick) { savedChipDragBlockClick = false; return; } // the click that ends a drag
+      applySavedSearch(entry);
+    });
     chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
       editSavedSearch(i);
     });
-    chip.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", String(i));
-      e.dataTransfer.effectAllowed = "move";
-    });
-    chip.addEventListener("dragover", (e) => { e.preventDefault(); chip.classList.add("drag-over"); });
-    chip.addEventListener("dragleave", () => chip.classList.remove("drag-over"));
-    chip.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      chip.classList.remove("drag-over");
-      const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
-      if (!Number.isFinite(from) || from === i) return;
-      const cur = loadSavedSearches();
-      const [moved] = cur.splice(from, 1);
-      cur.splice(i, 0, moved);
-      await persistSavedSearches(cur);
-      renderSavedSearches();
+    chip.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      savedChipDrag = { from: i, el: chip, startX: e.clientX, startY: e.clientY, moved: false, target: null };
     });
     bar.appendChild(chip);
   });

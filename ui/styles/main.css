@@ -4400,6 +4400,7 @@ body.drag-over::after {
 .lib-saved-searches:empty { display: none; }
 .lib-saved-search-chip { cursor: pointer; }
 .lib-saved-search-chip.drag-over { border-color: var(--accent); }
+.lib-saved-search-chip.tab-dragging { opacity: 0.45; }
 /* List/tiles toggle next to the type filter. */
 .lib-view-toggle { display: inline-flex; align-items: center; gap: 6px; }
 /* Tiles: same rows, same selection and right-click behaviour -- only the layout
