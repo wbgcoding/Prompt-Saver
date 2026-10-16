@@ -369,6 +369,11 @@ setInterval(() => {
     lastVideoTime = -1;
     return;
   }
+  // A play-once video that reached its end is finished, not suspended.
+  if (videoEl.ended && !videoEl.loop) {
+    lastVideoTime = -1;
+    return;
+  }
   if (videoEl.paused) {
     ensureVideoPlaying(); // respects videoAutoplay for a not-yet-started video
     return;
