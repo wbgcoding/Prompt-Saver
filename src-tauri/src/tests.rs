@@ -20409,3 +20409,27 @@ fn discard_recording_parts_in_moves_parts_to_the_holding_folder() {
     assert!(dir.join("verworfen").join("rec-2026-01-01-00-00-00_part3.mp4").is_file());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn pending_result_file_survives_the_sweep_even_when_old() {
+    let dir = std::env::temp_dir().join(format!("ps-test-pending-result-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let shown = dir.join("rec-2026-01-01-00-00-00.mp4");
+    let shown_keys = dir.join("rec-2026-01-01-00-00-00.keys.json");
+    let other = dir.join("rec-2026-01-01-00-00-05.mp4");
+    for f in [&shown, &shown_keys, &other] {
+        fs::write(f, b"video").unwrap();
+        backdate(f, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+    }
+    set_pending_recording(Some(shown.to_string_lossy().to_string()));
+    let protected = protected_take_paths();
+    set_pending_recording(None);
+    assert!(protected_take_paths().iter().all(|p| p != &shown), "closing the dialog releases the file");
+    let empty = std::collections::HashSet::new();
+    let (count, _) = sweep_stale_recordings_in(&dir, &empty, &protected, false, Duration::from_secs(60), None);
+    assert_eq!(count, 1);
+    assert!(shown.exists() && shown_keys.exists(), "the file an open dialog shows stays with its sidecar");
+    assert!(!other.exists());
+    let _ = fs::remove_dir_all(&dir);
+}

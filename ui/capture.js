@@ -255,6 +255,13 @@ export function bindCapture() {
     if (hadFocus) recMoreBtn.focus();
   }
   let pendingRecPath = "";
+  // The backend sweep spares the file this dialog shows; every change of the
+  // path is reported, and the unload clears it.
+  function setPendingRec(path) {
+    pendingRecPath = path;
+    invoke("set_pending_recording", { path: path || null }).catch(() => {});
+  }
+  window.addEventListener("pagehide", () => { invoke("set_pending_recording", { path: null }).catch(() => {}); });
   let recGen = 0; // invalidated on every close/discard so a late progress tick or a
                    // finished conversion from a superseded recording is ignored
   let recProgressOff = null;
@@ -337,7 +344,7 @@ export function bindCapture() {
     recPreview.load(); // removing the attribute alone neither stops playback nor frees the file
     recStatus.classList.remove("rec-status-cancellable");
     recStatus.onclick = null;
-    pendingRecPath = "";
+    setPendingRec("");
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
     if (shouldDelete && path) {
@@ -388,7 +395,7 @@ export function bindCapture() {
     for (const id of REC_ACTION_IDS) $(id).disabled = busy;
   }
   async function openRecModal(rawPath, needsCrop) {
-    pendingRecPath = rawPath;
+    setPendingRec(rawPath);
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
     recGen += 1;
@@ -461,7 +468,7 @@ export function bindCapture() {
       // Another action already moved the working file elsewhere: its path stands, the
       // converted copy must not overwrite it.
       if (pendingRecPath !== rawPath) return;
-      pendingRecPath = outPath;
+      setPendingRec(outPath);
       recPreview.classList.remove("hidden");
       recPreview.src = convertFileSrc(outPath);
     } catch (err) {
@@ -586,7 +593,7 @@ export function bindCapture() {
   // not on the now-stale original <data>/recordings path.
   function adoptRecPath(newPath) {
     if (!newPath || newPath === pendingRecPath) return;
-    pendingRecPath = newPath;
+    setPendingRec(newPath);
     if (!recPreview.classList.contains("hidden")) recPreview.src = convertFileSrc(newPath);
   }
   let recSaveBusy = false;

@@ -1159,6 +1159,7 @@ pub fn run() {
             media_files::save_recording_now,
             media_files::save_recording_parts,
             media_files::discard_recording_parts,
+            prompts::set_pending_recording,
             media_files::copy_recording_to_clipboard,
             media_files::clip_export_path,
             media_files::copy_file_to_clipboard,

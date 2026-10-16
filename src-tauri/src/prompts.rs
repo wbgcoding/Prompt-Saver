@@ -724,6 +724,11 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
 // saved or discarded them.
 pub(crate) static REC_RESULT_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
 
+// The file the result dialog currently shows (the raw capture, then the
+// converted copy). It sits unreferenced for as long as the dialog stays open,
+// which can outlast the sweep age.
+pub(crate) static REC_RESULT_PENDING: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 fn push_recording_with_sidecars(out: &mut Vec<PathBuf>, video: &Path) {
     out.push(video.with_extension("mic.wav"));
     #[cfg(windows)]
@@ -732,8 +737,8 @@ fn push_recording_with_sidecars(out: &mut Vec<PathBuf>, video: &Path) {
     out.push(video.to_path_buf());
 }
 
-// Parts of a chain that is still recording and parts waiting in the result
-// dialog, each with its sidecars.
+// Parts of a chain that is still recording, parts waiting in the result
+// dialog and the file the dialog shows, each with its sidecars.
 pub(crate) fn protected_take_paths() -> Vec<PathBuf> {
     let mut out = Vec::new();
     let parts: Vec<String> = REC_SESSION_PARTS
@@ -747,7 +752,17 @@ pub(crate) fn protected_take_paths() -> Vec<PathBuf> {
     for p in parts {
         push_recording_with_sidecars(&mut out, Path::new(&p));
     }
+    if let Some(p) = REC_RESULT_PENDING.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        push_recording_with_sidecars(&mut out, p);
+    }
     out
+}
+
+// The result dialog reports the file it shows on open and after every change
+// of that path (conversion, move), and null when it closes.
+#[tauri::command]
+pub(crate) fn set_pending_recording(path: Option<String>) {
+    *REC_RESULT_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = path.filter(|p| !p.is_empty()).map(PathBuf::from);
 }
 
 #[cfg(windows)]
