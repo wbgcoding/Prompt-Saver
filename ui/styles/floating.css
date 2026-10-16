@@ -709,6 +709,11 @@ body.vars-body {
   cursor: pointer;
 }
 .vars-remember input[type="checkbox"] { accent-color: var(--pill-bg, currentColor); }
+.vars-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
 .vars-actions {
   display: flex;
   justify-content: flex-end;

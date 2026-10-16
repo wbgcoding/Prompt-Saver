@@ -23,6 +23,8 @@ const titleEl = document.getElementById("title");
 const fieldsEl = document.getElementById("fields");
 const okEl = document.getElementById("ok");
 const cancelEl = document.getElementById("cancel");
+const noteEl = document.getElementById("note");
+let tooLongText = "";
 
 let rows = [];
 let answered = false;
@@ -34,7 +36,15 @@ function answer(values) {
   answered = true;
   // If the call itself fails (backend not ready, IPC hiccup), un-stick the guard:
   // otherwise this window can never answer again and just sits there forever.
-  invoke("var_window_result", { values }).catch(() => { answered = false; });
+  invoke("var_window_result", { values }).catch((e) => {
+    answered = false;
+    // The backend refuses an oversized answer; say so instead of sitting silent.
+    if (String(e).includes("bad values") && tooLongText) {
+      noteEl.textContent = tooLongText;
+      noteEl.classList.remove("hidden");
+      fitWindow();
+    }
+  });
 }
 
 const confirm = () =>
@@ -92,6 +102,7 @@ function buildText(row, initial, placeholder) {
 function render(data) {
   applyFloatTheme(data.theme, data.vars);
   const T = compactTexts(data.lang || "en");
+  tooLongText = T.varsTooLong;
   titleEl.textContent = T.varsTitle;
   okEl.textContent = T.varsCopy;
   cancelEl.textContent = T.cancel;
