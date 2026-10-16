@@ -11,25 +11,20 @@ pub(crate) fn csv_cell(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
-// Position lines: one per view+grid-size the prompt is placed in.
+// One CSV row: every cell guarded and joined with ';'.
 pub(crate) fn csv_row(cells: &[&str]) -> String {
     cells.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(";")
 }
 
-// Joins/splits a rotating prompt's entries for every text-based export format
-// (CSV cell, TXT body, Markdown-sync body): ONE marker everywhere. NOT the bare
-// "---" a first design sketched: `to_txt`'s blocks are already joined on the
-// literal "\n\n---\n\n" (between DIFFERENT prompts), and `prompt_to_md`'s header is
-// bounded by bare "---" lines too, so a bare "---" inside one prompt's own body
-// would be ambiguous with either. An HTML-comment marker cannot collide with
-// either delimiter and reads clearly as "generated" to a human editing the
-// Markdown-sync file by hand.
+// Joins/splits a rotating prompt's entries for every text-based export format (CSV cell,
+// TXT body, Markdown-sync body) with one marker. Not a bare "---": to_txt joins different
+// prompts on "\n\n---\n\n" and prompt_to_md's header is bounded by bare "---" lines, so one
+// inside a body would be ambiguous. An HTML-comment marker collides with neither and reads
+// as generated to someone editing the Markdown-sync file by hand.
 pub(crate) const VARIANT_SEP: &str = "\n<!-- next -->\n";
-// Escaped form of the marker, used ONLY so an entry that happens to contain the
-// literal separator text survives the round trip instead of being silently
-// split into extra entries: the inserted backslash means this
-// string can never equal VARIANT_SEP itself, so .split(VARIANT_SEP) never
-// matches inside it.
+// Escaped form of the marker, so an entry containing the literal separator survives the
+// round trip instead of being split: the inserted backslash means it never equals
+// VARIANT_SEP, so .split(VARIANT_SEP) cannot match inside it.
 pub(crate) const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
 
 pub(crate) fn join_variants(text: &str, variants: &[String]) -> String {
@@ -53,15 +48,12 @@ pub(crate) fn split_variants(joined: &str) -> (String, Vec<String>) {
 }
 
 // ---- Static placeholder resolution (export, Markdown sync) ----
-// A background write (export, the Markdown sync folder) can never show the
-// fill-in dialog, so it resolves the same priority the dialog itself offers,
-// minus the one interactive step: a remembered value, then a fixed value
-// (the maintained name/value list stored under ui_texts.varFixed), then the text's own
-// {?name=default} default, then blank. Never the raw {?...} syntax --
-// that would leak the app's own placeholder markup into a plain export or
-// someone else's Markdown folder. A dynamic name ({?@date}, {?@uuid}, ...) is
-// left exactly as written: its value only means something at the moment of
-// copy, and a background write has no such moment.
+// A background write (export, Markdown sync folder) cannot show the fill-in dialog, so it
+// resolves the dialog's priority minus the interactive step: a remembered value, then a
+// fixed value (ui_texts.varFixed), then the text's own {?name=default}, then blank. The raw
+// {?...} markup never leaks into an export or someone else's Markdown folder. A dynamic
+// name ({?@date}, {?@uuid}, ...) stays as written: its value only exists at the moment of
+// copy.
 pub(crate) fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> {
     settings
         .ui_texts
@@ -111,9 +103,8 @@ pub(crate) fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
     out
 }
 
-// The retired spelling `{#{` + body + `}#}`: same scan as before, kept only so the
-// one-time upgrade (store.rs `upgrade_placeholders`) can find what to rewrite.
-// Returns (start, end, trimmed body) triples, char-indexed and non-overlapping.
+// The retired spelling `{#{` + body + `}#}`, kept only so the one-time upgrade (store.rs
+// `upgrade_placeholders`) can find what to rewrite. Same return shape as find_var_tokens.
 pub(crate) fn find_old_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
@@ -146,11 +137,10 @@ pub(crate) fn find_old_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
     out
 }
 
-// name, options (the choice list, empty for a plain variable) and default --
-// same split rule as the frontend's parseVar: a bar starts the option list,
-// an equals sign before it (or before the whole token with no bar) sets the
-// default. A bar with no usable options after it falls back to a plain
-// variable, same as parseVar.
+// name, options (the choice list, empty for a plain variable) and default, split like the
+// frontend's parseVar: a bar starts the option list, an equals sign before it (or before
+// the whole token with no bar) sets the default. A bar with no usable options falls back to
+// a plain variable.
 pub(crate) fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
     let raw = token.trim();
     let (name_part, options): (&str, Vec<String>) = match raw.find('|') {
@@ -211,9 +201,8 @@ pub(crate) fn resolve_static_vars(text: &str, remembered: &HashMap<String, Strin
     out
 }
 
-// Resolves a prompt's own text AND every rotating-entry variant the same way,
-// for a caller that is about to export or sync it, never the live prompt
-// itself.
+// Resolves a prompt's text and every rotating-entry variant the same way, for a caller
+// about to export or sync it (never the live prompt).
 pub(crate) fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> Prompt {
     let mut rp = p.clone();
     rp.text = resolve_static_vars(&rp.text, remembered, fixed);
@@ -224,20 +213,17 @@ pub(crate) fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, Strin
 // Export the prompt library only (incl. images/files): never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 pub(crate) fn to_csv(prompts: &[Prompt]) -> String {
-    // pdfpage appended at the END, not inserted among the existing columns:
-    // an older export re-imported here has no such column, and row.get() on a
-    // short row already returns None (-> the same default 0), never shifting
-    // any OTHER column's fixed index. rotatemode follows the identical
-    // append-only precedent.
+    // pdfpage (like rotatemode) is appended at the END, not inserted among the columns: an
+    // older export re-imported here has no such column, and row.get() on a short row returns
+    // None (default 0) without shifting any other column's index.
     let head = [
         "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
         "image", "caption", "capsize", "tags", "notes", "pdfpage", "rotatemode",
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
-        // Entries 2..n ride along INSIDE the text cell: the CSV writer quotes
-        // every cell (embedded newlines included), so the join marker needs no
-        // escaping of its own.
+        // Entries 2..n ride along inside the text cell: the CSV writer quotes every cell, embedded
+        // newlines included, so the join marker needs no escaping.
         let text = join_variants(&p.text, &p.variants);
         rows.push(csv_row(&[
             &p.name,
@@ -254,8 +240,7 @@ pub(crate) fn to_csv(prompts: &[Prompt]) -> String {
             &p.caption,
             &p.caption_size.to_string(),
             &p.tags.join(","),
-            // The CSV writer quotes every cell and doubles inner quotes, so a
-            // multi-line note travels verbatim: no escaping needed here.
+            // The CSV writer quotes every cell, so a multi-line note travels verbatim.
             &p.notes,
             &p.pdf_page.to_string(),
             &p.rotate_mode,
@@ -267,9 +252,8 @@ pub(crate) fn to_csv(prompts: &[Prompt]) -> String {
 pub(crate) fn to_txt(prompts: &[Prompt]) -> String {
     use std::fmt::Write;
     let blocks: Vec<String> = prompts.iter().map(|p| {
-        // Entries 2..n ride along inside the body itself, joined by the same
-        // marker as CSV/Markdown-sync: never the bare "---" the blocks below are
-        // themselves separated by.
+        // Entries 2..n ride along inside the body, joined by the same marker as CSV/Markdown-sync,
+        // never the bare "---" that separates blocks.
         let mut block = format!("### {}\n{}", p.name, txt_escape_body(&join_variants(&p.text, &p.variants)));
         if !p.color.is_empty() {
             let _ = write!(block, "\n@color {}", p.color);
@@ -288,9 +272,8 @@ pub(crate) fn to_txt(prompts: &[Prompt]) -> String {
         if !p.file_path.is_empty() {
             let _ = write!(block, "\n@file {}", p.file_path);
         }
-        // Only a PDF attachment reads this, and 0 (the first page) is by far
-        // the common case: skip the line entirely then, same as every other
-        // optional field here.
+        // Only a PDF attachment reads this and 0 (the first page) is the common case, so the line
+        // is skipped then like other optional fields.
         if p.pdf_page > 0 {
             let _ = write!(block, "\n@pdfpage {}", p.pdf_page);
         }
@@ -313,8 +296,7 @@ pub(crate) fn to_txt(prompts: &[Prompt]) -> String {
         if !p.image.is_empty() {
             let _ = write!(block, "\n@imagedata {}", p.image);
         }
-        // Order/random preference: sparse like every other optional field here
-        // (a plain prompt, the overwhelming majority, never gets an empty line).
+        // Order/random preference: written sparsely like every other optional field.
         if !p.rotate_mode.is_empty() {
             let _ = write!(block, "\n@rotatemode {}", p.rotate_mode);
         }
@@ -323,13 +305,11 @@ pub(crate) fn to_txt(prompts: &[Prompt]) -> String {
     blocks.join("\n\n---\n\n")
 }
 
-// The JSON export format: unlike CSV/TXT (deliberately prompt-content-only, see
-// import_prompts) this is meant as the fully lossless round trip, so it also
-// keeps `favorite` -- still never `id`/`hotkey`/`hotkey_paste`/`trashed_at`/
-// `rotate_auto`, which stay machine-local or per-session state regardless of
-// format (a re-import that silently grabbed an existing hotkey binding, or
-// resurrected a trashed_at, would be a real footgun, not a feature). Rotating
-// entries ride as a real JSON array -- no VARIANT_SEP text marker needed here.
+// The JSON export format: unlike CSV/TXT (prompt content only, see import_prompts) it is
+// the lossless round trip, so it also keeps `favorite`. `id`, `hotkey`, `hotkey_paste`,
+// `trashed_at` and `rotate_auto` stay out: they are machine-local or per-session state, and
+// a re-import grabbing an existing hotkey binding or resurrecting a trashed_at would be a
+// footgun. Rotating entries ride as a real JSON array, so no VARIANT_SEP is needed.
 #[derive(Serialize, Deserialize, Default)]
 pub(crate) struct ExportPrompt {
     #[serde(default)]
@@ -399,8 +379,8 @@ pub(crate) fn to_json(prompts: &[Prompt]) -> String {
             rotate_mode: p.rotate_mode.clone(),
         })
         .collect();
-    // Every field here is a String/bool/u32/Vec<String> -- serialization
-    // cannot fail, so a default on the (unreachable) error path is safe.
+    // Every field is a String/bool/u32/Vec<String>, so serialization cannot fail and the
+    // default on the unreachable error path is safe.
     serde_json::to_string_pretty(&items).unwrap_or_default()
 }
 
@@ -439,13 +419,11 @@ pub(crate) fn parse_json_data(content: &str) -> Result<ImportData, String> {
     Ok(data)
 }
 
-// A confidential entry's fate in a one-shot export: `true` keeps it, ciphertext
-// and all -- the receiving end needs the same vault password to ever read it
-// again -- `false` (the default, matching a fresh install's "aus") drops it from
-// the export entirely rather than silently shipping ciphertext nobody asked for.
-// Pure and unit-testable apart from export_prompts' own file-dialog/format side effects.
-// Only the JSON export carries the confidential flag, so CSV and TXT never ship
-// sealed text: an import of those would read it back as a plain entry.
+// A confidential entry's fate in a one-shot export: `true` keeps it, ciphertext and all
+// (the receiving end needs the same vault password), `false` (the default) drops it rather
+// than silently shipping ciphertext nobody asked for. Only the JSON export carries the
+// confidential flag, so CSV and TXT never ship sealed text (an import would read it back as
+// a plain entry). Pure, apart from export_prompts' file-dialog and format side effects.
 pub(crate) fn secrets_exportable(format: &str, include_secrets: bool) -> bool {
     include_secrets && format == "json"
 }
@@ -478,11 +456,9 @@ pub(crate) async fn export_prompts(
             _ => store.prompts.clone(),
         };
         let selected = filter_export_secrets(selected, secrets_exportable(&format, include_secrets.unwrap_or(false)));
-        // A placeholder is a fill-in-at-copy-time thing; an export has no copy
-        // moment to fill it in at, so it gets resolved here instead of leaving
-        // the raw {#{...}#} syntax in the exported file. Each source is only
-        // consulted while its own flag is on, same as the fill-in dialog --
-        // varDefaults ships on, varFixed ships off.
+        // A placeholder is filled at copy time and an export has no such moment, so it is resolved
+        // here instead of leaving raw {?...} syntax in the file. Each source is consulted only
+        // while its own flag is on, as in the fill-in dialog (varDefaults ships on, varFixed off).
         let remembered = if store.settings.ui_flags.get("varDefaults") != Some(&false) {
             parse_ui_text_map(&store.settings, "varDefaults")
         } else {
@@ -494,8 +470,7 @@ pub(crate) async fn export_prompts(
             HashMap::new()
         };
         let resolved: Vec<Prompt> = selected.iter().map(|p| resolved_for_export(p, &remembered, &fixed)).collect();
-        // See strip_data_dir_prefix's own comment: an exported file must never
-        // carry an absolute demo-dir path either.
+        // An exported file must never carry an absolute demo-dir path (see strip_data_dir_prefix).
         let export_dir = data_dir(&app);
         let resolved = strip_data_dir_prefix(&export_dir, data_dir_is_demo(&app, &export_dir), &resolved).into_owned();
         let content = match format.as_str() {
@@ -519,10 +494,9 @@ pub(crate) async fn export_prompts(
     }
 }
 
-// Minimal CSV reader for our own export format (quoted fields, ';' delimiter).
-// Reverses csv_cell's formula-injection guard: a field re-quoted with a leading
-// `'` in front of =, +, -, @, tab or CR gets that quote stripped back off, so a
-// round trip through this app's own export/import never gains a stray character.
+// Reverses csv_cell's formula-injection guard: a field re-quoted with a leading `'` in
+// front of =, +, -, @, tab or CR gets that quote stripped, so a round trip never gains a
+// stray character.
 pub(crate) fn strip_formula_guard(s: String) -> String {
     let mut chars = s.chars();
     if chars.next() == Some('\'') && matches!(chars.next(), Some('=' | '+' | '-' | '@' | '\t' | '\r')) {
@@ -585,8 +559,7 @@ pub(crate) struct ImportedPrompt {
     pub(crate) notes: String,
     pub(crate) variants: Vec<String>,
     pub(crate) rotate_mode: String,
-    // Only ever true coming from a JSON file (the one format that also
-    // exports this) -- CSV/TXT parsers always set this false.
+    // True only from a JSON file (the one format that exports it).
     pub(crate) favorite: bool,
     // Only ever true coming from a JSON file; honoured for sealed text only.
     pub(crate) secret: bool,
@@ -719,9 +692,8 @@ pub(crate) fn parse_txt(content: &str) -> ImportData {
             Some((t, _)) => t,
             None => body,
         };
-        // The metadata is the trailing run of "@key value" lines, whatever their
-        // order; everything above that run is the body, whose own lines were
-        // escaped on export when they could be mistaken for one.
+        // The metadata is the trailing run of "@key value" lines in any order; everything above is
+        // the body, whose own lines were escaped on export when they could pass for one.
         let (body, mut meta) = split_txt_meta(body);
         let body = txt_unescape_body(&body);
         let rotate_mode = meta.remove("rotatemode").map(|v| v.trim().to_string()).unwrap_or_default();
@@ -753,8 +725,8 @@ pub(crate) fn parse_txt(content: &str) -> ImportData {
         let notes = meta.remove("notes").map(|v| notes_unescape(v.trim())).unwrap_or_default();
         let color = meta.remove("color").map(|v| v.trim().to_string()).unwrap_or_default();
         let text = body;
-        // Entries 2..n still ride along inside `text` at this point: split
-        // them back out now that every trailing @key line is gone.
+        // Entries 2..n still ride inside `text`: split them out now that the trailing @key lines
+        // are gone.
         let (text, variants) = split_variants(&text);
         data.prompts.push(ImportedPrompt {
             name: name.trim().to_string(),
@@ -780,8 +752,6 @@ pub(crate) fn parse_txt(content: &str) -> ImportData {
     }
     data
 }
-
-// Create/update views from "Name|CxR" definition lines.
 
 // Our own CSV export format back into import data.
 pub(crate) fn parse_csv_data(content: &str) -> ImportData {
@@ -840,16 +810,14 @@ pub(crate) fn parse_csv_data(content: &str) -> ImportData {
     data
 }
 
-// The signature a prompt is de-duplicated by, on both the preview and the real
-// import: the two must always agree, or the preview's "new"/"duplicate" label
-// could lie about what actually happens on confirm.
+// The signature a prompt is de-duplicated by, on preview and real import alike; the two
+// must agree or the preview's "new"/"duplicate" label could lie.
 pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
     format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
 }
 
-// Parse already-read file bytes (the caller reads once, hashes those same
-// bytes for the changed-since-preview check, and parses them here: never a
-// second read of the file).
+// Parses already-read bytes: the caller reads once and hashes those same bytes for the
+// changed-since-preview check, so the file is never read twice.
 pub(crate) fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -876,12 +844,10 @@ pub(crate) fn import_file_hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-// What an import WOULD do, without touching the store: the file is picked
-// here, and its path travels back so the confirm step (import_prompts) can
-// re-read the SAME file without a second file dialog. `hash` lets the confirm
-// step detect the file changing underneath the preview (someone editing or
-// replacing it in that window) instead of silently importing something the
-// user never saw.
+// What an import would do, without touching the store. The file is picked here and its
+// path travels back so the confirm step (import_prompts) re-reads the same file without a
+// second dialog. `hash` lets the confirm step detect the file changing under the preview
+// instead of importing something the user never saw.
 #[derive(Serialize)]
 pub(crate) struct ImportPreviewItem {
     pub(crate) name: String,
@@ -921,12 +887,8 @@ pub(crate) async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Resu
     Ok(ImportPreview { path: path.to_string_lossy().to_string(), hash, items })
 }
 
-// Shared by import_prompts and import_folder_files: builds a real Prompt for
-// each parsed item and appends it, skipping one that is an exact duplicate of
-// one already present (so the original is kept, no duplicate buttons). A
-// malformed tag or note on one item never aborts the whole batch.
-// A foreign file is an entry point like any other, but one bad tag must not
-// cost the entry its other tags: invalid names are dropped one by one.
+// A foreign file is an entry point like any other, but one bad tag must not cost the entry
+// its other tags: invalid names are dropped one by one.
 pub(crate) fn lenient_import_tags(raw: Vec<String>, known: &HashMap<String, String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let valid: Vec<String> = raw
@@ -948,6 +910,9 @@ pub(crate) fn lenient_import_note(raw: &str) -> String {
     })
 }
 
+// Shared by import_prompts and import_folder_files: builds a real Prompt for each parsed
+// item and appends it, skipping an exact duplicate of one already present so the original
+// is kept. A malformed tag or note on one item never aborts the whole batch.
 pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
     let mut seen: std::collections::HashSet<String> = store
         .prompts
@@ -993,8 +958,8 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
             tags,
             // A note from a foreign file must not abort the import either.
             notes: lenient_import_note(&item.notes),
-            // A CSV/TXT file carries prompt content, never machine-local bindings
-            //: nor the per-binding paste choice that belongs to one.
+            // A CSV/TXT file carries prompt content, never machine-local bindings (hotkeys, or the
+            // paste choice that belongs to one).
             hotkey: String::new(),
             hotkey_paste: String::new(),
             variants,
@@ -1002,17 +967,14 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
             // A CSV/TXT file never carries the auto-session state either: it is a
             // per-machine live behaviour, not portable prompt content.
             rotate_auto: false,
-            // Never measured here -- an imported attachment path is often not even
-            // reachable yet (different machine). The library backfill picks it up
-            // the first time this row is shown, same as any other pre-existing
-            // entry that has never been measured.
+            // Not measured here: an imported attachment path is often not reachable yet (different
+            // machine). The library backfill measures it when the row is first shown.
             media_duration_ms: 0,
             media_width: 0,
             media_height: 0,
             media_size_bytes: 0,
-            // Never exported, so never imported either -- the OCR backfill
-            // action picks up any picture this entry carries, same as an
-            // ordinary pre-existing entry.
+            // Never exported, so never imported; the OCR backfill picks up any picture this entry
+            // carries.
             image_text: String::new(),
             secret,
         };
@@ -1022,12 +984,10 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
     count
 }
 
-// Async: parsing + persisting an import stays off the UI thread. `path` comes
-// from a prior preview_import call: never a fresh file dialog here, so
-// confirming a preview can never silently import a DIFFERENT file. `hash` is
-// that same preview's digest of the file it showed; a mismatch here means the
-// file changed after the preview was shown, and the import is refused rather
-// than importing content the user never actually saw.
+// Async: parsing + persisting stays off the UI thread. `path` comes from a prior
+// preview_import call, never a fresh dialog, so confirming cannot import a different file.
+// `hash` is that preview's digest of the file; a mismatch means it changed after the
+// preview and the import is refused.
 #[tauri::command]
 pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<usize, String> {
     let bytes = read_file_capped(std::path::Path::new(&path), MAX_IMPORT_BYTES)?;
@@ -1036,8 +996,8 @@ pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: S
     }
     let data = parse_import_bytes(&bytes, std::path::Path::new(&path))?;
 
-    // Prompts-only import: never touch app settings, views or layout, even if an
-    // older export file still carries those blocks (they are parsed but ignored).
+    // Prompts-only import: settings, views and layout are never touched, even if an older
+    // export still carries those blocks (parsed but ignored).
     let mut store = lock(&state);
     let before_len = store.prompts.len(); // everything imported is appended after this
     let count = append_imported_prompts(&mut store, data.prompts);
@@ -1055,13 +1015,11 @@ pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: S
 }
 
 // ---- Import from a folder of .md/.txt files ----
-// Read-only: nothing here ever moves or deletes a source file. `importFolderDepth`
-// (ui_values, 1-5, default 3) counts the picked folder itself as depth 1, so 1
-// means "this folder only" and 3 means two levels of subfolders below it are
-// also scanned; a subfolder past the limit is left out entirely, never partially.
-// A file past `importFolderMax` (ui_values, default 500) is left out the same
-// way, by stopping the scan rather than filtering the result afterwards, so
-// nothing skipped this way could later be picked by name and still get in.
+// Read-only: nothing here moves or deletes a source file. `importFolderDepth` (ui_values,
+// 1-5, default 3) counts the picked folder as depth 1, so 1 means this folder only; a
+// subfolder past the limit is left out entirely, never partially. A file past
+// `importFolderMax` (ui_values, default 500) stops the scan rather than filtering
+// afterwards, so nothing skipped this way could later be picked by name and still get in.
 pub(crate) const IMPORT_FOLDER_EXTS: [&str; 2] = ["md", "txt"];
 // A file bigger than this is almost certainly not a hand-written note; treated
 // the same as an unreadable one (grayed out with a reason, never imported).
@@ -1088,9 +1046,8 @@ pub(crate) fn is_import_folder_file(path: &Path) -> bool {
     path.is_file() && has_import_folder_ext(path)
 }
 
-// One file the scan found, already telling the frontend whether it CAN be
-// imported and why not otherwise -- the same read that decides this also
-// measures its size, so preview and confirm can never disagree about it.
+// One file the scan found, already saying whether it can be imported and why not; the same
+// read measures its size, so preview and confirm cannot disagree.
 #[derive(Serialize, Clone)]
 pub(crate) struct FolderImportEntry {
     pub(crate) rel_path: String,
@@ -1108,11 +1065,9 @@ pub(crate) struct FolderImportPreview {
     pub(crate) truncated: bool,
 }
 
-// Depth-first, alphabetical so the same folder always previews in the same
-// order. `depth` counts `dir` itself as 0 (the picked folder); recursion into
-// a child only happens while the CHILD's own depth still fits inside
-// `max_depth`, so a folder past the limit contributes no file at all, not
-// just the ones further down inside it.
+// Depth-first and alphabetical so a folder always previews in the same order. `depth`
+// counts `dir` itself as 0; recursion into a child happens only while the child's own depth
+// fits inside `max_depth`, so a folder past the limit contributes no file at all.
 pub(crate) fn walk_import_folder(dir: &Path, depth: u32, max_depth: u32, max_files: usize, out: &mut Vec<PathBuf>) {
     if out.len() >= max_files {
         return;
@@ -1149,10 +1104,9 @@ pub(crate) fn import_folder_rel_path(base: &Path, path: &Path) -> String {
     path.strip_prefix(base).unwrap_or(path).to_string_lossy().replace('\\', "/")
 }
 
-// The first line becomes the standalone note when it is short and something
-// follows it; the rest of the file becomes the prompt text. A first line
-// already long, or a file with nothing after it, stays the whole text with no
-// note extracted -- a one-line file has no "rest" to separate it from.
+// The first line becomes the standalone note when it is short and something follows; the
+// rest is the prompt text. A long first line, or a file with nothing after it, stays the
+// whole text with no note.
 pub(crate) fn split_folder_note(content: &str) -> (String, String) {
     let content = content.replace("\r\n", "\n");
     let mut lines = content.splitn(2, '\n');
@@ -1166,9 +1120,9 @@ pub(crate) fn split_folder_note(content: &str) -> (String, String) {
     }
 }
 
-// Checks readability the same way the confirm step will actually read the
-// file (size cap, then UTF-8), so a file shown as importable here can never
-// turn out unreadable at confirm time on the same, unchanged disk state.
+// Checks readability the way the confirm step will read the file (size cap, then UTF-8), so
+// a file shown as importable can never turn out unreadable at confirm time on an unchanged
+// disk.
 pub(crate) fn read_import_folder_file(path: &Path) -> Result<String, &'static str> {
     let meta = fs::metadata(path).map_err(|_| "read-error")?;
     if meta.len() > MAX_IMPORT_FOLDER_FILE_BYTES {
@@ -1202,10 +1156,9 @@ pub(crate) fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) 
     (items, truncated)
 }
 
-// Opens the folder picker itself (like preview_import opens its file picker),
-// then scans it read-only with the current importFolderDepth/importFolderMax
-// settings. Never touches the store -- what actually gets imported is decided
-// later, by which checkboxes import_folder_files is called with.
+// Opens the folder picker itself (like preview_import's file picker) and scans it
+// read-only with the current importFolderDepth/importFolderMax. Never touches the store;
+// what gets imported is decided by which checkboxes import_folder_files receives.
 #[tauri::command]
 pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, title: String) -> Result<FolderImportPreview, String> {
     let Some(dir) = file_dialog(&app).set_title(&title).pick_folder() else {
@@ -1222,12 +1175,10 @@ pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, 
     Ok(FolderImportPreview { dir: dir.to_string_lossy().to_string(), items, truncated })
 }
 
-// Confirm step: re-reads exactly the checked files, by the preview's own
-// relPath resolved fresh against `dir`, and imports each as its own prompt.
-// A file gone or turned unreadable since the preview is silently skipped
-// rather than failing the whole batch -- there is no single content hash for
-// a folder of independent files the way preview_import has for one file, so
-// "reviewed, then acted on" is enforced per file instead of for the whole set.
+// Confirm step: re-reads exactly the checked files, by the preview's relPath resolved
+// against `dir`, and imports each as its own prompt. A file gone or unreadable since the
+// preview is skipped silently instead of failing the batch; with no single hash for a
+// folder of files, "reviewed, then acted on" is enforced per file.
 #[tauri::command]
 pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, dir: String, rel_paths: Vec<String>) -> Result<usize, String> {
     let base = Path::new(&dir);
@@ -1274,9 +1225,8 @@ pub(crate) fn folder_rel_path_is_safe(rel: &str) -> bool {
     path.components().next().is_some() && path.components().all(|c| matches!(c, std::path::Component::Normal(_)))
 }
 
-// One note file of an imported folder as a prompt. A file from an older version
-// still spells placeholders the old way, so they are upgraded like on every other
-// inbound path.
+// One note file of an imported folder as a prompt; placeholders in the old spelling are
+// upgraded like on every other inbound path.
 pub(crate) fn folder_file_item(name: String, tags: Vec<String>, content: &str) -> ImportedPrompt {
     // The rotation split runs FIRST, on the whole file -- the note is only
     // ever pulled off entry 0 (the plain text), never off a later variant,
