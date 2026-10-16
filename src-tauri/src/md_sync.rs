@@ -1,42 +1,27 @@
 use super::*;
 
-// ---- Prompt folders as Markdown (opt-in expert feature, default off) ----
+// Prompt folders as Markdown (opt-in expert feature, default off). A text-only prompt
+// (attached files, images and icons stay DB-only) round-trips through one <id>.md in a
+// chosen folder (default <data dir>/<slug>-sync). The id is the filename, so renaming a
+// prompt never orphans its file. Hooked at save_prompts(), the single choke point for
+// prompt mutations, so no individual command needs to know about it.
 //
-// A text-only prompt (no attached file/image/icon: those stay DB-only, binary
-// content does not belong in a git-friendly text file) round-trips through one
-// `<id>.md` per prompt in a chosen folder (default `<data dir>/<slug>-sync`). The id is
-// the filename, so renaming a prompt in the app never orphans its file. Hooked at
-// save_prompts(): the single choke point every prompt mutation already funnels
-// through: so no individual command (add/update/delete/batch/import) needs to know
-// this feature exists.
-//
-// Deliberately simplified vs. a fuller original ambition:
-//   - polling (SYNC_POLL_SECS) instead of a filesystem-watcher crate: no new
-//     dependency, and a few seconds of latency is fine for a background sync;
-//   - no per-view position sync: a prompt imported from a new file lands in the
-//     first free cell of the active view, exactly like a normal add;
-//   - no hotkey sync: keeps a background task from re-running hotkey conflict/
-//     registration logic, which has its own careful invariants elsewhere;
-//   - conflict handling is "whichever side changed since the last successful sync
-//     wins this cycle, the other is retried next cycle" rather than an interactive
-//     merge dialog with per-conflict choices.
-// None of these lose data outright: worst case a change waits one more poll
-// interval: but this has NOT had the multi-instance crash-simulation stress test
-// the original spec calls for as a "done" gate. Treat it as a beta feature.
+// Simplified on purpose: polling (SYNC_POLL_SECS) instead of a file watcher; no per-view
+// position sync (an imported prompt lands in the first free cell of the active view); no
+// hotkey sync (it has its own conflict invariants); conflicts resolve as "whichever side
+// changed since the last successful sync wins this cycle, the other is retried next".
+// Worst case a change waits one poll interval. Beta: there is no multi-instance
+// crash-simulation stress test yet.
 pub(crate) const SYNC_POLL_SECS: u64 = 5;
 
-// A lock is only ever held around one small file write, so 15 s is already far
-// past any real one. The age is deliberately NOT tied to the poll interval: the
-// second half of the staleness check is whether the process that wrote the lock
-// is still alive, so a genuinely slow write by a running instance is never
-// stolen however long it takes, and a lock left by a crashed one is picked up as
-// soon as the age passes.
+// A lock is held only around one small file write, so 15 s is far past any real one. The
+// age is not tied to the poll interval: staleness also checks whether the writing process
+// is alive, so a slow write by a running instance is never stolen, and a crashed
+// instance's lock is picked up as soon as the age passes.
 pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
 
-// After this many consecutive failed rounds (an unreachable folder, a network
-// share that is not mounted) the poll pauses instead of retrying every tick
-// forever, says so once, and from then on only tries again at
-// SYNC_PAUSED_FACTOR times the interval.
+// After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
+// pauses, says so once, and retries only every SYNC_PAUSED_FACTOR intervals.
 pub(crate) const SYNC_FAIL_MAX: u32 = 5;
 pub(crate) const SYNC_PAUSED_FACTOR: u64 = 10;
 
@@ -81,11 +66,10 @@ pub(crate) fn sync_dir_has_md(dir: &Path) -> bool {
     })
 }
 
-// The default folder changed name. Anyone who synced into the old one without ever
-// picking a folder of their own would silently start over in an empty new one, so
-// on the first start after the change their old folder becomes their explicit
-// choice. Runs once (marked in ui_texts), only when no custom folder is set and the
-// old folder actually holds our files. Returns the adopted path for the log line.
+// Adopts the old default folder as the explicit choice for anyone who synced into it
+// without ever picking a folder, so they do not silently start over in an empty new one.
+// Runs once (marked in ui_texts), only with no custom folder set and when the old folder
+// holds our files. Returns the adopted path for the log line.
 pub(crate) fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<String> {
     if settings.ui_texts.contains_key(SYNC_LEGACY_MARK) {
         return None;
@@ -100,32 +84,24 @@ pub(crate) fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> O
     Some(path)
 }
 
-// A media prompt syncs too, but only ever as a REFERENCE: the `file`/`icon` headers
-// carry the paths the user picked, so the button keeps its name, colour, tags, notes
-// and placement in step across machines while whoever set it up makes sure the paths
-// resolve there. Embedded binary data (a pasted screenshot lives base64-encoded in
-// `Prompt.image`) has no path to write and is never put in the file: it stays
-// DB-only and survives untouched, since apply_md_to_prompt only ever overwrites the
-// fields the header actually carries.
-// A prompt whose id is not a plain, filename-safe token stays out entirely: the id
-// becomes the FILE NAME here, and ids can arrive from an imported backup, i.e. from
-// outside this app.
-// A confidential entry never leaves an unencrypted trace outside the app, and
-// the Markdown sync folder is a plain text file with no dialog moment to ask
-// "encrypted or left out" the way a one-shot export has: so it is always left
-// out, never written encrypted. An entry that was already synced and is later
-// marked confidential drops out of `wanted` the same way a deleted prompt does,
-// so sync_sweep_orphans removes the stale plaintext file on the next sync.
+// A media prompt syncs only as a reference: the file/icon headers carry the picked paths,
+// so name, colour, tags, notes and placement stay in step across machines while the paths
+// must resolve there. Embedded binary data (a pasted screenshot in Prompt.image) is never
+// written; apply_md_to_prompt overwrites only the fields the header carries, so it
+// survives.
+// A prompt whose id is not a plain, filename-safe token stays out: the id becomes the file
+// name and ids can arrive from an imported backup.
+// A confidential entry is always left out, never written encrypted: the sync folder is
+// plain text with no dialog to ask. An entry marked confidential later drops out of
+// `wanted` like a deleted prompt, so sync_sweep_orphans removes its stale plaintext file.
 pub(crate) fn sync_eligible(p: &Prompt) -> bool {
     sync_safe_id(&p.id) && !p.secret
 }
 
-// Refused rather than escaped: the id is also how the inbound half finds the prompt
-// again, so a rewritten name would silently orphan the file.
-// A prompt written out as Markdown is text a person typed; 8 MB is far past any
-// real one and still small enough that re-reading the folder on a timer costs
-// nothing. A bigger file in the sync folder is simply not one of ours and is
-// skipped instead of being pulled into memory every cycle.
+// Refused rather than escaped: the id is also how the inbound half finds the prompt again,
+// so a rewritten name would orphan the file.
+// A synced prompt is typed text; 8 MB is far past any real one. A bigger file in the sync
+// folder is not ours and is skipped instead of being read every cycle.
 pub(crate) const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
 
 // Text as an editor may have saved it: plain UTF-8, UTF-8 with a byte order mark, or
@@ -158,11 +134,10 @@ pub(crate) fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
-// Notes are typed into a multi-line box, so they are the one header field where a
-// line break is real content. A note with one is written escaped (\n, \r, \\) and
-// flagged with a `notes_enc` line; one without stays exactly as it always was, so
-// older files and single-line notes (which may hold a path with backslashes) read
-// back unchanged.
+// Notes come from a multi-line box, so a line break is real content here. A note with one
+// is written escaped (\n, \r, \\) and flagged with a notes_enc line; one without stays as
+// is, so older files and single-line notes (which may hold backslashes) read back
+// unchanged.
 pub(crate) fn md_escape_notes(s: &str) -> Option<String> {
     if !s.contains(['\n', '\r']) {
         return None;
@@ -214,16 +189,11 @@ pub(crate) struct SyncPlacement {
     pub(crate) float_folder: String,
 }
 
-// A grid-folder member has no view.layouts entry of its own: save_tile_folder
-// drops it the moment it joins: so its view/grid/cell describe the
-// FOLDER's own placement instead. Every member's file ends up saying the same
-// (redundant, but self-consistent and self-healing: sync_write_all_impl rewrites
-// EVERY member's file the moment the folder moves, since prompt_to_md's output
-// changes for each of them). Float-folder membership is a fully separate axis:
-// a prompt can be a floating pill grouped into a pill-folder independently of
-// whatever grid tile it also is: and only membership syncs there, never the
-// folder's own desktop pixel position/scale, which is inherently per-machine
-// (a coordinate valid on one monitor layout can be off-screen on another).
+// A grid-folder member has no view.layouts entry (save_tile_folder drops it on joining),
+// so its view/grid/cell describe the folder's placement and every member's file says the
+// same; they are all rewritten when the folder moves. Float-folder membership is a
+// separate axis: only membership syncs, never the folder's desktop pixel position or
+// scale, which is per-machine.
 pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
     let float_folder = settings
         .float_folders
@@ -272,11 +242,10 @@ pub(crate) fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     prompt_to_md_impl(p, placement, false)
 }
 
-// Whether a file's content is what this machine would write for the prompt, in
-// today's format or in the one before notes and a trailing newline round-tripped
-// (notes flattened to one line, no extra newline after a text that ends with one).
-// Without the second form, every file an older version wrote would read as an edit
-// by someone else right after the update.
+// Whether a file's content is what this machine would write for the prompt, in today's
+// format or the one before notes and a trailing newline round-tripped. Without the second
+// form every file an older version wrote would read as an edit by someone else after the
+// update.
 pub(crate) fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
     prompt_to_md_impl(p, placement, false) == content || prompt_to_md_impl(p, placement, true) == content
 }
@@ -287,12 +256,10 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
         _ => (md_escape_line(&p.notes), ""),
     };
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
-    // `variants` is informational only (a human glancing at the header sees the
-    // entry count at a glance): NEVER read back by apply_md_to_prompt, which always
-    // re-derives the real list from the body's own VARIANT_SEP markers. The four
-    // REQUIRED fields (name/color/tags/notes, md_is_ours()) are unchanged; `variants`
-    // and the six placement fields below (2) are additive, which md_is_ours()
-    // already tolerates.
+    // variants is informational only and never read back: apply_md_to_prompt re-derives the
+    // list from the body's VARIANT_SEP markers. The four required fields (name/color/tags/notes,
+    // md_is_ours()) are fixed; variants and the six placement fields are additive, which
+    // md_is_ours() tolerates.
     let mut out = format!(
         "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
         md_escape_line(&p.name),
@@ -385,10 +352,9 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
     if let Some(v) = fields.get("notes") {
         p.notes = if fields.contains_key("notes_enc") { md_unescape_notes(v) } else { v.clone() };
     }
-    // Media by reference. Absent field = an older or hand-written file that does not
-    // describe media at all: leave whatever the prompt already has. Present but
-    // empty = "this button carries no file", which really does clear it. `image`
-    // (embedded binary) is deliberately not in this list; nothing here can express it.
+    // Media by reference. An absent field (older or hand-written file) leaves what the prompt
+    // has; present but empty means "no file" and clears it. Embedded image data cannot be
+    // expressed here.
     if let Some(v) = fields.get("file") {
         p.file_path.clone_from(v);
     }
@@ -405,11 +371,9 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
     // The writer closes the body with a newline; keeping it out of the stored text is
     // what stops every round trip through the folder from adding another blank line.
     let body = body.strip_suffix('\n').unwrap_or(&body);
-    // Entries 2..n ride along inside the body, split back out here: the
-    // `variants:` header count above is never consulted, so a stale count left by a
-    // hand-edit (added/removed an entry without touching the header) is harmless.
-    // `rotate_mode` is deliberately NOT part of this sync (same partial-field
-    // philosophy as favorite/hotkey/font, which this function also never touches).
+    // Entries 2..n ride along in the body and are split out here; the variants: header count is
+    // never consulted, so a stale count after a hand-edit is harmless. rotate_mode is not part
+    // of this sync (like favorite, hotkey and font).
     let (text, variants) = split_variants(body);
     // A file written by an older version still holds the old placeholder spelling.
     p.text = upgrade_placeholders(&text);
@@ -422,26 +386,20 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
     Some(p)
 }
 
-// The incoming half of the six placement fields. Unlike
-// apply_md_to_prompt (Prompt fields), these land on Settings: a view/folder is
-// found by NAME (an id is meaningless across machines) and created here if this
-// machine has never seen it. Every part below is independently best-effort, same
-// "never lose data outright" philosophy as content sync: nothing here aborts the
-// whole file over one malformed field. Returns (grid_placed, folders_touched):
-// grid_placed tells the caller whether to skip today's "active view, first free
-// cell" fallback (only when the grid fields were absent or unusable: an older
-// version's file, a hand-created one, or a folder name this machine rejected);
-// folders_touched tells it whether a tile/float folder was created, joined or
-// LEFT, which needs a normalize pass: the two are independent, since a
-// float_folder join/leave carries no grid fields at all.
+// The incoming half of the six placement fields. Unlike apply_md_to_prompt these land on
+// Settings: a view or folder is found by name (ids mean nothing across machines) and
+// created if unseen. Every part is best-effort, so one malformed field never aborts the
+// file. Returns (grid_placed, folders_touched): grid_placed tells the caller to skip the
+// "active view, first free cell" fallback (it is set unless the grid fields were absent or
+// unusable); folders_touched says a tile or float folder was created, joined or left and
+// needs a normalize pass. They are independent, since a float_folder join or leave carries
+// no grid fields.
 //
-// A field that is PRESENT but empty ("tile_folder: ") is a deliberate "not in a
-// folder any more" from the writer: prompt_to_md always writes all six fields,
-// so an empty one is never ambiguous with "this file predates the feature." That
-// case must actively leave whatever folder this machine still has the prompt in,
-// or a folder left on one machine reappears there forever: this machine's own
-// next outgoing write would keep re-asserting the stale membership, and the
-// machine that dropped it would re-join on the next poll.
+// A field that is present but empty ("tile_folder: ") is a deliberate "not in a folder any
+// more": prompt_to_md always writes all six, so empty never means "file predates the
+// feature". It must actively leave the folder this machine still has the prompt in, or the
+// stale membership would be re-asserted by this machine's next write and re-joined by the
+// other on the next poll.
 pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
     let mut folders_touched = false;
     if let Some(raw) = fields.get("float_folder") {
@@ -514,10 +472,9 @@ pub(crate) fn folder_cells_in_view(settings: &Settings, view_id: &str) -> Vec<[u
     settings.tile_folders.iter().filter(|f| f.view_id == view_id).map(|f| f.cell).collect()
 }
 
-// Every id already living inside one of this view's grid folders -- these sit
-// on the folder's own cell (see folder_cells_in_view), never in the view's own
-// layout, so place_ids_in_view/view_capacity_deficit must not count them as
-// needing a cell of their own.
+// Every id already inside one of this view's grid folders. These sit on the folder's cell
+// (see folder_cells_in_view), not in the view's layout, so place_ids_in_view and
+// view_capacity_deficit must not count them.
 pub(crate) fn folder_members_in_view(settings: &Settings, view_id: &str) -> std::collections::HashSet<String> {
     settings
         .tile_folders
@@ -527,16 +484,12 @@ pub(crate) fn folder_members_in_view(settings: &Settings, view_id: &str) -> std:
         .collect()
 }
 
-// The exact incoming cell wins when nothing ELSE sits there yet on THIS machine;
-// otherwise the first free cell stands in, the same fallback a brand-new tile
-// gets today. `prompt_id`'s OWN existing entry at that cell never counts as a
-// collision: without this, re-importing a placement that already matches
-// (e.g. only the prompt's text changed on the other machine) would read as
-// "occupied by ourselves" and bounce the tile to a different free cell on every
-// unrelated content edit. Bounds-checks against the view's OWN size, which may
-// differ from the machine that sent the file: a view only takes its incoming
-// grid size once, at creation (sync_find_or_create_view), never a forced resize
-// afterward.
+// The exact incoming cell wins when nothing else sits there on this machine; otherwise the
+// first free cell stands in, as for a new tile. The prompt's own existing entry at that cell
+// is not a collision, or re-importing a matching placement (only the text changed
+// elsewhere) would bounce the tile to another cell on every edit. Bounds-checked against
+// the view's own size, which may differ from the sender's: a view takes its incoming grid
+// size only at creation (sync_find_or_create_view).
 pub(crate) fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted: [u32; 2]) -> Option<[u32; 2]> {
     let view = settings.views.iter().find(|v| v.id == view_id)?;
     let folder_cells = folder_cells_in_view(settings, view_id);
@@ -552,11 +505,10 @@ pub(crate) fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &
     if fits { Some(wanted) } else { first_free_cell_excluding(view, &folder_cells) }
 }
 
-// Mirrors the frontend's placeTile(): with multiViewPrompt off (default), a prompt lives in exactly
-// ONE view. Without stripping the others here, a machine re-importing a placement
-// that already matches (only the prompt's content changed elsewhere) left the
-// prompt duplicated across every view it was ever placed in on ANY machine. With
-// the flag on, multiple placements are legitimate and deliberately left alone.
+// Mirrors the frontend's placeTile(): with multiViewPrompt off (default) a prompt lives in
+// exactly one view. Without stripping the others, re-importing a matching placement
+// duplicated the prompt across every view it was ever placed in on any machine. With the
+// flag on, multiple placements are legitimate and left alone.
 pub(crate) fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, wanted: [u32; 2]) {
     let Some(cell) = sync_resolve_cell(settings, view_id, prompt_id, wanted) else { return };
     let multi_view = settings.ui_flags.get("multiViewPrompt") == Some(&true);
@@ -601,11 +553,9 @@ pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols
     id
 }
 
-// Removes a prompt from every grid folder it happens to be in: the "leave" half
-// of an explicit-empty tile_folder field, and the shared first step both a leave
-// and a re-join take (moving folders is a leave-then-join). Returns whether it
-// actually removed anything, so a no-op leave (never was a member) doesn't count
-// as a change worth persisting.
+// Removes a prompt from every grid folder it is in: the leave half of an explicit-empty
+// tile_folder field, and the first step of a re-join (moving folders is leave then join).
+// Returns whether it removed anything, so a no-op leave is not persisted as a change.
 pub(crate) fn sync_leave_tile_folder(settings: &mut Settings, prompt_id: &str) -> bool {
     let mut removed = false;
     for folder in settings.tile_folders.iter_mut() {
@@ -630,10 +580,9 @@ pub(crate) fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) 
     removed
 }
 
-// Finds a grid folder by NAME or creates one: every member's file redundantly
-// carries the same name/color/place, so any one of them can recreate it. Mirrors
-// save_tile_folder: pulled out of every OTHER folder first, and a folder member is
-// not a tile of its own, so its own layout entry is dropped the moment it joins.
+// Finds a grid folder by name or creates one: every member's file carries the same name,
+// colour and place, so any one can recreate it. Mirrors save_tile_folder: the prompt
+// leaves other folders first, and a folder member's own layout entry is dropped on joining.
 pub(crate) fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: Option<[u32; 2]>) -> bool {
     let Ok(name) = folder_name_of(name) else { return false };
     if name.is_empty() {
@@ -647,10 +596,10 @@ pub(crate) fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, na
     let wanted = cell.unwrap_or([0, 0]);
     let cell = if exists { wanted } else { sync_resolve_cell(settings, view_id, prompt_id, wanted).unwrap_or(wanted) };
     sync_leave_tile_folder(settings, prompt_id);
-    // An existing folder is not moved or recoloured by a plain join, so two machines
-    // that disagree about its cell or colour would rewrite every member file forever.
-    // Adopt what the file says when this machine can: the cell only if it is free in
-    // that view (the folder's own cell excluded), the colour only if it is a valid one.
+    // A plain join neither moves nor recolours an existing folder, so two machines disagreeing
+    // about its cell or colour would rewrite every member file forever. Adopt what the file
+    // says when valid: the cell only if free in that view (the folder's own cell excluded), the
+    // colour only if valid.
     let mut adopt_cell = None;
     if let (true, Some(want)) = (exists, incoming) {
         let idx = settings.tile_folders.iter().position(|f| f.name == name && f.view_id == view_id);
@@ -690,12 +639,9 @@ pub(crate) fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, na
     true
 }
 
-// Same for pill folders, but only ever joins a prompt that is ALREADY a floating
-// pill on this machine (has a `floating` entry): a folder can group pills, but
-// conjuring a brand-new OS pill window out of a background sync poll is exactly
-// the kind of machine-specific side effect the sync deliberately keeps out of scope
-// (position/monitor layout differ per machine, and so does whether the feature is
-// even in use here).
+// Same for pill folders, but only joins a prompt that is already a floating pill on this
+// machine: creating an OS pill window from a background sync poll is a machine-specific
+// side effect the sync keeps out of scope (position and monitor layout differ per machine).
 pub(crate) fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) -> bool {
     if !settings.floating.contains_key(prompt_id) {
         return false;
@@ -718,20 +664,14 @@ pub(crate) fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, n
     true
 }
 
-// The general normalize_tile_folders/normalize_float_folders dissolve any folder
-// under 2 members: correct after a UI-driven removal (the user just took the
-// last-but-one member out), but wrong straight after an INCOMING sync batch: a
-// folder's members can legitimately arrive across SEPARATE poll cycles (a cloud
-// provider propagates several file writes with no ordering or batching guarantee
-// between machines). Dissolving a still-forming folder the moment it has only 1
-// member means it can never reach 2 at all: the next member's file finds no
-// folder to join, creates its own 1-member one, that gets dissolved too, forever.
-// These run every other invariant the general versions do (drop unknown/duplicate
-// members, drop a folder whose view no longer exists, resolve cell collisions,
-// cap the count) but only dissolve at 0 members, not 1: a folder that genuinely
-// never grows past 1 still gets cleaned up the next time a NON-sync path (any
-// UI-driven folder command) touches it, since those keep calling the general,
-// stricter version.
+// The general normalize_tile_folders/normalize_float_folders dissolve folders under 2
+// members, which is wrong right after an incoming sync batch: members can arrive across
+// separate poll cycles (a cloud provider gives no ordering between file writes), and
+// dissolving a still-forming 1-member folder means the next member's file creates its own
+// and loses it too, forever. These variants keep every other invariant (drop unknown or
+// duplicate members, drop a folder whose view is gone, resolve cell collisions, cap the
+// count) but dissolve only at 0 members. A folder that never grows is cleaned up when a
+// non-sync path touches it.
 pub(crate) fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
@@ -826,14 +766,11 @@ pub(crate) fn sync_write_agents_md(dir: &Path) {
     }
 }
 
-// ---- What each file in the folder looked like the last time it was seen ----
-//
-// Two problems share one answer. A file is only read when its modification time or
-// size differs from the last round, which keeps a thousand-entry folder from being
-// read end to end every few seconds; and a file whose stamp CHANGED since the last
-// round is deliberately not read yet, because an editor that writes straight into
-// the file (rather than the usual temp-file-and-rename) can be caught mid-write.
-// One round later the stamp has settled and what is read is a whole file.
+// What each file in the folder looked like when last seen. A file is read only when its
+// modification time or size differs from the last round, so a thousand-entry folder is not
+// read end to end every few seconds. A file whose stamp changed since the last round is
+// deliberately not read yet: an editor writing straight into the file can be caught
+// mid-write, and one round later the stamp has settled.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub(crate) struct SyncStamp {
     pub(crate) mtime_ns: u128,
@@ -922,11 +859,10 @@ pub(crate) fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
     sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true, hash });
 }
 
-// The files this process knows belong to a prompt of this library: written for one,
-// or read back as one. Only these may ever be swept as orphans. A file whose id the
-// app has never known (another machine's folder the user just pointed us at, a file
-// made or renamed by hand, one that arrived a moment ago) is not ours to delete, even
-// when it carries our header: the poll has to import it first.
+// Files this process knows belong to a prompt of this library (written for one, or read
+// back as one). Only these may be swept as orphans: a file whose id the app never knew
+// (another machine's folder, a hand-made or just-arrived file) is not ours to delete even
+// with our header; the poll must import it first.
 pub(crate) static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
 
 pub(crate) fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
@@ -940,11 +876,9 @@ pub(crate) fn sync_known_note(path: &Path) {
     sync_known_lock().insert(sync_seen_key(path));
 }
 
-// What the app last knew to be in each synced file: a hash of the content it
-// rendered and the file's stamp right then. When the next render hashes the same
-// and the file still carries that stamp, the file is known to hold exactly that
-// content and is not read back at all. An outside edit changes the stamp, so it
-// is never skipped.
+// What the app last knew to be in each synced file: a hash of the rendered content plus the
+// file's stamp then. When the next render hashes the same and the stamp is unchanged, the
+// file is not read back; an outside edit changes the stamp.
 pub(crate) type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
 pub(crate) static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
 
@@ -965,11 +899,9 @@ pub(crate) fn sync_file_known_current(path: &Path, hash: u64) -> bool {
     sync_written_lock().get(&sync_seen_key(path)).is_some_and(|(h, stamp)| *h == hash && *stamp == now)
 }
 
-// Remember that `path` holds the content with this hash (call after a write, or
-// after a read that found it already equal).
-// A stamp younger than SYNC_STAMP_TRUST_NS is not trusted: on a file system with a
-// coarse clock (FAT/exFAT/SMB) an outside edit of the same length inside the same tick
-// would carry the very same stamp. Such a file is simply compared by content next round.
+// A stamp younger than SYNC_STAMP_TRUST_NS is not trusted: on a file system with a coarse
+// clock (FAT/exFAT/SMB) an outside edit of the same length inside the same tick would carry
+// the very same stamp. Such a file is simply compared by content next round.
 pub(crate) const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
 
 pub(crate) fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
@@ -977,6 +909,8 @@ pub(crate) fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
     now_ns.saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
 }
 
+// Remember that `path` holds the content with this hash (call after a write, or after a
+// read that found it already equal).
 pub(crate) fn sync_file_note_current(path: &Path, hash: u64) {
     if let Some(stamp) = sync_stamp_of(path) {
         if sync_stamp_is_settled(&stamp) {
@@ -987,16 +921,13 @@ pub(crate) fn sync_file_note_current(path: &Path, hash: u64) {
     }
 }
 
-// Whether the file changed since the app last wrote or read it. `None` (never seen)
-// is not decided here: sync_edit_unsaved judges such a file by its content, so a
-// fresh start does not litter the folder with copies of what the app wrote itself.
-//
-// A stamp the poll noted but has not read yet (handled: false) counts as changed
-// too: the new stamp is already in the map, so comparing stamps alone would call an
-// edit the app never saw "unchanged" and overwrite it without keeping a copy.
-//
-// With a recorded hash the bytes decide: a changed stamp alone (a cloud client
-// touching the file, an identical rewrite by another instance) is no edit.
+// Whether the file changed since the app last wrote or read it. None (never seen) is not
+// decided here: sync_edit_unsaved judges it by content, so a fresh start does not litter the
+// folder with copies of what the app wrote itself. A stamp the poll noted but has not read
+// yet (handled: false) counts as changed, or an edit the app never saw would look unchanged
+// and be overwritten without a copy. With a recorded hash the bytes decide: a changed stamp
+// alone (a cloud client touching the file, an identical rewrite by another instance) is no
+// edit.
 pub(crate) fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
     let seen = sync_seen_lock();
     match (seen.get(&sync_seen_key(path)), sync_stamp_of(path)) {
@@ -1006,18 +937,9 @@ pub(crate) fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
     }
 }
 
-// Whether the bytes about to be replaced hold something the app has not saved
-// itself. A file that is not readable as text at all (an ANSI editor, a broken
-// encoding) is always worth a copy: the poll cannot import it, so the file is the
-// only place that version exists.
-//
-// A file the app has no record of at all (activation, a switch to a folder that
-// already holds files, a save ahead of the startup seed) is judged by its content: a
-// different one is somebody's edit, one equal to this prompt's own text, in today's
-// form or an older one, is not.
-// Writes `bytes` to a fresh `<id>.conflict-<secs>[-<n>]<tag>.md` in `dir`. The
-// name is claimed with create_new first, so two conflicts in the same second
-// (or an earlier copy) never overwrite each other.
+// Writes `bytes` to a fresh `<id>.conflict-<secs>[-<n>]<tag>.md` in `dir`. The name is
+// claimed with create_new first, so two conflicts in the same second (or an earlier copy)
+// never overwrite each other.
 pub(crate) fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Option<PathBuf> {
     let secs = now_secs();
     for n in 0..1000u32 {
@@ -1038,6 +960,14 @@ pub(crate) fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &
     None
 }
 
+// Whether the bytes about to be replaced hold something the app has not saved itself. A
+// file that is not readable as text (an ANSI editor, a broken encoding) is always worth a
+// copy: the poll cannot import it, so the file is the only place that version exists.
+//
+// A file the app has no record of (activation, a switch to a folder that already holds
+// files, a save ahead of the startup seed) is judged by its content: a different one is
+// somebody's edit, one equal to this prompt's own text, in today's form or an older one,
+// is not.
 pub(crate) fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPlacement) -> bool {
     if on_disk.is_empty() {
         return false;
@@ -1167,10 +1097,9 @@ pub(crate) fn sync_lock_is_stale(lock_path: &Path) -> bool {
     }
 }
 
-// Atomic create (never "check then create": that would race between two
-// instances). A held, non-stale lock means "leave this file for the next poll
-// cycle", never a blocking wait: this runs in a background task with no UI to
-// block, so retrying later is the safe choice over hanging the poll loop.
+// Atomic create (never check then create, which races between instances). A held,
+// non-stale lock means "leave this file for the next poll", not a blocking wait: this runs
+// in a background task with no UI.
 pub(crate) fn sync_lock_acquire(md_path: &Path) -> bool {
     let lock_path = sync_lock_path(md_path);
     let try_create = |p: &Path| {
@@ -1192,27 +1121,23 @@ pub(crate) fn sync_lock_release(md_path: &Path) {
     let _ = fs::remove_file(sync_lock_path(md_path));
 }
 
-// One writer at a time into the sync folder: the background flush, the activation
-// write, a folder change and the inbound poll's file scan all take this around their
-// file I/O, never the store lock. A slow share then only delays the next sync run;
-// it can no longer freeze every window that wants the library.
+// One writer at a time into the sync folder: the background flush, activation write, folder
+// change and the poll's file scan all take this around their file I/O, never the store
+// lock. A slow share then only delays the next sync run instead of freezing every window.
 pub(crate) static SYNC_RUN: Mutex<()> = Mutex::new(());
 
 pub(crate) fn sync_run_lock() -> std::sync::MutexGuard<'static, ()> {
     SYNC_RUN.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-// Split from the old sync_write_all(app, store) so the per-prompt file I/O
-// below (a read to compare content, sometimes a write, once per eligible prompt)
-// can run on owned data instead of a &Store borrow - every call site already
-// holds the store mutex, and this loop's cost scales with the whole library on
-// every single save. spawn_sync_write_all below clones what it needs and runs
-// this on a blocking task after the lock is dropped; the one genuinely
-// synchronous caller (activating the feature) calls this directly.
-// Returns how many files could not be written. A sync folder that silently stays
-// empty is the worst outcome this feature has: the user sees the switch on, the
-// files never appear, and nothing anywhere says why. Every failure is logged, and
-// the count lets the one caller the user is actually waiting on say so out loud.
+// Takes owned data rather than a &Store borrow: the per-prompt file I/O (a read to compare,
+// sometimes a write, for every eligible prompt) scales with the library on every save, and
+// the callers all hold the store mutex. spawn_sync_write_all clones what it needs and runs
+// this on a blocking task after the lock is dropped; activating the feature calls it
+// directly.
+// Returns how many files could not be written. A sync folder that silently stays empty is
+// the worst outcome here, so every failure is logged and the count lets the caller the user
+// is waiting on say so.
 pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) -> usize {
     if !sync_enabled(settings) {
         return 0;
@@ -1284,12 +1209,10 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         if on_disk == content.as_bytes() {
             sync_file_note_current(&path, hash);
         } else if sync_lock_acquire(&path) {
-            // Both sides changed: the file was edited outside the app since the app
-            // last touched it, and the prompt in the app has since changed too. The
-            // app's version wins the file, but the one being replaced is kept beside
-            // it instead of disappearing. A conflict is rare, a silent loss is not
-            // acceptable. The copy's name carries a dot, so it is neither a valid
-            // prompt id (the poll skips it) nor something the orphan sweep may touch.
+            // Both sides changed: the file was edited outside the app and the prompt in the app changed
+            // too. The app's version wins the file, and the replaced one is kept beside it. The copy's
+            // name carries a dot, so it is neither a valid prompt id (the poll skips it) nor something
+            // the orphan sweep may touch.
             if sync_edit_unsaved(&path, &on_disk, p, &placement) {
                 if let Some(copy) = sync_write_conflict_copy(&dir, &p.id, "", &on_disk) {
                     append_crash_log(&format!(
@@ -1329,17 +1252,11 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
     failed
 }
 
-// A queue rather than one independent spawn_blocking task per call - two rapid
-// saves used to race as two unrelated tasks, and whichever finished LAST won even
-// if it started from the OLDER snapshot, silently reverting the newer save's files
-// (and letting the orphan sweep delete/recreate files based on that stale state).
-// Only a dirty flag is queued, not a data snapshot: the worker re-fetches prompts/
-// settings fresh right before every write. A second review round of this fix
-// caught that queuing a snapshot at save time let an already-queued write still
-// land after the user disabled the feature (the snapshot's OWN captured settings
-// still read "enabled"); re-checking the live settings immediately before writing
-// closes that gap, and also means the actual file content written is never staler
-// than it has to be even if the worker was mid-write for a while.
+// A queue instead of one spawn_blocking task per call: two rapid saves raced as unrelated
+// tasks, and whichever finished last won even from the older snapshot, reverting the newer
+// save's files. Only a dirty flag is queued, not a snapshot; the worker re-fetches prompts
+// and settings right before every write, so a queued write cannot land after the feature
+// was disabled and the content is never staler than needed.
 pub(crate) struct SyncWriteQueue(pub(crate) Mutex<SyncWriteState>);
 #[derive(Default)]
 pub(crate) struct SyncWriteState {
@@ -1347,11 +1264,9 @@ pub(crate) struct SyncWriteState {
     pub(crate) active: bool,
 }
 
-// Called from save_prompts()/save_prompts_and_trash() after every successful
-// persist, all of which already hold the store mutex - this only ever sets two
-// bools under a brief lock, never touching the filesystem or cloning the library
-// itself, so it keeps that mutex from being held for however long a large or slow
-// sync folder takes to read and compare.
+// Called from save_prompts()/save_prompts_and_trash() after every successful persist, all
+// under the store mutex. It only sets two bools under a brief lock, so a large or slow sync
+// folder never holds that mutex.
 pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     if !sync_enabled(&store.settings) {
         return; // common case (feature off): nothing to queue
@@ -1372,18 +1287,15 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        // Fetch the queue state ONCE for this task's whole lifetime rather than
-        // re-fetching every loop iteration: a `try_state` miss mid-loop used to
-        // `return` without ever clearing `active`, which permanently latches
-        // `should_spawn` to false above and disables Markdown sync writes for the
-        // rest of the process. `Db` state (below) is refetched per-iteration on
-        // purpose -- only this queue's own liveness needs to be pinned down.
+        // Fetch the queue state once for the task's lifetime: a try_state miss mid-loop used to
+        // return without clearing active, which latches should_spawn to false and disables
+        // Markdown sync writes for the rest of the process. Db state is refetched per iteration on
+        // purpose.
         let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
         loop {
             {
-                // Check-and-clear (or check-and-go-inactive) as ONE critical section -
-                // a deposit between "queue looked empty" and "mark inactive" would
-                // otherwise sit unprocessed until some later unrelated save.
+                // Check-and-clear (or go inactive) in one critical section, or a deposit between "queue
+                // looked empty" and "mark inactive" would sit unprocessed until a later save.
                 let mut s = q.0.lock().unwrap_or_else(|e| e.into_inner());
                 if !s.pending {
                     s.active = false;
@@ -1413,12 +1325,11 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     });
 }
 
-// A prompt that left the library (deleted, trashed, or given an id this feature
-// refuses) takes its file with it: otherwise a stale file would come back as a "new"
-// prompt on the next inbound poll. ONLY files this feature could have written are
-// swept: the sync folder is a directory the USER picks, so it can hold their own
-// documents. A document without our `---` frontmatter is never imported by
-// sync_poll_once either, so deleting it would destroy data the app does not own.
+// A prompt that left the library (deleted, trashed, or given an id this feature refuses)
+// takes its file with it, or the stale file would come back as a new prompt on the next
+// poll. Only files this feature could have written are swept: the sync folder is
+// user-picked and may hold their own documents, and one without our --- frontmatter is
+// never imported, so deleting it would destroy data the app does not own.
 #[cfg(test)]
 pub(crate) fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
     sync_sweep_orphans_checked(dir, wanted, &|_| false);
@@ -1431,10 +1342,9 @@ pub(crate) fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::
         if !name.ends_with(".md") || name == "AGENTS.md" || wanted.contains(&name) {
             continue;
         }
-        // Only a name this feature could have written itself, i.e. one that is a
-        // valid prompt id. A copy the user made of one of our files ("notes copy.md",
-        // "plan (1).md") carries our header too, and deleting that as an orphan would
-        // destroy a file the user deliberately put there.
+        // Only a name this feature could have written, i.e. a valid prompt id. A user's copy of one
+        // of our files ("notes copy.md", "plan (1).md") carries our header too; deleting it as an
+        // orphan would destroy a file the user put there deliberately.
         if !Path::new(&name).file_stem().and_then(|s| s.to_str()).is_some_and(sync_safe_id) {
             continue;
         }
@@ -1512,20 +1422,17 @@ pub(crate) fn sync_poll_apply(
     let mut settings_changed = false;
     let mut placements_touched = false;
     for (stem, content, is_new) in candidates {
-        // Fields lives alongside content/name/etc: parse_frontmatter is cheap
-        // (string splitting) and apply_md_to_prompt already re-parses it itself, so
-        // a second pass here isn't worth threading through that function's own
-        // signature just to share one HashMap.
+        // parse_frontmatter is cheap string splitting and apply_md_to_prompt re-parses itself, so
+        // threading one shared HashMap through it is not worth the signature change.
         let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
         if is_new {
             if store.prompts.iter().any(|p| p.id == stem) {
                 continue; // added by something else in the meantime
             }
             if store.trash.iter().any(|p| p.id == stem) {
-                // Trashed here, written again by another machine that does not know:
-                // a second row with the same id would break restore, delete and purge.
-                // The file stays: the sweep only takes files this process wrote or read
-                // for a live prompt, and a later restore keeps this one as a copy.
+                // Trashed here, written again by a machine that does not know: a second row with the same
+                // id would break restore, delete and purge. The file stays (the sweep takes only files this
+                // process wrote or read for a live prompt), and a later restore keeps it as a copy.
                 continue;
             }
             let Some(np) = apply_md_with_tags(&sync_blank_prompt(stem), &content, &canonical_tags(&store.prompts)) else { continue };
@@ -1589,23 +1496,6 @@ pub(crate) fn sync_poll_apply(
     (changed, settings_changed)
 }
 
-// The inbound half: files -> DB. Runs on a timer (see start_sync_poll) rather than
-// a filesystem watcher, see the module note above for why.
-//
-// Used to hold the store mutex for the entire fs::read_dir + per-file
-// fs::read_to_string scan below - every other command needing that mutex (which
-// is nearly all of them) blocked for as long as reading the user's sync folder
-// took, and a slow or unreachable path (network share, unmounted drive) could
-// have blocked the whole app indefinitely. Now takes a brief lock only to check
-// the two guards and clone the prompt list, does every bit of file I/O against
-// that snapshot with no lock held, then takes a second brief lock to apply
-// whatever it actually found. Deliberately does NOT compute apply_md_to_prompt
-// during the unlocked scan (an earlier version of this fix did, and a review
-// caught that it would silently discard a UI edit made during the scan - the
-// snapshot-derived prompt would win over the real, more current one when
-// written back). Only the cheap "does this file differ from the snapshot" check
-// and the file-level lock happen unlocked; apply_md_to_prompt runs once the
-// store lock is back, against each prompt's CURRENT state.
 // Puts the files of candidates that were never applied back to "noted, not read".
 pub(crate) fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
     let mut seen = sync_seen_lock();
@@ -1626,13 +1516,11 @@ pub(crate) struct SyncToRead {
     pub(crate) stamp: SyncStamp,
 }
 
-// Stat-only pass over the folder: decides which files changed and have settled,
-// without reading a file or touching the store. A folder nothing changed in
-// costs one stat per file, and the caller copies no prompts or settings.
-//
-// Also returns (stem, key) of every file in the folder: the caller marks the files of
-// known prompts as known (SYNC_KNOWN) once it has the library's ids, every round and
-// for every such file, changed or not, so the sweep's gate stays as strict as before.
+// Stat-only pass over the folder: decides which files changed and have settled, without
+// reading a file or touching the store. An unchanged folder costs one stat per file and no
+// prompt or settings copy.
+// Also returns (stem, key) of every file: the caller marks files of known prompts as known
+// (SYNC_KNOWN) every round, changed or not, so the sweep's gate stays strict.
 pub(crate) type SyncScanOut = (Vec<SyncToRead>, usize, Vec<(String, String)>);
 pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
     let entries = fs::read_dir(dir)?;
@@ -1677,6 +1565,16 @@ pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
     Ok((to_read, files, all))
 }
 
+// The inbound half: files into the DB. Runs on a timer (see start_sync_poll) rather than a
+// filesystem watcher.
+//
+// The store mutex is held only briefly: once to check the guards and clone the prompt list,
+// and once to apply what was found. All file I/O runs against that snapshot with no lock,
+// so a slow or unreachable path (network share, unmounted drive) cannot block the app.
+// apply_md_to_prompt is deliberately not computed during the unlocked scan: it would
+// discard a UI edit made meanwhile. Only the cheap "does this file differ from the
+// snapshot" check and the file-level lock happen unlocked; the merge runs under the store
+// lock against each prompt's current state.
 pub(crate) fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
     let dir = {
@@ -1712,10 +1610,9 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
         sync_health_note_ok(&mut h, files, now_secs());
     }
     {
-        // The files of known prompts count as known (SYNC_KNOWN) every round, changed
-        // or not, taken against the library's ids (no prompt copy). The scan is stat
-        // only and has no snapshot, so the step lives here; the guards are rechecked
-        // under the same lock as before.
+        // The files of known prompts count as known (SYNC_KNOWN) every round, changed or not,
+        // taken against the library's ids. The scan is stat-only with no snapshot, so the step
+        // lives here; the guards are rechecked under the same lock.
         let store = lock(&state);
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
@@ -1742,11 +1639,8 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     };
     let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
     for SyncToRead { path, key, stem, name, stamp } in to_read {
-        // Acquire the file lock BEFORE reading, not after - the
-        // lock is meant to protect the read from a concurrent writer, which it did
-        // not while the read happened first and the lock was only taken afterward
-        // for the (much cheaper) bookkeeping. This is unchanged from the original
-        // pre-item-9 code, carried forward without noticing until flagged.
+        // Acquire the file lock before reading, so it actually protects the read from a concurrent
+        // writer.
         if !sync_lock_acquire(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
@@ -1816,11 +1710,10 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
             None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
         }
     });
-    // Prompts and Settings are separate tables/files (save_prompts never touches
-    // settings): a placement-only change with no content change would otherwise be
-    // applied in memory, echoed straight back out to the sync folder by
-    // save_prompts' own spawn_sync_write_all, and then silently lost on the next
-    // restart while the file on disk kept claiming the new placement forever.
+    // Prompts and Settings are saved separately (save_prompts never touches settings): without
+    // this a placement-only change would be echoed back out by save_prompts'
+    // spawn_sync_write_all and then lost on restart while the file kept claiming the new
+    // placement.
     if settings_changed {
         save_settings(app, &store.settings);
     }
@@ -1838,12 +1731,10 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     }
 }
 
-// ---- Letting go of the old folder when the user picks a new one ----
-//
-// The sync folder belongs to the USER. Deleting one is the single most one-way
-// thing this feature can do, so it is built to refuse rather than to guess: it
-// only ever removes files this app wrote itself, in one folder, never into
-// sub-folders, never by pattern, and the folder itself only if it ends up empty.
+// Letting go of the old folder. The sync folder belongs to the user and deleting one is the
+// most one-way thing this feature does, so it refuses rather than guesses: only files this
+// app wrote, in one folder, never in sub-folders, never by pattern, and the folder itself
+// only if it ends up empty.
 #[derive(Default)]
 pub(crate) struct SyncDirScan {
     /// Files this app wrote and may therefore remove.
@@ -1991,14 +1882,11 @@ pub(crate) fn sync_status(state: State<Db>) -> SyncStatus {
 }
 
 // Whether two paths name the same folder, or one lies inside the other. Compared by
-// identity (the resolved path), never by spelling: another letter case, a mapped
-// drive against its share path or a junction all reach the same files, and deleting
-// "the old folder" after writing into it would wipe what was just written.
-//
-// Case is ignored (this is a Windows-only app, and a share's server part can keep the
-// case it was typed in). A path that cannot be resolved right now (permissions, a
-// share briefly gone) counts as "maybe the same": the only thing this answer ever
-// gates is a delete, and a delete that wrongly does not happen loses nothing.
+// resolved identity, not spelling (letter case, a mapped drive against its share path, a
+// junction), since deleting "the old folder" after writing into it would wipe what was
+// just written. Case is ignored (Windows-only app). A path that cannot be resolved counts
+// as "maybe the same": this only gates a delete, and a wrongly skipped delete loses
+// nothing.
 pub(crate) fn sync_same_dir(a: &Path, b: &Path) -> bool {
     let (ca, cb) = match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => (x, y),
@@ -2036,12 +1924,11 @@ pub(crate) fn set_sync_dir_core(
     (old, new_dir, failures, enabled)
 }
 
-// Point the sync at another folder. `delete_old` is an explicit decision the WINDOW
-// made after asking the user. A backend that deleted a folder on its own initiative
-// is exactly the kind of surprise this app does not do. The folder that may be
-// deleted is never passed in: it is the one the app itself was syncing to a moment
-// ago, read from the settings here. Async so the one-off full write runs off the
-// main thread, and on a copy of the library so no window waits on it.
+// Point the sync at another folder. delete_old is an explicit decision the window made
+// after asking the user; the backend never deletes on its own initiative. The deletable
+// folder is not passed in but read from the settings: the one the app was syncing to a
+// moment ago. Async so the one-off full write runs off the main thread, on a copy of the
+// library.
 #[tauri::command(async)]
 pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool) -> Result<usize, String> {
     let trimmed = dir.trim();
@@ -2082,10 +1969,8 @@ pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete
     sync_delete_dir(&old, &data_dir(&app))
 }
 
-// Guards start_sync_poll against a second loop: the feature can be switched on
-// again before the previous loop has noticed it was switched off (or the setup
-// call and an immediate activation race), and either way only one timer may
-// ever be ticking at once.
+// Guards start_sync_poll against a second loop: the feature can be switched on again before
+// the previous loop noticed it was switched off, and only one timer may tick at once.
 pub(crate) static SYNC_POLL_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // Claims the single poll slot. False means a loop already holds it and this
@@ -2098,12 +1983,11 @@ pub(crate) fn sync_poll_release() {
     SYNC_POLL_RUNNING.store(false, Ordering::SeqCst);
 }
 
-// Run once before the first save of a session: every file that already sits in the
-// folder under the id of a library prompt is noted as known, and its stamp is
-// recorded. One that matches what this machine would write is handled; one that
-// differs (edited while the app was closed, or by another machine through the
-// cloud) stays unhandled, so a save landing before the poll has imported it keeps
-// a copy of it instead of overwriting it.
+// Run once before the first save of a session: every file in the folder under the id of a
+// library prompt is noted as known and its stamp recorded. One matching what this machine
+// would write is handled; one that differs (edited while the app was closed, or by another
+// machine) stays unhandled, so a save landing before the poll imported it keeps a copy
+// instead of overwriting it.
 pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
     for p in prompts.iter().filter(|p| sync_eligible(p)) {
         let path = dir.join(format!("{}.md", p.id));
