@@ -1615,6 +1615,7 @@ export default {
     recBarMuteMic: "Mikrofon stummschalten",
     recBarUnmuteMic: "Stummschaltung des Mikrofons aufheben",
     recBarMicLost: "Mikrofon getrennt: Aufnahme läuft ohne Mikrofon weiter",
+    recBarSystemLost: "Systemton nicht verfügbar: Aufnahme läuft ohne Systemton weiter",
     pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
     colorCopied: "Farbe kopiert",
     flagColorPicker: "Farbpipette",
