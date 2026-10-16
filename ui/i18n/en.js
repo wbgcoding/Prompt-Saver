@@ -1615,6 +1615,7 @@ export default {
     recBarMuteMic: "Mute microphone",
     recBarUnmuteMic: "Unmute microphone",
     recBarMicLost: "Microphone disconnected: recording continues without it",
+    recBarSystemLost: "System audio unavailable: recording continues without it",
     pickFailed: "Couldn't copy the color. Try picking again.",
     colorCopied: "Color copied",
     flagColorPicker: "Color picker (pipette)",
