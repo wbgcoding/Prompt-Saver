@@ -266,6 +266,11 @@ export function bindCapture() {
     invoke("set_pending_recording", { path: path || null }).catch(() => {});
   }
   window.addEventListener("pagehide", () => { invoke("set_pending_recording", { path: null }).catch(() => {}); });
+  // The running crop/conversion of the open dialog and the converted file a
+  // closed dialog's conversion finished anyway, so a close can wait for ffmpeg
+  // to let go of the take before moving it away.
+  let recWork = Promise.resolve();
+  let recLateOutput = "";
   let recGen = 0; // invalidated on every close/discard so a late progress tick or a
                    // finished conversion from a superseded recording is ignored
   let recProgressOff = null;
@@ -337,6 +342,8 @@ export function bindCapture() {
       if (!ok) return;
     }
     recGen += 1;
+    recLateOutput = "";
+    const work = recWork;
     invoke("cancel_recording_convert").catch(() => {});
     invoke("cancel_recording_crop").catch(() => {});
     if (recProgressOff) { recProgressOff(); recProgressOff = null; }
@@ -351,12 +358,17 @@ export function bindCapture() {
     setPendingRec("");
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
+    if (shouldDelete) await work.catch(() => {});
     if (shouldDelete && path) {
       // A number back means it actually moved to "verworfen" (see
       // discard_recording_file) -- null/failure stays silent, same as before.
       const keepH = await invoke("discard_recording_file", { path }).catch(() => null);
       if (keepH != null) toast(t("recDiscardedToast").replace("{hours}", String(Math.round(keepH))));
     }
+    // A conversion that finished before the cancel took hold left its output behind.
+    const late = recLateOutput;
+    recLateOutput = "";
+    if (shouldDelete && late && late !== path) invoke("discard_recording_file", { path: late }).catch(() => {});
     if (shouldDelete) invoke("discard_recording_parts").catch(() => {});
   }
   // needsCrop: the window recording's canvas was bigger than the window
@@ -400,6 +412,7 @@ export function bindCapture() {
   }
   async function openRecModal(rawPath, needsCrop) {
     setPendingRec(rawPath);
+    recLateOutput = "";
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
     recGen += 1;
@@ -465,7 +478,7 @@ export function bindCapture() {
     }
     try {
       const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
-      if (gen !== recGen) return;
+      if (gen !== recGen) { recLateOutput = outPath; return; }
       recStatus.classList.remove("rec-status-cancellable");
       recStatus.onclick = null;
       recStatus.textContent = "";
@@ -551,7 +564,7 @@ export function bindCapture() {
     // "Finish and continue" split this recording into several files. The
     // dialog opens the LAST one; the backend keeps the earlier parts and they
     // follow it on Save, Attach or Edit and go to the discard folder with it.
-    if (path) openRecModal(path, !!e.payload?.needs_crop);
+    if (path) recWork = openRecModal(path, !!e.payload?.needs_crop);
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());
   recModal.addEventListener("pointerdown", (e) => {
