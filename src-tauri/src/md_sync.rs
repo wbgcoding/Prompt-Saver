@@ -1231,14 +1231,20 @@ pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings:
     // postpones the sweep to the next write.
     let live = |id: &str| match app.try_state::<Db>() {
         Some(state) => match state.try_lock() {
-            Ok(store) => store.prompts.iter().any(|p| p.id == id),
-            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().prompts.iter().any(|p| p.id == id),
+            Ok(store) => sync_id_is_live(&store.prompts, id),
+            Err(std::sync::TryLockError::Poisoned(e)) => sync_id_is_live(&e.into_inner().prompts, id),
             Err(std::sync::TryLockError::WouldBlock) => true,
         },
         None => true,
     };
     let _run = sync_run_lock();
     sync_write_dir_checked(&dir, prompts, settings, &live)
+}
+
+// A library entry that still owns its file. A confidential one does not: its
+// plaintext file must be swept once the entry turned confidential.
+pub(crate) fn sync_id_is_live(prompts: &[Prompt], id: &str) -> bool {
+    prompts.iter().any(|p| p.id == id && sync_eligible(p))
 }
 
 // The file half of sync_write_all_impl: one call writes every eligible prompt into

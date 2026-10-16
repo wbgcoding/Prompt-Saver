@@ -5219,6 +5219,22 @@ fn sync_sweep_spares_a_file_whose_prompt_came_back_meanwhile() {
 }
 
 #[test]
+fn sync_sweep_removes_the_file_of_an_entry_that_became_confidential() {
+    let dir = sync_tmp_dir("sweep-secret");
+    let mut a = sync_test_prompt();
+    a.id = "a".into();
+    let mut b = sync_test_prompt();
+    b.id = "b".into();
+    sync_write_dir(&dir, &[a.clone(), b.clone()], &Settings::default());
+    assert!(dir.join("b.md").exists());
+    b.secret = true;
+    let library = vec![a.clone(), b];
+    sync_write_dir_checked(&dir, &[a], &Settings::default(), &|id| sync_id_is_live(&library, id));
+    assert!(!dir.join("b.md").exists(), "the plaintext file of a now confidential entry must go");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn sync_write_ignores_a_touch_that_left_the_bytes_alone() {
     let dir = sync_tmp_dir("touch-only");
     let path = dir.join("p1.md");
