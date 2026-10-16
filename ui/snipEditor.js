@@ -14,11 +14,10 @@ const snipWheelOn = () => settings.ui_flags?.numFieldWheel !== false;
 
 export function initSnipEditor() {
   // ==== screenshot editor ====
-  // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
-  // data URL and hands back an edited one; everything downstream of #snip-modal is
-  // untouched. Every knob below reads live from the expert menu.
-  // Starting sizes of a tool nobody has used yet. After that each tool starts with
-  // the size it was last used at (ui_texts "snipToolSizes", see snipRememberSize).
+  // Opens right after a capture, before #snip-modal. Pure frontend: it takes a data URL and
+  // hands back an edited one. Every knob reads live from the expert menu.
+  // Starting sizes of a tool nobody has used yet; afterwards each tool starts at its last used
+  // size (ui_texts "snipToolSizes", see snipRememberSize).
   const SNIP_DEFAULT_SIZES = { pen: 6, marker: 18, line: 4, arrow: 4, rect: 4, ellipse: 4, step: 8, textPx: 24, outlinePx: 3, blockPx: 12, dim: 0.55 };
   const SNIP_ARROW_HEAD_SCALE = 3.2;
   const SNIP_SIZE_LIMITS = { width: [1, 80], fontPx: [10, 96], outlinePx: [1, 12], blockPx: [4, 64], dim: [0.1, 0.9] };
@@ -53,14 +52,13 @@ export function initSnipEditor() {
     }, 400);
   }
   const SNIP_EDIT_UNDO_MAX = 50; // undo steps kept per edit
-  // Refuse a target this large outright rather than risk an out-of-memory
-  // canvas allocation -- comfortably above any real screen resolution.
+  // Refuse a target this large rather than risk an out-of-memory canvas allocation; far above
+  // any real screen resolution.
   const SNIP_SCALE_MAX_AREA = 80_000_000;
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_TEXT_BACK = () => EXPERT_DROPDOWNS.snipTextBack.get();
-  // The tool the editor opens with: a fixed choice from the expert menu, or (the
-  // default) the tool picked last, kept in ui_texts "snipLastTool". A first open
-  // or a stale id falls back to the hand.
+  // The tool the editor opens with: a fixed expert-menu choice or (default) the tool picked
+  // last, kept in ui_texts "snipLastTool". A first open or a stale id falls back to the hand.
   const SNIP_EDIT_DEFAULT_TOOL = () => {
     const pick = txt("snipEditDefaultTool") || "last";
     if (pick !== "last") return pick;
@@ -91,8 +89,7 @@ export function initSnipEditor() {
     step: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><text x="12" y="15.5" font-size="9" text-anchor="middle" fill="currentColor" font-family="sans-serif">1</text></svg>',
     pixelate: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" opacity="0.5"/><rect x="3" y="14" width="7" height="7" opacity="0.5"/><rect x="14" y="14" width="7" height="7"/></g></svg>',
     spotlight: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.6" d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>',
-    // The only way to reach panning used to be an undiscoverable middle-click
-    // or holding Space -- a real toolbar entry for the exact same gesture.
+    // Panning as a toolbar entry, for the same gesture as middle-click or holding Space.
     hand: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M8 13V6a1.5 1.5 0 0 1 3 0v5.5M11 11.2V4.5a1.5 1.5 0 0 1 3 0V11M14 11.3V6a1.5 1.5 0 0 1 3 0v7M17 12.5V9a1.5 1.5 0 0 1 3 0v6c0 3.6-2.2 6.5-6 6.5h-1c-2.7 0-4-.9-5.4-2.8L4.8 15c-.6-.9-.3-1.9.5-2.3.7-.4 1.5-.2 2.1.5L8 14"/></svg>',
   };
   const SNIP_EYEDROP_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M15 5l4 4-9.5 9.5H5v-4.5L14.5 5Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M13 7l4 4"/></svg>';
@@ -121,8 +118,8 @@ export function initSnipEditor() {
   const snipEditTextInput = $("snip-edit-text-input");
   const snipEditMeasureEl = $("snip-edit-measure");
   const snipEditNudgeHintEl = $("snip-edit-nudge-hint");
-  // Right-click menu for duplicating/deleting a shape, built once like the
-  // other dynamic popovers (tileFolderPop, viewsPop) instead of static markup.
+  // Right-click menu for duplicating/deleting a shape, built once like the other dynamic
+  // popovers.
   const snipCtxPop = document.createElement("div");
   snipCtxPop.className = "ctx snip-ctx-pop hidden";
   snipCtxPop.setAttribute("role", "menu");
@@ -159,9 +156,9 @@ export function initSnipEditor() {
   const snipEditBaseCtx = snipEditBaseCv.getContext("2d");
   const snipEditLiveCtx = snipEditLiveCv.getContext("2d");
 
-  // Drawing model: SE.ops is the ordered operation list ("base image, then every
-  // operation in sequence"). SE.rawCanvas holds ONLY the untouched capture (native
-  // size) so pixelate always samples the base, never already-drawn operations.
+  // SE.ops is the ordered operation list (base image, then every operation in sequence).
+  // SE.rawCanvas holds only the untouched capture at native size, so pixelate always samples
+  // the base, never already-drawn operations.
   const SE = {
     active: false, img: null, rawCanvas: null, w: 0, h: 0,
     ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
@@ -170,9 +167,8 @@ export function initSnipEditor() {
     onApply: null, onCancel: null,
   };
 
-  // Hold the toolbar button (or V) to peek at the untouched capture, or tap
-  // it to lock the original on screen until pressed again; the same control
-  // drives both the button and the key, see the wiring further down.
+  // Hold the toolbar button (or V) to peek at the untouched capture, or tap it to lock the
+  // original on screen until pressed again. One control drives both button and key.
   const snipOriginalToggle = makeHoldOrTapToggle((shown) => {
     SE.showRaw = shown;
     snipEditRedrawBase();
@@ -181,14 +177,13 @@ export function initSnipEditor() {
   });
 
   function snipEditClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
-  // One zoom step (20 %) for the wheel, the buttons and the keys, and the
-  // 8x ceiling, the same in this editor and the video editor.
+  // One zoom step (20 %) for wheel, buttons and keys, and the 8x ceiling; same as the video
+  // editor.
   const snipZoomStepFactor = 1.2;
   const snipZoomMax = 8;
-  // Zoom is image pixels per DEVICE pixel (100 % = one image pixel on one screen
-  // pixel), so a CSS length is zoom / devicePixelRatio per image pixel. Every
-  // conversion between client (CSS) coordinates and image coordinates goes
-  // through this one factor.
+  // Zoom is image pixels per device pixel (100 % = one image pixel on one screen pixel), so a
+  // CSS length is zoom / devicePixelRatio per image pixel. Every conversion between client
+  // (CSS) coordinates and image coordinates goes through this factor.
   function snipEditScale() { return SE.zoom / (window.devicePixelRatio || 1); }
   function snipEditDist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
   function snipEditNormRect(r) {
@@ -198,9 +193,8 @@ export function initSnipEditor() {
     }
     return r;
   }
-  // The one place image-pixel coordinates are computed. Canvas backing stores are
-  // always the image's native size; the CSS display size is SE.w * snipEditScale(),
-  // and clientX/clientY and getBoundingClientRect are both CSS pixels.
+  // The one place image-pixel coordinates are computed. Canvas backing stores are the image's
+  // native size; the CSS display size is SE.w * snipEditScale().
   function snipEditToImage(ev) {
     const r = snipEditBaseCv.getBoundingClientRect();
     const k = snipEditScale();
@@ -209,8 +203,8 @@ export function initSnipEditor() {
       y: snipEditClamp((ev.clientY - r.top) / k, 0, SE.h),
     };
   }
-  // Bounding rect of an op for snap purposes -- a rect-shaped op already has
-  // one, a two-point op (line/arrow/pen/marker) gets the box around its points.
+  // Bounding rect of an op for snapping: a rect-shaped op has one, a two-point op (line, arrow,
+  // pen, marker) gets the box around its points.
   function snipEditOpBoundingRect(op) {
     if (op.rect) return op.rect;
     if (op.points && op.points.length >= 2) {
@@ -219,8 +213,8 @@ export function initSnipEditor() {
     }
     return null;
   }
-  // The canvas itself (its four edges plus both centres) counts as one target,
-  // then every already-placed shape adds its own edges and centres.
+  // The canvas itself (four edges plus both centres) is one target; every placed shape adds
+  // its own edges and centres.
   function snipEditSnapTargets() {
     const targets = [{ x: 0, y: 0, w: SE.w, h: SE.h }];
     for (const op of SE.ops) {
@@ -229,9 +223,8 @@ export function initSnipEditor() {
     }
     return targets;
   }
-  // Set by snipEditSnapPoint while a drag is snapped, read by the live-preview
-  // draw functions to show a thin accent-coloured guide line; cleared again as
-  // soon as nothing is snapped, so it never lingers after the pointer moves on.
+  // Set by snipEditSnapPoint while a drag is snapped and read by the live-preview draw
+  // functions for a thin guide line; cleared once nothing is snapped.
   let snipEditGuide = null;
   function snipEditSnapPoint(pt) {
     if (!SNIP_EDIT_SNAP()) { snipEditGuide = null; return pt; }
@@ -240,8 +233,7 @@ export function initSnipEditor() {
     snipEditGuide = (r.guideX != null || r.guideY != null) ? { x: r.guideX, y: r.guideY } : null;
     return { x: r.x, y: r.y };
   }
-  // Alt disables snapping for the duration of the drag, same as the shift-key
-  // constraint below is per-drag rather than a persistent mode.
+  // Alt disables snapping for the duration of the drag.
   function snipEditApplySnap(pt0, altKey) {
     if (altKey) { snipEditGuide = null; return pt0; }
     return snipEditSnapPoint(pt0);
@@ -263,8 +255,8 @@ export function initSnipEditor() {
     if (!SE.perTool[tool]) {
       const widths = SNIP_WIDTH_PRESETS_OF(tool);
       const saved = snipSizesRead()[tool];
-      // A remembered size counts only when it is a number inside the field's range;
-      // anything else (a broken or hand-edited entry) falls back to the start size.
+      // A remembered size counts only when it is a number inside the field's range; anything else
+      // falls back to the start size.
       const pick = (field, def) => {
         const lim = SNIP_SIZE_LIMITS[field];
         const v = saved && typeof saved === "object" ? Number(saved[field]) : NaN;
@@ -316,12 +308,10 @@ export function initSnipEditor() {
     snipEditStrokeSmoothPath(ctx, op.points);
     ctx.restore();
   }
-  // Collects the whole stroke on its own transparent layer first (so self-overlap
-  // within one stroke never darkens further), then composites it once with alpha.
-  // Reused across calls instead of a fresh full-resolution canvas per marker
-  // stroke -- snipEditRedrawBase calls this once per marker op on EVERY redraw
-  // (every new operation, undo/redo, nudge and tool switch), so cost used to
-  // scale with marker count times image resolution.
+  // Collects the whole stroke on its own transparent layer (so self-overlap within one stroke
+  // never darkens further), then composites it once with alpha. The layer is reused across
+  // calls: this runs once per marker op on every redraw, so a fresh full-resolution canvas each
+  // time would cost marker count times image resolution.
   let snipEditMarkerTmp = null;
   function snipEditDrawMarkerOp(ctx, op) {
     const tmp = snipEditMarkerTmp || (snipEditMarkerTmp = document.createElement("canvas"));
@@ -351,19 +341,14 @@ export function initSnipEditor() {
     ctx.stroke();
     ctx.restore();
   }
-  // Used to draw the full shaft (round-capped) all the way to the tip and
-  // then lay a short, fairly wide triangle on top -- the round cap regularly
-  // poked out from under/beside that triangle, looking like a buggy double
-  // point. Now the shaft stops exactly at the head's own back edge (so the
-  // cap's bulge lands under the head's fill, never past its sides), and the
-  // head itself is a longer, more slender point instead of a stubby wedge.
+  // The shaft stops at the head's back edge, so its round cap lands under the head's fill and
+  // never pokes out beside the triangle; the head is a long, slender point.
   function snipEditDrawArrowOp(ctx, op) {
     const [a, b] = op.points;
     const dist = Math.hypot(b.x - a.x, b.y - a.y);
     const angle = dist > 0 ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
-    // Capped at the actual drag distance -- otherwise a drag shorter than one
-    // arrowhead put the shaft's "back" point PAST the start point, flipping
-    // the shaft to point backwards during the first few pixels of every drag.
+    // Capped at the drag distance: a drag shorter than one arrowhead would otherwise put the
+    // shaft's back point past the start and flip the shaft backwards.
     const headLen = Math.min(7 + op.width * SNIP_ARROW_HEAD_SCALE, dist); // tip-to-back distance along the shaft
     const headHalfAngle = Math.PI / 9;  // ~20 deg either side -- slender, not dumpy
     const backX = b.x - headLen * Math.cos(angle);
@@ -453,8 +438,8 @@ export function initSnipEditor() {
     ctx.fillText(String(n), op.point.x, op.point.y + 1);
     ctx.restore();
   }
-  // Always samples SE.rawCanvas (the untouched capture) -- never already-drawn
-  // operations -- so overlapping pixelation never compounds on itself.
+  // Always samples SE.rawCanvas (the untouched capture), so overlapping pixelation never
+  // compounds on itself.
   function snipEditDrawPixelate(ctx, rect, blockPx) {
     const { x, y, w, h } = snipEditNormRect(rect);
     if (w < 2 || h < 2) return;
@@ -505,23 +490,20 @@ export function initSnipEditor() {
     }
   }
 
-  // Full recomposite: base image, then every finished operation in sequence. Only
-  // called on discrete events (undo/redo/crop-change/zoom-change/finalize) -- never
-  // per mousemove, so a 4K capture never redraws its whole bitmap on a drag.
-  // `bare` leaves the crop dimming out, for the one caller that bakes this canvas
-  // into the image itself (a resize).
+  // Full recomposite: base image, then every finished operation in sequence. Only called on
+  // discrete events (undo/redo, crop or zoom change, finalize), never per mousemove, so a 4K
+  // capture does not redraw its whole bitmap on a drag. `bare` leaves the crop dimming out for
+  // the one caller that bakes this canvas into the image (a resize).
   function snipEditRedrawBase(bare) {
     if (!SE.img) return; // no session (the editor was closed)
     const ctx = snipEditBaseCtx;
     ctx.clearRect(0, 0, SE.w, SE.h);
-    // Showing the original means the untouched capture, not just "before the
-    // pending annotations" -- SE.img is the last baked composite (a scale op
-    // bakes every annotation drawn before it), so only SE.rawCanvas is still
-    // the same pixels the capture started with.
+    // "Original" means the untouched capture: SE.img is the last baked composite (a scale op
+    // bakes every earlier annotation), so only SE.rawCanvas still holds the capture's pixels.
     if (SE.showRaw) { ctx.drawImage(SE.rawCanvas, 0, 0, SE.w, SE.h); return; }
     ctx.drawImage(SE.img, 0, 0, SE.w, SE.h);
-    // A resize bakes the markers placed so far into SE.img; the scale op remembers
-    // how many, so the next marker carries on from there instead of restarting at 1.
+    // A resize bakes the markers placed so far into SE.img; the scale op remembers how many, so
+    // the next marker carries on from there.
     const baked = SE.ops.find((o) => o.tool === "scale");
     let stepN = baked ? baked.stepBase : 0;
     for (const op of SE.ops) {
@@ -541,8 +523,7 @@ export function initSnipEditor() {
     $("snip-edit-redo").disabled = !SE.redo.length;
   }
   // A resize keeps the image, raw capture and op list from before it so Undo can swap them
-  // back. Once undo can no longer reach the resize those are dead weight, and every earlier
-  // resolution of the screenshot would otherwise stay alive until the next editor session.
+  // back. Once undo cannot reach the resize any more, those are released.
   function snipEditReleaseResize(op) {
     op.prevImg = null;
     op.prevRawCanvas = null;
@@ -553,9 +534,9 @@ export function initSnipEditor() {
     const n = Math.min(SE.floor, SE.ops.length);
     for (let i = 0; i < n; i++) if (SE.ops[i].tool === "scale") snipEditReleaseResize(SE.ops[i]);
   }
-  // Resizes bake the history into the image, so they chain through `prevOps` instead of
-  // piling up in SE.ops: the undo limit has to be applied along that chain. The resize past
-  // the limit is released, and the next newer one remembers it as permanent (its floor).
+  // Resizes bake the history into the image, so they chain through `prevOps` instead of piling
+  // up in SE.ops, and the undo limit is applied along that chain. The resize past the limit is
+  // released and the next newer one remembers it as permanent (its floor).
   function snipEditTrimResizeChain(newest) {
     let depth = 1;
     let cur = newest;
@@ -571,14 +552,12 @@ export function initSnipEditor() {
       cur = older;
     }
   }
-  // `nudge` is what the arrow keys act on afterwards: the op itself by default, or
-  // whatever the caller names (an undo entry is not something to nudge).
+  // `nudge` is what the arrow keys act on afterwards: the op itself by default, or whatever the
+  // caller names (an undo entry is not something to nudge).
   function snipEditPushOp(op, nudge) {
     SE.ops.push(op);
-    // SE.ops IS the render list -- never drop a rendered op. Once the undo
-    // window is exceeded, advance the floor instead of shifting the oldest op out;
-    // it stays drawn (snipEditRedrawBase still walks every op) but becomes
-    // permanent, undo just can no longer walk back past it.
+    // SE.ops is the render list, so a rendered op is never dropped. Past the undo window the
+    // floor advances instead: the oldest op stays drawn but undo cannot walk back past it.
     if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX;
     snipEditReleaseBelowFloor();
     SE.redo.length = 0;
@@ -587,10 +566,9 @@ export function initSnipEditor() {
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
   }
-  // Moving, resizing, re-pointing or deleting a finished shape or text changes an
-  // op that already sits in SE.ops, so it gets an undo entry of its own: a
-  // {tool: "edit"} record that is never drawn, only applied backwards by undo and
-  // forwards again by redo (see snipEditUndoEdit / snipEditRedoEdit).
+  // Moving, resizing, re-pointing or deleting a finished shape or text gets an undo entry of
+  // its own: a {tool: "edit"} record that is never drawn, only applied backwards by undo and
+  // forwards by redo (see snipEditUndoEdit / snipEditRedoEdit).
   function snipEditGeom(op) {
     const g = {};
     if (op.points) g.points = op.points.map((p) => ({ ...p }));
@@ -608,9 +586,8 @@ export function initSnipEditor() {
     if (JSON.stringify(before) === JSON.stringify(after)) return;
     snipEditPushOp({ tool: "edit", kind: "geom", op, before, after }, SE.lastNudged);
   }
-  // Puts an op back next to the neighbours it had when it left SE.ops. Positions are
-  // never stored as raw indexes: a crop commit or discard in between filters an op
-  // out and would shift every index behind it.
+  // Puts an op back next to the neighbours it had when it left SE.ops. Positions are never raw
+  // indexes: a crop commit or discard in between would shift every index behind it.
   function snipEditReinsert(op, prev, next) {
     let i = next ? SE.ops.indexOf(next) : -1;
     if (i < 0) {
@@ -631,25 +608,23 @@ export function initSnipEditor() {
       SE.floor = Math.max(0, SE.floor - e.floorShift);
     }
   }
-  // Spotlight/crop: exactly one may exist -- a new one replaces the old rather than
-  // stacking two dimming layers.
+  // Spotlight/crop: at most one exists; a new one replaces the old rather than stacking two
+  // dimming layers.
   function snipEditPushUniqueOp(tool, op) {
     const at = SE.ops.findIndex((o) => o.tool === tool);
-    // A replaced spotlight or crop is something the user made: Ctrl+Z on its replacement
-    // must bring it back, so the new op remembers it and where it sat.
+    // A replaced spotlight or crop is the user's work, so the new op remembers it and where it
+    // sat, and Ctrl+Z on the replacement brings it back.
     if ((tool === "spotlight" || tool === "crop") && at >= 0) {
       op.replaced = { op: SE.ops[at], prev: SE.ops[at - 1] || null, next: SE.ops[at + 1] || null, floorShift: at < SE.floor ? 1 : 0 };
     }
-    // floor is a count-based boundary into SE.ops; only an entry that sat below
-    // it shifts it (an undoable op above the floor leaving must not re-lock one).
+    // floor is a count-based boundary into SE.ops; only an entry that sat below it shifts it.
     SE.floor = Math.max(0, SE.floor - SE.ops.slice(0, SE.floor).filter((o) => o.tool === tool).length);
     SE.ops = SE.ops.filter((o) => o.tool !== tool);
     snipEditPushOp(op);
   }
-  // Halving-step resample: a single drawImage straight down to a much smaller
-  // canvas blurs/aliases badly (the classic "shrunk screenshot text turns to
-  // mush" problem), so downscaling by more than 2x repeatedly halves first and
-  // only does the final, non-halved step at the end. Upscaling runs in one step.
+  // Halving-step resample: one drawImage straight down to a much smaller canvas aliases badly
+  // (shrunk text turns to mush), so downscaling by more than 2x halves repeatedly first and
+  // does only the final step non-halved. Upscaling is one step.
   function snipEditScaleCanvas(src, targetW, targetH) {
     let cur = src, curW = src.width, curH = src.height;
     while (curW > targetW * 2 && curH > targetH * 2) {
@@ -675,30 +650,26 @@ export function initSnipEditor() {
     octx.drawImage(cur, 0, 0, curW, curH, 0, 0, targetW, targetH);
     return out;
   }
-  // Scaling is an operation like any other tool, not a destructive edit: it
-  // pushes a "scale" op so undo/redo work the normal way. Every other op stores
-  // its coordinates in image pixels, so instead of trying to rescale each one
-  // individually this bakes the base image and every op drawn before it into a
-  // new canvas at the new size (a flatten step) -- see the "scale" skip in
-  // snipEditRedrawBase and the special-cased undo/redo just below.
+  // Scaling is an operation like any other, so undo/redo work the normal way. Every op stores
+  // its coordinates in image pixels, so instead of rescaling each one this bakes the base
+  // image and every op before it into a new canvas at the new size (see the "scale" skip in
+  // snipEditRedrawBase and the undo/redo handling just below).
   function snipEditApplyScale(targetW, targetH) {
     targetW = Math.max(1, Math.round(targetW));
     targetH = Math.max(1, Math.round(targetH));
     if (targetW * targetH > SNIP_SCALE_MAX_AREA) { toast(t("snipScaleTooLarge")); return false; }
     if (SE.tool === "crop") snipEditCropCommit(); // same guard snipEditExportDataUrl uses for a drawn-but-uncommitted crop
     snipEditFinishTextIfOpen();
-    // With the original locked on, the base canvas shows only the raw capture and
-    // the bake below would drop every annotation; export resets it the same way.
+    // With the original locked on, the base canvas shows only the raw capture and the bake below
+    // would drop every annotation; export resets it the same way.
     snipOriginalToggle.reset();
     const prevW = SE.w, prevH = SE.h, prevImg = SE.img, prevRawCanvas = SE.rawCanvas, prevOps = SE.ops.slice();
     const sx = targetW / SE.w, sy = targetH / SE.h;
     snipEditRedrawBase(true); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in
     const baked = snipEditScaleCanvas(snipEditBaseCv, targetW, targetH);
     const rawBaked = snipEditScaleCanvas(SE.rawCanvas, targetW, targetH);
-    // Crop is never rasterized (it only ever dims an overlay preview, see
-    // snipEditRedrawBase) -- its rect is the one thing stored in image-pixel
-    // coordinates that survives the bake, so it is rescaled by hand instead of
-    // being baked away, or it would point at the wrong region afterward.
+    // Crop is never rasterized (it only dims an overlay preview); its rect is the one
+    // image-pixel value that survives the bake, so it is rescaled by hand.
     const keptOps = SE.ops
       .filter((o) => o.tool === "crop")
       .map((o) => ({ ...o, rect: { x: o.rect.x * sx, y: o.rect.y * sy, w: o.rect.w * sx, h: o.rect.h * sy } }));
@@ -727,11 +698,8 @@ export function initSnipEditor() {
     snipEditFit();
     return true;
   }
-  // Scale bakes the whole composite into a new SE.img/SE.rawCanvas at a new
-  // SE.w/SE.h (see snipEditApplyScale) instead of being replayed like every
-  // other op, so undo/redo can't just pop/push it -- the op itself carries the
-  // before/after canvases and sizes needed to swap the working image back and
-  // forth, same idea as SE.rawCanvas already keeping the untouched capture.
+  // Scale replaces SE.img/SE.rawCanvas and SE.w/SE.h instead of being replayed like other ops,
+  // so the op carries the before/after canvases and sizes needed to swap them back and forth.
   function snipEditRestoreScaleState(w, h, img, rawCanvas, ops) {
     SE.w = w;
     SE.h = h;
@@ -791,10 +759,8 @@ export function initSnipEditor() {
     if (SE.tool === "crop") snipEditFitToCrop();
     snipEditUpdateUndoRedoButtons();
   }
-  // Shown only while something is nudgeable -- the arrow keys have no other
-  // job in this editor (no frames to step through), but a silent behaviour
-  // switch is still a silent behaviour switch, so a short line always says
-  // what they currently do.
+  // Shown only while something is nudgeable. The arrow keys have no other job in this editor,
+  // but a short line always says what they currently do.
   function snipEditUpdateNudgeHint() {
     snipEditNudgeHintEl.classList.toggle("hidden", !SE.lastNudged);
   }
@@ -803,9 +769,7 @@ export function initSnipEditor() {
     const dx = key === "ArrowLeft" ? -amount : key === "ArrowRight" ? amount : 0;
     const dy = key === "ArrowUp" ? -amount : key === "ArrowDown" ? amount : 0;
     if (resize) {
-      // Only a rect has a size to change; a line/arrow/pen/text/step has none,
-      // so Ctrl+Arrow is simply a no-op for those instead of guessing at what
-      // "bigger" would mean for a bare pair of points.
+      // Only a rect has a size to change; for the other tools Ctrl+Arrow is a no-op.
       if (!op.rect) return;
       op.rect.w = Math.max(4, op.rect.w + dx);
       op.rect.h = Math.max(4, op.rect.h + dy);
@@ -814,9 +778,8 @@ export function initSnipEditor() {
       if (op.point) { op.point.x += dx; op.point.y += dy; }
       if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
     }
-    // One undo step per run of nudges: a run on the same op and tool folds into the
-    // entry just below the top; a different op or tool, or any other action in
-    // between, starts a new one.
+    // One undo step per run of nudges: a run on the same op and tool folds into the entry just
+    // below the top; a different op or tool, or any other action in between, starts a new one.
     const last = SE.ops[SE.ops.length - 1];
     if (last && last.tool === "edit" && last.kind === "geom" && last.nudgeOf === op && last.nudgeTool === SE.tool) {
       last.after = snipEditGeom(op);
@@ -828,14 +791,11 @@ export function initSnipEditor() {
       if (JSON.stringify(before) === JSON.stringify(after)) { snipEditRedrawBase(); }
       else snipEditPushOp({ tool: "edit", kind: "geom", op, before, after, nudgeOf: op, nudgeTool: SE.tool }, op);
     }
-    // The move/resize above only touched the op's own coordinates -- the
-    // selection handles are a separate live-layer drawing keyed to the same
-    // op, and would otherwise keep showing the pre-nudge position/size.
+    // The selection handles are a separate live-layer drawing keyed to the op and would keep
+    // showing the pre-nudge position and size.
     if (SE.selOp === op) snipEditDrawShapeSelectionLive();
-    // The crop tool's own live overlay (handles + dim) is drawn from SE.cropRect,
-    // not from the committed op -- without this, nudging a just-committed crop
-    // moves what gets exported while the on-screen handles stay put, so Apply/
-    // Copy would silently produce an image cropped from a region never shown.
+    // The crop tool's live overlay is drawn from SE.cropRect, not the committed op; without this
+    // a nudged crop would export a region the on-screen handles never showed.
     if (op.tool === "crop" && op.rect) {
       SE.cropRect = { ...op.rect };
       snipEditDrawCropOverlayLive();
@@ -869,9 +829,8 @@ export function initSnipEditor() {
   // to the whole image is no crop at all.
   function snipEditFullCropRect() { return { x: 0, y: 0, w: SE.w, h: SE.h }; }
   function snipEditCropIsFull(r) { return !!r && r.x === 0 && r.y === 0 && r.w === SE.w && r.h === SE.h; }
-  // Same handle-to-cursor mapping the video editor already uses for its own
-  // crop/overlay handles (video.css .ve-h-*): a directional resize cursor at
-  // each corner/edge and a move cursor inside a box smaller than the image.
+  // Handle-to-cursor mapping, same as the video editor's crop handles (video.css .ve-h-*): a
+  // directional resize cursor at each corner and edge, a move cursor inside a smaller box.
   const SNIP_CROP_HANDLE_CURSORS = {
     nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize",
     w: "ew-resize", e: "ew-resize",
@@ -889,8 +848,8 @@ export function initSnipEditor() {
     snipEditClearLive();
     const r = SE.cropRect;
     if (!r) return;
-    // Heavier dim once the box is at rest, so the picture reads as cropped; lighter
-    // while an edge is being dragged, so what would come back stays visible.
+    // Heavier dim once the box is at rest so the picture reads as cropped; lighter while an edge
+    // is dragged so what would come back stays visible.
     snipEditDrawCropDim(snipEditLiveCtx, r, SE.drag ? 0.55 : 0.85);
     const hs = 8;
     snipEditLiveCtx.save();
@@ -904,9 +863,9 @@ export function initSnipEditor() {
     snipEditLiveCtx.restore();
     snipEditDrawGuides();
   }
-  // While the crop tool is active SE.cropRect is the editable copy of the crop op;
-  // whatever changes SE.ops behind its back (undo, redo, a resize) must pull it
-  // back in line, or the next export commits the stale rectangle again.
+  // While the crop tool is active SE.cropRect is the editable copy of the crop op; whatever
+  // changes SE.ops behind its back (undo, redo, a resize) must pull it back in line, or the
+  // next export commits the stale rectangle.
   function snipEditSyncCropFromOps() {
     if (SE.tool !== "crop") return;
     const existing = SE.ops.find((o) => o.tool === "crop");
@@ -937,14 +896,14 @@ export function initSnipEditor() {
       const ratio = orig.w / orig.h;
       const vertical = handle === "n" || handle === "s";
       if (vertical) nr.w = nr.h * ratio; else nr.h = nr.w / ratio;
-      // The edge opposite a top handle is the anchor: re-derive the top from it, or
-      // the new height would push that fixed edge around.
+      // The edge opposite a top handle is the anchor: re-derive the top from it so the new height
+      // does not push the fixed edge around.
       const north = handle.includes("n");
       if (north) nr.y = y <= y2 ? y2 - nr.h : y2;
       const west = !vertical && handle.includes("w");
       if (west) nr.x = x2 - nr.w;
-      // The derived side can still run out of room: shrink both together toward the
-      // anchored edges, so the ratio survives the image border.
+      // The derived side can run out of room: shrink both together toward the anchored edges so the
+      // ratio survives the image border.
       const right = nr.x + nr.w, bottom = nr.y + nr.h;
       const maxW = west ? right : SE.w - nr.x;
       const maxH = north ? bottom : SE.h - nr.y;
@@ -980,8 +939,7 @@ export function initSnipEditor() {
       const committed = SE.ops.find((o) => o.tool === "crop");
       SE.cropRect = committed ? { ...committed.rect } : snipEditFullCropRect(); // "smaller than 8x8 -> ignore"
     }
-    // The drag is the edit: it becomes the (undoable) crop op right away and the view
-    // follows the new box.
+    // The drag is the edit: it becomes the (undoable) crop op right away and the view follows.
     snipEditCropCommit();
     snipEditFitToCrop();
     snipEditDrawCropOverlayLive();
@@ -991,16 +949,16 @@ export function initSnipEditor() {
     if (!r || r.w < 8 || r.h < 8) return;
     const existing = SE.ops.find((o) => o.tool === "crop");
     if (snipEditCropIsFull(r)) {
-      // A box equal to the image is no crop: no op is added, and an earlier crop that the
-      // box was dragged back out of is taken away again (undoable like any removal).
+      // A box equal to the image is no crop: no op is added, and an earlier crop the box was
+      // dragged back out of is removed (undoable).
       if (existing) snipEditRemoveOp(existing);
       return;
     }
     if (existing && JSON.stringify(existing.rect) === JSON.stringify(r)) return;
     snipEditPushUniqueOp("crop", { tool: "crop", rect: { ...r } });
   }
-  // Zooms so the crop box fills the view (width or height, whichever limits) and
-  // centres it; a box that spans the whole image is the plain fit.
+  // Zooms so the crop box fills the view and centres it; a box spanning the whole image is the
+  // plain fit.
   function snipEditFitToCrop() {
     const r = SE.cropRect;
     if (!r || snipEditCropIsFull(r)) { snipEditFit(); return; }
@@ -1015,11 +973,11 @@ export function initSnipEditor() {
   function snipEditCropDiscard() {
     SE.drag = null;
     SE.cropRect = snipEditFullCropRect();
-    // Same floor adjustment as snipEditPushUniqueOp: only crops below the floor shift it.
+    // Same floor adjustment as snipEditPushUniqueOp.
     SE.floor = Math.max(0, SE.floor - SE.ops.slice(0, SE.floor).filter((o) => o.tool === "crop").length);
     SE.ops = SE.ops.filter((o) => o.tool !== "crop");
-    // A nudge target that was the discarded crop op is detached now: arrow keys must
-    // not move it and bring the discarded box back.
+    // A nudge target that was the discarded crop op is detached, so arrow keys cannot bring the
+    // discarded box back.
     if (SE.lastNudged && !SE.ops.includes(SE.lastNudged)) {
       SE.lastNudged = null;
       snipEditUpdateNudgeHint();
@@ -1031,11 +989,10 @@ export function initSnipEditor() {
     snipEditDrawCropOverlayLive();
   }
 
-  // ---- shape selection: a click on an existing rect/ellipse/line/arrow, made
-  // while that same tool is active, selects it instead of starting a new one --
-  // the same 8-handle box the crop tool already draws (2 endpoint handles for a
-  // line/arrow). Pen, marker, pixelate, spotlight, text and step keep their prior
-  // behaviour; text already has its own move-only selection above. ----
+  // ---- shape selection: a click on an existing rect/ellipse/line/arrow while that tool is
+  // active selects it instead of starting a new one, with the same 8-handle box as the crop
+  // tool (2 endpoint handles for a line or arrow). Other tools keep their behaviour; text has
+  // its own move-only selection above. ----
   const SNIP_SHAPE_TOOLS = ["rect", "ellipse", "line", "arrow"];
   function snipEditShapeBounds(op) {
     if (op.rect) return op.rect;
@@ -1104,9 +1061,8 @@ export function initSnipEditor() {
     snipEditClearLive();
     if (SE.selOp) snipEditPaintShapeHandles(SE.selOp);
   }
-  // Drag-preview ghost: drawn on the live layer at the new position while the
-  // committed op (old position) stays visible underneath on the base canvas
-  // until pointerup -- the same simplification already used for a text move.
+  // Drag-preview ghost on the live layer at the new position; the committed op stays visible
+  // at its old position on the base canvas until pointerup (same as a text move).
   function snipEditDrawShapeDragLive(op) {
     snipEditClearLive();
     snipEditDrawOp(snipEditLiveCtx, op);
@@ -1126,9 +1082,8 @@ export function initSnipEditor() {
     snipEditClearLive();
   }
 
-  // ---- duplicate / delete via right-click. Independent of the active tool: a
-  // right-click always tests every duplicable kind, not only SE.tool's, so the
-  // menu works for whatever shape sits under the pointer. ----
+  // ---- duplicate / delete via right-click. Independent of the active tool: a right-click
+  // tests every duplicable kind, so the menu works for whatever shape sits under the pointer. ----
   const SNIP_CTX_RECT_KINDS = ["rect", "ellipse", "spotlight", "pixelate"];
   function snipEditHitTestForCtx(pt) {
     const tol = 8 / snipEditScale();
@@ -1149,7 +1104,7 @@ export function initSnipEditor() {
       if (!r) continue;
       const inBox = pt.x >= r.x - tol && pt.x <= r.x + r.w + tol && pt.y >= r.y - tol && pt.y <= r.y + r.h + tol;
       if (!inBox) continue;
-      // Spotlight/pixelate have no outline-only edge -- the whole rect is the target.
+      // Spotlight and pixelate have no outline-only edge; the whole rect is the target.
       if (op.tool === "spotlight" || op.tool === "pixelate") return op;
       const onBorder = Math.abs(pt.x - r.x) <= tol || Math.abs(pt.x - r.x - r.w) <= tol
         || Math.abs(pt.y - r.y) <= tol || Math.abs(pt.y - r.y - r.h) <= tol;
@@ -1158,9 +1113,8 @@ export function initSnipEditor() {
     }
     return null;
   }
-  // A fresh push at the end, never spliced next to the source -- snipEditUndo()
-  // always pops the last entry, so anything inserted mid-array would make undo
-  // remove the wrong operation.
+  // A fresh push at the end, never spliced next to the source: snipEditUndo() pops the last
+  // entry, so a mid-array insert would make undo remove the wrong operation.
   function snipEditDuplicateOp(op) {
     if (op.tool === "spotlight") return; // only one spotlight may exist, there is nothing to copy
     const offset = SNIP_DUP_OFFSET_PX;
@@ -1174,23 +1128,22 @@ export function initSnipEditor() {
     }
     snipEditPushOp(dup);
   }
-  // Removes one specific op wherever it sits in SE.ops. The removal is an undo
-  // entry too, so Ctrl+Z brings the op back at its old place.
+  // Removes one specific op wherever it sits in SE.ops. The removal is an undo entry too.
   function snipEditRemoveOp(op) {
     const index = SE.ops.indexOf(op);
     if (index < 0) return;
     SE.ops.splice(index, 1);
-    // The floor is a count: an op below it leaving shifts it down by one. Only that
-    // delta is stored, so a crop commit or discard in between cannot be undone by
-    // restoring an absolute value.
+    // The floor is a count: an op below it leaving shifts it down by one. Only that delta is
+    // stored, so a crop commit or discard in between cannot be undone by restoring an absolute
+    // value.
     const floorShift = index < SE.floor ? 1 : 0;
     SE.floor -= floorShift;
     if (SE.selOp === op) snipEditDeselectShape();
     snipEditPushOp({ tool: "edit", kind: "remove", op, prev: SE.ops[index - 1] || null, next: SE.ops[index] || null, floorShift }, null);
   }
 
-  // ---- text: a real <input> positioned over the canvas, in stage-local (i.e.
-  // already-zoomed) pixels, since the input shares the stage's containing block. ----
+  // ---- text: a real <input> positioned over the canvas in stage-local (already zoomed)
+  // pixels, since the input shares the stage's containing block. ----
   function snipEditHitTestText(pt) {
     for (let i = SE.ops.length - 1; i >= 0; i--) {
       const op = SE.ops[i];
@@ -1236,18 +1189,16 @@ export function initSnipEditor() {
 
   // ---- contextual (tool-specific) toolbar: only what the active tool understands ----
   function snipEditBuildWidthField(tool, ts) {
-    // A plain div, not a <label>: the S/M/L buttons below sit before the
-    // exact-value field, so a <label> here would forward a click on the
-    // "Width" text to the first of THEM, not to the number field -- the
-    // field gets its own aria-label instead (see the .setAttribute below).
+    // A plain div, not a <label>: the S/M/L buttons sit before the exact-value field, so a
+    // <label> would forward a click on "Width" to the first of them. The field gets its own
+    // aria-label instead.
     const wrap = document.createElement("div");
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: t("snipEditWidth") }));
     const row = document.createElement("div");
     row.className = "snip-edit-width-row";
     const presets = SNIP_WIDTH_PRESETS_OF(tool);
-    // Three visibly different stroke weights read at a glance -- the S/M/L
-    // letters said nothing about WHICH was thicker without reading the tooltip.
+    // Three visibly different stroke weights, readable at a glance.
     const STROKE_ICON_W = [2.5, 5, 8];
     ["snipEditWidthS", "snipEditWidthM", "snipEditWidthL"].forEach((lab, i) => {
       const px = presets[i];
@@ -1272,9 +1223,8 @@ export function initSnipEditor() {
     wrap.appendChild(control);
     return wrap;
   }
-  // Single trigger button (current color) opens a popover holding the full
-  // palette + eyedropper, so the toolbar stays one row tall regardless of
-  // palette size (a full inline grid there used to force it multi-row).
+  // One trigger button (current color) opens a popover with the full palette and eyedropper, so
+  // the toolbar stays one row tall.
   const snipColorPop = document.createElement("div");
   snipColorPop.className = "snip-color-pop hidden";
   document.body.appendChild(snipColorPop);
@@ -1352,9 +1302,8 @@ export function initSnipEditor() {
     return wrap;
   }
   function snipEditBuildNumField(labelText, value, min, max, title, onChange, presets) {
-    // A real <label> (not a plain div) so the input keeps an accessible name
-    // from its own visible text -- see the numFieldDec/-Inc/-List buttons
-    // below for why they need an explicit aria-label instead.
+    // A real <label> so the input keeps an accessible name from its visible text; the
+    // numFieldDec/-Inc/-List buttons below carry an explicit aria-label.
     const wrap = document.createElement("label");
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: labelText }));
@@ -1400,10 +1349,9 @@ export function initSnipEditor() {
     if (!snipEditToolHasPanel(SE.tool) || !snipEditContextEl.firstElementChild) { closeSnipEditContext(); return; }
     snipEditPlaceContext();
   }
-  // One listener for the whole editor's lifetime. Capture phase, so the check runs
-  // before a control inside the panel rebuilds the panel (a rebuilt control is no
-  // longer attached and would look like an outside press). A press on a tool
-  // button is handled by that button's own click.
+  // One listener for the editor's lifetime. Capture phase, so the check runs before a control
+  // inside the panel rebuilds the panel (a rebuilt control is detached and would look like an
+  // outside press). A press on a tool button is handled by that button's own click.
   document.addEventListener("pointerdown", (e) => {
     if (!snipEditContextIsOpen()) return;
     if (e.target.closest?.(SNIP_CTX_INSIDE) || e.target.closest?.("#snip-edit-tools button")) return;
@@ -1442,9 +1390,8 @@ export function initSnipEditor() {
   function snipEditBuildToolButtons() {
     snipEditToolsEl.innerHTML = "";
     for (const tdef of SNIP_TOOLS) {
-      // Dividers: between the drawing tools (pen..step) and the image tools
-      // (pixelate/spotlight) -- same grouping the Snipping Tool uses -- and
-      // again before the view tool (hand), which does not draw anything.
+      // Dividers between the drawing tools (pen..step) and the image tools (pixelate/spotlight),
+      // and again before the view tool (hand), which does not draw.
       if (tdef.id === "pixelate" || tdef.id === "hand") {
         const sep = document.createElement("span");
         sep.className = "snip-edit-sep";
@@ -1486,12 +1433,10 @@ export function initSnipEditor() {
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
     snipEditClearLive();
-    // Clear any crop-hover cursor left over from the previous tool -- an
-    // inline style would otherwise outrank the panning class below and the
-    // per-tool crosshair default.
+    // Clear a crop-hover cursor left from the previous tool: an inline style outranks the
+    // panning class below and the per-tool crosshair default.
     snipEditWrap.style.cursor = "";
-    // A grab cursor as soon as the Hand tool is picked, not only once a
-    // drag actually starts -- the same affordance Space-hold already gets.
+    // A grab cursor as soon as the Hand tool is picked, like Space-hold.
     snipEditWrap.classList.toggle("panning", tool === "hand");
     snipEditSyncCropFromOps();
     snipEditRenderToolButtons();
@@ -1509,8 +1454,8 @@ export function initSnipEditor() {
     if (SE.tool === "marker") snipEditDrawMarkerOp(snipEditLiveCtx, op); else snipEditDrawPenOp(snipEditLiveCtx, op);
     snipEditDrawGuides();
   }
-  // Pointer moves arrive far faster than frames on a high-rate mouse or pen; the
-  // stroke is redrawn once per frame instead of once per move.
+  // Pointer moves arrive faster than frames on a high-rate mouse or pen; the stroke is redrawn
+  // once per frame.
   let snipEditLivePenFrame = 0;
   function snipEditScheduleLivePenStroke() {
     if (snipEditLivePenFrame) return;
@@ -1574,11 +1519,11 @@ export function initSnipEditor() {
   // ---- pan (space+drag or middle mouse) ----
   function snipEditStartPan(e) {
     SE.panState = { x: e.clientX, y: e.clientY, sl: snipEditWrap.scrollLeft, st: snipEditWrap.scrollTop };
-    // Without capture, dragging past the canvas edge (zoomed in beyond the
-    // viewport) stops delivering pointermove once the cursor leaves it.
+    // Without capture, dragging past the canvas edge (zoomed in beyond the viewport) stops
+    // delivering pointermove once the cursor leaves it.
     snipEditLiveCv.setPointerCapture(e.pointerId);
-    // A leftover crop-tool inline cursor otherwise outranks the grab/grabbing
-    // cursor below for this whole drag (only the Space-key path cleared it).
+    // A leftover crop-tool inline cursor would outrank the grab/grabbing cursor for the whole
+    // drag.
     snipEditWrap.style.cursor = "";
     snipEditWrap.classList.add("panning");
     e.preventDefault();
@@ -1601,9 +1546,8 @@ export function initSnipEditor() {
     snipEditStage.classList.toggle("pixelated", SE.zoom > 1);
     snipEditStage.style.width = `${sw}px`;
     snipEditStage.style.height = `${sh}px`;
-    // Once the picture is larger than the view, leave half a view of room on
-    // every side so any corner or edge can be panned into the middle. While it
-    // fits, the CSS auto margin keeps it centred.
+    // Once the picture is larger than the view, leave half a view of room on every side so any
+    // corner or edge can be panned into the middle. While it fits, the auto margin centres it.
     const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
     snipEditStage.style.margin = (sw > vw || sh > vh) ? `${Math.round(vh / 2)}px ${Math.round(vw / 2)}px` : "";
     $("snip-edit-zoom-val").textContent = `${Math.round(SE.zoom * 100)}%`;
@@ -1635,11 +1579,9 @@ export function initSnipEditor() {
     if (!SE.active) return;
     if (e.button === 1 || SE.spaceDown || (e.button === 0 && SE.tool === "hand")) { snipEditStartPan(e); return; }
     if (e.button !== 0) return;
-    // The canvas itself is never a focus target, so the browser's default
-    // mousedown action for it is to blur whatever is currently focused --
-    // including the text-tool input this same handler is about to focus below,
-    // since that default action runs AFTER this handler returns. Without this,
-    // opening the text field looked like it immediately lost focus again.
+    // The canvas is never a focus target, so the browser's default mousedown action blurs the
+    // focused element, including the text input this handler is about to focus (the default runs
+    // after the handler returns). Prevent it.
     e.preventDefault();
     snipEditFinishTextIfOpen();
     const pt0 = snipEditToImage(e);
@@ -1686,13 +1628,9 @@ export function initSnipEditor() {
     if (SE.panState) { snipEditDoPan(e); return; }
     if (!SE.drag) {
       if (SE.tool === "crop") {
-        // Space held means a pan is about to start (or the panning CSS class
-        // is already showing its grab cursor) -- an inline crop cursor would
-        // otherwise outrank that class and never let go/grabbing show.
+        // Space held means a pan is about to start (or the panning class shows its grab cursor); an
+        // inline crop cursor would outrank that class.
         if (!SE.spaceDown) snipEditWrap.style.cursor = snipEditCropCursorFor(snipEditToImage(e));
-        // The overlay is already on screen and unchanged by a plain hover
-        // (its handles do not react to hover position) -- redrawing it here
-        // was a full-image clear+refill on every mousemove for nothing.
       } else if (SNIP_SHAPE_TOOLS.includes(SE.tool)) {
         if (!SE.spaceDown) snipEditWrap.style.cursor = snipEditShapeCursorFor(snipEditToImage(e));
       }
@@ -1787,10 +1725,8 @@ export function initSnipEditor() {
         break;
       }
     }
-    // snipEditClearLive() above wiped the selection handles a plain click
-    // (kind "shape-move" with no actual movement) just painted on mousedown --
-    // redraw them so the selection stays visible instead of vanishing the
-    // instant the button is released.
+    // snipEditClearLive() wiped the selection handles that a plain click (a "shape-move" with no
+    // movement) painted on mousedown; redraw them so the selection stays visible.
     if (SE.selOp && SE.selOp.tool === SE.tool) snipEditDrawShapeSelectionLive();
   }
   snipEditLiveCv.addEventListener("pointerdown", snipEditOnPointerDown);
@@ -1803,13 +1739,11 @@ export function initSnipEditor() {
     openSnipCtxPop(hit, e.clientX, e.clientY);
   });
   window.addEventListener("pointerup", snipEditOnPointerUp);
-  // A cancelled pointer stream (e.g. the browser claiming a touch drag mid-
-  // gesture) would otherwise leave SE.drag/SE.panState set forever, which
-  // makes every tool button and shortcut a no-op for the rest of the session.
+  // A cancelled pointer stream (e.g. the browser claiming a touch drag) would otherwise leave
+  // SE.drag/SE.panState set forever and make every tool button and shortcut a no-op.
   window.addEventListener("pointercancel", snipEditOnPointerUp);
-  // Alt-Tabbing away while Space/V is held never delivers the matching keyup
-  // to this window -- without this, every later click would start a pan
-  // (SE.spaceDown stuck true) or the raw/before image would stay stuck shown.
+  // Alt-Tabbing away while Space/V is held never delivers the matching keyup: without this,
+  // every later click would start a pan or the raw image would stay shown.
   window.addEventListener("blur", () => {
     if (SE.spaceDown) { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
     snipOriginalToggle.reset();
@@ -1841,17 +1775,15 @@ export function initSnipEditor() {
     if (snipEdit.classList.contains("hidden")) return;
     // A question raised over the editor (discard, replace) owns every key.
     if (!$("confirm-modal").classList.contains("hidden")) return;
-    // The shortcuts overview is a sibling overlay, not inside snipEdit's own
-    // DOM subtree, so it needs its own check before the editor's normal Tab
-    // trap and tool shortcuts take over.
+    // The shortcuts overview is a sibling overlay outside snipEdit's DOM subtree, so it needs
+    // its own check before the editor's Tab trap and tool shortcuts.
     if (!$("shortcuts-modal").classList.contains("hidden")) {
       if (e.key === "Tab") { trapTabWithin($("shortcuts-modal"), e); return; }
       if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); return; }
       return;
     }
-    // Appended straight to document.body (see its own declaration), so it sits
-    // outside snipEdit's own DOM subtree -- the plain trap below would let Tab
-    // walk back into the editor underneath while this menu is still open.
+    // Appended to document.body, outside snipEdit's DOM subtree: the plain trap below would let
+    // Tab walk back into the editor while this menu is open.
     if (!snipCtxPop.classList.contains("hidden")) {
       if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
       if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
@@ -1867,9 +1799,8 @@ export function initSnipEditor() {
       if (snipEditContextIsOpen()) { closeSnipEditContext(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
       if (SE.tool === "crop" && (SE.drag || (SE.cropRect && !snipEditCropIsFull(SE.cropRect)) || SE.ops.some((o) => o.tool === "crop"))) { snipEditCropDiscard(); return; }
-      // A selected/just-drawn shape only gives up the arrow keys, never the
-      // whole editor -- closing on Escape here would throw away every edit
-      // made so far just because something happened to be selected.
+      // A selected or just-drawn shape gives up only the arrow keys, never the whole editor;
+      // closing on Escape here would throw away every edit just because something is selected.
       if (SE.lastNudged) { snipEditDeselectShape(); return; }
       snipEditRequestCancel();
       return;
@@ -1891,8 +1822,8 @@ export function initSnipEditor() {
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) snipEditRedo(); else snipEditUndo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); snipEditRedo(); return; }
-    // Canvas zoom: Ctrl+Plus/Minus/0, matching the video editor's preview zoom
-    // keys -- plain 0 and - stay the pixelate/spotlight tool shortcuts above.
+    // Canvas zoom: Ctrl+Plus/Minus/0, like the video editor's preview zoom; plain 0 and - stay
+    // the pixelate/spotlight shortcuts above.
     if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); snipEditZoomBy(snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
@@ -1920,9 +1851,8 @@ export function initSnipEditor() {
   // ---- open / cancel / apply / export ----
   function snipEditOpen(dataUrl, { onApply, onCancel }) {
     const img = new Image();
-    // A capture that fails to decode (truncated data URL, a broken picked file)
-    // must not leave the editor silently never opening -- fall back to the
-    // same path a user cancel already takes, so nothing is left half-open.
+    // A capture that fails to decode (truncated data URL, broken picked file) takes the same
+    // path as a user cancel, so nothing is left half-open.
     img.onerror = () => {
       toast(t("snipEditOpenFailed"));
       onCancel?.();
@@ -1988,8 +1918,7 @@ export function initSnipEditor() {
     closeSnipScalePop(); // its Apply would scale a canvas that is gone
     closeSnipColorPop();
     closeColorPop(); // the custom picker opened from a swatch outlives the editor otherwise
-    // Nothing of the session stays alive behind the hidden editor: the next open starts
-    // from a fresh capture anyway.
+    // Nothing of the session stays alive behind the hidden editor.
     SE.img = null;
     SE.rawCanvas = null;
     SE.ops = [];
@@ -2021,17 +1950,13 @@ export function initSnipEditor() {
     }
     if (ok && SE.active) snipEditCancel();
   }
-  // Applies the crop (if any) only now -- everything else stays undoable until export.
-  // The output canvas is never larger than the source, so a 4K/panorama capture is
-  // never upscaled, and this is a single synchronous pass, never a per-block loop.
+  // Applies the crop (if any) only now; everything else stays undoable until export. The output
+  // is never larger than the source (no upscaling) and is built in one synchronous pass.
   function snipEditExportDataUrl() {
-    // A drawn crop rectangle otherwise only reaches SE.ops via an Enter keypress --
-    // export must not require that hidden step, or a crop drawn (or redrawn over an
-    // older one) and exported straight away silently exports uncropped/stale instead.
-    // Scoped to the crop tool being active (same guard the Enter handler already
-    // uses) so this never resurrects a crop the user has since undone while parked
-    // on another tool -- SE.cropRect is only kept in sync with SE.ops while crop is
-    // the active tool (see snipEditSetTool).
+    // A drawn crop rectangle reaches SE.ops only via Enter; export must not depend on that hidden
+    // step or it would export uncropped or stale. Only while the crop tool is active (the same
+    // guard as the Enter handler): SE.cropRect is kept in sync with SE.ops only then (see
+    // snipEditSetTool), so a crop undone while parked on another tool is not resurrected.
     if (SE.tool === "crop") snipEditCropCommit();
     snipOriginalToggle.reset();
     const crop = SE.ops.find((o) => o.tool === "crop");
@@ -2046,15 +1971,14 @@ export function initSnipEditor() {
     const out = document.createElement("canvas");
     out.width = sw;
     out.height = sh;
-    // The base canvas carries the crop dimming outside the rect; with a fractional
-    // rect the rounded edge pixels would pick up a dim line, so draw it bare.
+    // The base canvas carries the crop dimming outside the rect; with a fractional rect the
+    // rounded edge pixels would pick up a dim line, so draw it bare.
     if (crop) snipEditRedrawBase(true);
     out.getContext("2d").drawImage(snipEditBaseCv, sx, sy, sw, sh, 0, 0, sw, sh);
     if (crop) snipEditRedrawBase();
-    // Always lossless png regardless of the screenshotFormat setting -- the
-    // setting's actual target format is applied once, in Rust, at the real
-    // save step (save_screenshot_now/_as re-encode from this data URL), so an
-    // edited screenshot never picks up a lossy detour on its way there.
+    // Always lossless png regardless of screenshotFormat: the target format is applied once in
+    // Rust at the real save step (save_screenshot_now/_as re-encode from this data URL), so an
+    // edited screenshot takes no lossy detour.
     return out.toDataURL("image/png");
   }
   function snipEditApply() {
@@ -2124,9 +2048,8 @@ export function initSnipEditor() {
         percentField.setValue(Math.round((h / origH) * 100));
       },
     });
-    // Presets and the percent field itself share this: they always set both
-    // dimensions from the ORIGINAL size, regardless of the lock-aspect toggle
-    // (a percentage is inherently aspect-preserving).
+    // Presets and the percent field set both dimensions from the original size, whatever the
+    // lock-aspect toggle says (a percentage keeps the aspect by nature).
     const setByPercent = (p) => {
       percentField.setValue(p);
       widthField.setValue(Math.max(1, Math.round((origW * p) / 100)));
@@ -2224,10 +2147,8 @@ export function initSnipEditor() {
       if (path) toast(t("snipEditSavedTo").replace("{path}", () => path));
     } catch (e) { errToast(e); }
   });
-  // SouthEast-only resize handle. The move side of the titlebar needs no JS
-  // at all -- data-tauri-drag-region alone drags the window (same as the main
-  // window's own header) -- but there is no HTML-attribute equivalent for
-  // resizing, so this is the one spot that calls into the window API directly.
+  // South-east resize handle. Moving the window needs no JS (data-tauri-drag-region), but
+  // resizing has no HTML-attribute equivalent, so this calls the window API directly.
   $("snip-edit-resize-grip").addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
