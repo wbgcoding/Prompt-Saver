@@ -81,6 +81,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await Promise.all([tick, discard]);
   check("the discard follows the draft write", started, ["save_editor_draft:1", "discard_editor_draft:2"]);
 
+  // Hotkey capture on/off pairs keep their order.
+  started.length = 0;
+  delays = { "set_hotkey_capture:1": 40 };
+  const capOn = orderedInvoke("set_hotkey_capture", { v: 1, active: true });
+  const capOff = orderedInvoke("set_hotkey_capture", { v: 2, active: false });
+  await sleep(5);
+  check("the capture-off call waits for the capture-on call", started, ["set_hotkey_capture:1"]);
+  await Promise.all([capOn, capOff]);
+
   // Commands outside the table are not chained.
   started.length = 0;
   delays = { "copy_text:1": 40 };

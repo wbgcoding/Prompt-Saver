@@ -409,6 +409,9 @@ const ORDERED_KEYS = {
   set_start_minimized: () => "set_start_minimized",
   set_favorite: () => "set_favorite",
   // A tick still in flight must land before the discard of a save or cancel.
+  // Capture on/off pairs from quick focus changes must reach the backend in order,
+  // or a late "on" leaves every global hotkey unregistered.
+  set_hotkey_capture: () => "hotkey_capture",
   save_editor_draft: () => "draft",
   discard_editor_draft: () => "draft",
   set_active_view: () => "views",
