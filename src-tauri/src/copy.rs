@@ -13,8 +13,8 @@ pub(crate) fn copy_payload(p: &Prompt) -> &str {
 // against a corrupted or hand-edited settings/import file.
 pub(crate) const MAX_ROTATE_VARIANTS: usize = 49; // + entry 0 (text) = 50 total, matching rotateMaxEntries' own max
 
-// Trims, drops empty entries and enforces the hard ceiling: "leere Einträge
-// werden beim Speichern verworfen" applies to add_prompt/update_prompt alike.
+// Trims, drops empty entries and enforces the hard ceiling; add_prompt and update_prompt
+// both apply it.
 pub(crate) fn sanitize_variants(list: Vec<String>) -> Vec<String> {
     list.into_iter()
         .map(|s| s.trim().to_string())
@@ -56,24 +56,16 @@ pub(crate) fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
     }
 }
 
-// Which entry the NEXT copy would use, without touching any state: so a tile's
-// "next: n/total" badge and the actual copy always agree, no matter how many times
-// this is called between two real copies. The global "rotatingPrompts" flag off, or
-// a prompt with no variants, always resolves to entry 0: the list stays saved on
-// the prompt, it is just not served.
-// A stored pointer/bag that no longer fits the current entry count (edited since)
-// is never trusted blindly: `% total` keeps a stale `rotate_pos` in range, and any
-// bag containing an out-of-range index is treated as absent (discarded on the next
-// rotation_advance) instead of ever indexing past the end.
-// Alongside `idx` (the absolute entry position, used to resolve the text),
-// also returns `pos`: a 1-based "draw number within the current cycle", for a
-// badge that counts up 1..total and restarts, instead of random mode's `idx`
-// jumping to an arbitrary absolute position each time. Order mode's `idx` is
-// already such a natural count (the pointer only ever moves forward), so
-// `pos` there is just `idx + 1`; random mode derives it from how many entries
-// remain undrawn in the current shuffle bag (`total - bag.len() + 1`): a
-// freshly reshuffled, still-untouched bag always holds exactly `total`
-// entries, so the very first upcoming draw of a cycle is always `1`.
+// Which entry the next copy would use, without touching state, so a tile's "next: n/total"
+// badge and the actual copy always agree. With the global "rotatingPrompts" flag off, or no
+// variants, it resolves to entry 0 (the list stays saved, just not served).
+// A stored pointer/bag that no longer fits the entry count (edited since) is never
+// trusted: `% total` keeps a stale `rotate_pos` in range, and a bag with an out-of-range
+// index counts as absent (discarded on the next rotation_advance).
+// Besides `idx` (the absolute entry position) it returns `pos`: a 1-based draw number
+// within the current cycle, so a badge counts 1..total and restarts instead of jumping
+// around in random mode. Order mode: `idx + 1`. Random mode: `total - bag.len() + 1`, since
+// a fresh bag holds exactly `total` entries.
 pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
     let total = rotation_total(p);
     let (idx, pos) = if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
@@ -92,17 +84,14 @@ pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, S
     (idx, pos, rotation_entry_text(p, idx))
 }
 
-// Advances the pointer past the entry rotation_next() just reported: call ONLY
-// once the copy that used it actually reached the clipboard, so a failed copy never
-// burns an entry. Random mode pops the bag's shown front and, once that empties it
-// (or the bag was stale/absent, per rotation_next's own validity check), reshuffles
-// a fresh permutation of every OTHER index with the just-shown one placed last: a
-// full cycle (every entry exactly once) always separates two showings of the same
-// entry, including across the reshuffle boundary.
+// Advances the pointer past the entry rotation_next() just reported; call it only once the
+// copy actually reached the clipboard, so a failed copy never burns an entry. Random mode
+// pops the bag's front and, when that empties it (or the bag was stale or absent),
+// reshuffles every other index with the just-shown one placed last, so two showings of the
+// same entry are always a full cycle apart, also across the reshuffle.
 pub(crate) fn rotation_advance(p: &Prompt, settings: &mut Settings) {
-    // Same gate as rotation_next(): while the feature is globally off the pointer
-    // must stay frozen, not silently drift, so turning it back on resumes exactly
-    // where the user left off instead of landing on an arbitrary position.
+    // Same gate as rotation_next(): while the feature is globally off the pointer stays
+    // frozen, so turning it back on resumes where the user left off.
     if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
         return;
     }
@@ -167,10 +156,8 @@ pub(crate) fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> boo
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
 }
 
-// The most-called command in the app (every tile/pill/hotkey copy goes through it),
-// so it clones only the ONE field the chosen branch actually needs: not the whole
-// Prompt, which on an image prompt meant cloning that base64 blob on every
-// text-branch check too.
+// The most-called command (every tile/pill/hotkey copy), so it clones only the one field
+// the chosen branch needs, not the whole Prompt (an image prompt's base64 blob included).
 pub(crate) enum CopyPayload {
     Image(String),
     File(String),
@@ -186,11 +173,10 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
         match store.prompts.iter().find(|p| p.id == id) {
             Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
             Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
-            // rotation_next() itself falls back to p.text when there is nothing
-            // to rotate, so a plain prompt goes through this exact same branch.
-            // A confidential entry is decrypted here with the session key, or the
-            // copy is refused outright while the vault is locked -- ciphertext
-            // must never reach the clipboard as if it were the real text.
+            // rotation_next() itself falls back to p.text when there is nothing to rotate, so a plain
+            // prompt takes this branch too. A confidential entry is decrypted with the session key, or
+            // the copy is refused while the vault is locked: ciphertext must never reach the clipboard
+            // as the real text.
             Some(p) => {
                 let key = secret_session_key(secret_timeout_min(&store.settings));
                 let (text, variants) = reveal_secret_text(p, key)?;
@@ -206,14 +192,11 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
     let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
         CopyPayload::File(path) => set_clipboard_file(&path),
-        // Put_text is the one place that decides plain copy vs. auto-session.
         CopyPayload::Text(text) => put_text(&state, Some(&id), &text),
         CopyPayload::Missing => false,
     };
-    // Only a successful TEXT copy may consume a rotation entry: a failed copy
-    // must leave the pointer exactly where it was, and an Image/File payload never
-    // showed any entry at all (the copy_image/file_path branches above short-circuit
-    // before rotation_next ever runs) so it must not silently advance it either.
+    // Only a successful text copy may consume a rotation entry: a failed copy leaves the
+    // pointer where it was, and an Image/File payload showed no entry at all.
     if ok && is_text {
         let mut store = lock(&state);
         if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
@@ -238,10 +221,10 @@ pub(crate) fn revealed_prompt(p: &Prompt, key: Option<[u8; 32]>) -> Option<Promp
     Some(plain)
 }
 
-// What rotation_peek() reports for a "next: n/total" badge or a copy path that
-// needs the resolved text itself (chaining, drag-out, hotkeys, tray, quick-launch)
-// BEFORE it goes through variable resolution: those all peek, resolve, copy_text,
-// then commit, so a cancelled variable dialog never burns an entry.
+// What rotation_peek() reports for a "next: n/total" badge or a copy path that needs the
+// resolved text before variable resolution (chaining, drag-out, hotkeys, tray,
+// quick-launch): they peek, resolve, copy_text, then commit, so a cancelled variable dialog
+// never burns an entry.
 #[derive(Serialize)]
 pub(crate) struct RotationPeek {
     pub(crate) index: usize,
@@ -266,9 +249,9 @@ pub(crate) fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek
     Some(RotationPeek { index, pos, total: rotation_total(&plain), text })
 }
 
-// Every window's tile/pill/folder-member badge stays live off ONE event, fired
-// wherever the pointer actually moves (copy_prompt's own success path, this command)
-//: the same "backend decides, frontend just reflects" split as prompt-updated.
+// Every window's tile/pill/folder-member badge stays live off one event, fired wherever the
+// pointer moves (copy_prompt's success path, this command): the backend decides, the
+// frontend reflects.
 #[derive(Serialize, Clone)]
 pub(crate) struct RotationChanged {
     pub(crate) id: String,
@@ -333,12 +316,11 @@ pub(crate) fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
     save_settings(&app, &store.settings);
 }
 
-// The placeholder round's entry point. The frontend resolves every
-// entry's placeholders ONCE (union of variables across all of them, one dialog)
-// and hands back `resolved` in absolute entry order; this arms entry
-// rotation_next() currently points at and advances the pointer: replacing what
-// copy_prompt would otherwise have done for this one copy, so it must never be
-// called together with copy_prompt for the same click.
+// The placeholder round's entry point. The frontend resolves every entry's placeholders
+// once (one dialog for the union of variables) and hands back `resolved` in absolute entry
+// order; this arms the entry rotation_next() points at and advances the pointer. It
+// replaces what copy_prompt would do for this one copy, so never call both for the same
+// click.
 #[tauri::command(async)]
 pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: Vec<String>) -> bool {
     let mut store = lock(&state);
@@ -380,23 +362,20 @@ pub(crate) fn rotation_end_auto(id: String) {
     let _ = id;
 }
 
-// Put arbitrary text on the clipboard: used after filling prompt placeholders,
-// chains, drag-out, hotkeys, tray and quick-launch. `id` is the source
-// prompt when there is one, so an auto-eligible prompt still opens its session
-// even when the actual copy went through variable resolution first: a plain
-// copy_prompt call for it would have double-resolved the placeholders.
+// Put arbitrary text on the clipboard: used after filling placeholders, chains, drag-out,
+// hotkeys, tray and quick-launch. `id` is the source prompt when there is one, so an
+// auto-eligible prompt still opens its session even though the copy went through variable
+// resolution (a plain copy_prompt would have resolved the placeholders twice).
 #[tauri::command]
 pub(crate) async fn copy_text(state: State<'_, Db>, text: String, id: Option<String>) -> Result<bool, String> {
     Ok(put_text(&state, id.as_deref(), &text))
 }
 
-// The CF_HTML clipboard payload, built by hand rather than through
-// clipboard-win's own header writer, so the byte math has a plain function a
-// unit test can call directly.
-// Reference: https://learn.microsoft.com/windows/win32/dataxchg/html-clipboard-format
-// Every offset is a BYTE position into this string's UTF-8 encoding (never a
-// char or UTF-16 count, which is what the format itself requires and what
-// makes a multi-byte character in the fragment worth its own test).
+// The CF_HTML clipboard payload, built by hand rather than through clipboard-win's header
+// writer so the byte math is a plain function a unit test can call. Reference:
+// https://learn.microsoft.com/windows/win32/dataxchg/html-clipboard-format. Every offset is
+// a byte position in the UTF-8 string (the format requires it, and a multi-byte character
+// in the fragment is worth its own test).
 pub(crate) const CF_HTML_BODY_HEAD: &str = "<html>\r\n<body>\r\n<!--StartFragment-->";
 pub(crate) const CF_HTML_BODY_FOOT: &str = "<!--EndFragment-->\r\n</body>\r\n</html>";
 
@@ -418,15 +397,11 @@ pub(crate) fn build_cf_html(fragment: &str) -> String {
     format!("{header}{CF_HTML_BODY_HEAD}{fragment}{CF_HTML_BODY_FOOT}")
 }
 
-// Puts both the plain Markdown text (CF_UNICODETEXT) and its rendered form
-// (CF_HTML) on the clipboard in one go, so an app that only reads CF_HTML sees
-// formatting and one that only reads plain text sees exactly what a normal
-// copy would have given it. `html` is already escaped and sanitised by the
-// caller (the same renderer the Markdown preview uses), so this never
-// inspects or trusts it beyond handing it to Windows unchanged. set_string
-// empties the clipboard and claims CF_UNICODETEXT; the CF_HTML payload is
-// then added under its own registered format WITHOUT clearing what was just
-// set; the two calls together are what makes one clipboard entry carry both.
+// Puts both the plain Markdown text (CF_UNICODETEXT) and its rendered form (CF_HTML) on the
+// clipboard, so an app reading only CF_HTML sees formatting and one reading plain text sees
+// what a normal copy gives. `html` is already escaped and sanitised by the caller, so it is
+// passed to Windows unchanged. set_string empties the clipboard and claims CF_UNICODETEXT;
+// CF_HTML is then added under its registered format without clearing what was just set.
 #[cfg(windows)]
 pub(crate) fn put_formatted(text: &str, html: &str) -> bool {
     let Ok(_clip) = clipboard_win::Clipboard::new_attempts(10) else {
@@ -486,9 +461,9 @@ pub(crate) fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-// Retention window in seconds from the expert "history retention" setting
-// (days). Default 30 days for a new install; 0 or negative = forever. Stores
-// older than this default are pinned to 0 in migrate().
+// Retention window from the expert "history retention" setting (days). Default 30 days for
+// a new install; 0 or negative = forever. Stores older than this default are pinned to 0 in
+// migrate().
 pub(crate) const HISTORY_DAYS_DEFAULT: f64 = 30.0;
 pub(crate) const RECORDING_RETENTION_DAYS_DEFAULT: f64 = 90.0;
 pub(crate) fn history_max_age(settings: &Settings) -> Option<u64> {
@@ -523,12 +498,10 @@ pub(crate) fn prune_history(settings: &mut Settings) {
     }
 }
 
-// The copy-history row's on-demand trigger. db_trim_copy already runs
-// after every insert, but only against the cap/cutoff live at THAT moment --
-// lowering historyMax or historyDays does not retroactively trim until the
-// next copy, so this exists to apply whatever the settings say right now.
-// Row count before/after (never a byte estimate stored nowhere -- copy_log
-// only ever holds a prompt id and a timestamp) is the honest "size" figure.
+// The copy-history row's on-demand trigger. db_trim_copy runs after every insert, but only
+// against the cap/cutoff live then; lowering historyMax or historyDays trims nothing until
+// the next copy, so this applies the current settings now. Row count before/after is the
+// honest "size" figure (copy_log holds only a prompt id and a timestamp).
 #[tauri::command(async)]
 pub(crate) fn trim_copy_history_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
     let Some(conn) = db_conn(&app) else { return (0, 0) };
@@ -577,11 +550,9 @@ pub(crate) async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String
         // Usage count + "last used" stamp only: collected, see SETTINGS_QUIET_MS.
         // The history row itself still goes into its own table below, untouched.
         save_settings_soon();
-        // The main window's own settings.usage/last_used mirror is only ever
-        // refreshed by a handful of explicit refetches (opening the journal,
-        // "copy again") -- a copy recorded from a floating pill, the folder
-        // window or the tray left it stale everywhere else, so "most used" /
-        // "recently used" library sort silently froze at whatever it read last.
+        // The main window's settings.usage/last_used mirror is refreshed only by a few explicit
+        // refetches; a copy recorded from a pill, the folder window or the tray would leave it
+        // stale and freeze the "most used" / "recently used" sorts, so it is told here.
         let _ = app.emit_to(
             "main",
             "usage-changed",
@@ -600,8 +571,8 @@ pub(crate) async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String
                 return Ok(()); // identical consecutive copy: don't add another row
             }
         }
-        // An insert failure used to be swallowed here and still report success,
-        // so the entry was silently missing from the journal with no trace anywhere.
+        // An insert failure is logged, not reported as success: otherwise the entry would be
+        // silently missing from the journal.
         if let Err(e) = db_append_copy(&conn, &entry, cap, cutoff) {
             append_crash_log(&format!("copy history append failed: {e}"));
             return Err("history-failed".into());
@@ -625,8 +596,8 @@ pub(crate) fn clear_history_core(delete_log: impl FnOnce() -> bool, settings: &m
 // Wipe copy history + usage counters (privacy / journal "clear").
 #[tauri::command]
 pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
-    // A "clear" the user asked for is a privacy action -- a DB error here must
-    // not be reported as success while the log rows are still on disk.
+    // A "clear" the user asked for is a privacy action: a DB error must not be reported as
+    // success while the log rows are still on disk.
     let (cleared, saved) = {
         let mut store = lock(&state);
         let cleared = clear_history_core(
@@ -668,12 +639,11 @@ pub(crate) fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rus
     tx.commit()
 }
 
-// Undo for "clear copy history": writes the row-level log and the two counter
-// maps back. The frontend is the one holding the snapshot (it read it through
-// recent_copies before calling clear_copy_history), so this only ever replays
-// what genuinely existed a moment ago, through the same insert clause a live
-// copy uses -- never a raw table swap. The counters are written only after the
-// rows are committed, so a failed restore changes nothing.
+// Undo for "clear copy history": writes the row-level log and the two counter maps back.
+// The frontend holds the snapshot (read via recent_copies before the clear), so this only
+// replays what existed a moment ago, through the same insert clause a live copy uses, never
+// a raw table swap. Counters are written after the rows commit, so a failed restore
+// changes nothing.
 #[tauri::command]
 pub(crate) async fn restore_copy_history(
     app: AppHandle,
