@@ -2063,7 +2063,18 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
         let settings_persisted = if o.mutated_settings { crate::save_settings(app, &st.settings) } else { true };
         persisted && settings_persisted
     });
+    // A switch set from here needs the same live effects the settings window gives it
+    // (capture exclusion, the error list, a running auto-advance session).
+    let flag_set = match &cmd {
+        Cmd::SettingsSet { key, .. } if outcome.code == 0 && outcome.mutated_settings => {
+            store.settings.ui_flags.get(key.as_str()).map(|on| (key.clone(), *on))
+        }
+        _ => None,
+    };
     drop(store);
+    if let Some((key, on)) = flag_set {
+        crate::apply_flag_effects(app, &key, on);
+    }
     if outcome.code == 0 && (outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
         // The windows, the armed hotkeys and the tray still hold what they read
         // before this command: tell them, or a stale grid keeps a deleted tile and

@@ -208,9 +208,34 @@ pub(crate) fn run_update_check(app: AppHandle) {
 // flag is then left OFF, so the UI and the store never disagree.
 // Runs off the main thread: switching the receiver on or wider waits for its
 // port to bind, and the activation backup takes as long as the library is large.
+// The live effects of a switch changing that do not depend on the store lock: the
+// window capture exclusion, the collected error list and a running auto-advance
+// session. Shared by the settings window and the command line / receiver, so a
+// `settings set` takes effect without a restart there too.
+pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
+    // Capture exclusion applies live to every open window. Never hold the store
+    // lock across window API calls (deadlock risk). The flag says "allow
+    // screenshots", so the exclusion is its OPPOSITE: passing it straight through
+    // is what made the switch work backwards.
+    if key == ALLOW_SCREENSHOT_KEY {
+        apply_capture_exclusion_all(app, !enabled);
+    }
+    // "Off" means the list is empty, not just paused -- clear whatever is
+    // already collected the moment the switch goes off.
+    if key == "errorLog" && !enabled {
+        ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+    // Turning either gate off must not leave a session silently running.
+    #[cfg(windows)]
+    if !enabled && (key == "rotatingPrompts" || key == "rotateAuto") {
+        clipwatch::end_any();
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 #[tauri::command(async)]
 pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
-    let is_capture = key == ALLOW_SCREENSHOT_KEY;
     let is_clip = key == "clipWatcher";
     let is_hotkeys = key == "promptHotkeys";
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
@@ -242,13 +267,6 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         notify_float_settings(&app);
         return result;
     }
-    // Turning either gate off must not leave a session silently running.
-    let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
-    // "Off" means the list is empty, not just paused -- clear whatever is
-    // already collected the moment the switch goes off.
-    if key == "errorLog" && !enabled {
-        ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    }
     // Turning this ON while demo mode is active is exactly the condition
     // enable_demo_mode/disable_demo_mode's own real-instance check exists to
     // prevent (second review, finding 4): a second process that starts once
@@ -271,7 +289,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     let clear_ocr_index = key == "ocrIndex" && !enabled;
     let snapshot = {
         let mut store = lock(&state);
-        store.settings.ui_flags.insert(key, enabled);
+        store.settings.ui_flags.insert(key.clone(), enabled);
         save_settings(&app, &store.settings);
         if clear_ocr_index {
             // A running "read existing pictures" pass would write the text straight back.
@@ -315,21 +333,11 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         // makes this safe even if one somehow were still winding down.
         start_sync_poll(app.clone());
     }
-    // Capture exclusion applies live to every open window. Never hold the store
-    // lock across window API calls (deadlock risk). The flag says "allow
-    // screenshots", so the exclusion is its OPPOSITE: passing it straight through
-    // is what made the switch work backwards.
-    if is_capture {
-        apply_capture_exclusion_all(&app, !enabled);
-    }
+    apply_flag_effects(&app, &key, enabled);
     // The window itself now always runs (started at boot) since the
     // auto-advance session needs it independently of this toggle; on/off just
     // changes what on_clipboard_update does with each event, checked live.
     let _ = is_clip;
-    #[cfg(windows)]
-    if end_auto_session {
-        clipwatch::end_any();
-    }
     // Switching the feature off unregisters every prompt accelerator but keeps
     // the stored ones, so switching it back on restores them all.
     if is_hotkeys {
