@@ -1,8 +1,8 @@
 use super::*;
 
-// The sidecar files that sit beside a recording, each as its own extension of the
-// video's name (`rec.mp4` -> `rec.keys.json`). One builder for all of them, so a
-// Save/Copy/discard that moves or drops one kind handles the others the same way.
+// The sidecar files beside a recording, each as an extension of the video's name (`rec.mp4`
+// -> `rec.keys.json`). One builder for all of them, so a Save/Copy/discard that moves or
+// drops one kind handles the others the same way.
 pub(crate) const KEYS_SIDECAR_EXT: &str = "keys.json";
 pub(crate) const CAM_SIDECAR_EXT: &str = "cam.json";
 
@@ -12,35 +12,30 @@ pub(crate) fn sidecar_path(video: &Path, ext: &str) -> PathBuf {
 
 #[tauri::command]
 pub(crate) fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
-    // A source still offered to an open editor wins: a page that boots in the
-    // meantime never got the load event and has to start on it.
+    // A source still offered to an open editor wins: a page that boots in the meantime never got
+    // the load event and has to start on it.
     let offered = VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let (path, origin_dir, overlay_path) = offered.unwrap_or_else(|| pending.lock().clone());
     let overlay_path = if overlay_path.is_empty() { None } else { Some(overlay_path) };
     if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path, request_id: None }) }
 }
 
-// ---- Open an existing file (not a fresh capture/recording) in whichever
-// editor its actual content calls for. ----
+// ---- Open an existing file in whichever editor its content calls for ----
 
 // Largest file, in megabytes, the editors will open.
 pub(crate) const EDITOR_OPEN_MAX_MB: f64 = 2048.0;
 
-// True once a file is past the ceiling -- kept as its own pure
-// function so the boundary (exactly at the limit still opens) is unit
-// testable without a running app.
+// True once a file is past the ceiling. Pure, so the boundary (exactly at the limit still
+// opens) is testable without a running app.
 pub(crate) fn exceeds_open_edit_limit(bytes: u64, max_mb: f64) -> bool {
     let cap = ((max_mb.max(1.0)) as u64).saturating_mul(1024 * 1024);
     bytes > cap
 }
 
-// Content, never the extension, decides what opens: a real image (any of the
-// formats the `image` crate reads, sniffed the same way decode_image_file
-// already does) wins first since it is by far the cheaper check; only then is
-// ffprobe asked whether this is a video it can read. `ffprobe` is None in a
-// unit test that has no bundled
-// ffprobe.exe, which correctly makes every video case fall through to "not
-// media" there rather than false-negative on the image branch.
+// Content, never the extension, decides what opens: a real image (any format the `image`
+// crate reads, sniffed as decode_image_file does) wins first as the cheaper check, then
+// ffprobe is asked whether it is a readable video. `ffprobe` is None in a unit test without
+// the bundled ffprobe.exe, so every video case falls through to "not media" there.
 pub(crate) fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(&'static str, Option<image::ImageFormat>)> {
     if decode_image_file(&path.to_string_lossy()).is_some() {
         let fmt = image::ImageReader::open(path)
@@ -66,28 +61,15 @@ pub(crate) enum OpenEditResult {
     Video { copied_path: String, origin_dir: String, name: String },
 }
 
-// A video opened this way is a COPY (see open_file_in_editor below), and
-// has_keys_sidecar/read_key_sidecar only ever look for "<video>.keys.json"
-// right beside whatever path the editor was actually handed -- without this,
-// reopening a past recording through "open an existing file" (the composer
-// button's right-click, or a library attachment) silently lost its typed
-// keys even though the original recording's own sidecar was still sitting
-// untouched next to the source file. A source with no sidecar (the setting
-// was off, or the recording predates this feature) leaves the copy without
-// one too, same as it always did.
-// A ceiling on the key-sidecar JSON this app will ever copy along with a
-// working copy. EVENTS_CAP already bounds how large a sidecar this app's own
-// capture can produce, so a file well past that is either corrupted or from
-// somewhere else entirely -- either way not worth reading into memory just to
-// carry it into a throwaway editor folder.
+// Ceiling on the key-sidecar JSON copied along with a working copy. EVENTS_CAP bounds what
+// this app's own capture produces, so a file well past it is corrupted or foreign and not
+// worth reading into memory.
 #[cfg(windows)]
 pub(crate) const KEY_SIDECAR_MAX_COPY_BYTES: u64 = 16 * 1024 * 1024;
 
-// Whether `path` is safe to carry along as a key-overlay sidecar: present,
-// under the size ceiling, and parseable as the same KeySidecar shape
-// read_key_sidecar itself expects. Split out as its own pure function (no
-// destination involved) so a test can prove an oversized or malformed file is
-// rejected without going through open_file_in_editor's whole command.
+// Whether `path` is safe to carry along as a key-overlay sidecar: present, under the size
+// ceiling, and parseable as the KeySidecar shape read_key_sidecar expects. Pure (no
+// destination involved) so a test can prove an oversized or malformed file is rejected.
 #[cfg(windows)]
 pub(crate) fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
     let Ok(meta) = fs::metadata(path) else { return false };
@@ -97,6 +79,10 @@ pub(crate) fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
     fs::read_to_string(path).ok().and_then(|data| parse_key_sidecar(&data)).is_some()
 }
 
+// A video opened this way is a copy (see open_file_in_editor), and has_keys_sidecar and
+// read_key_sidecar only look for "<video>.keys.json" beside the path the editor was handed,
+// so the original recording's sidecar is copied along. A source with no sidecar leaves the
+// copy without one too.
 #[cfg(windows)]
 pub(crate) fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
     let src_sidecar = sidecar_path(src, KEYS_SIDECAR_EXT);
@@ -107,10 +93,10 @@ pub(crate) fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
 #[cfg(not(windows))]
 pub(crate) fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
 
-// A dual-audio recording that the editor has not muxed yet keeps its microphone
-// track in "<name>.mic.wav" beside the video. The editor's working copy needs it
-// too, or the export silently drops the microphone. Held to the same size ceiling
-// as the video itself, and a copy that fails halfway is not left behind.
+// A dual-audio recording the editor has not muxed yet keeps its microphone track in
+// "<name>.mic.wav" beside the video. The working copy needs it too, or the export drops the
+// microphone. Held to the same size ceiling as the video, and a copy that fails halfway is
+// not left behind.
 pub(crate) fn copy_mic_sidecar_alongside(src: &Path, dest: &Path) {
     copy_mic_sidecar_capped(src, dest, EDITOR_OPEN_MAX_MB);
 }
@@ -127,10 +113,9 @@ pub(crate) fn copy_mic_sidecar_capped(src: &Path, dest: &Path, max_mb: f64) {
     }
 }
 
-// Whether `path` is a file inside one of the throwaway working folders that
-// open_file_in_editor makes (directly under the app's own temp folder). Its copy
-// carries the opened file's name, not a recording's, so it cannot pass
-// is_own_recording_source, yet the editor has to mux the mic track into it.
+// Whether `path` is a file inside one of the throwaway working folders open_file_in_editor
+// makes (directly under the app's temp folder). Its copy carries the opened file's name, so
+// it cannot pass is_own_recording_source, yet the editor has to mux the mic track into it.
 pub(crate) fn is_editor_work_copy(path: &Path) -> bool {
     is_editor_work_copy_in(&std::env::temp_dir().join(brand::TEMP_DIR), path)
 }
@@ -148,12 +133,10 @@ pub(crate) fn is_editor_work_copy_in(temp_root: &Path, path: &Path) -> bool {
             .is_some_and(|n| n.starts_with(&format!("{}-openedit-", brand::TEMP_PREFIX)))
 }
 
-// Right-click "Open a file in the editor" (the screenshot/record buttons, and
-// an image/video attachment in the library) all land here. The original file
-// is never touched: an image is read into a data URL straight into the same
-// #snip-modal flow a fresh capture uses, a video is copied once into its own
-// throwaway working folder (swept by sweep_stale_temp_files) and THAT copy is
-// what open_video_editor is pointed at.
+// Right-click "Open a file in the editor" (screenshot/record buttons, library attachments)
+// lands here. The original is never touched: an image is read into a data URL for the same
+// #snip-modal flow a fresh capture uses, and a video is copied once into its own throwaway
+// working folder (swept by sweep_stale_temp_files), which open_video_editor is pointed at.
 #[tauri::command]
 pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<OpenEditResult, String> {
     let p = PathBuf::from(&path);
@@ -194,8 +177,7 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
             let work_dir = std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-openedit-{}-{}", brand::TEMP_PREFIX, local_stamp(), std::process::id()));
             fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
             let dest = work_dir.join(format!("{base}.{ext}"));
-            // A copy of up to the size ceiling plus its sidecars: off the async
-            // runtime's own threads.
+            // A copy of up to the size ceiling plus its sidecars: off the async runtime's threads.
             tauri::async_runtime::spawn_blocking({
                 let p = p.clone();
                 let dest = dest.clone();
@@ -214,10 +196,9 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
     }
 }
 
-// Target folder for a plain "Save": a custom expert path, else
-// Videos\<app>. Mirrors screenshot_dir. The raw capture itself always keeps
-// landing in <data>/recordings until explicitly saved/copied -- the sweep
-// stays in charge of whatever is still undecided there.
+// Target folder for a plain "Save": a custom expert path, else Videos\<app>. Mirrors
+// screenshot_dir. The raw capture stays in <data>/recordings until explicitly saved or
+// copied, and the sweep stays in charge of whatever is undecided there.
 pub(crate) fn recording_dir(custom: &str) -> PathBuf {
     let c = custom.trim();
     if !c.is_empty() {
@@ -229,30 +210,26 @@ pub(crate) fn recording_dir(custom: &str) -> PathBuf {
     base.join("Videos").join(brand::DISPLAY_NAME)
 }
 
-// Default recording folder path (shown greyed in the expert menu / the
-// result window's folder line when no custom folder is set).
+// Default recording folder path (shown greyed in the expert menu and the result window's
+// folder line when no custom folder is set).
 #[tauri::command]
 pub(crate) fn default_recording_dir() -> String {
     recording_dir("").to_string_lossy().to_string()
 }
 
-// The recording folder's own canonical form -- the custom `recordingDir`
-// setting, or the default `Videos\<app>` folder when none is set -- resolved
-// by Rust from its own settings rather than trusted from a caller's raw IPC
-// argument. Every command below that lists, cleans or deletes recordings
-// checks its `dir` parameter against this before touching anything, so a
-// call made with some other folder string can only ever read/delete inside
-// the one folder this app actually keeps recordings in.
+// The recording folder's canonical form: the custom `recordingDir` setting, or the default
+// `Videos\<app>`, resolved by Rust from its own settings rather than trusted from a caller's
+// IPC argument. Every command that lists, cleans or deletes recordings checks its `dir`
+// against this first, so a call with another folder string can only touch the one folder
+// this app keeps recordings in.
 pub(crate) fn configured_recording_dir(state: &State<'_, Db>) -> PathBuf {
     let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     recording_dir(&custom)
 }
 
-// Whether `candidate` really is `configured`: canonicalized when the folder
-// exists (defeats a short-name, trailing-dot or symlink mismatch), a plain
-// case-insensitive comparison when it does not exist yet -- there is nothing
-// to list, clean or delete from a folder that was never created either way,
-// so a name-only comparison costs nothing extra there.
+// Whether `candidate` really is `configured`: canonicalized when the folder exists (defeats a
+// short-name, trailing-dot or symlink mismatch), a case-insensitive comparison when it does
+// not exist yet, since there is nothing to list, clean or delete in a folder never created.
 pub(crate) fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
     match (fs::canonicalize(candidate), fs::canonicalize(configured)) {
         (Ok(a), Ok(b)) => a == b,
@@ -263,20 +240,16 @@ pub(crate) fn path_matches_configured_dir(candidate: &Path, configured: &Path) -
     }
 }
 
-// Only the extensions this app itself ever writes into the recording folder --
-// the user could point it at any folder they like (including one already full
-// of unrelated files), so both the size readout and the cleanup below must
-// never so much as count, let alone delete, anything this app did not create.
+// Only the extensions this app writes into the recording folder. The user can point it at
+// any folder (even one full of unrelated files), so the size readout and cleanup must never
+// count or delete anything this app did not create.
 pub(crate) const VIDEO_FOLDER_EXTS: [&str; 8] = ["mp4", "webm", "gif", "avi", "mov", "mkv", "webp", "apng"];
 
 pub(crate) fn is_video_folder_file(path: &std::path::Path) -> bool {
-    // The extension check alone still leaves every OTHER file with a matching
-    // extension in a shared folder (a real video the user already had there,
-    // or one from some other app) open to being counted and swept up by the
-    // automatic cleanup below -- discard_recording_file_in already treats its
-    // "rec-" stem as the actual proof a file is this app's own recording;
-    // stats/cleanup/the discard trash listing now require the same proof,
-    // rather than trusting the extension on its own.
+    // The extension alone would still let any other file with a matching extension (a real video
+    // the user already had there, or one from another app) be counted and swept up by the
+    // automatic cleanup. discard_recording_file_in treats the "rec-" stem as the proof a file is
+    // this app's recording, and stats, cleanup and the discard trash listing require the same.
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     name.starts_with("rec-")
         && path.is_file()
@@ -301,15 +274,12 @@ pub(crate) fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
     (count, bytes)
 }
 
-// (file count, total bytes) of every recording in the folder -- a missing
-// folder (nothing saved there yet) is simply empty, not an error. Includes
-// the "verworfen" discard-trash subfolder too: those files still sit on
-// this same drive, under this same folder, so leaving them out would make the
-// displayed folder size quietly wrong the moment anything gets discarded.
-// `configured` is Rust's own resolved recording folder (see
-// `configured_recording_dir`); `dir` is only ever trusted once it is proven
-// to be that same folder, kept apart from the tauri::command wrapper below so
-// it can be unit-tested without a running app.
+// (file count, total bytes) of every recording in the folder; a missing folder is empty, not
+// an error. It includes the "verworfen" discard-trash subfolder, which sits on the same
+// drive, so leaving it out would make the displayed folder size wrong after any discard.
+// `configured` is Rust's resolved recording folder (see `configured_recording_dir`); `dir`
+// is trusted only once proven to be that folder. Kept apart from the tauri::command wrapper
+// so it is unit-testable without a running app.
 pub(crate) fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64) {
     let base = std::path::Path::new(dir);
     if !path_matches_configured_dir(base, configured) {
@@ -331,8 +301,8 @@ pub(crate) struct VideoFolderFile {
     pub(crate) size: u64,
 }
 
-// Shared by the preview and the real delete, so what the user confirms is
-// exactly what gets removed -- never a second, independently computed list.
+// Shared by the preview and the real delete, so what the user confirms is exactly what is
+// removed.
 pub(crate) fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, VideoFolderFile)> {
     let age = Duration::from_secs(u64::from(age_days) * 24 * 3600);
     let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
@@ -362,9 +332,9 @@ pub(crate) fn video_folder_cleanup_preview(state: State<'_, Db>, dir: String, ag
     video_folder_cleanup_preview_impl(&dir, age_days, &configured_recording_dir(&state))
 }
 
-// A single file name of the kind this app writes into the recording folder:
-// no path part at all, the "rec-" stem and a recording extension. IPC callers
-// pass names, so anything path-like (separators, "..", a drive prefix) is out.
+// A single file name of the kind this app writes into the recording folder: no path part, the
+// "rec-" stem and a recording extension. IPC callers pass names, so anything path-like
+// (separators, "..", a drive prefix) is out.
 pub(crate) fn is_bare_recording_name(name: &str) -> bool {
     let p = Path::new(name);
     p.file_name().and_then(|n| n.to_str()) == Some(name)
@@ -372,9 +342,8 @@ pub(crate) fn is_bare_recording_name(name: &str) -> bool {
         && p.extension().is_some_and(|e| VIDEO_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
 }
 
-// Deletes only files the confirmation dialog listed (`names`) that are still
-// stale: a file that crossed the age threshold after the list was shown stays
-// for next time, so the user never loses a file they were not shown.
+// Deletes only files the confirmation dialog listed (`names`) that are still stale: a file
+// that crossed the age threshold after the list was shown stays for next time.
 pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, names: &[String], configured: &Path) -> usize {
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return 0;
@@ -387,8 +356,7 @@ pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, names: &[Strin
         }
         if fs::remove_file(&path).is_ok() {
             n += 1;
-            // The sidecars only mean something next to their video: left behind
-            // they would sit in the folder with no owner.
+            // The sidecars only mean something next to their video; left behind they would have no owner.
             let _ = fs::remove_file(path.with_extension("mic.wav"));
             let _ = fs::remove_file(sidecar_path(&path, KEYS_SIDECAR_EXT));
             let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
@@ -402,14 +370,12 @@ pub(crate) fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: 
     video_folder_cleanup_impl(&dir, age_days, &names, &configured_recording_dir(&state))
 }
 
-// The batch-export dialog needs each selected recording's real duration
-// to build export_recordings_batch's per-item total_ms and to sum the disk
-// space check -- reuses the same ffprobe path probe_media_meta already uses
-// for a library attachment. A file that cannot be probed (missing, corrupt)
-// comes back as 0, the same "unknown" fallback probe_media_meta uses
-// everywhere else, rather than failing the whole batch over one bad file.
-// `dir` must be the configured recording folder and every name a bare
-// recording file name; anything else reads as 0 without being probed.
+// The batch-export dialog needs each selected recording's real duration for
+// export_recordings_batch's per-item total_ms and the disk-space check; this reuses the
+// ffprobe path probe_media_meta uses. A file that cannot be probed (missing, corrupt) comes
+// back as 0, probe_media_meta's "unknown", rather than failing the batch. `dir` must be the
+// configured recording folder and every name a bare recording file name; anything else
+// reads as 0 without being probed.
 pub(crate) fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String], configured: &Path) -> Vec<u64> {
     use rayon::prelude::*;
     let dir_ok = path_matches_configured_dir(dir, configured);
@@ -432,17 +398,13 @@ pub(crate) async fn video_folder_file_durations_ms(app: AppHandle, dir: String, 
     .unwrap_or_default()
 }
 
-// Never overwrite an existing file at the target: "<stem>.<ext>", then
-// "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every result-dialog button
-// that writes into a folder instead of a dialog-chosen exact path.
-// The free name is claimed the moment it is found instead of merely observed: a
-// plain exists() check lets a file that appears at that name before a later
-// fs::rename onto it get silently replaced, since rename onto an existing file
-// overwrites on Windows. create_new opens the name atomically (the OS refuses if
-// it already exists) and moves straight to the next numbered candidate on that
-// exact race, so the name this function returns is always one nothing else could
-// have claimed first. The empty placeholder file it leaves behind still needs to
-// be replaced (or removed on failure) by the caller.
+// Never overwrite an existing file at the target: "<stem>.<ext>", then "<stem> (2).<ext>",
+// "<stem> (3).<ext>", and so on. Shared by every result-dialog button that writes into a
+// folder rather than a dialog-chosen path.
+// The free name is claimed when found: a plain exists() check lets a file appear at that
+// name before a later fs::rename onto it, which overwrites on Windows. create_new claims the
+// name atomically and moves to the next candidate on that race. The empty placeholder it
+// leaves must be replaced (or removed on failure) by the caller.
 pub(crate) fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::io::Result<PathBuf> {
     let mut n: u32 = 1;
     loop {
@@ -455,9 +417,8 @@ pub(crate) fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &
     }
 }
 
-// fs::rename fails across drives (recordingDir can be anywhere the user
-// picks, unlike the fixed same-drive <data>/recordings) -- fall back to
-// copy+remove there.
+// fs::rename fails across drives (recordingDir can be anywhere, unlike the same-drive
+// <data>/recordings), so fall back to copy+remove.
 pub(crate) fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
     if fs::rename(src, dst).is_ok() {
         return Ok(());
@@ -466,12 +427,9 @@ pub(crate) fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io
     fs::remove_file(src)
 }
 
-// Save/Save As/Copy relocate the video but used to leave its mic
-// sidecar (a dual-audio capture not yet muxed by the editor) behind in the
-// recordings folder, where it had no owner left and was later swept as an
-// orphan -- silently losing the microphone track on every recording saved
-// before it was ever opened in the editor. Best-effort: the primary move
-// already succeeded by the time this runs, so a sidecar move failure is
+// Save/Save As/Copy relocate the video, so its mic sidecar (a dual-audio capture not yet
+// muxed by the editor) must follow, or it has no owner and is swept as an orphan, losing the
+// microphone track. Best-effort: the primary move already succeeded, so a sidecar failure is
 // logged, not propagated.
 pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path::Path) {
     let old_sidecar = old_video.with_extension("mic.wav");
@@ -483,9 +441,8 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
             }
         }
     }
-    // The key-overlay sidecar (if this take ever wrote one) travels
-    // the same way, for the same reason -- Save/Save As/Copy relocate the
-    // video file and would otherwise orphan it at the old path.
+    // The key-overlay sidecar (if this take wrote one) travels the same way, or it would be
+    // orphaned at the old path.
     #[cfg(windows)]
     {
         let old_keys = sidecar_path(old_video, KEYS_SIDECAR_EXT);
@@ -498,8 +455,7 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
             }
         }
     }
-    // Same again for the camera sidecar, on whichever of the two recordings
-    // (screen or camera) is the one actually being relocated here.
+    // Same for the camera sidecar, on whichever recording (screen or camera) is being relocated.
     let old_cam = sidecar_path(old_video, CAM_SIDECAR_EXT);
     if old_cam.is_file() {
         let new_cam = sidecar_path(new_video, CAM_SIDECAR_EXT);
@@ -511,9 +467,8 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
     }
 }
 
-// Shared by Save/Copy: if the file already sits in the target folder
-// (e.g. Copy running after a Save already placed it there), leave its name
-// alone; otherwise move it in under a name that never overwrites anything.
+// Shared by Save/Copy: a file already in the target folder (e.g. Copy after a Save) keeps its
+// name; otherwise it moves in under a name that never overwrites anything.
 pub(crate) fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
     let same_dir = src
@@ -527,8 +482,8 @@ pub(crate) fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std:
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stem = src.file_stem().and_then(|e| e.to_str()).unwrap_or("Recording");
-    // The name is claimed up front, so a second move at the same moment takes the
-    // next free one instead of replacing this file.
+    // The name is claimed up front, so a second move at the same moment takes the next free one
+    // instead of replacing this file.
     let dest = reserve_unique_dest_path(dir, stem, ext)?;
     if let Err(e) = move_file(src, &dest) {
         let _ = fs::remove_file(&dest);
@@ -538,26 +493,21 @@ pub(crate) fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std:
     Ok(dest)
 }
 
-// Post-capture "Save as..." for a recording -- the file already sits in the
-// recordings folder (raw or converted); this moves it wherever the user
-// picks, same shape as save_screenshot_as but from a real file instead of a
-// data URL. Moves rather than copies so the raw capture does not linger as a
-// duplicate in <data>/recordings once it has a permanent home -- the
-// frontend updates its own pending-path to the new location afterwards, so
-// a later Attach/Copy on the same result still finds the file.
+// Post-capture "Save as..." for a recording already in the recordings folder (raw or
+// converted): moves it where the user picks, like save_screenshot_as but from a real file.
+// It moves rather than copies so the raw capture does not linger in <data>/recordings; the
+// frontend updates its pending path afterwards so a later Attach/Copy still finds the file.
 #[tauri::command]
 pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
     }
-    // move_file below relocates this file wherever the save dialog points --
-    // refuse to move anything that is not proven to be either this app's own
-    // recording, sitting in a recording folder, or a file this same
-    // session's own export_video call actually wrote (an export can land
-    // outside any recording folder once export_dest_dir_is_authorized has
-    // cleared it, so the recording-folder rule alone would refuse "Save as"
-    // right after a perfectly legitimate export).
+    // move_file relocates this file wherever the save dialog points, so refuse anything not
+    // proven to be this app's own recording in a recording folder, or a file this session's
+    // export_video wrote. An export can land outside any recording folder once
+    // export_dest_dir_is_authorized cleared it, so the folder rule alone would refuse "Save as"
+    // right after a legitimate export.
     if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) && !is_known_export_output(&src) {
         return Err("source-not-allowed".to_string());
     }
@@ -576,9 +526,8 @@ pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win:
     }
 }
 
-// Folder of the latest "Save as" the user picked in the dialog, so the earlier
-// parts of the same take can follow the last file there without the renderer
-// naming a destination.
+// Folder of the latest "Save as" the user picked, so the earlier parts of the same take can
+// follow the last file there without the renderer naming a destination.
 pub(crate) static LAST_SAVE_AS_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 // Moves each part into `dest_dir` (name kept, so the part suffix stays) with its
@@ -606,10 +555,9 @@ pub(crate) fn place_recording_parts(parts: &mut Vec<RecordingPartInfo>, allowed:
     (saved, failed)
 }
 
-// Quit during a recording: the take is stopped first, and no result dialog will
-// ever ask what to do with it, so it is saved like the dialog's Save would (last
-// file and earlier parts into the recordings folder) instead of being left in
-// the staging folder, where the stale sweep would delete it later.
+// Quit during a recording: the take is stopped first and no result dialog will ask what to
+// do with it, so it is saved as the dialog's Save would (last file and earlier parts into
+// the recordings folder) rather than left in staging, where the stale sweep deletes it.
 pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload) {
     let state = app.state::<Db>();
     let allowed = recording_source_dirs(app, &state);
@@ -628,9 +576,9 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
     }
 }
 
-// Save/Attach/Edit/Save as in the result dialog: the earlier parts of a
-// "finish and continue" take go where the last file went. `beside_save_as`
-// picks the folder of the latest Save as instead of the recordings folder.
+// Save/Attach/Edit/Save as in the result dialog: the earlier parts of a "finish and continue"
+// take go where the last file went. `beside_save_as` picks the folder of the latest Save as
+// instead of the recordings folder.
 #[tauri::command]
 pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, beside_save_as: bool) -> Result<(u32, u32), String> {
     let allowed = recording_source_dirs(&app, &state);
@@ -644,8 +592,8 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     Ok(place_recording_parts(&mut parts, &allowed, &dest))
 }
 
-// Discard in the result dialog: the earlier parts go to the discard folder like
-// the last file. Returns how many were moved.
+// Discard in the result dialog: the earlier parts go to the discard folder like the last
+// file. Returns how many were moved.
 pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, allowed: &[PathBuf]) -> u32 {
     let mut moved = 0u32;
     parts.retain(|part| {
@@ -665,41 +613,36 @@ pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u
     discard_recording_parts_in(&mut parts, &allowed)
 }
 
-// The folder picker used by the video editor's "choose folder"
-// export target and the recordings batch-export dialog. A plain wrapper
-// around the same picker `pick_folder` uses, except this one also remembers
-// the folder as an authorized export destination -- `pick_folder` itself
-// stays untouched since it is shared with picks that have nothing to do with
-// exporting (attachments, imports, the recordings folder setting, ...) and
-// must not widen what an export command will accept.
+// The folder picker for the video editor's "choose folder" export target and the batch-export
+// dialog. A wrapper around the picker `pick_folder` uses that also remembers the folder as an
+// authorized export destination; `pick_folder` stays untouched since other picks
+// (attachments, imports, the recordings folder setting) must not widen what an export
+// accepts.
 #[tauri::command]
 pub(crate) async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
     let result = file_dialog_for(&app, win.label()).pick_folder();
     let _ = win.set_focus();
     if let Some(dir) = &result {
-        // remember_export_dest_dir is what actually authorizes exporting into
-        // this folder right away (export_dest_dir_is_authorized checks it
-        // directly, not a purpose-bound grant); the grant below is the
-        // separate, one-time authority set_video_export_dir needs if the
-        // caller goes on to save this folder as the standing preference.
+        // remember_export_dest_dir authorizes exporting into this folder right away
+        // (export_dest_dir_is_authorized checks it directly); the grant below is the separate
+        // one-time authority set_video_export_dir needs if the caller saves this folder as the
+        // standing preference.
         remember_export_dest_dir(dir);
         grant_picked_dir(dir, "videoExport");
     }
     result.map(|p| p.to_string_lossy().to_string())
 }
 
-// Plain "Save" -- writes straight into recordingDir without a dialog
-// (the common case); save_recording_as above keeps the free dialog for
-// everything else.
+// Plain "Save": writes straight into recordingDir without a dialog (the common case);
+// save_recording_as keeps the free dialog for everything else.
 #[tauri::command]
 pub(crate) async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<String, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
     }
-    // place_in_dir below moves the file -- refuse to move anything that is not
-    // proven to be this app's own recording, sitting where its own capture or
-    // an earlier Save/Copy left it.
+    // place_in_dir moves the file, so refuse anything not proven to be this app's own recording
+    // where its capture or an earlier Save/Copy left it.
     if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
         return Err("source-not-allowed".to_string());
     }
@@ -708,29 +651,25 @@ pub(crate) async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src
     Ok(dest.to_string_lossy().to_string())
 }
 
-// "Copy" -- the video counterpart of the screenshot result dialog's
-// clipboard copy. A video cannot be a bitmap, so the file itself is the
-// clipboard payload (the same CF_HDROP path copy_prompt already uses for any
-// file-attached prompt); it is moved into recordingDir first so the pasted
-// reference still resolves after the window closes (see discard_recording_file
-// and closeRecModal on the frontend: a copy alone does not count as "saving",
-// so closing without also using Save/Save as.../Attach still deletes it).
+// "Copy", the video counterpart of the screenshot dialog's clipboard copy. A video cannot be
+// a bitmap, so the file itself is the clipboard payload (the CF_HDROP path copy_prompt uses
+// for any file-attached prompt). It is moved into recordingDir first so the pasted reference
+// still resolves after the window closes (see discard_recording_file and closeRecModal on
+// the frontend: a copy alone does not count as "saving", so closing without Save, Save
+// as... or Attach still deletes it).
 //
-// The move happens before the clipboard write and is not undone if that write
-// fails (undoing it would just trade one race for another) -- so the new
-// location is always returned alongside a success flag rather than folded
-// into the Err case, which used to strand the frontend pointing at the
-// now-nonexistent original path: every later action (Save, Discard, a retry)
-// would fail with "file not found" even though the recording still exists,
-// safely, at `dest`.
+// The move happens before the clipboard write and is not undone if that write fails, so the
+// new location is always returned with a success flag instead of folded into the Err case.
+// Otherwise the frontend would keep pointing at the vanished original path and every later
+// action would fail with "file not found" although the recording still exists at `dest`.
 #[tauri::command]
 pub(crate) async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
     }
-    // Same move as save_recording_now above -- the source must already be
-    // proven to be this app's own recording before place_in_dir relocates it.
+    // Same as save_recording_now: the source must be proven this app's own recording before
+    // place_in_dir relocates it.
     if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
         return Err("source-not-allowed".to_string());
     }
@@ -741,10 +680,9 @@ pub(crate) async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_,
     Ok((dest_str, clip_ok))
 }
 
-// The video editor's "Copy to clipboard" export target -- a throwaway
-// file in the app's own temp folder rather than anywhere the user chose, so
-// it can be swept away automatically (see sweep_clip_export_temp below)
-// without ever touching a real save.
+// The video editor's "Copy to clipboard" export target: a throwaway file in the app's temp
+// folder rather than anywhere the user chose, so it can be swept automatically (see
+// sweep_clip_export_temp) without touching a real save.
 pub(crate) fn clip_export_path_impl(ext: &str) -> Result<String, String> {
     let dir = std::env::temp_dir().join(brand::TEMP_DIR);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -758,38 +696,33 @@ pub(crate) async fn clip_export_path(ext: String) -> Result<String, String> {
     clip_export_path_impl(&ext)
 }
 
-// Thin wrapper so the frontend does not need a Windows-only code path of its
-// own -- same CF_HDROP mechanism copy_recording_to_clipboard already uses.
+// Thin wrapper so the frontend needs no Windows-only code path; same CF_HDROP mechanism as
+// copy_recording_to_clipboard.
 #[tauri::command]
 pub(crate) async fn copy_file_to_clipboard(path: String) -> bool {
     set_clipboard_file(&path)
 }
 
-// recDiscardKeepH has no expert-menu row yet (same "future menu writes it
-// directly" state as recCanvasMode above) -- 0 disables the
+// recDiscardKeepH has no expert-menu row yet (like recCanvasMode above); 0 disables the
 // whole discard-trash cleanup, keeping everything in "verworfen" forever.
 pub(crate) fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
     lock(state).settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0)
 }
 
-// The two folders a genuine recording can sit in while a recording command is
-// still allowed to act on it by an IPC path: the app's own capture staging
-// folder (<data>/recordings, where a fresh recording always lands first) and
-// the currently configured recordingDir (where Save/Copy leave it before the
-// result window closes). Shared by discard/convert/save/copy below so they
-// all draw the line in exactly the same place.
+// The two folders a genuine recording can sit in while a recording command may act on it by
+// an IPC path: the capture staging folder (<data>/recordings, where a fresh recording first
+// lands) and the configured recordingDir (where Save/Copy leave it before the result window
+// closes). Shared by discard/convert/save/copy so they draw the line in one place.
 pub(crate) fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [PathBuf; 2] {
     let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     [data_dir(app).join("recordings"), recording_dir(&custom)]
 }
 
-// Whether `path` is a recording this app itself produced, sitting in one of
-// `allowed`'s folders, rather than an arbitrary file named in a recording
-// command's IPC argument -- the same "rec-" stem plus allowed-parent-folder
-// proof discard_recording_file_in below already requires, reused here so
-// convert_recording/save_recording_now/copy_recording_to_clipboard cannot be
-// made to move, replace or feed ffmpeg an unrelated file just because a
-// subverted renderer sent that file's path as `src_path`.
+// Whether `path` is a recording this app produced, in one of `allowed`'s folders, rather than
+// an arbitrary file named in a recording command's IPC argument. It is the same "rec-" stem
+// plus allowed-parent proof discard_recording_file_in requires, so convert_recording,
+// save_recording_now and copy_recording_to_clipboard cannot be made to move, replace or feed
+// ffmpeg an unrelated file by a subverted renderer.
 pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if !name.starts_with("rec-") || !path.is_file() {
@@ -799,36 +732,21 @@ pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool 
     allowed.iter().any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false))
 }
 
-// Whether `sidecar` is exactly the mic capture belonging to `video` -- the
-// only sidecar mux_mic_track may consume and delete. Checked apart from
-// is_own_recording_source (which only proves `video` itself is ours) so a
-// second, unrelated path cannot ride along just because it happens to sit in
-// an allowed folder too.
+// Whether `sidecar` is exactly the mic capture belonging to `video`, the only sidecar
+// mux_mic_track may consume and delete. Checked apart from is_own_recording_source (which
+// proves only `video`) so an unrelated path in an allowed folder cannot ride along.
 pub(crate) fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
     sidecar == video.with_extension("mic.wav")
 }
 
-// Discard a not-yet-saved recording. Scoped to the app's own recordings
-// folder OR the current recordingDir (Copy/Save move the working file
-// there before the window closes) -- never an arbitrary webview-supplied
-// path, same defense-in-depth pattern as delete_screenshot_file. Moves into
-// a "verworfen" subfolder of whichever of those two it was actually in,
-// rather than deleting outright, so a wrong click can still be undone --
-// see restore_discarded_recording and the sweep in sweep_recordings_now_result,
-// which is what eventually clears this subfolder back out.
-// Split out so the actual move logic has a real unit test against a plain
-// tempdir, no AppHandle/Db needed -- same split as sweep_stale_recordings_in
-// above. Returns the file's new path in "verworfen" on success.
+// Split out so the move logic has a unit test against a plain tempdir, no AppHandle/Db
+// needed. Returns the file's new path in "verworfen" on success.
 pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Option<PathBuf> {
-    // The directory check alone let this touch ANY file directly inside
-    // recordingDir -- often the user's normal Videos folder, shared with files
-    // this app never touched. delete_screenshot_file's own comment already
-    // calls its filename-prefix check "defense in depth" against exactly this;
-    // this command claimed to follow the same pattern but was missing that
-    // half. Every real recording (raw, saved, converted, or moved by Copy)
-    // keeps the "rec-" stem `rec_filename`/`place_in_dir` give it -- only
-    // Save As lets the user pick a different name, and that always sets
-    // recSavedOrAttached first, taking the file out of discard's reach.
+    // The directory check alone would let this touch any file directly inside recordingDir, often
+    // the user's normal Videos folder, shared with files this app never made. Every real
+    // recording (raw, saved, converted, or moved by Copy) keeps the "rec-" stem that
+    // rec_filename/place_in_dir give it; only Save As lets the user pick another name, and that
+    // sets recSavedOrAttached first, taking the file out of discard's reach.
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if !name.starts_with("rec-") {
         return None;
@@ -842,9 +760,8 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     fs::create_dir_all(&trash).ok()?;
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
-    // A discarded recording takes its mic and key-overlay sidecars (if any)
-    // with it -- best-effort, since most recordings have neither. Both only
-    // ever exist next to an mp4 (the screen recorder's own container).
+    // A discarded recording takes its mic and key-overlay sidecars (if any) with it, best-effort
+    // since most recordings have neither. Both exist only next to an mp4.
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         if ext.eq_ignore_ascii_case("mp4") {
             let sidecar = path.with_extension("mic.wav");
@@ -860,9 +777,8 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
             }
         }
     }
-    // The camera sidecar takes the same trip, regardless of container --
-    // camera recordings are webm, not mp4, so this cannot sit inside the
-    // ext-gated block above.
+    // The camera sidecar takes the same trip regardless of container (camera recordings are webm),
+    // so it cannot sit inside the ext-gated block above.
     let cam_sidecar = sidecar_path(path, CAM_SIDECAR_EXT);
     if cam_sidecar.is_file() {
         let _ = move_file(&cam_sidecar, &sidecar_path(&dest, CAM_SIDECAR_EXT));
@@ -870,9 +786,8 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     Some(dest)
 }
 
-// A cancelled take goes to its folder's holding area like a discarded one, so a
-// Cancel clicked by mistake can still be undone. A file that cannot be moved there
-// is removed with its mic track, as before.
+// A cancelled take goes to its folder's holding area like a discarded one, so a mistaken
+// Cancel can be undone. A file that cannot be moved there is removed with its mic track.
 pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
     let moved = path.parent().and_then(|dir| discard_recording_file_in(&[dir.to_path_buf()], path)).is_some();
     if !moved {
@@ -881,14 +796,12 @@ pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
     }
 }
 
-// Discard a not-yet-saved recording. Scoped to the app's own recordings
-// folder OR the current recordingDir (Copy/Save move the working file
-// there before the window closes) -- never an arbitrary webview-supplied
-// path, same defense-in-depth pattern as delete_screenshot_file. Moves into
-// a "verworfen" subfolder of whichever of those two it was actually in,
-// rather than deleting outright, so a wrong click can still be undone --
-// see restore_discarded_recording and the sweep in sweep_recordings_now_result,
-// which is what eventually clears this subfolder back out.
+// Discard a not-yet-saved recording. Scoped to the app's recordings folder or the current
+// recordingDir (Copy/Save move the working file there before the window closes), never an
+// arbitrary webview-supplied path (defense in depth, as delete_screenshot_file). It moves
+// into a "verworfen" subfolder of whichever it was in rather than deleting, so a wrong click
+// can be undone (see restore_discarded_recording; the sweep in sweep_recordings_now_result
+// eventually clears the subfolder).
 #[tauri::command]
 pub(crate) fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> Option<f64> {
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
@@ -897,18 +810,14 @@ pub(crate) fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path:
     Some(discard_keep_hours(&state))
 }
 
-// Bare filename only, never a path -- every caller below reaches into a
-// folder's own "verworfen" subfolder with a name taken from that same
-// folder's listing, but this guard stops a hand-crafted "../x" from ever
-// escaping it, the same defense-in-depth discard_recording_file already
-// applies to the file it moves in.
+// Bare filename only, never a path. Callers reach into a folder's "verworfen" subfolder with a
+// name from that folder's own listing; this stops a hand-crafted "../x" from escaping it.
 pub(crate) fn is_bare_filename(name: &str) -> bool {
     !name.is_empty() && std::path::Path::new(name).file_name().is_some_and(|f| f == std::ffi::OsStr::new(name))
 }
 
-// The Aufnahmeordner dialog's own listing of what is currently sitting in
-// the trash, waiting out its retention window -- same shape and same
-// extension filter as video_folder_stats/video_folder_cleanup_preview above.
+// The recordings-folder dialog's listing of what sits in the trash waiting out its retention
+// window; same shape and extension filter as video_folder_stats/video_folder_cleanup_preview.
 pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<VideoFolderFile> {
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return Vec::new();
@@ -941,9 +850,8 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
     let trash = std::path::Path::new(dir).join("verworfen");
     let src = trash.join(name);
     let dst = std::path::Path::new(dir).join(name);
-    // Never overwrites a same-named file that has appeared at the old spot
-    // since the discard -- restoring silently on top of someone else's
-    // recording would be a worse surprise than the restore just failing.
+    // Never overwrites a same-named file that appeared at the old spot since the discard:
+    // restoring on top of someone else's recording would be worse than the restore failing.
     if !src.is_file() || dst.exists() || move_file(&src, &dst).is_err() {
         return false;
     }
@@ -951,8 +859,7 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
     if sidecar_src.is_file() {
         let _ = move_file(&sidecar_src, &dst.with_extension("mic.wav"));
     }
-    // The key-overlay sidecar used to stay behind in the trash on
-    // a restore, orphaned at the old path forever.
+    // The key-overlay sidecar leaves the trash with its video instead of staying orphaned.
     let keys_src = src.with_extension("keys.json");
     if keys_src.is_file() {
         let _ = move_file(&keys_src, &dst.with_extension("keys.json"));
@@ -982,8 +889,7 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
         return false;
     }
     let _ = fs::remove_file(path.with_extension("mic.wav"));
-    // A manual "delete for good" used to leave the key-overlay
-    // sidecar sitting in the trash forever once its video was gone.
+    // "Delete for good" removes the key-overlay sidecar with its video.
     let _ = fs::remove_file(path.with_extension("keys.json"));
     let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
     fs::remove_file(&path).is_ok()
