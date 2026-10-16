@@ -1381,6 +1381,7 @@ export default {
     errSyncLeavePrompts: "Nie udało się zapisać promptów w poprzednim folderze",
     errSyncLeaveSettings: "Nie udało się zapisać ustawień w poprzednim folderze",
     errDataDirBusy: "Folder danych jest nadal używany przez inne zadanie, więc nic nie zostało przeniesione. Poczekaj chwilę i spróbuj ponownie.",
+    errTakeoverHasPrompts: "Ta biblioteka ma już własne prompty, więc nic nie zostało przejęte.",
     errNotTextAttachment: "Ten załącznik nie jest plikiem tekstowym",
     errUpdateNotNewer: "Ta wersja nie jest nowsza od zainstalowanej",
     errUpdateCheckFailed: "Sprawdzanie aktualizacji nie powiodło się. Spróbuj ponownie później.",

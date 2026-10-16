@@ -1388,6 +1388,7 @@ export default {
     errSyncLeavePrompts: "Die Prompts konnten nicht im bisherigen Ordner gespeichert werden",
     errSyncLeaveSettings: "Die Einstellungen konnten nicht im bisherigen Ordner gespeichert werden",
     errDataDirBusy: "Der Datenordner wird noch von einer anderen Aufgabe verwendet, deshalb wurde nichts verschoben. Warte einen Moment und versuche es erneut.",
+    errTakeoverHasPrompts: "Diese Bibliothek enthält inzwischen eigene Prompts, deshalb wurde nichts übernommen.",
     errNotTextAttachment: "Dieser Anhang ist keine Textdatei",
     errUpdateNotNewer: "Diese Version ist nicht neuer als die installierte",
     errUpdateCheckFailed: "Die Updateprüfung ist fehlgeschlagen. Versuche es später erneut.",

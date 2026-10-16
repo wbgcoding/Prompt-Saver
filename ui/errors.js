@@ -50,6 +50,7 @@ export const ERROR_MSG_KEYS = {
   "the prompts could not be saved to the folder being left": "errSyncLeavePrompts",
   "the settings could not be saved to the folder being left": "errSyncLeaveSettings",
   "the data folder is still in use": "errDataDirBusy",
+  "this library already has prompts": "errTakeoverHasPrompts",
   "not a text attachment": "errNotTextAttachment",
   "this release is not newer than the installed version": "errUpdateNotNewer",
   "update check failed": "errUpdateCheckFailed",

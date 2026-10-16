@@ -1381,6 +1381,7 @@ export default {
     errSyncLeavePrompts: "无法将提示词保存到之前的文件夹",
     errSyncLeaveSettings: "无法将设置保存到之前的文件夹",
     errDataDirBusy: "数据文件夹仍被其他任务占用，因此未移动任何内容。请稍候片刻后重试。",
+    errTakeoverHasPrompts: "此资料库现在已有自己的提示词，因此没有导入任何内容。",
     errNotTextAttachment: "此附件不是文本文件",
     errUpdateNotNewer: "此版本并不比已安装的版本更新",
     errUpdateCheckFailed: "检查更新失败，请稍后再试。",

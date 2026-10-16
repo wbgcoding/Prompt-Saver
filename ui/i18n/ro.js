@@ -1381,6 +1381,7 @@ export default {
     errSyncLeavePrompts: "Prompturile nu au putut fi salvate în dosarul anterior",
     errSyncLeaveSettings: "Setările nu au putut fi salvate în dosarul anterior",
     errDataDirBusy: "Dosarul de date este încă folosit de altă sarcină, așa că nu s-a mutat nimic. Așteaptă un moment și încearcă din nou.",
+    errTakeoverHasPrompts: "Această bibliotecă are acum prompturi proprii, așa că nu s-a preluat nimic.",
     errNotTextAttachment: "Acest atașament nu este un fișier text",
     errUpdateNotNewer: "Această versiune nu este mai nouă decât cea instalată",
     errUpdateCheckFailed: "Verificarea actualizărilor a eșuat. Încearcă din nou mai târziu.",

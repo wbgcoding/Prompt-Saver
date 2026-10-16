@@ -1381,6 +1381,7 @@ export default {
     errSyncLeavePrompts: "Não foi possível salvar os prompts na pasta anterior",
     errSyncLeaveSettings: "Não foi possível salvar as configurações na pasta anterior",
     errDataDirBusy: "A pasta de dados ainda está em uso por outra tarefa, então nada foi movido. Aguarde um momento e tente novamente.",
+    errTakeoverHasPrompts: "Esta biblioteca já tem prompts próprios, por isso nada foi adotado.",
     errNotTextAttachment: "Este anexo não é um arquivo de texto",
     errUpdateNotNewer: "Esta versão não é mais recente que a instalada",
     errUpdateCheckFailed: "A verificação de atualizações falhou. Tente de novo mais tarde.",

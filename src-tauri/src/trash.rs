@@ -780,6 +780,14 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
     let src = appdata_store_dir(&app, &dir);
     if adopt {
         let src = src.clone().ok_or("no-source")?;
+        // The offer was made on an empty store; a prompt added while the dialog was
+        // open would be replaced by the adopted database and lost.
+        {
+            let store = lock(&state);
+            if !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids) {
+                return Err("this library already has prompts".to_string());
+            }
+        }
         let mut landed = false;
         if let Err(e) = copy_store_files(&src, &dir, &mut landed) {
             // Whatever did arrive IS the store on disk now, while the one in memory

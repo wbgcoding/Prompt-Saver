@@ -1388,6 +1388,7 @@ export default {
     errSyncLeavePrompts: "The prompts could not be saved to the previous folder",
     errSyncLeaveSettings: "The settings could not be saved to the previous folder",
     errDataDirBusy: "The data folder is still in use by another task, so nothing was moved. Wait a moment and try again.",
+    errTakeoverHasPrompts: "This library now has prompts of its own, so nothing was adopted.",
     errNotTextAttachment: "This attachment is not a text file",
     errUpdateNotNewer: "This release is not newer than the installed version",
     errUpdateCheckFailed: "The update check failed. Try again later.",
