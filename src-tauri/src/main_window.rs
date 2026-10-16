@@ -1,13 +1,8 @@
 use super::*;
 
-// Bring the main window back from the tray: always at the saved size/position.
-// Routed through resolve_geometry() (the same validation the startup path
-// uses) instead of trusting the saved geometry raw -- a monitor unplugged
-// while the app sat minimized in the tray must not be able to restore the
-// window off every remaining screen. A window that is simply gone (the process
-// kept running with zero top-level windows, the never-comes-back state a
-// crashed-out webview or a bug can leave behind) is rebuilt first instead of
-// leaving the call a silent no-op.
+// Bring the main window back from the tray at the saved size and position, validated by
+// resolve_geometry() so a monitor unplugged meanwhile cannot restore it off every screen.
+// A window that no longer exists is rebuilt first.
 pub(crate) fn show_main(app: &AppHandle) {
     park_idle_snip_overlay(app);
     let win = show_main_seam(app.get_webview_window("main"), || build_main_window(app));
@@ -29,10 +24,8 @@ pub(crate) fn show_main(app: &AppHandle) {
     reapply_taskbar_state(app);
 }
 
-// The decision `show_main` runs on: reuse the window it already has, or ask
-// for a fresh one. Pulled apart from `show_main` itself so a test can hand it
-// a counter instead of a real window and prove the missing case actually
-// triggers a build rather than doing nothing (the bug this whole point fixes).
+// The decision show_main runs on, split out so a test can pass a counter instead of a real
+// window and prove a missing window triggers a build.
 pub(crate) fn show_main_seam<W>(existing: Option<W>, build: impl FnOnce() -> tauri::Result<W>) -> Option<W> {
     match existing {
         Some(w) => Some(w),
@@ -46,12 +39,9 @@ pub(crate) fn show_main_seam<W>(existing: Option<W>, build: impl FnOnce() -> tau
     }
 }
 
-// The one place the main window is built and wired up -- used by setup() for
-// the window Tauri already created from tauri.conf.json at normal startup, and
-// by show_main() to replace one that was destroyed out from under a process
-// that kept running. Same label, same starting geometry, same decorations and
-// the same event handlers either way, so a rebuilt window behaves exactly like
-// the one the app started with.
+// The one place the main window is built and wired up: setup() uses it for the window Tauri
+// created from tauri.conf.json, show_main() to replace a destroyed one. Same label, geometry,
+// decorations and event handlers either way.
 pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     let win = match app.get_webview_window("main") {
         Some(w) => w,
@@ -76,9 +66,8 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
     if settings.always_on_top {
         let _ = win.set_always_on_top(true);
     }
-    // Without this the frameless, transparent window shows through until the
-    // frontend paints -- a rebuilt window has to arrive dressed the same way
-    // the one created at startup does.
+    // The frameless, transparent window would show through until the frontend paints, so it is
+    // dressed with the theme up front.
     {
         let eff = effective_theme(app, &theme_base_of(&settings, &settings.theme));
         let vars = theme_vars_of(&settings);
@@ -156,30 +145,23 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                     let _ = w.hide();
                 }
             } else {
-                // Never vanish while an export, conversion, ffmpeg
-                // download, backup or import is still going --
-                // request_app_quit asks the main window first,
-                // exactly once per quit attempt (QUIT_CONFIRMED
-                // lets a quit through once the user has answered).
+                // Never vanish while an export, conversion, download, backup or import is running:
+                // request_app_quit asks the main window once per quit attempt (QUIT_CONFIRMED lets the
+                // answered quit through).
                 api.prevent_close();
                 request_app_quit(&handle2);
             }
         }
         WindowEvent::Destroyed => {
-            // No process without a main window: end this one right away, and
-            // back that up with a watchdog in case exit() itself never
-            // completes (a stuck shutdown handler, for instance) -- the same
-            // silent-zombie shape the bug this guards against started from.
-            // The watchdog starts before anything that can wait on the store
-            // lock, so a backup or import holding it cannot keep it from running.
+            // No process without a main window: exit right away, with a watchdog in case exit() never
+            // completes (a stuck shutdown handler). The watchdog starts before anything that can wait
+            // on the store lock, so a backup or import holding it cannot delay it.
             let deadline = SystemTime::now() + WATCHDOG_GRACE;
             let hard_deadline = SystemTime::now() + WATCHDOG_JOB_GRACE;
             std::thread::spawn(move || loop {
                 if watchdog_deadline_reached(SystemTime::now(), deadline) {
-                    // A finishing export, conversion or backup is given the
-                    // longer grace: killing it here would leave a half-written
-                    // file behind, which is worse than a few more seconds of a
-                    // windowless process.
+                    // A finishing export, conversion or backup gets the longer grace: killing it would leave
+                    // a half-written file.
                     let busy = bg_ops_running_count() > 0
                         && !watchdog_deadline_reached(SystemTime::now(), hard_deadline);
                     if !busy {
@@ -215,26 +197,23 @@ pub(crate) const WATCHDOG_GRACE: Duration = Duration::from_secs(5);
 // forced exit never truncates an export, conversion or backup mid-write.
 pub(crate) const WATCHDOG_JOB_GRACE: Duration = Duration::from_secs(120);
 
-// Pure decision for the watchdog thread above -- kept apart from the sleep
-// loop so a test can drive it with fixed instants instead of a real 5-second
-// wait.
+// Pure decision for the watchdog thread, split out so a test can use fixed instants.
 pub(crate) fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
     now >= deadline
 }
 
-// Global-hotkey action: open the standalone quick-launcher (fuzzy search,
-// instant copy) instead of raising the main window. Replaces any launcher already
-// open, so a second hotkey press never leaves two fighting over the same focus.
+// Global-hotkey action: open the standalone quick-launcher instead of raising the main
+// window. Replaces any launcher already open so a second press never leaves two fighting
+// over the focus.
 pub(crate) fn summon_launcher(app: &AppHandle) {
     LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()).clear();
     open_launcher_window(app, false);
 }
 
-// The launcher window itself, shared by the hotkey and by the tray filter row.
-// `deferred` builds it hidden and leaves the focus where it is: the tray hand-off keeps
-// the typist in the tray's own field until the launcher page has loaded (it then calls
-// launcher_ready), because a keystroke sent to a launcher whose page is not there yet is
-// lost. A launcher that never reports in is revealed after LAUNCHER_REVEAL_FALLBACK anyway.
+// The launcher window, shared by the hotkey and the tray filter row. `deferred` builds it
+// hidden without taking focus: the tray keeps the typist's field until the launcher page has
+// loaded and calls launcher_ready, since keystrokes sent earlier are lost. A launcher that
+// never reports in is revealed after LAUNCHER_REVEAL_FALLBACK anyway.
 pub(crate) fn open_launcher_window(app: &AppHandle, deferred: bool) {
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         let _ = win.close();
@@ -308,9 +287,8 @@ pub(crate) fn reveal_launcher(app: &AppHandle) {
     }
 }
 
-// Open the project's GitHub page in the default browser (app logo → repo,
-// version label → releases). The URLs are hardcoded: the webview can never open
-// an arbitrary address.
+// Open the project's GitHub page in the default browser. The URLs are hardcoded so the
+// webview can never open an arbitrary address.
 #[tauri::command]
 pub(crate) fn open_repo(page: Option<String>) -> Result<(), String> {
     let url = match page.as_deref() {
@@ -328,10 +306,8 @@ pub(crate) fn open_repo(page: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-// The third-party license list is generated at build time (build.rs) from the real
-// dependency manifests and embedded here as a plain JSON string; the frontend parses
-// it. Regenerating THIRD-PARTY-NOTICES.md from the same source happens in build.rs
-// too, so the two never show a different list.
+// Generated at build time (build.rs) from the real dependency manifests and embedded as a
+// JSON string for the frontend; build.rs writes THIRD-PARTY-NOTICES.md from the same source.
 pub(crate) static THIRD_PARTY_LICENSES_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/third_party_licenses.json"));
 
@@ -340,43 +316,32 @@ pub(crate) fn third_party_notices() -> &'static str {
     THIRD_PARTY_LICENSES_JSON
 }
 
-// The window's minimum logical size at a given webview zoom factor: growing the
-// 680x460 floor by the same factor keeps at least 680x460 CSS pixels visible
-// (zoom scales CSS pixels inside a fixed window frame), capped to the monitor
-// so this never asks for a window bigger than the screen.
+// The window's minimum logical size at a webview zoom factor: the 680x460 floor grown by the
+// factor keeps that many CSS pixels visible, capped to the monitor.
 pub(crate) fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
     let min_w = ((MAIN_WIN_MIN_W as f64 * factor).round() as u32).min(cap.0);
     let min_h = ((MAIN_WIN_MIN_H as f64 * factor).round() as u32).min(cap.1);
     (min_w, min_h)
 }
 
-// Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
-// Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
-// space, so (unlike a CSS `zoom` on <body>) it never desyncs popup positioning
-// or grid hit-testing. Clamped to the slider's 75: 300% range (the slider,
-// ui/expertConfig.js EXPERT_VALUES uiScale, has always had a 75% floor).
+// Scale the main-window UI with the webview's native zoom (like Ctrl +/-). Unlike a CSS
+// `zoom` on <body>, it keeps event coordinates and getBoundingClientRect in one space, so
+// popup placement and grid hit-testing stay correct. Clamped to the slider's 75-300% range.
 #[tauri::command]
 pub(crate) fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
     let f = factor.clamp(0.75, 3.0);
     if let Some(win) = app.get_webview_window("main") {
         win.set_zoom(f).map_err(|e| e.to_string())?;
-        // See zoom_min_size: without this, the fixed 680x460 OS minimum leaves
-        // fewer and fewer CSS pixels visible as zoom climbs (250% => 272x184,
-        // header/composer become unreachable). Grow the window's minimum by the
-        // same factor: and the window itself, if it is currently smaller than
-        // that: so the header/composer stay reachable at any zoom level.
-        // The window may sit on any monitor by now (this runs live, not just at
-        // startup): cap against the monitor it is actually on, not always the
-        // primary one, falling back to primary if that can't be read either.
+        // Grow the window's minimum by the zoom factor, and the window itself if it is smaller, so
+        // the header and composer stay reachable (the fixed OS minimum shows fewer CSS pixels as
+        // zoom climbs). Capped against the monitor the window is on now, falling back to primary.
         let cap = monitor_cap(win.current_monitor().ok().flatten().or_else(|| win.primary_monitor().ok().flatten()));
         let (min_w, min_h) = zoom_min_size(f, cap);
         let _ = win.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
         if let Ok(size) = win.outer_size() {
             let scale = win.scale_factor().unwrap_or(1.0);
-            // Round like zoom_min_size does (not truncate): otherwise a window
-            // whose true logical size sits right at the new minimum can read 1px
-            // under it here, and the set_size call below would then shave that
-            // truncated value off the OTHER (already-fine) dimension too.
+            // Round like zoom_min_size, not truncate: a size right at the new minimum could otherwise
+            // read 1px under it and shave the other, already fine dimension too.
             let cur_w = (size.width as f64 / scale).round() as u32;
             let cur_h = (size.height as f64 / scale).round() as u32;
             if cur_w < min_w || cur_h < min_h {
@@ -396,10 +361,6 @@ pub(crate) fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> b
         x >= p.x && x < p.x + s.width as i32 && y >= p.y && y < p.y + s.height as i32
     })
 }
-
-// NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent); a
-// physically stored size grew by the monitor's scale factor on every start.
-// Position stays physical (global desktop coordinates).
 
 // Keep in sync with tauri.conf.json's main-window minWidth/minHeight. The OS/WebView2
 // minSize constraint only guards interactive resize-dragging, not a programmatic
@@ -421,10 +382,8 @@ pub(crate) fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, heigh
     WindowGeom { x: 100, y: 100, width, height }
 }
 
-// A monitor's usable size in logical (DPI-independent) pixels, or effectively
-// "no cap" if none is given (lookup failed): the multiplication that feeds
-// zoom_min_size is already bounded by the 75-300% zoom clamp, so an unread
-// monitor never produces a runaway size, just an un-clamped (bounded) one.
+// A monitor's usable size in logical pixels, or effectively no cap when none is given
+// (lookup failed). The zoom clamp already bounds the multiplication fed to zoom_min_size.
 pub(crate) fn monitor_cap(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
     monitor
         .map(|m| {
