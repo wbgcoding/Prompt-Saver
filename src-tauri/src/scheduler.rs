@@ -21,10 +21,8 @@ struct JobHandle {
 
 pub struct Scheduler {
     jobs: Mutex<HashMap<String, JobHandle>>,
-    // Handles displaced by a same-name re-registration (see register_periodic).
-    // shutdown() keeps waiting on these too, or a re-registered job's
-    // still-finishing predecessor thread (e.g. mid disk-write) could be cut
-    // off by process exit once its map entry is gone.
+    // Handles displaced by a same-name re-registration (see register_periodic). shutdown() waits
+    // on these too, so a still-finishing predecessor (e.g. mid disk-write) is not cut off by exit.
     retired: Mutex<Vec<JobHandle>>,
 }
 
@@ -33,13 +31,10 @@ impl Scheduler {
         Scheduler { jobs: Mutex::new(HashMap::new()), retired: Mutex::new(Vec::new()) }
     }
 
-    // Registering a name twice stops the earlier job's thread and replaces
-    // it rather than running two copies of it. The old handle is stopped
-    // and evicted from `jobs` BEFORE the new thread is even spawned, and the
-    // new thread is additionally told to wait for that old thread's `stopped`
-    // flag before running its own job() for the first time -- closing the
-    // window where a slow-to-notice predecessor (mid `job()` when re-
-    // registered) and the new job could otherwise run concurrently.
+    // Registering a name twice stops the earlier job's thread and replaces it. The old handle is
+    // stopped and evicted from `jobs` before the new thread is spawned, and the new thread waits
+    // for the old thread's `stopped` flag before its first job() run, so a slow predecessor and the
+    // new job never run concurrently.
     pub fn register_periodic(
         &self,
         name: &str,
@@ -83,13 +78,10 @@ impl Scheduler {
         }
     }
 
-    // Wakes every job thread out of its wait and waits a bounded time for
-    // all of them to finish. False means at least one job was still running
-    // when the deadline passed; the caller carries on rather than holding
-    // the app open for it. The `stopped` flags are cloned out and the locks
-    // dropped before the wait loop -- holding `jobs` for the whole wait would
-    // block any concurrent retime()/register_periodic() call (e.g. from a job
-    // thread's own last run) until the deadline, for no reason at shutdown.
+    // Wakes every job thread out of its wait and waits a bounded time for all of them. False
+    // means a job was still running at the deadline; the caller carries on rather than holding the
+    // app open. The `stopped` flags are cloned out and the locks dropped before waiting: holding
+    // `jobs` would block a concurrent retime()/register_periodic() until the deadline.
     pub fn shutdown(&self, wait: Duration) -> bool {
         let flags: Vec<Arc<AtomicBool>> = {
             let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
@@ -112,11 +104,9 @@ impl Scheduler {
     }
 }
 
-// One job's entire life: wait until due (or a re-time/stop arrives early),
-// run it, wait again. Nothing here ever touches another job's state.
-// `predecessor`, when set, is the `stopped` flag of the job this one just
-// replaced under the same name -- waited out before the first run so the
-// two never execute job() at the same time (see register_periodic).
+// One job's whole life: wait until due (or a re-time/stop arrives), run it, wait again.
+// `predecessor`, when set, is the `stopped` flag of the job this one replaced under the same
+// name; it is waited out before the first run so the two never run job() together.
 fn job_loop(
     rx: Receiver<JobMsg>,
     first_delay: Duration,
@@ -152,10 +142,8 @@ fn job_loop(
             Err(RecvTimeoutError::Timeout) => {}
         }
         if due <= Instant::now() {
-            // A panicking job must not silently stop the whole schedule (and
-            // must not skip the `stopped` update below, which shutdown()'s
-            // wait loop depends on) -- one bad run is logged and the job
-            // keeps its cadence instead of the thread quietly dying.
+            // A panicking job must not stop the schedule or skip the `stopped` update below (shutdown()'s
+            // wait depends on it): one bad run is logged and the job keeps its cadence.
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(&job)).is_err() {
                 super::append_crash_log("scheduled job panicked; it will still run again on its normal interval");
             }
