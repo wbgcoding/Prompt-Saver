@@ -1509,6 +1509,16 @@ export function initSnipEditor() {
     if (SE.tool === "marker") snipEditDrawMarkerOp(snipEditLiveCtx, op); else snipEditDrawPenOp(snipEditLiveCtx, op);
     snipEditDrawGuides();
   }
+  // Pointer moves arrive far faster than frames on a high-rate mouse or pen; the
+  // stroke is redrawn once per frame instead of once per move.
+  let snipEditLivePenFrame = 0;
+  function snipEditScheduleLivePenStroke() {
+    if (snipEditLivePenFrame) return;
+    snipEditLivePenFrame = requestAnimationFrame(() => {
+      snipEditLivePenFrame = 0;
+      if (SE.drag && (SE.drag.kind === "pen" || SE.drag.kind === "marker")) snipEditDrawLivePenStroke();
+    });
+  }
   function snipEditDrawLiveLineArrow() {
     snipEditClearLive();
     const ts = snipEditToolState(SE.tool);
@@ -1692,7 +1702,7 @@ export function initSnipEditor() {
     let pt = snipEditApplySnap(pt0, e.altKey);
     if (e.shiftKey) pt = snipEditApplyShiftConstraint(SE.drag, pt);
     switch (SE.drag.kind) {
-      case "pen": case "marker": SE.drag.points.push(pt); snipEditDrawLivePenStroke(); break;
+      case "pen": case "marker": SE.drag.points.push(pt); snipEditScheduleLivePenStroke(); break;
       case "line": case "arrow": SE.drag.b = pt; snipEditDrawLiveLineArrow(); break;
       case "rect": case "ellipse": SE.drag.b = pt; snipEditDrawLiveRectEllipse(); snipEditShowMeasure(e, SE.drag); break;
       case "pixelate": SE.drag.b = pt; snipEditDrawLivePixelatePreview(); break;
