@@ -408,19 +408,28 @@ pub(crate) fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: 
 // for a library attachment. A file that cannot be probed (missing, corrupt)
 // comes back as 0, the same "unknown" fallback probe_media_meta uses
 // everywhere else, rather than failing the whole batch over one bad file.
-pub(crate) fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String]) -> Vec<u64> {
+// `dir` must be the configured recording folder and every name a bare
+// recording file name; anything else reads as 0 without being probed.
+pub(crate) fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String], configured: &Path) -> Vec<u64> {
     use rayon::prelude::*;
+    let dir_ok = path_matches_configured_dir(dir, configured);
     // Probed in parallel (each one is a child process); collect keeps the order of `names`.
-    names.par_iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
+    names
+        .par_iter()
+        .map(|name| if dir_ok && is_bare_recording_name(name) { probe_media_meta(ffprobe, &dir.join(name)).0 } else { 0 })
+        .collect()
 }
 
 #[tauri::command]
 pub(crate) async fn video_folder_file_durations_ms(app: AppHandle, dir: String, names: Vec<String>) -> Vec<u64> {
     let ffprobe = ffprobe_search_path(&app);
+    let configured = configured_recording_dir(&app.state::<Db>());
     // Off the async runtime: one process spawn per file would otherwise hold a worker.
-    tauri::async_runtime::spawn_blocking(move || video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names))
-        .await
-        .unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(move || {
+        video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names, &configured)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 // Never overwrite an existing file at the target: "<stem>.<ext>", then

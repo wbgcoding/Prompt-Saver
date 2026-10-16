@@ -1467,10 +1467,10 @@ fn video_folder_file_durations_ms_reads_each_files_real_duration_and_zeros_a_mis
     let Some(ffprobe) = test_ffprobe() else { return };
     let dir = std::env::temp_dir().join(format!("ps-batch-durations-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    make_test_mp4(&ffmpeg, &dir, "a.mp4", 1, "64x48");
-    make_test_mp4(&ffmpeg, &dir, "b.mp4", 2, "64x48");
-    let names = vec!["a.mp4".to_string(), "b.mp4".to_string(), "missing.mp4".to_string()];
-    let durations = video_folder_file_durations_ms_impl(Some(&ffprobe), &dir, &names);
+    make_test_mp4(&ffmpeg, &dir, "rec-a.mp4", 1, "64x48");
+    make_test_mp4(&ffmpeg, &dir, "rec-b.mp4", 2, "64x48");
+    let names = vec!["rec-a.mp4".to_string(), "rec-b.mp4".to_string(), "rec-missing.mp4".to_string()];
+    let durations = video_folder_file_durations_ms_impl(Some(&ffprobe), &dir, &names, &dir);
     assert_eq!(durations.len(), 3);
     assert!((500..=1500).contains(&durations[0]), "a.mp4 duration was {}", durations[0]);
     assert!((1500..=2500).contains(&durations[1]), "b.mp4 duration was {}", durations[1]);
@@ -6305,8 +6305,8 @@ fn read_key_sidecar_at_refuses_a_file_past_the_size_cap() {
 fn video_folder_durations_keep_the_order_of_the_names_and_zero_a_missing_file() {
     let dir = std::env::temp_dir().join(format!("ps-durations-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    let names: Vec<String> = (0..12).map(|i| format!("missing-{i}.mp4")).collect();
-    let got = video_folder_file_durations_ms_impl(None, &dir, &names);
+    let names: Vec<String> = (0..12).map(|i| format!("rec-missing-{i}.mp4")).collect();
+    let got = video_folder_file_durations_ms_impl(None, &dir, &names, &dir);
     assert_eq!(got, vec![0u64; 12], "one value per name, unknown files as 0");
     // Structural: the command runs the probes on the blocking pool, not a runtime worker.
     let src = production_sources();
@@ -6314,6 +6314,25 @@ fn video_folder_durations_keep_the_order_of_the_names_and_zero_a_missing_file() 
     let at = src.find("async fn video_folder_file_durations_ms(").unwrap();
     assert!(src[at..at + 600].contains("spawn_blocking"), "the durations command must use spawn_blocking");
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn video_folder_durations_skip_foreign_dirs_and_non_bare_names() {
+    assert!(is_bare_recording_name("rec-1.mp4"));
+    assert!(is_bare_recording_name("rec-1.MKV"));
+    for bad in ["", "rec-1", "rec-1.txt", "x.mp4", "..\rec-1.mp4", "../rec-1.mp4", "sub/rec-1.mp4", "C:\rec-1.mp4", "rec-1.mp4\\", "rec-1.mp4:s"] {
+        assert!(!is_bare_recording_name(bad), "{bad:?} must be refused");
+    }
+    let configured = std::env::temp_dir().join(format!("ps-durations-cfg-{}", std::process::id()));
+    let foreign = std::env::temp_dir().join(format!("ps-durations-foreign-{}", std::process::id()));
+    fs::create_dir_all(&configured).unwrap();
+    fs::create_dir_all(&foreign).unwrap();
+    // A refused entry reads 0 without any probe being spawned.
+    let names = vec!["rec-a.mp4".to_string(), "..\rec-b.mp4".to_string()];
+    assert_eq!(video_folder_file_durations_ms_impl(None, &foreign, &names, &configured), vec![0, 0]);
+    assert_eq!(video_folder_file_durations_ms_impl(None, &configured, &names, &configured), vec![0, 0]);
+    let _ = fs::remove_dir_all(&configured);
+    let _ = fs::remove_dir_all(&foreign);
 }
 
 #[test]
