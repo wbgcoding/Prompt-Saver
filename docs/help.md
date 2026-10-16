@@ -124,7 +124,7 @@ tile is focused. The ring fades out a short while after the window loses focus.
   still be started. Drag a row to reorder the chain right there, right-click a row to
   remove that step; the clipboard follows either change. Switchable
   off on its own in the expert menu.
-- Chain double-click latch: with it on, chain mode stays on after copying, for
+- Chain stays on after copying: with it on, chain mode stays on after copying, for
   building several chains in a row.
 - Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
 - Drag-out: hold the modifier key and drag a tile onto another window to paste

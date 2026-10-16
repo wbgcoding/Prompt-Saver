@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "加入收藏",
     favoriteRemove: "取消收藏",
     favoritesOnly: "仅收藏",
-    flagChainLock: "链：双击锁定",
+    flagChainLock: "链：复制后保持开启",
     flagChainQuickStart: "从磁贴菜单开始链",
     sortToggle: "反转顺序",
     flagLibraryTypeFilter: "库类型筛选",

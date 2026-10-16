@@ -42,8 +42,7 @@ SECTION = """\
             out.errors.push('199: the tile menu offered Start chain while a chain is running');
           }
         }
-        // chainLock ships on, so a single click latches rather than exits (off ->
-        // on -> latched -> off) -- cycle until it is actually gone, not just once.
+        // A running chain ends on one click; the loop only guards a stray state.
         for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
         await sleep(150);
       }
@@ -543,8 +542,13 @@ SECTION = """\
             }
             window.dispatchEvent(new Event('mouseup'));
           }
-          await click('chain-btn'); // on -> latched
+          await click('chain-btn'); // a tap ends the running chain
           await sleep(60);
+          if (document.body.classList.contains('chain-mode')) out.errors.push('one tap on the chain button did not end the chain');
+          await click('chain-btn'); // one tap starts a latched chain
+          await sleep(60);
+          if (!document.getElementById('chain-btn').classList.contains('chain-locked')) out.errors.push('one tap on the chain button did not start a latched chain');
+          if (!await clickTile('p0') || !await clickTile('p3')) out.errors.push('could not pick p0 and p3 into the latched chain');
           await awayAndBack();
           if (!document.body.classList.contains('chain-mode')) out.errors.push('554: blur then focus ended a locked chain');
           if (pickedIds().length !== 2) out.errors.push('554: blur then focus cleared the picks of a locked chain');

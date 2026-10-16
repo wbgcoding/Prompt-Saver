@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "Aggiungi ai preferiti",
     favoriteRemove: "Rimuovi dai preferiti",
     favoritesOnly: "Solo preferiti",
-    flagChainLock: "Catena: il doppio clic mantiene attiva la modalità catena",
+    flagChainLock: "Catena: resta attiva dopo la copia",
     flagChainQuickStart: "Avviare una catena dal menu del riquadro",
     sortToggle: "Inverti ordine",
     flagLibraryTypeFilter: "Filtro tipo della libreria",

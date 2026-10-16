@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "Aan favorieten toevoegen",
     favoriteRemove: "Uit favorieten verwijderen",
     favoritesOnly: "Alleen favorieten",
-    flagChainLock: "Keten: dubbelklik houdt ketenmodus aan",
+    flagChainLock: "Keten: blijft aan na kopiëren",
     flagChainQuickStart: "Een keten starten vanuit het tegelmenu",
     sortToggle: "Volgorde omkeren",
     flagLibraryTypeFilter: "Typefilter bibliotheek",

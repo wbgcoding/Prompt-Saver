@@ -1101,7 +1101,7 @@ export default {
     favoriteAdd: "Add to favorites",
     favoriteRemove: "Remove from favorites",
     favoritesOnly: "Favorites only",
-    flagChainLock: "Chain: double-click keeps chain mode on",
+    flagChainLock: "Chain: stays on after copying",
     flagChainQuickStart: "Start a chain from the tile menu",
     sortToggle: "Reverse order",
     flagLibraryTypeFilter: "Library type filter",

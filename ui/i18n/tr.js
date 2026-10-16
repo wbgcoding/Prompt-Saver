@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "Favorilere ekle",
     favoriteRemove: "Favorilerden çıkar",
     favoritesOnly: "Yalnızca favoriler",
-    flagChainLock: "Zincir: çift tıkla kilitle",
+    flagChainLock: "Zincir: kopyaladıktan sonra açık kalır",
     flagChainQuickStart: "Zinciri kutucuk menüsünden başlat",
     sortToggle: "Sırayı tersine çevir",
     flagLibraryTypeFilter: "Kütüphane tür filtresi",

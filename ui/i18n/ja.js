@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "お気に入りに追加",
     favoriteRemove: "お気に入りから削除",
     favoritesOnly: "お気に入りのみ",
-    flagChainLock: "チェーン：ダブルクリックでチェーンモードを維持",
+    flagChainLock: "チェーン：コピー後も有効のまま",
     flagChainQuickStart: "タイルのメニューからチェーンを開始",
     sortToggle: "順序を反転",
     flagLibraryTypeFilter: "ライブラリの種類フィルター",

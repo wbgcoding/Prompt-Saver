@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "Adaugă la favorite",
     favoriteRemove: "Elimină din favorite",
     favoritesOnly: "Doar favorite",
-    flagChainLock: "Lanț: blocare dublu-clic",
+    flagChainLock: "Lanț: rămâne activ după copiere",
     flagChainQuickStart: "Pornește un lanț din meniul dalei",
     sortToggle: "Inversează ordinea",
     flagLibraryTypeFilter: "Filtru de tip al bibliotecii",

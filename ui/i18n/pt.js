@@ -1130,7 +1130,7 @@ export default {
     favoriteAdd: "Adicionar aos favoritos",
     favoriteRemove: "Remover dos favoritos",
     favoritesOnly: "Apenas favoritos",
-    flagChainLock: "Cadeia: travar com duplo clique",
+    flagChainLock: "Cadeia: continua ativa após copiar",
     flagChainQuickStart: "Iniciar uma cadeia a partir do menu do bloco",
     sortToggle: "Inverter ordem",
     flagLibraryTypeFilter: "Filtro de tipo da biblioteca",

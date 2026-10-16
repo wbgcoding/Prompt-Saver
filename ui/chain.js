@@ -296,11 +296,10 @@ export function setChainLock() {
   setChainMode(true); // turning on never clears the current picks; refreshes the button state
 }
 
-// Each click advances one fixed step: off → on → latched (∞) → off. Deterministic
-// order, no double-click timing to misfire. A plain toggle when latching is off.
+// One tap turns chaining on, the next turns it off. With latching enabled the
+// tap goes straight to the latched (∞) state, so the chain survives a copy.
 export function onChainClick() {
-  if (!flag("chainLock")) { setChainMode(!chainMode); return; }
-  if (!chainMode) setChainMode(true); // off → on
-  else if (!chainLock) setChainLock(); // on → latched
-  else setChainMode(false); // latched → off
+  if (chainMode) { setChainMode(false); return; }
+  if (flag("chainLock")) setChainLock();
+  else setChainMode(true);
 }

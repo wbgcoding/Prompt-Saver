@@ -214,8 +214,8 @@ export function maybeCloseOnCopy() {
 }
 
 export function bindCopyFlow() {
-  // Chain mode: combine several text buttons into one clipboard copy. Single
-  // click toggles it; a quick double-click latches it "always on".
+  // Chain mode: combine several text buttons into one clipboard copy. A single
+  // click toggles it.
   $("chain-btn").addEventListener("click", onChainClick);
   // A paste inside this window ends chain mode (unless latched); the clipboard
   // already holds the chain. A paste in another program is not seen here, so the

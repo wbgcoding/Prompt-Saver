@@ -1101,7 +1101,7 @@ export default {
     favoriteAdd: "Zu Favoriten hinzufügen",
     favoriteRemove: "Aus Favoriten entfernen",
     favoritesOnly: "Nur Favoriten",
-    flagChainLock: "Kette: Doppelklick hält den Verkettungsmodus aktiv",
+    flagChainLock: "Kette: bleibt nach dem Kopieren aktiv",
     flagChainQuickStart: "Kette aus dem Kachelmenü starten",
     sortToggle: "Reihenfolge umkehren",
     flagLibraryTypeFilter: "Typfilter der Bibliothek",
