@@ -20606,7 +20606,7 @@ fn portable_update_points_at_the_release_page_of_the_offered_version() {
 
 #[test]
 fn recording_status_stats_the_file_after_the_session_lock_is_released() {
-    let src = include_str!("rec_bar.rs");
+    let src = include_str!("rec_bar.rs").replace("\r\n", "\n");
     let start = src.find("pub(crate) async fn recording_status(").unwrap();
     let body = &src[start..src[start..].find("#[cfg(not(windows))]").map(|i| start + i).unwrap()];
     let lock_at = body.find("rstate.0.lock()").unwrap();
