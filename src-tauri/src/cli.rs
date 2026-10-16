@@ -1,16 +1,14 @@
-// Command line: `prompt-saver <command> ...`. A launch whose first argument
-// names one of the commands below never opens a window. If the app is already
-// running, the launch hands its arguments to that instance over a named pipe
-// and prints whatever it answers; otherwise it opens the store itself, runs
-// the command alone, prints the result and exits. Either way exactly one
-// process ever touches the database at a time.
+// Command line: `prompt-saver <command> ...`. A launch whose first argument names one of the
+// commands below never opens a window. If the app is already running, the launch hands its
+// arguments to that instance over a named pipe and prints the answer; otherwise it opens the
+// store itself, runs the command alone, prints the result and exits. Either way only one
+// process touches the database at a time.
 //
-// Layout: `parse()` turns argv into a `Cmd`; `exec()` is the pure core that
-// runs a `Cmd` against a `Store` already in memory (used by both the
-// standalone path and the already-running instance, so the two can never
-// drift apart); `run_standalone()` and `run_in_process()` are the two thin
-// callers that load/persist the store around it; the pipe framing and the
-// launch-side dispatcher sit at the top.
+// Layout: `parse()` turns argv into a `Cmd`; `exec()` is the pure core that runs a `Cmd`
+// against a `Store` in memory (shared by the standalone path and the running instance, so
+// they cannot drift apart); `run_standalone()` and `run_in_process()` are the two thin
+// callers that load and persist the store around it; the pipe framing and the launch-side
+// dispatcher sit at the top.
 
 use crate::{
     acquire_data_dir_lock, append_crash_log, append_imported_prompts, backup_db_file, canonical_tags,
@@ -62,11 +60,9 @@ pub(crate) fn dispatch_from_launch_args() -> Option<i32> {
     Some(run_standalone(&argv, &cwd))
 }
 
-// A windows_subsystem="windows" release build starts with no console at all,
-// so a second launch typed into an existing terminal would otherwise print
-// nothing. Attaching to the caller's own console (and only that -- a debug
-// build, or any launch that already has a real std handle, is left alone)
-// is what makes a command's output show up there instead of vanishing.
+// A windows_subsystem="windows" release build starts with no console, so a launch typed into
+// an existing terminal would print nothing. Attaching to the caller's console (only that; a
+// debug build or a launch with a real std handle is left alone) makes the output show there.
 #[cfg(windows)]
 fn attach_parent_console_if_needed() {
     use windows::Win32::Storage::FileSystem::{
@@ -78,15 +74,13 @@ fn attach_parent_console_if_needed() {
         STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
     unsafe {
-        // Already has a working handle (debug build, or a console of its own) --
-        // attaching again would only fail and must never disturb it.
+        // Already has a working handle (debug build or own console): attaching again would only fail.
         if let Ok(h) = GetStdHandle(STD_OUTPUT_HANDLE) {
             if !h.is_invalid() {
                 return;
             }
         }
-        // No parent console to attach to (started from Explorer, a shortcut, or
-        // the Task Scheduler) -- stays exactly as silent as it always has.
+        // No parent console to attach to (Explorer, a shortcut, the Task Scheduler): stay silent.
         if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
             return;
         }
@@ -114,20 +108,18 @@ fn attach_parent_console_if_needed() {
 
 // ---------- Named pipe transport ----------
 //
-// The single-instance plugin (see run()) already forwards a second launch's
-// raw argv to the running instance, but only one way -- it has no channel for
-// an answer. This pipe is that channel, and it is simpler to just use it for
-// the whole round trip: the second process connects to it directly instead of
-// going through the plugin at all, so it keeps full control of its own exit
-// code and never has to fight the plugin's unconditional exit(0).
+// The single-instance plugin (see run()) forwards a second launch's argv to the running
+// instance but has no channel for an answer. This pipe is that channel, and the second
+// process uses it for the whole round trip, keeping control of its own exit code instead of
+// fighting the plugin's unconditional exit(0).
 
 fn pipe_name() -> String {
     format!(r"\\.\pipe\{}-cli", crate::brand::IDENTIFIER)
 }
 
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
-// Windows' own busy-pipe error code (ERROR_PIPE_BUSY); retried instead of
-// treated as "nobody is listening".
+// Windows' busy-pipe error code (ERROR_PIPE_BUSY), retried rather than read as "nobody is
+// listening".
 const ERROR_PIPE_BUSY: i32 = 231;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -164,9 +156,9 @@ async fn read_frame<R: tokio::io::AsyncRead + Unpin>(r: &mut R, max: usize) -> s
     Ok(buf)
 }
 
-// Tries the already-running instance. `None` means nothing answered (no pipe
-// at all, or a real error opening it) -- the caller falls back to standalone.
-// `Some(code)` means an answer was printed and this IS the launch's exit code.
+// Tries the already-running instance. `None` means nothing answered (no pipe, or an error
+// opening it) and the caller falls back to standalone. `Some(code)` means an answer was
+// printed and this is the launch's exit code.
 async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
     use tokio::net::windows::named_pipe::ClientOptions;
     let name = pipe_name();
@@ -195,9 +187,8 @@ async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
             }
             Some(resp.code)
         }
-        // The running instance never took the request, so nothing ran: the store
-        // is effectively unreachable from here right now, same standing as a
-        // foreign machine's fresh data-dir lock (exit 3).
+        // The running instance never took the request, so nothing ran: the store is unreachable from
+        // here for now, like a foreign machine's fresh data-dir lock (exit 3).
         Forwarded::NotHandedOver => {
             eprintln!("prompt-saver: the running instance did not accept the command within 5 seconds");
             Some(3)
@@ -247,14 +238,12 @@ async fn exchange<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
     }
 }
 
-// Started once from run()'s setup(), independent of the single-instance
-// plugin: `first_pipe_instance` makes a second app instance's attempt to
-// start a second server fail cleanly (relevant only with "allow multiple
-// instances" on), so exactly one running copy ever answers the pipe.
-// Every tokio named-pipe handle registers itself with the runtime's reactor the
-// moment it is created, so creating one on the plain setup() thread panics the
-// whole process before a window ever exists. The first server instance is
-// therefore created inside the spawned task, exactly like every later one.
+// Started once from run()'s setup(), independent of the single-instance plugin.
+// `first_pipe_instance` makes a second app instance's attempt to start a second server fail
+// cleanly (relevant with "allow multiple instances" on), so only one copy answers the pipe.
+// A tokio named-pipe handle registers with the runtime's reactor when created, so creating
+// one on the plain setup() thread would panic the process before a window exists. The first
+// server instance is therefore created inside the spawned task, like every later one.
 pub(crate) fn install_server(app: &AppHandle) {
     use tokio::net::windows::named_pipe::ServerOptions;
     let name = pipe_name();
@@ -269,9 +258,8 @@ pub(crate) fn install_server(app: &AppHandle) {
                 return;
             }
             let connected = server;
-            // Queue the next instance before handing this one off, so a client
-            // that connects while this request is still running is accepted
-            // immediately instead of racing the still-busy pipe.
+            // Queue the next instance before handing this one off, so a client that connects while this
+            // request runs is accepted immediately instead of racing the busy pipe.
             server = match ServerOptions::new().create(&name) {
                 Ok(s) => s,
                 Err(_) => return,
@@ -303,16 +291,13 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
     answer_then_restart(answer, restart, || app.restart()).await;
 }
 
-// A second GUI launch's way of proving this instance is not just accepting
-// connections but genuinely alive: the answer is sent from inside the main
-// thread's own closure, not as soon as the closure is queued (queuing always
-// succeeds even when the main thread itself is wedged -- see the tray-window
-// comment above on the same hazard). It is sent BEFORE show_main does its
-// work, because raising a window -- and rebuilding a missing one, webview and
-// all -- can easily outlast the launch side's patience, and a slow window is
-// not a hung process. Reaching the closure at all is the liveness proof. A
-// promptsaver:// link pings with `raise` false: the link's own point is to
-// copy or open quietly, never to pull a window to the front.
+// A second GUI launch's proof that this instance is alive, not just accepting connections.
+// The answer is sent from inside the main thread's own closure (queuing always succeeds even
+// when the main thread is wedged; see the tray-window comment above). It is sent before
+// show_main does its work, because raising a window or rebuilding a missing one can outlast
+// the launch side's patience, and a slow window is not a hung process. Reaching the closure
+// is the liveness proof. A promptsaver:// link pings with `raise` false: it should copy or
+// open quietly, never pull a window to the front.
 async fn respond_to_show_ping(
     pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer,
     app: &AppHandle,
@@ -339,14 +324,12 @@ async fn respond_to_show_ping(
 
 // ---------- Second-launch handshake (a plain GUI start, not a CLI command) ----------
 //
-// A second launch that is not a CLI command pings the same pipe a CLI launch
-// uses instead of trusting the single-instance plugin's own unconditional
-// forward-and-exit -- see run()'s own comment on why. `argv` is the launch's
-// raw arguments (already known not to look like a CLI command by the time
-// run() calls this). A promptsaver:// link runs the exact same handshake,
-// with a ping that never raises a window: the answer still has to reach the
-// single-instance plugin (a live instance) or this process's own setup (a
-// takeover, or nobody running) -- it never ends the launch here on its own.
+// A second launch that is not a CLI command pings the same pipe instead of trusting the
+// single-instance plugin's unconditional forward-and-exit. `argv` is the launch's raw
+// arguments (already known not to be a CLI command). A promptsaver:// link runs the same
+// handshake with a ping that never raises a window; the answer still has to reach the
+// single-instance plugin (a live instance) or this process's own setup (a takeover, or
+// nobody running), and never ends the launch here.
 
 const SHOW_PING: &str = "\0show-ping\0"; // never a valid subcommand, path or link
 const ALIVE_PING: &str = "\0alive-ping\0"; // liveness only, never raises a window
@@ -369,8 +352,8 @@ fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
 }
 
-// A link must reach the single-instance plugin (a live instance) or this
-// process's own setup (a takeover, or nobody running) -- it never ends here.
+// A link must reach the single-instance plugin (a live instance) or this process's own setup
+// (a takeover, or nobody running); it never ends here.
 fn link_decision(handshake: LaunchDecision) -> LaunchDecision {
     match handshake {
         LaunchDecision::HandedOff => LaunchDecision::Primary,
@@ -379,10 +362,9 @@ fn link_decision(handshake: LaunchDecision) -> LaunchDecision {
 }
 
 pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
-    // A link never ends this launch silently: HandedOff (the running instance
-    // is alive) is turned back into Primary, so the caller falls through to
-    // the single-instance plugin, which forwards the link and exits this
-    // process, or to this process's own first-launch setup.
+    // A link never ends this launch silently: HandedOff (the running instance is alive) turns
+    // back into Primary, so the caller falls through to the single-instance plugin, which
+    // forwards the link and exits this process, or to this process's first-launch setup.
     if argv.iter().any(|a| a.starts_with("promptsaver://")) {
         let Ok(rt) = runtime() else { return LaunchDecision::Primary };
         return link_decision(rt.block_on(resolve_second_launch_async(ALIVE_PING)));
@@ -396,12 +378,10 @@ pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
 async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
     use tokio::net::windows::named_pipe::ClientOptions;
     let name = pipe_name();
-    // Only two outcomes end this launch: a clear answer (hand off) or a proven
-    // hang that was ended (take over). Everything else -- a busy pipe, a
-    // connection that breaks under us, a process that cannot be identified --
-    // falls through to Primary and lets the single-instance plugin decide
-    // exactly as it did before this handshake existed. Exiting on a doubt is
-    // what leaves the user with no window at all.
+    // Only two outcomes end this launch: a clear answer (hand off) or a proven hang that was
+    // ended (take over). Anything else (a busy pipe, a broken connection, an unidentifiable
+    // process) falls through to Primary and leaves the decision to the single-instance plugin,
+    // since exiting on a doubt would leave the user with no window.
     let connect_deadline = std::time::Instant::now() + SECOND_LAUNCH_TIMEOUT;
     let mut client = loop {
         match ClientOptions::new().open(&name) {
@@ -415,13 +395,13 @@ async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
             Err(_) => return LaunchDecision::Primary, // nobody is listening
         }
     };
-    // The pid is read off the still-connected handle, before anything can end
-    // the server and let Windows hand the number to someone else.
+    // The pid is read off the still-connected handle, before anything can end the server and let
+    // Windows hand the number to someone else.
     let server_pid = named_pipe_server_pid(&client);
     let req = PipeRequest { argv: vec![ping.to_string()], cwd: String::new() };
     let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::Primary };
-    // Its own full budget: time already spent waiting for a busy pipe must not
-    // shrink the window the running instance gets to prove it is alive.
+    // Its own full budget: time spent waiting for a busy pipe must not shrink the window the
+    // running instance gets to prove it is alive.
     let roundtrip = async {
         write_frame(&mut client, &bytes).await.ok()?;
         read_frame(&mut client, MAX_FRAME_BYTES).await.ok()
@@ -430,15 +410,14 @@ async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
     if answered {
         return LaunchDecision::HandedOff;
     }
-    // Connected, but the main thread never even reached the answer -- a
-    // genuinely wedged instance (the answer goes out before show_main does any
-    // work, so a slow or rebuilding window never looks like a hang here).
+    // Connected, but the main thread never reached the answer: a wedged instance (the answer goes
+    // out before show_main does any work, so a slow or rebuilding window never looks like a hang).
     let Some(pid) = server_pid else { return LaunchDecision::Primary };
     let (same_user, same_exe) = process_identity_check(pid);
     if should_take_over_hung_instance(false, same_user, same_exe) {
-        // Terminate and WAIT: TerminateProcess only asks. Racing ahead while
-        // the old process still holds the single-instance mutex, the data-dir
-        // lock and the pipe would end this launch without a window after all.
+        // Terminate and wait: TerminateProcess only asks. Racing ahead while the old process still
+        // holds the single-instance mutex, the data-dir lock and the pipe would leave this launch
+        // without a window.
         let ended = terminate_process(pid);
         append_crash_log(&format!(
             "second launch: took over a hung running instance (pid {pid}, ended={ended})"
@@ -453,19 +432,17 @@ async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
     }
 }
 
-// Pure decision, independent of the pipe/timeout machinery above: whether a
-// second launch that failed to reach the running instance in time may end it
-// and continue as the primary instance itself. Never crosses a user or
-// executable boundary -- a hung process belonging to someone else, or to a
-// different build entirely, is left alone.
+// Pure decision, independent of the pipe/timeout machinery: whether a second launch that
+// failed to reach the running instance in time may end it and continue as primary. Never
+// crosses a user or executable boundary; a hung process of someone else, or of a different
+// build, is left alone.
 fn should_take_over_hung_instance(answered_in_time: bool, same_user: bool, same_exe_path: bool) -> bool {
     !answered_in_time && same_user && same_exe_path
 }
 
-// GetNamedPipeServerProcessId (Win32_System_Pipes) is not part of this
-// project's enabled `windows` crate feature set, so this one call stays a
-// direct kernel32 binding, the same pattern other modules already use for a few
-// user32/kernel32 calls they need without pulling in a whole extra feature.
+// GetNamedPipeServerProcessId (Win32_System_Pipes) is not in this project's enabled `windows`
+// crate features, so this one call stays a direct kernel32 binding, like a few other modules'
+// user32/kernel32 calls.
 fn named_pipe_server_pid(client: &tokio::net::windows::named_pipe::NamedPipeClient) -> Option<u32> {
     use std::os::windows::io::AsRawHandle;
     #[link(name = "kernel32")]
@@ -477,9 +454,8 @@ fn named_pipe_server_pid(client: &tokio::net::windows::named_pipe::NamedPipeClie
     (ok && pid != 0).then_some(pid)
 }
 
-// (same_user, same_exe_path) for the process behind `pid`. Either half
-// defaults to false on any failure to query it -- an unknown answer is never
-// treated as a match.
+// (same_user, same_exe_path) for the process behind `pid`. Either half is false on any query
+// failure; an unknown answer is never treated as a match.
 fn process_identity_check(pid: u32) -> (bool, bool) {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Security::{EqualSid, GetTokenInformation, TokenUser, PSID, TOKEN_QUERY};
@@ -487,9 +463,9 @@ fn process_identity_check(pid: u32) -> (bool, bool) {
         GetCurrentProcess, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
-    // The Sid field of a queried TOKEN_USER points into its own info buffer,
-    // so the buffer has to outlive every use of the pointer -- returned
-    // together rather than as a bare PSID a caller could dangle.
+    // The Sid field of a queried TOKEN_USER points into its info buffer, so the buffer must
+    // outlive every use of the pointer; it is returned together rather than as a bare PSID a
+    // caller could dangle.
     unsafe fn token_user_sid(token: windows::Win32::Foundation::HANDLE) -> Option<(Vec<u8>, PSID)> {
         let mut needed = 0u32;
         let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &mut needed) };
@@ -536,9 +512,8 @@ fn process_identity_check(pid: u32) -> (bool, bool) {
     }
 }
 
-// Ends `pid` and waits for it to be really gone. `true` only when the process
-// has exited: the caller may not touch the mutex, the data-dir lock or the
-// pipe the old instance still owns until then.
+// Ends `pid` and waits until it is really gone. `true` only when the process has exited: the
+// caller may not touch the mutex, data-dir lock or pipe the old instance owns until then.
 fn terminate_process(pid: u32) -> bool {
     use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{
@@ -594,12 +569,10 @@ fn usage_err(msg: impl Into<String>) -> String {
     format!("{msg}\nRun \"prompt-saver --help\" for the full command list.")
 }
 
-// A prompt/view identifier: permissive enough to match every id this or an
-// older build ever minted (see gen_id), narrow enough to reject anything that
-// could not possibly be one -- a stray path, a flag, control characters.
-// pub(crate): also the id check for a promptsaver:// link and the remote
-// receiver, so all three entry points reject the same malformed ids the
-// same way.
+// A prompt/view identifier: permissive enough for every id this or an older build minted
+// (see gen_id), narrow enough to reject a stray path, a flag or control characters.
+// pub(crate): also the id check for a promptsaver:// link and the remote receiver, so all
+// three entry points reject malformed ids the same way.
 pub(crate) fn valid_id(s: &str) -> bool {
     !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
@@ -632,9 +605,8 @@ fn valid_path_arg(s: &str) -> Result<String, String> {
     Ok(s.to_string())
 }
 
-// A relative path argument resolves against the CALLER's working directory,
-// never this process' own -- when a second launch was forwarded to the
-// already-running instance, those two directories are almost never the same.
+// A relative path argument resolves against the caller's working directory, not this
+// process': a second launch forwarded to the running instance has a different one.
 fn resolve_path_arg(cwd: &Path, raw: &str) -> PathBuf {
     let p = Path::new(raw);
     if p.is_absolute() {
@@ -644,10 +616,9 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> PathBuf {
     }
 }
 
-// A tiny cursor over the remaining args, shared by every subcommand's parser.
-// It owns its items: taking a flag out replaces the list instead of leaking a
-// copy, which mattered once the app parsed a command for every pipe and receiver
-// request and never exited between them.
+// A tiny cursor over the remaining args, shared by every subcommand's parser. It owns its
+// items: taking a flag out replaces the list instead of leaking a copy, which matters now
+// that the app parses a command for every pipe and receiver request without exiting.
 struct Args {
     items: Vec<String>,
     pos: usize,
@@ -692,9 +663,8 @@ fn parse(argv: &[String]) -> Result<Parsed, String> {
     }
     let cmd = match head {
         "version" => Cmd::Version,
-        // Machine-facing only: its own JSON self-description, not listed in
-        // top_level_help(). docs/automation.md's command table is generated
-        // from this, never hand-typed -- see command_manifest() below.
+        // Machine-facing only: its JSON self-description, not listed in top_level_help().
+        // docs/automation.md's command table is generated from it (see command_manifest() below).
         "describe" => Cmd::Describe,
         "list" => parse_list(&mut a)?,
         "get" => parse_get(&mut a)?,
@@ -715,9 +685,8 @@ fn parse(argv: &[String]) -> Result<Parsed, String> {
     Ok(Parsed::Run(cmd))
 }
 
-// Whether the remaining args are exactly a bare `--help`/`-h` for this
-// (sub)command -- checked before the real parse so `--help` always works
-// even when other required arguments are missing.
+// Whether the remaining args are exactly a bare `--help`/`-h`, checked before the real parse
+// so `--help` works even when required arguments are missing.
 fn wants_help(a: &Args) -> bool {
     a.items.get(a.pos..).is_some_and(|rest| rest == ["--help"] || rest == ["-h"])
 }
@@ -727,8 +696,7 @@ fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
     while i < a.items.len() {
         if a.items[i] == name {
             let val = a.items.get(i + 1).ok_or_else(|| usage_err(format!("{name} needs a value")))?.clone();
-            // Remove both the flag and its value so positional parsing after
-            // this call never sees them.
+            // Remove the flag and its value so positional parsing never sees them.
             let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
             kept.extend_from_slice(&a.items[i + 2..]);
             a.items = kept;
@@ -1096,8 +1064,8 @@ fn confirmed_of(cmd: &Cmd) -> bool {
     }
 }
 
-// What a rejected mutating command would have done -- shown instead of doing
-// it, so a script that forgot --yes still learns what it almost triggered.
+// What a rejected mutating command would have done, shown instead of doing it, so a script
+// that forgot --yes learns what it almost triggered.
 fn dry_run_description(cmd: &Cmd) -> String {
     match cmd {
         Cmd::Add { name, .. } => format!("would add a prompt named \"{name}\""),
@@ -1228,13 +1196,13 @@ fn cmd_copy(store: &Store, id: &str) -> Outcome {
     let Some(p) = store.prompts.iter().find(|p| p.id == id) else {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
-    // Same rule as `get`: a confidential prompt's text is only ever shown in the
-    // app, and what the store holds for it is ciphertext.
+    // Same rule as `get`: a confidential prompt's text is only shown in the app, and the store
+    // holds ciphertext for it.
     if p.secret {
         return Outcome::err(1, format!("prompt {id} is confidential and can only be copied in the app itself\n"));
     }
-    // Our own copy: the clipboard watcher must not take it for a foreign one, and
-    // it can see the change before the write returns, so note it first.
+    // Our own copy: the clipboard watcher must not take it for a foreign one and can see the
+    // change before the write returns, so note it first.
     crate::note_own_copy(&p.text);
     match arboard::Clipboard::new().and_then(|mut c| c.set_text(p.text.clone())) {
         Ok(()) => Outcome::ok(String::new()),
@@ -1268,12 +1236,10 @@ fn cmd_search(store: &Store, query: &str, tag: Option<&str>, json: bool) -> Outc
 
 // ---------- Add / edit / delete / restore ----------
 //
-// A prompt made or changed here gets every field the store itself needs
-// (id, timestamps, defaults) but is never placed into a view's grid layout --
-// exactly like a prompt whose view was deleted (see View::layouts' own
-// comment: "a member with no cell ... is an overflow entry, not a lost one").
-// It shows up in list/get/search immediately either way; arranging it on a
-// grid is a job for the app itself.
+// A prompt made or changed here gets every field the store needs (id, timestamps, defaults)
+// but is never placed into a view's grid layout, like a prompt whose view was deleted (see
+// View::layouts: "a member with no cell ... is an overflow entry, not a lost one"). It shows
+// in list/get/search at once; arranging it on a grid is the app's job.
 
 #[allow(clippy::too_many_arguments)]
 fn cmd_add(store: &mut Store, name: &str, text: &str, tags: &[String], favorite: bool, notes: Option<&str>, color: Option<&str>, json: bool) -> Outcome {
@@ -1346,9 +1312,8 @@ fn cmd_edit(store: &mut Store, id: &str, name: Option<&str>, text: Option<&str>,
     let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) else {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
-    // A confidential entry stores its text sealed with the vault key, which the
-    // command line never holds: plain text written here would sit on disk as is
-    // and fail to open in the app.
+    // A confidential entry's text is sealed with the vault key, which the command line never
+    // holds: plain text written here would sit on disk as is and fail to open in the app.
     if p.secret && text.is_some() {
         return Outcome::err(1, format!("prompt {id} is confidential and its text can only be changed in the app itself\n"));
     }
@@ -1510,8 +1475,8 @@ fn cmd_view_remove(store: &mut Store, id: &str) -> Outcome {
     if store.settings.views.len() <= 1 {
         return Outcome::err(4, "cannot remove the last view\n".to_string());
     }
-    // Also dissolves the grid folders of that view, so their members are not
-    // left claimed by a folder nobody can reach.
+    // Also dissolves the view's grid folders, so their members are not left claimed by a folder
+    // nobody can reach.
     let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     if let Err(e) = crate::views::remove_view_from_settings(&mut store.settings, id, &prompt_ids) {
         return Outcome::err(4, format!("{e}\n"));
@@ -1529,8 +1494,8 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
         }
         _ => store.prompts.clone(),
     };
-    // A confidential entry holds sealed ciphertext in its text fields: it never
-    // leaves in a file, the same default the app's own export applies.
+    // A confidential entry holds sealed ciphertext in its text fields and never leaves in a file,
+    // as with the app's own export.
     let selected = crate::filter_export_secrets(selected, false);
     let remembered = if store.settings.ui_flags.get("varDefaults") != Some(&false) { parse_ui_text_map(&store.settings, "varDefaults") } else { std::collections::HashMap::new() };
     let fixed = if store.settings.ui_flags.get("varFixed") == Some(&true) { parse_ui_text_map(&store.settings, "varFixed") } else { std::collections::HashMap::new() };
@@ -1542,9 +1507,8 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
     };
     let out_path = resolve_path_arg(cwd, path);
     if out_path.exists() && !confirmed {
-        // Overwriting an existing file is the one export side effect that can
-        // destroy something -- everything else about export only adds a new
-        // file, so this is the only spot that needs confirmation.
+        // Overwriting an existing file is the one export side effect that can destroy something, so
+        // it is the only spot that needs confirmation.
         return Outcome::err(4, format!("refused: \"{}\" already exists. Pass --yes to overwrite it.\n", out_path.display()));
     }
     match std::fs::write(&out_path, content) {
@@ -1607,11 +1571,10 @@ fn cmd_backup_list(dir: &Path, json: bool) -> Outcome {
     }
 }
 
-// Shared by both callers of `backup restore` (special-cased outside exec()
-// because the live path reuses the production restore_backup command
-// end-to-end, including its app restart -- there is nothing for exec() itself
-// to do there). This is the standalone half: same safety snapshot, staging
-// and swap, minus anything that only makes sense with a running app.
+// Shared by both callers of `backup restore`, which is special-cased outside exec(): the
+// live path reuses the production restore_backup command end to end, including its app
+// restart. This is the standalone half: the same safety snapshot, staging and swap, minus
+// anything that needs a running app.
 fn restore_backup_standalone(dir: &Path, name: &str, keep: usize, scope: &str, settings: &crate::Settings) -> Result<(), String> {
     let backups_root = dir.join("backups");
     let backup_db = backup_db_file(&backups_root.join(name)).ok_or_else(|| "missing".to_string())?;
@@ -1636,16 +1599,16 @@ fn restore_backup_standalone(dir: &Path, name: &str, keep: usize, scope: &str, s
     }
     let _ = std::fs::remove_file(dir.join("data.db-wal"));
     let _ = std::fs::remove_file(dir.join("data.db-shm"));
-    // A restore that brings settings with it may have switched the picture-text
-    // index off while the prompts that stay still carry its text.
+    // A restore that brings settings may have switched the picture-text index off while the
+    // prompts that stay still carry its text.
     if scope != "data" {
         clear_ocr_text_after_restore(dir, settings.ui_flags.get("ocrIndex").copied().unwrap_or(false))?;
     }
     Ok(())
 }
 
-// Erases the picture text in the restored data when the index was on before and
-// the restored settings have it off; writes only when something was cleared.
+// Erases the picture text in the restored data when the index was on before and the restored
+// settings have it off; writes only when something was cleared.
 fn clear_ocr_text_after_restore(dir: &Path, was_on: bool) -> Result<(), String> {
     if !was_on {
         return Ok(());
@@ -1670,10 +1633,9 @@ fn map_restore_err_code(e: &str) -> i32 {
 // ---------- Settings ----------
 
 fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
-    // The receiver's certificate values belong to this machine and never
-    // travel over the command line, least of all the remote one.
-    // The vault salt and verifier and the sealed backup password would give
-    // anyone with the receiver password what an offline guess needs.
+    // The receiver's certificate values belong to this machine and never travel over the command
+    // line, least of all the remote one. The vault salt and verifier and the sealed backup
+    // password would give anyone with the receiver password what an offline guess needs.
     if crate::remote::is_remote_secret_key(key) || crate::is_vault_key(key) || key == crate::BACKUP_PW_KEY {
         return Outcome::err(2, format!("no setting named \"{key}\"\n"));
     }
@@ -1710,10 +1672,9 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
     if crate::remote::is_remote_secret_key(key) {
         return Outcome::err(1, format!("{key} is managed by the app and cannot be set\n"));
     }
-    // Folder authority, the vault keys, the backup password, the import-denied
-    // switches and every receiver setting have their own dedicated writers and
-    // are refused for an import too; this generic setter is reachable from the
-    // remote receiver, so it must not be a way around them.
+    // Folder authority, the vault keys, the backup password, the import-denied switches and
+    // every receiver setting have dedicated writers and are refused for an import too; this
+    // generic setter is reachable from the remote receiver and must not bypass them.
     if crate::is_protected_folder_key(key)
         || crate::is_vault_key(key)
         || key == crate::BACKUP_PW_KEY
@@ -1735,8 +1696,8 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
             Err(_) => return Outcome::err(1, "alwaysOnTop takes true or false\n".to_string()),
         },
         _ => {
-            // A key that already holds a value keeps its kind: a text setting set to
-            // "2024" stays text, and a switch never turns into a stray number.
+            // A key that already holds a value keeps its kind: a text setting "2024" stays text, and a
+            // switch never turns into a stray number.
             let held = if s.ui_flags.contains_key(key) {
                 "flag"
             } else if s.ui_values.contains_key(key) {
@@ -1753,8 +1714,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
                 return Outcome::err(1, format!("{key} takes {wants}\n"));
             }
             if let Some(b) = as_flag {
-                // Switching the picture-text index off here erases its text, the same
-                // as the switch in the app does: that text was read out of pictures.
+                // Switching the picture-text index off here erases its text, as the switch in the app does.
                 if key == "ocrIndex" && !b && s.ui_flags.get(key).copied().unwrap_or(false) {
                     let cleared = crate::clear_ocr_index_text(store);
                     store.settings.ui_flags.insert(key.to_string(), b);
@@ -1763,8 +1723,8 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
                 }
                 s.ui_flags.insert(key.to_string(), b);
             } else if let Some(n) = as_number {
-                // "NaN", "inf" and "1e999" parse as numbers but cannot be stored: they
-                // are written as null and the whole settings block fails to load.
+                // "NaN", "inf" and "1e999" parse as numbers but cannot be stored: they are written as null
+                // and the whole settings block fails to load.
                 let Some(n) = crate::clamp_ui_value(key, n) else {
                     return Outcome::err(1, format!("{key} needs a finite number
 "));
@@ -1799,8 +1759,8 @@ pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
     run_standalone_with(data_dir_headless, argv, cwd)
 }
 
-// run_standalone with the folder supplied by the caller (asked only once the
-// command needs a store), so a test can point it at a folder of its own.
+// run_standalone with the folder supplied by the caller (asked only once the command needs a
+// store), so a test can point it at a folder of its own.
 pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &[String], cwd: &Path) -> i32 {
     let parsed = match parse(argv) {
         Ok(p) => p,
@@ -1828,9 +1788,8 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     let store = load_store_headless(&dir);
     acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
 
-    // Before the restore arm: a restore replaces the whole database, so a store
-    // another machine holds locked must be refused for it like for every other
-    // change (it used to return before this check was ever reached).
+    // Before the restore arm: a restore replaces the whole database, so a store another machine
+    // holds locked must be refused for it like for every other change.
     if is_mutating(&cmd) && crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
         eprintln!("the data folder is locked by another machine right now\n");
         return 3;
@@ -1878,13 +1837,10 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
             eprintln!("could not open the store to save the change\n");
             return 3;
         };
-        // Reuses the map load_store_headless() already populated from the table,
-        // not a fresh empty one -- write_rows only deletes a row that is missing
-        // from the new list AND already known to this map, exactly so a process
-        // that never saw a row does not erase it. Starting empty here would make
-        // every deletion a no-op on disk: the row leaves store.prompts in memory
-        // but write_rows, finding no prior knowledge of it, never drops it from
-        // the table.
+        // Reuses the map load_store_headless() populated from the table, not an empty one:
+        // write_rows deletes a row only if it is missing from the new list and already known to this
+        // map, so a process that never saw a row does not erase it. Starting empty would make every
+        // deletion a no-op on disk.
         let write_ok = if outcome.mutated_trash {
             db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash, &mut store.written.borrow_mut()).is_ok()
         } else if outcome.mutated_prompts {
@@ -1945,18 +1901,18 @@ pub(crate) async fn run_in_process(app: &AppHandle, argv: Vec<String>, cwd: Path
     (code, stdout, stderr)
 }
 
-// Same as run_in_process, but a restore does not relaunch the app itself: the
-// last element says a relaunch is due, and the caller does it once its answer is
-// written. A relaunch inside the call drops the connection before any answer goes
-// out, which a script reads as a failed restore.
+// Same as run_in_process, but a restore does not relaunch the app itself: the last element
+// says a relaunch is due and the caller does it once its answer is written. A relaunch inside
+// the call drops the connection before any answer goes out, which a script reads as a failed
+// restore.
 pub(crate) async fn run_in_process_deferred(app: &AppHandle, argv: Vec<String>, cwd: PathBuf) -> (i32, String, String, bool) {
     let mut restart = false;
     let (code, stdout, stderr) = run_in_process_inner(app, argv, cwd, &mut restart).await;
     (code, stdout, stderr, restart)
 }
 
-// Runs `after` once `answer` has finished: the answer must be on the wire before
-// the relaunch tears the connection down.
+// Runs `after` once `answer` has finished: the answer must be on the wire before the relaunch
+// tears the connection down.
 pub(crate) async fn answer_then_restart(answer: impl std::future::Future<Output = ()>, restart_due: bool, restart: impl FnOnce()) {
     answer.await;
     if restart_due {
@@ -1991,10 +1947,9 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
         return (0, format!("{}\n", describe_json()), String::new());
     }
 
-    // Backup restore reuses the real, already-tested restore end to end (safety
-    // snapshot, staged swap) instead of a second reimplementation that would have
-    // to fake what only a running app can really do; the relaunch is left to the
-    // caller (see run_in_process_deferred).
+    // Backup restore reuses the real, tested restore end to end (safety snapshot, staged swap)
+    // instead of a second implementation that would have to fake what only a running app can do;
+    // the relaunch is left to the caller (see run_in_process_deferred).
     if let Cmd::BackupRestore { name, keep, scope, confirmed } = &cmd {
         if !confirmed {
             return (4, String::new(), format!("refused: {}. Pass --yes to actually do it.\n", dry_run_description(&cmd)));
@@ -2041,11 +1996,10 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
     let state: tauri::State<Db> = app.state();
     let dir = data_dir(app);
     let mut store = lock(&state);
-    // (This check also refuses a prompt-only command while only the settings
-    // are locked; the standalone caller does not look at SETTINGS_LOCKED.)
-    // The same refusal the standalone caller gives, up front: a store that is
-    // read-only, locked after a failed decrypt or settings-locked must not even
-    // be changed in memory, or the next save that succeeds would write it.
+    // The same refusal the standalone caller gives, up front: a store that is read-only, locked
+    // after a failed decrypt or settings-locked must not even be changed in memory, or the next
+    // save that succeeds would write it. (This also refuses a prompt-only command while only the
+    // settings are locked; the standalone caller does not look at SETTINGS_LOCKED.)
     if is_mutating(&cmd)
         && (crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || store.prompts_locked || crate::SETTINGS_LOCKED.load(Ordering::Relaxed))
     {
@@ -2076,9 +2030,8 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
         crate::apply_flag_effects(app, &key, on);
     }
     if outcome.code == 0 && (outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
-        // The windows, the armed hotkeys and the tray still hold what they read
-        // before this command: tell them, or a stale grid keeps a deleted tile and
-        // its next layout write puts the cell back.
+        // The windows, armed hotkeys and tray still hold what they read before this command: tell
+        // them, or a stale grid keeps a deleted tile and its next layout write restores the cell.
         let _ = tauri::Emitter::emit_to(app, "main", "store-synced", ());
         crate::rearm_hotkeys(app);
         crate::rebuild_tray(app);
@@ -2088,9 +2041,9 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
     (outcome.code, outcome.stdout, outcome.stderr)
 }
 
-// Runs a command on the live store and keeps its change only when `persist`
-// accepts it. A refused write puts prompts, trash and settings back exactly as
-// they were, so the caller's "refused" answer is true of the running app too.
+// Runs a command on the live store and keeps its change only when `persist` accepts it. A
+// refused write puts prompts, trash and settings back as they were, so the caller's
+// "refused" answer is true of the running app too.
 fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist: impl FnOnce(&Store, &Outcome) -> bool) -> Outcome {
     // Only a command that can change something needs the copy; a read over a
     // large library stays free of it.
@@ -2105,29 +2058,25 @@ fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist:
     if let Some(before) = before {
         (store.prompts, store.trash, store.settings) = before;
     }
-    // When the prompts write went through and only the settings write failed,
-    // memory is back but the disk keeps the prompt change until the next save,
-    // which rewrites everything (see the line below).
-    // The row bookkeeping may have moved with the failed write: start it over so
-    // nothing is skipped as already written on the next save.
+    // If the prompts write went through and only the settings write failed, memory is back but
+    // the disk keeps the prompt change until the next save, which rewrites everything. The row
+    // bookkeeping may have moved with the failed write, so start it over to avoid skipping rows
+    // as already written.
     store.forget_written_rows();
     Outcome::err(3, "the store refused the write (locked or unavailable)\n")
 }
 
 // ---------- Remote-caller path confinement ----------
 //
-// A command line launch resolves `export`/`import` against the CALLER's own
-// working directory (see resolve_path_arg) because a trusted local user is
-// the one typing it. The remote receiver and a promptsaver:// link have no
-// such trusted caller behind them, so the same two commands are confined to
-// the data folder there: parsed here, in the one module that already owns
-// `Cmd`/`parse`, rather than duplicating a second copy of the command
-// grammar next to it.
+// A command line launch resolves `export`/`import` against the caller's own working directory
+// because a trusted local user types it. The remote receiver and a promptsaver:// link have
+// no such trusted caller, so the same two commands are confined to the data folder there.
+// It is parsed here, in the module that owns `Cmd`/`parse`, rather than duplicating the
+// grammar elsewhere.
 pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), String> {
     let cmd = match parse(argv) {
         Ok(Parsed::Run(cmd)) => cmd,
-        // A bad or --help invocation is reported by the real dispatch right
-        // after this call; nothing here needs to duplicate that message.
+        // A bad or --help invocation is reported by the real dispatch right after this call.
         _ => return Ok(()),
     };
     let raw = match &cmd {
@@ -2135,9 +2084,9 @@ pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), S
         _ => return Ok(()),
     };
     let resolved = resolve_path_arg(base_dir, &raw);
-    // Export's target file usually does not exist yet -- confine its parent
-    // directory instead, the same way a shell would resolve a not-yet-created
-    // path. An import's source must already exist, so this equally covers it.
+    // Export's target usually does not exist yet, so its parent directory is confined instead,
+    // as a shell resolves a not-yet-created path. An import's source must already exist, so this
+    // covers it too.
     let check_dir = if resolved.exists() {
         resolved.clone()
     } else {
@@ -2155,9 +2104,8 @@ pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), S
     if !canon_target.starts_with(&canon_base) {
         return Err("refused: the path escapes the data folder".to_string());
     }
-    // The data folder also holds the live store and the snapshots, which an export
-    // would overwrite with JSON and no safety copy: only the folder's other files
-    // are valid targets.
+    // The data folder also holds the live store and the snapshots, which an export would
+    // overwrite with JSON and no safety copy: only the folder's other files are valid targets.
     if matches!(cmd, Cmd::Export { .. }) {
         let target = if resolved.exists() {
             canon_target
@@ -2174,10 +2122,10 @@ pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), S
     Ok(())
 }
 
-// True for a path that is part of the stored data inside the data folder: the
-// database with its write-ahead files, the legacy json files, the folder lock,
-// and anything under the snapshots and attachment folders. Both arguments are
-// canonical. File names compare case-insensitively (Windows).
+// True for a path that is part of the stored data inside the data folder: the database with
+// its write-ahead files, the legacy json files, the folder lock, and anything under the
+// snapshots and attachment folders. Both arguments are canonical; names compare
+// case-insensitively (Windows).
 fn is_store_path(target: &Path, base: &Path) -> bool {
     let Ok(rel) = target.strip_prefix(base) else {
         return false;
@@ -2256,12 +2204,11 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
 
 // ---------- Machine-readable self-description (`prompt-saver describe`) ----------
 //
-// docs/automation.md's command table is generated from this, never typed by
-// hand a second time: adding a command here without regenerating the doc is
-// caught by tests/automation_doc_check.py (see tests/README.md). The
-// (name, subcommand) pairs below are exactly the ones parse() recognizes;
-// each entry's usage/description text is command_help()'s own text, split at
-// its first blank line, so the two can never drift apart.
+// docs/automation.md's command table is generated from this, so adding a command here
+// without regenerating the doc is caught by tests/automation_doc_check.py (see
+// tests/README.md). The (name, subcommand) pairs are exactly the ones parse() recognizes;
+// each entry's usage/description is command_help()'s own text split at its first blank line,
+// so the two cannot drift apart.
 const MANIFEST_ENTRIES: &[(&str, Option<&str>)] = &[
     ("list", None),
     ("get", None),
@@ -2287,8 +2234,8 @@ const MANIFEST_ENTRIES: &[(&str, Option<&str>)] = &[
     ("version", None),
 ];
 
-// Full names, exactly as they appear in the "name" field below (top-level
-// command, or "<command> <subcommand>") -- the commands that need --yes.
+// Full names as in the "name" field below (top-level command, or "<command> <subcommand>"):
+// the commands that need --yes.
 const MUTATING_COMMAND_NAMES: &[&str] =
     &["add", "edit", "delete", "restore", "tag add", "tag remove", "view add", "view remove", "import", "backup restore", "settings set"];
 
@@ -2319,9 +2266,9 @@ fn command_manifest() -> Vec<CommandSpec> {
         .collect()
 }
 
-// The JSON `prompt-saver describe` prints: enough for a program to drive the
-// tool without reading source -- the full command list, and the exit codes
-// every command shares (see top_level_help()).
+// The JSON `prompt-saver describe` prints: enough for a program to drive the tool without
+// reading source, with the full command list and the exit codes every command shares (see
+// top_level_help()).
 fn describe_json() -> String {
     let doc = serde_json::json!({
         "app": crate::brand::DISPLAY_NAME,
