@@ -86,12 +86,10 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
     Ok(())
 }
 
-// Places the restored prompt in the ACTIVE view via the same first_free_cell scan
-// add_prompt already uses for a brand-new prompt: if the view is full, the prompt
-// still comes back (reachable through the library) just without a grid cell of its
-// own: the same graceful fallback, never a hard failure or a silently dropped
-// prompt. Every other app-level association (floating, folder membership, hotkey)
-// was already let go at delete time and is not reconstructed.
+// Places the restored prompt in the active view via the same first_free_cell scan
+// add_prompt uses: if the view is full, the prompt still comes back (reachable through the
+// library) without a grid cell, never a hard failure or a dropped prompt. Floating, folder
+// membership and hotkey were let go at delete time and are not reconstructed.
 #[tauri::command]
 pub(crate) async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<AppState, String> {
     let (app_state, restored) = {
@@ -370,31 +368,25 @@ pub(crate) async fn restore_prompts_batch(app: AppHandle, state: State<'_, Db>, 
     Ok(app_state)
 }
 
-// Permanent delete: the trash entry, its media files and its whole version history
-// are gone for good. This is the old hard-delete's own cleanup logic, just moved
-// here instead of running at every "delete" click.
-//
-// Returns the orphan-file set to sweep instead of sweeping itself, so the
-// caller can drop the store lock first: a big attachments folder used to stay
-// locked out from every other window for the whole fs scan.
+// Permanent delete: the trash entry, its media files and its whole version history are gone
+// for good. Returns the orphan-file set to sweep instead of sweeping itself, so the caller
+// can drop the store lock first and a big attachments folder does not lock out every other
+// window during the fs scan.
 pub(crate) fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Result<Option<std::collections::HashSet<String>>, String> {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let before = store.trash.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
 
-    // A failed trash save means the purged prompt is still coming back on
-    // the next restart (trash has no JSON fallback the way save_prompts does): its
-    // rotation position and version history must come back with it, not vanish
-    // permanently for a purge that never actually persisted. Same guard shape as
-    // the 102 fix on the orphan sweep just below.
+    // A failed trash save means the purged prompt comes back on the next restart (trash has no
+    // JSON fallback like save_prompts), so its rotation position and version history must come
+    // back with it rather than vanish for a purge that never persisted.
     if save_trash(app, store) {
         let orphan_scan = orphan_cleanup_enabled(store).then(|| orphan_referenced_set(store));
         rotation_forget(&mut store.settings, ids); // no orphaned pointer/bag left behind
         save_settings(app, &store.settings);
-        // save_trash above only returns true through a working connection, so
-        // losing it between the two calls is a narrow window: but a purge that
-        // leaves the prompt's text sitting in prompt_versions must never pass
-        // unrecorded.
+        // save_trash above returns true only through a working connection, so losing it between
+        // the two calls is a narrow window, but a purge that leaves the prompt's text in
+        // prompt_versions must not pass unrecorded.
         match db_conn(app) {
             Some(c) => {
                 for id in ids {
@@ -407,10 +399,9 @@ pub(crate) fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> R
         }
         Ok(orphan_scan)
     } else {
-        // A failed save already means the disk-side trash still has these rows and
-        // they will reappear on restart: restore the in-memory copy to match now,
-        // so this session's trash view (and any callers returning store.trash) does
-        // not show them as gone in the meantime.
+        // A failed save means the disk-side trash still has these rows and they reappear on
+        // restart: restore the in-memory copy so this session's trash view does not show them as
+        // gone.
         store.trash = before;
         Err("save-failed".to_string())
     }
@@ -445,10 +436,7 @@ pub(crate) async fn empty_trash(app: AppHandle, state: State<'_, Db>) -> Result<
 
 pub(crate) const TRASH_RETENTION_DAYS_DEFAULT: f64 = 30.0;
 
-// Drop anything past the retention window (0/off by settings default, same
-// "0 = forever" convention as historyDays). Runs once at startup, mirroring
-// prune_history's own startup sweep: never on a timer, so a long-idle app does
-// not surprise-purge something the user only just noticed in the trash.
+// The trash retention window in seconds, None when off (0 = forever, like historyDays).
 pub(crate) fn trash_retention_secs(settings: &Settings) -> Option<u64> {
     let days = settings.ui_values.get("trashRetentionDays").copied().unwrap_or(TRASH_RETENTION_DAYS_DEFAULT);
     if days <= 0.0 {
@@ -469,6 +457,9 @@ pub(crate) fn stale_trash_ids(trash: &[Prompt], max_age: u64, now: u64) -> Vec<S
         .collect()
 }
 
+// Drop anything past the retention window. Runs once at startup, like prune_history, never
+// on a timer, so a long-idle app does not surprise-purge something the user only just
+// noticed in the trash.
 pub(crate) fn sweep_trash(app: &AppHandle, store: &mut Store) {
     let Some(max_age) = trash_retention_secs(&store.settings) else {
         return;
@@ -483,12 +474,10 @@ pub(crate) fn sweep_trash(app: &AppHandle, store: &mut Store) {
     }
 }
 
-// The trash row's on-demand trigger -- the same rule sweep_trash
-// applies at startup, but explicit and always answered (even "nothing to
-// clean up"), same reasoning as sweep_recordings_now's own manual button.
-// A live click carries none of the "long-idle app surprise-purges the trash"
-// risk the startup-only comment above warns about, since the user asked for
-// this exact sweep right now.
+// The trash row's on-demand trigger: the rule sweep_trash applies at startup, but explicit
+// and always answered (even "nothing to clean up"), like sweep_recordings_now. A live click
+// carries none of the surprise-purge risk of the startup-only sweep: the user asked for it
+// now.
 #[tauri::command]
 pub(crate) fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
     // The orphan sweep locks the store itself, so it runs only after this guard is
@@ -586,10 +575,9 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
             incomplete = true;
         }
         save_settings(&app, &store.settings);
-        // Data-only wipe: keep every setting, drop the derived data tables. Each
-        // failure is logged and reported: the command used to always answer
-        // Ok(()) here, so a locked file or a mid-wipe I/O error could leave
-        // private rows on disk while the user was told everything was gone.
+        // Data-only wipe: keep every setting, drop the derived data tables. Each failure is logged
+        // and reported, so a locked file or mid-wipe I/O error cannot leave private rows on disk
+        // while the user is told everything is gone.
         match db_conn(&app) {
             Some(c) => {
                 for (table, e) in wipe_data_tables(&c) {
@@ -614,11 +602,10 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
     Ok(())
 }
 
-// The settings a reset leaves behind: every default, plus the values that are
-// keys rather than preferences. The backup password would make every protected
-// backup unreadable if dropped, the receiver's certificate belongs to this
-// machine, and the vault's salt and verifier are what the confidential prompts
-// the reset keeps are sealed with.
+// The settings a reset leaves behind: every default, plus the values that are keys rather
+// than preferences. The backup password (dropping it would make every protected backup
+// unreadable), the receiver's certificate (it belongs to this machine), and the vault's
+// salt and verifier (what the confidential prompts the reset keeps are sealed with).
 pub(crate) fn settings_after_reset(old: &Settings) -> Settings {
     let mut fresh = Settings::default();
     fresh.migrate();
@@ -675,9 +662,8 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
         load_pick_history(&store.settings); // reset clears the mirror too
         store.prompts = prompts;
-        // The prompt rows themselves are untouched here, but the store around them
-        // is rebuilt from defaults: start the row bookkeeping from scratch rather
-        // than reasoning about what survived a factory reset.
+        // The prompt rows are untouched, but the store around them is rebuilt from defaults: start
+        // the row bookkeeping from scratch.
         store.forget_written_rows();
         save_settings(&app, &store.settings);
         // Defaults switch the picture-text index off: erase its text as well.
@@ -793,11 +779,10 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
         }
         let mut landed = false;
         if let Err(e) = copy_store_files(&src, &dir, &mut landed) {
-            // Whatever did arrive IS the store on disk now, while the one in memory
-            // (and the row bookkeeping behind it) still describes the empty one it
-            // replaced: so the next save would delete every adopted row as "gone".
-            // The source in %APPDATA% is untouched either way; reload from what
-            // actually landed before reporting the failure.
+            // Whatever arrived is the store on disk now, while the one in memory (and its row
+            // bookkeeping) still describes the empty one it replaced, so the next save would delete
+            // every adopted row as gone. The source in %APPDATA% is untouched either way; reload from
+            // what landed before reporting the failure.
             if landed {
                 let _ = fs::remove_file(dir.join("data.db-wal"));
                 let _ = fs::remove_file(dir.join("data.db-shm"));
@@ -808,8 +793,8 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
             }
             return Err(e);
         }
-        // Same gap as set_data_dir -- an adopted store must bring its backup
-        // history along too, or the Backup panel shows 0 snapshots right after.
+        // An adopted store must bring its backup history along too (as set_data_dir does), or the
+        // Backup panel shows 0 snapshots.
         let src_backups = src.join("backups");
         if src_backups.is_dir() {
             if let Err(e) = copy_dir_all(&src_backups, &dir.join("backups")) {
