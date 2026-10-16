@@ -23,10 +23,9 @@ pub(crate) struct Prompt {
     // Attached file: clicking puts the file itself on the clipboard.
     #[serde(default)]
     pub(crate) file_path: String,
-    // Which page of an attached PDF the preview shows (0-based). Ignored for
-    // any other attachment type. Clamped against the actual page count at render
-    // time (pdf_preview), never here: the file can change independently of this
-    // number (a replaced attachment, or a shorter PDF at the same path).
+    // Page of an attached PDF the preview shows (0-based), ignored for other attachments.
+    // Clamped against the real page count at render time (pdf_preview), since the file can
+    // change independently of this number.
     #[serde(default)]
     pub(crate) pdf_page: u32,
     // Gif/video used as the tile icon only: shown, never copied.
@@ -60,29 +59,26 @@ pub(crate) struct Prompt {
     // user was in), or "" = follow the global promptHotkeyPaste setting.
     #[serde(default)]
     pub(crate) hotkey_paste: String,
-    // Unix seconds set the moment a prompt moves into the trash table; unused
-    // (0) for every prompt still in store.prompts. Drives both the trash list's
-    // "deleted N days ago" and the retention sweep: never touched for anything
-    // else, so it never appears in an export or a fresh add_prompt/update_prompt.
+    // Unix seconds set when a prompt moves into the trash table; 0 for every prompt still in
+    // store.prompts. Drives the trash list's "deleted N days ago" and the retention sweep, and
+    // never appears in an export or a fresh add_prompt/update_prompt.
     #[serde(default)]
     pub(crate) trashed_at: u64,
-    // "Rotating prompts": `text` is entry 1, `variants` holds entries 2..n, so
-    // every existing consumer (tile preview, search, export, dup-finder, tooltip,
-    // Markdown sync) stays correct without a single change, and "rotation is on" is
-    // exactly `!variants.is_empty()`: no separate bool that could drift from the data.
+    // "Rotating prompts": `text` is entry 1 and `variants` holds entries 2..n, so every consumer
+    // of `text` (tile preview, search, export, dup-finder, tooltip, Markdown sync) stays correct,
+    // and "rotation is on" is exactly `!variants.is_empty()` with no separate bool to drift.
     #[serde(default)]
     pub(crate) variants: Vec<String>,
     // "" = in order, "random" = shuffled bag (see rotation_next).
     #[serde(default)]
     pub(crate) rotate_mode: String,
-    // Auto-Wechsel: nach jedem Einfügen rückt die Zwischenablage auf den
-    // nächsten Eintrag vor. Ohne variants bedeutungslos (wie rotate_mode).
+    // Auto-rotate: after each paste the clipboard advances to the next entry. Meaningless
+    // without variants (like rotate_mode).
     #[serde(default)]
     pub(crate) rotate_auto: bool,
-    // Duration of an attached video, measured once when the attachment is set
-    // (probe_media_meta) and never on every render. 0 = never measured, or the
-    // file has no video stream. Read by the library/history thumbnail badge
-    // only -- the main grid tile never reads this field.
+    // Duration of an attached video, measured once when the attachment is set (probe_media_meta),
+    // never on render. 0 = never measured, or no video stream. Read only by the library/history
+    // thumbnail badge.
     #[serde(default)]
     pub(crate) media_duration_ms: u64,
     // Pixel width/height of an attached video or still image, 0 = unknown.
@@ -93,29 +89,23 @@ pub(crate) struct Prompt {
     // Size in bytes of the attached file (file_path/icon_path), 0 = unknown.
     #[serde(default)]
     pub(crate) media_size_bytes: u64,
-    // Text recognized in the attached picture, a search index and nothing
-    // else: never shown, exported or synchronized. Empty unless ocrIndex was
-    // on when the picture was attached. Cleared the moment the picture is
-    // removed or replaced.
+    // Text recognized in the attached picture: a search index only, never shown, exported or
+    // synchronized. Empty unless ocrIndex was on when the picture was attached; cleared when the
+    // picture is removed or replaced.
     #[serde(default)]
     pub(crate) image_text: String,
-    // Marked confidential: `text` and every entry of `variants` above hold
-    // AES-GCM ciphertext (see secret_encrypt) instead of plain text, gated by
-    // the session vault password (secret_vault_unlock). Name, tags and image
-    // stay plain either way, or the library grid could not draw the tile at
-    // all while locked.
+    // Marked confidential: `text` and every entry of `variants` hold AES-GCM ciphertext (see
+    // secret_encrypt), gated by the session vault password (secret_vault_unlock). Name, tags and
+    // image stay plain, or the library grid could not draw the tile while locked.
     #[serde(default)]
     pub(crate) secret: bool,
 }
 
-// A saved floating window position, plus the identity of the screen it was
-// on when it was last placed there -- name, resolution and its offset in
-// the virtual desktop, next to the coordinates. Coordinates alone cannot
-// tell a screen that came back from a different one that merely landed on
-// the same spot; `screen` is what lets a parked pill find its way home.
-// Empty on anything saved before this field existed, which is read as
-// "unknown" rather than "no screen", so an ordinary upgrade never parks a
-// button nothing has actually moved (see resolve_float_spot).
+// A saved floating window position plus the identity of the screen it was placed on (name,
+// resolution, offset in the virtual desktop). Coordinates alone cannot tell a returning
+// screen from a different one at the same spot; `screen` lets a parked pill find its way
+// home. Empty on older saves, read as "unknown" rather than "no screen", so an upgrade never
+// parks a button nothing moved (see resolve_float_spot).
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub(crate) struct Pos {
     pub(crate) x: i32,
@@ -149,21 +139,18 @@ pub(crate) struct View {
     // Optional tab color (hex); empty = default.
     #[serde(default)]
     pub(crate) color: String,
-    // Ordered membership: who belongs to this view, independent of where a
-    // grid size happens to have room to show them. `layouts` says WHERE a
-    // member sits, never WHETHER it belongs -- that split exists so a
-    // grid-size change can never silently drop or resurrect an entry. A
-    // member with no cell in the current size's layout is an overflow
-    // entry, not a lost one.
+    // Ordered membership: who belongs to this view, independent of where a grid size has room
+    // to show them. `layouts` says where a member sits, never whether it belongs, so a
+    // grid-size change cannot drop or resurrect an entry. A member without a cell in the
+    // current size's layout is an overflow entry.
     #[serde(default)]
     pub(crate) members: Vec<String>,
 }
 
-// An Android-style folder inside the grid. It occupies ONE cell of one view and
-// holds prompts that are no longer tiles of their own: a member's layout entry is
-// dropped when it joins and it gets a free cell again when it leaves. A view can
-// change its grid size, so a folder whose cell no longer exists is moved to the first
-// free one instead of disappearing.
+// An Android-style folder inside the grid. It occupies one cell of one view and holds
+// prompts that are no longer tiles of their own: a member's layout entry is dropped when it
+// joins and it gets a free cell when it leaves. If the view's grid size changes and the
+// folder's cell disappears, it moves to the first free one.
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct TileFolder {
     #[serde(default)]
@@ -181,11 +168,10 @@ pub(crate) struct TileFolder {
     pub(crate) members: Vec<String>,
 }
 
-// An Android-style folder holding several floating pills. It owns ONE window
-// (the folder icon; expanding only resizes it), so `pos` is the icon's top-left in
-// physical desktop pixels: the same space `Settings.floating` uses. A member keeps
-// its own `floating` entry so switching the feature off puts every pill back where
-// it was.
+// An Android-style folder holding several floating pills. It owns one window (the folder
+// icon; expanding only resizes it), so `pos` is the icon's top-left in physical desktop
+// pixels, the space `Settings.floating` uses. A member keeps its own `floating` entry so
+// switching the feature off restores every pill.
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct FloatFolder {
     #[serde(default)]
@@ -239,8 +225,7 @@ pub(crate) struct Settings {
     // Per-floating-button size factor (1.0 = default).
     #[serde(default)]
     pub(crate) float_scale: HashMap<String, f64>,
-    // Pill folders. Kept even while the feature is switched off, so turning it
-    // back on restores the folders instead of losing them.
+    // Pill folders. Kept while the feature is off, so turning it back on restores them.
     #[serde(default)]
     pub(crate) float_folders: Vec<FloatFolder>,
     // Per-prompt video player state (volume, mute, loop), grid and pill.
@@ -250,8 +235,8 @@ pub(crate) struct Settings {
     pub(crate) window: Option<WindowGeom>,
     #[serde(default = "default_on")]
     pub(crate) minimize_to_tray: bool,
-    // False for a store written before the 30/90-day retention defaults; migrate()
-    // pins such a store to keep-forever once.
+    // False for a store written before the 30/90-day retention defaults; migrate() pins such a
+    // store to keep-forever once.
     #[serde(default)]
     pub(crate) retention_defaults_v2: bool,
     #[serde(default)]
@@ -264,25 +249,21 @@ pub(crate) struct Settings {
     // Global hotkey accelerator (e.g. "CommandOrControl+Shift+P"); empty = off.
     #[serde(default)]
     pub(crate) hotkey: String,
-    // Global voice-dictation hotkey; empty = off. Checked/cleaned through the
-    // exact same functions as `hotkey` above -- see HotkeyOwner.
+    // Global voice-dictation hotkey; empty = off. Validated like `hotkey` (see HotkeyOwner).
     #[serde(default)]
     pub(crate) voice_hotkey: String,
-    // Global stop/pause hotkeys for a running recording -- the bar is otherwise
-    // the ONLY way to stop or pause it. Registered only while a recording is
-    // active (see rearm_hotkeys) -- unlike `hotkey`/`voice_hotkey` these ship
-    // with a real default, since a long-running, disk-filling capture needs a
-    // way out from day one.
+    // Global stop/pause hotkeys for a running recording, registered only while one is active
+    // (see rearm_hotkeys). Unlike `hotkey`/`voice_hotkey` they ship with a default, since a
+    // long-running capture needs a way out from the start.
     #[serde(default = "default_rec_stop_hotkey")]
     pub(crate) rec_stop_hotkey: String,
     #[serde(default = "default_rec_pause_hotkey")]
     pub(crate) rec_pause_hotkey: String,
     #[serde(default = "default_on")]
     pub(crate) auto_update: bool,
-    // Whether the user allowed the automatic update check. A fresh profile
-    // starts Unasked and never goes online until answered; a stored settings
-    // blob without the key is an existing install (Legacy) and is turned into
-    // Yes or No from its `auto_update` value by `migrate`.
+    // Whether the user allowed the automatic update check. A fresh profile starts Unasked and
+    // never goes online until answered; a stored blob without the key is an existing install
+    // (Legacy), which `migrate` turns into Yes or No from its `auto_update` value.
     #[serde(default = "legacy_update_consent")]
     pub(crate) update_consent: UpdateConsent,
     // How far the one-time rewrites of stored content have run (see DATA_VERSION).
@@ -306,28 +287,21 @@ pub(crate) struct Settings {
     // Expert string options (e.g. copy-feedback font). Missing key = default.
     #[serde(default)]
     pub(crate) ui_texts: HashMap<String, String>,
-    // Seeded once on a genuinely fresh install (empty library, never seeded
-    // before): never re-seeded just because the user later deletes everything.
+    // Seeded once on a genuinely fresh install; never re-seeded after the user deletes everything.
     #[serde(default)]
     pub(crate) examples_seeded: bool,
-    // Ids of the seeded example prompts, so "remove examples" can find exactly
-    // those three (and only those) without guessing by name/content.
+    // Ids of the seeded example prompts, so "remove examples" finds exactly those.
     #[serde(default)]
     pub(crate) example_prompt_ids: Vec<String>,
-    // Content fingerprint of each seeded example at the moment it was created
-    // (example_seed_fingerprint). "Remove examples" only deletes an id whose
-    // current fingerprint still matches: one the user has since edited is now
-    // theirs and is left alone. An id with no entry here (old installs seeded
-    // before this field existed) is treated as unchanged, matching the
-    // previous unconditional-delete behaviour.
+    // Content fingerprint of each seeded example when it was created (example_seed_fingerprint).
+    // "Remove examples" deletes only an id whose fingerprint still matches; an edited one is the
+    // user's now. An id with no entry (installs seeded before this field existed) counts as
+    // unchanged.
     #[serde(default)]
     pub(crate) example_prompt_seeds: HashMap<String, u64>,
-    // Each entry is one group of prompt ids the user dismissed together as
-    // "not a duplicate" - never re-suggested as a group. Was Vec<[String; 2]> (one
-    // entry per PAIR): ignoring an N-member group wrote N*(N-1)/2 entries, 79800 for
-    // a 400-item group. A JSON array of strings deserializes into a Vec<String> the
-    // same whether it has 2 elements or more, so every already-stored pair loads
-    // here unchanged as a 2-member group - no migration needed.
+    // Each entry is one group of prompt ids dismissed together as "not a duplicate", never
+    // re-suggested as a group. A stored array of two ids loads as a 2-member group, so older
+    // pair-shaped saves need no migration.
     #[serde(default)]
     pub(crate) dup_ignored: Vec<Vec<String>>,
     // Tag key (the lowercased name) -> chip color (#rrggbb). Keyed lowercase so a
@@ -338,9 +312,9 @@ pub(crate) struct Settings {
     // each carries only the variables that differ from its built-in base.
     #[serde(default)]
     pub(crate) custom_themes: Vec<CustomTheme>,
-    // Legacy in-blob copy history. Read once on upgrade to migrate into the
-    // dedicated `copy_log` table, then never written back (the table owns it so
-    // a million-entry history never bloats this encrypted settings blob).
+    // Legacy in-blob copy history: read once on upgrade to migrate into the `copy_log` table,
+    // never written back (the table owns it, so a huge history does not bloat this encrypted
+    // settings blob).
     #[serde(default, skip_serializing)]
     pub(crate) copy_log: Vec<CopyEntry>,
     // Per-prompt copy count + last-used time (unix seconds). Both bounded by the
@@ -349,13 +323,13 @@ pub(crate) struct Settings {
     pub(crate) usage: HashMap<String, u32>,
     #[serde(default)]
     pub(crate) last_used: HashMap<String, u64>,
-    // Rotation pointer for "variants" prompts: kept out of Prompt itself (see
-    // rotation_next) so every copy doesn't rewrite prompts.json / bump the version
-    // history / touch the Markdown sync file. Index of the NEXT entry to serve.
+    // Rotation pointer for "variants" prompts, kept out of Prompt (see rotation_next) so a copy
+    // does not rewrite prompts.json, bump the version history or touch the Markdown sync file.
+    // Index of the next entry to serve.
     #[serde(default)]
     pub(crate) rotate_pos: HashMap<String, u32>,
-    // Shuffled remaining indices for "random" mode (the "bag": drawn without
-    // repetition, reshuffled once empty). Absent/empty means "reshuffle on next use".
+    // Shuffled remaining indices for "random" mode (drawn without repetition, reshuffled when
+    // empty). Absent or empty means "reshuffle on next use".
     #[serde(default)]
     pub(crate) rotate_bag: HashMap<String, Vec<u32>>,
     #[serde(default = "default_on")]
@@ -372,11 +346,10 @@ pub(crate) struct Settings {
     pub(crate) active_view: String,
     #[serde(default)]
     pub(crate) views: Vec<View>,
-    // Grid folders. Kept while the feature is off as well: the members simply
-    // show as their own tiles again until it comes back on.
+    // Grid folders. Kept while the feature is off: members show as their own tiles again.
     #[serde(default)]
     pub(crate) tile_folders: Vec<TileFolder>,
-    // Legacy single-grid fields (pre-views). Read for migration, never written back.
+    // Legacy single-grid fields (pre-views): read for migration, never written back.
     #[serde(default = "default_cols", rename = "cols", skip_serializing)]
     pub(crate) legacy_cols: u32,
     #[serde(default = "default_rows", rename = "rows", skip_serializing)]
@@ -411,10 +384,8 @@ pub(crate) fn default_rec_stop_hotkey() -> String {
     "Ctrl+Alt+S".to_string()
 }
 pub(crate) fn default_rec_pause_hotkey() -> String {
-    // Was "Ctrl+Alt+P", identical to the quick-launcher's own default
-    // (`hotkey` above) -- on every fresh install the two collided from the
-    // start and the pause hotkey silently never registered until the user
-    // changed one of them by hand.
+    // Distinct from the quick-launcher's default (`hotkey`), which would collide on a fresh
+    // install and keep the pause hotkey from registering.
     "Ctrl+Alt+O".to_string()
 }
 
@@ -445,13 +416,12 @@ impl Default for Settings {
             autostart: false,
             start_minimized: false,
             always_on_top: false,
-            // A fresh install ships with the quick-launcher already bound, so the
-            // feature is discoverable without a trip to settings. An EXISTING install's
-            // stored value (including a deliberately empty/off one) is untouched --
-            // #[serde(default)] only ever fills in a value that was never written.
+            // A fresh install ships with the quick-launcher bound so the feature is discoverable. An
+            // existing install's stored value (even empty/off) is untouched, since #[serde(default)]
+            // only fills in values never written.
             hotkey: "CommandOrControl+Alt+P".to_string(),
-            // Unlike the app hotkey, voice dictation ships with NO global binding --
-            // a fresh install is not expected to start listening from a key combo.
+            // Voice dictation ships without a global binding: a fresh install should not start
+            // listening on a key combo.
             voice_hotkey: String::new(),
             rec_stop_hotkey: default_rec_stop_hotkey(),
             rec_pause_hotkey: default_rec_pause_hotkey(),
@@ -489,14 +459,13 @@ impl Default for Settings {
     }
 }
 
-// Current step of the one-time stored-content rewrites; load_store runs every step
-// above `Settings::data_version` once. Step 1: placeholders in the old {#{...}#}
-// spelling in the version history and the trash.
+// Current step of the one-time stored-content rewrites; load_store runs every step above
+// `Settings::data_version` once. Step 1: placeholders in the old {#{...}#} spelling in the
+// version history and the trash.
 pub(crate) const DATA_VERSION: u32 = 1;
 pub(crate) const GRID_MIN: u32 = 1;
-// Hard safety ceilings. The default-facing limits are 20 (enforced in the UI via
-// the expert values gridMax / maxViews); these only cap how far those expert
-// overrides can be pushed, so old data and extreme settings can't break things.
+// Hard safety ceilings. The user-facing limits are 20 (enforced in the UI via the expert
+// values gridMax / maxViews); these only cap how far those overrides can be pushed.
 pub(crate) const GRID_MAX: u32 = 200;
 pub(crate) const MAX_VIEWS: usize = 200;
 // Grid folders. One per cell at most, so a huge grid is the real ceiling.
@@ -508,20 +477,19 @@ pub(crate) const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / 
 pub(crate) const MAX_FLOAT_FOLDERS: usize = 100;
 pub(crate) const MAX_FOLDER_NAME: usize = 40;
 pub(crate) const FOLDER_BOX: f64 = 96.0; // collapsed folder icon (square, logical px at scale 1)
-// Brand-owned identifiers. Every product name in the Rust code comes from
-// src/brand.rs, which tools/brand.js writes from brands/<brand>.json.
+// Brand-owned identifiers: every product name in the Rust code comes from src/brand.rs,
+// which tools/brand.js writes from brands/<brand>.json.
 pub(crate) const AUTOSTART_KEY: &str = brand::AUTOSTART_KEY;
-// Local data folder under %APPDATA%\Roaming. Used by the pre-app panic hook
-// (no AppHandle) and the store path; deliberately NOT the bundle identifier.
+// Local data folder under %APPDATA%\Roaming, used by the pre-app panic hook (no AppHandle)
+// and the store path; deliberately not the bundle identifier.
 pub(crate) const DATA_FOLDER: &str = brand::DATA_FOLDER;
 
 pub(crate) fn grid_key(cols: u32, rows: u32) -> String {
     format!("{}x{}", cols, rows)
 }
 
-// WebView2-missing dialog texts; shown before settings exist, so the OS
-// locale decides (same language set as the UI). `{app}` is filled with the
-// product name once, in webview2_dialog: the translations never spell it.
+// WebView2-missing dialog texts. Shown before settings exist, so the OS locale decides.
+// `{app}` is filled with the product name in webview2_dialog.
 pub(crate) fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("WebView2 Runtime fehlt", "{app} benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach {app} einfach erneut starten."),
@@ -547,7 +515,6 @@ pub(crate) fn webview2_dialog(lang: &str) -> (String, String) {
     )
 }
 
-// Resolve the effective UI language code ("auto" -> OS locale), EN fallback.
 // Supported UI languages besides English (keep in sync with ui/i18n.js).
 pub(crate) const LANG_CODES: [&str; 10] = [
     "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro",
@@ -584,10 +551,8 @@ pub(crate) fn tray_labels(lang: &str) -> (&'static str, &'static str) {
     }
 }
 
-// Voice-hotkey feedback while the window may stay hidden: the tray tooltip
-// switches to a recording state for the length of a dictation session, then
-// back to the app name. Runs for every session regardless of what started it
-// (button or hotkey) -- harmless to set even while the window is visible.
+// Voice-hotkey feedback while the window may stay hidden: the tray tooltip switches to a
+// recording state for the length of a dictation session, then back to the app name.
 pub(crate) fn set_tray_recording(app: &AppHandle, recording: bool) {
     let Some(tray) = app.tray_by_id("tray") else { return };
     let text = if recording {
@@ -619,9 +584,8 @@ pub(crate) fn tray_recording_label(lang: &str) -> &'static str {
     }
 }
 
-// The tray's own Stop/Pause/Resume labels for a running recording -- the
-// tray is drawn by the OS, not the webview, so (like every other tray label
-// above) these live here rather than in ui/i18n.js.
+// The tray's Stop/Pause/Resume labels for a running recording. The tray is drawn by the OS,
+// not the webview, so these live here rather than in ui/i18n.js.
 pub(crate) fn tray_rec_stop_label(lang: &str) -> &'static str {
     match lang {
         "de" => "Aufnahme beenden",
@@ -669,9 +633,8 @@ pub(crate) fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
     }
 }
 
-// Headers of the two tray quick-copy sections. The tray is drawn by the OS,
-// not by the webview, so these live next to the other tray labels instead of in
-// the frontend table.
+// Headers of the two tray quick-copy sections; they live here because the tray is drawn by
+// the OS, not the webview.
 pub(crate) fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("Zuletzt benutzt", "Favoriten"),
@@ -688,9 +651,8 @@ pub(crate) fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
     }
 }
 
-// Placeholder text of the tray menu's own filter row -- same reasoning as
-// tray_labels above: the tray window is a webview, but its text still lives
-// here so every tray string is translated in one place.
+// Placeholder of the tray menu's filter row; kept here so every tray string is translated in
+// one place.
 pub(crate) fn tray_search_placeholder(lang: &str) -> &'static str {
     match lang {
         "de" => "Suchen…",
@@ -707,8 +669,8 @@ pub(crate) fn tray_search_placeholder(lang: &str) -> &'static str {
     }
 }
 
-// Localized default name of the auto-created start page. As long as the user
-// never renamed it, it follows the UI language (see set_language).
+// Localized default name of the auto-created start page; it follows the UI language until
+// the user renames it (see set_language).
 pub(crate) fn home_name(lang: &str) -> &'static str {
     match lang {
         "de" => "Startseite",
@@ -731,8 +693,8 @@ pub(crate) const HOME_NAMES: [&str; 18] = [
     "Domů", "Головна", "Hem", "Acasă",
 ];
 
-// Expert-menu values that no longer exist. A loaded store drops them once, so a
-// key that is added back later never inherits a stale stored value.
+// Expert-menu values that no longer exist. A loaded store drops them once, so a key added
+// back later never inherits a stale stored value.
 pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
     &[
         "snipPenPx",
@@ -903,14 +865,13 @@ pub(crate) fn removed_ui_text_keys() -> &'static [&'static str] {
     &["snipScaleFilter", "fuzzyMaxTypos"]
 }
 
-// Holds every numeric expert value to the range its slider enforces (the table
-// is generated from ui/expertConfig.js). A hand-edited settings file or an
-// import can carry any number; a value that is not finite is dropped so the
-// key falls back to its default, and a key whose top stop means "unlimited"
-// keeps its 0.
+// Holds every numeric expert value to the range its slider enforces (the table is generated
+// from ui/expertConfig.js). A hand-edited file or an import can carry any number: a value
+// that is not finite is dropped so the key falls back to its default, and a key whose top
+// stop means "unlimited" keeps its 0.
 pub(crate) fn clamp_ui_values(map: &mut HashMap<String, f64>) {
-    // A number that is not finite would be written as null and make the whole
-    // settings block unreadable on the next start, whatever key it sits under.
+    // A non-finite number would be written as null and make the whole settings block unreadable
+    // on the next start, whatever key it sits under.
     map.retain(|_, v| v.is_finite());
     let keys = crate::ui_ranges::UI_VALUE_RANGES.iter().map(|r| r.0).chain(crate::ui_ranges::UI_SELECT_RANGES.iter().map(|r| r.0));
     for key in keys {
@@ -941,10 +902,10 @@ pub(crate) fn clamp_ui_value(key: &str, v: f64) -> Option<f64> {
     Some(v)
 }
 
-// A preset-or-custom select holds its presets or a whole number from the free-entry
-// field's range. Anything below one (fractions, negatives) means "never" where the
-// select has a zero preset (the safe reading for a retention that deletes things)
-// and the smallest custom value where it has none; the rest is rounded and capped.
+// A preset-or-custom select holds its presets or a whole number from the free-entry field's
+// range. Anything below one (fractions, negatives) means "never" where the select has a zero
+// preset (the safe reading for a retention that deletes things) and the smallest custom
+// value where it has none; the rest is rounded and capped.
 pub(crate) fn snap_select_value(v: f64, options: &[f64]) -> f64 {
     let min = crate::ui_ranges::SELECT_CUSTOM_MIN;
     if v < min {
@@ -969,10 +930,9 @@ impl Settings {
         }
         // Merges that read an old key run first, before the removal loops below.
         //
-        // Four on/off switches each had a duration beside them. The duration is the
-        // only control now and 0 means off: a switch that was stored off becomes a
-        // stored 0. A switch that was on (or never set) leaves the stored or default
-        // duration as it is.
+        // Four on/off switches used to sit beside a duration; the duration alone now controls it and
+        // 0 means off. A switch stored off becomes a stored 0; one that was on (or unset) leaves the
+        // stored or default duration.
         for (flag, value) in [
             ("copyBubble", "bubbleMs"),
             ("undoToast", "undoToastMs"),
@@ -984,12 +944,10 @@ impl Settings {
             }
         }
         //
-        // Five separate search-list caps became one, "searchListMax". The largest value
-        // a user set wins, so nobody loses rows they asked for; a cap that was never
-        // stored counts with the default it showed before, so lowering one cap does
-        // not shrink the lists the other four kept at their defaults. A stored 0
-        // ("keep no recent searches") cannot be kept: the merged list has no off
-        // stop. A value already stored under the new key is never overwritten.
+        // Five search-list caps merged into "searchListMax": the largest user-set value wins so no
+        // one loses rows, and an unstored cap counts with its old default so lowering one cap does
+        // not shrink the others. A stored 0 ("keep no recent searches") cannot be kept, since the
+        // merged list has no off stop. A value already under the new key is never overwritten.
         if !self.ui_values.contains_key("searchListMax") {
             let caps: [(&str, f64); 5] = [
                 ("searchRecentMax", 8.0),
@@ -1012,13 +970,11 @@ impl Settings {
             }
         }
         //
-        // Tile lift on hover was a highlight switch, a lift switch and a distance
-        // (the lift was on unless stored off). It is one distance now, 0 = off, and
-        // the new default is 0. An install that stored none of the three keys takes
-        // the new default; one that stored any of them keeps exactly the lift it
-        // shows today, where an unstored switch counts as its old default, on.
-        // Only while an old switch is still stored: afterwards "hoverLift" is the
-        // distance alone and a stored 0 (off) must survive every launch.
+        // Tile lift on hover merged a highlight switch, a lift switch and a distance into one
+        // distance ("hoverLift", 0 = off, default 0). An install with none of the old keys takes the
+        // default; one with any of them keeps the lift it shows today (an unstored switch counts as
+        // its old default, on). Runs only while an old switch is stored, so a later stored 0 survives
+        // every launch.
         if self.ui_flags.contains_key("tileHoverLift") || self.ui_flags.contains_key("tileHover") {
             let on = self.ui_flags.get("tileHover") != Some(&false)
                 && self.ui_flags.get("tileHoverLift") != Some(&false);
@@ -1029,9 +985,9 @@ impl Settings {
                 self.ui_values.remove("hoverLift");
             }
         }
-        // Three dim-until-hovered switches (tiles, media, top bar) with two opacity
-        // sliders became one strength. Whoever dimmed anything keeps the strongest dim
-        // they had, now on all three. Never overwrites a stored strength.
+        // Three dim-until-hovered switches (tiles, media, top bar) and two opacity sliders merged
+        // into one strength, "hoverDim". The strongest dim anyone had applies to all three. Never
+        // overwrites a stored strength.
         if !self.ui_values.contains_key("hoverDim") {
             let mut s: f64 = 0.0;
             if self.ui_flags.get("tilesHoverDim") == Some(&true) {
@@ -1047,10 +1003,9 @@ impl Settings {
                 self.ui_values.insert("hoverDim".into(), (s / 5.0).round() * 5.0);
             }
         }
-        // The attachment preview size slider became three steps. A stored size of 4 KB or
-        // less reads as "short", 20 KB or more as "long"; anything between is the old
-        // default's neighbourhood and stays "medium" (no key). A choice already stored
-        // is never overwritten.
+        // The attachment preview size slider became three steps: a stored size of 4 KB or less
+        // reads as "short", 20 KB or more as "long", anything between stays "medium" (no key). A
+        // stored choice is never overwritten.
         if !self.ui_texts.contains_key("attachPreviewSize") {
             if let Some(kb) = self.ui_values.get("attachPreviewKb").copied() {
                 if kb <= 4.0 {
@@ -1060,9 +1015,8 @@ impl Settings {
                 }
             }
         }
-        // Seven look switches for tile text became one choice, "tileStyle". Styles that
-        // were combined cannot be kept by a single choice: the first one in this order
-        // wins. A choice already stored is never overwritten.
+        // Seven look switches for tile text merged into one choice, "tileStyle". Combined styles
+        // cannot be kept, so the first in this order wins. A stored choice is never overwritten.
         if !self.ui_texts.contains_key("tileStyle") {
             for (flag, style) in [
                 ("boldTileNames", "bold"),
@@ -1080,11 +1034,10 @@ impl Settings {
             }
         }
         //
-        // The favorites view used to be two switches: "favView" (settings) and
-        // "favViewButton" (header star, on unless stored false). It is one now,
-        // "favViewButton", off by default. The view stays on exactly when it was
-        // visible before: favView on and the star not hidden. Runs only while
-        // favView is stored, and removes it, so it happens once.
+        // The favorites view merged "favView" and "favViewButton" (header star, on unless stored
+        // false) into "favViewButton", off by default. It stays on exactly when it was visible
+        // before: favView on and the star not hidden. Runs only while favView is stored, and removes
+        // it, so it happens once.
         if let Some(on) = self.ui_flags.remove("favView") {
             let star = self.ui_flags.get("favViewButton") != Some(&false);
             if on && star {
@@ -1099,10 +1052,9 @@ impl Settings {
             }
             self.retention_defaults_v2 = true;
         }
-        // The expert drawing defaults of the screenshot editor became the sizes each
-        // tool remembers. Whoever had set one keeps it as that tool's starting size,
-        // unless sizes are already remembered. Values outside a field's range are not
-        // carried (the editor would ignore them anyway).
+        // The screenshot editor's expert drawing defaults became the sizes each tool remembers. A
+        // set value becomes that tool's starting size unless sizes are already remembered; values
+        // outside a field's range are not carried.
         if !self.ui_texts.contains_key("snipToolSizes") {
             let mut sizes = serde_json::Map::new();
             let mut put = |old: &str, tool: &str, field: &str, scale: f64, lo: f64, hi: f64| {
@@ -1136,9 +1088,8 @@ impl Settings {
         if let Some(h) = self.ui_values.get_mut("updateCheckH") {
             *h = clamp_update_hours(*h);
         }
-        // Grid folders and floating-button folders had a switch each; they share one
-        // now. Folders stay on unless both old switches were stored off, because
-        // switching them off hides the folders a user kept.
+        // Grid folders and floating-button folders share one switch now. Folders stay on unless both
+        // old switches were stored off, since switching them off hides the folders a user kept.
         if !self.ui_flags.contains_key("folders")
             && (self.ui_flags.contains_key("tileFolders") || self.ui_flags.contains_key("pillFolders"))
         {
@@ -1155,17 +1106,14 @@ impl Settings {
         for k in removed_ui_text_keys() {
             self.ui_texts.remove(*k);
         }
-        // The privacy switch used to be "hide from screen capture" (on unless stored
-        // false); it is now "allow screenshots" (off unless stored true). Anyone who
-        // had deliberately turned the hiding OFF keeps their screenshots.
+        // "Hide from screen capture" (on unless stored false) became "allow screenshots" (off unless
+        // stored true). Anyone who had turned the hiding off keeps their screenshots.
         if let Some(hidden) = self.ui_flags.remove("captureExclusion") {
             if !hidden {
                 self.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
             }
         }
-        // The "ai" theme was renamed to "neon"; no "ai" anywhere, even
-        // internally. Rewrite a stored preference so nobody's colours reset to
-        // "system" on update.
+        // Rewrite a stored "ai" theme (renamed "neon") so nobody's colours reset to "system".
         if self.theme == "ai" {
             self.theme = "neon".to_string();
         }
@@ -1174,9 +1122,8 @@ impl Settings {
                 c.base = "neon".to_string();
             }
         }
-        // The Black & White theme was removed: it was a light one, so whoever used it
-        // (as the theme itself or as the base of a custom theme) gets Light, with the
-        // custom theme's own colours kept.
+        // The Black & White theme was removed. It was a light one, so whoever used it (as the theme
+        // or as a custom theme's base) gets Light, keeping the custom theme's own colours.
         if self.theme == "mono" {
             self.theme = "light".to_string();
         }
@@ -1206,20 +1153,16 @@ impl Settings {
                 members,
             });
         }
-        // Every view arrives through here, including from an imported backup, so this
-        // is where the same ceilings the commands enforce have to hold. Without them a
-        // hand-edited backup with cols near u32::MAX makes the grid renderer build
-        // billions of cells and the window never paints again.
+        // Every view arrives through here, including from an imported backup, so this is where the
+        // ceilings the commands enforce must hold: a hand-edited backup with cols near u32::MAX
+        // would make the grid renderer build billions of cells and the window never paint again.
         self.views.truncate(MAX_VIEWS);
         for v in self.views.iter_mut() {
             v.cols = v.cols.clamp(GRID_MIN, GRID_MAX);
             v.rows = v.rows.clamp(GRID_MIN, GRID_MAX);
-            // One-time backfill for a view saved before membership tracking existed: derive
-            // membership from the union of every saved grid size (current
-            // size first) instead of leaving it empty, which would make
-            // every existing entry look freshly hidden. Never runs again
-            // once `members` is populated, and never used as a source of
-            // truth after this.
+            // One-time backfill for a view saved before membership tracking: derive membership from the
+            // union of every saved grid size (current size first) instead of leaving it empty, which
+            // would make every entry look hidden. Never runs once `members` is populated.
             if v.members.is_empty() {
                 let current_key = grid_key(v.cols, v.rows);
                 let mut sizes: Vec<&String> = v.layouts.keys().collect();
@@ -1258,13 +1201,10 @@ impl Settings {
     }
 }
 
-// Whether an install should be marked as having already seen the first-run
-// tour, so it is never sprung on an existing user. Mirrors seed_example_prompts'
-// own freshness check exactly (real prompts already exist, OR the example-seeding
-// marker is set -- the latter still counts a store as non-fresh even if its
-// examples were later dismissed/deleted). A pure function, not a Settings method,
-// so it is testable without a whole Store around it (called from load_store, once
-// prompts are known, right after the Store itself is built).
+// Whether an install is marked as having seen the first-run tour, so it is never sprung on
+// an existing user. Mirrors seed_example_prompts' freshness check (prompts exist, or the
+// example-seeding marker is set, which counts even after the examples were deleted). Pure
+// rather than a Settings method so it is testable without a Store.
 pub(crate) fn tour_should_be_marked_seen(has_prompts: bool, examples_seeded: bool) -> bool {
     has_prompts || examples_seeded
 }
@@ -1272,42 +1212,36 @@ pub(crate) fn tour_should_be_marked_seen(has_prompts: bool, examples_seeded: boo
 // In-memory store, flushed to disk on mutations.
 pub(crate) struct Store {
     pub(crate) prompts: Vec<Prompt>,
-    // Prompts the user deleted, kept whole (media + version history untouched)
-    // until a real purge. Newest-deleted first, matching how every other list in
-    // the app (recent copies, history) already orders "most recent on top".
+    // Prompts the user deleted, kept whole (media and version history untouched) until a real
+    // purge. Newest-deleted first, like the other "most recent on top" lists.
     pub(crate) trash: Vec<Prompt>,
     pub(crate) settings: Settings,
-    // Set when db_load found encrypted prompt rows it could NOT decrypt (e.g. DPAPI
-    // failed after a profile move / password reset). While true, save_prompts refuses
-    // to rewrite the prompts table so a rewrite can never destroy the rows that are
-    // present-but-unreadable (they are missing from the in-memory list, so a write
-    // would delete them as "gone"). The raw data.db is snapshotted aside on detect.
+    // Set when db_load found encrypted prompt rows it could not decrypt (e.g. DPAPI failed
+    // after a profile move or password reset). While true, save_prompts refuses to rewrite the
+    // prompts table: those rows are missing from the in-memory list, so a write would delete
+    // them as "gone". The raw data.db is snapshotted aside on detect.
     pub(crate) prompts_locked: bool,
-    // What the prompts/trash tables already hold, so a save only re-seals the rows
-    // that really changed (see WrittenRows). It belongs to the prompt list and sits
-    // under the same lock rather than beside it: a second lock could be taken apart
-    // from this one, letting one window update the map for a list another window is
-    // still writing. A RefCell, not a Mutex: it is a detail of the write path, and
-    // every save_* takes a shared &Store.
+    // What the prompts/trash tables already hold, so a save re-seals only rows that changed
+    // (see WrittenRows). It sits under the same lock as the prompt list: a separate lock could
+    // let one window update the map for a list another window is still writing. A RefCell, not a
+    // Mutex, since it is a detail of the write path and every save_* takes a shared &Store.
     pub(crate) written: std::cell::RefCell<WrittenRows>,
 }
 
 impl Store {
-    // Void everything believed to be on disk, so the next save rewrites every row.
-    // The keys stay (only the hashes go): a row this process knew about must still
-    // be deletable by the first save after this call.
-    // Mandatory wherever the tables change without going through write_rows: a
-    // wholesale replacement of the prompt set, a swapped or restored data.db, a raw
-    // DELETE, a move to another data folder. Missing it anywhere leaves the process
-    // trusting hashes for content the disk no longer holds.
+    // Void everything believed to be on disk, so the next save rewrites every row. The keys stay
+    // (only the hashes go), so a row this process knew about is still deletable by the first
+    // save. Mandatory wherever the tables change without going through write_rows: a wholesale
+    // replacement of the prompt set, a swapped or restored data.db, a raw DELETE, a move to
+    // another data folder.
     pub(crate) fn forget_written_rows(&self) {
         for hash in self.written.borrow_mut().values_mut() {
             *hash = crate::store::STALE_ROW_HASH;
         }
     }
 
-    // Keep both folder lists valid against the CURRENT prompt list: one call
-    // after every mutation that can remove a prompt. Idempotent.
+    // Keeps both folder lists valid against the current prompt list: call after every mutation
+    // that can remove a prompt. Idempotent.
     pub(crate) fn normalize_folders(&mut self) {
         let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
         normalize_float_folders(&mut self.settings.float_folders, &ids);
