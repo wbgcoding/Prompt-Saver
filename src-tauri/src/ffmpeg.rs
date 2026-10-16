@@ -2,36 +2,30 @@ use super::*;
 
 // ---------- ffmpeg: fetched on demand for video export/conversion ----------
 //
-// ffmpeg is used as a separate, independently-invoked subprocess -- never linked
-// into this binary -- so it carries its own licence rather than this app's. The
-// pinned build (gyan.dev's "essentials" release) is GPLv3: MP4/H.264 output is
-// a hard requirement, and only the GPL build includes libx264 -- the LGPL
-// alternative has no H.264 encoder at all. GPL redistribution as a separate
-// subprocess only requires shipping the licence text and a source pointer (see
-// THIRD-PARTY-NOTICES.md) -- the same pattern OBS Studio uses -- and does not
-// affect the licensing of this app's own code.
+// ffmpeg runs as a separate subprocess, never linked into this binary, so it carries its own
+// licence. The pinned build (gyan.dev's "essentials" release) is GPLv3: MP4/H.264 output is a
+// requirement and only the GPL build includes libx264. Shipping it as a separate subprocess
+// only requires the licence text and a source pointer (see THIRD-PARTY-NOTICES.md), as OBS
+// Studio does, and does not affect this app's own licensing.
 pub(crate) const FFMPEG_URL: &str =
     "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip";
 pub(crate) const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
 pub(crate) const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
-// The video editor needs structured probing (duration/fps/dimensions,
-// stream count for the mic-mux check) that parsing ffmpeg's own banner text
-// cannot give reliably -- ffprobe's JSON output can. Same zip, same already
-// -verified hash (FFMPEG_SHA256 covers the whole archive, not per-file), so
-// extracting a second entry from it needs no extra pinned hash of its own.
+// The video editor needs structured probing (duration, fps, dimensions, stream count for the
+// mic-mux check) that ffmpeg's banner text cannot give reliably but ffprobe's JSON can. Same
+// zip and already verified hash (FFMPEG_SHA256 covers the whole archive), so a second entry
+// needs no extra pinned hash.
 pub(crate) const FFPROBE_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffprobe.exe";
-// The zip itself is ~106 MB (it also carries ffplay.exe, never extracted);
-// capped generously above that so a legitimate download is never mistaken for
-// a truncation attempt.
+// The zip is ~106 MB (it also carries ffplay.exe, never extracted); the cap is generous so a
+// legitimate download is never mistaken for a truncation attempt.
 pub(crate) const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
 
-// Set by `cancel_ffmpeg_download`, polled between chunks in the download loop --
-// a cancelled or failed download simply leaves nothing behind, so no resumable
-// retry is needed.
+// Set by `cancel_ffmpeg_download` and polled between chunks; a cancelled or failed download
+// leaves nothing behind, so no resumable retry is needed.
 pub(crate) static FFMPEG_DOWNLOAD_CANCEL: AtomicBool = AtomicBool::new(false);
 
-// Held for the whole download: a second start (another window) is refused
-// instead of running a second 100 MB transfer that shares one cancel flag.
+// Held for the whole download: a second start (another window) is refused instead of running
+// a second 100 MB transfer that shares one cancel flag.
 pub(crate) static FFMPEG_DOWNLOAD_RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub(crate) struct FlagClaim(&'static AtomicBool);
@@ -53,9 +47,8 @@ pub(crate) fn hex_decode(s: &str) -> Option<Vec<u8>> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
 }
 
-// The two hashes here are both public/pinned, not secrets -- this is not a
-// timing-attack-relevant comparison -- but the spec asks for a constant-time
-// compare, so this never short-circuits on the first differing byte.
+// Both hashes are public and pinned, so this is not timing-attack relevant, but a
+// constant-time compare is required, so it never short-circuits on the first differing byte.
 pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -67,11 +60,10 @@ pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-// Discovery order: next to the exe, then the app's data folder, then PATH --
-// first hit wins. Never touches the network; that only
-// ever happens in `download_ffmpeg`, and only after explicit user consent.
-// The installer's bundled copy lands next to the exe, so an installed build
-// never reaches this function's "not found" case at all.
+// Discovery order: next to the exe, then the app's data folder, then PATH; first hit wins.
+// Never touches the network (only `download_ffmpeg` does, after explicit user consent). The
+// installer's bundled copy lands next to the exe, so an installed build never reaches the
+// "not found" case.
 pub(crate) fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -92,18 +84,15 @@ pub(crate) fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
 pub(crate) fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
     find_media_tool(app, "ffmpeg.exe")
 }
-// Alongside ffmpeg.exe once download_ffmpeg_blocking has run -- same
-// install directory, same discovery order. An install from before ffprobe
-// support was added only has ffmpeg.exe; probing/editor features degrade to
-// "ffmpeg-missing" until the user re-runs the (idempotent) download, same
-// fetch-on-demand story ffmpeg.exe itself already tells.
+// Alongside ffmpeg.exe once download_ffmpeg_blocking has run, with the same discovery order.
+// An install from before ffprobe support has only ffmpeg.exe; probing and editor features
+// degrade to "ffmpeg-missing" until the user re-runs the idempotent download.
 pub(crate) fn ffprobe_search_path(app: &AppHandle) -> Option<PathBuf> {
     find_media_tool(app, "ffprobe.exe")
 }
 
-// Reports where ffmpeg was found (if anywhere) so the frontend knows whether to
-// offer the download at all -- never called on app start, only when a feature
-// that needs ffmpeg is actually reached for.
+// Reports where ffmpeg was found (if anywhere) so the frontend knows whether to offer the
+// download; never called on app start, only when a feature that needs ffmpeg is reached.
 #[tauri::command]
 pub(crate) async fn ffmpeg_status(app: AppHandle) -> Option<String> {
     ffmpeg_search_path(&app).map(|p| p.to_string_lossy().to_string())
@@ -114,9 +103,8 @@ pub(crate) fn cancel_ffmpeg_download() {
     FFMPEG_DOWNLOAD_CANCEL.store(true, Ordering::SeqCst);
 }
 
-// Where a downloaded ffmpeg.exe is written: beside the exe when that folder is
-// writable (the portable case), otherwise the app's data folder. Never PATH,
-// never a system directory, never elevated.
+// Where a downloaded ffmpeg.exe is written: beside the exe when that folder is writable (the
+// portable case), otherwise the app's data folder. Never PATH, a system directory or elevated.
 pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -130,12 +118,10 @@ pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
     data_dir(app)
 }
 
-// Download, verify, extract and stage ffmpeg.exe. The caller (frontend) must
-// already have gotten explicit consent through
-// `confirmDialog()` before invoking this -- this command is a plain mechanism
-// with no consent check of its own, so the UI layer stays the one place that
-// decides when it may run. Progress is reported via the
-// "ffmpeg-download-progress" event ({downloaded, total}); a cancellation or any
+// Download, verify, extract and stage ffmpeg.exe. The frontend must already have obtained
+// explicit consent through `confirmDialog()`; this command is a plain mechanism with no
+// consent check, so the UI layer is the one place that decides when it may run. Progress is
+// reported via the "ffmpeg-download-progress" event ({downloaded, total}); a cancellation or
 // failure leaves nothing behind (nothing is written until the hash is verified).
 #[tauri::command]
 pub(crate) async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
@@ -151,14 +137,12 @@ pub(crate) async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
     result
 }
 
-// Sanity-check this is actually a zip (local file header "PK\x03\x04") before
-// trusting it further -- a corruption/wrong-format guard, not authentication on
-// its own -- then verify the pinned SHA-256, constant-time compared. A mismatch
-// (truncated body, tampered mirror, wrong asset) is rejected and nothing is ever
-// written -- this mirrors the updater's own fail-closed rule
-// (install_update_blocking). Split out from the download itself, and taking the
-// expected hash as a parameter, so a wrong-hash rejection is provable in a unit
-// test without a live download (see `ffmpeg_wrong_hash_is_rejected` below).
+// Sanity-check this is a zip (local file header "PK\x03\x04") before trusting it further (a
+// format guard, not authentication), then verify the pinned SHA-256, constant-time compared.
+// A mismatch (truncated body, tampered mirror, wrong asset) is rejected and nothing is
+// written, mirroring the updater's fail-closed rule (install_update_blocking). Taking the
+// expected hash as a parameter makes a wrong-hash rejection provable in a unit test (see
+// `ffmpeg_wrong_hash_is_rejected`).
 pub(crate) fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String> {
     if bytes.len() < 4 || &bytes[0..2] != b"PK" {
         return Err("downloaded file is not a valid archive".to_string());
@@ -176,10 +160,10 @@ pub(crate) fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
     verify_ffmpeg_zip_against(bytes, FFMPEG_SHA256)
 }
 
-// The HTTP client for the large downloads (ffmpeg, the installer, the WebView2
-// bootstrapper). ureq's overall request timeout would also bound reading the body,
-// so a slow link could never finish a big file; the connect and each single read are
-// bounded instead, which still ends a stalled transfer.
+// The HTTP client for the large downloads (ffmpeg, the installer, the WebView2 bootstrapper).
+// ureq's overall request timeout would also bound reading the body, so a slow link could never
+// finish a big file; the connect and each single read are bounded instead, which still ends a
+// stalled transfer.
 pub(crate) fn download_agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(30))
@@ -193,16 +177,15 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
         .call()
         .map_err(|e| format!("download: {}", e))?;
     let total: u64 = resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0);
-    // Reserve the announced size once instead of regrowing a 100 MB buffer by
-    // doubling; a lying header is capped by the same limit the loop enforces.
+    // Reserve the announced size once instead of regrowing a 100 MB buffer by doubling; a lying
+    // header is capped by the limit the loop enforces.
     let mut bytes = Vec::with_capacity(total.min(FFMPEG_ZIP_MAX_BYTES) as usize);
     use std::io::Read;
     let mut reader = resp.into_reader();
     let mut buf = vec![0u8; 256 * 1024];
-    // Progress goes out only when the shown value changes (whole percent, or
-    // every MiB without a length): every report also locks the store, updates
-    // the taskbar and wakes every window, which thousands of times per download
-    // slowed the transfer itself.
+    // Progress goes out only when the shown value changes (whole percent, or every MiB without a
+    // length): every report locks the store, updates the taskbar and wakes every window, which
+    // thousands of times per download slowed the transfer itself.
     let mut last_report: Option<u64> = None;
     loop {
         if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
@@ -239,10 +222,10 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
     install_ffmpeg_from_zip(&bytes, &dir)
 }
 
-// Inflates one archive entry straight into a staged file beside its final
-// name: decompression and disk writes overlap instead of first holding the
-// whole 100 MB executable in memory and writing it afterwards. The staged file
-// is removed on any failure, including a body that is not a Windows executable.
+// Inflates one archive entry straight into a staged file beside its final name, so
+// decompression and disk writes overlap instead of holding the whole 100 MB executable in
+// memory first. The staged file is removed on any failure, including a body that is not a
+// Windows executable.
 fn extract_entry_to(bytes: &[u8], entry_name: &str, staged: &Path) -> Result<(), String> {
     use std::io::{Read, Write};
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| format!("zip: {}", e))?;
@@ -264,13 +247,11 @@ fn extract_entry_to(bytes: &[u8], entry_name: &str, staged: &Path) -> Result<(),
     })
 }
 
-// Extracts ffmpeg.exe and (best-effort) ffprobe.exe from an already verified
-// archive into `dir`, both entries in parallel, each staged under a unique temp
-// name in the SAME directory and then renamed into place: an interrupted write
-// never leaves a half-written executable at the real name, and a same-directory
-// rename is atomic on NTFS. A build missing ffprobe.exe still has a working
-// convert_recording via ffmpeg.exe alone, just no video-editor probing until a
-// fresh download supplies it.
+// Extracts ffmpeg.exe and (best-effort) ffprobe.exe from a verified archive into `dir`, both
+// in parallel, each staged under a unique temp name in the same directory and renamed into
+// place: an interrupted write never leaves a half-written executable at the real name, and a
+// same-directory rename is atomic on NTFS. A build without ffprobe.exe still converts via
+// ffmpeg.exe alone, just without video-editor probing until a fresh download.
 pub(crate) fn install_ffmpeg_from_zip(bytes: &[u8], dir: &Path) -> Result<String, String> {
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let staged = dir.join(format!(".ffmpeg-{}-{}.tmp", std::process::id(), stamp));
@@ -306,12 +287,10 @@ pub(crate) fn install_ffmpeg_from_zip(bytes: &[u8], dir: &Path) -> Result<String
 
 // ---------- Video conversion (ffmpeg) ----------
 //
-// MP4/H.264 is always what the native recorder writes; a different target
-// format, or the lossless quality step, is produced by this separate pass
-// afterward, never inside the recorder itself -- runs in the background with
-// a cancelable progress indicator. The source MP4 is only ever deleted once
-// the new file is confirmed on disk, so a failed or cancelled run always
-// leaves the original recording intact.
+// MP4/H.264 is what the native recorder writes; a different target format or the lossless
+// quality step is produced by this separate background pass with a cancelable progress
+// indicator, never inside the recorder. The source MP4 is deleted only once the new file is
+// confirmed on disk, so a failed or cancelled run leaves the original recording intact.
 
 pub(crate) static REC_CONVERT_CANCEL: AtomicBool = AtomicBool::new(false);
 
@@ -325,35 +304,26 @@ pub(crate) fn cancel_recording_convert() {
     REC_CONVERT_CANCEL.store(true, Ordering::SeqCst);
 }
 
-// The crop rect a window recording's stop_recording_now just computed,
-// waiting for the frontend's automatic post-capture crop step -- exactly
-// one recording result flow is ever open at a time, same assumption
-// REC_CONVERT_CANCEL already makes. Keyed by path so a crop request for a
-// stale/superseded recording (the result modal was discarded and a new
-// recording already started) is refused rather than acting on the wrong
-// file.
+// The crop rect a window recording's stop_recording_now just computed, waiting for the
+// frontend's automatic post-capture crop step. Only one recording result flow is open at a
+// time (as REC_CONVERT_CANCEL assumes). Keyed by path so a crop request for a superseded
+// recording (the result modal was discarded and a new recording started) is refused.
 // (recording path, crop rect as x, y, w, h)
 pub(crate) type PendingRecCrop = Option<(PathBuf, (u32, u32, u32, u32))>;
 pub(crate) static PENDING_REC_CROP: Mutex<PendingRecCrop> = Mutex::new(None);
 pub(crate) static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
 
-// Every part a "finish and continue" chain has already closed, oldest first
-// -- read once the recording finally stops for real (stop_recording_now) to
-// fill RecordingStoppedPayload.parts, and cleared the moment a new recording
-// actually starts so a finished chain never leaks into the next one's
-// result. A plain recording that never used the continue button leaves this
-// empty the whole time. Each entry keeps its own mic sidecar path too (both
-// system and mic audio active), so a cancel can remove every part's leftover
-// files, not just its video.
+// Every part a "finish and continue" chain has closed, oldest first. Read when the recording
+// stops for real (stop_recording_now) to fill RecordingStoppedPayload.parts, and cleared when
+// a new recording starts so a finished chain never leaks into the next result. Empty for a
+// plain recording. Each entry keeps its mic sidecar path (both system and mic audio active),
+// so a cancel can remove every part's leftover files, not just its video.
 pub(crate) static REC_SESSION_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
 
-// One entry per interim continuation-part crop currently running in the
-// background -- a cancel of the whole take signals every one of these to stop
-// and waits for it before deleting that part's file, so an ffmpeg process
-// still reading the source can never lose that race against the delete (a
-// deleted-then-recreated file, or a delete that fails outright because the
-// file is still open). Each thread removes its own entry once it is done,
-// cancelled or not.
+// One entry per interim continuation-part crop running in the background. A cancel of the
+// whole take signals each to stop and waits for it before deleting that part's file, so an
+// ffmpeg process still reading the source cannot lose that race against the delete. Each
+// thread removes its own entry when done, cancelled or not.
 pub(crate) static REC_INTERIM_CROPS: Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>> = Mutex::new(Vec::new());
 
 #[derive(serde::Serialize, Clone)]
@@ -366,13 +336,11 @@ pub(crate) fn cancel_recording_crop() {
     REC_CROP_CANCEL.store(true, Ordering::SeqCst);
 }
 
-// Trims a window recording down to the union of every position the window
-// actually occupied, dropping the black margin its fixed multi-display
-// canvas leaves around it. Reuses run_ffmpeg_to_staged so a cancel or
-// failure leaves the original, letterboxed recording untouched -- this step
-// is a pure quality nicety, never something a plain window recording can
-// fail to complete without. Progress arrives as "recording-crop-progress"
-// ({ms}), same shape as convert_recording's own progress event.
+// Trims a window recording down to the union of every position the window occupied, dropping
+// the black margin its fixed multi-display canvas leaves. Reuses run_ffmpeg_to_staged so a
+// cancel or failure leaves the original recording untouched; it is a quality nicety a window
+// recording never fails to complete without. Progress arrives as "recording-crop-progress"
+// ({ms}), shaped like convert_recording's progress event.
 #[tauri::command]
 pub(crate) async fn crop_recording_to_used_area(app: AppHandle, path: String) -> Result<String, String> {
     let src = PathBuf::from(&path);
@@ -397,16 +365,14 @@ pub(crate) async fn crop_recording_to_used_area(app: AppHandle, path: String) ->
     .map_err(|e| e.to_string())?
 }
 
-// crf 16 (rather than convert_recording's lossless crf 0): a crop-only pass
-// has no reason to balloon the file size for a difference nobody can see,
-// just to stay visually transparent while it removes a plain black border.
-// Audio is copied untouched -- cropping never touches timing, so
-// re-encoding it would only risk a sync drift for no benefit.
+// crf 16 (not convert_recording's lossless crf 0): a crop-only pass has no reason to balloon
+// the file for a difference nobody can see. Audio is copied untouched, since cropping never
+// touches timing and re-encoding it would only risk sync drift.
 pub(crate) fn crop_recording_blocking(
     ffmpeg: &Path, src: &Path, rect: (u32, u32, u32, u32), is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
-    // libx264 requires even dimensions; the offset is floored to even too so
-    // chroma stays aligned on the 4:2:0 subsampling grid.
+    // libx264 requires even dimensions; the offset is floored to even too so chroma stays aligned
+    // on the 4:2:0 subsampling grid.
     let (x, y, w, h) = rect;
     let (x, y) = (x & !1, y & !1);
     let (w, h) = ((w & !1).max(2), (h & !1).max(2));
@@ -424,13 +390,10 @@ pub(crate) fn crop_recording_blocking(
     Ok(src.to_string_lossy().to_string())
 }
 
-// `format`: "mp4" | "webm" | "gif". `lossless` only means anything for "mp4"
-// (a CRF-0 re-encode of the same source, the lossless quality step's actual
-// effect) -- "webm"/"gif" always use their own fixed settings below.
-// Progress arrives as "recording-convert-progress" ({ms}: encoded output
-// time so far) -- the frontend already knows the recording's total duration
-// from its own capture timer, so it turns this into a percentage rather than
-// the backend guessing at one.
+// `format`: "mp4" | "webm" | "gif". `lossless` means something only for "mp4" (a CRF-0
+// re-encode of the same source, the lossless quality step); "webm"/"gif" use fixed settings.
+// Progress arrives as "recording-convert-progress" ({ms}: encoded output time so far); the
+// frontend knows the total duration from its capture timer and turns it into a percentage.
 #[tauri::command]
 pub(crate) async fn convert_recording(
     app: AppHandle,
@@ -446,9 +409,8 @@ pub(crate) async fn convert_recording(
     if !src.is_file() {
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
-    // ffmpeg re-encodes this file in place of the source below -- an IPC
-    // caller that is not really the recording UI must not be able to point
-    // that at an arbitrary file just by naming it in src_path.
+    // ffmpeg re-encodes this file in place of the source, so an IPC caller that is not the
+    // recording UI must not be able to point that at an arbitrary file by naming it in src_path.
     if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
         return Err("source-not-allowed".to_string());
     }
@@ -467,11 +429,10 @@ pub(crate) async fn convert_recording(
     result
 }
 
-// A request to "convert" mp4 -> mp4 without the lossless step would just
-// overwrite the source with an identical copy -- there is nothing to do, so
-// it is rejected as a caller mistake rather than run through ffmpeg. The
-// lossless step is the one exception: its whole point IS an mp4 -> mp4
-// re-encode, so same-extension alone cannot be the guard.
+// A request to "convert" mp4 -> mp4 without the lossless step would overwrite the source with
+// an identical copy, so it is rejected as a caller mistake rather than run through ffmpeg. The
+// lossless step is the exception (its point is an mp4 -> mp4 re-encode), so same-extension
+// alone cannot be the guard.
 pub(crate) fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
     same_extension && !(format == "mp4" && lossless)
 }
@@ -486,15 +447,12 @@ pub(crate) fn is_video_format(format: &str) -> bool {
 
 // ---------- ffmpeg errors in plain language, one classifier for every caller ----------
 //
-// ffmpeg's own log lines ("moov atom not found", "Invalid data found when
-// processing input") are a diagnosis for a person who already knows what
-// they mean, not a message to show someone who does not. Every ffmpeg (and
-// ffmpeg-adjacent Windows IO) failure funnels through classify_ffmpeg_error()
-// to one of these stable keys, translated in all eleven languages; the exact
-// wording stays reachable underneath as a collapsible "technical details"
-// line, never as the headline. A user-triggered cancel is handled entirely
-// separately (see is_cancelled() below) and never reaches this classifier at
-// all -- it is not an error.
+// ffmpeg's own log lines ("moov atom not found", "Invalid data found when processing input")
+// diagnose for someone who knows what they mean, not a message to show a user. Every ffmpeg
+// (and ffmpeg-adjacent Windows IO) failure goes through classify_ffmpeg_error() to one of
+// these stable keys, translated in all eleven languages; the exact wording stays reachable
+// as a collapsible "technical details" line, never the headline. A user-triggered cancel is
+// handled separately (see is_cancelled() below) and never reaches this classifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FfmpegErrorKey {
     Truncated,
@@ -524,13 +482,11 @@ impl FfmpegErrorKey {
     }
 }
 
-// Ordered by specificity: a truncated file's log also contains generic
-// "Invalid data" noise further down, so the more precise match must be tried
-// first. Covers both ffmpeg's own AVERROR text (the same fixed, English,
-// POSIX-style strings on every platform ffmpeg runs on) and the plain
-// std::io::Error wording Rust itself produces for a failed spawn, wait or
-// rename, since both kinds of text reach this function from the call sites
-// below.
+// Ordered by specificity: a truncated file's log also contains generic "Invalid data" noise
+// further down, so the more precise match is tried first. Covers ffmpeg's own AVERROR text
+// (fixed English POSIX-style strings on every platform) and the std::io::Error wording Rust
+// produces for a failed spawn, wait or rename, since both reach this function from the call
+// sites below.
 pub(crate) fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
     if text.contains("moov atom not found") {
         FfmpegErrorKey::Truncated
@@ -556,10 +512,9 @@ pub(crate) fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
     }
 }
 
-// Capped in LINES rather than characters, so a run with many short
-// diagnostic lines is not cut off mid-sentence the way a character cap
-// would; not a user-facing setting, just a sane bound on the collapsible
-// "technical details" text.
+// Capped in lines rather than characters, so a run with many short diagnostic lines is not
+// cut off mid-sentence; a sane bound on the collapsible "technical details" text, not a
+// user-facing setting.
 pub(crate) const FFMPEG_ERROR_TAIL_LINES: usize = 20;
 
 pub(crate) fn tail_lines(text: &str, n: usize) -> String {
@@ -575,19 +530,17 @@ pub(crate) struct FfmpegErrorPayload {
     pub(crate) raw: String,
 }
 
-// The one place an ffmpeg failure becomes the string a Tauri command
-// actually returns: a small JSON envelope the frontend's shared
-// parseFfmpegError() unwraps, rather than a copy of this classify-and-format
-// logic per call site.
+// The one place an ffmpeg failure becomes the string a Tauri command returns: a small JSON
+// envelope the frontend's shared parseFfmpegError() unwraps, instead of a copy of this
+// classify-and-format logic per call site.
 pub(crate) fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> String {
     let payload = FfmpegErrorPayload { key: key.as_str(), code, raw: tail_lines(raw_text, FFMPEG_ERROR_TAIL_LINES) };
     serde_json::to_string(&payload).unwrap_or_else(|_| key.as_str().to_string())
 }
 
-// A Windows job object that kills everything assigned to it when its last handle
-// closes, which includes this process ending for any reason. Without it a quit
-// (or a crash) while an export runs leaves ffmpeg alive and still writing its
-// staged file into the user's folder.
+// A Windows job object that kills everything assigned to it when its last handle closes,
+// which includes this process ending for any reason. Without it a quit or crash during an
+// export leaves ffmpeg alive and still writing its staged file into the user's folder.
 pub(crate) struct KillOnCloseJob(pub(crate) windows::Win32::Foundation::HANDLE);
 
 // A job handle is a plain kernel object handle, usable from any thread.
@@ -634,9 +587,8 @@ impl Drop for KillOnCloseJob {
     }
 }
 
-// The app's own job, created on first use and never closed before the process
-// ends. None when the OS refused: children then simply run unsupervised, as
-// before.
+// The app's own job, created on first use and never closed before the process ends. None when
+// the OS refused: children then run unsupervised.
 pub(crate) fn app_job() -> Option<&'static KillOnCloseJob> {
     static JOB: std::sync::OnceLock<Option<KillOnCloseJob>> = std::sync::OnceLock::new();
     JOB.get_or_init(KillOnCloseJob::new).as_ref()
@@ -654,13 +606,13 @@ pub(crate) fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnC
     Ok(child)
 }
 
-// The error text a helper that ran out of time hands to the window (mapped in the
-// window's error table); the io error itself carries `ErrorKind::TimedOut`.
+// The error text a helper that ran out of time hands to the window (mapped in its error
+// table); the io error itself carries `ErrorKind::TimedOut`.
 pub(crate) const FFMPEG_TIMEOUT_ERR: &str = "ffmpeg-timeout";
 
-// Waits for `child` for at most `timeout`, polling every 50 ms. Past the limit the
-// child is killed and reaped and the result is a `TimedOut` error: a stalled network
-// file or a hung drive must not leave a command pending for good.
+// Waits for `child` for at most `timeout`, polling every 50 ms. Past the limit the child is
+// killed and reaped and the result is a `TimedOut` error: a stalled network file or a hung
+// drive must not leave a command pending for good.
 pub(crate) fn wait_with_deadline(child: &mut std::process::Child, timeout: Duration) -> std::io::Result<std::process::ExitStatus> {
     let deadline = std::time::Instant::now() + timeout;
     loop {
@@ -692,10 +644,9 @@ pub(crate) fn status_in_job(cmd: &mut std::process::Command, timeout: Duration) 
     wait_with_deadline(&mut child, timeout)
 }
 
-// `Command::output()` for a helper that should die with the app, with a time limit.
-// Both pipes are drained on their own threads while the child runs (a full pipe would
-// stall it); after a timeout those threads are left to end when the killed child's
-// pipes close.
+// `Command::output()` for a helper that should die with the app, with a time limit. Both
+// pipes are drained on their own threads while the child runs (a full pipe would stall it);
+// after a timeout those threads end when the killed child's pipes close.
 pub(crate) fn output_in_job(cmd: &mut std::process::Command, timeout: Duration) -> std::io::Result<std::process::Output> {
     use std::io::Read;
     cmd.stdout(std::process::Stdio::piped());
@@ -717,14 +668,14 @@ pub(crate) fn output_in_job(cmd: &mut std::process::Command, timeout: Duration) 
     Ok(std::process::Output { status, stdout: collect(out_reader), stderr: collect(err_reader) })
 }
 
-// Where run_ffmpeg_to_staged notes the staged files it has in flight, one path
-// per line, so a start after a killed run can remove what the dead process left
-// in the user's folders. Set once at start-up; without it nothing is recorded.
+// Where run_ffmpeg_to_staged notes the staged files it has in flight, one path per line, so a
+// start after a killed run can remove what the dead process left in the user's folders. Set
+// once at start-up; without it nothing is recorded.
 pub(crate) static EXPORT_JOURNAL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 pub(crate) static EXPORT_JOURNAL_LOCK: Mutex<()> = Mutex::new(());
 
-// One line per staged file: `host<TAB>pid<TAB>path`. The data folder may be shared
-// between machines, so a line is only ever acted on by the host that wrote it.
+// One line per staged file: `host<TAB>pid<TAB>path`. The data folder may be shared between
+// machines, so a line is only acted on by the host that wrote it.
 pub(crate) fn journal_lines(journal: &Path) -> Vec<String> {
     fs::read_to_string(journal)
         .map(|t| t.lines().filter(|l| !l.is_empty()).map(String::from).collect())
@@ -755,10 +706,10 @@ pub(crate) fn journal_write(journal: &Path, lines: &[String]) {
     }
 }
 
-// Read-modify-write across processes: the in-process mutex covers threads, a
-// create-new lock file covers a second local instance. A lock older than ten
-// seconds belongs to a dead run and is taken over; if it cannot be had within
-// a second the change runs unlocked rather than blocking an export.
+// Read-modify-write across processes: the in-process mutex covers threads, a create-new lock
+// file covers a second local instance. A lock older than ten seconds belongs to a dead run
+// and is taken over; if it cannot be had within a second the change runs unlocked rather than
+// blocking an export.
 pub(crate) fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
     let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let lock = journal.with_extension("lock");
@@ -802,8 +753,8 @@ pub(crate) fn export_journal_remove(journal: &Path, staged: &Path) {
     });
 }
 
-// The process id in a `.export-<pid>-<stamp>.<ext>` staged name, and only for a
-// name of exactly that shape: the journal is never trusted to name other files.
+// The process id in a `.export-<pid>-<stamp>.<ext>` staged name, and only for a name of
+// exactly that shape: the journal is never trusted to name other files.
 pub(crate) fn staged_export_pid(path: &Path) -> Option<u32> {
     let name = path.file_name()?.to_str()?;
     let rest = name.strip_prefix(".export-")?;
@@ -815,9 +766,8 @@ pub(crate) fn staged_export_pid(path: &Path) -> Option<u32> {
     pid.parse().ok()
 }
 
-// Only a local absolute path may be deleted from a journal line: a UNC or other
-// network path (or a relative one) would make every start talk to a host the
-// journal's writer picked.
+// Only a local absolute path may be deleted from a journal line: a UNC, other network or
+// relative path would make every start talk to a host the journal's writer picked.
 pub(crate) fn is_local_absolute_path(raw: &str) -> bool {
     if raw.starts_with("\\\\") || raw.starts_with("//") {
         return false;
@@ -831,10 +781,9 @@ pub(crate) fn is_local_absolute_path(raw: &str) -> bool {
     unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(windows::core::PCWSTR(root.as_ptr())) != DRIVE_REMOTE }
 }
 
-// Removes the staged files of runs on THIS host whose process is gone and forgets
-// them. Lines of other hosts are kept verbatim (a pid means nothing there); a
-// file whose process is still alive stays listed. Callers skip this entirely in
-// a read-only instance.
+// Removes the staged files of runs on this host whose process is gone and forgets them. Lines
+// of other hosts are kept verbatim (a pid means nothing there); a file whose process is still
+// alive stays listed. Callers skip this in a read-only instance.
 pub(crate) fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> bool) {
     with_journal_lock(journal, || {
         let mut keep: Vec<String> = Vec::new();
@@ -862,18 +811,15 @@ pub(crate) fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(
     });
 }
 
-// Generous on purpose: this is a last-resort safety net against a hung
-// ffmpeg process, not a quality-of-service limit, so it must never fire on a
-// large export that is genuinely just slow.
+// Generous on purpose: a last-resort net against a hung ffmpeg process, not a
+// quality-of-service limit, so it must never fire on a large export that is just slow.
 pub(crate) const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
 
-// Shared by convert_recording (240, simple format conversion) and the video
-// editor's export (implementing the "one export path" requirement): spawns
-// ffmpeg with the given output-side arguments, streams `-progress pipe:1` into
-// `on_progress`, tails stderr for the error message on failure, and stages the
-// result under a unique temp name in `dst`'s own directory -- the caller
-// renames it into place only once it is confirmed complete, so a failed or
-// cancelled run never leaves a half-written file at any real name. Neither
+// Shared by convert_recording and the video editor's export (one export path): spawns ffmpeg
+// with the given output-side arguments, streams `-progress pipe:1` into `on_progress`, tails
+// stderr for the error message on failure, and stages the result under a unique temp name in
+// `dst`'s own directory. The caller renames it into place only once it is confirmed complete,
+// so a failed or cancelled run never leaves a half-written file at any real name. Neither
 // caller talks to the ffmpeg process directly.
 pub(crate) fn run_ffmpeg_to_staged(
     ffmpeg: &Path,
@@ -916,10 +862,9 @@ pub(crate) fn run_ffmpeg_to_staged(
         }
     };
 
-    // ffmpeg's normal log on stderr is drained on its own thread so it can
-    // never block the stdout progress reader below via a full OS pipe buffer
-    // -- only its text is kept (tailed below), for the error message on a
-    // failure.
+    // ffmpeg's normal log on stderr is drained on its own thread so a full OS pipe buffer can
+    // never block the stdout progress reader below; only its text is kept (tailed below) for the
+    // error message on a failure.
     let stderr_thread = child.stderr.take().map(|mut pipe| {
         std::thread::spawn(move || {
             use std::io::Read;
@@ -929,15 +874,13 @@ pub(crate) fn run_ffmpeg_to_staged(
         })
     });
 
-    // stdout carries `-progress pipe:1`'s machine-readable "key=value" lines,
-    // one flush per line, unlike the carriage-return-redrawn stats ffmpeg would
-    // otherwise print to stderr. `out_time_ms` is ffmpeg's own field name for a
-    // value that is actually in MICROSECONDS, hence the /1000 below. A thread
-    // reads the lines and hands the parsed values over a channel, so this loop
-    // wakes every 200 ms whether or not ffmpeg printed anything: a cancel or the
-    // FFMPEG_MAX_RUN_SECS limit (a last-resort kill, not a quality target) takes
-    // effect even while ffmpeg is silent (probing a huge input, a stalled source)
-    // instead of only at its next progress line.
+    // stdout carries `-progress pipe:1`'s machine-readable "key=value" lines, one flush per line,
+    // unlike the carriage-return-redrawn stats ffmpeg prints to stderr. `out_time_ms` is ffmpeg's
+    // name for a value that is actually in microseconds, hence the /1000 below. A thread reads the
+    // lines and hands the parsed values over a channel, so this loop wakes every 200 ms whether or
+    // not ffmpeg printed anything: a cancel or the FFMPEG_MAX_RUN_SECS limit takes effect even
+    // while ffmpeg is silent (probing a huge input, a stalled source), not only at its next
+    // progress line.
     let start = std::time::Instant::now();
     let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
@@ -980,8 +923,7 @@ pub(crate) fn run_ffmpeg_to_staged(
         }
     };
     let stderr_text = stderr_thread.and_then(|t| t.join().ok()).unwrap_or_default();
-    // ffmpeg is gone now: from here on the staged file is either handed back or
-    // removed by this function itself.
+    // ffmpeg is gone: from here the staged file is either handed back or removed by this function.
     forget_staged();
 
     if is_cancelled() {
@@ -1003,11 +945,10 @@ pub(crate) fn run_ffmpeg_to_staged(
     Ok(staged)
 }
 
-// `is_cancelled` and `on_progress` are plain closures rather than the process-global
-// flag and an `AppHandle` -- the only things this function does with them is poll and
-// report, so it takes no dependency on Tauri's runtime or REC_CONVERT_CANCEL at all and
-// can be exercised in a unit test against a real ffmpeg binary, with its own local
-// cancel flag and no app instance needed.
+// `is_cancelled` and `on_progress` are plain closures rather than the process-global flag and
+// an `AppHandle`, since this function only polls and reports with them. That keeps it free of
+// Tauri's runtime and REC_CONVERT_CANCEL and testable against a real ffmpeg binary with its
+// own local cancel flag.
 pub(crate) fn convert_recording_blocking(
     ffmpeg: &Path, src: &Path, format: &str, lossless: bool, is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
@@ -1015,13 +956,11 @@ pub(crate) fn convert_recording_blocking(
     if convert_is_noop(same_extension, format, lossless) {
         return Err("nothing to convert".to_string());
     }
-    // The real, final name -- for mp4 + lossless this is the SAME path as
-    // `src` (the whole point of that step is replacing it in place). ffmpeg
-    // is never pointed at it directly though: run_ffmpeg_to_staged writes a
-    // uniquely-named staged file in the same directory first, so a source
-    // that is also the destination is never read and written by the same
-    // process at once, and a conversion that fails or is cancelled never
-    // leaves a half-written file at either name.
+    // The real, final name; for mp4 + lossless this is the same path as `src` (that step replaces
+    // it in place). ffmpeg is never pointed at it directly: run_ffmpeg_to_staged writes a
+    // uniquely-named staged file in the same directory first, so a source that is also the
+    // destination is never read and written by one process at once, and a failed or cancelled
+    // conversion never leaves a half-written file at either name.
     let dst = src.with_extension(format);
     let mut args: Vec<String> = Vec::new();
     match format {
@@ -1038,15 +977,14 @@ pub(crate) fn convert_recording_blocking(
             args.extend(["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-c:a", "libopus"].map(String::from));
         }
         "gif" => {
-            // Capped at 30s, palette-quantised, no audio -- a straight per-frame
-            // GIF encode is both huge and visibly banded without this.
+            // Capped at 30s, palette-quantised, no audio: a straight per-frame GIF encode is huge and
+            // visibly banded.
             args.extend([
                 "-t", "30", "-an", "-vf",
                 "fps=15,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer",
             ].map(String::from));
         }
-        // avi: the same codec family as mp4, repackaged into a container an
-        // older program handles better.
+        // avi: the mp4 codec family in a container older programs handle better.
         "avi" => {
             args.extend(["-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-b:a", "192k"].map(String::from));
         }
@@ -1059,11 +997,9 @@ pub(crate) fn convert_recording_blocking(
             return Err(e);
         }
     };
-    // Only now, with the converted file confirmed complete on disk, does the
-    // real name get touched at all: rename the staged file into place (this
-    // is also what replaces `src` in-place for the mp4 + lossless case, since
-    // `dst == src` there), then remove the old source if it is a genuinely
-    // different file from what now sits at `dst`.
+    // Only now, with the converted file confirmed on disk, does the real name get touched: rename
+    // the staged file into place (which also replaces `src` for the mp4 + lossless case, since
+    // `dst == src`), then remove the old source if it is a different file from what sits at `dst`.
     fs::rename(&staged, &dst).map_err(|e| {
         let _ = fs::remove_file(&staged);
         let text = e.to_string();
