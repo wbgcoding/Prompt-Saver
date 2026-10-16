@@ -20298,15 +20298,15 @@ fn a_request_is_judged_by_the_password_and_ranges_in_force_when_it_arrives() {
     settings.ui_texts.insert("remoteAllowedRanges".into(), "192.168.1.0/24".into());
     settings.ui_texts.insert("remotePasswordHash".into(), "old-hash".into());
     let peer: std::net::IpAddr = "192.168.1.20".parse().unwrap();
-    assert_eq!(remote::live_access(&settings, peer), Some(Some("old-hash".to_string())));
+    assert_eq!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), peer), Some(Some("old-hash".to_string())));
     // The password was regenerated while the connection was open.
     settings.ui_texts.insert("remotePasswordHash".into(), "new-hash".into());
-    assert_eq!(remote::live_access(&settings, peer), Some(Some("new-hash".to_string())));
+    assert_eq!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), peer), Some(Some("new-hash".to_string())));
     // The ranges were narrowed past this peer.
     settings.ui_texts.insert("remoteAllowedRanges".into(), "192.168.2.0/24".into());
-    assert_eq!(remote::live_access(&settings, peer), None);
+    assert_eq!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), peer), None);
     // Loopback stays allowed whatever the ranges say.
-    assert!(remote::live_access(&settings, "127.0.0.1".parse().unwrap()).is_some());
+    assert!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), "127.0.0.1".parse().unwrap()).is_some());
 }
 
 #[test]

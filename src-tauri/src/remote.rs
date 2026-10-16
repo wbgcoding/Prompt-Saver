@@ -112,8 +112,40 @@ fn password_hash_hex(settings: &Settings) -> Option<String> {
 }
 
 fn log_remote(settings: &Settings, origin: &str, text: &str) {
-    if error_log_enabled(settings) {
+    log_remote_if(error_log_enabled(settings), origin, text);
+}
+
+fn log_remote_if(enabled: bool, origin: &str, text: &str) {
+    if enabled {
         record_error_log(text, origin, None, ERROR_LOG_MAX);
+    }
+}
+
+// The few settings every connection looks at, copied out under the store lock so a
+// polling client never makes the receiver clone the whole library's settings.
+pub(crate) struct ReceiverAccess {
+    network_filter: bool,
+    ranges: Vec<String>,
+    rate_limit: u32,
+    log: bool,
+    password_hash: Option<String>,
+}
+
+impl ReceiverAccess {
+    pub(crate) fn from_settings(settings: &Settings) -> Self {
+        Self {
+            network_filter: network_filter_enabled(settings),
+            ranges: allowed_ranges(settings),
+            rate_limit: remote_rate_limit(settings),
+            log: error_log_enabled(settings),
+            password_hash: password_hash_hex(settings),
+        }
+    }
+
+    fn read(app: &AppHandle) -> Self {
+        let state: State<Db> = app.state();
+        let guard = lock(&state);
+        Self::from_settings(&guard.settings)
     }
 }
 
@@ -1271,52 +1303,48 @@ async fn handle_connection(
     generation: u64,
 ) {
     let ip = peer.ip();
-    let settings = {
-        let state: State<Db> = app.state();
-        let guard = lock(&state);
-        guard.settings.clone()
-    };
+    let access = ReceiverAccess::read(&app);
     let tls = acceptor.is_some();
     // Checked before a single byte of the actual request is read -- an
     // address outside the loopback default (or outside the configured
     // ranges, with the network switch on) never gets that far.
-    if !peer_allowed(ip, network_filter_enabled(&settings), &allowed_ranges(&settings)) {
-        log_remote(&settings, "remoteApi", "remote access: refused a connection from a disallowed address");
+    if !peer_allowed(ip, access.network_filter, &access.ranges) {
+        log_remote_if(access.log, "remoteApi", "remote access: refused a connection from a disallowed address");
         return;
     }
     if guard.locked(ip) {
-        log_remote(&settings, "remoteApi", "remote access: refused a locked-out address");
+        log_remote_if(access.log, "remoteApi", "remote access: refused a locked-out address");
         refuse_before_request(&mut stream, tls, 403, "locked out").await;
         return;
     }
-    if !guard.check_rate(ip, remote_rate_limit(&settings)) {
-        log_remote(&settings, "remoteApi", "remote access: rate limit exceeded");
+    if !guard.check_rate(ip, access.rate_limit) {
+        log_remote_if(access.log, "remoteApi", "remote access: rate limit exceeded");
         refuse_before_request(&mut stream, tls, 429, "rate limit exceeded").await;
         return;
     }
     match acceptor {
         Some(acceptor) => match tls_accept(&acceptor, stream).await {
-            Ok(tls_stream) => serve_request(tls_stream, ip, settings, app, guard, runs, generation).await,
-            Err(()) => log_remote(&settings, "remoteApi", "remote access: a connection failed the secure handshake"),
+            Ok(tls_stream) => serve_request(tls_stream, ip, access, app, guard, runs, generation).await,
+            Err(()) => log_remote_if(access.log, "remoteApi", "remote access: a connection failed the secure handshake"),
         },
-        None => serve_request(stream, ip, settings, app, guard, runs, generation).await,
+        None => serve_request(stream, ip, access, app, guard, runs, generation).await,
     }
 }
 
-// What the live settings say about this peer right before a request is
+// What the live access fields say about this peer right before a request is
 // authorized: None when its address is no longer allowed, otherwise the stored
 // password hash as it is now (itself None when no password is configured).
-pub(crate) fn live_access(settings: &Settings, ip: IpAddr) -> Option<Option<String>> {
-    if !peer_allowed(ip, network_filter_enabled(settings), &allowed_ranges(settings)) {
+pub(crate) fn live_access(access: &ReceiverAccess, ip: IpAddr) -> Option<Option<String>> {
+    if !peer_allowed(ip, access.network_filter, &access.ranges) {
         return None;
     }
-    Some(password_hash_hex(settings))
+    Some(access.password_hash.clone())
 }
 
 async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
     ip: IpAddr,
-    settings: Settings,
+    access: ReceiverAccess,
     app: AppHandle,
     guard: Arc<RemoteGuard>,
     runs: Arc<RunController>,
@@ -1325,7 +1353,7 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
     let req = match read_request(&mut stream).await {
         Ok(r) => r,
         Err(status) => {
-            log_remote(&settings, "remoteApi", "remote access: malformed or oversized request");
+            log_remote_if(access.log, "remoteApi", "remote access: malformed or oversized request");
             write_response(&mut stream, status, &json_err("bad request")).await;
             return;
         }
@@ -1334,13 +1362,9 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
     // twenty seconds ago. A password regenerated or a range narrowed since (neither
     // restarts the receiver) must apply to this request, so both are checked again
     // against the live settings right before authorizing.
-    let settings = {
-        let state: State<Db> = app.state();
-        let guard = lock(&state);
-        guard.settings.clone()
-    };
-    let Some(stored_hash) = live_access(&settings, ip) else {
-        log_remote(&settings, "remoteApi", "remote access: refused a connection from a disallowed address");
+    let access = ReceiverAccess::read(&app);
+    let Some(stored_hash) = live_access(&access, ip) else {
+        log_remote_if(access.log, "remoteApi", "remote access: refused a connection from a disallowed address");
         return;
     };
     if let Err(status) = authorize(&req, stored_hash.as_deref()) {
@@ -1357,7 +1381,7 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
                 )
             }
         };
-        log_remote(&settings, "remoteApi", log_msg);
+        log_remote_if(access.log, "remoteApi", log_msg);
         write_response(&mut stream, status, &json_err(body_msg)).await;
         return;
     }
@@ -1365,7 +1389,7 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
     let argv = match serde_json::from_slice::<RemoteRequest>(&req.body) {
         Ok(r) if !r.argv.is_empty() && r.argv.len() <= MAX_ARGV_LEN => r.argv,
         _ => {
-            log_remote(&settings, "remoteApi", "remote access: malformed command body");
+            log_remote_if(access.log, "remoteApi", "remote access: malformed command body");
             write_response(&mut stream, 400, &json_err("malformed command body")).await;
             return;
         }
@@ -1374,19 +1398,19 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
     // A connection accepted before a stop, a restart or a renewed certificate
     // belongs to a run that no longer exists: it must not execute anything.
     if !runs.current(generation) {
-        log_remote(&settings, "remoteApi", "remote access: a request from a stopped receiver was not run");
+        log_remote_if(access.log, "remoteApi", "remote access: a request from a stopped receiver was not run");
         write_response(&mut stream, 503, &json_err("receiver restarted")).await;
         return;
     }
     let dir = data_dir(&app);
     if let Err(msg) = crate::cli::confine_path_arg(&argv, &dir) {
-        log_remote(&settings, "remoteApi", &format!("remote access: {cmd_name} -> refused (path escapes the data folder)"));
+        log_remote_if(access.log, "remoteApi", &format!("remote access: {cmd_name} -> refused (path escapes the data folder)"));
         let body = serde_json::to_vec(&serde_json::json!({"code": 4, "stdout": "", "stderr": msg})).unwrap_or_default();
         write_response(&mut stream, 200, &body).await;
         return;
     }
     let (code, stdout, stderr, restart) = crate::cli::run_in_process_deferred(&app, argv, dir).await;
-    log_remote(&settings, "remoteApi", &format!("remote access: {cmd_name} -> exit {code}"));
+    log_remote_if(access.log, "remoteApi", &format!("remote access: {cmd_name} -> exit {code}"));
     let body = serde_json::to_vec(&serde_json::json!({"code": code, "stdout": stdout, "stderr": stderr})).unwrap_or_default();
     // A restore relaunches the app: the answer goes out first, then the restart.
     crate::cli::answer_then_restart(write_response(&mut stream, 200, &body), restart, || app.restart()).await;
