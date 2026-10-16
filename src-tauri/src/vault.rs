@@ -6,9 +6,9 @@ use super::*;
 // (Argon2id(password + pepper, salt)); 2/3 additionally deflate the JSON before
 // encrypting. Old plaintext .json backups are still read.
 pub(crate) const BACKUP_MAGIC: &[u8; 4] = b"PSB1";
-// Fixed obfuscation key: MUST stay identical across all versions or old fixed-key
-// backups become unreadable. Not a secret (open source); it only keeps backups from
-// being plainly readable while staying restorable on any machine.
+// Fixed obfuscation key: must stay identical across all versions or old fixed-key backups
+// become unreadable. Not a secret (open source); it only keeps backups from being plainly
+// readable while staying restorable on any machine.
 pub(crate) const BACKUP_FIXED_KEY: [u8; 32] = [
     0x8f, 0x2a, 0x41, 0xd7, 0x63, 0x1c, 0xb9, 0x05, 0xe4, 0x77, 0x38, 0xaa, 0x1e, 0x90, 0x6d, 0xc2,
     0x54, 0x0b, 0xf3, 0x82, 0x9c, 0x2d, 0x71, 0x48, 0xba, 0x66, 0x0f, 0xd5, 0x37, 0xe1, 0x59, 0x84,
@@ -30,9 +30,9 @@ pub(crate) fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32],
     Ok(key)
 }
 
-// A backup is JSON, so deflating it before encryption shrinks the file to a
-// fraction. Compression must happen BEFORE encryption: ciphertext does not
-// compress. Modes 2/3 mark a deflated payload; 0/1 stay readable forever.
+// A backup is JSON, so deflating it before encryption shrinks the file to a fraction.
+// Compression must happen before encryption, since ciphertext does not compress. Modes 2/3
+// mark a deflated payload; 0/1 stay readable forever.
 pub(crate) fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
     use flate2::{write::DeflateEncoder, Compression};
     let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
@@ -40,19 +40,19 @@ pub(crate) fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
     enc.finish().map_err(|e| e.to_string())
 }
 
-// Ceiling for anything we decompress. The default backup key ships inside the exe, so
-// a valid-looking .psb is something anyone can craft: without a cap a few KB of
-// deflate expands until the process is killed. Far above any real library.
+// Ceiling for anything we decompress. The default backup key ships inside the exe, so a
+// valid-looking .psb is something anyone can craft; without a cap a few KB of deflate expand
+// until the process is killed. Far above any real library.
 pub(crate) const MAX_INFLATED: u64 = 512 * 1024 * 1024;
 
-// Pure predicate, kept apart from do_backup's own AppHandle/filesystem side
-// effects so the size threshold itself is directly unit-testable.
+// Pure predicate, kept apart from do_backup's AppHandle/filesystem side effects so the
+// threshold is directly unit-testable.
 pub(crate) fn too_large_to_restore(len: u64) -> bool {
     len > MAX_INFLATED
 }
 
-// Decompress at most MAX_INFLATED bytes, refusing anything larger instead of growing
-// the buffer until the allocator gives up.
+// Decompress at most MAX_INFLATED bytes, refusing anything larger instead of growing the
+// buffer until the allocator gives up.
 pub(crate) fn inflate_capped<R: std::io::Read>(reader: R) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let mut out = Vec::new();
@@ -134,8 +134,8 @@ pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Opti
         .decrypt(Nonce::from_slice(nonce), ct)
         .map_err(|_| {
             if matches!(data[4], 0 | 2) {
-                // A fixed-key backup has no password to get wrong: asking for one
-                // would send the user after something that cannot help.
+                // A fixed-key backup has no password to get wrong; asking for one would send the user after
+                // something that cannot help.
                 "corrupt backup".to_string()
             } else {
                 "wrong password or corrupt backup".to_string()
@@ -145,17 +145,17 @@ pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Opti
 }
 
 // ---------- Confidential entries (per-prompt encryption) ----------
-// Same derivation and cipher as the encrypted backups above (Argon2id + AES-256-GCM),
-// with its own pepper, salt and verification value: this feature has nothing to do
-// with a backup password and must not accept one as a substitute. Format: b"PSE1" |
-// nonce(12) | AES-256-GCM ciphertext, base64. No compression: a prompt's text is far
-// too small for it to matter, and it would only add a length side channel.
+// Same derivation and cipher as the encrypted backups above (Argon2id + AES-256-GCM), with
+// its own pepper, salt and verification value: this feature is unrelated to a backup
+// password and must not accept one as a substitute. Format: b"PSE1" | nonce(12) |
+// AES-256-GCM ciphertext, base64. No compression: a prompt's text is too small for it to
+// matter, and it would add a length side channel.
 pub(crate) const SECRET_MAGIC: &[u8; 4] = b"PSE1";
 pub(crate) const SECRET_PEPPER: &[u8] = b"prompt-saver::secret::pepper::v1";
 pub(crate) const SECRET_PW_MAX: usize = 128;
-// ui_texts slots: the vault's own salt and a ciphertext of a known marker, used to
-// check a password before trusting it: never the password itself, and never
-// DPAPI-sealed on top, since neither value is a secret on its own.
+// ui_texts slots: the vault's own salt and a ciphertext of a known marker, used to check a
+// password before trusting it. Never the password itself, and never DPAPI-sealed on top, since
+// neither value is a secret on its own.
 pub(crate) const SECRET_SALT_KEY: &str = "secretVaultSalt";
 pub(crate) const SECRET_VERIFY_KEY: &str = "secretVaultVerify";
 pub(crate) const SECRET_VERIFY_MARKER: &str = "prompt-saver-secret-vault-ok";
@@ -189,9 +189,8 @@ pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
     base64_encode(&out)
 }
 
-// Wrong password and corrupt ciphertext fail the exact same way (AEAD tag
-// mismatch): there is no separate "wrong password" code path to get subtly
-// wrong, the cipher itself is the check.
+// A wrong password and a corrupt ciphertext fail the same way (AEAD tag mismatch), so there
+// is no separate "wrong password" path to get subtly wrong; the cipher itself is the check.
 pub(crate) fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
@@ -208,13 +207,11 @@ pub(crate) fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, Str
     String::from_utf8(pt).map_err(|_| "corrupt-secret".to_string())
 }
 
-// Resolves a prompt's copyable text and variants: passed through unchanged for
-// a plain prompt, decrypted with the session key for a confidential one, or
-// refused outright with "secret-locked" when the vault has no key right now.
-// This is the one place a confidential entry's real text is allowed to exist
-// in memory again -- every copy, peek and rotation-changed path goes through
-// it instead of reading Prompt.text/variants directly, so none of them can
-// hand ciphertext to the clipboard or an event payload by mistake.
+// Resolves a prompt's copyable text and variants: unchanged for a plain prompt, decrypted with
+// the session key for a confidential one, or refused with "secret-locked" when the vault has
+// no key. This is the one place a confidential entry's real text exists in memory again:
+// every copy, peek and rotation-changed path goes through it instead of reading
+// Prompt.text/variants, so none can hand ciphertext to the clipboard or an event payload.
 pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
     if !p.secret {
         return Ok((p.text.clone(), p.variants.clone()));
@@ -222,9 +219,8 @@ pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(S
     let Some(key) = key else {
         return Err("secret-locked".to_string());
     };
-    // Ciphertext cannot be rewritten at load, so the old placeholder spelling inside
-    // a confidential entry is upgraded here, where it is read back; the next save
-    // stores it that way.
+    // Ciphertext cannot be rewritten at load, so the old placeholder spelling inside a
+    // confidential entry is upgraded where it is read back; the next save stores it that way.
     let text = upgrade_placeholders(&secret_decrypt(&p.text, &key)?);
     let mut variants = Vec::with_capacity(p.variants.len());
     for v in &p.variants {
@@ -233,9 +229,9 @@ pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(S
     Ok((text, variants))
 }
 
-// A stored value read back for display or editing: sealed text is opened with the
-// key, anything else (a snapshot taken before the entry became confidential, or
-// plain text) is returned as it is. The inverse direction of secret_encrypt_if_plain.
+// A stored value read back for display or editing: sealed text is opened with the key,
+// anything else (a snapshot from before the entry became confidential, or plain text) is
+// returned as is. The inverse of secret_encrypt_if_plain.
 pub(crate) fn reveal_if_sealed(value: &str, key: &[u8; 32]) -> String {
     match secret_decrypt(value, key) {
         Ok(plain) => upgrade_placeholders(&plain),
@@ -243,18 +239,18 @@ pub(crate) fn reveal_if_sealed(value: &str, key: &[u8; 32]) -> String {
     }
 }
 
-// True when the value has the shape of sealed text (the magic and a nonce behind
-// the base64), whether or not a key is at hand to open it.
+// True when the value has the shape of sealed text (the magic and a nonce behind the base64),
+// whether or not a key is at hand to open it.
 pub(crate) fn looks_sealed(value: &str) -> bool {
     let raw = base64_decode(value);
     raw.len() >= SECRET_MAGIC.len() + 12 && &raw[0..4] == SECRET_MAGIC
 }
 
-// Opens a version snapshot's text and variants for the history panel and for a
-// restore. Sealed values are opened whenever a session key exists, whatever the
-// prompt's flag says now: an entry made plain again keeps its older sealed
-// snapshots, and they must never be shown or restored as ciphertext. Without a key
-// a sealed value is refused as locked; an all-plain snapshot passes through.
+// Opens a version snapshot's text and variants for the history panel and a restore. Sealed
+// values are opened whenever a session key exists, whatever the prompt's flag says now: an
+// entry made plain again keeps its older sealed snapshots, which must never be shown or
+// restored as ciphertext. Without a key a sealed value is refused as locked; an all-plain
+// snapshot passes through.
 pub(crate) fn open_snapshot(text: &str, variants: &[String], key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
     match key {
         Some(k) => Ok((reveal_if_sealed(text, &k), variants.iter().map(|v| reveal_if_sealed(v, &k)).collect())),
@@ -263,12 +259,10 @@ pub(crate) fn open_snapshot(text: &str, variants: &[String], key: Option<[u8; 32
     }
 }
 
-// A version-history snapshot taken before an entry became confidential holds
-// plain text; one taken afterwards holds ciphertext already readable with the
-// current vault key. Used when restoring a snapshot into an entry that is
-// confidential right now: keeps an already-encrypted value as-is instead of
-// encrypting it a second time, and encrypts a plain one so it never lands on
-// disk unencrypted under a confidential entry.
+// A snapshot from before an entry became confidential holds plain text; one taken afterwards
+// holds ciphertext readable with the current vault key. Used when restoring a snapshot into
+// an entry that is confidential now: it keeps an already-encrypted value as is and encrypts a
+// plain one, so nothing lands on disk unencrypted under a confidential entry.
 pub(crate) fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
     if secret_decrypt(value, key).is_ok() {
         value.to_string()
@@ -277,11 +271,10 @@ pub(crate) fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
     }
 }
 
-// One derived key for the whole running session, forgotten on quit (never
-// written anywhere) and on an idle timeout (secretTimeoutMin, 15 minutes by
-// default, 0 = only on quit). Every confidential entry shares this one key; nothing about it is
-// per-entry, matching "own salt, own verification value" for the FEATURE, not
-// for each prompt.
+// One derived key for the whole running session, forgotten on quit (never written anywhere)
+// and on an idle timeout (secretTimeoutMin, 15 minutes by default, 0 = only on quit). Every
+// confidential entry shares it; "own salt, own verification value" is per feature, not per
+// prompt.
 pub(crate) struct SecretSession {
     pub(crate) key: [u8; 32],
     pub(crate) unlocked_at: std::time::Instant,
@@ -299,8 +292,8 @@ pub(crate) fn secret_timeout_min(settings: &Settings) -> u32 {
         .clamp(0.0, 240.0) as u32
 }
 
-// None means locked: no session yet, or the idle timeout already elapsed. A
-// timeout of 0 means "until quit" and is never checked here.
+// None means locked: no session yet, or the idle timeout elapsed. A timeout of 0 means "until
+// quit" and is never checked here.
 pub(crate) fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
     let mut guard = SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(sess) = guard.as_ref() {
@@ -313,8 +306,8 @@ pub(crate) fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
     None
 }
 
-// Seconds until the idle timeout locks the session again. None = it never does
-// (timeout 0, until quit). Pure, so the arithmetic can be tested without a clock.
+// Seconds until the idle timeout locks the session again; None = never (timeout 0). Pure, so
+// the arithmetic is testable without a clock.
 pub(crate) fn secret_relock_in_secs(timeout_min: u32, elapsed_secs: u64) -> Option<u64> {
     (timeout_min > 0).then(|| (timeout_min as u64 * 60).saturating_sub(elapsed_secs))
 }
@@ -323,9 +316,8 @@ pub(crate) fn secret_relock_in_secs(timeout_min: u32, elapsed_secs: u64) -> Opti
 pub(crate) struct SecretVaultStatus {
     pub(crate) configured: bool,
     pub(crate) unlocked: bool,
-    // While unlocked with a timeout: how long until the key is dropped. The window
-    // schedules a refetch for that moment, since the backend only notices the
-    // expiry when it is next asked and nothing else tells the window.
+    // While unlocked with a timeout: how long until the key is dropped. The window schedules a
+    // refetch for then, since the backend notices the expiry only when asked.
     pub(crate) remaining_secs: Option<u64>,
 }
 
@@ -360,11 +352,10 @@ pub(crate) fn secret_vault_verify(password: &str, salt_b64: &str, verify_b64: &s
     Ok(key)
 }
 
-// First-time vault setup: stores the salt and verifier and reports whether they
-// reached disk. Ok(false) means metadata already exists and nothing was touched
-// (never replace an existing salt: it would orphan every ciphertext). On a failed
-// save both slots return to what they held, so no unlocked state can ever rest on
-// a salt that is not durable.
+// First-time vault setup: stores the salt and verifier and reports whether they reached disk.
+// Ok(false) means metadata already exists and nothing was touched (never replace an existing
+// salt: it would orphan every ciphertext). On a failed save both slots return to what they
+// held, so no unlocked state rests on a salt that is not durable.
 pub(crate) fn secret_vault_first_setup(
     settings: &mut Settings,
     salt: &[u8],
@@ -390,9 +381,9 @@ pub(crate) fn secret_vault_first_setup(
     Ok(true)
 }
 
-// Converts a copy of one prompt to the requested confidential state, every field
-// authenticated or encrypted before anything is returned. None = already in that
-// state. The live prompt is never touched here.
+// Converts a copy of one prompt to the requested confidential state, every field encrypted
+// or authenticated before anything is returned. None = already in that state. The live prompt
+// is never touched here.
 pub(crate) fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) -> Result<Option<Prompt>, String> {
     if secret == p.secret {
         return Ok(None);
@@ -411,8 +402,8 @@ pub(crate) fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) ->
     Ok(Some(out))
 }
 
-// Swaps the converted prompt in, persists, and puts the original back when the
-// save fails, so a failed conversion can never ride along on a later save.
+// Swaps the converted prompt in, persists, and puts the original back when the save fails, so
+// a failed conversion cannot ride along on a later save.
 pub(crate) fn apply_prompt_secret(
     store: &mut Store,
     id: &str,
@@ -434,11 +425,9 @@ pub(crate) fn apply_prompt_secret(
     Ok(())
 }
 
-// First call ever (no salt stored yet) sets the password up as the vault's
-// password. Every later call verifies against the stored salt/marker instead:
-// there is no way to change it short of turning secretPrompts off, which is a
-// deliberate consequence of "forgetting it means total loss", never a shortcut
-// around that promise.
+// The first call (no salt stored yet) sets the password up as the vault's password; every
+// later call verifies against the stored salt and marker. It cannot be changed short of
+// turning secretPrompts off, a deliberate consequence of "forgetting it means total loss".
 #[tauri::command]
 pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, password: String) -> Result<AppState, String> {
     if password.is_empty() || password.len() > SECRET_PW_MAX {
@@ -466,8 +455,8 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
         if created {
             fresh_key = Some(key);
         } else {
-            // Another call set the vault up first: verify against what it stored
-            // instead of replacing its salt.
+            // Another call set the vault up first: verify against what it stored instead of replacing its
+            // salt.
             (salt_b64, verify_b64) = read_meta();
         }
     }
@@ -487,10 +476,9 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
     })
 }
 
-// Turns one prompt's confidential flag on or off, encrypting/decrypting its text
-// and every variant with the current session key. Requires an unlocked session
-// either way -- turning it OFF still needs the key to recover the plain text, so
-// there is no path that leaves a prompt's `secret` flag lying about what its own
+// Turns one prompt's confidential flag on or off, encrypting or decrypting its text and every
+// variant with the session key. Both directions need an unlocked session (turning it off
+// needs the key to recover the plain text), so the `secret` flag never lies about what the
 // text field holds.
 #[tauri::command]
 pub(crate) async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, secret: bool) -> Result<AppState, String> {
