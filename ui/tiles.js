@@ -706,7 +706,7 @@ export function styleCopyText(el, maxW, maxH, cap) {
   applyCopySizeLevel(el, txt("copySizeLevel"));
 }
 
-// Separate from the pill/folder windows' COPIED_MS=900: this tile flash runs shorter.
+// Separate from the pill and folder windows' shared copied duration (900 ms): this tile flash runs shorter.
 export const TILE_COPIED_MS = 350;
 // Flash + small "Copied!" bubble at the bottom of the tile.
 export function showCopied(tile, label) {
