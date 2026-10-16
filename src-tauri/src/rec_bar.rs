@@ -1,10 +1,9 @@
 use super::*;
 
 // ---- Recording control bar: a small always-on-top window with its own
-// WDA_EXCLUDEFROMCAPTURE (unconditional -- unlike the privacy setting the pill
-// windows use, the bar must NEVER appear in the recording, full stop), pinned
-// top-centre of the recorded monitor or to the top-right corner of the
-// recorded window, following it while it moves. ----
+// WDA_EXCLUDEFROMCAPTURE (unconditional, unlike the pill windows' privacy setting: the bar
+// must never appear in the recording), pinned top-centre of the recorded monitor or to the
+// top-right corner of the recorded window, following it while it moves. ----
 
 #[cfg(windows)]
 pub(crate) fn monitor_bounds(hmonitor: isize) -> Option<(i32, i32, i32, i32)> {
@@ -76,23 +75,21 @@ pub(crate) fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hw
     }
 }
 
-// Re-asserts the bar's position every 200ms while a window target moves or
-// resizes, stopping itself once the bar is hidden/closed or the recorded
-// window itself is gone -- Tauri has no "external window moved" event, so this
-// is a poll loop, same shape as the scheduler module's periodic jobs.
+// Re-asserts the bar's position every 200ms while a window target moves or resizes,
+// stopping once the bar is hidden/closed or the recorded window is gone. Tauri has no
+// "external window moved" event, so this is a poll loop like the scheduler module's
+// periodic jobs.
 #[cfg(windows)]
-// Bumped on every spawn_rec_bar_follow call so an old follow thread notices
-// it has been superseded (a hide+show within one 200ms poll tick spawns a
-// new thread for a new hwnd before the old one has seen the bar hidden) and
-// exits immediately instead of fighting the new thread over positioning or
-// auto-stopping the wrong (new) session when its own stale hwnd closes.
+// Bumped on every spawn_rec_bar_follow call so an old follow thread notices it was
+// superseded (a hide+show within one poll tick spawns a new thread for a new hwnd) and
+// exits instead of fighting the new thread over positioning or auto-stopping the wrong
+// session when its stale hwnd closes.
 pub(crate) static REC_BAR_FOLLOW_GEN: AtomicU64 = AtomicU64::new(0);
 
-// Once the user has dragged the bar themselves, the 200ms poll must stop
-// re-snapping it back to the tracked window's corner -- reset true at the
-// start of every follow thread (a fresh recording gets the auto-follow back),
-// flipped false by rec_bar_mark_moved() the moment a drag begins. The window
-// closing/stopping the recording is unaffected: that check runs regardless.
+// Once the user has dragged the bar, the poll must stop re-snapping it to the tracked
+// window's corner. Reset true at the start of every follow thread (a fresh recording gets
+// auto-follow back), flipped false by rec_bar_mark_moved() when a drag begins. The
+// window-closed/stop check runs regardless.
 pub(crate) static REC_BAR_FOLLOWING: AtomicBool = AtomicBool::new(true);
 
 #[tauri::command]
@@ -138,12 +135,10 @@ pub(crate) fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     });
 }
 
-// Cheap insurance against a future regression of the same shape as the
-// show_rec_bar bug -- if the bar's window exists but is not visible while a
-// recording is still running, the user would otherwise be locked out with no
-// way to stop it again. Registered unconditionally at startup; the
-// recording_active() check makes every tick a no-op outside an actual
-// recording, so the always-on cost is one cheap state read every few seconds.
+// Insurance against a regression like the show_rec_bar bug: if the bar's window exists but
+// is invisible while a recording runs, the user could not stop it. Registered at startup;
+// the recording_active() check makes every tick a no-op outside a recording, so the cost is
+// one cheap state read every few seconds.
 pub(crate) fn rec_bar_heal_tick(app: &AppHandle) {
     if !recording_active(app) {
         return;
@@ -208,12 +203,11 @@ pub(crate) async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -
     }
 }
 
-// The bar's own content decides its size now: a fixed 320x56 window used to
-// clip stop-btn/cancel-btn off the right edge for anyone with an optional
-// icon shown. recbar.js measures its real content box after every layout
-// change and asks for exactly that. Re-running position_rec_bar keeps the bar
-// anchored the same way show_rec_bar first placed it instead of leaving it
-// pinned at its old top-left corner as the width changes.
+// The bar's own content decides its size: recbar.js measures its real content box after
+// every layout change and asks for exactly that (a fixed window clipped the stop/cancel
+// buttons when an optional icon was shown). Re-running position_rec_bar keeps the bar
+// anchored as show_rec_bar first placed it instead of pinned at its old top-left corner as
+// the width changes.
 #[tauri::command]
 pub(crate) fn fit_rec_bar(app: AppHandle, width: f64, height: f64) {
     #[cfg(windows)]
@@ -240,18 +234,15 @@ pub(crate) fn hide_rec_bar(app: AppHandle) {
     }
 }
 
-// A region recording's own outline, standing in for the Windows capture
-// border a region target now switches off (recording::border_setting_for_target):
-// WGC captures the whole monitor and the app crops it down, so the OS border
-// would ring the entire screen rather than the recorded area. Click-through,
-// always-on-top and capture-excluded like the rec bar, but built fresh per
-// recording and destroyed rather than reused -- unlike the bar's fixed shape,
-// a region's rect is different every time. No-op (best-effort) on Monitor and
-// Window recordings, which keep the OS border and never call this at all.
-// Never focused: it has nothing to click or type into, and showing it must
-// not steal keyboard focus away from whatever app is being recorded.
-// Bumped for every outline window that is shown or torn down, so a re-apply
-// queued for an earlier outline can never touch the next recording's one.
+// A region recording's own outline, standing in for the Windows capture border that a
+// region target switches off (recording::border_setting_for_target): WGC captures the whole
+// monitor and the app crops it, so the OS border would ring the entire screen.
+// Click-through, always-on-top and capture-excluded like the rec bar, but built fresh per
+// recording and destroyed afterwards, since a region's rect differs every time. Never
+// focused: showing it must not steal keyboard focus from the recorded app. Monitor and
+// Window recordings keep the OS border and never call this.
+// Bumped for every outline window shown or torn down, so a re-apply queued for an earlier
+// outline can never touch the next recording's one.
 pub(crate) static REC_OUTLINE_GEN: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn outline_closure_is_current(gen: u64, current: u64) -> bool {
@@ -320,18 +311,16 @@ pub(crate) fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32), colo
         Err(_) => return,
     };
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
-    // Unconditional, like the rec bar: it must never appear in the recording
-    // no matter what the privacy screenshot-exclusion setting says. Applied
-    // while the window is still hidden, before any placement below.
+    // Unconditional like the rec bar: it must never appear in the recording whatever the
+    // privacy setting says. Applied while the window is still hidden, before any placement.
     set_capture_exclusion(&win, true);
     let _ = win.set_ignore_cursor_events(true); // click-through: never steals input from whatever is under it
-    // The window is built on whichever monitor the system picks and then moved
-    // to the region's own monitor, which can have another scale factor. tao
-    // answers the resulting DPI change by resizing the window to the system's
-    // suggested rect, which rescales its physical size. So the rect is applied
-    // again after every scale or size event, deferred to the main thread (a
-    // re-apply inside the event itself runs before tao's own resize and is
-    // undone by it). The pixel guard keeps that from looping.
+    // The window is built on whichever monitor the system picks and then moved to the region's
+    // monitor, which can have another scale factor; tao answers the DPI change by resizing to
+    // the system's suggested rect, which rescales the physical size. So the rect is applied
+    // again after every scale or size event, deferred to the main thread (a re-apply inside the
+    // event runs before tao's own resize and is undone by it). The pixel guard keeps that from
+    // looping.
     let want = rect;
     let app_evt = app.clone();
     win.on_window_event(move |event| {
@@ -412,10 +401,9 @@ pub(crate) struct RecordingStatus {
     pub(crate) bytes: u64,
     pub(crate) audio_system: bool,
     pub(crate) audio_mic: bool,
-    // true once the mic capture thread hit AUDCLNT_E_DEVICE_INVALIDATED
-    // (unplugged mid-recording) -- the recording itself keeps running with
-    // silence in place of the mic track; the control bar surfaces this once
-    // as a warning state on the mic indicator the first time it flips true.
+    // True once the mic capture thread hit AUDCLNT_E_DEVICE_INVALIDATED (unplugged
+    // mid-recording): the recording keeps running with silence for the mic track, and the
+    // control bar warns once, the first time this flips true.
     pub(crate) mic_lost: bool,
     // The same for the system (loopback) capture: no render device, or the
     // stream could not start. The track is silence; the bar says so.
@@ -424,32 +412,26 @@ pub(crate) struct RecordingStatus {
     // silenced. Always false for a source that was never active this session.
     pub(crate) audio_system_muted: bool,
     pub(crate) audio_mic_muted: bool,
-    // Set once an unrecoverable encoder write failure happened (e.g. disk
-    // full) -- the feeder has already stopped itself at this point, so the
-    // control bar's own poll uses this to stop the session properly instead
-    // of leaving it looking like it is still recording.
+    // Set once an unrecoverable encoder write failure happened (e.g. disk full); the feeder
+    // has already stopped, so the bar's poll uses this to stop the session properly instead of
+    // looking like it still records.
     pub(crate) encode_error: Option<String>,
-    // False when the last rearm_hotkeys() could not actually claim the
-    // stop/pause combination (another app already holds it) -- surfaced here
-    // rather than silently, so the bar can warn instead of the user believing
-    // in a binding that never fires.
+    // False when the last rearm_hotkeys() could not claim the stop/pause combination (another
+    // app holds it), so the bar can warn instead of the user believing in a binding that never
+    // fires.
     pub(crate) stop_hotkey_ok: bool,
     pub(crate) pause_hotkey_ok: bool,
-    // recBarSize (Vorgabe an): whether the bar should show the size at all
-    // right now -- false below REC_BAR_SIZE_FROM_MB, or with the switch off.
+    // recBarSize: whether the bar shows the size right now; false below REC_BAR_SIZE_FROM_MB
+    // or with the switch off.
     pub(crate) show_size: bool,
-    // Seconds left at the observed average rate (bytes so far / elapsed so
-    // far -- never estimated from the configured bitrate, see rec_bar_size_state)
-    // before recMaxMb is reached. Only Some(..) past three quarters of that
-    // ceiling; None both below it and with show_size false.
+    // Seconds left at the observed average rate (bytes so far / elapsed so far, never the
+    // configured bitrate; see rec_bar_size_state) before recMaxMb is reached. Some only past
+    // three quarters of that ceiling; None below it and with show_size false.
     pub(crate) size_eta_secs: Option<u64>,
-    // recTargetSwitch (Vorgabe an): whether the bar's target-switch button is
-    // enabled at all right now -- a window recording using the "every
-    // display" or "current display" canvas, with the master flag on. A
-    // canvas-mode "monitor" recording still needs the actual pick to land on
-    // the same screen, only checkable once something has actually been
-    // picked, so a false here already means the button itself is disabled;
-    // a true here does not yet guarantee any given pick will succeed.
+    // recTargetSwitch: whether the bar's target-switch button is enabled right now (a window
+    // recording using the "every display" or "current display" canvas, master flag on). Whether
+    // a given pick lands on the same screen can only be checked once something is picked, so
+    // true does not guarantee a pick succeeds.
     pub(crate) target_switch_enabled: bool,
     // The mid-recording half of the low-disk warning (the before-start check is
     // check_recording_disk_space) -- Some at most once per recording, the
@@ -457,12 +439,11 @@ pub(crate) struct RecordingStatus {
     pub(crate) disk_low: Option<(u64, u64)>,
 }
 
-// recBarSize's own threshold logic: whether to show the size at all, and
-// once past three quarters of recMaxMb, an ETA to that ceiling from the
-// recording's own observed average rate so far -- pure and window-free so
-// this has a real unit test, not just its recording_status wiring (same
-// reasoning as estimate_export_bytes/recording_disk_warning above).
-// recMaxMb <= 0 disables the ETA half only, size still shows past show_from_mb.
+// recBarSize's threshold logic: whether to show the size at all and, past three quarters of
+// recMaxMb, an ETA to that ceiling from the recording's observed average rate. Pure and
+// window-free so it has a real unit test (like estimate_export_bytes/
+// recording_disk_warning). recMaxMb <= 0 disables the ETA half only; the size still shows
+// past show_from_mb.
 pub(crate) fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64, max_mb: f64) -> (bool, Option<u64>) {
     let mb = bytes as f64 / (1024.0 * 1024.0);
     if mb < show_from_mb {
@@ -498,13 +479,10 @@ pub(crate) fn rec_bar_settings(store: &Store) -> (bool, f64, f64, bool) {
     )
 }
 
-// Read-only status for the control bar's live timer + file-size readout;
-// polled from the frontend rather than pushed, so a bar that briefly misses a
-// tick self-corrects on the next one instead of drifting.
-//
-// Async and never waiting on the store: the recording bar polls this twice a
-// second; as a sync command waiting on the store lock it froze every window
-// while a backup ran.
+// Read-only status for the control bar's live timer and file-size readout, polled from the
+// frontend so a bar that misses a tick self-corrects on the next one. Async and never
+// waiting on the store: the bar polls twice a second, and a sync command waiting on the
+// store lock froze every window during a backup.
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn recording_status(
