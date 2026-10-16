@@ -141,6 +141,11 @@ pub(crate) fn close_all_snip(app: &AppHandle) {
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     SNIP_PRESENTED.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
+    // The frozen geometry belongs to the session that just ended; a later reveal
+    // must never place the overlay with it.
+    if let Some(state) = app.try_state::<SnipState>() {
+        state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
     // Every path that ends a snip session (capture, cancel, window click)
     // funnels through here, so this is the one place that can guarantee OCR mode
     // never survives past the session it was armed for.
@@ -1097,6 +1102,12 @@ pub(crate) async fn begin_capture(
         .is_err()
     {
         if app.get_webview_window("snip-0").is_some() {
+            // A session that is still preparing has nothing on screen to bring
+            // forward: revealing now would show the previous session's frozen
+            // image and geometry over the desktop.
+            if !SNIP_PRESENTED.load(Ordering::SeqCst) {
+                return Ok(());
+            }
             // Same bounds assert as the normal reveal; a bare show() would leave a
             // parked overlay at its parking spot.
             if !reveal_snip(&app).await {

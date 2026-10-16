@@ -129,6 +129,7 @@ function resetSession() {
   loupe.classList.add("hidden");
   dot.classList.add("hidden");
   historyEl.classList.add("hidden"); // a region snip must not inherit the picker strip
+  bg.removeAttribute("src"); // the previous session's frozen image must not show before the new one loads
   fullDim();
   clearTimeout(revealTimer);
   revealTimer = 0;
