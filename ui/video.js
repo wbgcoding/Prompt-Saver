@@ -3220,7 +3220,9 @@ function isLosslessCopy() {
   // which a plain copy of the main file would leave out.
   if (opsOf("clip").some((c) => !c.missing)) return false;
   const { sys, mic } = VE.audio;
-  return !sys.mute && sys.vol === 100 && !mic.mute && mic.vol === 100;
+  // A track the recording does not have has no state to compare: its mute button is
+  // disabled and its default (muted) would otherwise rule the copy out for good.
+  return (!VE.hasSys || (!sys.mute && sys.vol === 100)) && (!VE.hasMic || (!mic.mute && mic.vol === 100));
 }
 
 // ---------------------------------------------------------------- export

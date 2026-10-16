@@ -128,6 +128,13 @@ function baseState(ops) {
   expect("isLosslessCopy stays true when the only clip is missing", vm.runInContext("isLosslessCopy()", sb) === true);
   sb.VE = baseState([]);
   expect("isLosslessCopy stays true for an untouched recording", vm.runInContext("isLosslessCopy()", sb) === true);
+  // A track the recording lacks keeps its default (muted) state and must not rule the copy out.
+  sb.VE = { ...baseState([]), hasSys: true, hasMic: false, audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } } };
+  expect("isLosslessCopy ignores the mic state without a mic track", vm.runInContext("isLosslessCopy()", sb) === true);
+  sb.VE = { ...baseState([]), hasSys: true, hasMic: true, audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } } };
+  expect("isLosslessCopy is false when an existing mic track is muted", vm.runInContext("isLosslessCopy()", sb) === false);
+  sb.VE = { ...baseState([]), hasSys: false, hasMic: false, audio: { sys: { mute: true, vol: 50 }, mic: { mute: true, vol: 100 } } };
+  expect("isLosslessCopy ignores the state of absent tracks", vm.runInContext("isLosslessCopy()", sb) === true);
 }
 
 // The preview's second box of a double frame sits inside the border, at inset
