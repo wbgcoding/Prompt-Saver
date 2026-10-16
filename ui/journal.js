@@ -19,7 +19,7 @@ export const journalTypes = new Set(); // additive, like the library's
 export async function restoreClipInbox(items) {
   if (!items || !items.length) return;
   try {
-    await invoke("restore_clip_inbox", { items: [...items].reverse().map((it) => ({ ts: it.ts, text: it.text })) });
+    await invoke("restore_clip_inbox", { items: [...items].reverse().map((it) => ({ id: it.id, ts: it.ts, text: it.text })) });
   } catch (err) { errToast(err); return; }
   await refreshClipInbox();
 }

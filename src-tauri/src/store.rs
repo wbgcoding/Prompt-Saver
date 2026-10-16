@@ -1257,10 +1257,28 @@ pub(crate) fn example_seed_fingerprint(name: &str, text: &str, image: &str) -> u
 }
 pub(crate) fn db_add_clip(conn: &Connection, ts: u64, text: &str, cap: usize) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO clip_inbox(ts, text) VALUES(?1, ?2)", params![ts as i64, enc_str(text)])?;
+    db_trim_clips(conn, cap)
+}
+// Keeps the newest `cap` rows. Counts rows, not id distance: ids have gaps after a
+// single dismiss, and an undo can bring older ids back.
+pub(crate) fn db_trim_clips(conn: &Connection, cap: usize) -> rusqlite::Result<()> {
     conn.execute(
-        "DELETE FROM clip_inbox WHERE id <= (SELECT MAX(id) FROM clip_inbox) - ?1",
+        "DELETE FROM clip_inbox WHERE id NOT IN (SELECT id FROM clip_inbox ORDER BY id DESC LIMIT ?1)",
         params![cap as i64],
     )?;
+    Ok(())
+}
+// A restored row goes back under its old id when that id is free, so it still sorts
+// older than anything stored since; otherwise it is a plain new row.
+pub(crate) fn db_insert_clip_at(conn: &Connection, id: Option<i64>, ts: u64, text: &str) -> rusqlite::Result<()> {
+    if let Some(id) = id {
+        let taken: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM clip_inbox WHERE id = ?1)", params![id], |r| r.get(0))?;
+        if !taken {
+            conn.execute("INSERT INTO clip_inbox(id, ts, text) VALUES(?1, ?2, ?3)", params![id, ts as i64, enc_str(text)])?;
+            return Ok(());
+        }
+    }
+    conn.execute("INSERT INTO clip_inbox(ts, text) VALUES(?1, ?2)", params![ts as i64, enc_str(text)])?;
     Ok(())
 }
 pub(crate) fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {

@@ -177,6 +177,8 @@ pub(crate) async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
 
 #[derive(Deserialize)]
 pub(crate) struct ClipRestoreItem {
+    #[serde(default)]
+    pub(crate) id: Option<i64>,
     pub(crate) ts: u64,
     pub(crate) text: String,
 }
@@ -204,7 +206,8 @@ pub(crate) async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, ite
 pub(crate) fn db_restore_clips(conn: &Connection, items: &[ClipRestoreItem], cap: usize) -> rusqlite::Result<()> {
     let tx = conn.unchecked_transaction()?;
     for item in items {
-        db_add_clip(&tx, item.ts, &item.text, cap)?;
+        db_insert_clip_at(&tx, item.id, item.ts, &item.text)?;
     }
+    db_trim_clips(&tx, cap)?;
     tx.commit()
 }

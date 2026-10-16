@@ -13907,6 +13907,38 @@ fn a_failing_row_leaves_the_copy_history_untouched() {
 }
 
 #[test]
+fn the_clip_cap_counts_rows_and_an_undo_sorts_below_newer_copies() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
+    )
+    .unwrap();
+    for i in 0..10u64 {
+        db_add_clip(&conn, i, &format!("t{i}"), 50).unwrap();
+    }
+    // Dismissing single entries leaves holes in the ids; the cap must not eat real rows.
+    for id in [2, 4, 6, 8] {
+        conn.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]).unwrap();
+    }
+    db_add_clip(&conn, 10, "t10", 7).unwrap();
+    assert_eq!(db_count_clips(&conn), 7);
+    // Clear, a new copy arrives, then the undo brings the old rows back.
+    let old = db_list_clips(&conn);
+    conn.execute("DELETE FROM clip_inbox", []).unwrap();
+    db_add_clip(&conn, 20, "fresh", 50).unwrap();
+    let items: Vec<ClipRestoreItem> =
+        old.iter().rev().map(|c| ClipRestoreItem { id: Some(c.id), ts: c.ts, text: c.text.clone() }).collect();
+    db_restore_clips(&conn, &items, 50).unwrap();
+    let texts: Vec<String> = db_list_clips(&conn).into_iter().map(|c| c.text).collect();
+    assert_eq!(texts.first().map(String::as_str), Some("fresh"), "the new copy stays the newest");
+    assert_eq!(texts.len(), 8);
+    // A cap smaller than the restored set drops the oldest, never the new copy.
+    db_restore_clips(&conn, &[], 3).unwrap();
+    assert_eq!(db_list_clips(&conn).first().map(|c| c.text.as_str()), Some("fresh"));
+    assert_eq!(db_count_clips(&conn), 3);
+}
+
+#[test]
 fn a_failing_item_leaves_the_clip_inbox_untouched() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(
@@ -13915,14 +13947,14 @@ fn a_failing_item_leaves_the_clip_inbox_untouched() {
     )
     .unwrap();
     let items = [
-        ClipRestoreItem { ts: 1, text: "a".into() },
-        ClipRestoreItem { ts: 99, text: "bad".into() },
-        ClipRestoreItem { ts: 3, text: "b".into() },
+        ClipRestoreItem { id: None, ts: 1, text: "a".into() },
+        ClipRestoreItem { id: None, ts: 99, text: "bad".into() },
+        ClipRestoreItem { id: None, ts: 3, text: "b".into() },
     ];
     assert!(db_restore_clips(&conn, &items, 50).is_err());
     assert!(db_list_clips(&conn).is_empty(), "no partial restore");
     assert_eq!(db_count_clips(&conn), 0);
-    assert!(db_restore_clips(&conn, &[ClipRestoreItem { ts: 1, text: "a".into() }, ClipRestoreItem { ts: 3, text: "b".into() }], 50).is_ok());
+    assert!(db_restore_clips(&conn, &[ClipRestoreItem { id: None, ts: 1, text: "a".into() }, ClipRestoreItem { id: None, ts: 3, text: "b".into() }], 50).is_ok());
     assert_eq!(db_list_clips(&conn).len(), 2);
     assert_eq!(db_count_clips(&conn), 2, "the count matches the list without unsealing it");
 }
