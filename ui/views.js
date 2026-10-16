@@ -424,14 +424,14 @@ export function renderViews() {
 }
 
 export async function switchToView(id) {
-  assignFavView(false); // picking a normal view leaves the favorites grid
-  if (gridSelected.size) clearGridSelection(); // a selection belongs to what's on screen
   try {
     assignSettings(await invoke("set_active_view", { id }));
   } catch (err) {
     errToast(err);
-    return; // a rejection must not leave the click doing nothing silently
+    return; // the favorites grid stays up: it is still what is drawn
   }
+  assignFavView(false); // picking a normal view leaves the favorites grid
+  if (gridSelected.size) clearGridSelection(); // a selection belongs to what's on screen
   await renderGrid(true); // prompts unchanged, settings already fresh
 }
 
