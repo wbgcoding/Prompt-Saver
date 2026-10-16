@@ -519,31 +519,40 @@ pub(crate) async fn recording_status(
         Err(std::sync::TryLockError::Poisoned(e)) => rec_bar_settings(&e.into_inner()),
         Err(std::sync::TryLockError::WouldBlock) => (true, REC_BAR_SIZE_FROM_MB, 8000.0, true),
     };
-    let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
-    let Some(session) = guard.as_ref() else { return Ok(None) };
-    let bytes = std::fs::metadata(&session.output_path).map(|m| m.len()).unwrap_or(0);
-    let elapsed_ms = recording::elapsed_ms(session);
+    // Only plain copies leave the lock: a file stat on a stalled network folder
+    // must not hold up Stop, Cancel, Pause or Resume.
+    let (output_path, mut status, elapsed_ms, target_switch_on_session) = {
+        let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(session) = guard.as_ref() else { return Ok(None) };
+        let elapsed_ms = recording::elapsed_ms(session);
+        let status = RecordingStatus {
+            paused: session.phase == RecPhase::Paused,
+            elapsed_ms,
+            bytes: 0,
+            audio_system: session.audio_system,
+            audio_mic: session.audio_mic,
+            mic_lost: session.mic_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
+            system_lost: session.system_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
+            audio_system_muted: session.system_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
+            audio_mic_muted: session.mic_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
+            encode_error: recording::encode_error(session),
+            stop_hotkey_ok: REC_STOP_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
+            pause_hotkey_ok: REC_PAUSE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
+            show_size: false,
+            size_eta_secs: None,
+            target_switch_enabled: false,
+            disk_low: recording::take_disk_low(session),
+        };
+        (session.output_path.clone(), status, elapsed_ms, recording::can_switch_target(session))
+    };
+    let bytes = std::fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
     let (show_size, size_eta_secs) =
         if bar_size_on { rec_bar_size_state(bytes, elapsed_ms, show_from_mb, max_mb) } else { (false, None) };
-    let target_switch_enabled = target_switch_on && recording::can_switch_target(session);
-    Ok(Some(RecordingStatus {
-        paused: session.phase == RecPhase::Paused,
-        elapsed_ms,
-        bytes,
-        audio_system: session.audio_system,
-        audio_mic: session.audio_mic,
-        mic_lost: session.mic_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
-        system_lost: session.system_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
-        audio_system_muted: session.system_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
-        audio_mic_muted: session.mic_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
-        encode_error: recording::encode_error(session),
-        stop_hotkey_ok: REC_STOP_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
-        pause_hotkey_ok: REC_PAUSE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
-        show_size,
-        size_eta_secs,
-        target_switch_enabled,
-        disk_low: recording::take_disk_low(session),
-    }))
+    status.bytes = bytes;
+    status.show_size = show_size;
+    status.size_eta_secs = size_eta_secs;
+    status.target_switch_enabled = target_switch_on && target_switch_on_session;
+    Ok(Some(status))
 }
 #[cfg(not(windows))]
 #[tauri::command]

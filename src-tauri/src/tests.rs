@@ -20555,3 +20555,15 @@ fn portable_update_points_at_the_release_page_of_the_offered_version() {
     assert_eq!(release_page_for("https://example.com/releases/download/v9.9.9/x-setup.exe"), None, "only our own repo");
     assert_eq!(release_page_for(&format!("{}/releases/download/../x/y.exe", repo_url())), None);
 }
+
+#[test]
+fn recording_status_stats_the_file_after_the_session_lock_is_released() {
+    let src = include_str!("rec_bar.rs");
+    let start = src.find("pub(crate) async fn recording_status(").unwrap();
+    let body = &src[start..src[start..].find("#[cfg(not(windows))]").map(|i| start + i).unwrap()];
+    let lock_at = body.find("rstate.0.lock()").unwrap();
+    let scope_end = body.find("\n    };\n    let bytes").expect("the lock lives in its own block");
+    let stat_at = body.find("metadata(&output_path)").expect("stats a copied path");
+    assert!(lock_at < scope_end && scope_end < stat_at, "metadata must run after the lock block ends");
+    assert!(!body.contains("metadata(&session"), "never stat through the locked session");
+}
