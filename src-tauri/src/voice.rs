@@ -18,10 +18,8 @@ const HRESULT_NO_LANGUAGE: i32 = 0x800455BCu32 as i32; // "The requested languag
 const HRESULT_ACCESS_DENIED: i32 = 0x80070005u32 as i32; // no mic OR mic access denied -- one HRESULT covers both
 const HRESULT_PRIVACY_OFF: i32 = 0x80045509u32 as i32; // "speech privacy policy was not accepted"
 
-// Stable error key from a WinRT HRESULT -- never the raw code, never any
-// recognized text. Takes the raw code rather than a `windows::core::Error`
-// so the mapping table itself is a plain, unit-testable function (see the
-// "voice HRESULT mapping" tests).
+// Stable error key from a WinRT HRESULT, never the raw code or any recognized text. Takes the
+// raw code so the mapping is a plain, unit-testable function.
 pub(super) fn error_key_for_hresult(code: i32) -> &'static str {
     match code {
         HRESULT_NO_LANGUAGE => "voice-no-language",
@@ -34,12 +32,9 @@ fn error_key(e: &windows::core::Error) -> &'static str {
     error_key_for_hresult(e.code().0)
 }
 
-// The Completed handler's end-reason table: TimeoutExceeded (7) is always
-// "silence" -- Windows' own AutoStopSilenceTimeout fired.
-// Success (0) means WE asked it to stop; `requested` is whatever the caller
-// (voice_stop, the hard cap, or the own idle watchdog) set right before
-// calling StopAsync, defaulting to "manual" when nothing was recorded (a
-// plain externally-triggered stop). Anything else is a genuine error.
+// The Completed handler's end-reason table. TimeoutExceeded (7) is always "silence" (Windows'
+// AutoStopSilenceTimeout fired). Success (0) means we asked it to stop; `requested` is the
+// reason set right before StopAsync, "manual" when none was recorded. Anything else is an error.
 pub(super) fn stop_reason(status: i32, requested: Option<&'static str>) -> &'static str {
     match status {
         7 => "silence",
@@ -48,10 +43,8 @@ pub(super) fn stop_reason(status: i32, requested: Option<&'static str>) -> &'sta
     }
 }
 
-// The idle/hard-cap watchdog's decision, extracted as a pure function so the
-// timing rules (0 = auto-stop off, the hard cap always wins once reached) are
-// unit-testable without a real session. `elapsed`/`idle` are both measured
-// from the session's own clocks (see run_session's loop).
+// The idle/hard-cap watchdog's decision as a pure function (0 = auto-stop off, the hard cap
+// always wins once reached). `elapsed`/`idle` come from the session's own clocks.
 pub(super) fn should_stop(idle: Duration, elapsed: Duration, auto_stop_sec: u32, max_sec: u32) -> Option<&'static str> {
     if elapsed >= Duration::from_secs(max_sec.max(1) as u64) {
         return Some("max");
@@ -62,18 +55,14 @@ pub(super) fn should_stop(idle: Duration, elapsed: Duration, auto_stop_sec: u32,
     None
 }
 
-// The frontend's own slider caps (voiceMaxMin/voiceAutoStopSec, ui/expertConfig.js
-// EXPERT_VALUES) are UI convenience only -- these are the real limits, so a
-// stale/tampered/future caller cannot bypass them. Extracted as a pure
-// function so the bounds themselves are unit-tested, not just trusted.
+// The frontend's slider caps (voiceMaxMin/voiceAutoStopSec) are only convenience; these are
+// the real limits, so a stale or tampered caller cannot bypass them.
 pub(super) fn clamp_durations(max_sec: u32, auto_stop_sec: u32) -> (u32, u32) {
     (max_sec.clamp(60, 3600), auto_stop_sec.clamp(0, 60))
 }
 
-// Installed recognition languages. Measured 21.08.: SupportedTopicLanguages
-// (and SupportedGrammarLanguages) only ever list tags with an installed
-// Language.Speech pack -- so unlike OCR's AvailableRecognizerLanguages there
-// is no separate "installed" flag to compute, it is always true here.
+// Installed recognition languages. SupportedTopicLanguages only lists tags with an installed
+// Language.Speech pack, so unlike OCR there is no separate "installed" flag: it is always true.
 pub(super) fn languages() -> Result<Vec<VoiceLang>, String> {
     ensure_winrt();
     let langs = SpeechRecognizer::SupportedTopicLanguages().map_err(|e| e.to_string())?;
@@ -90,9 +79,8 @@ pub(super) fn languages() -> Result<Vec<VoiceLang>, String> {
     Ok(out)
 }
 
-// Whether Windows' own online-speech consent is already on -- exactly one
-// REG_DWORD, no elevated rights needed to read or write it. Missing key =
-// not accepted, same as 0.
+// Whether Windows' online-speech consent is on: one REG_DWORD, readable and writable without
+// elevation. A missing key counts as not accepted.
 fn online_speech_accepted() -> bool {
     winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
         .open_subkey("Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy")
@@ -108,12 +96,8 @@ pub(super) fn enable_online_speech() -> Result<(), String> {
     key.set_value("HasAccepted", &1u32).map_err(|e| e.to_string())
 }
 
-// "auto" -> the system speech language IF a pack for it is installed,
-// otherwise (or for an explicit tag whose pack is missing, when auto_pick is
-// on) whatever recognition language IS installed -- same "use whatever is
-// already there" fallback as OCR's create_auto_engine/resolve_engine. The
-// actual decision is the plain, unit-testable pick_lang below; this only
-// gathers the two WinRT-sourced inputs it needs.
+// "auto" -> the system speech language if a pack for it is installed, otherwise (or for an
+// explicit tag whose pack is missing, when auto_pick is on) any installed recognition language.
 pub(super) fn pick_lang(lang: &str, auto_pick: bool, installed: &[String], system_tag: Option<&str>) -> Result<String, String> {
     if installed.is_empty() {
         return Err("voice-no-language".to_string());
@@ -134,26 +118,23 @@ pub(super) fn pick_lang(lang: &str, auto_pick: bool, installed: &[String], syste
     Ok(installed[0].clone())
 }
 
+// Gathers pick_lang's two WinRT-sourced inputs.
 fn resolve_lang(lang: &str, auto_pick: bool) -> Result<String, String> {
     let installed: Vec<String> = languages()?.into_iter().map(|v| v.tag).collect();
     let system_tag = SpeechRecognizer::SystemSpeechLanguage().ok().and_then(|l| l.LanguageTag().ok()).map(|t| t.to_string());
     pick_lang(lang, auto_pick, &installed, system_tag.as_deref())
 }
 
-// voice_support(): cheap "does Windows have a speech engine at all" probe --
-// deliberately does not start a real session (Create() alone is enough to
-// learn this; actually opening the mic waits for the user's first real
-// voice_start, so the OS mic-access prompt never appears before that).
+// voice_support(): a cheap "does Windows have a speech engine at all" probe. It does not
+// start a real session (Create() alone suffices), so the OS mic-access prompt only appears
+// at the first voice_start.
 pub(super) fn support() -> VoiceSupport {
     ensure_winrt();
     let langs = match languages() {
         Ok(v) => v,
         Err(e) => {
-            // A real WinRT/registry failure, not just "no language pack
-            // installed" -- both collapse to the same supported=false below
-            // (voice genuinely cannot work either way from here), but only
-            // this one is a bug worth a trace instead of an ordinary, expected
-            // state that needs none.
+            // A real WinRT/registry failure, not just a missing language pack (both give supported=false
+            // below), so it is worth a trace.
             super::append_crash_log(&format!("voice_support: language enumeration failed: {e}"));
             Vec::new()
         }
@@ -171,11 +152,9 @@ pub(super) fn prepare(lang: String, auto_pick: bool) -> Result<(String, bool), S
     Ok((resolved, !online_speech_accepted()))
 }
 
-// Runs on its own thread for the whole session lifetime. Never returns
-// early on a recoverable error -- run_session already reports it via
-// voice-error + voice-stopped before returning Err, this only guards
-// against a failure happening BEFORE `ended` could be set by anything else
-// (e.g. Create() itself failing, so Completed never fires at all).
+// Runs on its own thread for the whole session. run_session reports a recoverable error via
+// voice-error + voice-stopped before returning Err; this only guards a failure before `ended`
+// could be set elsewhere (e.g. Create() failing, so Completed never fires).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn start_session(
     app: AppHandle,
@@ -219,28 +198,23 @@ fn run_session(
     recognizer.CompileConstraintsAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
     let session = recognizer.ContinuousRecognitionSession().map_err(|e| error_key(&e))?;
 
-    // Windows' own AutoStopSilenceTimeout is the belt of two intentionally
-    // redundant silence checks -- the app's own idle watchdog below is the
-    // one that actually decides. When
-    // voiceAutoStop is off (auto_stop_sec == 0), point Windows' property at
-    // the hard cap instead, so it never fires earlier than max_sec on its own.
+    // Windows' AutoStopSilenceTimeout is a redundant backstop; the app's own idle watchdog below
+    // decides. With voiceAutoStop off (auto_stop_sec == 0) it is set to the hard cap so it never
+    // fires earlier than max_sec.
     let watch_secs = if auto_stop_sec > 0 { auto_stop_sec } else { max_sec };
     let _ = session.SetAutoStopSilenceTimeout(windows::Foundation::TimeSpan { Duration: watch_secs as i64 * 10_000_000 });
 
     let last_activity = Arc::new(Mutex::new(Instant::now()));
-    // What voice_stop/the watchdog set right before calling StopAsync, so the
-    // Completed handler (status == Success) knows WHY it was asked to stop.
-    // A real Windows-detected silence timeout reports status == 7 on its own
-    // and never needs this.
+    // What voice_stop or the watchdog set right before StopAsync, so the Completed handler
+    // (status == Success) knows why it was asked to stop. A Windows-detected silence timeout
+    // reports status 7 on its own.
     let requested_reason: Arc<Mutex<Option<&'static str>>> = Arc::new(Mutex::new(None));
 
     if interim {
         let app2 = app.clone();
         let last2 = last_activity.clone();
-        // An error here means partial-result delivery never gets wired up --
-        // recording would silently start anyway with nothing ever reaching the
-        // window, so this must fail the session up front like every other WinRT
-        // setup call in this function, not be swallowed.
+        // A failure here must fail the session up front like every other WinRT setup call: otherwise
+        // recording would start with partial results never reaching the window.
         recognizer
             .HypothesisGenerated(&TypedEventHandler::new(
                 move |_sender: &Option<SpeechRecognizer>, args: &Option<SpeechRecognitionHypothesisGeneratedEventArgs>| {
@@ -260,9 +234,8 @@ fn run_session(
 
     let app_r = app.clone();
     let last_r = last_activity.clone();
-    // Same reasoning as HypothesisGenerated above: a session that starts anyway
-    // with this unregistered would record indefinitely and never deliver a
-    // single word of text.
+    // Same as HypothesisGenerated: a session started without this would record forever and
+    // never deliver text.
     session
         .ResultGenerated(&TypedEventHandler::new(
             move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionResultGeneratedEventArgs>| {
@@ -271,8 +244,7 @@ fn run_session(
                     if let Ok(result) = args.Result() {
                         if let Ok(text) = result.Text() {
                             let text = text.to_string();
-                            // Nothing recognized in this segment -> nothing to insert,
-                            // same "empty is not an error" rule as OCR's recognize().
+                            // Nothing recognized in this segment -> nothing to insert.
                             if !text.is_empty() {
                                 let _ = app_r.emit("voice-text", VoiceTextEvent { id, token, text });
                             }
@@ -287,22 +259,17 @@ fn run_session(
     let app_c = app.clone();
     let ended_c = ended.clone();
     let reason_c = requested_reason.clone();
-    // The most important of the three registrations to catch: if this one alone
-    // fails to register, a session that otherwise starts fine will run to
-    // completion (or be stopped) and never tell the window it did -- "recording"
-    // stays true, the microphone icon never clears, forever.
+    // The most important registration: if it fails, a session otherwise running fine would end
+    // without telling the window, and the microphone icon would never clear.
     session
         .Completed(&TypedEventHandler::new(
             move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionCompletedEventArgs>| {
-                // Fires exactly once per session; the swap makes a second call (should
-                // never happen, but WinRT event delivery guarantees are not a Rust
-                // guarantee) a no-op instead of a duplicated event.
+                // Fires once per session; the swap makes a repeated call a no-op instead of a duplicate event.
                 if ended_c.swap(true, Ordering::SeqCst) {
                     return Ok(());
                 }
-                // status.0 is out of range for the stop_reason table's two named
-                // cases (0/7) only on genuine failure -- map that to -1, which the
-                // table already resolves to "error".
+                // A status outside the stop_reason table's named cases (0/7) only occurs on failure: map it
+                // to -1, which resolves to "error".
                 let status = args.as_ref().and_then(|a| a.Status().ok()).map(|s| s.0).unwrap_or(-1);
                 let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
                 let reason = stop_reason(status, requested);
@@ -315,30 +282,23 @@ fn run_session(
 
     session.StartAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
 
-    // A stop the thread itself decided on (hard cap / own idle watchdog) --
-    // fires StopAsync and then just waits for Completed to actually flip
-    // `ended`, same as a stop requested from outside.
+    // A stop the thread itself decided on (hard cap / idle watchdog): fires StopAsync, then
+    // waits for Completed to flip `ended`, like an external stop.
     let self_stop = |reason: &'static str| {
         *requested_reason.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
         if session.StopAsync().is_err() {
-            // Windows refused the stop request ITSELF (not merely "already
-            // stopped" -- a session that ended on its own already set `ended`
-            // via Completed, which this check catches). Completed will almost
-            // certainly never fire now, so waiting the usual timeout would only
-            // delay reporting a stop that never really happened -- the mic stays
-            // open the whole time. Report the truth immediately instead of the
-            // caller's intended (and now false) reason.
+            // Windows refused the stop request itself (a session that ended on its own already set
+            // `ended` via Completed). Completed will almost certainly never fire, so report the failure
+            // immediately instead of waiting the timeout with the mic open, and not with the intended reason.
             if !ended.swap(true, Ordering::SeqCst) {
                 let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: "error".to_string() });
                 super::set_tray_recording(app, false);
             }
             return;
         }
-        // Normally Completed fires within a beat and flips `ended` itself.
-        // If it never does (a stuck driver, WinRT not delivering the
-        // event), do not hold this thread -- and the microphone -- open
-        // forever; report the same end after a bounded wait instead. The
-        // swap keeps this a no-op if Completed fires in the same instant.
+        // Completed normally flips `ended` within a beat. If it never does (stuck driver, event not
+        // delivered), report the same end after a bounded wait instead of holding the thread and the
+        // microphone open forever. The swap keeps this a no-op if Completed fires at the same instant.
         let deadline = Instant::now() + super::VOICE_SELF_STOP_TIMEOUT;
         while !ended.load(Ordering::SeqCst) {
             if Instant::now() >= deadline {
@@ -361,11 +321,8 @@ fn run_session(
                 break;
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                // Idle means the engine has recognized nothing since the last
-                // Hypothesis/Result, measured independently of the engine's
-                // own timeout so the behavior does not depend on Windows
-                // honoring AutoStopSilenceTimeout. should_stop also enforces
-                // the hard cap (voiceMaxMin), which always wins once reached.
+                // Idle = nothing recognized since the last Hypothesis/Result, measured independently of
+                // Windows' own timeout. should_stop also enforces the hard cap (voiceMaxMin).
                 let idle = last_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed();
                 if let Some(reason) = should_stop(idle, session_started.elapsed(), auto_stop_sec, max_sec) {
                     self_stop(reason);
@@ -373,9 +330,8 @@ fn run_session(
                 }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                // The sending half was dropped without a message (should not
-                // normally happen -- voice_shutdown always sends "shutdown" --
-                // but treat it the same way rather than looping forever).
+                // The sending half was dropped without a message (voice_shutdown normally sends "shutdown");
+                // treat it the same way rather than looping forever.
                 self_stop("shutdown");
                 break;
             }
