@@ -1103,6 +1103,7 @@ export default {
     ffmpegOfferConfirm: "下载",
     ffmpegFoundMsg: "已找到 FFmpeg：{path}",
     ffmpegDownloading: "正在下载… {pct}%（点击取消）",
+    ffmpegExtracting: "正在解压 ffmpeg…",
     ffmpegDownloadDone: "ffmpeg 下载完成",
     ffmpegCancelHint: "点击以取消下载",
     valRecQuality: "质量",

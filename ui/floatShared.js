@@ -190,6 +190,7 @@ export function themeColorScheme(theme) {
 }
 
 // The "ffmpeg-download-progress" event payload is { downloaded, total } (bytes),
+// plus stage: "extract" once the download is complete and the archive unpacks,
 // not a ready percentage -- both listeners (main window expert menu, video editor)
 // compute the same rounded 0-100 value from it, so a payload shape change only
 // needs fixing here.
@@ -222,6 +223,12 @@ export async function runFfmpegDownload(btn, { onDone, onError, t }) {
   let unlisten = () => {};
   try {
     unlisten = await window.__TAURI__.event.listen("ffmpeg-download-progress", (e) => {
+      if (e.payload?.stage === "extract") {
+        btn.textContent = t("ffmpegExtracting");
+        btn.removeAttribute("aria-valuenow");
+        btn.setAttribute("aria-valuetext", t("ffmpegExtracting"));
+        return;
+      }
       const pct = ffmpegDownloadPct(e.payload);
       dlEta.feed(pct);
       const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);

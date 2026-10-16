@@ -444,6 +444,63 @@ fn ffmpeg_wrong_hash_is_rejected() {
     assert!(err.contains("hash mismatch"), "{err}");
 }
 
+fn ffmpeg_install_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    use std::io::Write;
+    for (name, body) in entries {
+        writer.start_file(*name, options).unwrap();
+        writer.write_all(body).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
+fn ffmpeg_dir_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> =
+        std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn ffmpeg_install_extracts_both_tools_and_leaves_no_temp() {
+    let mut exe = b"MZ".to_vec();
+    exe.extend(stream_test_bytes(3 << 20));
+    let mut probe = b"MZ".to_vec();
+    probe.extend(stream_test_bytes(1 << 20));
+    let zip_bytes = ffmpeg_install_zip(&[(FFMPEG_ZIP_ENTRY, &exe), (FFPROBE_ZIP_ENTRY, &probe)]);
+    let dir = stream_test_dir("ffmpeg-install-both");
+    let path = install_ffmpeg_from_zip(&zip_bytes, &dir).unwrap();
+    assert_eq!(PathBuf::from(path), dir.join("ffmpeg.exe"));
+    assert_eq!(std::fs::read(dir.join("ffmpeg.exe")).unwrap(), exe);
+    assert_eq!(std::fs::read(dir.join("ffprobe.exe")).unwrap(), probe);
+    assert_eq!(ffmpeg_dir_names(&dir), vec!["ffmpeg.exe", "ffprobe.exe"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ffmpeg_install_without_ffprobe_still_installs_ffmpeg() {
+    let zip_bytes = ffmpeg_install_zip(&[(FFMPEG_ZIP_ENTRY, b"MZ-fake-exe")]);
+    let dir = stream_test_dir("ffmpeg-install-noprobe");
+    install_ffmpeg_from_zip(&zip_bytes, &dir).unwrap();
+    assert_eq!(ffmpeg_dir_names(&dir), vec!["ffmpeg.exe"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ffmpeg_install_rejects_non_executable_and_cleans_up() {
+    let zip_bytes = ffmpeg_install_zip(&[(FFMPEG_ZIP_ENTRY, b"not an exe"), (FFPROBE_ZIP_ENTRY, b"MZ-probe")]);
+    let dir = stream_test_dir("ffmpeg-install-bad");
+    let err = install_ffmpeg_from_zip(&zip_bytes, &dir).unwrap_err();
+    assert!(err.contains("not a valid executable"), "{err}");
+    assert!(ffmpeg_dir_names(&dir).is_empty(), "{:?}", ffmpeg_dir_names(&dir));
+    let missing = install_ffmpeg_from_zip(&ffmpeg_install_zip(&[("x.txt", b"MZ")]), &dir).unwrap_err();
+    assert!(missing.contains("not found"), "{missing}");
+    assert!(ffmpeg_dir_names(&dir).is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn ffmpeg_matching_hash_is_accepted() {
     let zip_bytes = ffmpeg_test_zip();

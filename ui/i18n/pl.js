@@ -1103,6 +1103,7 @@ export default {
     ffmpegOfferConfirm: "Pobierz",
     ffmpegFoundMsg: "Znaleziono FFmpeg: {path}",
     ffmpegDownloading: "Pobieranie… {pct}% (kliknij, aby anulować)",
+    ffmpegExtracting: "Rozpakowywanie ffmpeg…",
     ffmpegDownloadDone: "Pobrano ffmpeg",
     ffmpegCancelHint: "Kliknij, aby anulować pobieranie",
     valRecQuality: "Jakość",

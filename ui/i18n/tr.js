@@ -1103,6 +1103,7 @@ export default {
     ffmpegOfferConfirm: "İndir",
     ffmpegFoundMsg: "FFmpeg bulundu: {path}",
     ffmpegDownloading: "İndiriliyor… %{pct} (iptal etmek için tıklayın)",
+    ffmpegExtracting: "ffmpeg açılıyor…",
     ffmpegDownloadDone: "ffmpeg indirildi",
     ffmpegCancelHint: "İndirmeyi iptal etmek için tıklayın",
     valRecQuality: "Kalite",

@@ -1103,6 +1103,7 @@ export default {
     ffmpegOfferConfirm: "ダウンロード",
     ffmpegFoundMsg: "FFmpeg が見つかりました: {path}",
     ffmpegDownloading: "ダウンロード中… {pct}%（クリックでキャンセル）",
+    ffmpegExtracting: "ffmpeg を展開中…",
     ffmpegDownloadDone: "ffmpeg をダウンロードしました",
     ffmpegCancelHint: "クリックしてダウンロードをキャンセル",
     valRecQuality: "品質",

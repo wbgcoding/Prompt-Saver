@@ -1103,6 +1103,7 @@ export default {
     ffmpegOfferConfirm: "Descarcă",
     ffmpegFoundMsg: "FFmpeg găsit: {path}",
     ffmpegDownloading: "Se descarcă… {pct}% (clic pentru a anula)",
+    ffmpegExtracting: "Se dezarhivează ffmpeg…",
     ffmpegDownloadDone: "ffmpeg descărcat",
     ffmpegCancelHint: "Clic pentru a anula descărcarea",
     valRecQuality: "Calitate",

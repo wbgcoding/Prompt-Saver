@@ -1103,6 +1103,7 @@ export default {
     ffmpegOfferConfirm: "Downloaden",
     ffmpegFoundMsg: "FFmpeg gevonden: {path}",
     ffmpegDownloading: "Bezig met downloaden… {pct}% (klik om te annuleren)",
+    ffmpegExtracting: "ffmpeg uitpakken…",
     ffmpegDownloadDone: "ffmpeg gedownload",
     ffmpegCancelHint: "Klik om de download te annuleren",
     valRecQuality: "Kwaliteit",

@@ -175,10 +175,17 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
         .call()
         .map_err(|e| format!("download: {}", e))?;
     let total: u64 = resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0);
-    let mut bytes = Vec::new();
+    // Reserve the announced size once instead of regrowing a 100 MB buffer by
+    // doubling; a lying header is capped by the same limit the loop enforces.
+    let mut bytes = Vec::with_capacity(total.min(FFMPEG_ZIP_MAX_BYTES) as usize);
     use std::io::Read;
     let mut reader = resp.into_reader();
-    let mut buf = [0u8; 64 * 1024];
+    let mut buf = vec![0u8; 256 * 1024];
+    // Progress goes out only when the shown value changes (whole percent, or
+    // every MiB without a length): every report also locks the store, updates
+    // the taskbar and wakes every window, which thousands of times per download
+    // slowed the transfer itself.
+    let mut last_report: Option<u64> = None;
     loop {
         if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
             return Err("cancelled".to_string());
@@ -191,58 +198,90 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
         if bytes.len() as u64 > FFMPEG_ZIP_MAX_BYTES {
             return Err("download too large / truncated".to_string());
         }
-        let _ = app.emit(
-            "ffmpeg-download-progress",
-            serde_json::json!({ "downloaded": bytes.len() as u64, "total": total }),
-        );
-        let pct = (bytes.len() as u64 * 100).checked_div(total).map(|v| v as u32);
-        push_bg_op(app, "ffmpeg-download", "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
+        let done = bytes.len() as u64;
+        let pct = (done * 100).checked_div(total).map(|v| v.min(100) as u32);
+        let step = pct.map(u64::from).unwrap_or(done >> 20);
+        if last_report != Some(step) {
+            last_report = Some(step);
+            let _ = app.emit("ffmpeg-download-progress", serde_json::json!({ "downloaded": done, "total": total }));
+            push_bg_op(app, "ffmpeg-download", "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
+        }
     }
     if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
         return Err("cancelled".to_string());
     }
+    let _ = app.emit(
+        "ffmpeg-download-progress",
+        serde_json::json!({ "downloaded": bytes.len() as u64, "total": total, "stage": "extract" }),
+    );
+    push_bg_op(app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);
     verify_ffmpeg_zip(&bytes)?;
-    let (exe_bytes, probe_bytes) = {
-        let mut archive =
-            zip::ZipArchive::new(std::io::Cursor::new(&bytes)).map_err(|e| format!("zip: {}", e))?;
-        let mut entry = archive
-            .by_name(FFMPEG_ZIP_ENTRY)
-            .map_err(|_| "ffmpeg.exe not found inside the downloaded archive".to_string())?;
-        let mut out = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut out).map_err(|e| format!("extract: {}", e))?;
-        drop(entry);
-        // Best-effort: a build missing ffprobe.exe still has a working
-        // convert_recording via ffmpeg.exe alone, just no video-editor
-        // probing until a fresh download supplies it.
-        let probe = archive.by_name(FFPROBE_ZIP_ENTRY).ok().and_then(|mut e| {
-            let mut buf = Vec::with_capacity(e.size() as usize);
-            e.read_to_end(&mut buf).ok().map(|_| buf)
-        });
-        (out, probe)
-    };
-    if exe_bytes.len() < 2 || &exe_bytes[0..2] != b"MZ" {
-        return Err("extracted file is not a valid executable".to_string());
-    }
     let dir = ffmpeg_install_dir(app);
     fs::create_dir_all(&dir).map_err(|e| format!("target dir: {}", e))?;
-    let final_path = dir.join("ffmpeg.exe");
-    // Stage under a unique temp name in the SAME directory, then rename into
-    // place -- an interrupted write never leaves a half-written ffmpeg.exe at
-    // the real name, and a same-directory rename is atomic on NTFS.
+    install_ffmpeg_from_zip(&bytes, &dir)
+}
+
+// Inflates one archive entry straight into a staged file beside its final
+// name: decompression and disk writes overlap instead of first holding the
+// whole 100 MB executable in memory and writing it afterwards. The staged file
+// is removed on any failure, including a body that is not a Windows executable.
+fn extract_entry_to(bytes: &[u8], entry_name: &str, staged: &Path) -> Result<(), String> {
+    use std::io::{Read, Write};
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| format!("zip: {}", e))?;
+    let mut entry = archive.by_name(entry_name).map_err(|_| "missing".to_string())?;
+    let mut head = [0u8; 2];
+    entry.read_exact(&mut head).map_err(|_| "invalid-exe".to_string())?;
+    if &head != b"MZ" {
+        return Err("invalid-exe".to_string());
+    }
+    let mut write = || -> std::io::Result<()> {
+        let mut out = std::io::BufWriter::with_capacity(1 << 20, fs::File::create(staged)?);
+        out.write_all(&head)?;
+        std::io::copy(&mut entry, &mut out)?;
+        out.into_inner().map_err(|e| e.into_error())?.sync_all()
+    };
+    write().map_err(|e| {
+        let _ = fs::remove_file(staged);
+        format!("extract: {}", e)
+    })
+}
+
+// Extracts ffmpeg.exe and (best-effort) ffprobe.exe from an already verified
+// archive into `dir`, both entries in parallel, each staged under a unique temp
+// name in the SAME directory and then renamed into place: an interrupted write
+// never leaves a half-written executable at the real name, and a same-directory
+// rename is atomic on NTFS. A build missing ffprobe.exe still has a working
+// convert_recording via ffmpeg.exe alone, just no video-editor probing until a
+// fresh download supplies it.
+pub(crate) fn install_ffmpeg_from_zip(bytes: &[u8], dir: &Path) -> Result<String, String> {
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let staged = dir.join(format!(".ffmpeg-{}-{}.tmp", std::process::id(), stamp));
-    fs::write(&staged, &exe_bytes).map_err(|e| format!("write: {}", e))?;
+    let probe_staged = dir.join(format!(".ffprobe-{}-{}.tmp", std::process::id(), stamp));
+    let (exe, probe) = std::thread::scope(|s| {
+        let probe = s.spawn(|| extract_entry_to(bytes, FFPROBE_ZIP_ENTRY, &probe_staged));
+        let exe = extract_entry_to(bytes, FFMPEG_ZIP_ENTRY, &staged);
+        (exe, probe.join().unwrap_or_else(|_| Err("extract: panicked".to_string())))
+    });
+    if let Err(e) = exe {
+        if probe.is_ok() {
+            let _ = fs::remove_file(&probe_staged);
+        }
+        return Err(match e.as_str() {
+            "missing" => "ffmpeg.exe not found inside the downloaded archive".to_string(),
+            "invalid-exe" => "extracted file is not a valid executable".to_string(),
+            _ => e,
+        });
+    }
+    let final_path = dir.join("ffmpeg.exe");
     fs::rename(&staged, &final_path).map_err(|e| {
         let _ = fs::remove_file(&staged);
+        if probe.is_ok() {
+            let _ = fs::remove_file(&probe_staged);
+        }
         format!("install: {}", e)
     })?;
-    if let Some(probe_bytes) = probe_bytes {
-        if probe_bytes.len() >= 2 && &probe_bytes[0..2] == b"MZ" {
-            let probe_staged = dir.join(format!(".ffprobe-{}-{}.tmp", std::process::id(), stamp));
-            if fs::write(&probe_staged, &probe_bytes).is_ok() {
-                let _ = fs::rename(&probe_staged, dir.join("ffprobe.exe"));
-            }
-        }
+    if probe.is_ok() && fs::rename(&probe_staged, dir.join("ffprobe.exe")).is_err() {
+        let _ = fs::remove_file(&probe_staged);
     }
     Ok(final_path.to_string_lossy().to_string())
 }
