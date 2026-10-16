@@ -3,14 +3,12 @@ use super::*;
 // ---------- Background operations: one source for the taskbar icon AND
 // the running-jobs list in the main window's header ----------
 //
-// Export, recording conversion, the ffmpeg download, a backup and an import can
-// each run for a while with the window sitting in the background. Every one of
-// them reports its own state into this small registry instead of touching the
-// taskbar icon directly, so two running at once -- or one finishing while
-// another starts -- combine into one sane reading instead of the second simply
-// overwriting the first's icon state. The same registry backs the header
-// popover's list of jobs, so the two views can never disagree about what is
-// actually running.
+// Export, recording conversion, the ffmpeg download, a backup and an import can each run
+// for a while with the window in the background. Each reports its state into this small
+// registry instead of touching the taskbar icon directly, so two running at once, or one
+// finishing while another starts, combine into one reading instead of overwriting each
+// other. The same registry backs the header popover's job list, so the two views cannot
+// disagree.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum OpPhase {
     Running(u8), // a percent value, never above 100
@@ -23,11 +21,9 @@ pub(crate) enum OpPhase {
 
 #[derive(Clone, Debug)]
 pub(crate) struct BgOp {
-    // Feature grouping ("export", "convert", "ffmpeg-download", ...) shown to
-    // the frontend for its label/icon/cancel-command lookup. Distinct from the
-    // registry's own key (see bg_ops() below), which is unique PER JOB so a
-    // batch of same-kind jobs (several exports at once) each get their own
-    // row instead of overwriting one shared "export" entry.
+    // Feature grouping ("export", "convert", "ffmpeg-download", ...) the frontend uses for its
+    // label/icon/cancel-command lookup. Distinct from the registry key (see bg_ops() below),
+    // which is unique per job so a batch of same-kind jobs gets one row each.
     pub(crate) kind: String,
     pub(crate) phase: OpPhase,
     pub(crate) target: Option<String>, // destination file/folder, for the popover's "open folder"
@@ -55,11 +51,9 @@ impl BgOp {
     }
 }
 
-// What the frontend actually reads (`list_bg_ops`) -- OpPhase itself has no
-// serde impl, so this is the flattened, JSON-friendly shape. `id` is the
-// registry's own unique key (see bg_ops() below); `kind` is the feature
-// grouping ("export", "convert", "ffmpeg-download", ...) the frontend already
-// keys its label/cancel-command lookup on.
+// What the frontend reads (`list_bg_ops`): OpPhase has no serde impl, so this is the
+// flattened JSON shape. `id` is the registry's unique key (see bg_ops() below); `kind` is
+// the feature grouping.
 #[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct BgOpInfo {
     pub(crate) id: String,
@@ -84,12 +78,11 @@ pub(crate) fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-// Pure and window-free on purpose, so the state machine (several operations at
-// once, one erroring, all finishing) can be unit-tested without a real HWND.
-// A finished job stays in the map for the popover but never affects the icon:
-// any error still running wins outright; otherwise no active job is "off";
-// otherwise any indeterminate operation wins over a plain percentage;
-// otherwise the shown percentage is the average across every running operation.
+// Pure and window-free so the state machine (several operations at once, one erroring, all
+// finishing) is unit-testable without an HWND. A finished job stays in the map for the
+// popover but never affects the icon: any running error wins outright; otherwise no active
+// job is "off"; otherwise any indeterminate operation wins over a plain percentage;
+// otherwise the percentage is the average across running operations.
 pub(crate) fn aggregate_taskbar_state(ops: &HashMap<String, BgOp>) -> (&'static str, Option<u8>) {
     let active: Vec<&BgOp> = ops.values().filter(|o| o.phase != OpPhase::Done).collect();
     if active.iter().any(|o| o.phase == OpPhase::Error) {
@@ -133,10 +126,10 @@ pub(crate) fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
         .max(0.0)
 }
 
-// The entry a progress or start report writes to. The ids are fixed ("backup",
-// "import"), so a second run finds the first one's finished entry: it is replaced by a
-// fresh one, or the new run would keep the old start time (which the UI keys its
-// once-per-run "done" toast on) and finish silently.
+// The entry a progress or start report writes to. The ids are fixed ("backup", "import"),
+// so a second run finds the first one's finished entry and replaces it with a fresh one;
+// otherwise the new run would keep the old start time (which the UI keys its once-per-run
+// "done" toast on) and finish silently.
 pub(crate) fn entry_for_run<'a>(ops: &'a mut std::collections::HashMap<String, BgOp>, id: &str, kind: &str) -> &'a mut BgOp {
     if ops.get(id).is_some_and(|o| o.finished_at_ms.is_some()) {
         ops.insert(id.to_string(), BgOp::fresh(kind));
@@ -144,11 +137,10 @@ pub(crate) fn entry_for_run<'a>(ops: &'a mut std::collections::HashMap<String, B
     ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind))
 }
 
-// The one place `bg_ops()` is ever written. Deliberately free of any
-// AppHandle/window dependency: an export's own progress closure calls this
-// directly (see export_video_blocking's caller), so a job keeps reporting
-// correctly even once the window that started it is gone -- proved with no
-// window at all by export_progress_survives_a_closed_window below.
+// The one place `bg_ops()` is written. Free of any AppHandle/window dependency: an export's
+// progress closure calls it directly (see export_video_blocking's caller), so a job keeps
+// reporting after the window that started it is gone (proved by
+// export_progress_survives_a_closed_window).
 pub(crate) fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>, keep_min: f64) -> (&'static str, Option<u8>) {
     let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
     match state {
@@ -321,31 +313,25 @@ fn apply_taskbar_on_main(hwnd: isize, state: &str, value: Option<u8>) -> bool {
 #[cfg(not(windows))]
 pub(crate) fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
 
-// `op` names which feature is reporting ("export", "convert", "ffmpeg-download",
-// "backup", "import"); `state` is "running" (with a 0-100 `value`),
-// "indeterminate", "error", or "done" (marks this operation's own entry done,
-// kept for bgDoneKeepMin minutes rather than dropped right away). `target` is
-// an optional destination file/folder for the header popover's "open folder"
-// button; omitted or None leaves a previously reported target unchanged.
-// Every caller is expected to eventually send "done" or "error" even on its
-// own cancel/failure path -- a taskbar icon stuck mid-progress is worse than
-// none. The registry itself is updated regardless of the taskbarProgress
-// switch below -- that switch only controls the Windows icon, never whether
-// the header's own running-jobs list sees the job.
+// `op` names the reporting feature ("export", "convert", "ffmpeg-download", "backup",
+// "import"); `state` is "running" (with a 0-100 `value`), "indeterminate", "error", or
+// "done" (marks this operation's entry done, kept for bgDoneKeepMin minutes). `target` is an
+// optional destination file/folder for the header popover's "open folder" button; None
+// leaves a previously reported target unchanged. Every caller is expected to send "done" or
+// "error" eventually, also on its cancel/failure path: a taskbar icon stuck mid-progress is
+// worse than none. The registry is updated regardless of the taskbarProgress switch, which
+// only controls the Windows icon.
 //
-// This is deliberately just a thin AppHandle-holder around push_bg_op, kept
-// as its own function so the frontend still has a single, stable command
-// name to invoke -- the internal Rust progress loops below (export_video,
-// convert_recording, download_ffmpeg) call push_bg_op directly instead of
-// going through this command, so their own reporting survives a closed window.
-// Async on purpose: a sync command runs on the main thread, and push_bg_op takes the
-// store lock, which a backup or import can hold for a long time.
+// A thin AppHandle-holder around push_bg_op, kept as its own function so the frontend has
+// one stable command name; the Rust progress loops (export_video, convert_recording,
+// download_ffmpeg) call push_bg_op directly, so their reporting survives a closed window.
+// Async: a sync command runs on the main thread, and push_bg_op takes the store lock, which
+// a backup or import can hold for a long time.
 #[tauri::command]
 pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>, target: Option<String>) {
-    // This command's callers (backup, import, ...) only ever run one instance
-    // at a time, so the job's id and its kind are the same string -- unlike
-    // export_video's own push_bg_op calls below, which give a batch of exports
-    // one id each while keeping "export" as their shared kind.
+    // This command's callers (backup, import, ...) run one instance at a time, so job id and
+    // kind are the same string; export_video's push_bg_op calls give a batch one id each under
+    // the shared kind "export".
     push_bg_op(&app, &op, &op, &state, value, target);
 }
 
@@ -357,9 +343,8 @@ pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: Stri
 pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
     let keep_min = app.try_state::<Db>().map(|s| bg_done_keep_min(&s)).unwrap_or(10.0);
     let (agg_state, agg_value) = record_bg_op(id, kind, state, value, target, keep_min);
-    // One shared broadcast point for every state change (running tick, done,
-    // error) -- the main window's header popover listens for this instead of
-    // polling, so a job finishing is reflected there even when the window that
+    // One broadcast point for every state change (running tick, done, error): the header
+    // popover listens instead of polling, so a job finishing shows even when the window that
     // started it (the video editor, say) is the one whose own promise resolves.
     let _ = app.emit("bg-ops-changed", ());
     let enabled = app
@@ -410,12 +395,10 @@ pub(crate) fn list_bg_ops(state_db: State<Db>) -> Vec<BgOpInfo> {
     list_bg_ops_impl(bg_done_keep_min(&state_db))
 }
 
-// Cancels every cancelable kind of running job unconditionally -- each of the
-// three is a cheap no-op when its own job is not actually running. Backup and
-// import have no cancel primitive of their own (interrupting a database write
-// mid-flight is the genuinely risky case), so quitting with one of those still
-// running is gated by asking first (see the CloseRequested handler below),
-// never by trying to abort it here.
+// Cancels every cancelable kind of running job unconditionally; each is a cheap no-op when
+// its job is not running. Backup and import have no cancel primitive (interrupting a
+// database write mid-flight is the risky case), so quitting with one running is gated by
+// asking first (see the CloseRequested handler), never by aborting it here.
 pub(crate) fn cancel_all_bg_ops() {
     cancel_all_exports();
     cancel_recording_convert();
@@ -446,10 +429,8 @@ pub(crate) fn open_bg_op_folder(path: String) -> Result<(), String> {
     open_explorer_at(&path)
 }
 
-// Set once the main window's own confirm dialog answers "quit anyway" to a
-// bg-quit-requested prompt, so any later quit attempt while the process is still
-// shutting down passes without asking again. Never reset: a fresh app run starts
-// at false.
+// Set once the main window's confirm dialog answers "quit anyway" to a bg-quit-requested
+// prompt, so later quit attempts during shutdown pass without asking again. Never reset.
 pub(crate) static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 
 // The app's one real shutdown sequence -- same three steps whether it runs
@@ -466,12 +447,11 @@ pub(crate) fn do_full_exit(handle: &AppHandle) {
     handle.exit(0);
 }
 
-// The one gate every full-quit path goes through -- the main window's close
-// button AND the tray menu's "Quit", so a job started from either entry point
-// gets the same "N jobs are still running, cancel them and quit?" question
-// instead of the tray simply skipping it. Shows the main window first: the
-// confirm dialog lives in its webview, so asking while it is still hidden
-// (minimized to tray) would leave the question unseen.
+// The one gate every full-quit path goes through (the main window's close button and the
+// tray menu's "Quit"), so a job started from either gets the same "N jobs are still
+// running, cancel them and quit?" question. Shows the main window first: the confirm dialog
+// lives in its webview, so asking while it is hidden (minimized to tray) would leave the
+// question unseen.
 pub(crate) fn request_app_quit(app: &AppHandle) {
     // A live recording is lost as an unplayable file when the process just
     // ends, so it counts as a running job and gets the same question.
