@@ -105,9 +105,9 @@ body.video-body {
 .ve-overlay-live { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .ve-live { position: absolute; box-sizing: border-box; }
 .ve-live-image { object-fit: fill; }
-/* Export scales a video overlay with force_original_aspect_ratio=decrease and
-   pads the rest black rather than stretching it -- object-fit: fill used to
-   distort the footage in the preview instead of matching that letterbox. */
+/* Export scales a video overlay with force_original_aspect_ratio=decrease and pads the
+   rest black rather than stretching it; object-fit: fill would distort the footage in
+   the preview instead of matching that letterbox. */
 .ve-live-video { object-fit: contain; background: #000; }
 .ve-live-frame { border-style: solid; }
 .ve-live-keys {
@@ -367,8 +367,7 @@ body.video-body {
   font-size: 11.5px;
   word-break: break-all;
 }
-/* The export target is a real, editable field now -- same look as
-   .ve-path above, just an <input> instead of a <p>. */
+/* The export target is an editable field, same look as .ve-path above but an <input>. */
 .ve-export-dest-input { width: 100%; font-size: 11.5px; color: var(--muted); }
 /* The plain-filename field sits above the full-path one -- the
    extension label next to it never gets its own input, so it cannot be
