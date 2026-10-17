@@ -898,7 +898,7 @@ pub(crate) async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, 
         let ocr_was_on = ocr_index_flag_on(&store);
         let changed = merge_settings_only(&mut store.settings, incoming, |s| save_settings(&app, s))?;
         if clear_ocr_text_if_switched_off(ocr_was_on, &mut store) {
-            save_prompts_and_trash(&app, &store);
+            write_ocr_wipe(&app, &store, "settings import");
         }
         (changed, store.settings.clone())
     };
@@ -1149,7 +1149,7 @@ pub(crate) async fn import_all(
         })?;
         // The import's own save covers the prompt rows; the trash is written here.
         if want_settings && ocr_was_on && !ocr_index_flag_on(&store) {
-            save_prompts_and_trash(&app, &store);
+            write_ocr_wipe(&app, &store, "import");
         }
         (store.settings.clone(), count, dropped, backup_pw_dropped, vault_mismatch)
     };

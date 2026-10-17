@@ -1042,7 +1042,7 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
         if ocr_was_on && scope != "data" {
             let mut fresh = load_store(&app);
             if clear_ocr_text_if_switched_off(true, &mut fresh) {
-                save_prompts_and_trash(&app, &fresh);
+                write_ocr_wipe(&app, &fresh, "restore");
             }
         }
         // The store still holds the pre-restore prompts and settings until the relaunch every caller

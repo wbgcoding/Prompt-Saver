@@ -20951,3 +20951,26 @@ fn a_failed_settings_write_seeds_no_example_prompts() {
     assert_eq!(seeded.len(), 2);
     assert!(store.settings.examples_seeded && store.prompts.len() == 2);
 }
+
+#[test]
+fn leftover_picture_text_is_cleared_at_boot_only_when_the_index_is_off_and_the_set_is_writable() {
+    let mut store = secret_test_store(vec![image_text_prompt("p1", "read from a picture")]);
+    store.settings.ui_flags.insert("ocrIndex".into(), true);
+    assert!(!heal_ocr_text_at_boot(&mut store), "index on: the text is wanted");
+    assert!(!store.prompts[0].image_text.is_empty());
+
+    store.settings.ui_flags.insert("ocrIndex".into(), false);
+    store.prompts_locked = true;
+    assert!(!heal_ocr_text_at_boot(&mut store), "locked prompt set is never rewritten");
+    assert!(!store.prompts[0].image_text.is_empty());
+    store.prompts_locked = false;
+
+    store.settings.ui_flags.insert("demoMode".into(), true);
+    assert!(!heal_ocr_text_at_boot(&mut store), "demo mode keeps its sample library");
+    assert!(!store.prompts[0].image_text.is_empty());
+    store.settings.ui_flags.remove("demoMode");
+
+    assert!(heal_ocr_text_at_boot(&mut store), "index off with stored text: cleared");
+    assert!(store.prompts[0].image_text.is_empty());
+    assert!(!heal_ocr_text_at_boot(&mut store), "nothing left to clear");
+}

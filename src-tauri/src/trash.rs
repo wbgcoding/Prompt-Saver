@@ -696,8 +696,8 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
         let mut store = lock(&state);
         let (old, ocr_was_on) = reset_settings_core(&mut store, |st| save_settings(&app, &st.settings))?;
         // Defaults switch the picture-text index off: erase its text as well.
-        if ocr_was_on && clear_ocr_index_text(&mut store) && !save_prompts_and_trash(&app, &store) {
-            append_crash_log("reset: the picture-text wipe could not be written");
+        if ocr_was_on && clear_ocr_index_text(&mut store) {
+            write_ocr_wipe(&app, &store, "reset");
         }
         remote::reset_side_effects(&old, &store.settings)
     };

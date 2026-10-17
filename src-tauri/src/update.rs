@@ -287,7 +287,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         if clear_ocr_index {
             // A running "read existing pictures" pass would write the text straight back.
             if clear_ocr_index_text(&mut store) {
-                save_prompts_and_trash(&app, &store);
+                write_ocr_wipe(&app, &store, "index switch-off");
             }
         }
         is_sync_enable.then(|| (store.prompts.clone(), store.settings.clone()))
@@ -489,7 +489,7 @@ pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
         save_settings(&app, &store.settings);
         // The reset turned the picture-text index back off: its text goes with it.
         if ocr_was_on && clear_ocr_index_text(&mut store) {
-            save_prompts_and_trash(&app, &store);
+            write_ocr_wipe(&app, &store, "expert reset");
         }
         remote::reset_side_effects(&old, &store.settings)
     };

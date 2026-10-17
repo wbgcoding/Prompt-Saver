@@ -577,6 +577,26 @@ pub(crate) fn clear_ocr_text_if_switched_off(was_on: bool, store: &mut Store) ->
     was_on && !ocr_index_flag_on(store) && clear_ocr_index_text(store)
 }
 
+// Writes the prompts and trash after the picture text was cleared in memory. A failed write
+// leaves the text in the database although the index is off: it is logged here and the next start
+// clears it again (heal_ocr_text_at_boot), so callers do not have to fail an operation whose main
+// data change already went through.
+pub(crate) fn write_ocr_wipe(app: &AppHandle, store: &Store, context: &str) {
+    if !save_prompts_and_trash(app, store) {
+        append_crash_log(&format!("{context}: the picture-text wipe could not be written"));
+    }
+}
+
+// Start-up self-heal for a wipe that never reached the database: the index is off, yet picture
+// text is still stored. Returns true when something was cleared and has to be written. A locked
+// prompt set is never rewritten, and the sample library of demo mode is left alone.
+pub(crate) fn heal_ocr_text_at_boot(store: &mut Store) -> bool {
+    if store.prompts_locked || ocr_index_flag_on(store) || store.settings.ui_flags.get("demoMode").copied().unwrap_or(false) {
+        return false;
+    }
+    clear_ocr_index_text(store)
+}
+
 pub(crate) fn clear_ocr_index_text(store: &mut Store) -> bool {
     cancel_ocr_index_backfill();
     OCR_EPOCH.fetch_add(1, Ordering::SeqCst);

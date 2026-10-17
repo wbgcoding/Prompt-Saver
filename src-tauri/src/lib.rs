@@ -336,7 +336,11 @@ pub fn run() {
             // enable_demo_mode/disable_demo_mode can tell a real second running instance from the
             // allowMultipleInstances setting (see other_instance_running).
             register_running_instance(&default_data_dir(&handle));
-            let store = load_store(&handle);
+            let mut store = load_store(&handle);
+            // A picture-text wipe that failed to reach the database in an earlier run is repeated here.
+            if heal_ocr_text_at_boot(&mut store) {
+                write_ocr_wipe(&handle, &store, "start-up");
+            }
             // A one-off pass over whatever the log already holds (see its own comment for why it cannot
             // just check today's account name).
             scrub_user_paths_from_crash_log();
