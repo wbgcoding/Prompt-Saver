@@ -319,10 +319,13 @@ pub(crate) async fn collapse_float_folder(app: AppHandle, state: State<'_, Db>, 
     set_folder_expansion(&app, &id, None);
     set_bounds_phys(&win, icon);
     // The window may have been dragged while it was open, so store where the icon
-    // ended up rather than where the folder was opened.
+    // ended up rather than where the folder was opened. The screen id comes first: monitor
+    // queries wait for the main thread, which may be waiting on the store lock.
+    let (ix, iy) = (icon.x.round() as i32, icon.y.round() as i32);
+    let screen = screen_id_at(&app, ix, iy);
     let mut store = lock(&state);
     if let Some(folder) = store.settings.float_folders.iter_mut().find(|f| f.id == id) {
-        folder.pos = Pos { x: icon.x.round() as i32, y: icon.y.round() as i32, ..Default::default() };
+        folder.pos = Pos { x: ix, y: iy, screen };
     }
     save_settings(&app, &store.settings);
     Ok(())

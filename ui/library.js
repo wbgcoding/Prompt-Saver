@@ -293,7 +293,9 @@ export function searchConditionMet(c, p) {
   }
   return c.neg ? !hit : hit;
 }
-export function computeLibSearchScore(p) {
+// `imageHits` ({ query, ids }) lets another search surface bring its own recognized-text hits
+// instead of the library's; left out, the library's own lookup is used.
+export function computeLibSearchScore(p, imageHits = null) {
   const rawInput = libQuery.trim().toLowerCase();
   if (!rawInput) return { score: 1, fuzzy: false, entryIndex: 0 };
   // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard conditions pulled
@@ -351,7 +353,8 @@ export function computeLibSearchScore(p) {
   if (best) return { score: best, fuzzy: true, entryIndex: bestEntry, field: bestKind, q };
   // Last resort: text recognized inside an attached picture. Only reached when nothing else
   // matched, so it never outranks a match on the name, body, a tag or a note.
-  if (optFlag("ocrIndex") && imageHitQuery === rawInput && imageHitIds.has(p.id)) {
+  const hits = imageHits || { query: imageHitQuery, ids: imageHitIds };
+  if (optFlag("ocrIndex") && hits.query === rawInput && hits.ids.has(p.id)) {
     return { score: 90, fuzzy: false, entryIndex: 0, fromImage: true };
   }
   return { score: 0, fuzzy: false, entryIndex: 0 };

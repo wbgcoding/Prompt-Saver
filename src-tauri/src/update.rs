@@ -218,6 +218,11 @@ pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
     if key == "errorLog" && !enabled {
         ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
+    // A running key capture must not outlive the switch.
+    #[cfg(windows)]
+    if key == "keyOverlay" {
+        keylog::flag_changed(enabled);
+    }
     // Turning either gate off must not leave a session silently running.
     #[cfg(windows)]
     if !enabled && (key == "rotatingPrompts" || key == "rotateAuto") {

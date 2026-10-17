@@ -1,5 +1,5 @@
 // Chain mode: queue several prompts and copy them as one block.
-import { $, DRAG_THRESHOLD, errToast, flag, gridEl, invoke, prompts, settings, t } from "./core.js";
+import { $, DRAG_THRESHOLD, errToast, flag, gridEl, invoke, prompts, serialInvoke, settings, t } from "./core.js";
 import { resolveVars, varTokens } from "./promptVars.js";
 import { recordToolUsage } from "./management.js";
 
@@ -35,15 +35,24 @@ export function chainText() {
 // `commitId` is the prompt just newly picked into the chain (if it rotates):
 // its pointer only advances once this actual clipboard write succeeds, never from
 // the pick alone (a pick that never reaches the clipboard must burn nothing).
+// Writes go out one after another and only the newest push counts: an older result
+// neither commits nor reports, and the picks it carried are committed by the push
+// that superseded it (an empty chain drops them).
+let chainPushSeq = 0;
+const chainPendingCommits = new Set();
 export function pushChainClipboard(commitId) {
-  if (!chainSel.length) return;
-  invoke("copy_text", { text: chainText() })
+  const seq = ++chainPushSeq;
+  if (!chainSel.length) { chainPendingCommits.clear(); return; }
+  if (commitId) chainPendingCommits.add(commitId);
+  serialInvoke("chain-clipboard", "copy_text", { text: chainText() })
     .then((ok) => {
-      if (!ok) return;
+      if (seq !== chainPushSeq || !ok) return;
       recordToolUsage("chain");
-      if (commitId) invoke("rotation_commit", { id: commitId }).catch(() => {});
+      const ids = [...chainPendingCommits].filter((id) => chainSel.includes(id));
+      chainPendingCommits.clear();
+      for (const id of ids) invoke("rotation_commit", { id }).catch(() => {});
     })
-    .catch((e) => errToast(e));
+    .catch((e) => { if (seq === chainPushSeq) errToast(e); });
 }
 
 // Reflect one tile's chain state (skip / picked + order badge) without a re-render.

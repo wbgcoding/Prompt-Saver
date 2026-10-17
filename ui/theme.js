@@ -200,6 +200,7 @@ export function draftFrom(theme) {
 export function previewThemeDraft() {
   if (!themeDraft) return;
   document.documentElement.setAttribute("data-theme", themeDraft.base);
+  document.documentElement.style.colorScheme = themeColorScheme(themeDraft.base);
   applyThemeVars(themeDraft.vars);
   // The pills and folders only hear the backend's theme-changed event, which fires on a
   // real switch; without this broadcast the preview would stop at the main window's edge.

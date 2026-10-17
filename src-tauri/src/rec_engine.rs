@@ -69,11 +69,10 @@ impl RecordClock {
         self.paused.load(std::sync::atomic::Ordering::SeqCst)
     }
     pub(crate) fn now_ticks(&self) -> i64 {
-        let elapsed = self
-            .segment_start
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .map(|t0| (t0.elapsed().as_nanos() / 100) as i64);
+        // Both values are read under the segment lock: pause() moves the running span into
+        // accumulated_ticks under the same lock, so reading outside it could count it twice.
+        let seg = self.segment_start.lock().unwrap_or_else(|e| e.into_inner());
+        let elapsed = seg.map(|t0| (t0.elapsed().as_nanos() / 100) as i64);
         rec_clock_ticks(self.accumulated_ticks.load(std::sync::atomic::Ordering::SeqCst), elapsed)
     }
     pub(crate) fn pause(&self) {
@@ -113,8 +112,11 @@ pub(crate) fn crop_and_flip_rows_bottom_up(
 ) -> Vec<u8> {
     let row_bytes = crop_w * 4;
     let mut out = vec![0u8; row_bytes * crop_h];
-    if crop_x + crop_w > src_width {
-        return out; // defensive -- a stale/out-of-range crop must not panic the capture thread
+    // Only the part of the crop that lies inside the frame is copied; the rest stays black.
+    let copy_w = crop_w.min(src_width.saturating_sub(crop_x));
+    let copy_bytes = copy_w * 4;
+    if copy_bytes == 0 {
+        return out;
     }
     for row in 0..crop_h {
         let sy = crop_y + row;
@@ -122,12 +124,12 @@ pub(crate) fn crop_and_flip_rows_bottom_up(
             break;
         }
         let src = sy * stride + crop_x * 4;
-        if src + row_bytes > raw.len() {
+        if src + copy_bytes > raw.len() {
             break;
         }
         let dst_row = crop_h - 1 - row;
         let dst = dst_row * row_bytes;
-        out[dst..dst + row_bytes].copy_from_slice(&raw[src..src + row_bytes]);
+        out[dst..dst + copy_bytes].copy_from_slice(&raw[src..src + copy_bytes]);
     }
     out
 }

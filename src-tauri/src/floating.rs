@@ -171,12 +171,94 @@ fn main_scale_factor(app: &AppHandle) -> f64 {
         .unwrap_or(1.0)
 }
 
+// Labels whose window was asked to close. close() only queues the teardown, and building
+// under the same label before it ran fails, so a pill wanted again meanwhile must wait for
+// the label to go. The flag marks an entry that already has a waiting task.
+static CLOSING_FLOATS: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum ReopenStep {
+    Build,
+    Keep,
+    WaitThenSync,
+}
+
+pub(crate) fn reopen_step(exists: bool, closing: bool) -> ReopenStep {
+    match (exists, closing) {
+        (false, _) => ReopenStep::Build,
+        (true, false) => ReopenStep::Keep,
+        (true, true) => ReopenStep::WaitThenSync,
+    }
+}
+
+fn close_tracked(label: &str, win: &tauri::WebviewWindow) {
+    {
+        let mut c = CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner());
+        if !c.iter().any(|(l, _)| l == label) {
+            c.push((label.to_string(), false));
+        }
+    }
+    let _ = win.close();
+}
+
+fn is_closing(label: &str) -> bool {
+    CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(l, _)| l == label)
+}
+
+fn forget_closing(label: &str) {
+    CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(l, _)| l != label);
+}
+
+// True when the caller must not build now. A window that is still closing gets one task that
+// waits off this thread (it may be the event loop that runs the teardown) and then replays
+// the plan; a live window is simply kept.
+fn defer_while_closing(app: &AppHandle, label: &str) -> bool {
+    let exists = app.get_webview_window(label).is_some();
+    let step = reopen_step(exists, is_closing(label));
+    if step == ReopenStep::Build {
+        forget_closing(label);
+        return false;
+    }
+    if step == ReopenStep::WaitThenSync {
+        let first = {
+            let mut c = CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner());
+            match c.iter_mut().find(|(l, _)| l == label) {
+                Some(e) if !e.1 => {
+                    e.1 = true;
+                    true
+                }
+                _ => false,
+            }
+        };
+        if first {
+            let app2 = app.clone();
+            let label = label.to_string();
+            tauri::async_runtime::spawn(async move {
+                wait_label_gone(&app2, &label).await;
+                forget_closing(&label);
+                sync_float_windows(&app2);
+            });
+        }
+    }
+    true
+}
+
+// Bounded wait until a closing window's label is free again.
+pub(crate) async fn wait_label_gone(app: &AppHandle, label: &str) {
+    for _ in 0..50 {
+        if app.get_webview_window(label).is_none() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
 // `taken` collects the box this pill actually lands in (real or parked) so
 // the next call in the same sync_float_windows pass fans its own park spot
 // out from this one instead of landing on top of it.
 pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Rect>) {
     let label = flabel(&prompt.id);
-    if app.get_webview_window(&label).is_some() {
+    if defer_while_closing(app, &label) {
         return;
     }
 
@@ -276,8 +358,9 @@ pub(crate) fn save_settings_off_event_loop(app: &AppHandle) {
 }
 
 pub(crate) fn close_floating_window(app: &AppHandle, id: &str) {
-    if let Some(win) = app.get_webview_window(&flabel(id)) {
-        let _ = win.close();
+    let label = flabel(id);
+    if let Some(win) = app.get_webview_window(&label) {
+        close_tracked(&label, &win);
     }
 }
 
@@ -805,7 +888,7 @@ pub(crate) fn folder_box(scale: f64) -> f64 {
 // out of the taskbar and out of other apps' screen captures.
 pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rect>) {
     let label = folder_label(&folder.id);
-    if app.get_webview_window(&label).is_some() {
+    if defer_while_closing(app, &label) {
         return;
     }
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
@@ -907,7 +990,7 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
             _ => false,
         };
         if stale {
-            let _ = win.close();
+            close_tracked(&label, &win);
         }
     }
     // Every box already on screen, so a pill/folder opened below (parked or
@@ -1043,6 +1126,8 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
                 if let Some(hs) = app.try_state::<HiddenFloats>() {
                     hs.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
                 }
+                // An unpin just before closes the window asynchronously: build only once its label is free.
+                wait_label_gone(&app, &flabel(&id)).await;
                 let mut taken: Vec<Rect> = app.webview_windows().values().filter_map(window_rect).collect();
                 open_floating(&app, &p, &mut taken);
                 let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": true }));
