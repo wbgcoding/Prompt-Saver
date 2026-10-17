@@ -41,11 +41,10 @@ export function prettyAccel(accel) {
 // edit changes nothing.
 export const promptHotkeysOn = () => flag("promptHotkeys");
 
-// The backend answers a rejected accelerator with a code so the reason can be shown
-// in the app language; anything else passes through unchanged. "save-failed" isn't a
-// hotkey code at all (update_prompt's generic write failure) but reaches this same
-// mapper from Item-1's popup rows, so it gets the same friendly text the editor's
-// own save path already shows for it.
+// The backend answers a rejected accelerator with a code so the reason can be shown in
+// the app language; anything else passes through. "save-failed" is not a hotkey code
+// (update_prompt's generic write failure) but reaches this mapper from the popup rows, so
+// it gets the same friendly text as the editor's save path.
 export const HOTKEY_ERRORS = {
   "hotkey-invalid": "promptHotkeyInvalid",
   "hotkey-taken": "promptHotkeyTaken",
@@ -56,9 +55,9 @@ export const hotkeyMessage = (err) =>
   HOTKEY_ERRORS[err] ? t(HOTKEY_ERRORS[err]) : err === "save-failed" ? t("persistFailed") : t("hotkeyFail");
 
 // Show an inline reason and drop the capture; empty text clears the message again.
-// Whatever the reason, the full list of what is already bound is one click away
-// through the same button -- naming the owner is not enough on its own when the
-// fix is to open that other binding and change it.
+// Whatever the reason, the full list of what is already bound is one click away through
+// the same button: naming the owner is not enough when the fix is to open that other
+// binding.
 export function showHotkeyError(msg) {
   modal.hotkeyErr.textContent = msg || "";
   modal.hotkeyErr.classList.toggle("hidden", !msg);
@@ -136,24 +135,20 @@ export function reassertHotkeyCapture() {
   hotkeyCapture(true);
 }
 
-// ONE reusable hotkey-recording field, wired onto `input`: click, press a
-// combo. A client-side pre-check (hotkeyOwner) gives instant feedback; the BACKEND
-// re-checks before anything is actually kept (only it knows the system blocklist
-// and can ask Windows whether another app already owns the combination), so a
-// refusal here always leaves the previous binding exactly as it was.
-//   id: the prompt this field belongs to (null for the global hotkey), or a
-//             function returning it fresh each time, for a field reused across
-//             different prompts (the singleton editor).
-//   errEl: element for an inline error message; omitted falls back to a toast.
-//   current: () => the accel to restore the field to after a refused capture.
-//   onCommit(accel): persists (or, for the editor, only stages) the change; must
-//             throw the backend's rejection code on failure, and returns the accel
-//             actually stored (not always what was requested: see the note
-//             on update_prompt's own late OS-conflict check). Returning `null`
-//             aborts silently without touching the field or showing an error: the
-//             editor uses this when the user moved to a different prompt while an
-//             await was in flight, so a stale answer never overwrites what is by
-//             then a completely different prompt's row.
+// ONE reusable hotkey-recording field, wired onto `input`: click, press a combo. A
+// client-side pre-check (hotkeyOwner) gives instant feedback; the BACKEND re-checks
+// before anything is kept (only it knows the system blocklist and can ask Windows who
+// owns the combination), so a refusal leaves the previous binding as it was.
+// id: the prompt this field belongs to (null for the global hotkey), or a function
+// returning it fresh each time (a field reused across prompts, the singleton editor).
+// errEl: element for an inline error message; omitted falls back to a toast.
+// current: () => the accel to restore the field to after a refused capture.
+// onCommit(accel): persists (or, in the editor, only stages) the change; throws the
+// backend's rejection code on failure and returns the accel actually stored (may differ
+// from the request: update_prompt's late OS-conflict check). Returning `null` aborts
+// silently and leaves the field untouched: the editor does this when the user moved to
+// another prompt during the await, so a stale answer never overwrites a different
+// prompt's row.
 export function bindHotkeyField(input, { id = null, errEl = null, showAllEl = null, current, onCommit }) {
   const resolveId = () => (typeof id === "function" ? id() : id);
   const showErr = (msg) => {
@@ -162,8 +157,7 @@ export function bindHotkeyField(input, { id = null, errEl = null, showAllEl = nu
     if (showAllEl) showAllEl.classList.toggle("hidden", !msg);
   };
   // A commit is a round trip (check_hotkey, maybe update_prompt); a second keypress
-  // landing before the first resolves could otherwise finish out of order and
-  // clobber the newer request with the older one's result.
+  // before it resolves could finish out of order and clobber the newer result.
   let busy = false;
   input.addEventListener("focus", () => hotkeyCapture(true));
   input.addEventListener("blur", () => hotkeyCapture(false));
@@ -183,7 +177,7 @@ export function bindHotkeyField(input, { id = null, errEl = null, showAllEl = nu
     busy = true;
     try {
       const stored = await onCommit(accel);
-      if (stored === null) return; // aborted silently, see onCommit's doc above
+      if (stored === null) return; // aborted silently
       input.value = prettyAccel(stored);
     } catch (err) {
       input.value = prettyAccel(current());
@@ -206,8 +200,8 @@ export function setPromptHotkey(accel) {
 
 // ---- "All hotkeys": global + every per-prompt hotkey, each row live ----
 
-// The ONE place that actually persists the global hotkey: shared by the Settings
-// panel's own field and the popup's global row, so they can never disagree.
+// The ONE place that persists the global hotkey, shared by the Settings field and the
+// popup's global row so they never disagree.
 export async function commitGlobalHotkey(accel) {
   await invoke("set_hotkey", { hotkey: accel });
   settings.hotkey = accel;
@@ -215,18 +209,18 @@ export async function commitGlobalHotkey(accel) {
   renderHotkeysList(); // a no-op while the popup is closed
   return accel;
 }
-// The dictation hotkey's counterpart, same shape -- its own field, gated behind the voiceHotkey
-// expert flag, checked through the same set_voice_hotkey/check_hotkey backend
-// path (hotkeyOwner above already treats it as a real collision).
+// The dictation hotkey: its own field, gated behind the voiceHotkey expert flag, checked
+// through set_voice_hotkey/check_hotkey (hotkeyOwner above already treats it as a real
+// collision).
 export async function commitVoiceHotkey(accel) {
   await invoke("set_voice_hotkey", { hotkey: accel });
   settings.voice_hotkey = accel;
   if (accel) toast(t("hotkeySet"));
   return accel;
 }
-// The recording stop hotkey, same shape again -- only ever actually registered while a
-// recording runs (see rearm_hotkeys on the backend), so a successful commit
-// here can still show as blocked later through the bar's own warning icon.
+// The recording stop hotkey: only registered while a recording runs (see rearm_hotkeys on
+// the backend), so a successful commit can still show as blocked later through the bar's
+// warning icon.
 export async function commitRecStopHotkey(accel) {
   await invoke("set_rec_stop_hotkey", { hotkey: accel });
   settings.rec_stop_hotkey = accel;
@@ -240,23 +234,20 @@ export async function commitRecPauseHotkey(accel) {
   return accel;
 }
 
-// Unlike the editor (which only stages a hotkey until Save), a popup row has no
-// save step of its own: it writes straight through update_prompt with every OTHER
-// field taken from the prompt's own in-memory copy, unchanged. The text and the
-// rotation entries are deliberately NOT sent: for a confidential prompt the
-// cached copy can be empty (vault locked) or stale, and a missing field means
-// "keep what is stored". check_hotkey runs
-// first so a live OS conflict shows up immediately instead of only being caught by
-// update_prompt's own late rearm (see the "the backend hands back what it
-// really stored" note at the editor's save path).
+// Unlike the editor (which stages a hotkey until Save), a popup row has no save step: it
+// writes through update_prompt with every OTHER field taken from the prompt's in-memory
+// copy. The text and rotation entries are deliberately NOT sent: for a confidential
+// prompt the cached copy can be empty (vault locked) or stale, and a missing field means
+// "keep what is stored". check_hotkey runs first so a live OS conflict shows immediately
+// instead of only at update_prompt's late rearm.
 export async function commitPromptHotkeyDirect(id, accel) {
   const p = prompts.find((x) => x.id === id);
   if (!p) throw "save-failed";
   if (accel) await invoke("check_hotkey", { hotkey: accel, id });
   const saved = await invoke("update_prompt", {
     id: p.id, name: p.name, color: p.color,
-    // No image field: the prompt list no longer carries the bytes, and a missing
-    // field means "keep the stored picture": exactly what this write wants.
+    // No image field: a missing field means "keep the stored picture", which is what this
+    // write wants.
     showImage: p.show_image, copyImage: p.copy_image,
     filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
     caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
@@ -272,10 +263,9 @@ export async function commitPromptHotkeyDirect(id, accel) {
   return saved.hotkey;
 }
 
-// Tile-menu checkmark entry: same "write straight through with everything
-// else unchanged" shape as commitPromptHotkeyDirect. Turning it off also ends a
-// session that happens to be running right now, instead of waiting for the next
-// paste to notice the prompt no longer qualifies.
+// Tile-menu checkmark entry: writes straight through with everything else unchanged, like
+// commitPromptHotkeyDirect. Turning it off also ends a session running right now instead
+// of waiting for the next paste to notice.
 export async function toggleRotateAutoDirect(id) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
@@ -283,7 +273,7 @@ export async function toggleRotateAutoDirect(id) {
   try {
     const saved = await invoke("update_prompt", {
       id: p.id, name: p.name, color: p.color,
-      // Same as commitPromptHotkeyDirect: no image, text or entries = keep the stored ones.
+      // No image, text or entries: the stored ones are kept.
       showImage: p.show_image, copyImage: p.copy_image,
       filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
       caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
@@ -299,10 +289,9 @@ export async function toggleRotateAutoDirect(id) {
   }
 }
 
-// One entry per row kind: how to read its current value and how to commit a
-// new one. "prompt" rows carry their own id (used both for the lookup and to
-// exclude themselves from hotkeyOwner's conflict check); the other three share
-// the null-id bucket the same way their own dedicated fields always have.
+// One entry per row kind: how to read its current value and how to commit a new one.
+// "prompt" rows carry their own id (for the lookup and to exclude themselves from
+// hotkeyOwner's conflict check); the other three share the null-id bucket.
 export const HOTKEYS_LIST_KINDS = {
   global: { current: () => settings.hotkey, onCommit: commitGlobalHotkey },
   prompt: {
