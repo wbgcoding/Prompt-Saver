@@ -20,14 +20,14 @@ import { withDialog } from "./editor.js";
 export let deleteAllTimer = null;
 export let resetSettingsTimer = null;
 
-// Whatever had focus right before the settings/expert panel opened, so
-// closing it returns focus there (same reasoning as modalOpener above).
+// Whatever had focus before the settings/expert panel opened, so closing it returns focus
+// there.
 export let settingsOpener = null;
 export function assignSettingsOpener(v) { settingsOpener = v; }
 
-// Hide the settings modal and reset the Updates status line back to the version
-// number: unless a real update is pending (the "update available" state stays).
-// So a transient "already newest version" message doesn't linger after reopening.
+// Hide the settings modal and reset the Updates status line to the version number, unless
+// a real update is pending, so a transient "already newest version" message does not
+// linger.
 // The Import button's menu (from a file or from a folder).
 export function closeImportMenu() {
   const pop = $("import-menu-pop");
@@ -57,9 +57,8 @@ export async function runExport(format) {
   }
 }
 
-// Same shape as runExport, fed by the statistics dashboard's own format
-// select + button instead of the settings export row. No success toast, same
-// as runExport: the save dialog closing is confirmation enough.
+// Like runExport but fed by the statistics dashboard's format select + button. No success
+// toast: the save dialog closing is confirmation enough.
 export async function runStatsExport(format) {
   try {
     await withDialog(() => invoke("export_stats", { format }));
@@ -126,10 +125,9 @@ export async function runImport() {
   const picked = await runImportPreview();
   if (!picked) return;
   try {
-    // No withDialog here: import_prompts re-reads the already-picked file, it
-    // never opens a native dialog itself (that guard is preview_import's job).
-    // hash is preview_import's digest of that same file -- import_prompts
-    // refuses if the file changed underneath the preview.
+    // No withDialog: import_prompts re-reads the picked file and opens no native dialog
+    // (preview_import does). hash is preview_import's digest of that file; import_prompts
+    // refuses if the file changed since the preview.
     const count = await withTaskbarBusy("import", () => invoke("import_prompts", { path: picked.path, hash: picked.hash }));
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
@@ -154,7 +152,7 @@ export async function runImport() {
     applyBars();
     await renderGrid(true); // re-render with the new tile style
     toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
-    maybeDupImportToast(); // Flag near-duplicates the import may have introduced
+    maybeDupImportToast();
   } catch (err) {
     if (String(err) === "import-changed") toast(t("importChanged"));
     else if (String(err) !== "canceled") toast(t("importFailed"));
@@ -168,12 +166,10 @@ export const IMPORT_FOLDER_REASON_KEY = {
   "read-error": "importFolderReasonReadError",
 };
 
-// Same "review, then confirm" shape as runImportPreview, but for a whole
-// folder of .md/.txt files instead of one export file: every readable item
-// starts checked (a folder import is opt-out, not opt-in, since picking the
-// folder at all already means "these are the notes I want"), tags/size/a
-// per-row checkbox are shown, and an unreadable file is grayed out with why
-// rather than silently dropped.
+// Same review-then-confirm shape as runImportPreview, for a folder of .md/.txt files:
+// every readable item starts checked (opt-out, since picking the folder means "these are
+// the notes I want"), tags/size/a checkbox are shown, and an unreadable file is grayed
+// out with the reason instead of dropped.
 export async function runImportFolder() {
   let preview;
   try {
@@ -277,8 +273,7 @@ export async function runExportAll() {
 export async function runImportAll() {
   const path = await withDialog(() => invoke("pick_backup_file")).catch(() => null);
   if (!path) return;
-  // Same two checkboxes as restoreBackup, both preselected -- the dialog
-  // itself refuses zero checked.
+  // Both checkboxes preselected; the dialog refuses zero checked.
   const ok = await confirmDialog({
     title: t("backupImport"), message: t("importAllConfirm"), confirmLabel: t("backupImport"),
     checkboxes: [
@@ -329,11 +324,10 @@ export async function runImportAll() {
   }
 }
 
-// Portable start with an installed copy's store present: offer to adopt it. Runs
-// after the window is up, so the dialog already has the theme and language.
-// Returns whether it actually showed a dialog: the first-run tour must not
-// open on top of (or right after burying) this more urgent prompt; it retries next
-// launch instead, since tourSeen was never written this time.
+// Portable start with an installed copy's store present: offer to adopt it. Runs after
+// the window is up so the dialog has theme and language. Returns whether a dialog showed:
+// the first-run tour must not open over this more urgent prompt; it retries next launch
+// since tourSeen was not written.
 export async function offerTakeover() {
   const offer = await invoke("takeover_offer").catch(() => null);
   if (!offer) return false;
@@ -349,10 +343,9 @@ export async function offerTakeover() {
     checkboxes: [{ key: "remember", label: t("takeoverRemember"), checked: false }],
     checkboxesOptional: true,
   });
-  // Read regardless of how the dialog closed (Adopt, Skip, Escape or a
-  // background click all leave the checkbox's own DOM state behind). The box starts
-  // unticked: only an explicit tick settles the folder, otherwise it is offered
-  // again next launch.
+  // Read regardless of how the dialog closed (Adopt, Skip, Escape or a background click
+  // leave the checkbox state behind). The box starts unticked: only an explicit tick
+  // settles the folder, otherwise it is offered again next launch.
   const remember = $("confirm-cb-remember")?.checked === true;
   try {
     await invoke("takeover_apply", { adopt, remember });
@@ -648,7 +641,7 @@ export function fillFontSelects() {
   fill(modal.fontSel, true);
 }
 
-// Snap legacy sizes (13/15/18/22) onto the new 10..40 grid.
+// Snap stored sizes (13/15/18/22) onto the 10..40 grid.
 export const normSize = (v) =>
   v <= 1 ? v : Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(v / 2) * 2));
 
