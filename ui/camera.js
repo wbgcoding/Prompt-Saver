@@ -1,14 +1,12 @@
-// Camera recording window. getUserMedia feeds the live preview; once
-// recording starts, the SAME stream is handed to the browser's own
-// MediaRecorder, which does the encoding -- this window never touches raw
-// pixels itself, unlike the screen recorder's own Rust/WGC pipeline. Chunks
-// are appended to disk as they arrive (camera_append_chunk) instead of
-// buffered here, so a long take never has to hold its whole size in memory.
+// Camera recording window. getUserMedia feeds the live preview; once recording starts, the
+// same stream goes to the browser's MediaRecorder, which does the encoding.
+// Chunks are appended to disk as they arrive (camera_append_chunk), so a long take never
+// sits in memory.
 //
-// getUserMedia only resolves once WebView2's permission prompt has been
-// answered, which happens in Rust (camera.rs, install_permission_handler) --
-// this file waits for the camera-permission-ready event before ever calling
-// it, closing the race where the page could ask before the handler exists.
+// getUserMedia only resolves once WebView2's permission prompt is answered, which happens
+// in Rust (camera.rs, install_permission_handler). This file waits for
+// camera-permission-ready before calling it, so the page cannot ask before the handler
+// exists.
 import { fmtTimeMMSS, takeElapsedMs } from "./floatShared.js";
 import { LANGS, fullTexts } from "./i18n.js";
 import { attachSelectPicker } from "./selectpop.js";
@@ -28,8 +26,8 @@ const audioSelect = document.getElementById("cam-audio-select");
 const audioLabel = document.getElementById("cam-audio-label");
 const resSelect = document.getElementById("cam-res-select");
 const resLabel = document.getElementById("cam-res-label");
-// Themed list popup instead of the native OS dropdown. A locked select (a
-// take in flight, see the disabled toggles below) never opens it.
+// Themed list popup instead of the native dropdown; a locked select (a take in flight)
+// never opens it.
 attachSelectPicker(audioSelect);
 attachSelectPicker(resSelect);
 const folderLabel = document.getElementById("cam-folder-label");
@@ -53,30 +51,23 @@ let recStartWall = 0;
 // over, so the clock shows recording time only.
 let pausedAt = 0;
 let pausedTotal = 0;
-// The screen recording's own pause-aware position at the moment this take's
-// recorder reported that it actually started -- read live
-// (camera_screen_elapsed_ms) from the recorder's start event, never
-// reconstructed later from wall-clock stamps alone, or a pause in the screen
-// recording between the two starts would silently inflate the overlay's
-// placement by however long it lasted. Holds the pending read (a promise),
-// which onstop awaits.
+// The screen recording's pause-aware position when this take's recorder reported it
+// started, read live (camera_screen_elapsed_ms): wall-clock stamps would let a
+// screen-recording pause between the two starts inflate the overlay placement.
+// Holds the pending read (a promise), which onstop awaits.
 let recScreenElapsedAtStart = null;
 // The same read once it has resolved (null until then), so onstop can mark
 // the session finishing without waiting on the read.
 let recScreenElapsedValue = null;
 let recTimer = 0;
-// The two expert-menu settings this window has no control of its own for
-// (device, framerate) -- read once at boot, applied to every getUserMedia
-// call below. Resolution has its own in-window select, so only its starting
-// value comes from settings.
+// Expert-menu settings this window has no control for (device, framerate), read once at
+// boot and applied to every getUserMedia call. Resolution has its own select; only its
+// starting value comes from settings.
 let videoDeviceId = "";
 let frameRate = 30;
-// Bumped on every refreshPreview() call; a getUserMedia that resolves after
-// a newer generation has already started stops its own tracks instead of
-// replacing `stream` out from under whatever is now current -- otherwise
-// the ready-event refresh and the 1500ms fallback refresh (see below) could
-// both resolve and leak the first stream's tracks (camera light stays on
-// with nothing showing it).
+// Bumped on every refreshPreview(); a getUserMedia that resolves after a newer generation
+// started stops its own tracks instead of replacing `stream`, so the ready-event and 1500ms
+// fallback refreshes cannot leak a stream (camera light stays on).
 let previewGen = 0;
 
 function t(key) {
@@ -145,10 +136,9 @@ function stopStream() {
   }
 }
 
-// Re-requests getUserMedia with the current resolution/audio picks. Called
-// on load and whenever either control changes, but never while a take is
-// actually recording -- swapping the live stream under an active
-// MediaRecorder would just corrupt the file.
+// Re-requests getUserMedia with the current resolution/audio picks, on load and on control
+// changes; never during a take, because swapping the stream under an active MediaRecorder
+// corrupts the file.
 async function refreshPreview() {
   if (recorder && recorder.state !== "inactive") return;
   const gen = ++previewGen;
@@ -170,17 +160,15 @@ async function refreshPreview() {
     try {
       newStream = await navigator.mediaDevices.getUserMedia(constraintsFor(true));
     } catch (err) {
-      // A saved camera that has since been unplugged must not switch the
-      // window off for good: one retry with the default camera, and only for
-      // the two errors a missing device produces (a permission denial or any
-      // other failure is not a stale device and is not retried).
+      // A saved camera that was unplugged must not switch the window off: retry once with
+      // the default camera, only for the two errors a missing device produces.
       const missing = err && (err.name === "NotFoundError" || err.name === "OverconstrainedError");
       if (!videoDeviceId || !missing || gen !== previewGen) throw err;
       newStream = await navigator.mediaDevices.getUserMedia(constraintsFor(false));
     }
     if (gen !== previewGen) {
-      // A newer refreshPreview() call (or a stop) already won the race --
-      // never let a late, now-stale stream take over the camera light.
+      // A newer refreshPreview() or a stop already won; a late stale stream must not take
+      // over the camera light.
       for (const track of newStream.getTracks()) track.stop();
       return;
     }
@@ -197,9 +185,9 @@ async function refreshPreview() {
   }
 }
 
-// Chunk-uploads a base64 string instead of a JSON array of numbers -- about
-// a third bigger than raw instead of three to four times bigger, over an
-// IPC channel that already pays a per-call and a serialization cost on top.
+// Chunks go up as a base64 string (about a third bigger than raw) instead of a JSON number
+// array (three to four times bigger), over an IPC channel that pays per call and per
+// serialization.
 function bufToBase64(buf) {
   const bytes = new Uint8Array(buf);
   let binary = "";
@@ -210,12 +198,10 @@ function bufToBase64(buf) {
   return btoa(binary);
 }
 
-// Every in-flight camera_append_chunk call for the CURRENT take -- onstop
-// awaits all of them before calling camera_finish_recording, or the very
-// last chunk (still mid-flight when MediaRecorder's own final
-// "dataavailable" fires right before "stop") loses its race against
-// finish's session.take() and is dropped on the floor, silently, with the
-// recording missing its last second or so.
+// Every in-flight camera_append_chunk of the CURRENT take: onstop awaits all of them before
+// camera_finish_recording, or the last chunk (mid-flight when the final dataavailable
+// fires) loses the race against finish's session.take() and the recording misses its last
+// second.
 let pendingAppends = [];
 // Each chunk's append starts only after the previous one finished: the backend
 // command is async, so two calls in flight at once could write out of order.
@@ -228,10 +214,9 @@ let appendFailed = false;
 // (see ondataavailable): onstop awaits it, never issues a second one.
 let abandonCall = null;
 
-// The one way back from a start that got as far as reserving the take in the
-// backend (file + session) and then failed in the recorder: releases that
-// reservation through the ordinary discard command and puts the window back
-// to its idle state, so the next Start begins from scratch.
+// The way back from a start that reserved the take in the backend (file + session) and then
+// failed in the recorder: releases the reservation through the discard command and returns
+// the window to idle.
 async function rollbackFailedStart() {
   const path = recPath;
   if (recorder) {
@@ -260,10 +245,8 @@ async function rollbackFailedStart() {
 
 async function startRecording() {
   if (!stream) return;
-  // Guards against a second click landing while the first is still awaiting
-  // camera_begin_recording or the live elapsed-time read below -- without
-  // this, that second call replaces the session mid-flight and leaves the
-  // first recorder.start() writing into a take that no longer exists.
+  // Guards against a second click while the first still awaits camera_begin_recording or
+  // the elapsed-time read: a second call would replace the session mid-flight.
   if (startBtn.disabled) return;
   startBtn.disabled = true;
   const mimeType = bestMimeType();
@@ -311,11 +294,10 @@ async function startRecording() {
     pendingAppends.push(append);
     appendChain = append;
   };
-  // Stamped when the recorder really reports it is running, not when Start
-  // was clicked or the backend reserved the take: this is the one moment
-  // that matters for alignment, not begin time (which can sit open for a
-  // while with the camera preview idle) and not finish time (the screen
-  // recording may have moved on, paused again, or stopped by then).
+  // Stamped when the recorder reports it is running, not at the Start click, the backend
+  // reservation or finish time: this is the only moment that matters for alignment (begin
+  // can sit open with the preview idle; the screen recording may have paused or stopped by
+  // finish).
   recorder.onstart = () => {
     recStartWall = Date.now();
     pausedAt = 0;
@@ -331,10 +313,8 @@ async function startRecording() {
     clearInterval(recTimer);
     recBadge.classList.add("hidden");
     setStatus("idle");
-    // Start and the two selects stay disabled until the whole finish below
-    // has run: a new take (or a preview refresh that would re-enable Start)
-    // while the old one is still uploading its last chunks would fight it
-    // over the one session.
+    // Start and the two selects stay disabled until the whole finish has run: a new take
+    // while the old one uploads its last chunks would fight it over the one session.
     startBtn.classList.remove("hidden");
     pauseBtn.classList.add("hidden");
     stopBtn.classList.add("hidden");
@@ -350,12 +330,10 @@ async function startRecording() {
       startBtn.disabled = !stream;
       return;
     }
-    // Marks the session finishing before any slow wait below -- Alt+F4/
-    // taskbar-close/app-quit landing in that window must finish this take,
-    // not delete it as if it were still an active, abandoned recording (see
-    // camera::CamSession::finishing). A take whose chunk write already
-    // failed is not marked: it was released for good and must never get a
-    // sidecar.
+    // Marks the session finishing before any slow wait: Alt+F4, taskbar close or app quit
+    // in that window must finish this take, not delete it as an abandoned recording (see
+    // camera::CamSession::finishing). A take whose chunk write already failed is not
+    // marked: it was released and must never get a sidecar.
     let screenElapsedMs = recScreenElapsedValue;
     const elapsedRead = recScreenElapsedAtStart;
     recScreenElapsedAtStart = null;
@@ -392,20 +370,17 @@ async function startRecording() {
     let finishError = null;
     try {
       const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs, screenElapsedMs });
-      // A companion screen recording that has ALREADY stopped by now opens
-      // as the primary source, with this camera take added as an aligned
-      // overlay when one is ready -- otherwise the camera file just opens on
-      // its own, same as any other recording. The overlay's own alignment
-      // lives in its sidecar (just written above), not in anything passed
-      // through open_video_editor.
+      // A companion screen recording that already stopped opens as the primary source with
+      // this camera take as an aligned overlay when one is ready; otherwise the camera file
+      // opens on its own. The overlay alignment lives in its sidecar (written above), not
+      // in open_video_editor's arguments.
       if (finished && finished.companion_path) {
         await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path });
       } else {
         await invoke("open_video_editor", { srcPath: path });
       }
     } catch (err) {
-      // A finish that fails leaves the raw file in place, still playable --
-      // the same fallback the screen recorder's own encode-error path uses.
+      // A failed finish leaves the raw file in place, still playable.
       finishError = err;
     }
     idleControls();
@@ -542,7 +517,6 @@ listen("camera-permission-ready", () => {
   startPreviewWhenReady();
 });
 
-// Theme + language, same shared helpers every satellite window uses.
 import("./floattheme.js").then(({ applyFloatTheme }) => {
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
   Promise.all([invoke("current_theme"), invoke("theme_vars")])
@@ -591,11 +565,9 @@ listen("language-changed", () => {
     .catch(() => {});
 });
 
-// A fallback in case the permission-ready event is somehow missed (e.g. this
-// window is reopened while WebView2 already answered it once for this
-// origin, so no new prompt round trip happens at all) -- counts the permission as
-// given after a short delay regardless of the event. The preview still waits for
-// the saved settings, so a slow read never opens the default camera for good.
+// Fallback in case the permission-ready event is missed (e.g. the window is reopened after
+// WebView2 already answered for this origin): counts the permission as given after a short
+// delay. The preview still waits for the saved settings.
 setTimeout(() => {
   if (stream) return;
   permissionReady = true;
