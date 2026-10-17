@@ -38,11 +38,9 @@ export function collapsibleHead(labelText, contentEl, stateKey) {
   });
   return h;
 }
-// Label + bounded number field, as used by the backup and statistics panels.
-// Clearing the field means "back to the default": it is committed on blur, so
-// an empty field mid-typing is left alone.
-// `after` redraws the caller's own panel once a reset restores the default,
-// same job renderExpert() does for the main expert menu's rows.
+// Label + bounded number field. Clearing the field means "back to the default", committed
+// on blur so an empty field mid-typing is left alone. `after` redraws the caller's panel
+// once a reset restores the default.
 export function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   const l = document.createElement("label");
   l.className = "field backup-set-row" + (extraClass ? " " + extraClass : "");
@@ -51,8 +49,8 @@ export function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   i.type = "number"; i.min = min; i.max = max; i.className = "modal-input"; i.value = String(val(key));
   const def = EXPERT_VALUES[key]?.def ?? min;
   const commit = async (raw) => {
-    // Number(raw) || def treated a typed 0 as falsy and silently fell back to
-    // the default -- a GFS retention tier (min 0 = "none") could never be set to 0.
+    // Only an empty or non-numeric entry falls back to the default: a typed 0 is valid (a
+    // GFS retention tier min 0 = "none").
     const n = Number(raw);
     const v = raw === "" || !Number.isFinite(n) ? def : Math.max(min, Math.min(max, n));
     i.value = String(v);
@@ -71,8 +69,8 @@ export function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   return l;
 }
 
-// Shared with the backup list's per-prompt type chip -- one classifier's
-// worth of i18n keys, not two.
+// Shared with the backup list's per-prompt type chip: one classifier's worth of i18n
+// keys.
 export const PROMPT_TYPE_LABELS = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
 
 // Fire-and-forget: a missed count is not worth interrupting or even toasting
@@ -87,8 +85,8 @@ export function recordToolUsage(tool) {
 const STATS_TOP_CHOICES = [5, 10, 20];
 export async function renderStatsPanel(body) {
   const on = optFlag("usageStats");
-  // Fetch BEFORE clearing: otherwise the panel paints empty during the await,
-  // which read as a flash on every re-render.
+  // Fetch BEFORE clearing, or the panel paints empty during the await and flashes on
+  // every re-render.
   let s = null;
   if (on) {
     try { s = await invoke("usage_stats", { topN: Math.round(val("statsTopN")) }); }
@@ -111,8 +109,6 @@ export async function renderStatsPanel(body) {
   sw.append(swl, swi); headRow.appendChild(withTip(sw, "usageStats"));
   body.appendChild(headRow);
   if (!on) return;
-  // Statistics export: same format select + save-dialog shape as the settings
-  // dialog's prompt export, placed here because this is where the data is on screen.
   const exportRow = document.createElement("div");
   exportRow.className = "export-row stats-export-row";
   const exportSelect = document.createElement("select");
@@ -200,7 +196,6 @@ export async function renderStatsPanel(body) {
   note.textContent = t("statsLocalOnly");
   body.appendChild(note);
 }
-// The statistics get their own dialog, opened from the settings.
 export async function openStats() {
   $("stats-modal").classList.remove("hidden");
   await renderStatsPanel($("stats-panel"));
@@ -230,10 +225,10 @@ export async function openDupes() {
   $("dupes-modal").classList.remove("hidden");
   await scanDupes();
 }
-// A found group is now only a summary card -- name list plus score -- with a
-// "Compare" button that opens the SAME view the library's/tile's free compare
-// uses (openCompareView below), passing this group along so that view shows
-// the finder's own "keep one side" actions instead of "take left/right".
+// A found group is a summary card (name list plus score) with a "Compare" button that
+// opens the same view as the library's free compare (openCompareView below), passing the
+// group so the view shows the finder's "keep one side" actions instead of "take
+// left/right".
 // The Rescan button shows a ring for at least a second (opts.minBusyMs) so a scan
 // that answers in a few milliseconds still visibly did something. Only one scan
 // runs at a time: a second click on the button is ignored, any other caller that
@@ -314,9 +309,8 @@ export async function scanDupes(opts = {}) {
     body.appendChild(card);
   }
 }
-// Deletes every OTHER member of the group, keeping only `keepId` -- reachable
-// exclusively from inside the compare view now (one such button per column,
-// see renderCompareView), never from the group card directly.
+// Deletes every OTHER member of the group, keeping only `keepId`; reachable only from the
+// compare view (one button per column, see renderCompareView).
 export async function keepOneDup(group, keepId) {
   const remove = group.members.filter((m) => m.id !== keepId).map((m) => m.id);
   if (!remove.length) return;
@@ -337,12 +331,10 @@ export async function keepOneDup(group, keepId) {
 }
 
 // ---- Compare view ----
-// Detached from the duplicate finder: it now takes any set of prompt ids
-// (normally two, from the library's own selection or a tile's "Compare
-// with…"), fetching each fresh via get_prompt instead of trusting whatever a
-// caller already had cached. The duplicate finder calls this SAME view for a
-// found group -- there is no second one -- passing the group along so the
-// finder's own "keep one side" buttons show here instead of "take left/right".
+// Takes any set of prompt ids (normally two, from the library's selection or a tile's
+// "Compare with..."), fetching each fresh via get_prompt rather than trusting a cached
+// copy. The duplicate finder opens this same view for a found group, passing the group so
+// its "keep one side" buttons show instead of "take left/right".
 export let compareState = null;
 export async function openCompareView(ids, dupGroup = null) {
   const fetched = await Promise.all(ids.map((id) => invoke("get_prompt", { id }).catch(() => null)));
@@ -355,18 +347,16 @@ export function closeCompareView() {
   $("compare-modal").classList.add("hidden");
   compareState = null;
 }
-// A rotating prompt's full entry list, entry 1 first -- same shape the version
-// history already builds (versionEntries/liveEntries above).
+// A rotating prompt's full entry list, entry 1 first.
 export const compareEntryList = (p) => ((p.variants || []).length ? [p.text || "", ...p.variants] : [p.text || ""]);
 export function renderCompareView() {
   if (!compareState) return;
   const { prompts: ps, dupGroup } = compareState;
   const body = $("compare-body");
   body.innerHTML = "";
-  // Word-diff highlighting only makes sense between exactly two entries -- a
-  // duplicate group of three or more (rare, but the finder's own pairwise
-  // matching can produce one) falls back to plain text per column instead of
-  // guessing which other column each one should be diffed against.
+  // Word-diff only makes sense between exactly two entries; a group of three or more
+  // (rare, but pairwise matching can produce one) shows plain text per column instead of
+  // guessing which column to diff against.
   const entries = ps.map(compareEntryList);
   ps.forEach((p, idx) => {
     const col = document.createElement("div");
@@ -404,7 +394,7 @@ export function renderCompareView() {
         block.className = "compare-entry";
         const hasMine = i < mine.length;
         const hasOther = i < other.length;
-        if (!hasMine) continue; // this side simply has fewer entries -- nothing to show
+        if (!hasMine) continue; // this side has fewer entries
         if (!hasOther) {
           const span = document.createElement("span");
           span.className = del;
@@ -434,9 +424,8 @@ export function renderCompareView() {
   const actions = $("compare-actions");
   actions.innerHTML = "";
   if (dupGroup) {
-    // The finder's own actions: keep exactly one of the group, deleting the
-    // rest (same keepOneDup as before, just reached from here now). Each
-    // column now carries its own keep button; only "ignore" stays here.
+    // The finder's actions: keep exactly one of the group, deleting the rest
+    // (keepOneDup). Each column has its own keep button; only "ignore" stays here.
     const ignore = document.createElement("button");
     ignore.type = "button";
     ignore.className = "ghost-btn";
@@ -508,11 +497,10 @@ export async function maybeDupImportToast() {
     if (groups.length) toast(t("dupImportToast").replace("{n}", String(groups.length)));
   } catch (_) {}
 }
-// The save-time cousin of maybeDupImportToast above: runs after EVERY save
-// (create or edit, called with no await from saveModal), never holds up
-// anything, and never asks a question -- ignoring the toast loses nothing.
-// Shares similarThreshold with the duplicate finder on purpose (the spec's
-// own reasoning: one number, one notion of "similar").
+// Save-time cousin of maybeDupImportToast above: runs after EVERY save (create or edit,
+// called without await from saveModal), never holds anything up and never asks a
+// question; ignoring the toast loses nothing. Shares similarThreshold with the duplicate
+// finder: one number, one notion of "similar".
 export async function maybeShowSimilarHint(id) {
   if (!flag("similarHint")) return;
   try {
@@ -526,9 +514,9 @@ export async function maybeShowSimilarHint(id) {
 }
 
 // ---- Trash ----
-// Deleting a prompt (grid tile, library row, editor, multi-select) always moves it
-// here first: delete_prompt/batch_prompts("delete") no longer hard-remove. This
-// dialog is the only place it can come back from, or be purged for good.
+// Deleting a prompt (grid tile, library row, editor, multi-select) always moves it here
+// first; delete_prompt/batch_prompts("delete") do not hard-remove. This dialog is the
+// only place it can come back from or be purged for good.
 export let trashList = [];
 export async function openTrash() {
   $("trash-modal").classList.remove("hidden");
@@ -593,9 +581,8 @@ export async function emptyTrashAll() {
 }
 
 // ---- Recent messages (error log) ----
-// The `errorLog` ring buffer, filled from errToast. Reloaded fresh every time
-// the window opens rather than kept live -- it is a look-back tool, not
-// something that needs to update while open.
+// The `errorLog` ring buffer, filled from errToast. Reloaded each time the window opens:
+// it is a look-back tool, not live.
 export let errorLogList = [];
 export async function openErrorLog() {
   $("error-log-modal").classList.remove("hidden");
@@ -660,9 +647,8 @@ export async function clearErrorLogAll() {
   renderErrorLogList();
 }
 
-// Regenerating replaces the stored hash, so a fresh plaintext is
-// shown exactly once, the same way turning the receiver on for the first
-// time already does (flagRow's own remoteApi branch).
+// Regenerating replaces the stored hash, so a fresh plaintext is shown exactly once, as
+// when the receiver is first turned on (flagRow's remoteApi branch).
 export async function openRemotePasswordDialog() {
   const ok = await confirmDialog({
     title: t("remotePasswordDialogTitle"),
@@ -770,12 +756,11 @@ export async function toggleShortLivedCert(enabled) {
 }
 
 export function bindManagement() {
-  // Duplicate finder modal (backups + statistics are now inline expert panels).
   $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
   $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
   $("dupes-rescan").addEventListener("click", () => scanDupes({ fromButton: true, minBusyMs: 1000 }));
-  // Compare view -- shared by the duplicate finder's own pairs and the
-  // library's/tile's free "compare two entries" entry points below.
+  // Compare view, shared by the duplicate finder's pairs and the library's/tile's free
+  // compare.
   $("compare-close").addEventListener("click", closeCompareView);
   $("compare-modal").addEventListener("pointerdown", (e) => { if (e.target === $("compare-modal")) closeCompareView(); });
   $("trash-close").addEventListener("click", () => $("trash-modal").classList.add("hidden"));
@@ -795,8 +780,8 @@ export function wireManagement() {
   EXPERT_ACTIONS["remote-password-open"] = openRemotePasswordDialog;
   EXPERT_ACTIONS["remote-ranges-open"] = openRemoteRangesDialog;
   EXPERT_ACTIONS["remote-tls-open"] = openRemoteTlsDialog;
-  // Runs the same sweep on demand -- unlike the silent background sweep,
-  // an explicit click always gets an answer, even "nothing to clean up".
+  // Runs the same sweep on demand: an explicit click always gets an answer, even "nothing
+  // to clean up".
   EXPERT_ACTIONS["rec-sweep-now"] = async () => {
     try {
       const [count, bytes] = await invoke("sweep_recordings_now");
@@ -805,10 +790,9 @@ export function wireManagement() {
       errToast(e);
     }
   };
-  // The parking notion's own escape hatch: every floating/folder position moves
-  // back onto the main screen, valid ones included, and forgets every stored
-  // screen identity -- for when nothing about the current placement is trusted
-  // any more.
+  // The parking notion's escape hatch: every floating/folder position moves back onto the
+  // main screen, valid ones included, and every stored screen identity is forgotten, for
+  // when nothing about the current placement is trusted.
   EXPERT_ACTIONS["float-recall"] = async () => {
     try {
       await invoke("float_recall");
@@ -816,9 +800,9 @@ export function wireManagement() {
       errToast(e);
     }
   };
-  // Only ui_flags/ui_values/ui_texts, plain JSON, no encryption -- never prompts,
-  // never hotkeys (see export_settings_only in the backend for why this is a
-  // separate, smaller pair of commands from the full-backup export/import).
+  // Only ui_flags/ui_values/ui_texts, plain JSON, no encryption; never prompts or hotkeys
+  // (see export_settings_only in the backend for why this is a separate pair of commands
+  // from the full-backup export/import).
   EXPERT_ACTIONS["settings-export"] = async () => {
     try {
       const path = await invoke("export_settings_only");
