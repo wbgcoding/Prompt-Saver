@@ -60,9 +60,8 @@ pub(crate) fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPos
     (work, dpi, cursor)
 }
 
-// Centred horizontally on the cursor's monitor, sitting in the upper third the way
-// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does: a search box
-// that pops up at screen centre reads as a dialog, not a launcher.
+// Centred horizontally on the cursor's monitor, in the upper third like a quick launcher:
+// a search box at screen centre reads as a dialog, not a launcher.
 pub(crate) fn launcher_rect(app: &AppHandle) -> Rect {
     let (work, dpi, _cursor) = work_and_dpi_at_cursor(app);
     let w = LAUNCHER_WIN_W * dpi;
