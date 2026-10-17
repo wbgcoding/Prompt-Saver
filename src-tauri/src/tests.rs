@@ -21173,12 +21173,23 @@ fn export_dest_is_usable_refuses_device_names_bad_characters_and_the_source_itse
 }
 
 #[test]
-fn a_destroyed_float_window_is_forgotten_by_the_closing_list() {
-    let label = "float-destroyed-forgets-test";
-    CLOSING_FLOATS.lock().unwrap().push((label.to_string(), false));
-    assert!(is_closing(label));
-    float_destroyed(label);
-    assert!(!is_closing(label));
+fn a_destroyed_float_window_leaves_the_closing_list_and_resyncs_only_after_a_gave_up_waiter() {
+    let mut list = vec![("a".to_string(), CloseWatch::Idle), ("b".to_string(), CloseWatch::Idle), ("c".to_string(), CloseWatch::Idle)];
+    // Never waited on: forgotten, nothing to replay.
+    assert!(!watch_destroyed(&mut list, "a"));
+    // The waiter is still polling and will replay the plan itself.
+    assert!(watch_claim(&mut list, "b"));
+    assert!(!watch_claim(&mut list, "b"));
+    assert!(!watch_destroyed(&mut list, "b"));
+    // The waiter gave up with the window alive: the Destroyed event replays once.
+    assert!(watch_claim(&mut list, "c"));
+    assert!(watch_give_up(&mut list, "c"));
+    assert!(!watch_claim(&mut list, "c"));
+    assert!(watch_destroyed(&mut list, "c"));
+    assert!(list.is_empty());
+    assert!(!watch_destroyed(&mut list, "c"));
+    // The window vanished before the waiter gave up: the waiter replays itself.
+    assert!(!watch_give_up(&mut list, "c"));
 }
 
 #[test]

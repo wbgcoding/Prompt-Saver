@@ -173,8 +173,48 @@ fn main_scale_factor(app: &AppHandle) -> f64 {
 
 // Labels whose window was asked to close. close() only queues the teardown, and building
 // under the same label before it ran fails, so a pill wanted again meanwhile must wait for
-// the label to go. The flag marks an entry that already has a waiting task.
-pub(crate) static CLOSING_FLOATS: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+// the label to go. The state tells whether the entry has a waiting task, and whether that
+// task gave up while the window still existed (the Destroyed event then replays the plan).
+pub(crate) static CLOSING_FLOATS: Mutex<Vec<(String, CloseWatch)>> = Mutex::new(Vec::new());
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum CloseWatch {
+    Idle,
+    Waiting,
+    GaveUp,
+}
+
+// Pure list steps, so the hand-over between the waiter and the Destroyed event is testable.
+// True when the caller is the one to start the waiting task.
+pub(crate) fn watch_claim(list: &mut [(String, CloseWatch)], label: &str) -> bool {
+    match list.iter_mut().find(|(l, _)| l == label) {
+        Some(e) if e.1 == CloseWatch::Idle => {
+            e.1 = CloseWatch::Waiting;
+            true
+        }
+        _ => false,
+    }
+}
+
+// The window is gone: drop the entry. True when a waiter already gave up on it, so nobody
+// else is going to replay the plan.
+pub(crate) fn watch_destroyed(list: &mut Vec<(String, CloseWatch)>, label: &str) -> bool {
+    let gave_up = list.iter().any(|(l, s)| l == label && *s == CloseWatch::GaveUp);
+    list.retain(|(l, _)| l != label);
+    gave_up
+}
+
+// The waiter's wait ran out with the window still there. False when the entry is already
+// gone (the window was destroyed in between), so the waiter must replay the plan itself.
+pub(crate) fn watch_give_up(list: &mut [(String, CloseWatch)], label: &str) -> bool {
+    match list.iter_mut().find(|(l, _)| l == label) {
+        Some(e) => {
+            e.1 = CloseWatch::GaveUp;
+            true
+        }
+        None => false,
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum ReopenStep {
@@ -195,7 +235,7 @@ pub(crate) fn close_tracked(label: &str, win: &tauri::WebviewWindow) {
     {
         let mut c = CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner());
         if !c.iter().any(|(l, _)| l == label) {
-            c.push((label.to_string(), false));
+            c.push((label.to_string(), CloseWatch::Idle));
         }
     }
     let _ = win.close();
@@ -210,9 +250,19 @@ fn forget_closing(label: &str) {
 }
 
 // The window is gone: a label that is never opened again (deleted prompt, dissolved folder)
-// must not stay in the list for the rest of the process.
-pub(crate) fn float_destroyed(label: &str) {
-    forget_closing(label);
+// must not stay in the list for the rest of the process. A waiter that gave up while the
+// teardown was still running left the reopen undone, so the plan is replayed once here, off
+// the event loop that runs this handler.
+pub(crate) fn float_destroyed(app: &AppHandle, label: &str) {
+    let gave_up = watch_destroyed(&mut CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()), label);
+    if gave_up {
+        let app2 = app.clone();
+        let label = label.to_string();
+        tauri::async_runtime::spawn(async move {
+            wait_label_gone(&app2, &label).await;
+            sync_float_windows(&app2);
+        });
+    }
 }
 
 // True when the caller must not build now. A window that is still closing gets one task that
@@ -226,22 +276,18 @@ fn defer_while_closing(app: &AppHandle, label: &str) -> bool {
         return false;
     }
     if step == ReopenStep::WaitThenSync {
-        let first = {
-            let mut c = CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner());
-            match c.iter_mut().find(|(l, _)| l == label) {
-                Some(e) if !e.1 => {
-                    e.1 = true;
-                    true
-                }
-                _ => false,
-            }
-        };
+        let first = watch_claim(&mut CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()), label);
         if first {
             let app2 = app.clone();
             let label = label.to_string();
             tauri::async_runtime::spawn(async move {
                 wait_label_gone(&app2, &label).await;
-                forget_closing(&label);
+                if app2.get_webview_window(&label).is_none() {
+                    forget_closing(&label);
+                } else if watch_give_up(&mut CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()), &label) {
+                    // Still tearing down: the Destroyed event replays the plan.
+                    return;
+                }
                 sync_float_windows(&app2);
             });
         }
@@ -335,7 +381,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
                 mark_parked(&app2, &pid, false);
             }
             WindowEvent::Destroyed => {
-                float_destroyed(&wlabel);
+                float_destroyed(&app2, &wlabel);
                 save_settings_off_event_loop(&app2);
             }
             _ => {}
@@ -955,7 +1001,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
                 mark_parked(&app2, &fid, false);
             }
             WindowEvent::Destroyed => {
-                float_destroyed(&wlabel);
+                float_destroyed(&app2, &wlabel);
                 set_folder_expansion(&app2, &fid, None);
                 save_settings_off_event_loop(&app2);
             }
