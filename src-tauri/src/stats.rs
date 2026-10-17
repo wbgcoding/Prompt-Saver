@@ -369,6 +369,33 @@ pub(crate) fn scan_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bo
     scan_dir_stats_with(dir, cap, |p| std::fs::read_dir(p))
 }
 
+// (count, bytes, capped, denied) for the backups folder: each snapshot lives in its own
+// subfolder, so the sizes are summed the way the backup list finds them (one snapshot file
+// per folder). Counts snapshots; stops after `cap` of them.
+pub(crate) fn backup_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bool, bool) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (0, 0, false, false),
+        Err(e) => return (0, 0, false, e.kind() == std::io::ErrorKind::PermissionDenied),
+    };
+    let (mut count, mut bytes) = (0u64, 0u64);
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(file) = backup_db_file(&path) else {
+            continue;
+        };
+        if count as usize >= cap {
+            return (count, bytes, true, false);
+        }
+        count += 1;
+        bytes += std::fs::metadata(file).map(|m| m.len()).unwrap_or(0);
+    }
+    (count, bytes, false, false)
+}
+
 // A runaway folder (a sync target pointed at something huge, say) stops
 // counting here rather than freezing the window open while it walks on.
 pub(crate) const STORAGE_SCAN_CAP: usize = 20_000;
@@ -441,7 +468,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
     // Backups
     {
         let target = backups_dir(&app);
-        let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
+        let (count, bytes, capped, denied) = backup_dir_stats(&target, STORAGE_SCAN_CAP);
         items.push(StorageItem { key: "backups".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
     }
 

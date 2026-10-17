@@ -6822,6 +6822,26 @@ fn scan_dir_stats_counts_files_one_level_deep_and_ignores_subfolders() {
 }
 
 #[test]
+fn backup_dir_stats_sums_the_snapshot_files_one_folder_down() {
+    let dir = std::env::temp_dir().join(format!("ps-storage-backups-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    for (stamp, bytes) in [("20260101-100000", 5usize), ("20260102-100000", 7)] {
+        let snap = dir.join(stamp);
+        fs::create_dir_all(&snap).unwrap();
+        fs::write(snap.join("data.db.gz"), vec![0u8; bytes]).unwrap();
+        fs::write(snap.join("prompts.json"), b"not counted").unwrap();
+    }
+    fs::create_dir_all(dir.join("20260103-100000")).unwrap(); // no snapshot file: not a backup
+    fs::write(dir.join("loose.txt"), b"1234567890").unwrap();
+    let (count, bytes, capped, denied) = backup_dir_stats(&dir, 100);
+    assert_eq!((count, bytes), (2, 12), "the row is the sum of the snapshot files, not of the top-level folder");
+    assert!(!capped && !denied);
+    assert_eq!(backup_dir_stats(&dir, 1).2, true, "the snapshot cap is reported");
+    assert_eq!(backup_dir_stats(&dir.join("missing"), 10), (0, 0, false, false));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn scan_dir_stats_stops_at_the_entry_cap() {
     let dir = std::env::temp_dir().join(format!("ps-storage-cap-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
