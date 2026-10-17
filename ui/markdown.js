@@ -198,11 +198,10 @@ export function detectCodeLang(text) {
   return cue[0];
 }
 
-// Whether `text` actually contains Markdown syntax, reusing the exact same
-// patterns renderMarkdown() itself reacts to (against escaped text, same as
-// there) -- so "does this look like Markdown" and "how it renders" can never
-// disagree. Gates the formatted-copy entry: no point offering it on a prompt
-// that would render as one plain paragraph anyway.
+// Whether `text` contains Markdown syntax, using the patterns renderMarkdown() reacts to
+// (against escaped text), so "looks like Markdown" and "how it renders" cannot disagree.
+// Gates the formatted-copy entry: no point offering it for a prompt that renders as one
+// plain paragraph.
 export function hasMarkdownSyntax(text) {
   if (!text) return false;
   const esc = mdEsc(text.replace(/\r\n?/g, "\n"));
@@ -210,7 +209,7 @@ export function hasMarkdownSyntax(text) {
   if (lines.some((l) => MD_FENCE.test(l) || MD_HEAD.test(l) || MD_HR.test(l) || MD_QUOTE.test(l) || MD_UL.test(l) || MD_OL.test(l))) return true;
   MD_INLINE.lastIndex = 0;
   const found = MD_INLINE.test(esc);
-  MD_INLINE.lastIndex = 0; // MD_INLINE is a shared /g regex -- mdInline()'s own exec loop assumes it starts at 0
+  MD_INLINE.lastIndex = 0; // MD_INLINE is a shared /g regex; mdInline() assumes it starts at 0
   return found;
 }
 
