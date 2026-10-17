@@ -879,6 +879,9 @@ pub(crate) fn merge_settings_only(
 pub(crate) fn refresh_after_import(app: &AppHandle, settings: &Settings) {
     push_theme(app, settings);
     apply_capture_exclusion_all(app, capture_excluded(settings));
+    // A running key capture must not outlive an import that switched the overlay off.
+    #[cfg(windows)]
+    keylog::flag_changed(keylog::enabled(&settings.ui_flags));
     rearm_hotkeys(app);
     apply_tray_menu(app);
     sync_float_windows(app);

@@ -708,6 +708,9 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
     remote::run_reset_side_effects(&app, &effects);
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);
+    // The key overlay defaults off too: end a running capture.
+    #[cfg(windows)]
+    keylog::flag_changed(false);
     Ok(())
 }
 
