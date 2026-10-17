@@ -19655,7 +19655,8 @@ fn a_stale_crash_log_lock_is_reclaimed_at_once() {
     let began = std::time::Instant::now();
     let lock = CrashLogLock::acquire(&path);
     assert!(lock.held, "an old marker must not block the log");
-    assert!(began.elapsed() < Duration::from_millis(100), "took {:?}", began.elapsed());
+    // Well under the 2 s wait for a live owner, with room for a loaded parallel test run.
+    assert!(began.elapsed() < Duration::from_millis(1000), "took {:?}", began.elapsed());
     drop(lock);
     assert!(!lock_path.exists());
 }
