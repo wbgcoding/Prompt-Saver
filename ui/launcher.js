@@ -1,14 +1,13 @@
-// Standalone quick-launcher, opened by the global hotkey. Fuzzy search over
-// every prompt, Enter/click copies. Picking a result only ever tells the backend
-// which id was chosen (launcher_select); the backend runs the exact same
-// "copy from outside the grid" path the tray menu already uses (fire_tray_copy),
-// so placeholder dialogs, cooldown, chains and recording stay in the main window, not
-// duplicated here.
+// Standalone quick-launcher, opened by the global hotkey. Fuzzy search over every prompt,
+// Enter/click copies. Picking a result only tells the backend which id was chosen
+// (launcher_select); the backend runs the "copy from outside the grid" path the tray menu
+// uses (fire_tray_copy), so placeholder dialogs, cooldown, chains and recording stay in
+// the main window.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-// Static, not dynamic: this window has to boot instantly (it opens on a hotkey
-// press) and unlike floating.js's pill, it needs the translated placeholder/empty
-// text from the very first frame, not after a lazy follow-up load.
+// Static, not dynamic: this window opens on a hotkey press and must boot instantly;
+// unlike floating.js's pill it needs the translated placeholder/empty text from the first
+// frame.
 import { LANGS, compactTexts } from "./i18n.js";
 import { mdPlain, resolveLang, varPreview } from "./floatShared.js";
 import { keysLabel } from "./shortcuts.js";
@@ -49,11 +48,10 @@ function select(id) {
   invoke("launcher_select", { id }).catch(() => {});
 }
 
-// Case-insensitive substring score: a name hit ranks far above a body hit, an
-// earlier match ranks above a later one. No dependency, no fuzzy typo-tolerance:
-// this is a quick filter, not the library's full search.
-// p.lname/p.ltext are precomputed once in boot() -- re-lowercasing every
-// item's name and (often much longer) body on every keystroke was the jank.
+// Case-insensitive substring score: a name hit ranks far above a body hit, an earlier
+// match above a later one. No fuzzy typo-tolerance: a quick filter, not the library's
+// full search. p.lname/p.ltext are lowercased once in boot(); lowercasing every name and
+// body per keystroke would be slow.
 function score(p, q) {
   const ni = p.lname.indexOf(q);
   if (ni === 0) return 1000;
@@ -133,9 +131,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Same grace-period pattern as vars.js: the backend shows the window and only then
-// takes focus, and a blur fired in that hand-off window would close before anything
-// was ever on screen.
+// Grace period: the backend shows the window and only then takes focus, and a blur fired
+// in that hand-off would close it before anything was on screen.
 const OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
