@@ -62,10 +62,9 @@ export function appendTermMarks(el, text, terms) {
   if (pos < text.length) el.appendChild(document.createTextNode(text.slice(pos)));
 }
 
-// Where each `{icon:key}` placeholder in ui/help.js gets its picture from: the
-// real button's own SVG element, read live, never a copy of its path data. A
-// help sentence naming a button this way always shows the button as it looks
-// today, including a future icon redesign, with zero upkeep in help.js itself.
+// Where each `{icon:key}` placeholder in ui/help.js gets its picture: the real button's
+// own SVG element, read live, never a copy of its path data, so a help sentence naming a
+// button always shows it as it looks today.
 export const HELP_ICON_SOURCES = {
   screenshot: () => $("snip-btn")?.querySelector("svg")?.outerHTML,
   record: () => $("record-btn")?.querySelector("svg")?.outerHTML,
@@ -104,9 +103,9 @@ export function appendHelpText(el, text, terms) {
   appendTermMarks(el, text.slice(last), terms);
 }
 
-// The one place help text (title, overview, steps, outcome, settings, tip) is
-// written into the DOM: clears the element, then renders icons plus, only when
-// asked, the search-term highlight markTerms used to do alone.
+// The one place help text (title, overview, steps, outcome, settings, tip) is written
+// into the DOM: clears the element, then renders icons plus, only when asked, the
+// search-term highlight.
 export function setHelpText(el, text, terms, highlight) {
   el.textContent = "";
   appendHelpText(el, text, highlight ? terms : []);
@@ -122,8 +121,8 @@ export function renderHelp() {
   const cats = helpCategories();
   const sections = HELP_SECTIONS.filter((id) => cats.some((c) => c.section === id));
   if (helpTab >= sections.length) helpTab = 0;
-  // Tab bar lives in the fixed header (stays visible while the rows scroll); it is
-  // hidden while searching across every section, same pattern as the expert menu.
+  // Tab bar lives in the fixed header (visible while the rows scroll); hidden while
+  // searching across every section.
   if (!searching && sections.length > 1) {
     const bar = document.createElement("div");
     bar.className = "expert-tabs";
@@ -179,8 +178,8 @@ export function renderHelp() {
     box.appendChild(hits);
   }
   for (const cat of list) {
-    // Reuses the expert menu's own group/collapse styling (arrow, spacing, hover):
-    // same visual language, zero new CSS for the mechanic itself.
+    // Reuses the expert menu's group/collapse styling (arrow, spacing, hover); no new CSS
+    // for the mechanic.
     const collapsedNow = searching ? shown > 1 : helpCollapsed.has(cat.title);
     const sec = document.createElement("div");
     sec.className = "expert-group help-group" + (collapsedNow ? " collapsed" : "");
@@ -204,9 +203,9 @@ export function renderHelp() {
     sec.appendChild(head);
     const body = document.createElement("div");
     body.className = "help-group-body";
-    // 22-A: four parts per entry; what it is, how to do it, what happens, and the
-    // settings that tune it. howTo/whatHappens are optional so a short standalone
-    // entry (e.g. the quick launcher) doesn't have to force a step list.
+    // Four parts per entry: what it is, how to do it, what happens, and the settings that
+    // tune it. howTo/whatHappens are optional so a short standalone entry (e.g. the quick
+    // launcher) needs no step list.
     const ov = document.createElement("p");
     ov.className = "help-overview";
     setHelpText(ov, cat.whatItIs, terms, searching);
@@ -282,9 +281,9 @@ export function openHelp() {
   $("help").classList.remove("hidden");
 }
 
-// Opens the help dialog pre-filtered to one article by its stable `id` (see
-// ui/help.js), through the same search field gsOpenHelp uses for a global-search
-// hit -- an anchor is a lookup key, never the (per-language) title text itself.
+// Opens the help dialog pre-filtered to one article by its stable `id` (see ui/help.js),
+// through the search field gsOpenHelp also uses: an anchor is a lookup key, never the
+// per-language title text.
 export function openHelpAt(id) {
   const cat = helpCategories().find((c) => c.id === id);
   helpQuery = cat ? cat.title : "";
@@ -295,7 +294,6 @@ export function openHelpAt(id) {
 }
 
 export function bindHelpView() {
-  // In-app documentation.
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
