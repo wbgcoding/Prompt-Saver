@@ -1368,3 +1368,15 @@ fn reopen_step_builds_only_when_the_label_is_free_and_waits_for_a_closing_window
     assert_eq!(reopen_step(true, false), ReopenStep::Keep);
     assert_eq!(reopen_step(true, true), ReopenStep::WaitThenSync);
 }
+
+// ---- the vault key is wiped when its session ends ----
+
+#[test]
+fn a_dropped_secret_session_leaves_no_key_bytes() {
+    let mut sess = std::mem::ManuallyDrop::new(SecretSession {
+        key: [0xA5; 32],
+        unlocked_at: std::time::Instant::now(),
+    });
+    unsafe { std::mem::ManuallyDrop::drop(&mut sess) };
+    assert_eq!(sess.key, [0u8; 32], "the key must be zeroed on drop");
+}

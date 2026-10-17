@@ -20,7 +20,7 @@ pub(crate) const BACKUP_PW_KEY: &str = "backupPw"; // ui_texts slot (DPAPI-seale
 
 pub(crate) fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     use argon2::Argon2;
-    let mut input = Vec::with_capacity(password.len() + BACKUP_PEPPER.len());
+    let mut input = zeroize::Zeroizing::new(Vec::with_capacity(password.len() + BACKUP_PEPPER.len()));
     input.extend_from_slice(password.as_bytes());
     input.extend_from_slice(BACKUP_PEPPER);
     let mut key = [0u8; 32];
@@ -162,7 +162,7 @@ pub(crate) const SECRET_VERIFY_MARKER: &str = "prompt-saver-secret-vault-ok";
 
 pub(crate) fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     use argon2::Argon2;
-    let mut input = Vec::with_capacity(password.len() + SECRET_PEPPER.len());
+    let mut input = zeroize::Zeroizing::new(Vec::with_capacity(password.len() + SECRET_PEPPER.len()));
     input.extend_from_slice(password.as_bytes());
     input.extend_from_slice(SECRET_PEPPER);
     let mut key = [0u8; 32];
@@ -278,6 +278,11 @@ pub(crate) fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
 pub(crate) struct SecretSession {
     pub(crate) key: [u8; 32],
     pub(crate) unlocked_at: std::time::Instant,
+}
+impl Drop for SecretSession {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.key);
+    }
 }
 pub(crate) static SECRET_SESSION: Mutex<Option<SecretSession>> = Mutex::new(None);
 
@@ -425,11 +430,47 @@ pub(crate) fn apply_prompt_secret(
     Ok(())
 }
 
+// Argon2id takes a noticeable moment: run it on the blocking pool so an unlock never ties up an
+// async worker other commands are waiting for. The password copy is wiped when the job ends.
+async fn derive_off_thread<F>(password: &str, derive: F) -> Result<[u8; 32], String>
+where
+    F: FnOnce(&str) -> Result<[u8; 32], String> + Send + 'static,
+{
+    let pw = zeroize::Zeroizing::new(password.to_string());
+    tauri::async_runtime::spawn_blocking(move || derive(&pw))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// The timeout is otherwise only noticed when something asks for the key. This wakes up when the
+// session is due and drops it then, so an idle app does not keep the key in memory for hours.
+fn schedule_session_expiry(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let timeout = secret_timeout_min(&lock(&app.state::<Db>()).settings);
+            let remaining = {
+                let guard = SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+                match guard.as_ref() {
+                    Some(s) => secret_relock_in_secs(timeout, s.unlocked_at.elapsed().as_secs()),
+                    None => return,
+                }
+            };
+            let Some(secs) = remaining else { return };
+            if secs == 0 {
+                secret_session_key(timeout);
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+        }
+    });
+}
+
 // The first call (no salt stored yet) sets the password up as the vault's password; every
 // later call verifies against the stored salt and marker. It cannot be changed short of
 // turning secretPrompts off, a deliberate consequence of "forgetting it means total loss".
 #[tauri::command]
 pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, password: String) -> Result<AppState, String> {
+    let password = zeroize::Zeroizing::new(password);
     if password.is_empty() || password.len() > SECRET_PW_MAX {
         return Err("invalid-password".to_string());
     }
@@ -446,7 +487,7 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
         use rand::RngCore;
         let mut salt = [0u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut salt);
-        let key = secret_derive_key(&password, &salt)?;
+        let key = derive_off_thread(&password, move |pw| secret_derive_key(pw, &salt)).await?;
         let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
         let created = {
             let mut store = lock(&state);
@@ -462,12 +503,13 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
     }
     let key = match fresh_key {
         Some(k) => k,
-        None => secret_vault_verify(&password, &salt_b64, &verify_b64)?,
+        None => derive_off_thread(&password, move |pw| secret_vault_verify(pw, &salt_b64, &verify_b64)).await?,
     };
     *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(SecretSession {
         key,
         unlocked_at: std::time::Instant::now(),
     });
+    schedule_session_expiry(app.clone());
     let store = lock(&state);
     let secret_key = secret_session_key(secret_timeout_min(&store.settings));
     Ok(AppState {
