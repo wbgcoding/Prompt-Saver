@@ -10,9 +10,9 @@ import { autoPasteNow, showCopied } from "./tiles.js";
 import { copyResolved } from "./library.js";
 import { recordToolUsage } from "./management.js";
 
-// Record a copy for the history/usage journal (backend honours the privacy flag).
-// Every successful copy path ends here, which makes it the one place that may start
-// the cooldown: see below.
+// Record a copy for the history/usage journal (the backend honours the privacy flag).
+// Every successful copy path ends here, so this is the one place that may start the
+// cooldown.
 export const recordCopy = (id) => {
   markCopied(id);
   if (optFlag("copySound")) playCopySound(val("copySoundVolume"));
@@ -22,8 +22,8 @@ export const recordCopy = (id) => {
 // Per-prompt copy throttle: block re-copying the SAME prompt within the cooldown
 // (expert value, 0 = off). Other prompts are never blocked, so a wrong pick can
 // be corrected instantly. Returns true if this copy should be skipped.
-// The check is pure: a copy that never happened; the placeholder dialog was
-// cancelled: must not lock the prompt out for the whole cooldown.
+// The check is pure: a copy that never happened (the placeholder dialog was cancelled)
+// must not lock the prompt out for the whole cooldown.
 export const copyTimes = new Map();
 export const COPY_TIMES_CAP = 256; // sweep entries past the cooldown once the map grows
 export function copyOnCooldown(id) {
@@ -93,11 +93,9 @@ export async function copyTextWithVars(p, el, paste = false) {
   }
 }
 
-// "Copy formatted" (context menu + editor): puts the Markdown text AND its
-// rendered HTML on the clipboard in one go. Placeholders go through the same
-// resolveVars() every other copy path uses, and the HTML is built with the
-// exact same renderer the Markdown preview itself uses, so there is only ever
-// one Markdown interpretation in the app.
+// Copy formatted (context menu + editor): puts the Markdown text AND its rendered HTML on
+// the clipboard in one go. Placeholders go through resolveVars(), and the HTML comes from
+// the Markdown preview's own renderer, so the app has one Markdown interpretation.
 export async function copyFormattedPrompt(id) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
@@ -153,8 +151,8 @@ export function moveKbFocus(dc, dr) {
   }
   if (best) focusTile(best);
 }
-// A copy swallowed by the cooldown would otherwise give no feedback at all: a
-// quick shake on the tile says "that didn't do anything" instead of silence.
+// A copy swallowed by the cooldown would give no feedback; a quick shake on the tile says
+// "that did nothing".
 export function blockedByCooldown(id, el) {
   if (!copyOnCooldown(id)) return false;
   if (el) {
