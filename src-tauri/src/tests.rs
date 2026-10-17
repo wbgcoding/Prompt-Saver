@@ -20973,6 +20973,8 @@ fn leftover_picture_text_is_cleared_at_boot_only_when_the_index_is_off_and_the_s
     assert!(heal_ocr_text_at_boot(&mut store), "index off with stored text: cleared");
     assert!(store.prompts[0].image_text.is_empty());
     assert!(!heal_ocr_text_at_boot(&mut store), "nothing left to clear");
+}
+
 #[test]
 fn clip_region_to_frame_keeps_the_pixels_that_lie_on_the_monitor() {
     // Inside: unchanged.
