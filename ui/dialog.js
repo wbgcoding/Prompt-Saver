@@ -54,17 +54,15 @@ function showNextDialog() {
 // `icon` puts an SVG above the title, `input` turns it into a one-field prompt
 // (then it resolves to the entered string, or null when dismissed).
 let confirmCleanup = null;
-// `checkboxes`: [{key, label, checked}]; rendered into #confirm-checkbox-row,
-// read back by the caller via document.getElementById(`confirm-cb-${key}`) once
-// the promise resolves true (the return value itself stays plain bool/string, so
-// no existing `if (!ok) return` caller needs to change). Default requires at
-// least one to stay checked (the confirm button would otherwise offer nothing
-// to actually do) -- pass `checkboxesOptional: true` for a plain standalone
-// toggle (e.g. "don't show this again") that must never block either button.
-// `altLabel` adds a third choice between Cancel and the confirm button and
-// resolves to the string "alt": a question with two different ways to go ahead
-// (delete the old sync folder, keep it) plus the way out. Left out, the dialog is
-// exactly the two-button one every other caller gets.
+// `checkboxes`: [{key, label, checked}]; rendered into #confirm-checkbox-row, read back
+// by the caller via document.getElementById(`confirm-cb-${key}`) once the promise
+// resolves true (the return value stays a plain bool/string). By default at least one
+// must stay checked, or the confirm button would offer nothing; pass `checkboxesOptional:
+// true` for a standalone toggle (e.g. "don't show this again") that never blocks either
+// button.
+// `altLabel` adds a third choice between Cancel and confirm and resolves to the string
+// "alt": a question with two ways to go ahead (delete the old sync folder, keep it) plus
+// the way out.
 function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }, onClosed) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
@@ -81,9 +79,9 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
   row.classList.toggle("hidden", !input);
   const ok = $("confirm-ok");
   const cancel = $("confirm-cancel");
-  // Part of THIS call's own render, not a side effect toggled by the caller
-  // around await confirmDialog(...): a second, unrelated dialog opening while
-  // this one is still pending must never flip the wrong dialog's cancel button.
+  // Part of THIS call's own render, not toggled by the caller around await
+  // confirmDialog(...): a second dialog opening while this one is pending must never flip
+  // the wrong dialog's cancel button.
   const alt = $("confirm-alt");
   cancel.classList.toggle("hidden", oneButton);
   alt.classList.toggle("hidden", !altLabel);
@@ -103,9 +101,8 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
     eye.title = input.copy ? t("copy") : "";
     eye.setAttribute("aria-label", input.copy ? t("copy") : t("showPassword"));
     eye.classList.toggle("hidden", field.type !== "password" && !input.copy);
-    // Native browser completion from the given list (e.g. existing tag names) --
-    // only wired when the caller actually passes one, so every other prompt keeps
-    // its plain input.
+    // Native browser completion from the given list (e.g. existing tag names), wired only
+    // when the caller passes one.
     const datalist = $("confirm-input-datalist");
     datalist.innerHTML = "";
     for (const value of input.datalist || []) {
