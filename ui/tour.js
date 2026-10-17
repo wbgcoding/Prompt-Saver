@@ -26,9 +26,9 @@ export function bindTour() {
   $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
 }
 
-// Step 5's second section: the settings already decided on first launch, shown
-// read-only except a plain switch flip. Not feature flags -- real settings with
-// their own invoke commands, so each row carries its own live-write function.
+// Step 5's second section: the settings decided on first launch, read-only except a plain
+// switch flip. They are real settings with their own invoke commands, not feature flags,
+// so each row carries its own live-write function.
 export const TOUR_SETUP = [
   { key: "autostart", labelKey: "autostart", textKey: "tourSetAutostart",
     get: () => settings.autostart === true,
@@ -79,10 +79,9 @@ export function renderTourDrawingStep(step) {
   return wrap;
 }
 
-// Small "?" button next to a feature row, opening the in-app help at the
-// article matching that row's helpAnchor. Lives inside the row's own <label>
-// (same trick as the expert menu's per-row reset button, e.g. valScreenshotDir):
-// stopPropagation keeps the click from also toggling the row's switch.
+// Small "?" button next to a feature row, opening the in-app help at the article for the
+// row's helpAnchor. Lives inside the row's <label>, so stopPropagation keeps the click
+// from also toggling the switch.
 export function tourHelpButton(anchor) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -151,9 +150,9 @@ export function renderTourOptionsStep() {
 }
 
 // The second section of step 5: the settings already decided on first launch.
-// Autostart and the update check are plain switches sharing the feature rows'
-// buffering; the data folder is read-only here on purpose -- moving it is a
-// multi-step flow of its own, out of place inside the tour.
+// Autostart and the update check are plain switches sharing the feature rows' buffering;
+// the data folder is read-only on purpose: moving it is a multi-step flow, out of place
+// inside the tour.
 export function renderTourSetupSection() {
   const section = document.createElement("div");
   section.className = "tour-setup";
@@ -161,9 +160,8 @@ export function renderTourSetupSection() {
   heading.className = "tour-setup-heading";
   heading.textContent = t("tourSetupHeading");
   section.appendChild(heading);
-  // Autostart and the update check side by side -- two switches sharing one
-  // row's height instead of two, the difference that keeps step 5 within the
-  // measured min-height budget every other step already fits.
+  // Autostart and the update check side by side: two switches in one row's height keep
+  // step 5 within the measured min-height budget of the other steps.
   const pair = document.createElement("div");
   pair.className = "tour-setup-pair";
   for (const opt of TOUR_SETUP) {
@@ -258,13 +256,10 @@ export function tourKeydown(e) {
   }
 }
 
-// The dialog must not visibly resize as the user pages through the five
-// steps, but a single fixed number (the old tourStepMinH expert setting) is
-// either too tall for the shortest step (an empty-looking box) or too short
-// for the tallest (a jump on Next). Measuring every step once, right after the
-// modal becomes visible (a hidden ancestor reports 0 for any height), and
-// keeping the tallest is the actual fix -- there is nothing left to tune by
-// hand, which is also why there is no expert setting for it.
+// The dialog must not visibly resize while paging through the five steps; a fixed height
+// is either too tall for the shortest step or too short for the tallest. So every step is
+// measured once, right after the modal becomes visible (a hidden ancestor reports 0
+// height), and the tallest is kept.
 export function tourMeasureMaxStepHeight() {
   const body = $("tour-body");
   let max = 0;
@@ -272,8 +267,8 @@ export function tourMeasureMaxStepHeight() {
     const wrap = i < TOUR_STEPS.length ? renderTourDrawingStep(TOUR_STEPS[i]) : renderTourOptionsStep();
     body.innerHTML = "";
     body.appendChild(wrap);
-    // Layout height, not the painted rect: the open animation scales the dialog
-    // while it is measured, which made the tallest step read about 3% short.
+    // Layout height, not the painted rect: the open animation scales the dialog while it
+    // is measured.
     max = Math.max(max, wrap.offsetHeight);
   }
   return max;
