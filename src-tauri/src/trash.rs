@@ -650,6 +650,32 @@ pub(crate) fn settings_after_reset(old: &Settings) -> Settings {
     fresh
 }
 
+// The in-memory half of a settings reset with its write. The write result decides: a failed write
+// puts the old settings, the corrupt-row lock and the colour history back, so the session never
+// shows factory settings while the disk keeps the old ones. Returns the old settings and whether
+// the picture-text index was on.
+pub(crate) fn reset_settings_core(store: &mut Store, write: impl FnOnce(&Store) -> bool) -> Result<(Settings, bool), String> {
+    let old = store.settings.clone();
+    let was_locked = SETTINGS_LOCKED.load(Ordering::Relaxed);
+    let ocr_was_on = ocr_index_flag_on(store);
+    // The backup password is a key, not a preference: dropping it would make
+    // every password-protected backup permanently unreadable.
+    store.settings = settings_after_reset(&store.settings);
+    SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
+    load_pick_history(&store.settings); // reset clears the mirror too
+    // The prompt rows are untouched, but the store around them is rebuilt from defaults: start
+    // the row bookkeeping from scratch.
+    store.forget_written_rows();
+    if !write(store) {
+        store.settings = old;
+        SETTINGS_LOCKED.store(was_locked, Ordering::Relaxed);
+        load_pick_history(&store.settings);
+        mirror_minimize_to_tray(&store.settings);
+        return Err("save-failed".into());
+    }
+    Ok((old, ocr_was_on))
+}
+
 // Reset every SETTING to its default (theme, views/layouts, toggles, expert values)
 // while keeping the stored prompts intact. The front-end reloads so each default
 // re-applies cleanly; cleared views make normalizeLayout re-place the kept prompts.
@@ -666,31 +692,19 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
             let _ = win.close();
         }
     }
+    let effects = {
+        let mut store = lock(&state);
+        let (old, ocr_was_on) = reset_settings_core(&mut store, |st| save_settings(&app, &st.settings))?;
+        // Defaults switch the picture-text index off: erase its text as well.
+        if ocr_was_on && clear_ocr_index_text(&mut store) && !save_prompts_and_trash(&app, &store) {
+            append_crash_log("reset: the picture-text wipe could not be written");
+        }
+        remote::reset_side_effects(&old, &store.settings)
+    };
     // Another copy's Run entry (portable versus installed) is not this reset's to remove.
     if !autostart_removal_skipped() {
         let _ = apply_autostart(false, false);
     }
-    let effects = {
-        let mut store = lock(&state);
-        let old = store.settings.clone();
-        let ocr_was_on = ocr_index_flag_on(&store);
-        let prompts = std::mem::take(&mut store.prompts); // keep the prompts
-        // The backup password is a key, not a preference: dropping it would make
-        // every password-protected backup permanently unreadable.
-        store.settings = settings_after_reset(&store.settings);
-        SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
-        load_pick_history(&store.settings); // reset clears the mirror too
-        store.prompts = prompts;
-        // The prompt rows are untouched, but the store around them is rebuilt from defaults: start
-        // the row bookkeeping from scratch.
-        store.forget_written_rows();
-        save_settings(&app, &store.settings);
-        // Defaults switch the picture-text index off: erase its text as well.
-        if ocr_was_on && clear_ocr_index_text(&mut store) {
-            save_prompts_and_trash(&app, &store);
-        }
-        remote::reset_side_effects(&old, &store.settings)
-    };
     remote::run_reset_side_effects(&app, &effects);
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);

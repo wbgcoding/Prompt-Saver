@@ -8451,6 +8451,28 @@ fn reset_settings_leaves_a_usable_state() {
 }
 
 #[test]
+fn a_failed_settings_write_keeps_the_old_settings_and_the_corrupt_row_lock_on_reset() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    let mut settings = Settings::default();
+    settings.migrate();
+    settings.ui_texts.insert("marker".into(), "OLD".into());
+    let mut store = Store { prompts: vec![test_prompt("keep")], trash: Vec::new(), settings, prompts_locked: false, written: Default::default() };
+    SETTINGS_LOCKED.store(true, Ordering::Relaxed);
+
+    let r = reset_settings_core(&mut store, |_| false);
+
+    assert_eq!(r.map(|_| ()), Err("save-failed".to_string()));
+    assert_eq!(store.settings.ui_texts.get("marker").map(String::as_str), Some("OLD"), "memory keeps the old settings");
+    assert!(SETTINGS_LOCKED.load(Ordering::Relaxed), "the corrupt-row lock stays");
+    assert_eq!(store.prompts.len(), 1, "the prompts are untouched");
+
+    let ok = reset_settings_core(&mut store, |_| true);
+    assert!(ok.is_ok());
+    assert!(!store.settings.ui_texts.contains_key("marker"), "a written reset takes effect");
+    assert!(!SETTINGS_LOCKED.load(Ordering::Relaxed), "a written reset releases the lock");
+}
+
+#[test]
 fn a_failed_trash_restore_keeps_the_receiver_secrets_in_the_live_settings() {
     let mut settings = Settings::default();
     settings.migrate();
