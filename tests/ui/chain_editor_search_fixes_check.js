@@ -121,6 +121,25 @@ section(() => {
   check(!!line && /&&\s*accepted\b/.test(line), "the restart toast is not gated on an accepted switch");
 });
 
+// theme.js previewThemeDraft: native controls follow the draft's base, like applyTheme.
+section(() => {
+  const src = read("theme.js");
+  const attrs = {};
+  const style = {};
+  const sandbox = run(extractBlock(src, "export function previewThemeDraft(").replace("export ", "") + "\n;globalThis.preview = previewThemeDraft;", {
+    themeDraft: { base: "dark", vars: {} },
+    document: { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, style } },
+    themeColorScheme: (theme) => (theme === "dark" ? "dark" : "light"),
+    applyThemeVars: () => {},
+    broadcastThemeSoon: () => {},
+  });
+  sandbox.preview();
+  check(attrs["data-theme"] === "dark" && style.colorScheme === "dark", `a dark draft sets color-scheme dark, got ${style.colorScheme}`);
+  sandbox.themeDraft = { base: "light", vars: {} };
+  sandbox.preview();
+  check(style.colorScheme === "light", `switching the draft back follows, got ${style.colorScheme}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
   console.log("chain_editor_search_fixes_check: ok");
