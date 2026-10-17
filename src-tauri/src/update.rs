@@ -505,6 +505,12 @@ pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
     apply_capture_exclusion_all(&app, true);
     apply_tray_menu(&app); // The tray sections fall back to their defaults too
     notify_float_settings(&app);
+    // The key overlay falls back to its default too: a running capture must not outlive it.
+    #[cfg(windows)]
+    {
+        let on = keylog::enabled(&lock(&state).settings.ui_flags);
+        keylog::flag_changed(on);
+    }
 }
 
 // Add a version to the skip list: it will not be offered again.
