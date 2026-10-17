@@ -20801,3 +20801,15 @@ fn record_clock_never_steps_backwards_while_another_thread_pauses_and_resumes() 
     stop.store(true, Ordering::SeqCst);
     toggler.join().unwrap();
 }
+
+#[test]
+fn session_messages_only_stop_a_recording_when_the_session_really_ends() {
+    use sessionend::{session_action, SessionAction};
+    const QUERY: u32 = 0x0011;
+    const END: u32 = 0x0016;
+    assert_eq!(session_action(QUERY, 0), SessionAction::FlushOnly);
+    assert_eq!(session_action(QUERY, 1), SessionAction::FlushOnly);
+    assert_eq!(session_action(END, 1), SessionAction::StopAndFlush);
+    assert_eq!(session_action(END, 0), SessionAction::None);
+    assert_eq!(session_action(0x0001, 1), SessionAction::None);
+}
