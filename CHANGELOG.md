@@ -958,6 +958,29 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **ffmpeg unpacks much faster.** The download no longer slows itself down with
+  thousands of progress updates, both tools unpack at the same time straight to
+  disk, and the button says when the download is done and unpacking runs.
+- **Recordings survive more endings.** The earlier parts of a "finish and
+  continue" take are saved, moved or discarded together with the last part
+  instead of being cleaned up an hour later. A take stays safe while its result
+  dialog is open, quitting the app or signing out of Windows during a recording
+  stops and saves it, and installing an update or restoring a backup waits until
+  the recording is over.
+- **The portable version updates itself correctly.** It opens the release page
+  instead of installing a second copy next to itself.
+- **Confidential prompts keep working after a vault change.** An entry from
+  another vault shows as locked instead of empty and can no longer be
+  overwritten by accident, moving the data folder locks the vault again, saving
+  an edit after the vault timed out asks for the password, and confidential
+  entries exported as encrypted JSON come back as confidential.
+- **Japanese dictation keeps ordinary words.** Spoken punctuation no longer
+  turns words such as 始まる or かっこいい into punctuation marks; period and
+  comma are now 句点 and 読点.
+- **Many smaller fixes** in the recording bar, video editor, screenshot editor,
+  library, placeholders, hotkeys, floating video buttons and the clipboard inbox,
+  plus better contrast for the favourite star, colour swatches and warnings.
+
 - **Auto rotation works with placeholders.** A rotating prompt with Auto on and
   placeholders in its texts now asks for all of them once and advances on every
   paste, instead of falling back to one copy at a time.
@@ -1643,6 +1666,14 @@ the video editor and the introduction tour ship on).
   darker accent as the main window's buttons.
 
 ### Security
+
+- **Media commands only touch the app's own files.** Video export, batch export,
+  the recording folder cleanup and the duration readout refuse files outside the
+  recording folder and the editor's own work copies, and the cleanup deletes only
+  the files its confirmation listed.
+- **Confidential text leaves no copies behind.** A synced prompt that becomes
+  confidential loses its plain text file in the sync folder, and a password typed
+  into a dialog is cleared when the dialog closes.
 
 - **Confidential prompts stay out of statistics and similarity hints.** An
   unnamed confidential prompt no longer shows a piece of its stored text as its
