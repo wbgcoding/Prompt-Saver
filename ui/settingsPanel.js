@@ -641,7 +641,7 @@ export function fillFontSelects() {
   fill(modal.fontSel, true);
 }
 
-// Snap stored sizes (13/15/18/22) onto the 10..40 grid.
+// Snap stored sizes such as 13, 15, 18 and 22 onto the 10..40 grid.
 export const normSize = (v) =>
   v <= 1 ? v : Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(v / 2) * 2));
 
