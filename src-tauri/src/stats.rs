@@ -370,8 +370,8 @@ pub(crate) fn scan_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bo
 }
 
 // (count, bytes, capped, denied) for the backups folder: each snapshot lives in its own
-// subfolder, so the sizes are summed the way the backup list finds them (one snapshot file
-// per folder). Counts snapshots; stops after `cap` of them.
+// subfolder; a folder counts as a snapshot the way the backup list finds them (one database
+// file per folder), and its size is every file directly inside it. Stops after `cap` of them.
 pub(crate) fn backup_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bool, bool) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -384,14 +384,24 @@ pub(crate) fn backup_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, 
         if !path.is_dir() {
             continue;
         }
-        let Some(file) = backup_db_file(&path) else {
+        if backup_db_file(&path).is_none() {
             continue;
-        };
+        }
         if count as usize >= cap {
             return (count, bytes, true, false);
         }
         count += 1;
-        bytes += std::fs::metadata(file).map(|m| m.len()).unwrap_or(0);
+        // Every regular file one level in, so the names cache, version files and leftover
+        // temp files show up in the row too.
+        if let Ok(files) = std::fs::read_dir(&path) {
+            for f in files.flatten() {
+                if let Ok(m) = f.metadata() {
+                    if m.is_file() {
+                        bytes += m.len();
+                    }
+                }
+            }
+        }
     }
     (count, bytes, false, false)
 }
