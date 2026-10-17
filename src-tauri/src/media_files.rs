@@ -327,7 +327,7 @@ pub(crate) fn video_folder_cleanup_preview_impl(dir: &str, age_days: u32, config
     video_folder_stale(dir, age_days).into_iter().map(|(_, f)| f).collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn video_folder_cleanup_preview(state: State<'_, Db>, dir: String, age_days: u32) -> Vec<VideoFolderFile> {
     video_folder_cleanup_preview_impl(&dir, age_days, &configured_recording_dir(&state))
 }

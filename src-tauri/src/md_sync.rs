@@ -1840,7 +1840,7 @@ pub(crate) struct SyncDirInfo {
     pub(crate) foreign: usize,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn sync_dir_info(app: AppHandle, state: State<Db>) -> SyncDirInfo {
     let dir = {
         let store = lock(&state);

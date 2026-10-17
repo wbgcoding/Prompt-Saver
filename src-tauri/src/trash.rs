@@ -488,7 +488,7 @@ pub(crate) fn sweep_trash(app: &AppHandle, store: &mut Store) {
 // and always answered (even "nothing to clean up"), like sweep_recordings_now. A live click
 // carries none of the surprise-purge risk of the startup-only sweep: the user asked for it
 // now.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
     // The orphan sweep locks the store itself, so it runs only after this guard is
     // gone (same shape as empty_trash): holding both froze the whole app.

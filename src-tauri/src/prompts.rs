@@ -626,7 +626,7 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
 
 // The "clean up now" button: runs the same sweep on demand and always reports what it did,
 // even nothing, unlike the silent background sweep.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
     sweep_recordings_now_result(&app)
 }

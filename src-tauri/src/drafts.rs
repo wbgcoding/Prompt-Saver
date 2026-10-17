@@ -272,7 +272,7 @@ pub(crate) fn sweep_edit_state_tick(app: &AppHandle) {
 // The edit-states row's on-demand trigger: runs the same rule as the periodic tick, so a
 // click removes exactly what the next tick would have. It returns a row count only, since
 // sweep_edit_state_conn reports nothing more.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn sweep_edit_states_now(app: AppHandle) -> u32 {
     let Some(conn) = db_conn(&app) else { return 0 };
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(&app)) as u32
