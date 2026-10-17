@@ -6829,12 +6829,12 @@ fn backup_dir_stats_sums_the_snapshot_files_one_folder_down() {
         let snap = dir.join(stamp);
         fs::create_dir_all(&snap).unwrap();
         fs::write(snap.join("data.db.gz"), vec![0u8; bytes]).unwrap();
-        fs::write(snap.join("prompts.json"), b"not counted").unwrap();
+        fs::write(snap.join("names.json"), b"extra").unwrap();
     }
     fs::create_dir_all(dir.join("20260103-100000")).unwrap(); // no snapshot file: not a backup
     fs::write(dir.join("loose.txt"), b"1234567890").unwrap();
     let (count, bytes, capped, denied) = backup_dir_stats(&dir, 100);
-    assert_eq!((count, bytes), (2, 12), "the row is the sum of the snapshot files, not of the top-level folder");
+    assert_eq!((count, bytes), (2, 22), "the row is the sum of every file inside the snapshot folders, not of the top-level folder or loose files");
     assert!(!capped && !denied);
     assert!(backup_dir_stats(&dir, 1).2, "the snapshot cap is reported");
     assert_eq!(backup_dir_stats(&dir.join("missing"), 10), (0, 0, false, false));
@@ -10079,7 +10079,7 @@ fn db_load_does_not_flag_a_readable_settings_row() {
 }
 
 // The command the window polls at startup must report exactly what the flag
-// holds -- this is the read side of the same lock write_settings_now checks
+// holds -- this is the read side of the same lock write_settings_outcome checks
 // before ever touching disk (untestable here directly: it needs a real
 // AppHandle, which no unit test in this file constructs).
 #[test]
@@ -10094,7 +10094,7 @@ fn settings_locked_command_reports_the_flag() {
 }
 
 // Same shape as settings_locked_command_reports_the_flag above -- the actual
-// flip lives in write_settings_now, which needs a real AppHandle no unit test
+// flip lives in write_settings_outcome, which needs a real AppHandle no unit test
 // here constructs, so this proves the read side: whatever the flag holds is
 // exactly what the window's startup poll gets back, in both directions.
 #[test]
@@ -13728,6 +13728,48 @@ fn a_failed_collected_write_stays_owed_without_retrying_every_tick() {
     assert!(!delay.owed());
     delay.mark();
     assert!(delay.take(false), "a successful write clears the backoff");
+}
+
+#[test]
+fn only_a_real_failure_owes_a_collected_write_again() {
+    for (outcome, owed) in [
+        (SettingsWrite::Written, false),
+        (SettingsWrite::Refused, false),
+        (SettingsWrite::Failed, true),
+    ] {
+        let delay = SettingsDelay::new(0);
+        delay.mark();
+        assert!(delay.take(false));
+        delay.settle_collected(outcome);
+        assert_eq!(delay.owed(), owed, "collected write, outcome {outcome:?}");
+    }
+}
+
+#[test]
+fn an_immediate_write_keeps_the_debt_only_when_it_failed() {
+    for (outcome, owed) in [
+        (SettingsWrite::Written, false),
+        (SettingsWrite::Refused, false),
+        (SettingsWrite::Failed, true),
+    ] {
+        let delay = SettingsDelay::new(0);
+        delay.mark();
+        delay.settle_immediate(outcome);
+        assert_eq!(delay.owed(), owed, "immediate write, outcome {outcome:?}");
+    }
+}
+
+#[test]
+fn due_is_false_inside_the_backoff_and_true_after_it() {
+    let delay = SettingsDelay::new(0);
+    assert!(!delay.due(), "nothing owed");
+    delay.mark();
+    assert!(delay.due());
+    assert!(delay.take(false));
+    delay.failed();
+    assert!(delay.owed() && !delay.due(), "owed but inside the backoff");
+    *delay.retry_at.lock().unwrap() = Some(Instant::now() - Duration::from_millis(1));
+    assert!(delay.due(), "the backoff has passed");
 }
 
 #[test]

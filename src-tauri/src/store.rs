@@ -84,7 +84,7 @@ pub(crate) fn mirror_minimize_to_tray(settings: &Settings) {
 
 // Set at load_store() when the settings row was present but unreadable (query error,
 // decrypt failure, corrupt JSON); a fresh install does not set it. While true,
-// write_settings_now refuses to rewrite the row, since the in-memory defaults would
+// write_settings_outcome refuses to rewrite the row, since the in-memory defaults would
 // overwrite it. Process-global because every settings write funnels through functions
 // that have no &Store.
 pub(crate) static SETTINGS_LOCKED: AtomicBool = AtomicBool::new(false);
@@ -387,7 +387,7 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
 }
 
 // The single choke point for save_prompts, save_prompts_and_trash, save_trash and
-// write_settings_now: a real refusal that emits the same event with the same host name,
+// write_settings_outcome: a real refusal that emits the same event with the same host name,
 // whichever action triggered it.
 pub(crate) fn data_dir_write_blocked(app: &AppHandle) -> bool {
     // No event here: the window is already on its way down for app.restart().
@@ -1277,13 +1277,9 @@ pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
 // listener cover all callers.
 pub(crate) fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
     let _writing = settings_write_lock();
-    let written = write_settings_now(app, settings);
-    // A full write covers whatever was collected, so nothing is owed any more. A failed one
-    // covers nothing: the collected change stays owed.
-    if written {
-        SETTINGS_DELAY.discard();
-    }
-    written
+    let outcome = write_settings_outcome(app, settings);
+    SETTINGS_DELAY.settle_immediate(outcome);
+    outcome == SettingsWrite::Written
 }
 
 // A settings write that accompanies a prompt/trash write. A locked settings row (present but
@@ -1298,17 +1294,26 @@ pub(crate) fn settings_pair_written(written: bool, locked: bool) -> bool {
     written || locked
 }
 
+// What a settings write did. Refused is a by-design no-op (read-only data folder, demo
+// transition, locked settings row) that a retry cannot change; only Failed is worth owing again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SettingsWrite {
+    Written,
+    Refused,
+    Failed,
+}
+
 // The write itself, without the "cancel a collected write" step: the collecting
 // path below calls this one so it does not clear its own mark twice.
-pub(crate) fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
+pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> SettingsWrite {
     mirror_minimize_to_tray(settings);
     if data_dir_write_blocked(app) {
-        return false;
+        return SettingsWrite::Refused;
     }
     // Safety valve: the row on disk is present but unreadable, so the in-memory Settings are
     // defaults. Rewriting would destroy the real row.
     if SETTINGS_LOCKED.load(Ordering::Relaxed) {
-        return false;
+        return SettingsWrite::Refused;
     }
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
@@ -1317,19 +1322,19 @@ pub(crate) fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
             if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
                 let _ = app.emit("settings-write-recovered", ());
             }
-            return true;
+            return SettingsWrite::Written;
         }
     }
     if !write_sealed_json(&data_dir(app).join("settings.json"), settings) {
         append_crash_log("persist failed: settings could not be written to the database or the JSON fallback");
         SETTINGS_WRITE_FAILED.store(true, Ordering::Relaxed);
         let _ = app.emit("persist-failed", "settings");
-        return false;
+        return SettingsWrite::Failed;
     }
     if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
         let _ = app.emit("settings-write-recovered", ());
     }
-    true
+    SettingsWrite::Written
 }
 
 // Counter writes are collected instead of going to disk one at a time. save_settings
@@ -1377,6 +1382,16 @@ impl SettingsDelay {
         self.marked.lock().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
+    // Owed and past the retry backoff: the idle tick asks this before taking any lock, so a
+    // debt waiting out its backoff costs nothing. `take(false)` still decides.
+    pub(crate) fn due(&self) -> bool {
+        if !self.owed() {
+            return false;
+        }
+        let retry_at = self.retry_at.lock().unwrap_or_else(|e| e.into_inner());
+        !retry_at.is_some_and(|t| Instant::now() < t)
+    }
+
     // The ONE place that decides whether a collected write happens, so the number
     // of `true` answers is exactly the number of disk writes on this path.
     // `force` skips the quiet window and the retry backoff: an exit or a backup cannot wait
@@ -1410,6 +1425,22 @@ impl SettingsDelay {
             Some(Instant::now() + Duration::from_millis(SETTINGS_RETRY_MS));
     }
 
+    // After a write that `take` approved: only a real failure is owed again. A refusal by
+    // design would refuse every retry too (and toast each time), so its debt stays dropped.
+    pub(crate) fn settle_collected(&self, outcome: SettingsWrite) {
+        if outcome == SettingsWrite::Failed {
+            self.failed();
+        }
+    }
+
+    // After an immediate write of the whole block: written or refused leaves nothing owed; a
+    // failed one covers nothing, so the collected change stays owed.
+    pub(crate) fn settle_immediate(&self, outcome: SettingsWrite) {
+        if outcome != SettingsWrite::Failed {
+            self.discard();
+        }
+    }
+
     // An immediate write of the same block has just happened: nothing left owed.
     pub(crate) fn discard(&self) {
         *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -1437,8 +1468,8 @@ pub(crate) fn save_settings_soon() {
 // caller already holds under the store lock.
 pub(crate) fn flush_settings(app: &AppHandle, settings: &Settings) {
     let _writing = settings_write_lock();
-    if SETTINGS_DELAY.take(true) && !write_settings_now(app, settings) {
-        SETTINGS_DELAY.failed();
+    if SETTINGS_DELAY.take(true) {
+        SETTINGS_DELAY.settle_collected(write_settings_outcome(app, settings));
     }
 }
 
@@ -1455,7 +1486,7 @@ pub(crate) fn flush_settings_now(app: &AppHandle) {
 
 // One round of the timer thread's flush job.
 pub(crate) fn settings_flush_tick(app: &AppHandle) {
-    if !SETTINGS_DELAY.owed() {
+    if !SETTINGS_DELAY.due() {
         return;
     }
     let Some(state) = app.try_state::<Db>() else {
@@ -1463,8 +1494,8 @@ pub(crate) fn settings_flush_tick(app: &AppHandle) {
     };
     let store = state.lock().unwrap_or_else(|e| e.into_inner());
     let _writing = settings_write_lock();
-    if SETTINGS_DELAY.take(false) && !write_settings_now(app, &store.settings) {
-        SETTINGS_DELAY.failed();
+    if SETTINGS_DELAY.take(false) {
+        SETTINGS_DELAY.settle_collected(write_settings_outcome(app, &store.settings));
     }
 }
 
