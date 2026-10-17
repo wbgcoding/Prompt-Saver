@@ -1,8 +1,7 @@
-// Pill folder window. The collapsed icon shows up to four member previews plus a
-// count; clicking it grows THIS window into a grid of the member pills. There is only
-// ever one window per folder: expanding resizes it, so z-order and focus stay as
-// simple as a single pill's. All geometry (side, edge flipping, DPI) is decided in the
-// backend, which is the only place that knows the monitors.
+// Pill folder window. The collapsed icon shows up to four member previews plus a count;
+// clicking it grows THIS window into a grid of the member pills.
+// One window per folder keeps z-order and focus as simple as a single pill's. All geometry
+// (side, edge flipping, DPI) is decided in the backend, which knows the monitors.
 import { FONTS, fitText } from "./fonts.js";
 import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { mediaKind } from "./media.js";
@@ -59,7 +58,6 @@ let blurredWhileOpening = false;
 // substitution), never through an English literal here.
 let TXT = { copied: "", size: "", edit: "", close: "", rename: "", dissolve: "", takeOut: "" };
 
-// Copy behaviour, mirrored from the pill window.
 let copyPrefs = readCopyPrefs({});
 let animMs = 150;
 // Drag-out: the modifier hands a member to the OS instead of pulling it out of
@@ -69,9 +67,8 @@ let dragOutOn = false, dragOutMod = "ctrlKey";
 // Rotating prompt: "next entry" badge per member, kept live by the backend's
 // rotation-changed event (any window's copy can move another member's pointer).
 const rotateInfo = new Map(); // member id -> { index, pos, total }
-// Per-id request generation: a rotation-changed push can land while that id's
-// initial rotation_peek is still in flight. Without this, the peek's reply
-// arrives after and overwrites the fresher pushed position with stale data.
+// A rotation-changed push can land while that id's initial rotation_peek is in flight; the
+// generation lets the peek drop its stale reply.
 const rotateReqs = new Map(); // member id -> latest request number
 let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
 
@@ -143,8 +140,8 @@ onInkChange(() => {
 function renderIcon() {
   const box = FOLDER_BOX * state.scale;
   document.body.style.setProperty("--folder-box", px(box));
-  // Ring thickness, in proportion to the icon: the same reasoning as the pill's:
-  // a fixed band is a hairline on a large folder and swallows a small one whole.
+  // Ring thickness scales with the icon: a fixed band is a hairline on a large folder and
+  // swallows a small one whole.
   const ring = Math.round(Math.min(RING_MAX, Math.max(RING_MIN, box * 0.18)));
   document.getElementById("resize")?.style.setProperty("--rz", `${ring}px`);
   previewEl.innerHTML = "";
@@ -156,10 +153,8 @@ function renderIcon() {
   }
   nameEl.textContent = state.name;
   nameEl.classList.toggle("hidden", !state.name);
-  // The count lives in the tooltip only: a bare number stamped on the icon explains
-  // nothing and covers a preview cell. The 2x2 preview identifies IMAGE members; for
-  // text pills it is four coloured squares, so the tooltip names the first two and
-  // counts the rest.
+  // The count lives in the tooltip only: a number stamped on the icon covers a preview
+  // cell. The tooltip names the first two text pills and counts the rest.
   const many = TXT.members ? TXT.members.replace("{n}", state.members.length) : "";
   const names = state.members.map((p) => p.name).filter(Boolean);
   const shown = names.slice(0, 2).join(", ");
@@ -209,12 +204,8 @@ function renderGrid() {
     tile.appendChild(ok);
     gridEl.appendChild(tile);
   }
-  // The tiles grow with the folder size, so the names have to as well; a fixed
-  // small font left a large folder full of unreadable labels. Same auto-fit pass
-  // the grid tiles and the pills use.
+  // Tile names grow with the folder (same auto-fit pass as the grid tiles and the pills).
   const cap = Math.max(9, Math.round(t / 3));
-  // 0.86 gave away 14% of the edge length unused; raised to use nearly the
-  // whole face, matching the padding cut below.
   for (const el of gridEl.querySelectorAll(".member-face .face-text")) {
     fitText(el, t * 0.92, t * 0.92, cap);
   }
@@ -274,9 +265,8 @@ async function openPopover(kind) {
     if (!(await layout(kind, el, token))) return;
     open = kind;
     if (blurredWhileOpening) { blurredWhileOpening = false; await closePopover(true); return; }
-    // Let the browser see the start state before the transition runs.
-    // Re-check the token -- a blur-driven closePopover() between the await
-    // above and this frame must not re-add "shown" onto an el already hidden again.
+    // Let the browser see the start state before the transition runs. Re-check the token: a
+    // blur-driven closePopover() since the await must not re-add "shown" onto a hidden el.
     requestAnimationFrame(() => { if (token === seq) el.classList.add("shown"); });
   } catch (_) {
     el.classList.add("hidden");
@@ -378,8 +368,8 @@ function applyTexts(s) {
   parkedBadge.title = TXT.parked;
   document.getElementById("menu-rename").textContent = TXT.rename;
   document.getElementById("menu-hide").textContent = TXT.hideForNow;
-  // The same folder glyph the grid-folder and view-group "ungroup" menu
-  // entries carry -- built once, language changes only touch the label.
+  // The same folder glyph as the grid-folder and view-group "ungroup" menu entries; built
+  // once, language changes only touch the label.
   const dissolveBtn = document.getElementById("menu-dissolve");
   let dissolveIcon = dissolveBtn.querySelector(".menu-icon");
   if (!dissolveIcon) {
@@ -412,9 +402,8 @@ function applyPrefs(s) {
   copyPrefs = readCopyPrefs(s);
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
-  // the whole feature (gating rule: nothing dependent stays visible with its parent
-  // off), same fix as floating.js and the main window.
+  // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze the whole
+  // feature (nothing dependent stays visible with its parent off).
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
   // The folder animation reuses the global animation setting.
   animMs = s.ui_flags?.animations === false ? 0 : 150;
@@ -456,9 +445,9 @@ window.addEventListener("mousedown", (e) => {
 let gripDrag = null;
 let gripSave = 0;
 let gripPainted = 0;
-// A mouse reports far more often than a screen refreshes, and every report used to
-// rebuild the whole icon, previews included. One repaint per frame is all the eye
-// can see, so the rest are skipped; the release below draws the final size.
+// A mouse reports far more often than a screen refreshes and every report rebuilds the
+// whole icon, previews included. One repaint per frame is enough; the release draws the
+// final size.
 const GRIP_PAINT_MS = 16;
 
 function gripPaint() {
@@ -552,9 +541,7 @@ iconEl.addEventListener("contextmenu", (e) => {
 window.addEventListener("contextmenu", (e) => e.preventDefault());
 window.addEventListener("keydown", async (e) => {
   if (e.key === "Escape") { closePopover(); return; }
-  // Same arrow/Shift+arrow move as the floating pill (floating.js) -- the
-  // folder window has no keyboard drag gesture of its own otherwise, only
-  // startDragging()'s native OS move.
+  // Arrow/Shift+arrow move like the floating pill; the folder window has no other keyboard drag.
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) &&
       menuEl.classList.contains("hidden") && popEl.classList.contains("hidden") &&
       !iconDrag && !memberDrag && !gripDrag) {
@@ -696,9 +683,8 @@ gridEl.addEventListener("contextmenu", (e) => {
   memberMenu.style.left = px(left);
   memberMenu.style.top = px(top);
 });
-// #member-menu is a sibling of #pop, never inside #grid -- a listener bound
-// to gridEl never sees a mousedown on the popover's own padding (or anywhere else
-// outside the grid), so the menu was stuck open. document catches every click.
+// #member-menu is a sibling of #pop, not inside #grid, so a listener on gridEl never sees a
+// mousedown outside the grid; document catches every click.
 document.addEventListener("mousedown", (e) => {
   if (!memberMenu.classList.contains("hidden") && !memberMenu.contains(e.target)) memberMenu.classList.add("hidden");
 });
@@ -727,16 +713,9 @@ listen("folder-changed", () => loadState());
 listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === true));
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings().catch(() => {}));
-// Same as the pill: an expert change has to reach a folder that is already open.
-// applySettings() alone never reaches state.cols (the grid column count) -- that only
-// arrives through loadState()'s own float_folder_state call, so a changed grid
-// column count never reached an already-open folder window without it too.
-// applySettings must land BEFORE loadState's own reflow/resize: applyPrefs redraws
-// an open grid with the new font and animation prefs, and loadState (the only place
-// the column count arrives) then sizes the window for that drawing. In parallel the
-// window could be sized for a grid drawn with the old prefs and redrawn with the new
-// ones moments later, leaving clipped or oversized members until something else
-// reflowed.
+// An expert change has to reach an already open folder. applySettings() alone never updates
+// state.cols, which only arrives through loadState(); applySettings must land BEFORE
+// loadState so the window is sized for a grid drawn with the new font and animation prefs.
 listen("settings-changed", () => {
   applySettings().catch(() => {}).then(() => loadState());
   refreshParkedBadge();
@@ -753,9 +732,8 @@ listen("prompt-updated", (e) => {
 listen("rotation-changed", (e) => {
   const { id, index, pos, total } = e.payload || {};
   if (!id || !state.members.some((p) => p.id === id)) return;
-  // This push is newer than anything primeMemberRotate could have in flight for
-  // this id -- invalidate it, so a slower peek reply landing after this cannot
-  // overwrite the position with stale data.
+  // Newer than anything primeMemberRotate has in flight for this id: invalidate it so a
+  // slower peek reply cannot overwrite the position.
   rotateReqs.set(id, (rotateReqs.get(id) || 0) + 1);
   rotateInfo.set(id, { index, pos, total });
   const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
