@@ -118,7 +118,7 @@ that flipping a parent toggle hides its dependent rows without reopening the men
 extra boots of `index.html` (`SEAL_PROBE`, stub flag `window.__STORE_SEALED__`) cover the
 store-sealing warning both ways: shown once with its permanent settings row when the
 store is unencrypted, and completely absent - with no empty gap left behind - when it is
-not.
+not. The tight-size pass for overflow, layout and raw keys runs in Italian by default; `SMOKE_LANGS=de,pl` or `SMOKE_LANGS=all` runs it for those languages too (up to 9 minutes per language).
 
 Layout: `tests/ui/smoke_test.py` is the entry (browser lookup, temp dir, suite order, the probe id
 check); the suites live in `tests/ui/smoke/`: `harness.py` (paths, window sizes, the one Chrome

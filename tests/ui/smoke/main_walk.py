@@ -1,10 +1,13 @@
 """Main-window suite: the size walk over index.html plus the Italian pass. The probe is assembled from
 the fragments in walk/."""
 import json
+import os
 import re
 
 from .harness import LANG_PRELOADS, SIZES, WRAPPER, unescape, run_chrome
 from .walk import SECTIONS
+
+ALL_LANGS = ["de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"]
 
 
 HEAD = """
@@ -294,58 +297,47 @@ def run(browser, tmp):
         if not (r["errors"] or r["overflow"] or r["rawKeys"] or r.get("layout")):
             print("   ok")
 
-    # 221: a pass in the longest-running UI language (Italian: averages ~42
-    # chars/string across all 1231 keys, the longest of the 11 by total
-    # character count) at the two tightest window sizes, where a long
-    # translation is most likely to overflow, overlap or push a button
-    # out of reach. Same page/probe as the English sweep above, only with
-    # SETTINGS.language overridden before main.js ever runs.
-    it_page = tmp / "ui" / "index-it.html"
-    it_page.write_text(
-        html.replace(
-            '<script src="tauri_stub.js"></script>',
-            '<script src="tauri_stub.js"></script>\n<script>SETTINGS.language = "it";</script>',
-            1,
-        ),
-        encoding="utf-8",
-    )
-    for w, h in (SIZES[-1], SIZES[-2]):
-        size_tag = f"it-{w}x{h}"
-        wrapper = tmp / f"wrap-{size_tag}.html"
-        wrapper.write_text(WRAPPER.replace("ui/index.html", "ui/index-it.html") % (w, h), encoding="utf-8")
-        # Raised from 126s once the clipboard-secret expert-menu check
-        # (password-skip switch plus its length slider, each gated on the
-        # other) added its own round of tab walks and switch toggles, then
-        # from 134s once the Capture tab split (372) added a 7th expert
-        # tab -- lengthening every existing tab walk by one click -- plus
-        # its own group-survives-the-split probe, itself two full walks.
-        # Kept equal to the English sweep's own budget just above, since
-        # this runs the exact same probe script and had fallen behind it.
-        proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 400000, wrapper.as_uri(), 270)
-        m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
-        if not m:
-            print(f"FAIL it {w}x{h}: the UI produced no probe result")
-            failed += 1
-            continue
-        r = json.loads(unescape(m.group(1)))
-        print(f"-- it {w}x{h} - expert tabs: {', '.join(r['tabs']) or 'none'}")
-        # Only the language-agnostic categories: overflow/layout/untranslated
-        # are exactly what 221 asks for (truncated text, overlaps,
-        # unreachable buttons). The probe's own "errors" array also carries
-        # its behavioral assertions (exact English button labels, toast
-        # text, dialog titles), which are EXPECTED to read differently in
-        # Italian and are not a layout bug -- checked once already by the
-        # English sweep above, so re-checking them here would only be noise.
-        for kind, items in (("overflow", sorted(set(r["overflow"]))),
-                            ("layout", r.get("layout", [])),
-                            ("untranslated", sorted(set(r["rawKeys"])))):
-            for it_ in items:
-                print(f"   FAIL {kind}: {it_}")
-            failed += len(items)
-        uncaught = [e for e in r["errors"] if e.startswith("error: ") or e.startswith("rejection: ")]
-        for e in uncaught:
-            print(f"   FAIL JS error: {e}")
-        failed += len(uncaught)
-        if not (uncaught or r["overflow"] or r["rawKeys"] or r.get("layout")):
-            print("   ok")
+    # A pass in a long-running UI language at the two tightest window sizes, where a long
+    # translation is most likely to overflow, overlap or push a button out of reach.
+    # Italian has the most characters per string, so it is the default; SMOKE_LANGS
+    # (comma list or "all") runs the same pass for other languages, e.g. before a release.
+    wanted = os.environ.get("SMOKE_LANGS", "it")
+    langs = ALL_LANGS if wanted == "all" else [l.strip() for l in wanted.split(",") if l.strip() not in ("", "en")]
+    for lang in langs:
+        lang_page = tmp / "ui" / f"index-{lang}.html"
+        lang_page.write_text(
+            html.replace(
+                '<script src="tauri_stub.js"></script>',
+                f'<script src="tauri_stub.js"></script>\n<script>SETTINGS.language = "{lang}";</script>',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        for w, h in (SIZES[-1], SIZES[-2]):
+            size_tag = f"{lang}-{w}x{h}"
+            wrapper = tmp / f"wrap-{size_tag}.html"
+            wrapper.write_text(WRAPPER.replace("ui/index.html", f"ui/index-{lang}.html") % (w, h), encoding="utf-8")
+            # Same budget as the English sweep above: it runs the exact same probe script.
+            proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 400000, wrapper.as_uri(), 270)
+            m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
+            if not m:
+                print(f"FAIL {lang} {w}x{h}: the UI produced no probe result")
+                failed += 1
+                continue
+            r = json.loads(unescape(m.group(1)))
+            print(f"-- {lang} {w}x{h} - expert tabs: {', '.join(r['tabs']) or 'none'}")
+            # Only the language-agnostic categories. The probe's "errors" array also holds
+            # behavioural assertions on exact English labels, which the English sweep covers.
+            for kind, items in (("overflow", sorted(set(r["overflow"]))),
+                                ("layout", r.get("layout", [])),
+                                ("untranslated", sorted(set(r["rawKeys"])))):
+                for it_ in items:
+                    print(f"   FAIL {kind}: {it_}")
+                failed += len(items)
+            uncaught = [e for e in r["errors"] if e.startswith("error: ") or e.startswith("rejection: ")]
+            for e in uncaught:
+                print(f"   FAIL JS error: {e}")
+            failed += len(uncaught)
+            if not (uncaught or r["overflow"] or r["rawKeys"] or r.get("layout")):
+                print("   ok")
     return failed
