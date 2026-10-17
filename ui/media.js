@@ -185,18 +185,17 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
     nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
   });
 
-  // Re-applies every label from the current L, called now with whatever the
-  // caller passed synchronously, and again via setLabels once a window whose
-  // translations load asynchronously (the floating pill) has them ready.
+  // Re-applies every label from the current L, now and again via setLabels once a window
+  // whose translations load asynchronously (the floating pill) has them.
   const applyLabels = () => {
     nameBtn(playBtn, video.paused ? L.play : L.pause);
     nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
     nameBtn(soundBtn, video.muted ? L.unmute : L.mute);
   };
   bar.setLabels = (newLabels) => { L = newLabels; applyLabels(); };
-  // mkBtn(ICON_PAUSE) above assumes autoplay always wins the race; wrong when
-  // flag("videoAutoplay") is off, so re-sync the glyph itself to the real state
-  // now instead of leaving it stuck on pause until the next play/pause event.
+  // mkBtn(ICON_PAUSE) assumes autoplay wins the race; wrong when flag("videoAutoplay") is
+  // off, so re-sync the glyph to the real state instead of leaving it on pause until the
+  // next play/pause event.
   playBtn.innerHTML = video.paused ? ICON_PLAY : ICON_PAUSE;
   applyLabels();
   syncSound();
