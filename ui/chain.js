@@ -4,13 +4,12 @@ import { resolveVars, varTokens } from "./promptVars.js";
 import { recordToolUsage } from "./management.js";
 
 // ---- Prompt chaining ----
-// The chain button turns several TEXT buttons into one clipboard copy: click it,
-// then click text buttons in the order you want them; each shows its position (1,
-// 2, 3 …) and the joined text (newline-separated) lands on the clipboard after
-// every pick. It ends after a paste (Ctrl+V inside this window) or when
-// the button is clicked again; switching to another program leaves it
-// untouched. Only text
-// prompts qualify: image/file/video buttons copy media, which can't be joined.
+// The chain button turns several TEXT buttons into one clipboard copy: click it, then
+// click text buttons in the order you want; each shows its position and the
+// newline-joined text lands on the clipboard after every pick. It ends after a paste
+// (Ctrl+V inside this window) or when the button is clicked again; switching to another
+// program leaves it untouched. Only text prompts qualify: image/file/video buttons copy
+// media, which can't be joined.
 export let chainMode = false;
 export let chainLock = false; // "always on": stays after a copy until turned off by hand
 export function assignChainLock(v) { chainLock = v; }
@@ -213,12 +212,11 @@ export function startChainStepDrag(down, row, list) {
   window.addEventListener("pointercancel", cancel, true);
 }
 
-// A rotating/variable prompt's pick goes through an await (peek, var fill)
-// between reading chainSel and mutating it -- without this, a fast double
-// click on the same tile passes the "already selected?" check twice, both
-// branches push, and the tile that DID get de-picked on the next click still
-// matches indexOf on the leftover duplicate, so it stays visibly picked with
-// its text silently gone. One in-flight pick/unpick per id at a time.
+// A rotating/variable prompt's pick awaits (peek, var fill) between reading chainSel and
+// mutating it. Without a guard a fast double click on one tile passes the "already
+// selected?" check twice, both branches push, and a later de-pick leaves a duplicate that
+// keeps the tile visibly picked with its text gone. One in-flight pick/unpick per id at a
+// time.
 export const chainPicking = new Set();
 export async function toggleChainPick(p) {
   if (!isTextPrompt(p)) return; // only text buttons chain
@@ -237,10 +235,10 @@ export async function toggleChainPick(p) {
     // Rotating prompt: peek the entry a copy would use (never consumes), resolve
     // {?variables} on THAT text, right when the button is picked into the chain.
     let rawText = p.text || p.name || "";
-    let peeked = false; // only a successful peek may be followed by a commit below:
-                         // a failed peek already fell back to p.text (a stale/wrong
-                         // entry to consume) and committing anyway would advance
-                         // whatever the pointer's REAL position actually is.
+    // Only a successful peek may be followed by a commit below: a failed peek fell back
+    // to p.text (a stale/wrong entry), and committing anyway would advance the pointer's
+    // REAL position.
+    let peeked = false;
     if ((p.variants || []).length) {
       const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
       if (peek) { rawText = peek.text; peeked = true; }
@@ -262,13 +260,12 @@ export async function toggleChainPick(p) {
   }
 }
 
-// The tile's own chain-start button: a second entry point into the SAME
-// mechanism a click on #chain-btn followed by a first tile pick already
-// uses, not a parallel one. chainLock stays untouched: starting from a tile
-// behaves like a normal, unlatched start.
+// The tile's own chain-start button: a second entry point into the same mechanism as
+// #chain-btn followed by a first tile pick, not a parallel one. chainLock stays
+// untouched: it behaves like a normal, unlatched start.
 export async function startChainWith(p) {
   if (!flag("chainPrompts") || !flag("chainQuickStart")) return;
-  if (chainMode || !isTextPrompt(p)) return; // button is hidden either way -- belt and braces
+  if (chainMode || !isTextPrompt(p)) return; // the button is hidden anyway
   setChainMode(true);
   await toggleChainPick(p);
 }
