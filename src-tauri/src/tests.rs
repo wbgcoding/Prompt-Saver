@@ -6836,7 +6836,7 @@ fn backup_dir_stats_sums_the_snapshot_files_one_folder_down() {
     let (count, bytes, capped, denied) = backup_dir_stats(&dir, 100);
     assert_eq!((count, bytes), (2, 12), "the row is the sum of the snapshot files, not of the top-level folder");
     assert!(!capped && !denied);
-    assert_eq!(backup_dir_stats(&dir, 1).2, true, "the snapshot cap is reported");
+    assert!(backup_dir_stats(&dir, 1).2, "the snapshot cap is reported");
     assert_eq!(backup_dir_stats(&dir.join("missing"), 10), (0, 0, false, false));
     let _ = fs::remove_dir_all(&dir);
 }
