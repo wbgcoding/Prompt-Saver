@@ -1,10 +1,8 @@
-// Filename rule for the video export panel's "File name" field, applied to
-// the stem only -- the format's own extension is appended separately by
-// video.js. The Rust side (export_file_name_is_valid in video_editor.rs) re-checks the
-// exact same rule against whatever dest_path actually arrives, since the
-// frontend check only ever guards the live field, not the IPC call itself.
-// Kept in its own tiny module so the two can be read side by side without
-// pulling in video.js's DOM/Tauri wiring.
+// Filename rule for the video export panel's "File name" field, applied to the stem only
+// (video.js appends the format's extension). The Rust side (export_file_name_is_valid in
+// video_editor.rs) re-checks the same rule on the dest_path that actually arrives, since
+// this check only guards the live field, not the IPC call. Kept in its own tiny module so
+// both can be read side by side without video.js's DOM/Tauri wiring.
 export const EXPORT_NAME_BAD_CHARS = /[\\/:*?"<>|\x00-\x1f]/;
 
 // Windows reserved device names, matched case-insensitively against the part
@@ -24,9 +22,8 @@ export function exportNameIsValid(name) {
   // survives it and Windows silently drops it from the real file name, so it
   // gets its own check here.
   if (trimmed.endsWith(".")) return false;
-  // A bare ".." inside a longer name (e.g. "v1..2") cannot climb anywhere --
-  // it only means "walk up a level" without separators of its own around it,
-  // which the exact "." / ".." checks above already cover on their own.
+  // A bare ".." inside a longer name (e.g. "v1..2") cannot climb anywhere: it only means
+  // "walk up" when set off by separators, which the exact "." / ".." checks above cover.
   const firstSegment = trimmed.split(".")[0].toUpperCase();
   return !EXPORT_RESERVED_STEMS.has(firstSegment);
 }
