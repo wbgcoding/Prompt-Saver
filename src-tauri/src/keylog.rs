@@ -1265,7 +1265,7 @@ pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64, shortcuts_
     // The caller read the flag earlier; the live state decides. flag_changed stores the state
     // before it discards under this same lock, so a switch-off either refuses this start or
     // discards the capture it installs.
-    if FLAG_STATE.fetch_update(Ordering::SeqCst, Ordering::SeqCst, claim_start).is_err() {
+    if FLAG_STATE.try_update(Ordering::SeqCst, Ordering::SeqCst, claim_start).is_err() {
         return;
     }
     *guard = start(hold_ms, start_abs_ms, shortcuts_only);
