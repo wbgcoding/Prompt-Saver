@@ -9,10 +9,9 @@
 
 const SEARCH_PREFIXES = ["tag", "var"];
 
-// Splits a lowercased, trimmed query into the part that still runs through
-// the normal scoring ("rest") and the tag:/var: hard conditions pulled out of
-// it. Anything else -- including a plain "-word" exclusion -- is left in
-// "rest" untouched, exactly as it was before these two prefixes existed.
+// Splits a lowercased, trimmed query into the part that still runs through the normal
+// scoring ("rest") and the tag:/var: hard conditions pulled out of it. Anything else,
+// including a plain "-word" exclusion, stays in "rest" untouched.
 function parseSearchQuery(raw) {
   const terms = String(raw || "").split(/\s+/).filter(Boolean);
   const rest = [];
