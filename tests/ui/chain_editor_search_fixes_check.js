@@ -169,6 +169,7 @@ section(() => {
   const sandbox = run(extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
     libQuery: "",
     assignLibQuery: (v) => { sandbox.libQuery = v; },
+    gsImageHits: { query: "", ids: new Set() },
     computeLibSearchScore: (p) => score(p),
     varPreview: (s) => s,
     gsCopyPrompt: () => {},
@@ -217,6 +218,71 @@ section(() => {
   flags.tags = false; flags.notes = false;
   check(!hit("work stuff") && !hit("oranges"), "tags and notes stay out of the search while their features are off");
   check(hit("zebra"), "a rotation entry is found with the features off");
+});
+
+// library.js computeLibSearchScore: a caller can hand in its own recognized-text hits, and the
+// library's own set stays untouched.
+section(() => {
+  const src = read("library.js");
+  const sandbox = run(extractBlock(src, "export function computeLibSearchScore(").replace("export ", "") + "\n;globalThis.score = computeLibSearchScore;", {
+    libQuery: "sunset",
+    imageHitQuery: "",
+    imageHitIds: new Set(),
+    parseSearchQuery: (raw) => ({ rest: raw, conditions: [] }),
+    searchConditionMet: () => true,
+    tagsOn: () => false,
+    notesOn: () => false,
+    flag: () => true,
+    fuzzyTokens: (s) => s.split(/[^\p{L}\p{N}]+/u).filter(Boolean),
+    fuzzyMaxTyposFor: () => 0,
+    fuzzyWordHit: (a, b) => a === b,
+    optFlag: () => true,
+  });
+  const p = { id: "p1", name: "Beach", text: "waves", file_path: "", variants: [] };
+  check(sandbox.score(p).score === 0, "no hit set, no image match");
+  const own = { query: "sunset", ids: new Set(["p1"]) };
+  const r = sandbox.score(p, own);
+  check(r.score > 0 && r.fromImage === true, `a handed-in hit set matches, got ${JSON.stringify(r)}`);
+  check(sandbox.score(p, { query: "other", ids: new Set(["p1"]) }).score === 0, "a hit set for another query is ignored");
+  check(sandbox.imageHitIds.size === 0 && sandbox.imageHitQuery === "", "the library's own hit state is untouched");
+});
+
+// globalSearch.js gsRefreshImageHits: one lookup per query, stale answers dropped.
+later(async () => {
+  const src = read("globalSearch.js");
+  const from = src.indexOf("let gsImageHits");
+  const code = src.slice(from, src.indexOf("// Reuses the library's scoring"));
+  const calls = [];
+  const renders = [];
+  const sandbox = run(code.replace(/export /g, "") + "\n;globalThis.refresh = gsRefreshImageHits; globalThis.hits = () => gsImageHits;", {
+    gsQuery: "",
+    gsOpen: true,
+    optFlag: () => true,
+    gsRender: () => renders.push(1),
+    invoke: (cmd, args) => { const d = deferred(); calls.push({ cmd, args, d }); return d.promise; },
+  });
+  sandbox.gsQuery = "sun";
+  const a = sandbox.refresh();
+  sandbox.refresh(); // a second render for the same query asks nothing more
+  check(calls.length === 1 && calls[0].cmd === "search_image_text" && calls[0].args.query === "sun", `one lookup for the query, got ${calls.length}`);
+  sandbox.gsQuery = "sunset";
+  const b = sandbox.refresh();
+  calls[1].d.resolve(["p2"]);
+  await b;
+  calls[0].d.resolve(["p1"]); // the slower, older answer
+  await a;
+  check(sandbox.hits().query === "sunset" && [...sandbox.hits().ids].join() === "p2", `the stale answer is dropped, got ${JSON.stringify([sandbox.hits().query, [...sandbox.hits().ids]])}`);
+  check(renders.length === 1, "only the current answer renders");
+  // closed overlay or a too-short query asks nothing
+  sandbox.gsOpen = false;
+  sandbox.gsQuery = "x";
+  await sandbox.refresh();
+  check(calls.length === 2, "a one-letter query asks nothing");
+  // the flag off asks nothing
+  sandbox.optFlag = () => false;
+  sandbox.gsQuery = "another";
+  await sandbox.refresh();
+  check(calls.length === 2, "with picture text search off nothing is asked");
 });
 
 Promise.all(pending).then(() => {

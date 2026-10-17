@@ -1,7 +1,7 @@
 // Search everything overlay.
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { assignLibQuery, computeLibSearchScore, copyResolved, libQuery, toastCopied } from "./library.js";
-import { $, debounced, flag, gateOpen, invoke, prompts, settings, t, val } from "./core.js";
+import { $, debounced, flag, gateOpen, invoke, optFlag, prompts, settings, t, val } from "./core.js";
 import { editPrompt } from "./editor.js";
 import { switchToView } from "./views.js";
 import { varPreview } from "./floatShared.js";
@@ -35,6 +35,27 @@ export async function gsCopyPrompt(p) {
   toastCopied(p);
 }
 
+// Recognized picture text for the overlay's own query. Owned here: the library keeps its own
+// hit set for its own search field, and this one never touches it. `gsImageAsked` is the
+// query already sent, so a render never fires the same lookup twice.
+let gsImageHits = { query: "", ids: new Set() };
+let gsImageAsked = "";
+export function gsResetImageHits() {
+  gsImageHits = { query: "", ids: new Set() };
+  gsImageAsked = "";
+}
+export async function gsRefreshImageHits() {
+  const q = gsQuery.trim().toLowerCase();
+  if (!optFlag("ocrIndex") || q.length < 2 || q === gsImageAsked) return;
+  gsImageAsked = q;
+  let ids = [];
+  try { ids = (await invoke("search_image_text", { query: q })) || []; } catch { ids = []; }
+  // An answer for an older query, or one that lands after the overlay closed, is dropped.
+  if (!gsOpen || q !== gsQuery.trim().toLowerCase()) return;
+  gsImageHits = { query: q, ids: new Set(ids) };
+  if (ids.length) gsRender();
+}
+
 // Reuses the library's scoring (computeLibSearchScore). It reads the module-level
 // libQuery instead of taking a query, so the query is swapped in and restored around one
 // synchronous pass; nothing async runs in between, so a library search mid-flight never
@@ -45,10 +66,10 @@ export function gsPromptHits(q) {
   let scored;
   try {
     scored = prompts
-      .map((p) => ({ p, r: computeLibSearchScore(p) }))
+      .map((p) => ({ p, r: computeLibSearchScore(p, gsImageHits) }))
       .filter((x) => x.r.score > 0)
       // A prompt that matches only through its file path is listed under attachments.
-      .filter((x) => x.r.field !== "file" || computeLibSearchScore({ ...x.p, file_path: "" }).score > 0)
+      .filter((x) => x.r.field !== "file" || computeLibSearchScore({ ...x.p, file_path: "" }, gsImageHits).score > 0)
       .sort((a, b) => b.r.score - a.r.score);
   } finally {
     assignLibQuery(saved);
@@ -76,7 +97,7 @@ export function gsHistoryHits(q) {
     for (const e of gsHistoryLog) {
       const p = byId.get(e.id);
       if (!p || seen.has(p.id)) continue;
-      const r = computeLibSearchScore(p);
+      const r = computeLibSearchScore(p, gsImageHits);
       if (r.score > 0) { scored.push({ p, r }); seen.add(p.id); }
     }
     scored.sort((a, b) => b.r.score - a.r.score);
@@ -347,6 +368,7 @@ export function gsRender() {
   empty.classList.toggle("hidden", any);
   if (!any) empty.textContent = t("globalSearchNoResults");
   gsSetActive(gsFlatRows.length ? 0 : -1);
+  gsRefreshImageHits();
 }
 // True from a keystroke until its render ran, so Enter can render first instead of
 // acting on the rows of the previous query.
@@ -358,6 +380,7 @@ export async function openGlobalSearch() {
   gsOpen = true;
   gsQuery = "";
   gsExpanded = new Set();
+  gsResetImageHits();
   $("gs-input").value = "";
   try { gsHistoryLog = await invoke("recent_copies", { limit: 500, grouped: false }); } catch { gsHistoryLog = []; }
   // A toggle or Escape during the fetch already closed it: showing it now would leave an
