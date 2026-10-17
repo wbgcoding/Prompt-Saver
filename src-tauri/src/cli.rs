@@ -947,7 +947,7 @@ fn parse_backup(a: &mut Args) -> Result<Parsed, String> {
                 return Err(usage_err("backup name has an invalid shape"));
             }
             if valid_scope(&scope).is_err() {
-                return Err(usage_err("--scope must be all, prompts or settings"));
+                return Err(usage_err("--scope must be all, data or settings"));
             }
             Cmd::BackupRestore { name, keep, scope, confirmed }
         }
@@ -2190,10 +2190,10 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("search", _) => "prompt-saver search <query> [--tag NAME] [--json]\n\nCase-insensitive search over name, text, notes and tags.".to_string(),
         ("export", _) => "prompt-saver export <path> [--format json|csv|txt] [--ids a,b,c] [--yes]\n\nWrite prompts to a file. --yes is only needed to overwrite an existing file.".to_string(),
         ("import", _) => "prompt-saver import <path> --yes\n\nAppend prompts read from a file this app exported.".to_string(),
-        ("backup", None) => "prompt-saver backup create [--keep N] [--json]\nprompt-saver backup list [--json]\nprompt-saver backup restore <name> [--scope all|prompts|settings] [--keep N] --yes".to_string(),
+        ("backup", None) => "prompt-saver backup create [--keep N] [--json]\nprompt-saver backup list [--json]\nprompt-saver backup restore <name> [--scope all|data|settings] [--keep N] --yes".to_string(),
         ("backup", Some("create")) => "prompt-saver backup create [--keep N] [--json]\n\nSnapshot the store now. Prints the new backup's name.".to_string(),
         ("backup", Some("list")) => "prompt-saver backup list [--json]\n\nList existing backups, newest first.".to_string(),
-        ("backup", Some("restore")) => "prompt-saver backup restore <name> [--scope all|prompts|settings] [--keep N] --yes\n\nReplace the store with a backup. Always takes a safety snapshot first.".to_string(),
+        ("backup", Some("restore")) => "prompt-saver backup restore <name> [--scope all|data|settings] [--keep N] --yes\n\nReplace the store with a backup. Always takes a safety snapshot first.".to_string(),
         ("settings", None) => "prompt-saver settings get <key> [--json]\nprompt-saver settings set <key> <value> --yes".to_string(),
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
         ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the remote access switches and values, the link and clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),

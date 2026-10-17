@@ -1298,3 +1298,27 @@ fn settings_set_keeps_the_kind_a_key_already_has() {
     assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myNumber", "4", "--yes"]).code, 0);
     assert_eq!(store.settings.ui_values.get("myNumber"), Some(&4.0));
 }
+
+// The scope list the help prints, the one the parse error prints and the one valid_scope
+// accepts must be the same three words.
+#[test]
+fn the_backup_restore_scope_texts_match_what_the_parser_accepts() {
+    let listed = |text: &str| -> Vec<String> {
+        let from = text.find("--scope ").expect("help names the scope flag") + "--scope ".len();
+        let to = from + text[from..].find(']').expect("scope list is closed");
+        text[from..to].trim_start_matches('[').split('|').map(str::to_string).collect()
+    };
+    for help in [command_help("backup", None), command_help("backup", Some("restore"))] {
+        let scopes = listed(&help);
+        assert_eq!(scopes.len(), 3, "{help}");
+        for s in &scopes {
+            assert!(valid_scope(s).is_ok(), "help lists {s:?}, which the parser refuses");
+        }
+    }
+    let err = parse(&args(&["backup", "restore", "20260101-120000", "--scope", "prompts", "--yes"])).err().expect("prompts is not a scope");
+    let advised = err.split("must be ").nth(1).and_then(|r| r.lines().next()).unwrap_or("");
+    for word in advised.split([',', ' ']).filter(|w| !w.is_empty() && *w != "or") {
+        assert!(valid_scope(word).is_ok(), "the error advises {word:?}, which the parser refuses");
+    }
+    assert!(parse(&args(&["backup", "restore", "20260101-120000", "--scope", "data", "--yes"])).is_ok());
+}

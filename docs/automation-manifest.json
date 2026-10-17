@@ -109,7 +109,7 @@
   },
   {
     "name": "backup restore",
-    "usage": "prompt-saver backup restore <name> [--scope all|prompts|settings] [--keep N] --yes",
+    "usage": "prompt-saver backup restore <name> [--scope all|data|settings] [--keep N] --yes",
     "description": "Replace the store with a backup. Always takes a safety snapshot first.",
     "mutating": true
   },
