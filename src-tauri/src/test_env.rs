@@ -2,7 +2,7 @@
 // starts any thread points the roaming and local app-data folders and the temp folder at
 // a per-process sandbox, so no code path a test reaches can resolve into the owner's real
 // data folder, and two runs at the same time (or leftovers of an earlier one) never meet
-// in a shared folder. The guard test in `tests.rs` proves it.
+// in a shared folder. The guard test in `tests/` proves it.
 
 use std::ffi::OsString;
 use std::path::PathBuf;

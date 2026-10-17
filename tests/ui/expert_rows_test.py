@@ -577,7 +577,6 @@ def outline_init_script(color):
     src = "\n".join(
         p.read_text(encoding="utf-8")
         for p in sorted((REPO / "src-tauri" / "src").glob("*.rs"))
-        if p.name != "tests.rs"
     )
     m = re.search(r"fn rec_outline_init_script\(color: &str\) -> String \{\s*format!\(\s*\"(.*?)\"\s*\)\s*\}", src, re.S)
     if not m:

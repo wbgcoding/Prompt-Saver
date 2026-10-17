@@ -220,7 +220,7 @@ function brandRs(b) {
 //
 // These strings decide where an installation keeps its data and how Windows knows
 // the app. Changing one strands every existing install; brand_values_are_pinned in
-// tests.rs asserts them for exactly that reason.
+// the unit tests assert them for exactly that reason.
 
 pub const DISPLAY_NAME: &str = ${rs(b.displayName)};
 pub const SLUG: &str = ${rs(b.slug)};
