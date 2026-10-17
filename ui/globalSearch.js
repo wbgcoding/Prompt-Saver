@@ -47,6 +47,8 @@ export function gsPromptHits(q) {
     scored = prompts
       .map((p) => ({ p, r: computeLibSearchScore(p) }))
       .filter((x) => x.r.score > 0)
+      // A prompt that matches only through its file path is listed under attachments.
+      .filter((x) => x.r.field !== "file" || computeLibSearchScore({ ...x.p, file_path: "" }).score > 0)
       .sort((a, b) => b.r.score - a.r.score);
   } finally {
     assignLibQuery(saved);
@@ -147,7 +149,7 @@ export function gsHelpHits(q) {
   const ql = helpNorm(q);
   const out = [];
   for (const cat of helpCategories()) {
-    const hay = helpNorm([cat.title, cat.whatItIs, (cat.howTo || []).join(" "), cat.whatHappens || "", (cat.settings || []).join(" ")].join(" "));
+    const hay = helpNorm([cat.title, cat.whatItIs, (cat.howTo || []).join(" "), cat.whatHappens || "", (cat.settings || []).join(" "), cat.tip || ""].join(" "));
     if (hay.includes(ql)) out.push({ label: cat.title, sub: helpSectionLabel(cat.section), run: () => gsOpenHelp(cat) });
   }
   return out;

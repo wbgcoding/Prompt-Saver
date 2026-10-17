@@ -155,6 +155,47 @@ section(() => {
   }
 });
 
+// globalSearch.js gsPromptHits: a prompt that matches only through its file path belongs to
+// the attachments group, not the prompt group.
+section(() => {
+  const src = read("globalSearch.js");
+  const score = (p) => {
+    const q = sandbox.libQuery;
+    const fields = [["name", 3, p.name], ["text", 1, p.text], ["file", 1, p.file_path]];
+    let best = 0, field = "";
+    for (const [kind, w, val] of fields) if ((val || "").toLowerCase().includes(q) && w * 100 > best) { best = w * 100; field = kind; }
+    return best ? { score: best, field } : { score: 0 };
+  };
+  const sandbox = run(extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
+    libQuery: "",
+    assignLibQuery: (v) => { sandbox.libQuery = v; },
+    computeLibSearchScore: (p) => score(p),
+    varPreview: (s) => s,
+    gsCopyPrompt: () => {},
+    prompts: [
+      { id: 1, name: "Alpha", text: "x", file_path: "C:/docs/report.pdf" },
+      { id: 2, name: "Beta", text: "report text", file_path: "" },
+      { id: 3, name: "Gamma", text: "see report", file_path: "C:/docs/report.pdf" },
+      { id: 4, name: "Delta report", text: "", file_path: "C:/docs/report.pdf" },
+    ],
+  });
+  const labels = sandbox.hits("report").map((h) => h.label).sort().join();
+  check(labels === "Beta,Delta report,Gamma", `a file-path-only prompt stays out of the prompt group, got ${labels}`);
+});
+
+// globalSearch.js gsHelpHits: the article tip is searchable, like the help dialog's own search.
+section(() => {
+  const src = read("globalSearch.js");
+  const sandbox = run(extractBlock(src, "export function gsHelpHits(").replace("export ", "") + "\n;globalThis.hits = gsHelpHits;", {
+    helpNorm: (s) => String(s).toLowerCase(),
+    helpCategories: () => [{ title: "Copying", whatItIs: "a", howTo: ["b"], whatHappens: "c", settings: ["d"], tip: "Hold shift for the hidden trick", section: "s" }],
+    helpSectionLabel: (s) => s,
+    gsOpenHelp: () => {},
+  });
+  check(sandbox.hits("hidden trick").length === 1, "a word only in the tip finds the help article");
+  check(sandbox.hits("nothing here").length === 0, "an unrelated word finds nothing");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
   console.log("chain_editor_search_fixes_check: ok");
