@@ -854,9 +854,14 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
 // The target and the prompts it may be compared with. A confidential prompt is
 // neither compared nor offered as a match: its stored text can be ciphertext and
 // its name must not surface as a hint. None when the target is missing or secret.
+// Only id, name and text are copied (all the comparison reads), so the lock is not held
+// while a whole library's image data URLs are cloned.
 pub(crate) fn similar_inputs(prompts: &[Prompt], id: &str) -> Option<(Prompt, Vec<Prompt>)> {
-    let target = prompts.iter().find(|p| p.id == id).filter(|p| !p.secret)?.clone();
-    let others = prompts.iter().filter(|p| p.id != id && !p.secret).cloned().collect();
+    fn slim(p: &Prompt) -> Option<Prompt> {
+        serde_json::from_value(serde_json::json!({ "id": p.id, "name": p.name, "text": p.text })).ok()
+    }
+    let target = slim(prompts.iter().find(|p| p.id == id).filter(|p| !p.secret)?)?;
+    let others = prompts.iter().filter(|p| p.id != id && !p.secret).filter_map(slim).collect();
     Some((target, others))
 }
 

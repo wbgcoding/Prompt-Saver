@@ -11637,6 +11637,25 @@ fn similar_inputs_leaves_confidential_prompts_out_on_both_sides() {
 }
 
 #[test]
+fn similar_inputs_copies_only_what_the_comparison_reads() {
+    let mut a = test_prompt("a");
+    a.text = "Please write a short friendly email".into();
+    a.image = "data:image/png;base64,AAAA".into();
+    let mut b = test_prompt("b");
+    b.name = "Mail".into();
+    b.text = "Please write a short friendly email today".into();
+    b.image = "data:image/png;base64,BBBB".into();
+    b.notes = "a long note".into();
+    let all = vec![a, b];
+    let (target, others) = similar_inputs(&all, "a").expect("a plain target");
+    assert_eq!((target.id.as_str(), target.text.as_str()), ("a", "Please write a short friendly email"));
+    assert_eq!((others[0].id.as_str(), others[0].name.as_str()), ("b", "Mail"));
+    assert_eq!(others[0].text, "Please write a short friendly email today");
+    assert!(target.image.is_empty() && others[0].image.is_empty(), "image data must stay out of the copy");
+    assert!(others[0].notes.is_empty());
+}
+
+#[test]
 fn stats_display_name_never_falls_back_to_the_text_of_a_confidential_prompt() {
     let mut p = test_prompt("p1");
     p.name = String::new();
