@@ -13,8 +13,8 @@ document.title = APP_NAME;
 
 const { invoke } = window.__TAURI__.core;
 
-// Pin glyph for the fixed-value marker -- this window has no shared icon
-// module, so it is a one-off inline SVG.
+// Pin glyph for the fixed-value marker; this window has no shared icon module, so it is a
+// one-off inline SVG.
 const FIXED_PIN_SVG =
   '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>';
 
@@ -91,9 +91,7 @@ function buildText(row, initial, placeholder) {
   input.type = "text";
   input.className = "vars-input";
   input.value = initial;
-  // A fixed value is only ever SUGGESTED, shown as the placeholder -- an
-  // untouched field stays genuinely empty, never silently filled from the
-  // fixed list.
+  // A fixed value is only SUGGESTED, as the placeholder: an untouched field stays empty.
   if (placeholder) input.placeholder = placeholder;
   row.appendChild(input);
   return { focus: () => { input.focus(); input.select(); }, value: () => input.value };
@@ -174,17 +172,14 @@ document.addEventListener("keydown", (e) => {
     }
     answer(null);
   }
-  // Enter inside a choice control (the collapsed button, or a focused item in
-  // the open list) must reach that control's OWN native activation (open the list,
-  // or pick the focused item) instead of being hijacked into an immediate confirm
-  // with whatever value was already selected before. A single-option choice has no
-  // list to open at all (buildChoice only toggles it past options.length > 1); its
-  // button's native Enter activation is then a no-op, so Enter must fall through to
-  // confirm() there same as any other row, or it does nothing at all.
+  // Enter inside a choice control (the collapsed button, or a focused item in the open
+  // list) must reach that control's own activation (open the list, or pick the item)
+  // instead of confirming with the earlier value. A single-option choice has no list to
+  // open (buildChoice only toggles past options.length > 1), so Enter falls through to
+  // confirm() there like any other row.
   else if (e.key === "Enter") {
-    // Cancel already gets its own native Enter activation (-> answer(null)) --
-    // hijacking that into confirm() when Cancel has focus would confirm the form a
-    // keyboard user just tried to dismiss.
+    // Cancel keeps its native Enter activation (-> answer(null)): confirming from Cancel
+    // would confirm the form a keyboard user tried to dismiss.
     if (e.target === cancelEl) return;
     const choice = e.target.closest(".vars-choice");
     const hasChoices = choice && choice.querySelectorAll(".vars-choice-item").length > 1;
@@ -209,9 +204,8 @@ window.addEventListener("blur", () => {
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) answer(null);
 });
-// A click elsewhere in the card (a different row, say) left any other open
-// choice list standing open: nothing ever closed one except picking an item or
-// clicking its own button again.
+// A click elsewhere in the card (a different row, say) closes any other open choice list;
+// otherwise only picking an item or clicking its own button would.
 cardEl.addEventListener("mousedown", (e) => {
   for (const list of cardEl.querySelectorAll(".vars-choice-list:not(.hidden)")) {
     if (!list.parentElement.contains(e.target)) list.classList.add("hidden");
