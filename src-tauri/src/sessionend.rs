@@ -27,9 +27,27 @@ const SHUTDOWN_STOP_WAIT: Duration = Duration::from_secs(3);
 static STOP_STARTED: AtomicBool = AtomicBool::new(false);
 static STOP_DONE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
 
-// Both session messages of one shutdown arrive here: the first starts the stop on a
-// worker thread (the window thread must not sit in an encoder flush), the second only
-// waits for it again.
+// What a session message asks of us. WM_QUERYENDSESSION only asks whether the session may end
+// (another app can still veto it), so a running take must not be stopped for it. Only a
+// WM_ENDSESSION with a non-zero wParam means the session really ends; a zero wParam is the
+// shutdown being cancelled.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum SessionAction {
+    None,
+    FlushOnly,
+    StopAndFlush,
+}
+
+pub(crate) fn session_action(msg: u32, w: usize) -> SessionAction {
+    match msg {
+        WM_QUERYENDSESSION => SessionAction::FlushOnly,
+        WM_ENDSESSION if w != 0 => SessionAction::StopAndFlush,
+        _ => SessionAction::None,
+    }
+}
+
+// The stop runs on a worker thread (the window thread must not sit in an encoder flush);
+// a repeated call only waits for it again.
 #[cfg(windows)]
 fn finish_recording(app: &AppHandle) {
     let starting = !STOP_STARTED.load(Ordering::Acquire);
@@ -54,13 +72,18 @@ fn finish_recording(app: &AppHandle) {
 }
 
 unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> isize {
-    if msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION {
+    let action = session_action(msg, w);
+    if action != SessionAction::None {
         // A panic must not unwind across this extern "system" boundary (→ abort).
         let _ = std::panic::catch_unwind(|| {
             let app = APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(app) = app {
                 #[cfg(windows)]
-                finish_recording(&app);
+                {
+                    if action == SessionAction::StopAndFlush {
+                        finish_recording(&app);
+                    }
+                }
                 super::flush_settings_now(&app);
             }
         });

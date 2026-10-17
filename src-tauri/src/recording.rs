@@ -67,13 +67,38 @@ fn resolve_capture_item(target: RecTarget) -> Result<CaptureItem, String> {
     }
 }
 
-// The crop rectangle applied to each captured frame, or None to keep the whole frame
-// (Monitor/Window targets).
-fn resolve_crop(target: RecTarget) -> Option<(u32, u32, u32, u32)> {
-    match target {
-        RecTarget::Region { x, y, w, h, .. } => Some((x.max(0) as u32, y.max(0) as u32, even_dim(w), even_dim(h))),
-        _ => None,
+// Pure: the part of a monitor-relative region that lies on a frame_w x frame_h monitor, as
+// (x, y, w, h), or None when nothing of it does.
+pub(crate) fn clip_region_to_frame(x: i32, y: i32, w: u32, h: u32, frame_w: u32, frame_h: u32) -> Option<(u32, u32, u32, u32)> {
+    let x0 = (x as i64).max(0);
+    let y0 = (y as i64).max(0);
+    let x1 = (x as i64 + w as i64).min(frame_w as i64);
+    let y1 = (y as i64 + h as i64).min(frame_h as i64);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
     }
+    Some((x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32))
+}
+
+// A Region target's rectangle clipped to its monitor and rounded to even sizes, or None for
+// Monitor/Window targets. This is both the encoder size and the crop applied to each captured
+// frame; a region with nothing on the monitor is refused rather than recorded black.
+fn resolve_region_clip(target: RecTarget) -> Result<Option<(u32, u32, u32, u32)>, String> {
+    let RecTarget::Region { monitor, x, y, w, h } = target else {
+        return Ok(None);
+    };
+    if w == 0 || h == 0 {
+        return Err("region has no size".to_string());
+    }
+    let (frame_w, frame_h) = if monitor == 0 {
+        let m = Monitor::primary().map_err(|e| e.to_string())?;
+        (m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?)
+    } else {
+        let m = Monitor::from_raw_hmonitor(monitor as *mut std::ffi::c_void);
+        (m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?)
+    };
+    let (cx, cy, cw, ch) = clip_region_to_frame(x, y, w, h, frame_w, frame_h).ok_or_else(|| "region has no size".to_string())?;
+    Ok(Some((cx, cy, even_dim(cw), even_dim(ch))))
 }
 
 // The H.264 Media Foundation encoder rejects an odd width or height (0xC00DA412), so sizes
@@ -103,7 +128,7 @@ pub(crate) fn border_setting_for_target(target: RecTarget) -> DrawBorderSettings
 }
 
 // Pure: the outline window's rect in absolute (physical) screen pixels for a region
-// capture, given its monitor's top-left. Mirrors resolve_crop's monitor-relative (x, y).
+// capture, given its monitor's top-left. Mirrors resolve_region_clip's monitor-relative (x, y).
 pub(crate) fn region_outline_rect(monitor_origin: (i32, i32), x: i32, y: i32, w: u32, h: u32) -> (i32, i32, u32, u32) {
     (monitor_origin.0 + x.max(0), monitor_origin.1 + y.max(0), w, h)
 }
@@ -113,7 +138,16 @@ pub(crate) fn region_outline_rect(monitor_origin: (i32, i32), x: i32, y: i32, w:
 pub(crate) fn outline_rect_for_target(target: RecTarget) -> Option<(i32, i32, u32, u32)> {
     match target {
         RecTarget::Region { monitor, x, y, w, h } => {
-            let origin = super::monitor_bounds(monitor).map(|(l, t, _, _)| (l, t)).unwrap_or((0, 0));
+            let bounds = super::monitor_bounds(monitor);
+            let origin = bounds.map(|(l, t, _, _)| (l, t)).unwrap_or((0, 0));
+            // Show only the part that is recorded.
+            let (x, y, w, h) = match bounds {
+                Some((l, t, r, b)) => match clip_region_to_frame(x, y, w, h, (r - l).max(0) as u32, (b - t).max(0) as u32) {
+                    Some((cx, cy, cw, ch)) => (cx as i32, cy as i32, cw, ch),
+                    None => (x, y, w, h),
+                },
+                None => (x, y, w, h),
+            };
             Some(region_outline_rect(origin, x, y, w, h))
         }
         _ => None,
@@ -565,11 +599,8 @@ fn window_canvas_candidates(
 }
 
 fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
-    if let RecTarget::Region { w, h, .. } = target {
-        if w == 0 || h == 0 {
-            return Err("region has no size".to_string());
-        }
-        return Ok((even_dim(w), even_dim(h)));
+    if let Some((_, _, w, h)) = resolve_region_clip(target)? {
+        return Ok((w, h));
     }
     match resolve_capture_item(target)? {
         CaptureItem::Monitor(m) => Ok((
@@ -847,7 +878,7 @@ fn start_inner(
     };
 
     let cursor = if show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
-    let crop = resolve_crop(target);
+    let crop = resolve_region_clip(target)?;
     let border = border_setting_for_target(target);
     let placement_flags = match (canvas.placement, target) {
         (true, RecTarget::Window(hwnd)) => Some((hwnd, canvas.origin, used_area.clone().unwrap())),

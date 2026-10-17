@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc::{channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -1169,11 +1170,29 @@ pub fn pause() {
     }
 }
 
+// Mirrors the keyOverlay flag for the running capture: set when a capture starts and by the
+// flag switch, so resume never re-hooks the keyboard after the flag went off.
+static FLAG_ON: AtomicBool = AtomicBool::new(false);
+
+// Pure: whether resume should put the keyboard hook back.
+fn hook_install_wanted(flag_on: bool, hook_present: bool) -> bool {
+    flag_on && !hook_present
+}
+
+// Called when the keyOverlay flag is switched. Off ends a running capture right away, without
+// a sidecar.
+pub fn flag_changed(enabled: bool) {
+    FLAG_ON.store(enabled, Ordering::SeqCst);
+    if !enabled {
+        discard();
+    }
+}
+
 pub fn resume() {
     let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(cap) = guard.as_mut() {
         cap.clock.lock().unwrap_or_else(|e| e.into_inner()).resume(mono_ms());
-        if cap.hook.is_none() {
+        if hook_install_wanted(FLAG_ON.load(Ordering::SeqCst), cap.hook.is_some()) {
             cap.hook = install_hook();
             if cap.hook.is_none() {
                 // Fails safe: no hook means no keys are recorded, same as still being paused.
@@ -1229,6 +1248,7 @@ pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64, shortcuts_
     if guard.is_some() {
         return;
     }
+    FLAG_ON.store(true, Ordering::SeqCst);
     *guard = start(hold_ms, start_abs_ms, shortcuts_only);
 }
 
@@ -1254,6 +1274,14 @@ mod tests {
     // Only used by the Pane/Custom test below; imported here so a non-test build has no
     // unused-import warning.
     use windows::Win32::UI::Accessibility::{UIA_CustomControlTypeId, UIA_PaneControlTypeId};
+
+    #[test]
+    fn resume_reinstalls_the_hook_only_while_the_flag_is_on() {
+        assert!(hook_install_wanted(true, false));
+        assert!(!hook_install_wanted(false, false));
+        assert!(!hook_install_wanted(true, true));
+        assert!(!hook_install_wanted(false, true));
+    }
 
     #[test]
     fn recorder_stores_identifiers_with_timestamps_only() {

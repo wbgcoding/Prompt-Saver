@@ -96,11 +96,10 @@ pub(crate) async fn open_var_window(
     }
     let rows = rows.clamp(1, VAR_ROWS_MAX);
     if let Some(win) = app.get_webview_window(VAR_WIN_LABEL) {
-        // Release the copy that window was holding before its slot is overwritten,
-        // otherwise the first request waits for an answer that can never arrive.
-        if pending.lock().take().is_some() {
-            let _ = app.emit_to("main", "vars-filled", Option::<String>::None);
-        }
+        // Empty the slot so the old window's Destroyed no longer matches it. No answer is
+        // emitted: the page already cancelled the old request, and a late None would
+        // cancel the new one it registered since.
+        pending.lock().take();
         let _ = win.close();
         // close() only queues the teardown; the label is free again once it ran.
         // Building under the same label before that fails, which would leave the

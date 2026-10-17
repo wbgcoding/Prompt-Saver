@@ -976,7 +976,7 @@ fn border_setting_only_switches_off_for_a_region_target() {
 fn region_outline_rect_adds_the_monitor_origin_to_the_region_offset() {
     // A region picked on a monitor to the right of the primary one: the
     // outline must land at the monitor's own absolute position plus the
-    // region's offset within it, exactly what resolve_crop already crops
+    // region's offset within it, exactly what resolve_region_clip already crops
     // each frame to.
     assert_eq!(recording::region_outline_rect((1920, 0), 100, 50, 400, 300), (2020, 50, 400, 300));
     assert_eq!(recording::region_outline_rect((0, 0), 0, 0, 1920, 1080), (0, 0, 1920, 1080));
@@ -984,7 +984,7 @@ fn region_outline_rect_adds_the_monitor_origin_to_the_region_offset() {
 
 #[test]
 fn region_outline_rect_clamps_a_negative_offset_to_the_monitor_origin() {
-    // Same defensive clamp resolve_crop already applies to a region whose
+    // Same defensive clamp resolve_region_clip already applies to a region whose
     // picker math ever hands back a negative offset.
     assert_eq!(recording::region_outline_rect((0, 0), -10, -5, 200, 100), (0, 0, 200, 100));
 }
@@ -20973,4 +20973,84 @@ fn leftover_picture_text_is_cleared_at_boot_only_when_the_index_is_off_and_the_s
     assert!(heal_ocr_text_at_boot(&mut store), "index off with stored text: cleared");
     assert!(store.prompts[0].image_text.is_empty());
     assert!(!heal_ocr_text_at_boot(&mut store), "nothing left to clear");
+#[test]
+fn clip_region_to_frame_keeps_the_pixels_that_lie_on_the_monitor() {
+    // Inside: unchanged.
+    assert_eq!(recording::clip_region_to_frame(100, 50, 400, 300, 1920, 1080), Some((100, 50, 400, 300)));
+    // Negative origin: the visible part keeps its size minus the overhang.
+    assert_eq!(recording::clip_region_to_frame(-100, -20, 400, 300, 1920, 1080), Some((0, 0, 300, 280)));
+    // Overhang past the right/bottom edge.
+    assert_eq!(recording::clip_region_to_frame(1800, 1000, 400, 300, 1920, 1080), Some((1800, 1000, 120, 80)));
+    // No overlap at all.
+    assert_eq!(recording::clip_region_to_frame(2000, 0, 100, 100, 1920, 1080), None);
+    assert_eq!(recording::clip_region_to_frame(-500, 0, 100, 100, 1920, 1080), None);
+    assert_eq!(recording::clip_region_to_frame(0, 0, 0, 100, 1920, 1080), None);
+}
+
+#[test]
+fn crop_and_flip_rows_bottom_up_copies_the_overlap_of_a_crop_that_overhangs_the_frame() {
+    // 2x2 frame, pixels 1..4 (first byte distinct), crop 3 wide starting at x=1.
+    let raw: Vec<u8> = vec![1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4];
+    let out = crop_and_flip_rows_bottom_up(&raw, 2, 2, 8, 1, 0, 3, 2);
+    // Bottom-up: row 1 (pixel 4) first, then row 0 (pixel 2); the missing columns stay black.
+    assert_eq!(out, vec![4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
+fn record_clock_never_steps_backwards_while_another_thread_pauses_and_resumes() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let clock = std::sync::Arc::new(RecordClock::new());
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    let toggler = {
+        let (clock, stop) = (clock.clone(), stop.clone());
+        std::thread::spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                clock.pause();
+                clock.resume();
+            }
+        })
+    };
+    let mut last = 0i64;
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_millis(400) {
+        let now = clock.now_ticks();
+        assert!(now >= last, "ticks went back from {last} to {now}");
+        last = now;
+    }
+    stop.store(true, Ordering::SeqCst);
+    toggler.join().unwrap();
+}
+
+#[test]
+fn session_messages_only_stop_a_recording_when_the_session_really_ends() {
+    use sessionend::{session_action, SessionAction};
+    const QUERY: u32 = 0x0011;
+    const END: u32 = 0x0016;
+    assert_eq!(session_action(QUERY, 0), SessionAction::FlushOnly);
+    assert_eq!(session_action(QUERY, 1), SessionAction::FlushOnly);
+    assert_eq!(session_action(END, 1), SessionAction::StopAndFlush);
+    assert_eq!(session_action(END, 0), SessionAction::None);
+    assert_eq!(session_action(0x0001, 1), SessionAction::None);
+}
+
+#[test]
+fn export_dest_is_usable_refuses_device_names_bad_characters_and_the_source_itself() {
+    let dir = std::env::temp_dir().join(format!("ps-batch-dest-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("clip.mp4");
+    std::fs::write(&src, b"x").unwrap();
+    assert!(export_dest_is_usable(&dir.join("out.mp4"), &src));
+    assert!(!export_dest_is_usable(&dir.join("CON"), &src));
+    assert!(!export_dest_is_usable(&dir.join("bad?.mp4"), &src));
+    assert!(!export_dest_is_usable(&dir.join("CLIP.MP4"), &src));
+    assert!(!export_dest_is_usable(&src, &src));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn reopen_step_builds_only_when_the_label_is_free_and_waits_for_a_closing_window() {
+    assert_eq!(reopen_step(false, false), ReopenStep::Build);
+    assert_eq!(reopen_step(false, true), ReopenStep::Build);
+    assert_eq!(reopen_step(true, false), ReopenStep::Keep);
+    assert_eq!(reopen_step(true, true), ReopenStep::WaitThenSync);
 }
