@@ -2,6 +2,10 @@ use super::*;
 use crate::scheduler::Scheduler;
 use std::time::Instant;
 
+// The text-recognition epoch is one global counter: tests that read it or bump it run one
+// at a time, or a parallel bump makes a pass look stale.
+pub(super) static OCR_EPOCH_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 mod shots;
 mod ffmpeg_jobs;
 mod rec_conversion;

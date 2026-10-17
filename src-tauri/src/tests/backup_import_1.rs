@@ -503,6 +503,7 @@ fn is_protected_folder_key_covers_every_folder_setting_and_nothing_else() {
 
 #[test]
 fn outside_settings_that_switch_ocr_index_off_erase_the_picture_text() {
+    let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = Store { prompts: vec![sync_test_prompt()], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
     store.prompts[0].image_text = "read from a picture".into();
     store.settings.ui_flags.insert("ocrIndex".into(), true);

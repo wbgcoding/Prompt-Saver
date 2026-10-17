@@ -453,6 +453,7 @@ pub(super) fn secret_test_store(prompts: Vec<Prompt>) -> Store {
 // the text it returns afterwards must not land anywhere.
 #[test]
 fn a_pass_started_before_the_ocr_clear_never_writes_its_text() {
+    let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = secret_test_store(vec![image_text_prompt("a", "")]);
     store.settings.ui_flags.insert("ocrIndex".into(), true);
     let pic = store.prompts[0].image.clone();
@@ -483,6 +484,7 @@ fn a_pass_started_before_the_ocr_clear_never_writes_its_text() {
 
 #[test]
 fn a_failed_write_stops_the_ocr_backfill_and_takes_its_text_back_out() {
+    let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = secret_test_store(vec![image_text_prompt("a", "")]);
     store.settings.ui_flags.insert("ocrIndex".into(), true);
     let pic = store.prompts[0].image.clone();

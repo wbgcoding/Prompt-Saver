@@ -1246,6 +1246,7 @@ fn a_failed_settings_write_seeds_no_example_prompts() {
 
 #[test]
 fn leftover_picture_text_is_cleared_at_boot_only_when_the_index_is_off_and_the_set_is_writable() {
+    let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = secret_test_store(vec![image_text_prompt("p1", "read from a picture")]);
     store.settings.ui_flags.insert("ocrIndex".into(), true);
     assert!(!heal_ocr_text_at_boot(&mut store), "index on: the text is wanted");
