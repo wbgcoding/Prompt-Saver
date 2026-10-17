@@ -32,10 +32,9 @@ export function applyI18n() {
   });
   const winMax = document.getElementById("win-max");
   if (winMax) winMax.title = t(document.body.classList.contains("win-maximized") ? "winRestore" : "winMaximize");
-  // Cached video tiles keep their media bar across a language switch: its
-  // button labels are not markup, so data-i18n above never reaches them. Walk
-  // videoCache itself, not just the live DOM: a tile from a view that is not
-  // the active one is cached but detached, so querySelectorAll would miss it.
+  // Cached video tiles keep their media bar across a language switch; its button labels
+  // are not markup, so data-i18n never reaches them. Walk videoCache itself: a tile from
+  // an inactive view is cached but detached, so querySelectorAll would miss it.
   for (const { wrap } of videoCache.values()) {
     wrap.querySelector(".media-bar")?.setLabels?.(mediaBarLabels());
   }
@@ -62,20 +61,18 @@ export function setBars(header, composer) {
   applyBars();
 }
 
-// Mentions the double-click shortcut in the three bar buttons' own tooltip
-// while barToggleBoth is on, reusing the expert-menu row's own explanation
-// text instead of a second translated sentence.
+// Mentions the double-click shortcut in the three bar buttons' tooltip while
+// barToggleBoth is on, reusing the expert-menu row's explanation text.
 export function applyBarToggleTips() {
   const hint = flag("barToggleBoth") ? ` ${t("tipBarToggleBoth")}` : "";
   const keys = { "hide-bottom": "hideBarBottom", "show-top": "showBarTop", "show-bottom": "showBarBottom" };
   for (const [id, key] of Object.entries(keys)) $(id).title = t(key) + hint;
 }
 
-// ---- Themed tooltips: ONE shared popup for every hover hint; rich tile previews
-// AND the native `title` on any button/icon: so nothing falls back to the OS
-// tooltip. A raw `title` is converted to `data-tip` on first hover (removed so the
-// OS tip never fires); tiles carry `data-tip-name`/`data-tip-body` for the richer
-// name + preview + hint layout.
+// Themed tooltips: ONE shared popup for every hover hint (rich tile previews and the
+// native `title` of any button/icon), so nothing falls back to the OS tooltip. A raw
+// `title` is converted to `data-tip` on first hover and removed; tiles carry
+// `data-tip-name`/`data-tip-body` for the richer layout.
 export let tipEl = null;
 export let tipCur = null;   // element the tooltip is currently anchored to
 export let tipTimer = null;   // auto-hide (AFK) timer once a tip is shown
@@ -127,11 +124,11 @@ export function wireClear(el) {
   });
   upd();
 }
-// The small X inside a hotkey field: it removes the shortcut and nothing else. The
-// generic clear X skips read-only inputs, and every hotkey field is read-only, so
-// this one is built by hand. The X shows exactly while the field holds a shortcut
-// (css: input:not(:placeholder-shown) ~ .clear-btn) and, unlike the generic one,
-// can be reached with the keyboard because it is the only way to remove a hotkey.
+// The small X inside a hotkey field removes the shortcut and nothing else. The generic
+// clear X skips read-only inputs and every hotkey field is read-only, so this one is
+// built by hand. It shows exactly while the field holds a shortcut (css:
+// input:not(:placeholder-shown) ~ .clear-btn) and is keyboard-reachable because it is the
+// only way to remove a hotkey.
 export function hotkeyClearX(input, onClear, id) {
   const wrap = document.createElement("span");
   wrap.className = "clear-wrap hotkey-clear-wrap";
@@ -179,9 +176,8 @@ export function wireTooltips() {
     let y = cy + OFF;
     if (x + r.width + PAD > innerWidth) x = cx - OFF - r.width;
     if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
-    // The flip above only guards the edge it checked: near a corner, with a
-    // wide tooltip, the flipped side can itself run off the
-    // FAR edge. Clamp both bounds, same as placePopover does for every other popup.
+    // The flip only guards the edge it checked: near a corner a wide tooltip can run off
+    // the FAR edge, so clamp both bounds.
     tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD))}px`;
     tipEl.style.top = `${Math.max(PAD, Math.min(y, innerHeight - r.height - PAD))}px`;
   };
@@ -195,8 +191,8 @@ export function wireTooltips() {
     // Plain (icon/label) tooltips get a compact single-line style; tiles get the
     // richer name + preview + hint box.
     tipEl.classList.toggle("plain", !rich);
-    // Read regardless of rich/plain -- a library row's plain "Copy" tooltip
-    // carries these same two lines, just without the rest of the rich box.
+    // Read for rich and plain tips: a library row's plain "Copy" tooltip carries these
+    // two lines too.
     timesEl.textContent = el.dataset.tipTimes || "";
     mediaEl.textContent = el.dataset.tipMedia || "";
     hotkeyEl.textContent = el.dataset.tipHotkey || "";
@@ -221,8 +217,8 @@ export function wireTooltips() {
       }
       lenEl.textContent = "";
       notesEl.textContent = "";
-      // The rotate line is shared with the rich tile tip: leaving it filled here
-      // stuck the last hovered tile's "next entry" text under every plain tooltip.
+      // Clear the rotate line (shared with the rich tile tip), or the last hovered tile's
+      // "next entry" text would show under every plain tooltip.
       rotateEl.textContent = "";
       hintEl.textContent = "";
     }
@@ -370,8 +366,8 @@ export function wireSearchSuggest(input, storeKey) {
       pop.appendChild(row);
     }
     const r = input.getBoundingClientRect();
-    // Size to the terms (short), not the full search field: a full-width bar over a
-    // wide library search looked oversized. Clamp: at least 220px, at most the field.
+    // Size to the terms (short), not the full search field: a full-width bar over a wide
+    // library search looks oversized. At least 220px, at most the field.
     pop.style.width = "";
     pop.style.minWidth = `${Math.min(220, r.width)}px`;
     pop.style.maxWidth = `${r.width}px`;
@@ -415,10 +411,9 @@ export function lbApply() {
   lbMedia().style.transform = `translate(${lbX}px, ${lbY}px) scale(${lbScale})`;
   $("lightbox-stage").classList.toggle("zoomed", lbScale > 1);
 }
-// Screen point -> the media's own local CSS coordinates at the CURRENT scale
-// removed again, so it stays comparable to lbX/lbY (also pre-scale units)
-// regardless of zoom level. Reads the live, already-transformed bounding
-// rect, same trick as the video editor's toSource().
+// Screen point -> the media's local CSS coordinates with the CURRENT scale divided out
+// again, so it stays comparable to lbX/lbY (pre-scale units) at any zoom. Reads the live,
+// transformed bounding rect.
 export function lbToLocal(clientX, clientY) {
   const rect = lbMedia().getBoundingClientRect();
   return { x: (clientX - rect.left) / lbScale, y: (clientY - rect.top) / lbScale };
@@ -448,11 +443,10 @@ export function wireLightbox() {
   stage.addEventListener("click", (e) => { if (lbScale === 1 && e.target === stage) closeLightbox(); });
   stage.addEventListener("wheel", (e) => {
     e.preventDefault();
-    // Keep the point under the cursor fixed instead of always zooming to the
-    // media's centre: read it before and after the scale change and slide
-    // the pan by the difference, scaled back up -- the pan is a CSS translate
-    // applied AFTER the scale in the same transform, so it moves the media in
-    // already-scaled screen pixels, not the pre-scale ones lbToLocal reads in.
+    // Keep the point under the cursor fixed instead of zooming to the media's centre:
+    // read it before and after the scale change and slide the pan by the difference,
+    // scaled back up. The pan is a CSS translate applied AFTER the scale, so it moves the
+    // media in already-scaled screen pixels, not the pre-scale ones lbToLocal reads.
     const before = lbToLocal(e.clientX, e.clientY);
     lbScale = Math.min(8, Math.max(1, lbScale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
     if (lbScale === 1) {
@@ -483,10 +477,9 @@ export function wireLightbox() {
   stage.addEventListener("pointercancel", endDrag);
 }
 
-// The "?" overview both editors open -- same modal/modal-narrow/modal-titlebar
-// shell as every other list modal, filled straight from SHORTCUTS.
-// `withGlobal` adds the rebindable global/per-tile hotkey list on top (and gives the
-// dialog the width it needs); the editors' "?" buttons open the plain key list.
+// The "?" overview both editors open: the same modal shell as every other list modal,
+// filled from SHORTCUTS. `withGlobal` adds the rebindable global/per-tile hotkey list on
+// top (and the width it needs); the editors' "?" buttons open the plain key list.
 // `allWindows` lists one titled section per window instead of one flat table.
 export function openShortcutsModal(scope, { withGlobal = false, allWindows = false } = {}) {
   openShortcutsOverlay($("shortcuts-modal"));
@@ -529,14 +522,13 @@ export function closeShortcutsModal() {
   closeShortcutsOverlay($("shortcuts-modal"));
 }
 
-// A second click close to the first one folds or unfolds both bars together, target
-// state taken from the clicked button. A dblclick listener cannot do this: the first
-// click hides the clicked button, so the second click of a real double-click lands on
-// another element and the browser never fires dblclick on the button. Instead the
-// first click arms one-shot capture listeners on the document for half a second; a
-// click within 8 px of the first is the second half of the double-click and applies the
-// target to both bars. Its press is kept from reaching whatever sits under the pointer
-// too (a tile copies on pointer up, not on click), and so is the click itself.
+// A second click close to the first folds or unfolds both bars together, target state
+// taken from the clicked button. A dblclick listener cannot do this: the first click
+// hides the clicked button, so the second click lands on another element and dblclick
+// never fires. Instead the first click arms one-shot capture listeners on the document
+// for half a second; a click within 8 px is the second half of the double-click and
+// applies the target to both bars. Its press is kept from reaching whatever sits under
+// the pointer (a tile copies on pointer up, not on click), and so is the click itself.
 let barToggleDisarm = null;
 function armBarToggleBoth(first, target) {
   if (barToggleDisarm) barToggleDisarm();
