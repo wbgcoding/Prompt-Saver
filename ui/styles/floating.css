@@ -79,7 +79,7 @@ html, body {
   font-weight: 600;
   font-size: 16px;
   cursor: inherit;
-  /* No box-shadow: it painted a visible halo around the pill. */
+  /* No box-shadow: it would paint a halo around the pill. */
   transition: transform var(--transition), filter var(--transition);
 }
 .pill:hover { filter: brightness(1.08); }
@@ -298,16 +298,15 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .size-row .menu-close:hover { opacity: 1; }
 
-/* Resize grips around the window edges/corners (content scales with size).
-   Above the menu (z 10) so the edges/corners on the menu's side stay grabbable;
-   the 7px strips sit within the menu's 8px padding, so its buttons stay clickable
-   (grabbing a grip collapses the menu and resizes the pill). */
-/* Stadium-shaped resize ring that hugs the pill outline at ANY size, so the resize
-   hitbox sits exactly on the rounded edge instead of drifting out to the bounding
-   rectangle's corners as the pill grows. rz-catch is the full pill shape; rz-hole
-   (a smaller pill, on top) punches out the centre, leaving only the --rz-wide edge
-   ring to resize; the centre and the transparent corners stay draggable. --rz is
-   set from JS in proportion to the pill; the radius matches the pill (a pill for
+/* Resize grips around the window edges/corners (content scales with size). Above the
+   menu (z 10) so the edges on the menu's side stay grabbable; the 7px strips sit within
+   the menu's 8px padding, so its buttons stay clickable (grabbing a grip collapses the
+   menu and resizes the pill). */
+/* Stadium-shaped resize ring hugging the pill outline at ANY size, so the hitbox sits on
+   the rounded edge instead of drifting to the bounding rectangle's corners. rz-catch is
+   the full pill shape; rz-hole (a smaller pill on top) punches out the centre, leaving
+   the --rz-wide edge ring; the centre and the transparent corners stay draggable. --rz
+   is set from JS in proportion to the pill; the radius matches the pill (a pill for
    text, 10px for media). */
 .resize { position: fixed; inset: 0; z-index: 11; pointer-events: none; --rz: 12px; }
 .pill.dragging ~ .resize { display: none; }
@@ -353,10 +352,9 @@ body.menu-open .pill { flex: 0 0 auto; }
    transition, never a keyframe loop, so it follows the animation-speed setting and
    stops dead when animations are switched off. */
 /* Merge preview: the same scrim, mark and timing as the tabs and tiles in the main
-   window. A pill is always saturated, so the scrim is a fixed dark and the mark a
-   fixed white: that reads on every theme without guessing a contrast. The WINDOW
-   itself also grows a little (floating.js), which is the part a pill can do and a
-   tile cannot. */
+   window. A pill is always saturated, so the scrim is a fixed dark and the mark a fixed
+   white, which reads on every theme. The WINDOW also grows a little (floating.js), which
+   a pill can do and a tile cannot. */
 .pill.merge-hint::before,
 .folder-icon.merge-hint::before,
 .pill.merge-hint::after,
@@ -415,9 +413,9 @@ body.menu-open .pill { flex: 0 0 auto; }
 .folder-rz .rz-catch { inset: 0; cursor: nwse-resize; }
 .folder-rz .rz-hole { inset: var(--rz); cursor: inherit; }
 .folder-body.pop-open .folder-rz { display: none; }
-/* D3: the ring itself is unmarked, so a thin accent edge on the icon is the only sign
-   it exists; folder.js toggles this class on window mousemove the instant the pointer
-   is over #rz-catch, gone again over the centre hole or once the pointer leaves. */
+/* The ring itself is unmarked, so a thin accent edge on the icon is the only sign it
+   exists; folder.js toggles this class on window mousemove while the pointer is over
+   #rz-catch, and clears it over the centre hole or when the pointer leaves. */
 .folder-icon.rz-hover { box-shadow: inset 0 0 0 2px var(--pill-bg); }
 .folder-preview {
   display: grid;
@@ -437,8 +435,8 @@ body.menu-open .pill { flex: 0 0 auto; }
   color: var(--pill-fg);
   text-shadow: var(--pill-ink-shadow, none);
   font-weight: 700;
-  /* No carrier surface behind the folder any more: each tile gets its
-     own soft glow + hairline contour so it stays visible on light backgrounds. */
+  /* No carrier surface behind the folder: each tile gets its own soft glow + hairline
+     contour so it stays visible on light backgrounds. */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .folder-face {
@@ -540,13 +538,12 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .folder-member.copied .member-ok { opacity: 1; }
 
-/* Rotating-prompt "next entry" badge: small dot in the corner, independent of
-   the pill/theme colour so it reads the same in every theme; shared by the pill
+/* Rotating-prompt "next entry" badge: small dot in the corner, independent of the
+   pill/theme colour so it reads the same in every theme; shared by the pill
    (floating.html) and folder member tiles. A POSITIVE inset, not a negative
-   "notification dot" offset: `html, body { overflow: hidden }` clips the pill
-   window at its own edge (the window is sized exactly to the pill, no margin to
-   spill into), and .folder-member separately clips overflow for its rounded image
-   corners; a negative offset would be invisible in both places. */
+   "notification dot" offset: `html, body { overflow: hidden }` clips the pill window at
+   its edge and .folder-member clips overflow for its rounded image corners, so a
+   negative offset would be invisible in both. */
 .rotate-badge {
   position: absolute;
   top: 3px;
@@ -566,12 +563,11 @@ body.menu-open .pill { flex: 0 0 auto; }
    pill, which toggles it explicitly); empty until primeMemberRotate's peek lands. */
 .rotate-badge:empty { display: none; }
 
-/* Parked marker: a button (or folder icon) whose saved position's screen is
-   not connected right now. Deliberately subtle (a small dot, opposite corner
-   from the rotate badge) -- the pill still opened and still works, this only
-   explains why it is sitting on the main screen instead of where it was left.
-   A title on the badge itself (not the whole pill/icon) gives it a native
-   tooltip without displacing the pill's own name tooltip. */
+/* Parked marker: a button (or folder icon) whose saved screen is not connected right
+   now. Deliberately subtle (a small dot, opposite corner from the rotate badge): the
+   pill still works, this only explains why it sits on the main screen. A title on the
+   badge itself (not the whole pill) gives it a native tooltip without displacing the
+   pill's name tooltip. */
 .parked-badge {
   position: absolute;
   top: 3px;
@@ -738,9 +734,8 @@ body.vars-body {
 }
 
 /* ---- Standalone quick-launcher (launcher.html) ----
-   Same tokens as the pill menus and vars.html. A search field and a result list,
-   nothing else: picking a result hands off to the exact same "copy from outside
-   the grid" path the tray menu already uses. */
+   Same tokens as the pill menus and vars.html. A search field and a result list; picking
+   a result hands off to the copy-from-outside-the-grid path the tray menu uses. */
 body.launcher-body {
   display: flex;
   padding: 6px;
@@ -830,12 +825,12 @@ body.launcher-body {
 }
 
 /* ---- Custom tray menu (tray.html) ----
-   Same card/row tokens as the launcher -- a right-click popup restyled to look
-   like the rest of the app, since the native Win32 menu cannot be rounded. Row
-   height, header height and separator height here are kept in sync with
-   TRAY_WIN_ROW_H / TRAY_WIN_HEAD_H / TRAY_WIN_SEP_H in tray.rs, which sizes the
-   window from the exact same numbers before any content is drawn. The rows sit in
-   #rows, which has to be a flex column for the fixed flex-basis heights below to apply. */
+   Same card/row tokens as the launcher: a right-click popup restyled like the rest of
+   the app, since the native Win32 menu cannot be rounded. Row, header and separator
+   heights are kept in sync with TRAY_WIN_ROW_H / TRAY_WIN_HEAD_H / TRAY_WIN_SEP_H in
+   tray.rs, which sizes the window from the same numbers before any content is drawn. The
+   rows sit in #rows, which has to be a flex column for the fixed flex-basis heights to
+   apply. */
 body.tray-menu-body {
   display: flex;
   padding: 0;
@@ -852,10 +847,9 @@ body.tray-menu-body {
   background: var(--menu-bg);
   color: var(--menu-fg);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
-  /* The backend sizes the window to fit exactly, but caps that height to the
-     monitor's work area (tray_window_rect) -- at the favorites/recents entry
-     limits the uncapped content can still be taller than a small or heavily
-     scaled display, so this must actually scroll rather than just hide the rest. */
+  /* The backend sizes the window to fit but caps the height to the monitor's work area
+     (tray_window_rect); at the favorites/recents limits the content can still be taller
+     on a small or heavily scaled display, so this must scroll rather than hide the rest. */
   overflow-y: auto;
   overflow-x: hidden;
 }
