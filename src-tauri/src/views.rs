@@ -456,11 +456,19 @@ pub(crate) fn rename_tag_in_store(
         }
         if prompts_changed {
             restore_prompts(store, original_tags);
-            let _ = save_prompts_fn(store);
+            note_failed_undo(save_prompts_fn(store), "tag rename");
         }
         return Err("save-failed".into());
     }
     Ok(())
+}
+
+// The write that puts the old prompts back after a failed settings write. When that one fails
+// too, the disk keeps the new prompt rows although the command reports an error: leave a trace.
+pub(crate) fn note_failed_undo(written: bool, operation: &str) {
+    if !written {
+        append_crash_log(&format!("persist failed: the undo of a {operation} could not be written"));
+    }
 }
 
 // Remove a tag from every prompt plus its color entry. Idempotent.
@@ -495,7 +503,7 @@ pub(crate) async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: Strin
                     p.tags = tags;
                 }
             }
-            let _ = save_prompts(&app, &store);
+            note_failed_undo(save_prompts(&app, &store), "tag delete");
         }
         return Err("save-failed".into());
     }
@@ -705,7 +713,7 @@ pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String,
         // The prompts reached disk already: put their colours back there too.
         if prompts_changed {
             restore_prompt_colors(&mut store);
-            let _ = save_prompts(&app, &store);
+            note_failed_undo(save_prompts(&app, &store), "palette change");
         }
         return Err("save-failed".into());
     }
