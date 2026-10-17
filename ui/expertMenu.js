@@ -445,7 +445,7 @@ export function flagRow(key) {
     }
     // Read once at process start (before the builder exists): flipping it live
     // cannot change which guard is already running.
-    if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
+    if (key === "allowMultipleInstances" && accepted) toast(t("toastRestartNeeded"));
     applyFlags();
     if (key === "clipWatcher" && !enabled && accepted) await offerClipInboxCleanup();
     // "only changed" must recompute after every flag, not just gating ones: the row set depends on

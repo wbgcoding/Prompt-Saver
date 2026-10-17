@@ -113,6 +113,14 @@ later(async () => {
   check(opened.length === 0, "a preview does not open over a dialog opened meanwhile");
 });
 
+// expertMenu.js: the restart hint belongs to an accepted switch only (the handler is a closure
+// over the row, so the one source line is read).
+section(() => {
+  const line = read("expertMenu.js").split("\n").find((l) => l.includes('key === "allowMultipleInstances"') && l.includes("toastRestartNeeded"));
+  check(!!line, "restart toast line not found");
+  check(!!line && /&&\s*accepted\b/.test(line), "the restart toast is not gated on an accepted switch");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
   console.log("chain_editor_search_fixes_check: ok");
