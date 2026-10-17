@@ -150,7 +150,7 @@ export function wireBgOps() {
     const ok = await confirmDialog({
       title: t("bgTitle"),
       message: t("bgQuitRunning").replace("{n}", String(n)),
-      confirmLabel: t("bgCancelClose"),
+      confirmLabel: t("bgQuitAnyway"),
       danger: true,
     });
     if (ok) invoke("confirm_quit_with_running_ops").catch(() => {});
