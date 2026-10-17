@@ -367,6 +367,19 @@ pub(crate) fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// The flush of the real store before the switch. Both writes are attempted; a failed one aborts
+// the switch, because the transition lock refuses every later write in this process and the
+// unsaved change could never be written afterwards. A locked prompt set is not written at all.
+pub(crate) fn demo_flush_result(prompts_locked: bool, prompts: impl FnOnce() -> bool, settings: impl FnOnce() -> bool) -> Result<(), String> {
+    let prompts_ok = prompts_locked || prompts();
+    let settings_ok = settings();
+    if prompts_ok && settings_ok {
+        Ok(())
+    } else {
+        Err("save-failed".to_string())
+    }
+}
+
 // Switches to the bundled sample library, relaunching so every window loads it fresh (the
 // relaunch restore_backup uses for a full data swap). The real store is flushed first so
 // nothing pending is lost, then never touched again.
@@ -388,10 +401,7 @@ pub(crate) async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>, lang:
     build_demo_store(&demo, ffmpeg.as_deref(), lang.as_deref().unwrap_or("en"))?;
     {
         let store = lock(&state);
-        if !store.prompts_locked {
-            save_prompts(&app, &store);
-        }
-        save_settings(&app, &store.settings);
+        demo_flush_result(store.prompts_locked, || save_prompts(&app, &store), || save_settings_paired(&app, &store.settings))?;
         // Block every further store write for the rest of this process before the redirect flips
         // (disable_demo_mode does the same in reverse; db_conn() checks it), so nothing racing the
         // flip lands a real write in the demo store or clobbers its demoMode=true.

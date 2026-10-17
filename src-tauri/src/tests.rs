@@ -8473,6 +8473,15 @@ fn a_failed_settings_write_keeps_the_old_settings_and_the_corrupt_row_lock_on_re
 }
 
 #[test]
+fn a_failed_flush_aborts_the_switch_into_demo_mode() {
+    assert_eq!(demo_flush_result(false, || true, || true), Ok(()));
+    assert_eq!(demo_flush_result(false, || false, || true), Err("save-failed".to_string()));
+    assert_eq!(demo_flush_result(false, || true, || false), Err("save-failed".to_string()));
+    assert_eq!(demo_flush_result(true, || panic!("a locked prompt set is never written"), || true), Ok(()));
+    assert_eq!(demo_flush_result(true, || true, || false), Err("save-failed".to_string()));
+}
+
+#[test]
 fn a_failed_trash_restore_keeps_the_receiver_secrets_in_the_live_settings() {
     let mut settings = Settings::default();
     settings.migrate();
