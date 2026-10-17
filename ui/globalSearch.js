@@ -10,16 +10,13 @@ import { EXPERT_TABS, flagLabelKey, groupFlags, SETTINGS_AREA_LABEL } from "./ex
 import { assignHelpCollapsed, assignHelpQuery, helpCategories, helpNorm, helpSectionLabel, renderHelp } from "./helpView.js";
 
 // ---- Search everything ----
-// One overlay, opened over the main window, that searches six sources at once:
-// the prompt grid, the copy history, file attachments, views, settings (both
-// the expert menu and the normal settings directory already built for the
-// expert search) and the in-app help. It deliberately does NOT replace any of
-// those sources' own search field -- it sits above them. Visually it borrows
-// the quick launcher's card/row look, but it is a plain overlay inside this
-// window, not a second webview: everything that makes settings searchable
-// (EXPERT_TABS, SETTINGS_DIRECTORY, i18nHit, gateOpen) already lives in this
-// script's own state, and a second window would only reach it through a
-// second copy of that state or a risky expert-menu rebuild.
+// One overlay over the main window that searches six sources at once: the prompt grid,
+// the copy history, file attachments, views, settings (the expert menu and the normal
+// settings directory) and the in-app help. It sits above those sources' own search fields
+// and replaces none. It borrows the quick launcher's card/row look but is a plain overlay
+// in this window, not a second webview: everything that makes settings searchable
+// (EXPERT_TABS, SETTINGS_DIRECTORY, i18nHit, gateOpen) lives in this script's state, and
+// a second window would need a copy of it or a risky expert-menu rebuild.
 export let gsOpen = false;
 export let gsQuery = "";
 export let gsActive = -1; // index into gsFlatRows, the flat list a rendered pass produced
@@ -27,11 +24,10 @@ export let gsExpanded = new Set(); // group keys currently past their "show more
 export let gsFlatRows = []; // [{ el, run }], in on-screen order, across every group
 export let gsHistoryLog = []; // recent_copies, refetched each time the overlay opens
 
-// Copies a prompt the same way the copy history's own "copy again" does --
-// cooldown guard, variable/rotation resolution through copyResolved, usage
-// recorded, a toast shown. Deliberately not libraryCopy(): that one also reads
-// the library's own closeAfterCopy/auto-paste-double-click state, neither of
-// which applies to a result picked from this overlay.
+// Copies a prompt like the copy history's "copy again": cooldown guard, variable/rotation
+// resolution through copyResolved, usage recorded, toast. Not libraryCopy(): that also
+// reads the library's closeAfterCopy/auto-paste-double-click state, which does not apply
+// to a result picked here.
 export async function gsCopyPrompt(p) {
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
@@ -39,11 +35,10 @@ export async function gsCopyPrompt(p) {
   toastCopied(p);
 }
 
-// Reuses the library's own scoring (computeLibSearchScore), not a second one --
-// the spec is explicit about that. computeLibSearchScore reads the module-level
-// libQuery instead of taking a query argument, so it is swapped in and restored
-// around one synchronous pass; nothing async runs in between, so the real
-// library search (if a query is mid-flight there too) never sees the swap.
+// Reuses the library's scoring (computeLibSearchScore). It reads the module-level
+// libQuery instead of taking a query, so the query is swapped in and restored around one
+// synchronous pass; nothing async runs in between, so a library search mid-flight never
+// sees the swap.
 export function gsPromptHits(q) {
   const saved = libQuery;
   assignLibQuery(q);
@@ -94,11 +89,10 @@ export function gsHistoryHits(q) {
   }));
 }
 
-// A prompt's attached file (p.file_path) is the only per-prompt "attachment" the
-// data model has -- matched on the full path so a hit works whether the query is
-// the file name or a folder it lives under. "Open" reuses the same edit dialog a
-// double-click on the tile opens (it already renders the attachment preview);
-// there is no separate viewer to open it in.
+// A prompt's attached file (p.file_path) is the only per-prompt attachment in the data
+// model; matched on the full path so a hit works for the file name or a folder it lives
+// under. "Open" uses the edit dialog a tile double-click opens (it renders the attachment
+// preview); there is no separate viewer.
 export function gsAttachmentHits(q) {
   const ql = q.toLowerCase();
   return prompts
@@ -118,10 +112,9 @@ export function gsViewHits(q) {
     .map((v) => ({ label: v.name || "", sub: "", color: v.color, run: () => switchToView(v.id) }));
 }
 
-// Walks both settings surfaces this app already has: SETTINGS_DIRECTORY (the
-// normal page, toolbar, library dialog, backup manager) and every EXPERT_TABS
-// row, filtered the same way the expert menu's own search (renderExpert())
-// already does. No third copy of "what is a setting" is introduced here.
+// Walks both settings surfaces: SETTINGS_DIRECTORY (normal page, toolbar, library dialog,
+// backup manager) and every EXPERT_TABS row, filtered like the expert menu's own search
+// (renderExpert()).
 export function gsSettingsHits(q) {
   const out = [];
   for (const entry of SETTINGS_DIRECTORY) {
@@ -148,8 +141,8 @@ export function gsSettingsHits(q) {
   return out;
 }
 
-// The in-app help is EN/DE only (ui/help.js) -- helpCategories() already falls
-// back to English for the other nine, same as the help dialog's own search.
+// The in-app help is EN/DE only (ui/help.js); helpCategories() falls back to English for
+// the other languages, like the help dialog's search.
 export function gsHelpHits(q) {
   const ql = helpNorm(q);
   const out = [];
@@ -160,9 +153,8 @@ export function gsHelpHits(q) {
   return out;
 }
 
-// Opens the help dialog pre-filtered to the matched article, through the same
-// search field/renderHelp() the dialog's own search box uses -- not a second
-// "scroll to section" mechanism.
+// Opens the help dialog pre-filtered to the matched article, through the dialog's own
+// search field/renderHelp().
 export function gsOpenHelp(cat) {
   assignHelpQuery(cat.title);
   $("help-search").value = cat.title;
@@ -386,7 +378,6 @@ export function toggleGlobalSearch() {
 }
 
 export function bindGlobalSearch() {
-  // Search everything: toolbar icon, Ctrl+K, Escape/click-outside/icon to close.
   const gsEl = $("global-search");
   $("global-search-btn").addEventListener("click", toggleGlobalSearch);
   $("gs-close").addEventListener("click", closeGlobalSearch);
