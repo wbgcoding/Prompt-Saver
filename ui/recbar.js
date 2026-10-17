@@ -1,7 +1,6 @@
-// Recording control bar: a small always-on-top strip with a red dot,
-// elapsed time, live file size, Pause/Resume, Stop and Cancel. The window
-// itself carries WDA_EXCLUDEFROMCAPTURE (set on the Rust side, unconditionally
-// -- it must never appear in the recording it controls).
+// Recording control bar: a small always-on-top strip with a red dot, elapsed time, live
+// file size, Pause/Resume, Stop and Cancel. The window carries WDA_EXCLUDEFROMCAPTURE
+// (set in Rust, unconditionally) so it never appears in the recording it controls.
 import { fmtTimeMMSS, fmtSizeCompact, fmtNum } from "./floatShared.js";
 
 const { invoke } = window.__TAURI__.core;
@@ -26,25 +25,21 @@ const audioMicEl = document.getElementById("audio-mic");
 const hotkeyWarnEl = document.getElementById("hotkey-warn");
 const diskWarnEl = document.getElementById("disk-warn");
 
-// recBarSize gates the whole readout, shown from 500 MB onward
-// so the narrow bar stays narrow in the normal case -- the threshold decision
-// itself lives in recording_status (rec_bar_size_state), this only renders
-// what it already decided. etaSecs is only ever set past three quarters of
-// recMaxMb, where the text turns into a warm color and gets a tooltip with
-// the estimated time left at the recording's own observed rate so far.
+// recBarSize gates the whole readout, shown from 500 MB on so the narrow bar stays
+// narrow; the threshold lives in recording_status (rec_bar_size_state), this only renders
+// it. etaSecs is set only past three quarters of recMaxMb, where the text turns warm and
+// the tooltip gives the estimated time left at the observed rate.
 function applySize(bytes, etaSecs) {
   sizeEl.textContent = fmtSizeCompact(bytes, LANG);
   sizeEl.classList.toggle("rec-size-warn", etaSecs != null);
   sizeEl.title = etaSecs != null && tx ? tx("recBarSizeEta").replace("{time}", fmtTimeMMSS(etaSecs * 1000)) : "";
 }
 
-// recTargetSwitch's own button: stays visible even when it cannot do
-// anything right now (a Monitor/Region recording, or a Window recording that
-// never got a placement canvas) rather than popping in and out, with a
-// tooltip naming why. The actual "same screen" check for a canvas-mode
-// "monitor" recording only happens once something is actually picked (see
-// the recording-target-switch-failed listener in the main window) -- this only
-// covers the up-front, always-knowable half of the gate.
+// recTargetSwitch's button stays visible even when it cannot act (a Monitor/Region
+// recording, or a Window recording without a placement canvas), with a tooltip naming
+// why. The "same screen" check for a canvas-mode "monitor" recording happens once
+// something is picked (the recording-target-switch-failed listener in the main window);
+// this covers only the up-front half.
 let switchEnabled = false;
 function applyTargetSwitch(enabled) {
   switchEnabled = enabled;
@@ -54,19 +49,16 @@ function applyTargetSwitch(enabled) {
   if (label) { switchBtn.title = label; switchBtn.setAttribute("aria-label", label); }
 }
 
-// Mirrors the backend's own 5-second refusal (finish_and_continue_recording)
-// so the button is never enabled for a click the backend would reject anyway
-// -- the backend guard is still what actually decides, this only avoids a
-// pointless round trip during the riskiest moment for a file switch.
+// Mirrors the backend's 5-second refusal (finish_and_continue_recording) so the button is
+// never enabled for a click the backend would reject; the backend guard still decides.
 const CONTINUE_LOCKOUT_MS = 5000;
 function applyContinueEnabled(elapsedMs) {
   continueBtn.disabled = elapsedMs < CONTINUE_LOCKOUT_MS;
 }
 
-// A successful continue's own gap (ms the switch itself took, start to
-// finish) is shown for a few seconds right where the file size normally
-// sits, so the missing moment between the two files is never silently
-// hidden from the user -- not localized, same as fmtSizeCompact's "KB"/"MB".
+// A successful continue's gap (ms the switch took) is shown for a few seconds where the
+// file size sits, so the missing moment between the two files is never hidden. Not
+// localized, like fmtSizeCompact's "KB"/"MB".
 let gapHideTimer = 0;
 function showContinueGap(gapMs) {
   clearTimeout(gapHideTimer);
@@ -91,8 +83,8 @@ function applyPaused(p) {
   resumeIcon.classList.toggle("hidden", !p);
   const label = pauseBtnLabel();
   if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
-  // Reuses the same button label a sighted user just saw change (Pause/Resume):
-  // that already names which state the recording is in now.
+  // Reuses the Pause/Resume label a sighted user just saw change; it names the current
+  // state.
   if (changed && label) {
     const live = document.getElementById("live");
     live.textContent = "";
@@ -100,14 +92,11 @@ function applyPaused(p) {
   }
 }
 
-// System-audio / mic buttons, shown for the whole recording (never hidden) so
-// the user can always see at a glance what is being captured -- dim when that
-// source is off or muted, lit when on. audio_system/audio_mic are each a
-// fixed per-session choice (set once when the recording starts) that decides
-// whether the button can be used at all; mid-recording muting sits on top
-// (audio_system_muted/audio_mic_muted), toggled by clicking the button.
-// mic_lost can flip true mid-recording if the device gets unplugged, and latches.
-// system_lost is the same for the loopback capture (no render device, init refused).
+// System-audio / mic buttons stay visible for the whole recording: dim when the source is
+// off or muted, lit when on. audio_system/audio_mic are fixed per session and decide
+// whether the button is usable; mid-recording muting (audio_system_muted/audio_mic_muted)
+// sits on top. mic_lost can flip true if the device is unplugged and latches; system_lost
+// is the same for the loopback capture (no render device, init refused).
 let lastAudio = { system: false, mic: false, systemMuted: false, micMuted: false, micLost: false, systemLost: false };
 function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_muted, mic_lost, system_lost }) {
   lastAudio = {
@@ -155,8 +144,7 @@ audioMicEl.addEventListener("click", async () => {
   });
 });
 
-// Names which of the two hotkeys (another app already holds the
-// combination) is affected, so "it doesn't work" always has an answer.
+// Names which of the two hotkeys (another app holds the combination) is affected.
 function applyHotkeyWarn(stopOk, pauseOk) {
   const show = !stopOk || !pauseOk;
   hotkeyWarnEl.classList.toggle("hidden", !show);
@@ -167,10 +155,9 @@ function applyHotkeyWarn(stopOk, pauseOk) {
   if (label) { hotkeyWarnEl.title = label; hotkeyWarnEl.setAttribute("aria-label", label); }
 }
 
-// The mid-recording half of the low-disk warning -- fires at most once (the backend
-// already only reports it once), never hides again: a quiet standing
-// reminder rather than a toast this narrow bar has no room for, and free
-// space recovering mid-recording does not make the earlier warning untrue.
+// The mid-recording half of the low-disk warning: fires at most once (the backend reports
+// it once) and never hides, a standing reminder instead of a toast this narrow bar has no
+// room for; free space recovering does not make the warning untrue.
 let lastDiskLow = null;
 function applyDiskLow(diskLow) {
   if (!diskLow || !tx) return;
@@ -182,13 +169,10 @@ function applyDiskLow(diskLow) {
   diskWarnEl.setAttribute("aria-label", label);
 }
 
-// The window itself is a fixed 320x56 canvas from show_rec_bar; the bar's
-// content now sizes to its own children (recbar.css's width: max-content), so
-// this is what keeps the window big enough to actually show every one of
-// them instead of clipping the last buttons off the right edge. Covers the
-// first paint and every later change (an audio icon or warning appearing,
-// the continue gap showing) through one ResizeObserver rather than a list of
-// events to remember to also call this from.
+// The window is a fixed 320x56 canvas from show_rec_bar while the bar sizes to its
+// children (recbar.css width: max-content); this keeps the window big enough to show
+// every button instead of clipping the last off the right edge. One ResizeObserver covers
+// the first paint and every later change.
 const BAR_MARGIN = 8;
 let lastFitW = 0;
 let lastFitH = 0;
@@ -207,11 +191,9 @@ let pollTimer = 0;
 // Bumped for every new recording: a poll still waiting on the previous one's
 // status must not stop the new timer or hide the bar when it finally returns.
 let pollGen = 0;
-// While "finish and continue" runs, the backend holds the session out of its
-// state for the whole stop and restart, so recording_status answers "none"
-// although the recording goes on. A null answer that was asked inside that
-// window (or lands during it) must not close the bar; continueSeq changes at
-// both ends of the window to catch a poll that straddles it.
+// While "finish and continue" runs the backend holds the session out of its state, so
+// recording_status answers "none" though recording goes on. continueSeq changes at both
+// ends of that window so a poll that straddles it cannot close the bar.
 let continuing = false;
 let continueSeq = 0;
 let autoStopping = false;
@@ -225,21 +207,17 @@ async function poll() {
     if (gen !== pollGen) return;
     if (!status) {
       if (continuing || seq !== continueSeq) return;
-      // Stopped elsewhere -- the auto-stop path when the recorded window itself
-      // closes, or any other race. This bar's own buttons would now just error
-      // against a session that no longer exists, so close it too.
+      // Stopped elsewhere (auto-stop when the recorded window closes, or another race):
+      // this bar's buttons would only error against a missing session, so close it too.
       clearInterval(pollTimer);
       invoke("hide_rec_bar").catch(() => {});
       return;
     }
     if (status.encode_error) {
-      // The encoder already gave up (e.g. disk full) and stopped feeding
-      // itself -- finish the stop properly (closes the file, emits
-      // recording-captured with the error message) rather than sitting here
-      // polling a session that looks alive but is no longer writing video.
-      // The poll keeps running until the stop went through: a refused stop (a
-      // continue in flight) is retried on the next tick instead of leaving a
-      // live recording behind a closed bar.
+      // The encoder gave up (e.g. disk full) and stopped feeding itself: finish the stop
+      // properly (closes the file, emits recording-captured with the error) instead of
+      // polling a session that looks alive. The poll runs until the stop went through: a
+      // refused stop (a continue in flight) is retried on the next tick.
       if (autoStopping) return;
       autoStopping = true;
       invoke("stop_recording")
@@ -259,23 +237,19 @@ async function poll() {
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
     applyDiskLow(status.disk_low);
-    // Belt and suspenders alongside the ResizeObserver above: every one of
-    // the applyX calls just above can show or hide an element, and this runs
-    // right after every one of them regardless, on the same 500ms cadence
-    // that already drives the rest of the bar -- fitBar()'s own width/height
-    // check is a no-op when nothing actually changed.
+    // Belt and suspenders alongside the ResizeObserver: runs after every applyX call on
+    // the 500ms cadence; fitBar() is a no-op when nothing changed.
     fitBar();
   } catch {
-    // transient -- next tick self-corrects
+    // transient: the next tick self-corrects
   }
 }
 pollTimer = setInterval(poll, 500);
 poll();
 
-// The window is only hidden between recordings, never closed, so this page
-// outlives a recording. show_rec_bar announces every new one; without it the
-// buttons Stop/Cancel disabled and the stopped poll timer would stay that way
-// and the next recording would run behind a dead bar.
+// The window is only hidden between recordings, so this page outlives a recording.
+// show_rec_bar announces every new one; without it Stop/Cancel stay disabled and the
+// stopped poll timer stays stopped, so the next recording would run behind a dead bar.
 function resetForNewRecording() {
   clearInterval(pollTimer);
   pollGen++;
@@ -300,9 +274,8 @@ function resetForNewRecording() {
 }
 listen("rec-bar-reset", resetForNewRecording);
 
-// Opens the same overlay recording itself starts from, in "pick a switch
-// target" mode -- recorder-target-picked (below) is what actually acts on
-// the result, since the overlay closes and reopens no window of its own.
+// Opens the overlay recording starts from, in "pick a switch target" mode;
+// recorder-target-picked (below) acts on the result.
 switchBtn.addEventListener("click", () => {
   if (!switchEnabled) return;
   invoke("open_recorder_switch").catch(() => {});
@@ -313,9 +286,9 @@ listen("recorder-target-picked", async (e) => {
   try {
     await invoke("switch_recording_target", { targetKind: p.kind, targetId: p.id });
   } catch {
-    // Surfaced to the user via the main window's own toast (the main window listens
-    // for recording-target-switch-failed) -- this bar has no toast of its own
-    // and the previous source is already still recording regardless.
+    // Surfaced through the main window's toast (it listens for
+    // recording-target-switch-failed); this bar has no toast, and the previous source
+    // keeps recording.
   }
 });
 
@@ -325,10 +298,9 @@ pauseBtn.addEventListener("click", async () => {
     applyPaused(!paused);
   } catch {}
 });
-// Closes the running file exactly like Stop, then immediately opens the
-// next one with the same target/settings -- no target is sent along, the
-// backend reopens against whatever the session it is closing was actually
-// capturing (see finish_and_continue_recording).
+// Closes the running file like Stop, then opens the next one with the same
+// target/settings. No target is sent: the backend reopens against whatever the closing
+// session was capturing (see finish_and_continue_recording).
 continueBtn.addEventListener("click", async () => {
   if (continueBtn.disabled) return;
   continueBtn.disabled = true;
@@ -342,11 +314,9 @@ continueBtn.addEventListener("click", async () => {
     const result = await invoke("finish_and_continue_recording");
     showContinueGap(result.gap_ms);
   } catch (err) {
-    // The switch failed AFTER the old file was already closed for good --
-    // the backend already emitted "recording-captured" with every part
-    // folded in (the main window's own listener shows the result), this bar just
-    // closes like a normal stop instead of surfacing a second, redundant
-    // error on top of that.
+    // The switch failed AFTER the old file was closed for good: the backend already
+    // emitted "recording-captured" with every part (the main window's listener shows the
+    // result), so this bar just closes like a normal stop.
     if (typeof err === "string" && err.startsWith("recording-continue-failed-stopped:")) {
       stopped = true;
       pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
@@ -383,11 +353,9 @@ async function endTake(command) {
 stopBtn.addEventListener("click", () => endTake("stop_recording"));
 cancelBtn.addEventListener("click", () => endTake("cancel_recording"));
 
-// Keys act only once the user has clicked into the bar: the bar is shown
-// without focus on purpose, so the recorded app keeps it. Escape maps to Stop
-// (the take is kept), never to Cancel, so a stray Esc cannot throw a
-// recording away. Both keys go through the buttons, so pause/resume and stop
-// reach the backend through the same commands as a click.
+// Keys act only after the user clicked into the bar (it is shown without focus so the
+// recorded app keeps it). Escape maps to Stop (the take is kept), never Cancel, so a
+// stray Esc cannot throw a recording away. Both keys go through the buttons.
 document.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   if (e.key === "Escape") {
@@ -404,11 +372,9 @@ document.addEventListener("keyup", (e) => {
   if (e.code === "Space") e.preventDefault();
 });
 
-// The bar used to sit locked to the recorded window's corner. Dragging
-// from its background (not a button) now moves it freely to any monitor;
-// rec_bar_mark_moved() tells the 200ms follow poll in rec_bar.rs to stop
-// re-snapping it back for the rest of this recording -- its new position IS
-// the remembered one, simply by no longer being overwritten.
+// Dragging the bar's background (not a button) moves it freely to any monitor;
+// rec_bar_mark_moved() tells the 200ms follow poll in rec_bar.rs to stop re-snapping it
+// for the rest of this recording.
 const DRAG_THRESHOLD = 4;
 let dragStart = null;
 bar.addEventListener("mousedown", (e) => {
@@ -425,7 +391,6 @@ window.addEventListener("mousemove", async (e) => {
 });
 window.addEventListener("mouseup", () => { dragStart = null; });
 
-// Theme + language: same shared helpers every satellite window uses.
 import("./floattheme.js").then(({ applyFloatTheme }) => {
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
   Promise.all([invoke("current_theme"), invoke("theme_vars")])
