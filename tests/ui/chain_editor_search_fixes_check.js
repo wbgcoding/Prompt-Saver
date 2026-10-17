@@ -140,6 +140,21 @@ section(() => {
   check(style.colorScheme === "light", `switching the draft back follows, got ${style.colorScheme}`);
 });
 
+// video.js snapRect: every number of a snapped rect is even, also at the edge of an odd source.
+section(() => {
+  const src = read("video.js");
+  const sandbox = run(
+    "const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));\nconst even = (v) => Math.max(0, Math.round(v / 2) * 2);\n"
+    + extractBlock(src, "function snapRect(") + "\n;globalThis.snap = snapRect;",
+    { VE: { w: 641, h: 481 } },
+  );
+  for (const rect of [{ x: 640, y: 480, w: 100, h: 100 }, { x: 999, y: 999, w: 2, h: 2 }, { x: 541, y: 381, w: 100, h: 100 }, { x: -5, y: -5, w: 641, h: 481 }]) {
+    const r = sandbox.snap(rect);
+    check([r.x, r.y, r.w, r.h].every((n) => n % 2 === 0), `snapRect(${JSON.stringify(rect)}) gave an odd number: ${JSON.stringify(r)}`);
+    check(r.x + r.w <= 641 && r.y + r.h <= 481, `snapRect(${JSON.stringify(rect)}) leaves the frame: ${JSON.stringify(r)}`);
+  }
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
   console.log("chain_editor_search_fixes_check: ok");
