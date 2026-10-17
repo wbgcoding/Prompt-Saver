@@ -54,9 +54,9 @@ export function openCtx(id, x, y) {
   const otherViews = settings.views.filter((v) => v.id !== settings.active_view);
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView || otherViews.length > 0);
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", favView || otherViews.length === 0);
-  // Keyboard path for the mouse drag-onto-a-folder move: favorites' free-form
-  // layout has no grid cell for a folder to occupy, so it stays out of scope
-  // there the same way the mouse gesture already is.
+  // Keyboard path for the mouse drag-onto-a-folder move: favorites' free-form layout has
+  // no grid cell for a folder to occupy, so it is out of scope there, as the mouse
+  // gesture is.
   const moveFolderBtn = ctxEl.querySelector('[data-act="moveToFolder"]');
   moveFolderBtn.classList.toggle("hidden", !tileFoldersOn() || favView);
   // Only visible when this prompt actually rotates and both auto gates are on:
@@ -301,8 +301,7 @@ export function openGridTagPop() {
 export const TOOLBAR_TOOLS = ["favViewButton", "showLibrary", "barToggles", "showLogo", "showTitle"];
 // Little glyph shown beside each tool name so the menu reads at a glance.
 export const tbIcon = (d, fill) => `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'} d="${d}"/></svg>`;
-// Tool-menu icons mirror the real toolbar buttons so the menu reads the same as
-// the header (library and journal match 1:1).
+// Tool-menu icons mirror the real toolbar buttons (library and journal match 1:1).
 export const TOOL_ICONS = {
   favViewButton: tbIcon("M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.9l-5.1 2.6 1-5.7-4.1-4 5.7-.8z", true),
   showLibrary: tbIcon("M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z", true),
@@ -350,8 +349,8 @@ export function buildToolbarMenu() {
     });
     toolbarMenu.appendChild(b);
   }
-  // Hiding the top bar is not a header button any more: it lives here, and the
-  // bar comes back through the small restore button.
+  // Hiding the top bar is not a header button: it lives here, and the bar comes back
+  // through the small restore button.
   if (flag("barToggles")) {
     const sep = document.createElement("div");
     sep.className = "ctx-sep";
@@ -379,7 +378,6 @@ export function openToolbarMenu(x, y) {
 export function closeToolbarMenu() { toolbarMenu.classList.add("hidden"); }
 
 export function bindGridMenus({ openExternalFileInEditor }) {
-  // Grid tag filter toolbar button.
   $("grid-tag-btn").addEventListener("click", () => {
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     openGridTagPop();
