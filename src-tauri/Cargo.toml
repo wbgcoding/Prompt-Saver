@@ -46,6 +46,8 @@ tokio-rustls = { version = "=0.26.6", default-features = false, features = ["rin
 rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
 sha2 = "0.10"
+# Ed25519 check of signed updates; already in the tree through rustls.
+ring = "=0.17.14"
 # Encrypted single-file backups: AES-256-GCM + Argon2id password KDF (pure Rust, no
 # system/OpenSSL dependency). Default backups use a fixed key (portable); an optional
 # user password derives a stronger key.

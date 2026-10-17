@@ -154,6 +154,13 @@ if defined INSTALLER copy /y "%INSTALLER%" "%DIST%\" >nul
 rem SHA-256 sidecar for the installer (the auto-updater verifies "<installer>.sha256"
 rem before running the download). Upload it alongside the installer on the GitHub release.
 if defined INSTALLER for %%I in ("%INSTALLER%") do powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 '%%~fI').Hash.ToLower(); [IO.File]::WriteAllText('%DIST%\%%~nxI.sha256', $h)"
+rem Signature sidecar: the updater also needs "<installer>.sig", made with the signing key
+rem outside the repo (tools\sign_update.js). Without the key the build still finishes, but
+rem that installer cannot be published as an update.
+if defined INSTALLER for %%I in ("%INSTALLER%") do (
+    node "%~dp0tools\sign_update.js" sign "%DIST%\%%~nxI"
+    if errorlevel 1 echo [WARN] Installer not signed - it cannot be published as an update.
+)
 rem pdfium.dll is compiled INTO the exe (see pdfium_lib_path in images.rs) and unpacked
 rem on first use, so nothing has to travel next to the portable exe any more.
 rem ffmpeg.exe is the opposite: it is NOT embedded (100+ MB). If src-tauri\ffmpeg.exe

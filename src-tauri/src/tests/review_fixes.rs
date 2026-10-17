@@ -1435,3 +1435,23 @@ fn only_a_confidential_copy_opts_out_of_clipboard_history() {
         assert!(secret.contains(&name), "{name} missing");
     }
 }
+
+// ---- an update installs only with the publisher's signature ----
+
+#[test]
+fn an_update_signature_must_match_the_digest_and_the_key() {
+    use base64::Engine as _;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let rng = ring::rand::SystemRandom::new();
+    let pkcs8 = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
+    let pair = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
+    let key = b64.encode(ring::signature::KeyPair::public_key(&pair).as_ref());
+    let digest = [7u8; 32];
+    let sig = b64.encode(pair.sign(&digest).as_ref());
+    assert!(update_signature_valid(&digest, &sig, &key));
+    let mut other = digest;
+    other[0] ^= 1;
+    assert!(!update_signature_valid(&other, &sig, &key));
+    assert!(!update_signature_valid(&digest, "", &key));
+    assert!(!update_signature_valid(&digest, &sig, UPDATE_PUBLIC_KEY_B64));
+}

@@ -763,6 +763,23 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
     Ok(())
 }
 
+// Public half of the key every release installer is signed with (`tools/sign_update.js`).
+// The private half never leaves the publisher's machine.
+pub(crate) const UPDATE_PUBLIC_KEY_B64: &str = "Z1ty4r3YnfqsEo+h3gee71jt+QcyINxbMoDCMkEXVZ8=";
+
+// True when `sig_text` (base64, as published in `<installer>.sig`) is a valid Ed25519
+// signature over the installer's SHA-256 digest under `public_key_b64`.
+pub(crate) fn update_signature_valid(digest: &[u8], sig_text: &str, public_key_b64: &str) -> bool {
+    use base64::Engine as _;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let (Ok(sig), Ok(key)) = (b64.decode(sig_text.trim()), b64.decode(public_key_b64)) else {
+        return false;
+    };
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+        .verify(digest, &sig)
+        .is_ok()
+}
+
 // The blocking body of `install_update`, split out so it runs in spawn_blocking without an
 // AppHandle crossing the boundary.
 pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
@@ -801,11 +818,24 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
         .map(|t| t.split_whitespace().next().unwrap_or("").to_ascii_lowercase())
         .filter(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
         .ok_or_else(|| "no usable checksum published for this update, download rejected".to_string())?;
-    {
+    let digest = {
         use sha2::{Digest, Sha256};
-        if format!("{:x}", Sha256::digest(&bytes)) != want {
-            return Err("update hash mismatch: download rejected".to_string());
-        }
+        Sha256::digest(&bytes)
+    };
+    if format!("{:x}", digest) != want {
+        return Err("update hash mismatch: download rejected".to_string());
+    }
+    // Origin: the hash proves the download is intact, the signature that the publisher made
+    // it. Someone who could replace both release files still has no signing key.
+    let sig = ureq::get(&format!("{}.sig", url))
+        .set("User-Agent", brand::USER_AGENT)
+        .timeout(std::time::Duration::from_secs(30))
+        .call()
+        .ok()
+        .and_then(|r| r.into_string().ok())
+        .unwrap_or_default();
+    if !update_signature_valid(&digest, &sig, UPDATE_PUBLIC_KEY_B64) {
+        return Err("update signature invalid: download rejected".to_string());
     }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
     // the installer/script at a predictable path (TOCTOU).

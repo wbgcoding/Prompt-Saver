@@ -3685,6 +3685,7 @@ dependencies = [
  "rayon",
  "rcgen",
  "rfd",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",
