@@ -21173,6 +21173,15 @@ fn export_dest_is_usable_refuses_device_names_bad_characters_and_the_source_itse
 }
 
 #[test]
+fn a_destroyed_float_window_is_forgotten_by_the_closing_list() {
+    let label = "float-destroyed-forgets-test";
+    CLOSING_FLOATS.lock().unwrap().push((label.to_string(), false));
+    assert!(is_closing(label));
+    float_destroyed(label);
+    assert!(!is_closing(label));
+}
+
+#[test]
 fn reopen_step_builds_only_when_the_label_is_free_and_waits_for_a_closing_window() {
     assert_eq!(reopen_step(false, false), ReopenStep::Build);
     assert_eq!(reopen_step(false, true), ReopenStep::Build);

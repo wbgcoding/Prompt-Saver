@@ -174,7 +174,7 @@ fn main_scale_factor(app: &AppHandle) -> f64 {
 // Labels whose window was asked to close. close() only queues the teardown, and building
 // under the same label before it ran fails, so a pill wanted again meanwhile must wait for
 // the label to go. The flag marks an entry that already has a waiting task.
-static CLOSING_FLOATS: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+pub(crate) static CLOSING_FLOATS: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum ReopenStep {
@@ -201,12 +201,18 @@ pub(crate) fn close_tracked(label: &str, win: &tauri::WebviewWindow) {
     let _ = win.close();
 }
 
-fn is_closing(label: &str) -> bool {
+pub(crate) fn is_closing(label: &str) -> bool {
     CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(l, _)| l == label)
 }
 
 fn forget_closing(label: &str) {
     CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(l, _)| l != label);
+}
+
+// The window is gone: a label that is never opened again (deleted prompt, dissolved folder)
+// must not stay in the list for the rest of the process.
+pub(crate) fn float_destroyed(label: &str) {
+    forget_closing(label);
 }
 
 // True when the caller must not build now. A window that is still closing gets one task that
@@ -312,6 +318,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
 
         let app2 = app.clone();
         let pid = prompt.id.clone();
+        let wlabel = label.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
                 // Fires for every pixel of a drag, so never block on a busy store; the next event carries
@@ -327,7 +334,10 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
                 }
                 mark_parked(&app2, &pid, false);
             }
-            WindowEvent::Destroyed => save_settings_off_event_loop(&app2),
+            WindowEvent::Destroyed => {
+                float_destroyed(&wlabel);
+                save_settings_off_event_loop(&app2);
+            }
             _ => {}
         });
     }
@@ -924,6 +934,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
 
         let app2 = app.clone();
         let fid = folder.id.clone();
+        let wlabel = label.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
                 // While the folder is open the window origin is not the icon, so the stored position
@@ -944,6 +955,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
                 mark_parked(&app2, &fid, false);
             }
             WindowEvent::Destroyed => {
+                float_destroyed(&wlabel);
                 set_folder_expansion(&app2, &fid, None);
                 save_settings_off_event_loop(&app2);
             }
