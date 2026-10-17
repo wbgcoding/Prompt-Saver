@@ -82,6 +82,37 @@ later(async () => {
   check(commits.slice(2).join() === "g", `a removed pick burns nothing, got ${commits.slice(2)}`);
 });
 
+// editor.js openFileCreate: a slower preview never opens over a newer file.
+later(async () => {
+  const src = read("editor.js");
+  const from = src.includes("let fileCreateSeq") ? src.indexOf("let fileCreateSeq") : src.indexOf("export async function openFileCreate");
+  const code = src.slice(from, src.indexOf("// Left click: open the file dialog directly."));
+  const opened = [];
+  const previews = {};
+  const sandbox = run(code.replace(/export /g, "") + "\n;globalThis.open = openFileCreate;", {
+    modalSession: 0,
+    mediaKind: () => "",
+    PDF_EXT: /\.pdf$/i,
+    t: (k) => k,
+    loadFilePreview: (p) => { previews[p] = deferred(); return previews[p].promise; },
+    openModal: (o) => { opened.push(o.filePath); sandbox.modalSession++; },
+  });
+  const slow = sandbox.open("slow.png");
+  const fast = sandbox.open("fast.png");
+  previews["fast.png"].resolve("img-fast");
+  await fast;
+  previews["slow.png"].resolve("img-slow");
+  await slow;
+  check(opened.join() === "fast.png", `only the latest file opens the dialog, got ${opened}`);
+  // a dialog opened while the preview loads is left alone
+  opened.length = 0;
+  const late = sandbox.open("late.png");
+  sandbox.modalSession++;
+  previews["late.png"].resolve("x");
+  await late;
+  check(opened.length === 0, "a preview does not open over a dialog opened meanwhile");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
   console.log("chain_editor_search_fixes_check: ok");
