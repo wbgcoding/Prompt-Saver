@@ -976,7 +976,7 @@ fn border_setting_only_switches_off_for_a_region_target() {
 fn region_outline_rect_adds_the_monitor_origin_to_the_region_offset() {
     // A region picked on a monitor to the right of the primary one: the
     // outline must land at the monitor's own absolute position plus the
-    // region's offset within it, exactly what resolve_crop already crops
+    // region's offset within it, exactly what resolve_region_clip already crops
     // each frame to.
     assert_eq!(recording::region_outline_rect((1920, 0), 100, 50, 400, 300), (2020, 50, 400, 300));
     assert_eq!(recording::region_outline_rect((0, 0), 0, 0, 1920, 1080), (0, 0, 1920, 1080));
@@ -984,7 +984,7 @@ fn region_outline_rect_adds_the_monitor_origin_to_the_region_offset() {
 
 #[test]
 fn region_outline_rect_clamps_a_negative_offset_to_the_monitor_origin() {
-    // Same defensive clamp resolve_crop already applies to a region whose
+    // Same defensive clamp resolve_region_clip already applies to a region whose
     // picker math ever hands back a negative offset.
     assert_eq!(recording::region_outline_rect((0, 0), -10, -5, 200, 100), (0, 0, 200, 100));
 }
@@ -20752,4 +20752,27 @@ fn export_source_is_allowed_only_for_own_recordings_work_copies_and_the_open_edi
     assert!(!export_source_is_allowed(&dirs, &temp_root, &[String::new()], &foreign));
     assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, &elsewhere.join("gone.mp4")));
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn clip_region_to_frame_keeps_the_pixels_that_lie_on_the_monitor() {
+    // Inside: unchanged.
+    assert_eq!(recording::clip_region_to_frame(100, 50, 400, 300, 1920, 1080), Some((100, 50, 400, 300)));
+    // Negative origin: the visible part keeps its size minus the overhang.
+    assert_eq!(recording::clip_region_to_frame(-100, -20, 400, 300, 1920, 1080), Some((0, 0, 300, 280)));
+    // Overhang past the right/bottom edge.
+    assert_eq!(recording::clip_region_to_frame(1800, 1000, 400, 300, 1920, 1080), Some((1800, 1000, 120, 80)));
+    // No overlap at all.
+    assert_eq!(recording::clip_region_to_frame(2000, 0, 100, 100, 1920, 1080), None);
+    assert_eq!(recording::clip_region_to_frame(-500, 0, 100, 100, 1920, 1080), None);
+    assert_eq!(recording::clip_region_to_frame(0, 0, 0, 100, 1920, 1080), None);
+}
+
+#[test]
+fn crop_and_flip_rows_bottom_up_copies_the_overlap_of_a_crop_that_overhangs_the_frame() {
+    // 2x2 frame, pixels 1..4 (first byte distinct), crop 3 wide starting at x=1.
+    let raw: Vec<u8> = vec![1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4];
+    let out = crop_and_flip_rows_bottom_up(&raw, 2, 2, 8, 1, 0, 3, 2);
+    // Bottom-up: row 1 (pixel 4) first, then row 0 (pixel 2); the missing columns stay black.
+    assert_eq!(out, vec![4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
 }
