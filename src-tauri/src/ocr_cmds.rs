@@ -594,6 +594,28 @@ pub(crate) fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_fr
     store.prompts.iter_mut().find(|p| p.id == id).is_some_and(|p| apply_backfill_text(p, recognized_from, text))
 }
 
+// apply_ocr_backfill_text plus its write. A write that fails takes the text out of memory again,
+// so the session never searches text the disk does not have, and the pass stops with the error.
+pub(crate) fn apply_ocr_backfill_and_save(
+    store: &mut Store,
+    id: &str,
+    recognized_from: &str,
+    text: String,
+    started_epoch: u64,
+    save: impl FnOnce(&Store) -> bool,
+) -> Result<(), String> {
+    if !apply_ocr_backfill_text(store, id, recognized_from, text, started_epoch) {
+        return Ok(());
+    }
+    if save(store) {
+        return Ok(());
+    }
+    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+        p.image_text.clear();
+    }
+    Err("save-failed".to_string())
+}
+
 // The expert-menu "read existing pictures" action: every prompt that carries a picture but no
 // index text yet is read once, one at a time in a single sequential pass, never a flood of
 // parallel OCR calls. Progress and cancellation use the shared background-jobs registry
@@ -633,8 +655,10 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
                     .map_err(|e| e.to_string())?;
                 if !text.is_empty() {
                     let mut store = lock(&state);
-                    if apply_ocr_backfill_text(&mut store, &id, &image, text, started_epoch) {
-                        save_prompts(&app, &store);
+                    if let Err(e) = apply_ocr_backfill_and_save(&mut store, &id, &image, text, started_epoch, |st| save_prompts(&app, st)) {
+                        drop(store);
+                        push_bg_op(&app, "ocr-index", "ocr-index", "error", None, None);
+                        return Err(e);
                     }
                 }
             }

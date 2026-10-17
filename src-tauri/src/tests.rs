@@ -8314,6 +8314,23 @@ fn a_pass_started_before_the_ocr_clear_never_writes_its_text() {
     assert!(store.prompts[0].image_text.is_empty());
 }
 
+#[test]
+fn a_failed_write_stops_the_ocr_backfill_and_takes_its_text_back_out() {
+    let mut store = secret_test_store(vec![image_text_prompt("a", "")]);
+    store.settings.ui_flags.insert("ocrIndex".into(), true);
+    let pic = store.prompts[0].image.clone();
+    let started = ocr_epoch();
+    let r = apply_ocr_backfill_and_save(&mut store, "a", &pic, "text".into(), started, |_| false);
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert!(store.prompts[0].image_text.is_empty(), "memory matches the disk");
+    let r = apply_ocr_backfill_and_save(&mut store, "a", &pic, "text".into(), started, |_| true);
+    assert_eq!(r, Ok(()));
+    assert_eq!(store.prompts[0].image_text, "text");
+    // a stale pass writes nothing and asks for no save
+    let r = apply_ocr_backfill_and_save(&mut store, "a", "other.png", "x".into(), started, |_| panic!("no write for a skipped text"));
+    assert_eq!(r, Ok(()));
+}
+
 fn prompts_json(store: &Store) -> String {
     serde_json::to_string(&store.prompts).unwrap()
 }
