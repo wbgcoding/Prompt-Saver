@@ -94,7 +94,6 @@ export function journalRow(p, meta, onClick) {
   row.append(mediaThumb(p, thumbEl(p, journalThumbCache)), body);
   maybeBackfillMediaMeta(p, renderJournal);
   row.addEventListener("click", onClick);
-  // Edit straight from the history: same icon/pattern as the library row.
   const edit = document.createElement("span");
   edit.className = "icon-btn lib-edit";
   edit.title = t("edit");
@@ -152,11 +151,10 @@ export const fmtWhen = (ts) => {
 };
 const fmtFull = (ts) => (ts ? new Date(ts * 1000).toLocaleString(LANG) : "");
 
-// The "last copied" / "last edited" lines a tile or library row's tooltip
-// shows, each hanging off the function that actually owns that data -- the copy
-// timestamp off the same settings.last_used map smartSort reads, the edit
-// timestamp off promptHistory's lastEdited map -- so a value missing because its
-// own feature is off (or just never happened yet) drops only its own line.
+// The "last copied" / "last edited" lines of a tile or library row tooltip, each hanging
+// off the function that owns that data (the copy timestamp off settings.last_used, the
+// edit timestamp off promptHistory's lastEdited), so a value missing because its feature
+// is off drops only its own line.
 export function tileTimeLines(id) {
   const lines = [];
   const copied = settings.last_used?.[id];
@@ -212,8 +210,7 @@ export async function restoreCopyHistory(rows, usage, lastUsed) {
 }
 
 // One entry copied in another app: time, a two-line text preview and two icons (save as a
-// prompt, dismiss). The row itself copies the text again, like a row of the app's copies.
-// Shown inside the copy history.
+// prompt, dismiss). The row copies the text again; shown inside the copy history.
 export function journalClipRow(it) {
   const row = document.createElement("div");
   row.className = "clip-row journal-clip";
@@ -316,9 +313,8 @@ export function renderJournal() {
   // Newest first; the sort is stable, so equal timestamps keep the copy log first.
   recent.sort((a, b) => (b.ts || 0) - (a.ts || 0));
   if (journalRecentRev) recent.reverse();
-  // How hard the filters are biting, in the header where the filters are:
-  // same wording/element as the library, counted against entries with a
-  // still-existing prompt (a log row for a deleted prompt is not "all").
+  // How hard the filters are biting, in the header where the filters are: counted against
+  // entries with a still-existing prompt (a log row for a deleted prompt is not "all").
   const jcount = $("journal-count");
   if (jcount) {
     const all = (showApp ? journalLog.filter((e) => byId.get(e.id)).length : 0) +
@@ -339,7 +335,7 @@ export function renderJournal() {
   body.innerHTML = "";
   const copyAgain = (p) => async () => {
     if (copyOnCooldown(p.id)) return; // same prompt copied moments ago
-    if (await copyResolved(p)) { // handles {{variables}} like the library does
+    if (await copyResolved(p)) {
       await recordCopy(p.id); // await: the log must refetch AFTER the copy is recorded
       toastCopied(p);
       assignSettings(await invoke("get_settings"));
@@ -482,8 +478,7 @@ export async function resetAndLoadJournal() {
 }
 
 export function bindJournal() {
-  // Pause/resume recording copies from other apps straight from the copy history: same
-  // switch as the expert one.
+  // Pause/resume recording copies from other apps straight from the copy history.
   $("clip-toggle").addEventListener("click", async () => {
     const on = !optFlag("clipWatcher");
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
@@ -506,7 +501,6 @@ export function bindJournal() {
   });
   listen("clip-inbox-changed", () => refreshClipInbox());
 
-  // Copy history & usage journal.
   const renderJournalDebounced = debounced(renderJournal);
   $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournalDebounced(); });
   wireSearchSuggest($("journal-q"), "recentSearchJournal");
@@ -523,9 +517,8 @@ export function bindJournal() {
     const source = sourcesOn ? journalSource : "all";
     const clearApp = source !== "elsewhere";
     const clearElsewhere = source !== "app";
-    // Snapshot everything the clears are about to wipe, so Undo can write it all
-    // back: the row-level log (reused via the same call the journal itself uses to
-    // fill its list) plus the two counter maps, and the stored entries.
+    // Snapshot everything the clears are about to wipe, so Undo can write it all back:
+    // the row-level log, the two counter maps and the stored entries.
     let rows = [];
     let items = [];
     const usage = { ...(settings.usage || {}) };
