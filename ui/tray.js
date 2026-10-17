@@ -1,9 +1,8 @@
-// Custom Windows-11-style tray context menu, opened instead of the native
-// popup when trayCustomMenu is on. Every entry runs the exact same activation
-// the plain tray menu already used (tray_window_activate -> handle_tray_menu_id
-// -> fire_tray_copy), so placeholder dialogs, cooldown and chains stay in
-// the main window, never duplicated here. All text (labels, section titles, show/quit)
-// comes pre-translated from the backend -- this file draws rows, nothing else.
+// Custom Windows-11-style tray context menu, opened instead of the native popup when
+// trayCustomMenu is on. Every entry runs the same activation as the plain tray menu
+// (tray_window_activate -> handle_tray_menu_id -> fire_tray_copy), so placeholder
+// dialogs, cooldown and chains stay in the main window. All text comes pre-translated
+// from the backend; this file draws rows.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { hexToRgb, inkFor } from "./floatShared.js";
@@ -38,12 +37,11 @@ function activate(id) {
 // Same four kinds, same fallback tint as the native menu's tray_kind_tint.
 const KIND_TINT = { text: [90, 100, 114], image: [47, 111, 237], media: [139, 92, 246], file: [224, 138, 30] };
 
-// Same four glyphs as the native menu's hand-drawn 16x16 icon chips (tray_icon_pixels
-// in tray.rs), redrawn as vectors: a colored chip -- the prompt's own tile color, or
-// the kind's tint -- with a glyph on top, ink flipped light/dark by the chip's own
-// brightness exactly like the native icon does. Each glyph is a plain list of SVG
-// shape descriptors (never markup) built with createElementNS, so a prompt's own
-// color string never runs through innerHTML.
+// Same four glyphs as the native menu's hand-drawn 16x16 icon chips (tray_icon_pixels in
+// tray.rs), redrawn as vectors: a colored chip (the prompt's tile color, or the kind's
+// tint) with a glyph on top, ink flipped light/dark by the chip's brightness. Glyphs are
+// plain lists of SVG shape descriptors built with createElementNS, so a prompt's color
+// string never runs through innerHTML.
 const KIND_GLYPH = {
   text: [
     { tag: "path", d: "M4 5h10M4 8.2h10M4 11.4h7", strokeWidth: "1.6", strokeLinecap: "round" },
@@ -153,10 +151,9 @@ function addSeparator() {
   rowsEl.appendChild(document.createElement("div")).className = "tray-menu-sep";
 }
 
-// Draws the rows below the (always-present, never-cleared) search field: the
-// recording controls, then either the fixed favourites/recents sections or the
-// search-result list the caller passes in, then show/quit. Re-running this on
-// every keystroke is cheap -- at most a couple dozen rows.
+// Draws the rows below the always-present search field: the recording controls, then the
+// fixed favourites/recents sections or the caller's search-result list, then show/quit.
+// Cheap enough to re-run on every keystroke (a couple dozen rows).
 function renderRows(recEntries, sections, showLabel, quitLabel) {
   rowsEl.innerHTML = "";
   rows = [];
@@ -179,15 +176,14 @@ function render(plan) {
   renderRows(plan.recEntries, plan.sections, plan.showLabel, plan.quitLabel);
 }
 
-// The first keystroke in the filter field hands over to the quick launcher: the
-// backend builds it with what was typed already in its search box. This window keeps
-// the focus, and every further key lands in this field, until the launcher page is up
-// and the backend gives it the focus: that is the moment this window blurs, so the
-// field then holds exactly what was typed up to the switch. It is passed on once,
-// complete, and this window closes. Keys typed after the switch go to the launcher
-// itself, which puts the passed-on text in front of them. A launcher that never takes
-// the focus gets the text after HANDOFF_MAX_MS anyway. Arrow keys and Enter on the
-// fixed rows work before typing.
+// The first keystroke in the filter field hands over to the quick launcher, which the
+// backend builds with what was typed so far. This window keeps the focus and every
+// further key lands in this field until the launcher page is up and the backend gives it
+// the focus; that is when this window blurs, so the field holds exactly what was typed up
+// to the switch. It is passed on once, complete, and this window closes. Keys typed after
+// the switch go to the launcher, which puts the passed-on text in front of them. A
+// launcher that never takes the focus gets the text after HANDOFF_MAX_MS anyway. Arrow
+// keys and Enter on the fixed rows work before typing.
 const HANDOFF_MAX_MS = 3000;
 let handover = null; // set once the first keystroke started the hand-off
 let tailSent = false;
@@ -225,9 +221,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Same grace-period pattern as launcher.js/vars.js: the backend shows the window
-// and only then takes focus, and a blur fired in that hand-off window would
-// close before anything was ever on screen.
+// Grace period: the backend shows the window and only then takes focus, and a blur fired
+// in that hand-off would close the menu before anything was on screen.
 let openedAt = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
@@ -235,12 +230,10 @@ window.addEventListener("blur", () => {
   if (closed) return; // hidden between opens: nothing to close
   const left = BLUR_GRACE_MS - (Date.now() - openedAt);
   if (left <= 0) close();
-  // A blur landing inside the hand-off window itself (the backend showing the
-  // window, then taking focus) is not real activity to ignore forever -- if the
-  // user genuinely clicks another app in that same instant, discarding the blur
-  // outright left this always-on-top menu stranded on screen with nothing left
-  // to close it. Defer instead: close once the grace window actually ends,
-  // unless this window is focused again before then.
+  // A blur inside the hand-off window is deferred, not dropped: if the user clicks
+  // another app in that same instant, ignoring the blur would strand this always-on-top
+  // menu on screen. Close once the grace window ends, unless this window is focused again
+  // by then.
   else setTimeout(() => { if (!document.hasFocus() && !handover) close(); }, left);
 });
 document.body.addEventListener("mousedown", (e) => {
