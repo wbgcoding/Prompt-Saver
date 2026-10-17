@@ -196,6 +196,29 @@ section(() => {
   check(sandbox.hits("nothing here").length === 0, "an unrelated word finds nothing");
 });
 
+// journal.js journalMatches: the history search reads the same fields as the library search.
+section(() => {
+  const src = read("journal.js");
+  const flags = { tags: true, notes: true };
+  const sandbox = run(extractBlock(src, "export function journalMatches(").replace("export ", "") + "\n;globalThis.match = journalMatches;", {
+    typeAllowed: () => true,
+    journalTypes: new Set(),
+    journalQuery: "",
+    tagsOn: () => flags.tags,
+    notesOn: () => flags.notes,
+  });
+  const p = { name: "Mail", text: "body", file_path: "", variants: ["second entry zebra"], tags: ["Work Stuff"], notes: "remember oranges" };
+  const hit = (q) => { sandbox.journalQuery = q; return sandbox.match(p); };
+  check(hit("zebra"), "a rotation entry is found");
+  check(hit("work stuff"), "a tag is found while tags are on");
+  check(hit("oranges"), "a note is found while notes are on");
+  check(hit("body") && hit("mail"), "name and body still match");
+  check(!hit("absent"), "an unrelated word matches nothing");
+  flags.tags = false; flags.notes = false;
+  check(!hit("work stuff") && !hit("oranges"), "tags and notes stay out of the search while their features are off");
+  check(hit("zebra"), "a rotation entry is found with the features off");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
   console.log("chain_editor_search_fixes_check: ok");
