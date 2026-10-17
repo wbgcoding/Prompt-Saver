@@ -160,10 +160,9 @@ export function bindAbout() {
       const info = await invoke("check_update");
       if (info.available) offerUpdate(info);          // status → "Update to X available"
       else {
-        // The short form keeps this single-line at the same width the long
-        // sentence used to wrap at; the full sentence survives as a tooltip.
-        // dataset.i18nTitle (not just .title) keeps it correct across a later
-        // language switch too, the same as every other data-i18n-title element.
+        // The short form keeps this on one line at the width the long sentence wrapped
+        // at; the full sentence is the tooltip. dataset.i18nTitle (not just .title) keeps
+        // it correct across a language switch.
         setStatusText(updateVersion, "upToDate", "v", appVersion);
         updateVersion.dataset.i18nTitle = "upToDateTip";
         updateVersion.title = t("upToDateTip");
