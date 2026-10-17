@@ -18741,6 +18741,35 @@ fn a_failed_atomic_write_leaves_the_old_file_untouched() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// A file another program holds open without delete sharing cannot be replaced, but an in-place
+// write would still go through and could leave a half-written backup behind.
+#[cfg(windows)]
+#[test]
+fn the_strict_atomic_write_leaves_a_file_held_open_without_delete_sharing_untouched() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = std::env::temp_dir().join(format!("ps-atomic-held-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("backup.psb");
+    fs::write(&target, b"the previous backup").unwrap();
+    // Share read and write, but not delete: the swap is refused, an in-place write is not.
+    let held = fs::OpenOptions::new().read(true).share_mode(1 | 2).open(&target).unwrap();
+    let result = write_bytes_atomic_strict(&target, b"a replacement that must not appear");
+    assert!(result.is_err(), "a refused replace must surface as an error");
+    assert_eq!(fs::read(&target).unwrap(), b"the previous backup", "the old file stays byte-identical");
+    drop(held);
+    let names: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, vec!["backup.psb".to_string()], "the failed attempt removed its temp file");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn backup_export_writers_use_the_strict_replace() {
+    let src = include_str!("vault.rs");
+    assert!(!src.contains("write_bytes_atomic(&path"), "a backup export must not fall back to an in-place write");
+    assert_eq!(src.matches("write_bytes_atomic_strict(&path").count(), 2);
+}
+
 #[test]
 fn user_picked_exports_never_write_in_place() {
     for (name, src) in [
