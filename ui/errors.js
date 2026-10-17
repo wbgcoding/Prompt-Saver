@@ -1,13 +1,11 @@
 // Maps the plain English error strings the backend returns to translated texts. Shared by
 // the main window (core.js errText) and every satellite window (video, snip, ...), each
 // with its own t(). No imports: a window that only needs this must not pull in core.js.
-// The backend returns Err(String) with a plain English sentence; most call sites
-// just did errToast(err), which shows raw English no matter the app language.
-// Known error strings get mapped to a translated key here; anything not in the map
-// (an unexpected error, or a plain error code like "canceled" a caller already
-// checks for itself) shows the generic errUnexpected text and keeps the raw string
-// in the error log. tests/error_msg_check.py keeps this map and the Rust error
-// strings in step.
+// The backend returns Err(String) with a plain English sentence. Known strings are mapped
+// to a translated key here; anything not in the map (an unexpected error, or a plain code
+// like "canceled" a caller checks itself) shows the generic errUnexpected text and keeps
+// the raw string in the error log. tests/error_msg_check.py keeps this map and the Rust
+// error strings in step.
 export const ERROR_MSG_KEYS = {
   "cannot delete the last view": "errLastView",
   "theme name is empty": "errThemeNameEmpty",
