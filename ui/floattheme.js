@@ -1,7 +1,6 @@
-// Theme mapping for the small always-on-top windows (pills and pill folders).
-// They carry their OWN tokens (floating.css), so a custom theme's colours are mapped
-// onto them; a floating button follows the same palette as the main window instead
-// of falling back to the base theme's colours.
+// Theme mapping for the small always-on-top windows (pills and pill folders). They carry
+// their OWN tokens (floating.css), so a custom theme's colours are mapped onto them; a
+// floating button follows the main window's palette instead of the base theme's.
 import { hexLuminance, INK_CROSSOVER, inkFor, themeColorScheme } from "./floatShared.js";
 
 const FLOAT_THEME_MAP = {
@@ -89,9 +88,9 @@ export function applyFloatTheme(theme, vars) {
   if (inkListener) inkListener();
 }
 
-// Keep INK current without waiting for the next theme change, and re-paint
-// the pill ink immediately once it arrives -- a satellite window must never
-// need a restart to pick up a changed threshold or a flipped switch.
+// Keep INK current without waiting for the next theme change and repaint the pill ink at
+// once when it arrives: a satellite window must never need a restart to pick up a changed
+// threshold or switch.
 function setInk(ink) {
   if (!ink) return;
   INK = {
