@@ -3436,9 +3436,11 @@ select.modal-input { padding-right: 30px; }
   display: flex; flex-direction: column; gap: 4px;
   padding: 6px 8px; border-radius: 6px; background: var(--surface);
 }
-.hist-head { display: flex; align-items: center; gap: 8px; }
+/* Wraps so long translations of the two restore buttons move to a second line
+   instead of being cut off by the collapsible section. */
+.hist-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .hist-time { font-size: 11px; color: var(--muted); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-.hist-preview { font-size: 12px; color: var(--fg); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.hist-preview { font-size: 12px; color: var(--fg); flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .hist-expand {
   flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px;
@@ -3449,6 +3451,7 @@ select.modal-input { padding-right: 30px; }
 .hist-expand svg { transition: transform var(--transition); }
 .hist-row.open .hist-expand svg { transform: rotate(180deg); }
 .hist-restore, .hist-restore-new { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
+.hist-restore { margin-inline-start: auto; }
 /* Chip beside the preview when a snapshot carries rotation entries, so the row
    itself hints there is more than one text before the user even expands it. */
 .hist-entries { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 6px; }
