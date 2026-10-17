@@ -686,14 +686,27 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
             let _ = win.close();
         }
     }
-    let effects = {
+    let reset = {
         let mut store = lock(&state);
-        let (old, ocr_was_on) = reset_settings_core(&mut store, |st| save_settings(&app, &st.settings))?;
-        // Defaults switch the picture-text index off: erase its text as well.
-        if ocr_was_on && clear_ocr_index_text(&mut store) {
-            write_ocr_wipe(&app, &store, "reset");
+        match reset_settings_core(&mut store, |st| save_settings(&app, &st.settings)) {
+            Ok((old, ocr_was_on)) => {
+                // Defaults switch the picture-text index off: erase its text as well.
+                if ocr_was_on && clear_ocr_index_text(&mut store) {
+                    write_ocr_wipe(&app, &store, "reset");
+                }
+                Ok(remote::reset_side_effects(&old, &store.settings))
+            }
+            Err(e) => Err(e),
         }
-        remote::reset_side_effects(&old, &store.settings)
+    };
+    let effects = match reset {
+        Ok(effects) => effects,
+        Err(e) => {
+            // The settings rolled back, so the windows closed above belong back; the store
+            // lock is released here, as the window calls require.
+            sync_float_windows(&app);
+            return Err(e);
+        }
     };
     // Another copy's Run entry (portable versus installed) is not this reset's to remove.
     if !autostart_removal_skipped() {
