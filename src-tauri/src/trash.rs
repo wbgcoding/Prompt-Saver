@@ -366,13 +366,7 @@ pub(crate) async fn restore_prompts_batch(app: AppHandle, state: State<'_, Db>, 
         let mut store = lock(&state);
         let original_settings = store.settings.clone();
         restore_placed_core(&mut store, &placements, |st| {
-            save_pair_or_undo_first(
-                || save_settings(&app, &st.settings),
-                || save_prompts_and_trash(&app, st),
-                || {
-                    save_settings(&app, &original_settings);
-                },
-            )
+            save_settings_then_rows(&app, st, &original_settings, |s| save_prompts_and_trash(&app, s))
         })?;
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }
