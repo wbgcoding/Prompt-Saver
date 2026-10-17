@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc::{channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -1170,19 +1170,33 @@ pub fn pause() {
     }
 }
 
-// Mirrors the keyOverlay flag for the running capture: set when a capture starts and by the
-// flag switch, so resume never re-hooks the keyboard after the flag went off.
-static FLAG_ON: AtomicBool = AtomicBool::new(false);
+// Mirrors the keyOverlay flag for the capture: set by the flag switch, and claimed as on when
+// a capture starts before any switch happened. Resume never re-hooks the keyboard after the
+// flag went off, and a start that read the flag as on just before it was switched off is
+// refused.
+const FLAG_UNKNOWN: u8 = 0;
+const FLAG_ON: u8 = 1;
+const FLAG_OFF: u8 = 2;
+static FLAG_STATE: AtomicU8 = AtomicU8::new(FLAG_UNKNOWN);
 
 // Pure: whether resume should put the keyboard hook back.
 fn hook_install_wanted(flag_on: bool, hook_present: bool) -> bool {
     flag_on && !hook_present
 }
 
+// Pure: the flag state after a capture start, or None when the live flag is off.
+fn claim_start(state: u8) -> Option<u8> {
+    if state == FLAG_OFF {
+        None
+    } else {
+        Some(FLAG_ON)
+    }
+}
+
 // Called when the keyOverlay flag is switched. Off ends a running capture right away, without
 // a sidecar.
 pub fn flag_changed(enabled: bool) {
-    FLAG_ON.store(enabled, Ordering::SeqCst);
+    FLAG_STATE.store(if enabled { FLAG_ON } else { FLAG_OFF }, Ordering::SeqCst);
     if !enabled {
         discard();
     }
@@ -1192,7 +1206,7 @@ pub fn resume() {
     let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(cap) = guard.as_mut() {
         cap.clock.lock().unwrap_or_else(|e| e.into_inner()).resume(mono_ms());
-        if hook_install_wanted(FLAG_ON.load(Ordering::SeqCst), cap.hook.is_some()) {
+        if hook_install_wanted(FLAG_STATE.load(Ordering::SeqCst) == FLAG_ON, cap.hook.is_some()) {
             cap.hook = install_hook();
             if cap.hook.is_none() {
                 // Fails safe: no hook means no keys are recorded, same as still being paused.
@@ -1248,7 +1262,12 @@ pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64, shortcuts_
     if guard.is_some() {
         return;
     }
-    FLAG_ON.store(true, Ordering::SeqCst);
+    // The caller read the flag earlier; the live state decides. flag_changed stores the state
+    // before it discards under this same lock, so a switch-off either refuses this start or
+    // discards the capture it installs.
+    if FLAG_STATE.fetch_update(Ordering::SeqCst, Ordering::SeqCst, claim_start).is_err() {
+        return;
+    }
     *guard = start(hold_ms, start_abs_ms, shortcuts_only);
 }
 
@@ -1281,6 +1300,13 @@ mod tests {
         assert!(!hook_install_wanted(false, false));
         assert!(!hook_install_wanted(true, true));
         assert!(!hook_install_wanted(false, true));
+    }
+
+    #[test]
+    fn a_start_is_refused_only_while_the_live_flag_is_off() {
+        assert_eq!(claim_start(FLAG_UNKNOWN), Some(FLAG_ON));
+        assert_eq!(claim_start(FLAG_ON), Some(FLAG_ON));
+        assert_eq!(claim_start(FLAG_OFF), None);
     }
 
     #[test]
