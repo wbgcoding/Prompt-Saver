@@ -20827,3 +20827,11 @@ fn export_dest_is_usable_refuses_device_names_bad_characters_and_the_source_itse
     assert!(!export_dest_is_usable(&src, &src));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn reopen_step_builds_only_when_the_label_is_free_and_waits_for_a_closing_window() {
+    assert_eq!(reopen_step(false, false), ReopenStep::Build);
+    assert_eq!(reopen_step(false, true), ReopenStep::Build);
+    assert_eq!(reopen_step(true, false), ReopenStep::Keep);
+    assert_eq!(reopen_step(true, true), ReopenStep::WaitThenSync);
+}
