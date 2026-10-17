@@ -683,7 +683,9 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
         .collect();
     for label in labels {
         if let Some(win) = app.get_webview_window(&label) {
-            let _ = win.close();
+            // Tracked, so a sync right after a failed reset waits for the teardown instead of
+            // keeping the half-closed window.
+            close_tracked(&label, &win);
         }
     }
     let reset = {

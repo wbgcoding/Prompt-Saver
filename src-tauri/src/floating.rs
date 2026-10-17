@@ -191,7 +191,7 @@ pub(crate) fn reopen_step(exists: bool, closing: bool) -> ReopenStep {
     }
 }
 
-fn close_tracked(label: &str, win: &tauri::WebviewWindow) {
+pub(crate) fn close_tracked(label: &str, win: &tauri::WebviewWindow) {
     {
         let mut c = CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner());
         if !c.iter().any(|(l, _)| l == label) {
