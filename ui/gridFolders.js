@@ -19,8 +19,8 @@ const TILE_FOLDER_HOVER_MS = 300; // dwell time over a folder before a dragged p
 
 // ---- Grid folders: several prompts collapsed into one cell ----
 // Ships ON. A member has no layout entry of its own while it sits in a folder, so
-// switching the feature off simply shows every prompt as its own tile again: the
-// folders stay stored and come back with it.
+// switching the feature off shows every prompt as its own tile again; the folders stay
+// stored and come back with it.
 export const tileFoldersOn = () => flag("folders");
 export const tileFolderList = () => (tileFoldersOn() ? settings.tile_folders || [] : []);
 export const foldersOfView = (viewId) => tileFolderList().filter((f) => f.view_id === viewId);
@@ -106,9 +106,9 @@ export function pickTileFolderColor(f, anchor) {
     const live = folderById(f.id);
     if (!live) return;
     live.color = hex;
-    // The free picker's SV field fires this on every drag frame: a full
-    // renderGrid per frame would rebuild every tile in the view. Paint just
-    // this one folder tile live, the same way buildFolderTile itself does.
+    // The free picker's SV field fires this on every drag frame; a full renderGrid per
+    // frame would rebuild every tile. Paint just this folder tile live, as
+    // buildFolderTile does.
     const tile = gridEl.querySelector(`.folder-tile[data-folder-id="${CSS.escape(f.id)}"]`);
     if (tile) {
       tile.classList.toggle("tinted", !!hex);
@@ -198,8 +198,8 @@ export function buildFolderTile(f) {
   mini.appendChild(dots);
   tile.appendChild(mini);
   const name = document.createElement("span");
-  // NOT .tile-name: that class is what the auto-fitter scales, and a folder label
-  // blown up to prompt size is what made these tiles unreadable.
+  // NOT .tile-name: that class is what the auto-fitter scales, and a folder label at
+  // prompt size is unreadable.
   name.className = "folder-title";
   name.textContent = folderTitle(f);
   tile.appendChild(name);
@@ -296,10 +296,10 @@ export function openTileFolderPop(f, anchor) {
     btn.className = "folder-member-tile";
     btn.dataset.id = p.id;
     btn.title = p.name;
-    // Same content as a real grid tile (buildTile): image/gif thumb, type
-    // badge, tinted background: so a folder never shows less than the grid
-    // underneath it. Interactive bits (select checkbox, tile menu, video player)
-    // stay out: this button already has its own click/drag/context-menu handling.
+    // Same content as a real grid tile (buildTile): image/gif thumb, type badge, tinted
+    // background, so a folder never shows less than the grid underneath. Interactive bits
+    // (select checkbox, tile menu, video player) stay out: this button has its own
+    // click/drag/context-menu handling.
     const { kind, stored, showPath, showKind } = tileMedia(p);
     const showable = p.show_image && (stored || showKind === "image" || showKind === "gif");
     if (showable) {
@@ -410,8 +410,8 @@ export function armFolderDrop(e) {
   const arm = { el: host, armed: false, timer: 0 };
   const wait = TILE_FOLDER_HOVER_MS;
   // Show the wait instead of making the user guess it: a ring fills over exactly the
-  // dwell time, then the target flips to the armed scrim. Without it the folder
-  // appeared out of nothing and a drag that was only passing through looked broken.
+  // dwell time, then the target flips to the armed scrim, so a drag that is only passing
+  // through does not look broken.
   host.style.setProperty("--arm-ms", `${wait}ms`);
   host.classList.add("folder-arming");
   arm.timer = setTimeout(() => {
@@ -435,11 +435,11 @@ export async function dropIntoFolder(id, host, cell) {
 }
 
 // `settings.floating` maps every pinned prompt to its pill position, and the backend
-// treats exactly that entry as "pinned". The grid only ever asks whether an entry
-// exists, so after a pin/unpin the cached copy is brought in line straight away from
-// what the backend reports: waiting for the next full state fetch would leave the
-// context menu offering the opposite of what a click actually does. The placeholder
-// position is replaced by the real one with that next fetch; it is never sent back.
+// treats exactly that entry as "pinned". The grid only asks whether an entry exists, so
+// after a pin/unpin the cached copy is updated at once from what the backend reports;
+// waiting for the next full state fetch would leave the context menu offering the
+// opposite of what a click does. The placeholder position is replaced by the real one on
+// that fetch and never sent back.
 export function cacheFloatingState(id, pinned) {
   if (!settings.floating) settings.floating = {};
   if (pinned) settings.floating[id] = settings.floating[id] || { x: 0, y: 0 };
@@ -462,8 +462,8 @@ export function wireGridFolders() {
       tileFolderPop.classList.add("member-dragging");
       memberDrag.el.classList.add("dragging");
       document.body.classList.add("drag-active");
-      // A live ghost under the cursor, exactly as a tile drag has: pulling a member out
-      // of the folder showed nothing moving before, so the gesture read as "not working".
+      // A live ghost under the cursor, as in a tile drag: without it pulling a member out
+      // shows nothing moving and reads as "not working".
       const r = memberDrag.el.getBoundingClientRect();
       memberDrag.offX = memberDrag.startX - r.left;
       memberDrag.offY = memberDrag.startY - r.top;
