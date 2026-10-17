@@ -4,12 +4,10 @@ import { placePopover } from "./popover.js";
 import { confirmDialog } from "./dialog.js";
 
 // ---- Background jobs popover (header button) --------------------------
-// The registry lives entirely in Rust (see list_bg_ops/push_bg_op) and is
-// shared with the taskbar icon -- this just displays it. Export runs in the
-// video-editor window, convert and the ffmpeg download can run from this one,
-// but every one of their progress events is broadcast app-wide, so this
-// window learns about all three the same way regardless of which window
-// actually started them.
+// The registry lives in Rust (see list_bg_ops/push_bg_op) and is shared with the taskbar
+// icon; this only displays it. Export runs in the video-editor window, convert and the
+// ffmpeg download can run from here, but every progress event is broadcast app-wide, so
+// this window learns about all three the same way.
 export const BG_OP_CANCEL_CMD = {
   export: "cancel_export",
   convert: "cancel_recording_convert",
@@ -77,10 +75,9 @@ export function renderBgOpsPop(ops) {
         cancelBtn.className = "ghost-btn bg-ops-action";
         cancelBtn.textContent = t("cancel");
         cancelBtn.addEventListener("click", () => {
-          // A batch export can show several "export" rows at once, each
-          // with its own generation number riding in op.id ("export-<n>") --
-          // a plain cancel_export() would always hit the video editor's own
-          // last export instead of the specific row that was actually clicked.
+          // A batch export can show several "export" rows, each with its own generation
+          // number in op.id ("export-<n>"); a plain cancel_export() would hit the video
+          // editor's last export instead of the clicked row.
           if (op.kind === "export") {
             const generation = Number(op.id.split("-").pop());
             invoke("cancel_export_job", { generation }).catch(() => {});
