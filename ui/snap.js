@@ -1,12 +1,15 @@
 // Shared drag-snap helper for the screenshot editor and the video editor: one pure
 // function, so the two never drift apart.
-// | `rect` is the shape being moved: {x, y, w, h} in the caller's coordinate space (image
+//
+// `rect` is the shape being moved: {x, y, w, h} in the caller's coordinate space (image
 // pixels, source video pixels). w:0, h:0 treats it as a bare point: near edge, centre and
 // far edge collapse onto it, so a corner or text anchor snaps like a rectangle's edges.
-// | `targets` is a list of rectangles (or points, same convention) to snap against:
+//
+// `targets` is a list of rectangles (or points, same convention) to snap against:
 // typically the frame itself plus every other shape or overlay. Each contributes three
 // candidate lines per axis (near edge, centre, far edge).
-// | Returns the corrected {x, y} for `rect`, plus guideX/guideY: the matched target
+//
+// Returns the corrected {x, y} for `rect`, plus guideX/guideY: the matched target
 // line's coordinate on that axis (null when that axis did not snap), for drawing the
 // temporary guide line while dragging.
 export function snapMove(rect, targets, tol) {
