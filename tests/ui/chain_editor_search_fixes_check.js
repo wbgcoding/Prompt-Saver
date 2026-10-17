@@ -1,0 +1,88 @@
+// Small UI fixes, each section runs the real extracted source of the function in a vm.
+// UI_CHECK_DIR points the test at another copy of ui/ (to prove it fails on older code).
+// Run:  node tests/ui/chain_editor_search_fixes_check.js      Exit: 0 = clean, 1 = problems.
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const uiDir = process.env.UI_CHECK_DIR || path.join(__dirname, "..", "..", "ui");
+const read = (name) => fs.readFileSync(path.join(uiDir, name), "utf8").replace(/\r\n/g, "\n");
+function extractBlock(src, marker) {
+  const start = src.indexOf(marker);
+  if (start === -1) throw new Error(`could not find (text changed?): ${marker}`);
+  const braceStart = src.indexOf("{", src.indexOf(")", start));
+  let depth = 0;
+  for (let i = braceStart; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(start, i + 1);
+  }
+  throw new Error(`unbalanced braces after: ${marker}`);
+}
+const problems = [];
+const check = (ok, what) => { if (!ok) problems.push(what); };
+const pending = [];
+const later = (fn) => { pending.push(fn().catch((e) => problems.push(String(e.message || e)))); };
+const section = (fn) => { try { fn(); } catch (e) { problems.push(String(e.message || e)); } };
+const run = (code, sandbox) => { vm.createContext(sandbox); vm.runInContext(code, sandbox); return sandbox; };
+const tick = () => new Promise((r) => setImmediate(r));
+const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
+
+// chain.js pushChainClipboard: only the newest push counts.
+later(async () => {
+  const src = read("chain.js");
+  const from = src.includes("let chainPushSeq") ? src.indexOf("let chainPushSeq") : src.indexOf("export function pushChainClipboard");
+  const code = src.slice(from, src.indexOf("// Reflect one tile"));
+  const viaCopy = (cmd, args) => {
+    if (cmd !== "copy_text") { commits.push(args.id); return Promise.resolve(); }
+    const d = deferred(); calls.push({ key: "-", cmd, args, d }); return d.promise;
+  };
+  const calls = [];
+  const commits = [];
+  const toasts = [];
+  const usage = [];
+  const sel = [];
+  const sandbox = run(code.replace(/export /g, "") + "\n;globalThis.push = pushChainClipboard;", {
+    chainSel: sel,
+    chainText: () => sel.join("+"),
+    serialInvoke: (key, cmd, args) => { const d = deferred(); calls.push({ key, cmd, args, d }); return d.promise; },
+    invoke: viaCopy,
+    errToast: (e) => toasts.push(String(e)),
+    recordToolUsage: (k) => usage.push(k),
+  });
+  // a picked, then b picked while a's write is slow: the old result commits nothing,
+  // the newest one commits both picks.
+  sel.push("a"); sandbox.push("a");
+  sel.push("b"); sandbox.push("b");
+  check(calls.length === 2 && calls[0].key === calls[1].key, "chain writes share one ordered key");
+  calls[1].d.resolve(true);
+  await tick();
+  check(commits.join() === "a,b", `newest push commits the picks it carries, got ${commits}`);
+  calls[0].d.resolve(true);
+  await tick();
+  check(commits.length === 2 && usage.length === 1, "a stale result commits and records nothing");
+  // a stale failure shows no toast, a current one does
+  sel.push("c"); sandbox.push("c");
+  sel.push("d"); sandbox.push("d");
+  calls[2].d.reject(new Error("old"));
+  calls[3].d.reject(new Error("new"));
+  await tick();
+  check(toasts.length === 1 && toasts[0].includes("new"), `only the current failure toasts, got ${toasts}`);
+  // an empty chain cancels the in-flight push and drops its pending picks
+  sel.length = 0; sel.push("e"); sandbox.push("e");
+  sel.length = 0; sandbox.push();
+  calls[4].d.resolve(true);
+  await tick();
+  check(commits.length === 2, `an empty push cancels an in-flight one, got ${commits}`);
+  // a pick removed from the chain before the write lands is not committed
+  sel.length = 0; sel.push("f", "g");
+  sandbox.push("f"); sandbox.push("g");
+  sel.splice(0, 1);
+  calls[6].d.resolve(true);
+  await tick();
+  check(commits.slice(2).join() === "g", `a removed pick burns nothing, got ${commits.slice(2)}`);
+});
+
+Promise.all(pending).then(() => {
+  if (problems.length) { console.error("chain_editor_search_fixes_check FAILED:\n- " + problems.join("\n- ")); process.exit(1); }
+  console.log("chain_editor_search_fixes_check: ok");
+});
