@@ -8331,6 +8331,38 @@ fn a_failed_write_stops_the_ocr_backfill_and_takes_its_text_back_out() {
     assert_eq!(r, Ok(()));
 }
 
+#[test]
+fn a_refused_hotkey_is_cleared_only_when_both_writes_land() {
+    let mut p = test_prompt("p1");
+    p.hotkey = "Ctrl+Alt+1".into();
+    let mut store = secret_test_store(vec![p]);
+    store.settings.hotkey = "Ctrl+Alt+A".into();
+    store.settings.voice_hotkey = "Ctrl+Alt+V".into();
+    let dropped = vec!["p1".to_string()];
+
+    let ok = clear_refused_hotkeys(&mut store, false, false, &dropped, &mut |_| true, &mut |_| true);
+    assert!(ok);
+    assert!(store.settings.hotkey.is_empty() && store.settings.voice_hotkey.is_empty() && store.prompts[0].hotkey.is_empty());
+
+    store.settings.hotkey = "Ctrl+Alt+A".into();
+    store.settings.voice_hotkey = "Ctrl+Alt+V".into();
+    store.prompts[0].hotkey = "Ctrl+Alt+1".into();
+    let ok = clear_refused_hotkeys(&mut store, false, false, &dropped, &mut |_| true, &mut |_| false);
+    assert!(!ok);
+    assert_eq!(store.settings.hotkey, "Ctrl+Alt+A", "a failed settings write keeps the key");
+    assert_eq!(store.settings.voice_hotkey, "Ctrl+Alt+V");
+    assert_eq!(store.prompts[0].hotkey, "Ctrl+Alt+1");
+
+    let mut settings_calls = 0;
+    let ok = clear_refused_hotkeys(&mut store, true, true, &dropped, &mut |_| false, &mut |_| {
+        settings_calls += 1;
+        true
+    });
+    assert!(!ok);
+    assert_eq!(store.prompts[0].hotkey, "Ctrl+Alt+1", "a failed prompt write keeps the key");
+    assert_eq!(settings_calls, 0, "settings are not written after a failed prompt write");
+}
+
 fn prompts_json(store: &Store) -> String {
     serde_json::to_string(&store.prompts).unwrap()
 }

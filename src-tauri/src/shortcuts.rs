@@ -307,6 +307,9 @@ pub(crate) fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
 // blank it permanently.
 pub(crate) static REC_STOP_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 pub(crate) static REC_PAUSE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+// Whether the last rearm_hotkeys() could claim the voice hotkey. The refused key is only cleared
+// from the store when that write lands, so the store alone cannot answer "did it register".
+pub(crate) static VOICE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 // Runs of rearm_hotkeys never overlap: a second run interleaving with the first would
 // register accelerators the first just registered, read that as another app holding them,
@@ -458,29 +461,63 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
     if let Some(targets) = app.try_state::<HotkeyTargets>() {
         *targets.0.lock().unwrap_or_else(|e| e.into_inner()) = live;
     }
+    VOICE_HOTKEY_OK.store(voice_ok, std::sync::atomic::Ordering::Relaxed);
     REC_STOP_HOTKEY_OK.store(rec_stop_ok, std::sync::atomic::Ordering::Relaxed);
     REC_PAUSE_HOTKEY_OK.store(rec_pause_ok, std::sync::atomic::Ordering::Relaxed);
     if !app_ok || !voice_ok || !dropped.is_empty() {
         if let Some(state) = app.try_state::<Db>() {
             let mut store = lock(&state);
-            if !app_ok {
-                store.settings.hotkey = String::new();
-            }
-            if !voice_ok {
-                store.settings.voice_hotkey = String::new();
-            }
-            if !dropped.is_empty() {
-                for p in store.prompts.iter_mut() {
-                    if dropped.contains(&p.id) {
-                        p.hotkey = String::new();
-                    }
-                }
-                save_prompts(app, &store);
-            }
-            save_settings(app, &store.settings);
+            clear_refused_hotkeys(&mut store, app_ok, voice_ok, &dropped, &mut |st| save_prompts(app, st), &mut |st| save_settings_paired(app, &st.settings));
         }
     }
     app_ok
+}
+
+// Clears the refused hotkeys from the store and writes the result. The clear stays only when
+// every write landed; otherwise the old values go back in memory (and on disk, if the prompt rows
+// were already rewritten), so the next start does not meet a state the disk never had. The next
+// rearm simply refuses the key again, so a persistent write failure repeats this quietly.
+pub(crate) fn clear_refused_hotkeys(
+    store: &mut Store,
+    app_ok: bool,
+    voice_ok: bool,
+    dropped: &[String],
+    save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
+    save_settings_fn: &mut dyn FnMut(&Store) -> bool,
+) -> bool {
+    let old_hotkey = store.settings.hotkey.clone();
+    let old_voice = store.settings.voice_hotkey.clone();
+    let old_prompt_keys: Vec<(String, String)> = store
+        .prompts
+        .iter()
+        .filter(|p| dropped.contains(&p.id))
+        .map(|p| (p.id.clone(), p.hotkey.clone()))
+        .collect();
+    if !app_ok {
+        store.settings.hotkey = String::new();
+    }
+    if !voice_ok {
+        store.settings.voice_hotkey = String::new();
+    }
+    for p in store.prompts.iter_mut().filter(|p| dropped.contains(&p.id)) {
+        p.hotkey = String::new();
+    }
+    let prompts_written = dropped.is_empty() || save_prompts_fn(store);
+    if prompts_written && save_settings_fn(store) {
+        return true;
+    }
+    store.settings.hotkey = old_hotkey;
+    store.settings.voice_hotkey = old_voice;
+    for (id, key) in old_prompt_keys {
+        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+            p.hotkey = key;
+        }
+    }
+    if prompts_written && !dropped.is_empty() && !save_prompts_fn(store) {
+        append_crash_log("persist failed: the undo of a cleared hotkey could not be written");
+    }
+    append_crash_log("persist failed: a refused hotkey could not be cleared in the store");
+    false
 }
 
 // A prompt hotkey runs the very same activation a tile click does. The UI owns
@@ -718,9 +755,9 @@ fn apply_hotkey(app: &AppHandle, state: &State<'_, Db>, slot: HotkeySlot, accel:
     match slot {
         // rearm_hotkeys' return value reports the APP hotkey's fate.
         HotkeySlot::App if !armed => Err(HK_CONFLICT.to_string()),
-        // A refused voice hotkey is cleared from the store by rearm_hotkeys itself, so
-        // re-reading it is what answers "did this one land".
-        HotkeySlot::Voice if !hk.is_empty() && lock(state).settings.voice_hotkey != hk => Err(HK_CONFLICT.to_string()),
+        // A refused voice hotkey is cleared from the store by rearm_hotkeys itself (unless that
+        // write failed), so re-reading it and the registration flag answers "did this one land".
+        HotkeySlot::Voice if !hk.is_empty() && (lock(state).settings.voice_hotkey != hk || !VOICE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed)) => Err(HK_CONFLICT.to_string()),
         _ => Ok(()),
     }
 }
