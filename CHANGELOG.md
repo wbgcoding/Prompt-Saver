@@ -958,6 +958,24 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **A failed save no longer leaves half a change behind.** Adding, deleting,
+  restoring and resetting now either land completely or report the error and
+  keep the previous state, a counter write that failed is retried, backups are
+  never overwritten in place, and picture text left behind after the text index
+  was switched off is removed at the next start.
+- **Region recordings at a screen edge.** A selection that reaches past the
+  monitor records the part on screen instead of a black video, pausing no longer
+  shifts the timeline, a cancelled Windows shutdown keeps the recording running,
+  and switching the key overlay off stops recording keys at once.
+- **Search finds more.** The global search finds words that appear only in a
+  picture or a help tip and lists a file name once, and the history search also
+  looks at rotation texts, tags and notes.
+- **Smaller fixes** for floating buttons that vanished after a quick undo, a
+  second placeholder window that cancelled itself, the chain clipboard, the
+  file dialog, the theme preview, video crops on odd sizes, batch export names,
+  the storage view's backup size and the backup restore scope in the command
+  line help.
+
 - **ffmpeg unpacks much faster.** The download no longer slows itself down with
   thousands of progress updates, both tools unpack at the same time straight to
   disk, and the button says when the download is done and unpacking runs.
