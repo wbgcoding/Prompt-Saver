@@ -16,10 +16,8 @@ export const TOUR_SVG_WELCOME = `<svg viewBox="0 0 100 100" width="110" height="
   <line x1="46" y1="43" x2="54" y2="43" stroke="var(--accent-fg)" stroke-width="1.5" stroke-linecap="round"/>
   <line x1="46" y1="48" x2="54" y2="48" stroke="var(--accent-fg)" stroke-width="1.5" stroke-linecap="round"/>
 </svg>`;
-// A click on a tile sends its text to the clipboard: the tile itself, a cursor
-// over it, a motion arc for the copy, and the clipboard the line of text lands
-// in. Replaces an earlier drawing whose two rectangles either side of a plus
-// sign read as a battery rather than a click-to-copy action.
+// A click on a tile sends its text to the clipboard: the tile itself, a cursor over it, a
+// motion arc for the copy, and the clipboard the line of text lands in.
 export const TOUR_SVG_USAGE = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
   <rect x="6" y="32" width="36" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/>
   <line x1="13" y1="42" x2="35" y2="42" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
