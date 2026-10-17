@@ -20813,3 +20813,17 @@ fn session_messages_only_stop_a_recording_when_the_session_really_ends() {
     assert_eq!(session_action(END, 0), SessionAction::None);
     assert_eq!(session_action(0x0001, 1), SessionAction::None);
 }
+
+#[test]
+fn export_dest_is_usable_refuses_device_names_bad_characters_and_the_source_itself() {
+    let dir = std::env::temp_dir().join(format!("ps-batch-dest-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("clip.mp4");
+    std::fs::write(&src, b"x").unwrap();
+    assert!(export_dest_is_usable(&dir.join("out.mp4"), &src));
+    assert!(!export_dest_is_usable(&dir.join("CON"), &src));
+    assert!(!export_dest_is_usable(&dir.join("bad?.mp4"), &src));
+    assert!(!export_dest_is_usable(&dir.join("CLIP.MP4"), &src));
+    assert!(!export_dest_is_usable(&src, &src));
+    let _ = std::fs::remove_dir_all(&dir);
+}

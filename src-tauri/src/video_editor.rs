@@ -758,6 +758,12 @@ pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     combined.to_string_lossy().eq_ignore_ascii_case(&src_canon.to_string_lossy())
 }
 
+// The destination checks the single export applies, for one batch item: a valid file name
+// and a target that is not the source itself (ffmpeg would overwrite the file it reads).
+pub(crate) fn export_dest_is_usable(dest: &Path, src: &Path) -> bool {
+    dest.file_name().and_then(|n| n.to_str()).is_some_and(export_file_name_is_valid) && !export_dest_is_same_as_src(dest, src)
+}
+
 // Whether dest's folder is one this session may export into: the folder from the last save
 // dialog the backend ran, the standing videoExportDir preference, or the source file's own
 // folder, but only when that source already lives in a folder the app controls (recording
@@ -1064,6 +1070,10 @@ pub(crate) async fn export_recordings_batch(
         }
         let item_src = PathBuf::from(&item.src_path);
         if !item_src.is_file() || !is_own_recording_source(&allowed_sources, &item_src) {
+            failed += 1;
+            continue;
+        }
+        if !export_dest_is_usable(&PathBuf::from(&item.dest_path), &item_src) {
             failed += 1;
             continue;
         }
