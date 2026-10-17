@@ -14,9 +14,9 @@
   color: var(--menu-fg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   font-variant-numeric: tabular-nums;
-  /* WebView2 does not honour -webkit-app-region (that's an Electron
-     feature) -- dragging is wired up in recbar.js via startDragging()
-     instead, so this is just the visual hint that the background moves it. */
+  /* WebView2 ignores -webkit-app-region (an Electron feature); dragging is wired in
+     recbar.js via startDragging(), so this is only the visual hint that the background
+     moves it. */
   cursor: grab;
 }
 .rec-bar:active { cursor: grabbing; }
@@ -49,8 +49,8 @@
 
 .rec-time { font-size: 13px; min-width: 3.6em; }
 .rec-size { font-size: 12px; opacity: 0.7; min-width: 3.6em; }
-/* Past three quarters of recMaxMb -- same warm color the hotkey/mic
-   warnings already use, at full opacity so it actually stands out. */
+/* Past three quarters of recMaxMb: the warm color the hotkey/mic warnings use, at full
+   opacity. */
 .rec-size-warn { color: var(--danger); opacity: 1; }
 
 .rec-audio {
@@ -61,9 +61,8 @@
 .rec-audio.hidden { display: none; }
 .rec-audio.on { opacity: 0.85; }
 .rec-audio.lost { opacity: 1; color: var(--danger); }
-/* System/mic are buttons now (mute mid-recording), not plain status
-   icons -- strip the default button chrome so they still look identical to
-   the plain span they replaced. */
+/* System/mic are buttons (mute mid-recording): strip the default button chrome so they
+   look like plain status icons. */
 .rec-audio-btn { border: none; background: transparent; padding: 0; color: inherit; cursor: pointer; }
 .rec-audio-btn:disabled { cursor: default; }
 /* The stop/pause hotkey warning is either fully shown or not there at
