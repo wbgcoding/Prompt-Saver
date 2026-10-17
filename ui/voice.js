@@ -97,8 +97,8 @@ function applyVoiceCommandsCjk(text, commands, literalWord) {
       const chunk = text.slice(i, i + len);
       if (chunk === literalWord) {
         i += len;
-        // Nothing follows in this segment to escape -- emit the word itself
-        // rather than silently dropping it (same rule as the word-based path).
+        // Nothing follows in this segment to escape: emit the word itself instead of
+        // dropping it.
         if (i < text.length) forceLiteral = true; else out += chunk;
         matched = true;
         break;
@@ -135,9 +135,9 @@ function applyVoiceCommands(text, opts) {
       continue;
     }
     if (tokens[i].toLowerCase() === literalWord) {
-      // Nothing follows in this segment to escape (the word landed right at
-      // a recognizer utterance boundary) -- emit it as ordinary text instead
-      // of silently discarding the word the user actually said.
+      // Nothing follows in this segment to escape (the word landed at a recognizer
+      // utterance boundary): emit it as ordinary text instead of discarding what the user
+      // said.
       if (i === tokens.length - 1) {
         out += voiceEmitWord(tokens[i], capNext, out);
         capNext = false;
