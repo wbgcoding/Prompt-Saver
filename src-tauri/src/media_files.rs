@@ -787,12 +787,14 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
 }
 
 // A cancelled take goes to its folder's holding area like a discarded one, so a mistaken
-// Cancel can be undone. A file that cannot be moved there is removed with its mic track.
+// Cancel can be undone. A file that cannot be moved there is removed with every sidecar.
 pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
     let moved = path.parent().and_then(|dir| discard_recording_file_in(&[dir.to_path_buf()], path)).is_some();
     if !moved {
         let _ = fs::remove_file(path);
-        let _ = fs::remove_file(path.with_extension("mic.wav"));
+        for ext in ["mic.wav", KEYS_SIDECAR_EXT, CAM_SIDECAR_EXT] {
+            let _ = fs::remove_file(sidecar_path(path, ext));
+        }
     }
 }
 

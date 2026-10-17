@@ -1380,3 +1380,45 @@ fn a_dropped_secret_session_leaves_no_key_bytes() {
     unsafe { std::mem::ManuallyDrop::drop(&mut sess) };
     assert_eq!(sess.key, [0u8; 32], "the key must be zeroed on drop");
 }
+
+// ---- a screenshot re-encode refuses a header that promises a huge picture ----
+
+#[test]
+fn reencode_refuses_a_png_header_claiming_huge_dimensions() {
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(b"IHDR");
+    ihdr.extend_from_slice(&60_000u32.to_be_bytes());
+    ihdr.extend_from_slice(&60_000u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let mut crc = flate2::Crc::new();
+    crc.update(&ihdr);
+    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+    png.extend_from_slice(&13u32.to_be_bytes());
+    png.extend_from_slice(&ihdr);
+    png.extend_from_slice(&crc.sum().to_be_bytes());
+    let began = std::time::Instant::now();
+    assert!(reencode_screenshot_bytes(&png, "png", 90).is_err());
+    assert!(began.elapsed() < Duration::from_secs(2), "took {:?}", began.elapsed());
+}
+
+// ---- a take that cannot reach the holding area leaves no sidecar behind ----
+
+#[test]
+fn a_removed_take_takes_every_sidecar_with_it() {
+    let dir = std::env::temp_dir().join(format!("ps-take-sidecars-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    // A file where the holding folder would go makes the move fail, so the take is removed.
+    fs::write(dir.join("verworfen"), b"").unwrap();
+    let video = dir.join("rec-take.mp4");
+    fs::write(&video, b"v").unwrap();
+    for ext in ["mic.wav", KEYS_SIDECAR_EXT, CAM_SIDECAR_EXT] {
+        fs::write(sidecar_path(&video, ext), b"s").unwrap();
+    }
+    discard_or_remove_take(&video);
+    assert!(!video.exists());
+    for ext in ["mic.wav", KEYS_SIDECAR_EXT, CAM_SIDECAR_EXT] {
+        assert!(!sidecar_path(&video, ext).exists(), "{ext} was left behind");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
