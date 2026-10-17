@@ -174,9 +174,9 @@ export function renderTagSuggest(all = false) {
   if (!hits.length && !all) { closeTagSuggest(); return; }
   tagSuggest.innerHTML = "";
   if (!hits.length) {
-    // Opened by the handle with nothing to offer. This belongs IN the dropdown:
-    // a toast for "there is nothing here yet" reads like an error and is gone
-    // before it is understood.
+    // Opened by the handle with nothing to offer. The message belongs IN the dropdown: a
+    // toast for "there is nothing here yet" reads like an error and is gone before it is
+    // understood.
     const empty = document.createElement("div");
     empty.className = "tag-suggest-empty";
     empty.textContent = t(allTags().length ? "tagAllTaken" : "tagNone");
@@ -265,11 +265,9 @@ export function renderTagFilter() {
 }
 
 // Shared markup for the library's tag filter bar (#library-tagbar): label + chips +
-// manage tags button.
-// Only the container, the active set and what to re-render differ per caller.
-// "Manage tags" stays reachable even before the first tag exists -- the bar
-// used to disappear entirely with nothing to filter by, hiding the only way
-// to find out tags exist at all.
+// manage tags button. Only the container, the active set and what to re-render differ per
+// caller. "Manage tags" stays reachable before the first tag exists, otherwise nothing
+// would show that tags exist.
 export function renderTagBar(bar, activeSet, rerender) {
   bar.innerHTML = "";
   const names = allTags();
@@ -309,12 +307,11 @@ export function renderTagBar(bar, activeSet, rerender) {
   bar.appendChild(manage);
 }
 
-// Merging is just rename_tag with a target that already exists -- its own
-// rename_tag_in dedupes per-prompt and its color rule (keep the target's color,
-// only borrow the source's if the target has none) already matches what a merge
-// needs. Shared by the explicit Merge button and a rename that collides with an
-// existing tag. It runs at once: the snapshot taken here is what the undo toast
-// puts back.
+// Merging is rename_tag with a target that already exists: rename_tag_in dedupes per
+// prompt and its color rule (keep the target's color, borrow the source's only if the
+// target has none) is what a merge needs. Used by the Merge button and by a rename that
+// collides with an existing tag. It runs at once; the snapshot taken here is what the
+// undo toast puts back.
 export async function mergeTagWithUndo(from, into, refresh) {
   const sure = await confirmIfNoUndo({
     title: t("tagMergeTargetTitle"),
@@ -367,10 +364,9 @@ export function closeTagManager() {
   closeTagPop();
 }
 
-// Undo for a deleted tag: re-adds the tag text to every prompt that had it and
-// restores its color, through the same batch/tag-color commands the rest of the
-// tag UI uses: the same "rewrite through the store, not prompt by prompt" rule
-// as the tag manager's own refresh().
+// Undo for a deleted tag: re-adds the tag text to every prompt that had it and restores
+// its color, through the batch/tag-color commands (rewrite through the store, not prompt
+// by prompt, as in the tag manager's refresh()).
 export async function restoreDeletedTag(name, ids, color) {
   const idset = new Set(ids);
   if (ids.length) {
