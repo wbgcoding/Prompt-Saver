@@ -9431,6 +9431,23 @@ fn sanitize_error_log_origin_keeps_the_known_set_and_falls_back_to_other() {
 }
 
 #[test]
+fn every_overlay_id_in_the_main_window_is_an_allowed_error_origin() {
+    let html = include_str!("../../ui/index.html");
+    let mut missing = Vec::new();
+    for line in html.lines() {
+        let line = line.trim_start();
+        if !line.starts_with("<div id=\"") || !line.contains("class=\"overlay") {
+            continue;
+        }
+        let id = line["<div id=\"".len()..].split('"').next().unwrap();
+        if sanitize_error_log_origin(id) != id {
+            missing.push(id.to_string());
+        }
+    }
+    assert!(missing.is_empty(), "overlay ids missing from the error origin list: {missing:?}");
+}
+
+#[test]
 fn record_error_log_sanitizes_an_origin_outside_the_known_set() {
     let _guard = ERROR_LOG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
