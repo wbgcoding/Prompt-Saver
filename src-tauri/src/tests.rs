@@ -20776,3 +20776,28 @@ fn crop_and_flip_rows_bottom_up_copies_the_overlap_of_a_crop_that_overhangs_the_
     // Bottom-up: row 1 (pixel 4) first, then row 0 (pixel 2); the missing columns stay black.
     assert_eq!(out, vec![4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
 }
+
+#[test]
+fn record_clock_never_steps_backwards_while_another_thread_pauses_and_resumes() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let clock = std::sync::Arc::new(RecordClock::new());
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    let toggler = {
+        let (clock, stop) = (clock.clone(), stop.clone());
+        std::thread::spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                clock.pause();
+                clock.resume();
+            }
+        })
+    };
+    let mut last = 0i64;
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_millis(400) {
+        let now = clock.now_ticks();
+        assert!(now >= last, "ticks went back from {last} to {now}");
+        last = now;
+    }
+    stop.store(true, Ordering::SeqCst);
+    toggler.join().unwrap();
+}

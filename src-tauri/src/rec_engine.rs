@@ -69,11 +69,10 @@ impl RecordClock {
         self.paused.load(std::sync::atomic::Ordering::SeqCst)
     }
     pub(crate) fn now_ticks(&self) -> i64 {
-        let elapsed = self
-            .segment_start
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .map(|t0| (t0.elapsed().as_nanos() / 100) as i64);
+        // Both values are read under the segment lock: pause() moves the running span into
+        // accumulated_ticks under the same lock, so reading outside it could count it twice.
+        let seg = self.segment_start.lock().unwrap_or_else(|e| e.into_inner());
+        let elapsed = seg.map(|t0| (t0.elapsed().as_nanos() / 100) as i64);
         rec_clock_ticks(self.accumulated_ticks.load(std::sync::atomic::Ordering::SeqCst), elapsed)
     }
     pub(crate) fn pause(&self) {
