@@ -9448,6 +9448,15 @@ fn every_overlay_id_in_the_main_window_is_an_allowed_error_origin() {
 }
 
 #[test]
+fn the_stats_caches_survive_a_poisoned_lock() {
+    let src = include_str!("stats.rs");
+    for name in ["STORAGE_CACHE", "RETENTION_CACHE"] {
+        let bare = format!("{name}.lock().unwrap()");
+        assert!(!src.contains(&bare), "{name} must recover a poisoned lock with into_inner");
+    }
+}
+
+#[test]
 fn record_error_log_sanitizes_an_origin_outside_the_known_set() {
     let _guard = ERROR_LOG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();

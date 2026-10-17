@@ -403,7 +403,7 @@ pub(crate) const STORAGE_SCAN_CAP: usize = 20_000;
 #[tauri::command]
 pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<StorageBreakdown, String> {
     if !force {
-        if let Some(cached) = STORAGE_CACHE.lock().unwrap().clone() {
+        if let Some(cached) = STORAGE_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             return Ok(cached);
         }
     }
@@ -507,7 +507,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
 
     let total_bytes = items.iter().map(|i| i.bytes).sum();
     let fresh = StorageBreakdown { items, total_bytes, measured_at: now_secs() };
-    *STORAGE_CACHE.lock().unwrap() = Some(fresh.clone());
+    *STORAGE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
     Ok(fresh)
 }
 
@@ -546,7 +546,7 @@ pub(crate) static RETENTION_CACHE: Mutex<Option<RetentionOverview>> = Mutex::new
 #[tauri::command]
 pub(crate) async fn retention_overview(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<RetentionOverview, String> {
     if !force {
-        if let Some(cached) = RETENTION_CACHE.lock().unwrap().clone() {
+        if let Some(cached) = RETENTION_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             return Ok(cached);
         }
     }
@@ -596,7 +596,7 @@ pub(crate) async fn retention_overview(app: AppHandle, state: State<'_, Db>, for
         RetentionItem { key: "editStates".into(), count: edit_count, bytes: edit_bytes },
     ];
     let fresh = RetentionOverview { items, measured_at: now_secs() };
-    *RETENTION_CACHE.lock().unwrap() = Some(fresh.clone());
+    *RETENTION_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
     Ok(fresh)
 }
 
