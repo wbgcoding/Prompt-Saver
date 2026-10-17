@@ -5,9 +5,8 @@ import { varPreview, VAR_RE } from "./floatShared.js";
 // ---- Prompt variables ({?placeholder}) ----
 // A `{` directly followed by `?` and a letter, digit, `_` or `@` is a placeholder; that
 // start does not occur in JSON or code, so pasted code is never mistaken for one. The
-// 200-char body leaves room for a choice variable's option list, not just a name. The
-// pattern itself (VAR_RE) lives in floatShared.js so the pill and folder windows test
-// the very same one.
+// 200-char body leaves room for a choice variable's option list. The pattern (VAR_RE)
+// lives in floatShared.js so the pill and folder windows test the same one.
 export function extractVars(text) {
   const seen = [];
   for (const m of (text || "").matchAll(VAR_RE)) {
@@ -17,17 +16,14 @@ export function extractVars(text) {
   return seen;
 }
 export const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
-// A `{?` with no name right after it ({?}, {? x}) never becomes a real variable:
-// extractVars() never sees it, so it would sit in the copied text unfilled and
-// unexplained. Caught before save instead of left a silent trap.
+// A `{?` with no name ({?}, {? x}) never becomes a variable, so it would sit in the
+// copied text unfilled and unexplained; caught before save.
 const EMPTY_TOKEN_RE = /\{\?(?![\p{L}\p{N}_@])[^}\n]{0,200}\}/u;
 export const hasEmptyVarToken = (text) => EMPTY_TOKEN_RE.test(String(text || ""));
 
-// A placeholder gets a visible accent wherever raw prompt text is previewed, so
-// "does this prompt ask for anything" no longer surprises you only at copy time. It
-// reads as [name] (varPreview) and that shortened length is what counts against the
-// preview limit. DOM text nodes + a plain span, never innerHTML: a token is
-// user-typed text.
+// A placeholder gets a visible accent wherever raw prompt text is previewed. It reads as
+// [name] (varPreview) and that shortened length counts against the preview limit. DOM
+// text nodes + a plain span, never innerHTML: a token is user-typed text.
 export function fillVarHighlighted(el, text) {
   el.textContent = "";
   let used = 0;
@@ -64,8 +60,7 @@ export const DYN_VARS = [
 ];
 export const DYN_SET = new Set(DYN_VARS);
 // A reserved name is WRITTEN with an @ in front: {?@date}. That keeps every plain word
-// free for a variable of the user's own: "date" only fills itself in when it is spelled
-// @date. Old prompts are rewritten once by the store migration.
+// free for a variable of the user's own: "date" only fills itself in when spelled @date.
 export const DYN_OPEN = "@";
 export const dynToken = (name) => `${DYN_OPEN}${name}`;
 export const dynName = (raw) => (raw.length > 1 && raw.startsWith(DYN_OPEN) ? raw.slice(1) : "");
@@ -120,12 +115,10 @@ export function uuidV4() {
 export const CLIP_VAR_MAX = 100000;
 
 // A token is `name`, `name=default`, `name|opt,opt,…` or `name=default|opt,opt,…`.
-// Options are trimmed and empty ones dropped; a comma always starts the next
-// option, so an option can never contain one. A default selects the matching
-// entry in a choice list, or prefills a plain text variable when there is no
-// list. A bar or an equals sign without a usable name before it stays an
-// ordinary text variable: the whole token is then its name, exactly as
-// before, and no default is extracted from it.
+// Options are trimmed and empty ones dropped; a comma always starts the next option. A
+// default selects the matching entry in a choice list, or prefills a plain text variable
+// without a list. A bar or equals sign without a usable name before it leaves the whole
+// token as the name of an ordinary text variable, with no default.
 export function parseVar(token) {
   const raw = String(token).trim();
   const bar = raw.indexOf("|");
@@ -189,30 +182,26 @@ export function dynValue(name, now, ctx) {
   }
 }
 
-// The variable tokens of a prompt that are worth resolving at all (text prompts
-// only: an image/file prompt copies its media, not its text).
-// `text` overrides which string is scanned (the rotated entry actually about
-// to be copied): every existing caller keeps checking p.text unchanged.
+// The variable tokens of a prompt that are worth resolving at all (text prompts only: an
+// image/file prompt copies its media, not its text). `text` overrides which string is
+// scanned (the rotated entry about to be copied).
 export const varTokens = (p, text) =>
   (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(text ?? p.text) : []);
-// The subset the user still has to fill in by hand: the only reason to open a dialog.
-// An override text (the peeked rotating entry) must flow through the same as
-// varTokens takes one, or a placeholder living only in a later entry never gets
-// noticed at all -- checking p.text (entry 0) unconditionally.
+// The subset the user still has to fill in by hand: the only reason to open a dialog. An
+// override text (the peeked rotating entry) must pass through as in varTokens, or a
+// placeholder living only in a later entry goes unnoticed.
 export const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isDynVar(parseVar(tok).name));
-// True while any entry of a rotating prompt still carries a placeholder. An
-// auto-advance session renders the following entries itself, from their raw text:
-// so a prompt in this state must not open one, or the second paste would deliver
-// the placeholder rather than what it stands for, unless every entry was filled
-// up front (copyResolved hands them to rotation_arm_session).
+// True while any entry of a rotating prompt still carries a placeholder. An auto-advance
+// session renders later entries from their raw text, so such a prompt must not open one,
+// or a later paste would deliver the placeholder itself; unless every entry was filled up
+// front (copyResolved hands them to rotation_arm_session).
 export const anyEntryHasVars = (p) =>
   [p.text, ...(p.variants || [])].some((entry) => varTokens(p, entry).length > 0);
 
-// The text a copy of `p` is actually about to use: the pointer's CURRENT entry
-// for a rotating prompt, p.text otherwise. Read-only (never advances the pointer),
-// so it is safe to call ahead of a decision (dialogTokens) as well as the copy
-// itself. Every path that resolves p.text directly instead of this one silently
-// mis-detects (and mis-copies) once rotation has moved past entry 0.
+// The text a copy of `p` is about to use: the pointer's CURRENT entry for a rotating
+// prompt, p.text otherwise. Read-only (never advances the pointer), so it is safe to call
+// ahead of a decision (dialogTokens). Resolving p.text directly instead mis-detects and
+// mis-copies once rotation has moved past entry 0.
 export async function peekRotatedText(p) {
   if (!(p.variants || []).length) return p.text;
   const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
@@ -279,11 +268,9 @@ export function saveRememberedVars(next, prev) {
   invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
 }
 
-// Fixed placeholder values, kept by variable NAME (expert: varFixed) --
-// maintained BY HAND in the expert menu (add/change/delete), never written by
-// a fill-in dialog itself. Kept apart from varDefaults on purpose: a
-// deliberately maintained value must never be confused with whatever the
-// user happened to type in last time.
+// Fixed placeholder values, by variable NAME (expert: varFixed), maintained BY HAND in
+// the expert menu and never written by a fill-in dialog. Kept apart from varDefaults so a
+// deliberate value is never confused with whatever the user typed last time.
 export function readFixedVars() {
   try { return JSON.parse(settings.ui_texts?.varFixed || "{}"); } catch (_) { return {}; }
 }
@@ -296,9 +283,9 @@ export function saveFixedVars(next) {
 
 // ---- Standalone fill-in window (vars.html) ----
 // Every copy that needs typed placeholders asks here, inside the app or not: a small
-// always-on-top window next to the pointer, so the app the user is working in keeps
-// the foreground. Everything the variables MEAN still lives
-// here: that window is a form, it renders rows and hands the answers back.
+// always-on-top window next to the pointer, so the app the user works in keeps the
+// foreground. What the variables MEAN lives here; that window is a form that renders rows
+// and hands the answers back.
 export let varsWindowPending = null;
 export function assignVarsWindowPending(v) { varsWindowPending = v; }
 
