@@ -2,7 +2,8 @@
 // below the anchor when it fits, above it when it does not, always clamped into the
 // window on both axes (a popover past an edge is unreachable). Call it AFTER the content
 // is built: the size has to be measurable.
-// | Main-window only: floating.js/folder.js run in small frameless windows that can be
+//
+// Main-window only: floating.js/folder.js run in small frameless windows that can be
 // smaller than their own popover, so they clamp against the SCREEN
 // (screen.availLeft/availWidth/...) with their own four-way flip logic. media.js's volume
 // popup is a small fixed-size slider pinned by CSS to its button and flipped by one class
