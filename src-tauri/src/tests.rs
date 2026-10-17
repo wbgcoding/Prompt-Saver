@@ -13649,6 +13649,35 @@ fn an_immediate_write_cancels_the_collected_one_instead_of_letting_it_land_later
 }
 
 #[test]
+fn a_failed_collected_write_stays_owed_without_retrying_every_tick() {
+    let delay = SettingsDelay::new(0);
+    delay.mark();
+    assert!(delay.take(false), "the tick takes the owed write");
+    // The disk refused it.
+    delay.failed();
+    assert!(delay.owed(), "a write that did not land is still owed");
+    assert!(!delay.take(false), "no retry inside the backoff, a broken disk is not hammered");
+    assert!(delay.owed(), "the backoff must not drop the debt");
+    assert!(delay.take(true), "an exit or a backup tries again regardless of the backoff");
+    // That retry succeeded: nothing owed, and a later mark is not held back by the old failure.
+    assert!(!delay.owed());
+    delay.mark();
+    assert!(delay.take(false), "a successful write clears the backoff");
+}
+
+#[test]
+fn a_failure_keeps_a_newer_mark_that_arrived_during_the_write() {
+    let delay = SettingsDelay::new(0);
+    delay.mark();
+    assert!(delay.take(false));
+    delay.mark(); // a copy lands while the write is running
+    delay.failed();
+    assert!(delay.owed());
+    assert!(delay.take(true));
+    assert!(!delay.take(true), "one debt, one retry");
+}
+
+#[test]
 fn the_pointer_read_back_after_a_quit_is_the_one_the_last_commit_left() {
     let mut p = sample_prompts().remove(0);
     p.variants = vec!["b".into(), "c".into(), "d".into()]; // total = 4

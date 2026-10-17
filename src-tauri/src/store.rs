@@ -1277,9 +1277,13 @@ pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
 // listener cover all callers.
 pub(crate) fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
     let _writing = settings_write_lock();
-    // A full write covers whatever was collected, so nothing is owed any more.
-    SETTINGS_DELAY.discard();
-    write_settings_now(app, settings)
+    let written = write_settings_now(app, settings);
+    // A full write covers whatever was collected, so nothing is owed any more. A failed one
+    // covers nothing: the collected change stays owed.
+    if written {
+        SETTINGS_DELAY.discard();
+    }
+    written
 }
 
 // A settings write that accompanies a prompt/trash write. A locked settings row (present but
@@ -1342,12 +1346,17 @@ pub(crate) const SETTINGS_QUIET_MS: u64 = 1000;
 // How often the timer thread checks the mark: finer than the quiet window so the write
 // lands just behind it. A round with nothing owed costs one uncontended mutex.
 pub(crate) const SETTINGS_FLUSH_TICK_MS: u64 = 250;
+// After a collected write failed, the timer thread waits this long before trying again, so a
+// broken disk is not hit (and logged) every tick. Exit and backup flushes ignore it.
+pub(crate) const SETTINGS_RETRY_MS: u64 = 30_000;
 
 // Marked = a settings write is owed since that instant. Each mark inside the quiet window
 // pushes the write out, so a burst of copies becomes one write.
 pub(crate) struct SettingsDelay {
     pub(crate) marked: Mutex<Option<Instant>>,
     pub(crate) quiet: Mutex<Duration>,
+    // Earliest instant the timer thread may retry after a failed write.
+    pub(crate) retry_at: Mutex<Option<Instant>>,
 }
 
 impl SettingsDelay {
@@ -1355,6 +1364,7 @@ impl SettingsDelay {
         SettingsDelay {
             marked: Mutex::new(None),
             quiet: Mutex::new(Duration::from_millis(quiet_ms)),
+            retry_at: Mutex::new(None),
         }
     }
 
@@ -1369,22 +1379,41 @@ impl SettingsDelay {
 
     // The ONE place that decides whether a collected write happens, so the number
     // of `true` answers is exactly the number of disk writes on this path.
-    // `force` skips the quiet window: an exit or a backup cannot wait it out.
+    // `force` skips the quiet window and the retry backoff: an exit or a backup cannot wait
+    // them out. A `true` answer clears the backoff; the caller reports a failed write
+    // through `failed`.
     pub(crate) fn take(&self, force: bool) -> bool {
         let quiet = *self.quiet.lock().unwrap_or_else(|e| e.into_inner());
         let mut marked = self.marked.lock().unwrap_or_else(|e| e.into_inner());
+        let mut retry_at = self.retry_at.lock().unwrap_or_else(|e| e.into_inner());
+        if !force && retry_at.is_some_and(|t| Instant::now() < t) {
+            return false;
+        }
         match *marked {
             Some(at) if force || at.elapsed() >= quiet => {
                 *marked = None;
+                *retry_at = None;
                 true
             }
             _ => false,
         }
     }
 
+    // The write that `take` approved did not land: it is owed again, but not before the
+    // backoff has passed. A newer mark that arrived during the write is kept as it is.
+    pub(crate) fn failed(&self) {
+        let mut marked = self.marked.lock().unwrap_or_else(|e| e.into_inner());
+        if marked.is_none() {
+            *marked = Some(Instant::now());
+        }
+        *self.retry_at.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(Instant::now() + Duration::from_millis(SETTINGS_RETRY_MS));
+    }
+
     // An immediate write of the same block has just happened: nothing left owed.
     pub(crate) fn discard(&self) {
         *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *self.retry_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 }
 
@@ -1408,8 +1437,8 @@ pub(crate) fn save_settings_soon() {
 // caller already holds under the store lock.
 pub(crate) fn flush_settings(app: &AppHandle, settings: &Settings) {
     let _writing = settings_write_lock();
-    if SETTINGS_DELAY.take(true) {
-        write_settings_now(app, settings);
+    if SETTINGS_DELAY.take(true) && !write_settings_now(app, settings) {
+        SETTINGS_DELAY.failed();
     }
 }
 
@@ -1434,8 +1463,8 @@ pub(crate) fn settings_flush_tick(app: &AppHandle) {
     };
     let store = state.lock().unwrap_or_else(|e| e.into_inner());
     let _writing = settings_write_lock();
-    if SETTINGS_DELAY.take(false) {
-        write_settings_now(app, &store.settings);
+    if SETTINGS_DELAY.take(false) && !write_settings_now(app, &store.settings) {
+        SETTINGS_DELAY.failed();
     }
 }
 
