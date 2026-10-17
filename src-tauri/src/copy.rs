@@ -562,21 +562,26 @@ pub(crate) async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String
     };
     // The history itself lives in its own table: appended outside the lock so a
     // huge log never blocks other DB work and never bloats the settings blob.
-    if let Some(conn) = db_conn(&app) {
-        if dedup {
-            let last: Option<String> = conn
-                .query_row("SELECT id FROM copy_log ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))
-                .ok();
-            if last.as_deref() == Some(entry.id.as_str()) {
-                return Ok(()); // identical consecutive copy: don't add another row
-            }
+    // No connection (a data-folder switch or a blocked folder) means no journal row either: said
+    // so, not reported as written. The callers fire this after the clipboard write and ignore
+    // the answer, so the copy itself is never held back.
+    let Some(conn) = db_conn(&app) else {
+        append_crash_log("copy history append failed: no database connection");
+        return Err("history-failed".into());
+    };
+    if dedup {
+        let last: Option<String> = conn
+            .query_row("SELECT id FROM copy_log ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))
+            .ok();
+        if last.as_deref() == Some(entry.id.as_str()) {
+            return Ok(()); // identical consecutive copy: don't add another row
         }
-        // An insert failure is logged, not reported as success: otherwise the entry would be
-        // silently missing from the journal.
-        if let Err(e) = db_append_copy(&conn, &entry, cap, cutoff) {
-            append_crash_log(&format!("copy history append failed: {e}"));
-            return Err("history-failed".into());
-        }
+    }
+    // An insert failure is logged, not reported as success: otherwise the entry would be
+    // silently missing from the journal.
+    if let Err(e) = db_append_copy(&conn, &entry, cap, cutoff) {
+        append_crash_log(&format!("copy history append failed: {e}"));
+        return Err("history-failed".into());
     }
     rebuild_tray(&app); // The "recently used" section follows every copy
     Ok(())
