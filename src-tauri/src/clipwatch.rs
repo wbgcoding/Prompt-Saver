@@ -291,23 +291,79 @@ fn on_clipboard_update() {
 // Writes `text` as CF_UNICODETEXT into the clipboard bracket the caller has open. Ownership
 // of the GMEM_MOVEABLE block passes to Windows only when SetClipboardData succeeds; on every
 // other path it is still ours and must be freed, or a rotating prompt leaks one per paste.
-unsafe fn set_unicode_text(text: &str) {
+unsafe fn set_unicode_text(text: &str) -> bool {
     let units = wide(text);
     let bytes = units.len() * std::mem::size_of::<u16>();
     let hmem = GlobalAlloc(GMEM_MOVEABLE, bytes);
     if hmem == 0 {
-        return;
+        return false;
     }
     let ptr = GlobalLock(hmem);
     if ptr.is_null() {
         GlobalFree(hmem);
-        return;
+        return false;
     }
     std::ptr::copy_nonoverlapping(units.as_ptr(), ptr as *mut u16, units.len());
     GlobalUnlock(hmem);
     if SetClipboardData(CF_UNICODETEXT, hmem) == 0 {
         GlobalFree(hmem);
+        return false;
     }
+    true
+}
+
+// The formats a password manager sets so a copy stays out of Win+V history, the cloud
+// clipboard and clipboard managers. Only a confidential prompt's copy carries them.
+pub(crate) const PRIVATE_FORMATS: [&str; 3] = [
+    "ExcludeClipboardContentFromMonitorProcessing",
+    "CanIncludeInClipboardHistory",
+    "CanUploadToCloudClipboard",
+];
+
+pub(crate) fn private_formats(secret: bool) -> &'static [&'static str] {
+    if secret { &PRIVATE_FORMATS } else { &[] }
+}
+
+// Adds the opt-out formats (DWORD 0) to the clipboard bracket the caller has open.
+unsafe fn set_private_markers() {
+    for name in PRIVATE_FORMATS {
+        let fmt = RegisterClipboardFormatW(wide(name).as_ptr());
+        if fmt == 0 {
+            continue;
+        }
+        let hmem = GlobalAlloc(GMEM_MOVEABLE, std::mem::size_of::<u32>());
+        if hmem == 0 {
+            continue;
+        }
+        let ptr = GlobalLock(hmem);
+        if ptr.is_null() {
+            GlobalFree(hmem);
+            continue;
+        }
+        *(ptr as *mut u32) = 0;
+        GlobalUnlock(hmem);
+        if SetClipboardData(fmt, hmem) == 0 {
+            GlobalFree(hmem);
+        }
+    }
+}
+
+// A plain (not auto-advancing) copy of a confidential prompt: the text plus the opt-out
+// formats in one clipboard bracket. Retries briefly while another app holds the clipboard.
+pub(crate) fn write_private_text(text: &str) -> bool {
+    for _ in 0..10 {
+        if unsafe { OpenClipboard(0) } != 0 {
+            unsafe {
+                EmptyClipboard();
+                let ok = set_unicode_text(text);
+                set_private_markers();
+                CloseClipboard();
+                return ok;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    false
 }
 
 // Drives the tile badge's is-auto class.
@@ -350,18 +406,26 @@ fn open_and_promise(hwnd: isize, is_first: bool) {
         let dropped = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(session) = dropped {
             if is_first {
-                let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(session.text));
+                if session.secret {
+                    write_private_text(&session.text);
+                } else {
+                    let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(session.text));
+                }
             } else {
                 emit_active(&session.id, false);
             }
         }
         return;
     }
+    let secret = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|s| s.secret);
     unsafe {
         OWN_EMPTY.store(true, Ordering::Release);
         EmptyClipboard();
         OWN_EMPTY.store(false, Ordering::Release);
         SetClipboardData(CF_UNICODETEXT, 0);
+        if secret {
+            set_private_markers();
+        }
         CloseClipboard();
     }
     let now = tick();
@@ -561,7 +625,11 @@ pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool) {
         // The message window is not running: fall back to a normal, untracked
         // copy rather than silently dropping the text.
         *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
-        let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string()));
+        if secret {
+            write_private_text(text);
+        } else {
+            let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string()));
+        }
     }
 }
 

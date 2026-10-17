@@ -135,8 +135,10 @@ pub(crate) fn rotation_forget(settings: &mut Settings, ids: &[String]) {
 // carries rotation state (e.g. a resolved placeholder fill copied ad hoc).
 #[cfg(windows)]
 pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool {
+    let mut secret = false;
     if let Some(id) = id {
-        let (auto, secret) = {
+        let auto;
+        (auto, secret) = {
             let store = lock(state);
             store.prompts.iter().find(|p| p.id == id)
                 .map(|p| (auto_eligible(p, &store.settings), p.secret))
@@ -148,6 +150,10 @@ pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool 
         }
     }
     note_own_copy(text);
+    // A confidential prompt's plain text stays out of clipboard history and the cloud clipboard.
+    if !clipwatch::private_formats(secret).is_empty() {
+        return clipwatch::write_private_text(text);
+    }
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
 }
 #[cfg(not(windows))]

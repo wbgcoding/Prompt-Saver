@@ -1423,3 +1423,15 @@ fn a_removed_take_takes_every_sidecar_with_it() {
     }
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ---- a confidential copy carries the clipboard history and cloud opt-outs ----
+
+#[cfg(windows)]
+#[test]
+fn only_a_confidential_copy_opts_out_of_clipboard_history() {
+    assert!(clipwatch::private_formats(false).is_empty());
+    let secret = clipwatch::private_formats(true);
+    for name in ["CanIncludeInClipboardHistory", "CanUploadToCloudClipboard", "ExcludeClipboardContentFromMonitorProcessing"] {
+        assert!(secret.contains(&name), "{name} missing");
+    }
+}
