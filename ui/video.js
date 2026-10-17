@@ -1045,9 +1045,12 @@ function snapRect(rect) {
   const hMax = Math.max(2, VE.h - (VE.h % 2));
   const w = clamp(even(rect.w), 2, wMax);
   const h = clamp(even(rect.h), 2, hMax);
+  // The position ceiling needs the same treatment: odd source minus even size is odd.
+  const xMax = Math.max(0, VE.w - w);
+  const yMax = Math.max(0, VE.h - h);
   return {
-    x: clamp(even(rect.x), 0, Math.max(0, VE.w - w)),
-    y: clamp(even(rect.y), 0, Math.max(0, VE.h - h)),
+    x: clamp(even(rect.x), 0, xMax - (xMax % 2)),
+    y: clamp(even(rect.y), 0, yMax - (yMax % 2)),
     w, h,
   };
 }

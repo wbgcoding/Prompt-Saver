@@ -8,6 +8,8 @@ import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
 import { dynLocale } from "./promptVars.js";
 import { applyFlags } from "./expertMenu.js";
+import { notesOn } from "./tiles.js";
+import { tagsOn } from "./tags.js";
 import { editPrompt, openModal } from "./editor.js";
 
 export let journalQuery = ""; // copy-history search text
@@ -168,7 +170,12 @@ export function journalMatches(p) {
   if (!typeAllowed(journalTypes, p)) return false;
   const q = journalQuery.trim().toLowerCase();
   if (!q) return true;
-  return [p.name, p.text, p.file_path].some((s) => (s || "").toLowerCase().includes(q));
+  // The same fields the library search reads: every rotation entry, and tags and notes while
+  // those features are on.
+  const fields = [p.name, p.text, p.file_path, ...(p.variants || [])];
+  if (tagsOn()) fields.push((p.tags || []).join(" "));
+  if (notesOn()) fields.push(p.notes);
+  return fields.some((s) => (s || "").toLowerCase().includes(q));
 }
 
 export let journalLog = []; // cached newest copy events; refetched only on open/group/copy

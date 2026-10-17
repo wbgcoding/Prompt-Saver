@@ -1173,10 +1173,15 @@ export async function renderAttachTextPreview(path) {
 // Build a file-attach prompt from a path. Image, gif, video and PDF
 // attachments behave like media prompts; a PDF shows its rendered first page
 // but still copies the file on click.
+let fileCreateSeq = 0;
 export async function openFileCreate(path) {
   const kind = mediaKind(path);
   const isPdf = PDF_EXT.test(path);
+  const seq = ++fileCreateSeq;
+  const session = modalSession;
   const image = await loadFilePreview(path);
+  // A slower preview must not open over a newer file, or over a dialog opened meanwhile.
+  if (seq !== fileCreateSeq || session !== modalSession) return;
   openModal({
     mode: "file-create",
     title: t(kind === "video" ? "videoModalTitle" : kind || isPdf ? "imageModalTitle" : "fileModalTitle"),
