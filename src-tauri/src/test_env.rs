@@ -1,10 +1,8 @@
-// The unit-test process's own environment. A constructor that runs before the
-// test harness starts any thread points the roaming and local app-data folders
-// at a per-process sandbox, so no code path a test reaches can resolve into the
-// owner's real data folder (the error log, the store fallbacks), and the temp
-// folder there too, so two test runs at the same time, or leftovers an earlier
-// run did not clean up, can never meet in a shared folder. The guard test in
-// `tests.rs` proves it.
+// The unit-test process's own environment. A constructor that runs before the harness
+// starts any thread points the roaming and local app-data folders and the temp folder at
+// a per-process sandbox, so no code path a test reaches can resolve into the owner's real
+// data folder, and two runs at the same time (or leftovers of an earlier one) never meet
+// in a shared folder. The guard test in `tests.rs` proves it.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
