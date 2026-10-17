@@ -1,18 +1,12 @@
-// ---- ONE placement rule for every popover, dropdown and context menu in the
-// main window ---- Below the anchor when it fits, above it when it does not, and
-// always clamped into the window on both axes -- a popover that opens past an
-// edge is unreachable, and that was the same defect in the theme editor, the
-// value pickers and the colour row. Call it AFTER the content is built: the size
-// has to be measurable.
-//
-// Main-window only: floating.js/folder.js run in small frameless windows that
-// can be smaller than their own popover, so they clamp against the SCREEN
-// (screen.availLeft/availWidth/...) with their own four-way flip logic instead
-// of the window -- a genuinely different reference frame, not just a copy that
-// drifted. media.js's volume popup is a third case again: a small fixed-size
-// slider pinned by CSS relative to its own button, flipped with one class
-// toggle -- it never needs horizontal clamping or scrolling, so folding it onto
-// this pixel-computed helper would be a rewrite for its own sake, not a fix.
+// ONE placement rule for every popover, dropdown and context menu in the main window:
+// below the anchor when it fits, above it when it does not, always clamped into the
+// window on both axes (a popover past an edge is unreachable). Call it AFTER the content
+// is built: the size has to be measurable.
+// | Main-window only: floating.js/folder.js run in small frameless windows that can be
+// smaller than their own popover, so they clamp against the SCREEN
+// (screen.availLeft/availWidth/...) with their own four-way flip logic. media.js's volume
+// popup is a small fixed-size slider pinned by CSS to its button and flipped by one class
+// toggle; it needs no clamping.
 const POP_PAD = 6; // minimum gap between a popover and the window edge (px)
 
 export function placePopover(el, rect, gap = 4) {
@@ -30,9 +24,8 @@ export function placePopover(el, rect, gap = 4) {
   if (h <= below || below >= above) { top = rect.bottom + gap; room = below; }
   else { top = rect.top - gap - Math.min(h, above); room = above; }
   // Too tall for either side: keep it inside and let it scroll rather than cut it.
-  // Everything below reasons about the height it will ACTUALLY have: clamping with
-  // the unshrunk height would drag a tall popover to the top of the window and over
-  // the very thing it belongs to.
+  // Everything below uses the height it will ACTUALLY have: clamping with the unshrunk
+  // height would drag a tall popover to the top of the window and over its anchor.
   let shown = h;
   // A menu opened at a point (a right-click) has no anchor to keep uncovered, so one that
   // fits the window at all is moved up to fit, the way every system menu is, instead of
