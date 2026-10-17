@@ -6177,7 +6177,7 @@ fn delete_prompt_closes_the_pill_only_after_the_trash_move_saved() {
     let src = production_sources();
     let a = src.find("async fn delete_prompt(").expect("delete_prompt");
     let body = &src[a..a + src[a..].find("// The in-memory half of a batch delete").expect("end marker")];
-    let saved = body.find("save_prompts_and_trash(&app, &store)").expect("the trash save");
+    let saved = body.find("save_prompts_and_trash(&app, s)").expect("the trash save");
     let closed = body.find("close_floating_window(&app, &id)").expect("the pill close");
     assert!(closed > saved, "the pill must be closed after the save, not before it");
 }
@@ -20752,4 +20752,122 @@ fn export_source_is_allowed_only_for_own_recordings_work_copies_and_the_open_edi
     assert!(!export_source_is_allowed(&dirs, &temp_root, &[String::new()], &foreign));
     assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, &elsewhere.join("gone.mp4")));
     let _ = fs::remove_dir_all(&root);
+}
+
+// ---- Settings row and prompt rows written as one unit ----
+//
+// The writers are stood in for by closures: `settings_fails` makes the settings write return
+// false (a real write failure, not a locked row), `rows_called` records whether the prompt
+// rows were written at all.
+
+fn paired_fixture() -> Store {
+    let mut settings = Settings::default();
+    settings.migrate();
+    Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() }
+}
+
+fn paired_save<'a>(settings_fails: bool, rows_fail: bool, rows_called: &'a std::cell::Cell<bool>, undone: &'a std::cell::Cell<bool>) -> impl Fn(&Store, &Settings) -> bool + 'a {
+    move |_st, _orig| {
+        save_pair_or_undo_first(
+            || !settings_fails,
+            || {
+                rows_called.set(true);
+                !rows_fail
+            },
+            || undone.set(true),
+        )
+    }
+}
+
+#[test]
+fn a_locked_settings_row_counts_as_written_for_a_pair_but_a_real_failure_does_not() {
+    assert!(settings_pair_written(true, false));
+    assert!(settings_pair_written(false, true), "a locked row must not block prompt writes");
+    assert!(!settings_pair_written(false, false), "a real write failure undoes the pair");
+}
+
+#[test]
+fn a_failed_settings_write_leaves_a_new_prompt_out_of_the_store_and_the_grid() {
+    let mut store = paired_fixture();
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let p = test_prompt("n1");
+    let r = add_placed_prompt_core(&mut store, &p, paired_save(true, false, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert!(store.prompts.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "no cell, no member left behind");
+    assert!(!rows.get(), "the prompt rows are not written when the settings write failed");
+    // And when only the rows fail, the settings written first are taken back.
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = add_placed_prompt_core(&mut store, &p, paired_save(false, true, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert!(rows.get() && undone.get());
+    assert!(store.prompts.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    // Both writes landing keeps the prompt and its seat.
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    add_placed_prompt_core(&mut store, &p, paired_save(false, false, &rows, &undone)).unwrap();
+    assert_eq!(store.prompts.len(), 1);
+    assert!(store.settings.active_view_mut().members.iter().any(|m| m == "n1"));
+}
+
+#[test]
+fn a_failed_settings_write_keeps_a_deleted_prompt_in_the_library_with_its_placement() {
+    let mut store = paired_fixture();
+    let p = test_prompt("d1");
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    add_placed_prompt_core(&mut store, &p, paired_save(false, false, &rows, &undone)).unwrap();
+    store.settings.floating.insert("d1".into(), Pos { x: 1, y: 2, ..Default::default() });
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = delete_prompt_core(&mut store, "d1", 9, paired_save(true, false, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert_eq!(store.prompts.len(), 1);
+    assert!(store.trash.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "view, cell and pill still name the prompt");
+    assert!(!rows.get());
+    // The batch variant behaves the same.
+    let ids = vec!["d1".to_string()];
+    let r = delete_batch_core(&mut store, &ids, 9, paired_save(true, false, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert_eq!(store.prompts.len(), 1);
+    assert!(store.trash.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    // A pair that lands moves it to the trash.
+    assert_eq!(delete_batch_core(&mut store, &ids, 9, paired_save(false, false, &rows, &undone)), Ok(true));
+    assert!(store.prompts.is_empty() && store.trash.len() == 1);
+}
+
+#[test]
+fn a_failed_settings_write_leaves_a_restored_prompt_in_the_trash() {
+    let mut store = paired_fixture();
+    let mut p = test_prompt("t1");
+    p.trashed_at = 5;
+    store.trash.push(p);
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = restore_trashed_core(&mut store, "t1", |st| paired_save(true, false, &rows, &undone)(st, &Settings::default()));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert_eq!(store.trash.len(), 1);
+    assert_eq!(store.trash[0].trashed_at, 5);
+    assert!(store.prompts.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    assert!(!rows.get());
+}
+
+#[test]
+fn a_failed_settings_write_seeds_no_example_prompts() {
+    let mut store = paired_fixture();
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let created = vec![test_prompt("e1"), test_prompt("e2")];
+    let r = seed_examples_core(&mut store, created.clone(), paired_save(true, false, &rows, &undone));
+    assert_eq!(r.err(), Some("save-failed".to_string()));
+    assert!(store.prompts.is_empty());
+    assert!(!store.settings.examples_seeded);
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    assert!(!rows.get(), "nothing reached the prompt table, so a retry cannot duplicate");
+    let seeded = seed_examples_core(&mut store, created, paired_save(false, false, &rows, &undone)).unwrap();
+    assert_eq!(seeded.len(), 2);
+    assert!(store.settings.examples_seeded && store.prompts.len() == 2);
 }

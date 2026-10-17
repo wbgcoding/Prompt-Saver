@@ -1282,6 +1282,18 @@ pub(crate) fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
     write_settings_now(app, settings)
 }
 
+// A settings write that accompanies a prompt/trash write. A locked settings row (present but
+// unreadable) refuses every settings write by design and has its own notice, so it counts as
+// written here: rolling the prompt side back would block adding and deleting prompts for the whole
+// session. Only a real write failure returns false and makes the caller undo the pair.
+pub(crate) fn save_settings_paired(app: &AppHandle, settings: &Settings) -> bool {
+    settings_pair_written(save_settings(app, settings), SETTINGS_LOCKED.load(Ordering::Relaxed))
+}
+
+pub(crate) fn settings_pair_written(written: bool, locked: bool) -> bool {
+    written || locked
+}
+
 // The write itself, without the "cancel a collected write" step: the collecting
 // path below calls this one so it does not clear its own mark twice.
 pub(crate) fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {

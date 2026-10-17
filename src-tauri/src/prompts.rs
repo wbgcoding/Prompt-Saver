@@ -859,30 +859,12 @@ pub(crate) async fn add_prompt(
         } else {
             prompt
         };
-        // A grid folder owns its cell outside view.layouts and the renderer prefers the folder, so a
-        // cell handed out without excluding folder cells saves fine and never draws.
-        let folder_cells = active_view_folder_cells(&store.settings);
-        let view = store.settings.active_view_mut();
-        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-            let key = grid_key(view.cols, view.rows);
-            view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
-        }
-        view.members.push(prompt.id.clone());
-        store.prompts.push(prompt.clone());
-        if !save_prompts(&app, &store) {
-            // Nothing reached disk (or the JSON fallback): undo the in-memory add and report it instead
-            // of handing back an id the editor believes is saved. The layout entry was never persisted,
-            // but left in memory it would keep its cell occupied; members gets the same undo.
-            store.prompts.pop();
-            let view = store.settings.active_view_mut();
-            view.members.retain(|m| *m != prompt.id);
-            for layout in view.layouts.values_mut() {
-                layout.remove(&prompt.id);
-            }
-            return Err("save-failed".into());
-        }
+        add_placed_prompt_core(&mut store, &prompt, |st, original| {
+            save_settings_then_rows(&app, st, original, |s| save_prompts(&app, s))
+        })?;
+        // After the pair landed: an early return above drops the staged copies uncommitted, which
+        // removes them again.
         staged_copies.commit();
-        save_settings(&app, &store.settings);
         prompt
     };
     rebuild_tray(&app);
@@ -896,6 +878,31 @@ pub(crate) async fn add_prompt(
         }
     }
     Ok(prompt)
+}
+
+// Seats a new prompt in the next free cell of the active view and persists the settings row and
+// the prompt rows as one unit (`save` gets the store and the settings from before the call). When
+// either write fails the store is put back exactly as it was and nothing is left half-saved: no
+// prompt without its cell, no cell for a prompt that is not on disk.
+pub(crate) fn add_placed_prompt_core(store: &mut Store, prompt: &Prompt, save: impl FnOnce(&Store, &Settings) -> bool) -> Result<(), String> {
+    let original_settings = store.settings.clone();
+    // A grid folder owns its cell outside view.layouts and the renderer prefers the folder, so a
+    // cell handed out without excluding folder cells saves fine and never draws.
+    let folder_cells = active_view_folder_cells(&store.settings);
+    let view = store.settings.active_view_mut();
+    if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+        let key = grid_key(view.cols, view.rows);
+        view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
+    }
+    view.members.push(prompt.id.clone());
+    store.prompts.push(prompt.clone());
+    if !save(store, &original_settings) {
+        // Reported instead of handing back an id the editor believes is saved.
+        store.prompts.pop();
+        store.settings = original_settings;
+        return Err("save-failed".into());
+    }
+    Ok(())
 }
 
 // One example prompt as the frontend supplies it: name/text come from i18n.js
@@ -955,49 +962,42 @@ pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, e
                 image_text: String::new(),
                 secret: false,
             };
-            let view = store.settings.active_view_mut();
-            if let Some(cell) = first_free_cell(view) {
-                let key = grid_key(view.cols, view.rows);
-                view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
-            }
-            view.members.push(prompt.id.clone());
-            store.settings.example_prompt_ids.push(prompt.id.clone());
-            store.settings.example_prompt_seeds.insert(
-                prompt.id.clone(),
-                example_seed_fingerprint(&prompt.name, &prompt.text, &prompt.image),
-            );
-            store.prompts.push(prompt.clone());
             created.push(prompt);
         }
-        store.settings.examples_seeded = true;
-        // A failed save must not hand the UI prompts that never reached disk: roll back every
-        // in-memory change (view placement included). The two saves roll back independently: if
-        // save_prompts landed the new prompts, they stay in store.prompts so memory matches disk,
-        // otherwise the next unrelated save would erase a successful write and a retry would seed a
-        // duplicate batch.
-        let prompts_ok = save_prompts(&app, &store);
-        let settings_ok = save_settings(&app, &store.settings);
-        if !prompts_ok || !settings_ok {
-            let ids: std::collections::HashSet<String> = created.iter().map(|p| p.id.clone()).collect();
-            if !prompts_ok {
-                store.prompts.retain(|p| !ids.contains(&p.id));
-            }
-            if !settings_ok {
-                store.settings.example_prompt_ids.retain(|id| !ids.contains(id));
-                store.settings.example_prompt_seeds.retain(|id, _| !ids.contains(id));
-                store.settings.examples_seeded = false;
-                let view = store.settings.active_view_mut();
-                let key = grid_key(view.cols, view.rows);
-                if let Some(layout) = view.layouts.get_mut(&key) {
-                    layout.retain(|id, _| !ids.contains(id));
-                }
-                view.members.retain(|id| !ids.contains(id));
-            }
-            return Err("save-failed".into());
-        }
-        created
+        seed_examples_core(&mut store, created, |st, original| {
+            save_settings_then_rows(&app, st, original, |s| save_prompts(&app, s))
+        })?
     };
     rebuild_tray(&app); // Mirrors add_prompt: the tray's recent/fav sections can list these too
+    Ok(created)
+}
+
+// Places the seeded examples in the active view, flags the library as seeded and persists the
+// settings row and the prompt rows as one unit. A failed write puts the store back exactly as it
+// was (nothing seeded, no placement), so a retry cannot duplicate a batch that half landed.
+pub(crate) fn seed_examples_core(store: &mut Store, created: Vec<Prompt>, save: impl FnOnce(&Store, &Settings) -> bool) -> Result<Vec<Prompt>, String> {
+    let original_settings = store.settings.clone();
+    for prompt in &created {
+        let view = store.settings.active_view_mut();
+        if let Some(cell) = first_free_cell(view) {
+            let key = grid_key(view.cols, view.rows);
+            view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
+        }
+        view.members.push(prompt.id.clone());
+        store.settings.example_prompt_ids.push(prompt.id.clone());
+        store.settings.example_prompt_seeds.insert(
+            prompt.id.clone(),
+            example_seed_fingerprint(&prompt.name, &prompt.text, &prompt.image),
+        );
+        store.prompts.push(prompt.clone());
+    }
+    store.settings.examples_seeded = true;
+    if !save(store, &original_settings) {
+        let ids: std::collections::HashSet<&str> = created.iter().map(|p| p.id.as_str()).collect();
+        store.prompts.retain(|p| !ids.contains(p.id.as_str()));
+        store.settings = original_settings;
+        return Err("save-failed".into());
+    }
     Ok(created)
 }
 
@@ -1550,21 +1550,9 @@ pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>,
         }
         // Same placement as add_prompt: next free cell of the active view, normally the view whose
         // history was open.
-        let folder_cells = active_view_folder_cells(&store.settings);
-        let view = store.settings.active_view_mut();
-        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-            let key = grid_key(view.cols, view.rows);
-            view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
-        }
-        view.members.push(prompt.id.clone());
-        store.prompts.push(prompt.clone());
-        if !save_prompts(&app, &store) {
-            store.prompts.pop();
-            // Its cell goes too, or the unsaved copy would keep it occupied.
-            strip_ids_from_view(store.settings.active_view_mut(), std::slice::from_ref(&prompt.id));
-            return Err("save-failed".into());
-        }
-        save_settings(&app, &store.settings);
+        add_placed_prompt_core(&mut store, &prompt, |st, original| {
+            save_settings_then_rows(&app, st, original, |s| save_prompts(&app, s))
+        })?;
         prompt
     };
     rebuild_tray(&app);
@@ -1610,42 +1598,9 @@ pub(crate) fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorit
 pub(crate) async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
     let changed = {
         let mut store = lock(&state);
-        let original_settings = store.settings.clone();
-        let moved = match store.prompts.iter().position(|p| p.id == id) {
-            Some(pos) => {
-                let mut p = store.prompts.remove(pos);
-                p.trashed_at = now_secs();
-                store.trash.insert(0, p); // newest-deleted first
-                Some(pos)
-            }
-            None => None,
-        };
-        for view in &mut store.settings.views {
-            for layout in view.layouts.values_mut() {
-                layout.remove(&id);
-            }
-            view.members.retain(|m| *m != id);
-        }
-        store.settings.floating.remove(&id);
-        store.settings.float_scale.remove(&id);
-        store.settings.video_prefs.remove(&id);
-        store.normalize_folders(); // And out of whatever folder held it
-        if let Some(pos) = moved {
-            // prompts and trash move in one transaction. Report success only once it committed; on
-            // failure undo the in-memory move (the trash entry and the settings housekeeping above).
-            if !save_prompts_and_trash(&app, &store) {
-                if !store.trash.is_empty() {
-                    let mut p = store.trash.remove(0);
-                    p.trashed_at = 0;
-                    let at = pos.min(store.prompts.len());
-                    store.prompts.insert(at, p);
-                }
-                store.settings = original_settings;
-                return Err("save-failed".into());
-            }
-            save_settings(&app, &store.settings);
-        }
-        moved.is_some()
+        delete_prompt_core(&mut store, &id, now_secs(), |st, original| {
+            save_settings_then_rows(&app, st, original, |s| save_prompts_and_trash(&app, s))
+        })?
     };
     // Only now: a failed save returned above with the prompt still in the library,
     // and its pill has to stay open then.
@@ -1659,6 +1614,47 @@ pub(crate) async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: Stri
         }
     }
     Ok(changed)
+}
+
+// Moves one prompt into the trash and lets go of its app-level associations (cells, membership,
+// pill, scale, video prefs, folder). The settings row and the prompt/trash rows are written as one
+// unit; on a failed write the prompt is back in the library and the associations are restored, so
+// the disk never holds a view or pill naming an id that already sits in the trash. Returns whether
+// a prompt moved.
+pub(crate) fn delete_prompt_core(store: &mut Store, id: &str, now: u64, save: impl FnOnce(&Store, &Settings) -> bool) -> Result<bool, String> {
+    let original_settings = store.settings.clone();
+    let moved = match store.prompts.iter().position(|p| p.id == id) {
+        Some(pos) => {
+            let mut p = store.prompts.remove(pos);
+            p.trashed_at = now;
+            store.trash.insert(0, p); // newest-deleted first
+            Some(pos)
+        }
+        None => None,
+    };
+    for view in &mut store.settings.views {
+        for layout in view.layouts.values_mut() {
+            layout.remove(id);
+        }
+        view.members.retain(|m| m != id);
+    }
+    store.settings.floating.remove(id);
+    store.settings.float_scale.remove(id);
+    store.settings.video_prefs.remove(id);
+    store.normalize_folders(); // And out of whatever folder held it
+    if let Some(pos) = moved {
+        if !save(store, &original_settings) {
+            if !store.trash.is_empty() {
+                let mut p = store.trash.remove(0);
+                p.trashed_at = 0;
+                let at = pos.min(store.prompts.len());
+                store.prompts.insert(at, p);
+            }
+            store.settings = original_settings;
+            return Err("save-failed".into());
+        }
+    }
+    Ok(moved.is_some())
 }
 
 // The in-memory half of a batch delete: the prompts move to the trash (newest-deleted
@@ -1700,6 +1696,25 @@ pub(crate) fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -
     moved
 }
 
+// Batch counterpart of delete_prompt_core: the same unit of writes, and on failure the whole
+// selection is back in the library. The prompts return at the end of store.prompts, not their
+// original indices: this is a recovery path, and the visible grid position lives in view.layouts.
+// Returns whether anything moved.
+pub(crate) fn delete_batch_core(store: &mut Store, ids: &[String], now: u64, save: impl FnOnce(&Store, &Settings) -> bool) -> Result<bool, String> {
+    let original_settings = store.settings.clone();
+    let moved = move_batch_to_trash(store, ids, now);
+    if moved.is_empty() {
+        return Ok(false);
+    }
+    if !save(store, &original_settings) {
+        store.trash.drain(0..moved.len());
+        store.prompts.extend(moved);
+        store.settings = original_settings;
+        return Err("save-failed".into());
+    }
+    Ok(true)
+}
+
 // Batch operations: apply one action to many prompts in a single store pass (no per-item
 // save loop, so 100+ selected prompts never stall the UI). Returns the fresh state so the
 // caller re-renders once. Actions: delete, favorite, color, addView, removeView, tag-add,
@@ -1725,20 +1740,10 @@ pub(crate) async fn batch_prompts(
         "delete" => {
             // Move to trash, same as the single-prompt delete_prompt command:
             // media files and version history stay untouched until a real purge.
-            let original_settings = store.settings.clone();
-            let moved = move_batch_to_trash(&mut store, &ids, now_secs());
-            if !moved.is_empty() {
-                // Same atomic prompts+trash write as delete_prompt/restore_prompt. On failure undo the batch
-                // move instead of reporting success. The prompts go back at the end of store.prompts, not
-                // their original indices: this is a recovery path, and the visible grid position lives in
-                // view.layouts.
-                if !save_prompts_and_trash(&app, &store) {
-                    store.trash.drain(0..moved.len());
-                    store.prompts.extend(moved);
-                    store.settings = original_settings;
-                    return Err("save-failed".into());
-                }
-                save_settings(&app, &store.settings);
+            let deleted = delete_batch_core(&mut store, &ids, now_secs(), |st, original| {
+                save_settings_then_rows(&app, st, original, |s| save_prompts_and_trash(&app, s))
+            })?;
+            if deleted {
                 if let Some(conn) = db_conn(&app) {
                     discard_editor_draft_if(&conn, |t| idset.contains(t));
                 }

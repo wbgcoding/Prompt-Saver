@@ -94,8 +94,10 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
 pub(crate) async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<AppState, String> {
     let (app_state, restored) = {
         let mut store = lock(&state);
-        restore_trashed_core(&mut store, &id, |st| save_prompts_and_trash(&app, st))?;
-        save_settings(&app, &store.settings);
+        let original_settings = store.settings.clone();
+        restore_trashed_core(&mut store, &id, |st| {
+            save_settings_then_rows(&app, st, &original_settings, |s| save_prompts_and_trash(&app, s))
+        })?;
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         (AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }, true)
     };
@@ -343,6 +345,19 @@ pub(crate) fn save_pair_or_undo_first(first: impl FnOnce() -> bool, second: impl
     false
 }
 
+// The settings row and the prompt/trash rows of one change, written as a unit: settings first (a
+// locked row counts as written, see save_settings_paired), then the rows; when the rows fail, the
+// original settings go back. A failure of the settings write leaves the rows untouched on disk.
+pub(crate) fn save_settings_then_rows(app: &AppHandle, st: &Store, original: &Settings, rows: impl FnOnce(&Store) -> bool) -> bool {
+    save_pair_or_undo_first(
+        || save_settings_paired(app, &st.settings),
+        || rows(st),
+        || {
+            save_settings_paired(app, original);
+        },
+    )
+}
+
 // Undo of a batch delete with the snapshot taken before it: the placements and
 // the prompts are written together or not at all.
 #[tauri::command]
@@ -375,15 +390,16 @@ pub(crate) async fn restore_prompts_batch(app: AppHandle, state: State<'_, Db>, 
 pub(crate) fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Result<Option<std::collections::HashSet<String>>, String> {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let before = store.trash.clone();
+    let original_settings = store.settings.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
+    rotation_forget(&mut store.settings, ids); // no orphaned pointer/bag left behind
 
-    // A failed trash save means the purged prompt comes back on the next restart (trash has no
-    // JSON fallback like save_prompts), so its rotation position and version history must come
-    // back with it rather than vanish for a purge that never persisted.
-    if save_trash(app, store) {
+    // A failed write means the purged prompt comes back on the next restart (trash has no JSON
+    // fallback like save_prompts), so its rotation position and version history must come back
+    // with it rather than vanish for a purge that never persisted. The settings row goes first:
+    // a purge reported as done must not leave a rotation pointer on a deleted id.
+    if save_settings_then_rows(app, store, &original_settings, |s| save_trash(app, s)) {
         let orphan_scan = orphan_cleanup_enabled(store).then(|| orphan_referenced_set(store));
-        rotation_forget(&mut store.settings, ids); // no orphaned pointer/bag left behind
-        save_settings(app, &store.settings);
         // save_trash above returns true only through a working connection, so losing it between
         // the two calls is a narrow window, but a purge that leaves the prompt's text in
         // prompt_versions must not pass unrecorded.
@@ -399,10 +415,10 @@ pub(crate) fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> R
         }
         Ok(orphan_scan)
     } else {
-        // A failed save means the disk-side trash still has these rows and they reappear on
-        // restart: restore the in-memory copy so this session's trash view does not show them as
-        // gone.
+        // The disk-side trash still has these rows and they reappear on restart: restore the
+        // in-memory copy so this session's trash view does not show them as gone.
         store.trash = before;
+        store.settings = original_settings;
         Err("save-failed".to_string())
     }
 }
@@ -574,7 +590,10 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
         if !save_trash(&app, &store) {
             incomplete = true;
         }
-        save_settings(&app, &store.settings);
+        // The views and folders still naming the deleted ids on disk would point at nothing.
+        if !save_settings_paired(&app, &store.settings) {
+            incomplete = true;
+        }
         // Data-only wipe: keep every setting, drop the derived data tables. Each failure is logged
         // and reported, so a locked file or mid-wipe I/O error cannot leave private rows on disk
         // while the user is told everything is gone.
