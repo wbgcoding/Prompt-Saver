@@ -28,6 +28,8 @@ fn run(input: &[u8], protect: bool) -> Option<Vec<u8>> {
             return None;
         }
         let v = std::slice::from_raw_parts(out.pb, out.cb as usize).to_vec();
+        // The unprotected buffer holds plain settings or sidecar data: wipe it before it is freed.
+        std::ptr::write_bytes(out.pb, 0, out.cb as usize);
         LocalFree(out.pb as *mut c_void);
         Some(v)
     }
