@@ -63,13 +63,10 @@ export function closeBackups() {
 // Remembered UI state (which panel sections are expanded). Kept in ui_flags so it
 // survives a restart; the key is not in OPT_FLAG_LABELS, so it never shows up as an
 // expert toggle and applyFlags() ignores it.
-// The write failure is swallowed on purpose, everywhere this is called (including
-// tourSeen): every key here is a one-off memory of what the user already saw or
-// last had open, never data they typed. Losing a write just means the panel
-// starts collapsed again, or the tour reopens once more, next launch -- an error
-// toast at that exact moment (right as a tour finishes, or a panel closes) would
-// be more disruptive than the failure it reports, for something that quietly
-// self-corrects on its own.
+// The write failure is swallowed on purpose, wherever this is called (including
+// tourSeen): every key is a one-off memory of what the user saw or had open, never typed
+// data. A lost write only collapses a panel or reopens the tour once; an error toast at
+// that moment would be worse than the failure.
 export async function saveUiState(key, on) {
   settings.ui_flags = { ...(settings.ui_flags || {}), [key]: on };
   await invoke("set_ui_flag", { key, enabled: on }).catch(() => {});
@@ -88,11 +85,10 @@ export const STORAGE_ROW_LABELS = {
   crash_log: "storageKeyCrashLog",
 };
 
-// The "Speicher" section of the statistics/backups window: how much disk space
-// the app's own data actually uses, independent of the usage-statistics switch
-// above it (storage is not usage tracking, the two must not share a toggle).
-// The backend caches the scan, so reopening this window is instant; the
-// "measure again" button is the only thing that forces a fresh walk.
+// The "Speicher" section of the statistics/backups window: how much disk space the app's
+// data uses, independent of the usage-statistics switch (storage is not usage tracking,
+// so no shared toggle). The backend caches the scan; only the "measure again" button
+// forces a fresh walk.
 export async function renderStoragePanel(root, force) {
   let data;
   try { data = await invoke("storage_breakdown", { force: !!force }); }
@@ -159,15 +155,12 @@ export async function renderStoragePanel(root, force) {
 // removes it; fixed, so its row has a number but no setting to jump to.
 const VIDEO_CLIP_TTL_MIN = 60;
 
-// One row per kept-data category, in the fixed order the spec names
-// them. Each entry names its own value/select key (for the retention wording
-// AND the jump-to-setting button, which needs to know which EXPERT_TABS list
-// the key lives in) and its own on-demand cleanup action. Language is the
-// only thing normalized across rows (same order: what, how much, how long);
-// each category keeps its own existing way of counting -- days for trash/
-// recordings/discarded recordings/edit states, a plain count for copy
-// history/the clipboard inbox, minutes for temporary exports -- because that
-// is what each one already measured correctly before this row existed.
+// One row per kept-data category. Each entry names its own value/select key (for the
+// retention wording and the jump-to-setting button, which needs the EXPERT_TABS list the
+// key lives in) and its own on-demand cleanup action. Rows share the wording order (what,
+// how much, how long) but keep their own unit: days for trash/recordings/discarded
+// recordings/edit states, a plain count for copy history/clipboard inbox, minutes for
+// temporary exports.
 export const RETENTION_ROWS = [
   { key: "trash", nameKey: "trashTitle", settingKey: "trashRetentionDays", settingKind: "selects", wording: "days" },
   { key: "copyHistory", nameKey: "retentionCatCopyHistory", settingKey: "historyMax", settingKind: "values", wording: "count" },
@@ -178,9 +171,9 @@ export const RETENTION_ROWS = [
   { key: "editStates", nameKey: "storageKeyEditStates", settingKey: "editStateKeepDays", settingKind: "values", wording: "days" },
 ];
 
-// "0 means unlimited" always says so in words (retentionForever), never a
-// bare "0d" -- the one exception is temporary exports, whose fixed minutes
-// value has no off state so it never needs the zero case at all.
+// "0 means unlimited" always says so in words (retentionForever), never a bare "0d".
+// Temporary exports have a fixed minutes value with no off state, so they never need the
+// zero case.
 export function retentionKeepText(row) {
   const n = row.fixed ?? val(row.settingKey);
   if (row.wording === "count") return t("retentionKeepsCount").replace("{n}", () => n);
@@ -198,16 +191,10 @@ export async function retentionCleanupResult(promise, nothingKey) {
   }
 }
 
-// One backend action per row -- several already existed for their own
-// button elsewhere (discarded recordings, temporary exports); trash and copy
-// history get a new on-demand command each, since neither had one before.
-// The clipboard inbox reuses the SAME full clear the copy history already
-// offers: it is always kept at its cap on every insert, so there is nothing
-// "expired" to sweep, and building a second, fake "clean up" that only ever
-// removes zero items would be worse than being honest about that. Recordings
-// opens the existing preview-then-confirm cleanup dialog instead of a silent
-// delete, the same safety bar that dialog already holds everywhere else it
-// is reached from.
+// One backend action per row. The clipboard inbox reuses the full clear of the copy
+// history: it is kept at its cap on every insert, so nothing is "expired" to sweep and a
+// fake cleanup that removes zero items would be dishonest. Recordings opens the existing
+// preview-then-confirm cleanup dialog instead of a silent delete.
 export const RETENTION_CLEANUP = {
   trash: () => retentionCleanupResult(invoke("sweep_trash_now"), "recSweepNothing"),
   copyHistory: () => retentionCleanupResult(invoke("trim_copy_history_now"), "recSweepNothing"),
@@ -276,7 +263,7 @@ export async function renderRetentionPanel(root, force) {
     const cleanBtn = document.createElement("button");
     cleanBtn.type = "button";
     cleanBtn.className = "ghost-btn";
-    cleanBtn.textContent = t("recSweepNowAction"); // same wording as the discarded-recordings action elsewhere
+    cleanBtn.textContent = t("recSweepNowAction");
     cleanBtn.disabled = item.count === 0 && row.key !== "recordings";
     cleanBtn.addEventListener("click", async () => {
       await RETENTION_CLEANUP[row.key]();
@@ -293,16 +280,15 @@ export async function renderRetentionPanel(root, force) {
 }
 
 export async function renderBackupPanel(body) {
-  // Fetch BEFORE clearing: emptying the panel and only then awaiting lets the browser
-  // paint the empty state for a frame, which showed up as a visible flash on every
-  // re-render (backup now, value change …).
+  // Fetch BEFORE clearing: emptying first and then awaiting lets the browser paint the
+  // empty state, a visible flash on every re-render.
   let backups, hadPw;
   try { [backups, hadPw] = await Promise.all([invoke("list_backups"), invoke("has_backup_password").catch(() => false)]); }
   catch (e) { errToast(e); return; }
   body.innerHTML = "";
   const nf = (n) => Number(n).toLocaleString(LANG);
-  // Date/time card: date on top, time below (no comma), a touch larger than the
-  // plain small value so the timestamps read clearly.
+  // Date/time card: date on top, time below (no comma), slightly larger so timestamps
+  // read clearly.
   const dtCard = (l, d) => {
     const c = document.createElement("div"); c.className = "stat-card";
     const vv = document.createElement("div"); vv.className = "stat-val stat-dt";
@@ -354,8 +340,6 @@ export async function renderBackupPanel(body) {
   openFolderBtn.textContent = t("backupOpenFolder");
   openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => errToast(e)));
   left.appendChild(openFolderBtn);
-  // Saving to and importing from a file of the user's choice live next to the
-  // other backup actions.
   const saveFileBtn = document.createElement("button");
   saveFileBtn.type = "button";
   saveFileBtn.id = "backup-save-file";
@@ -401,9 +385,9 @@ export async function renderBackupPanel(body) {
     left.appendChild(delayRow);
   }
 
-  // Right column: retention. A plain number field replaces the three preset
-  // buttons; "Smart retention" is a switch above it that turns the field grey
-  // (backend ignores backupKeep while it is on) and activates the tiers below.
+  // Right column: retention. A plain number field; "Smart retention" is a switch above it
+  // that greys the field (the backend ignores backupKeep while it is on) and activates
+  // the tiers below.
   const gfsOn = optFlag("backupGfs");
   const gfsRow = switchRow(t("flagBackupGfs"), gfsOn, async (on) => {
     await saveBackupSetting("flag", "backupGfs", on);
@@ -421,19 +405,17 @@ export async function renderBackupPanel(body) {
     keepRow.querySelector("input").disabled = true;
   }
   right.appendChild(keepRow);
-  // Both retention states share ONE slot so picking a tile never moves the rows below
-  // it. The tier grid is always BUILT and merely parked when smart retention is off:
-  // a CSS min-height guessing its height was three pixels short of what the fields
-  // really measure, and every font, UI scale and translation moved that target again.
-  // Day / week beside each other, month / year underneath: four small fields. The
-  // tiers replace the plain count entirely (the backend ignores it while smart
-  // retention is on), so the count the user set stays untouched for when it is off.
+  // Both retention states share ONE slot so picking a tile never moves the rows below.
+  // The tier grid is always BUILT and merely parked when smart retention is off: a CSS
+  // min-height guess was off by pixels and moved with every font, UI scale and
+  // translation. Day / week side by side, month / year underneath. The tiers replace the
+  // plain count (the backend ignores it while smart retention is on), so the user's count
+  // stays untouched for when it is off.
   const slot = document.createElement("div"); slot.className = "backup-retention-slot";
   right.appendChild(slot);
   const tiers = document.createElement("div");
   tiers.className = "backup-tier-grid" + (gfsOn ? "" : " is-parked");
-  // Re-renders like every other row in this panel, so a tier's reset icon
-  // appears/disappears live instead of only after some unrelated change.
+  // Re-renders so a tier's reset icon appears/disappears live.
   const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); renderBackupPanel(body); };
   const rerenderPanel = () => renderBackupPanel(body);
   const tierRow = (labelKey, key, max, dataKey) => {
@@ -530,8 +512,8 @@ export async function renderBackupPanel(body) {
   pwControls.append(pwWrap, save, remove);
   pwRow.append(pwLabel, pwControls);
   set.appendChild(pwRow);
-  // The consequence of forgetting it, spelled out where it's set: not just
-  // in a toast after the fact, which is easy to miss.
+  // The consequence of forgetting it is spelled out where it is set, not only in a toast
+  // that is easy to miss.
   const pwWarn = document.createElement("p");
   pwWarn.className = "modal-hint backup-pw-hint";
   pwWarn.textContent = t("backupPasswordForgetWarn");
@@ -574,10 +556,10 @@ export async function renderBackupPanel(body) {
       const count = document.createElement("span"); count.className = "backup-count";
       count.textContent = b.prompts === null || b.prompts === undefined ? EMPTY_VALUE : nf(b.prompts);
       count.title = t("backupPrompts");
-      // Names are read straight from the snapshot (DPAPI-sealed exactly like
-      // the live library: a local snapshot is never password-protected, only the
-      // separate manual export-to-file has that option), so there is nothing to ask
-      // for here. An empty list just means an older backup made before this existed.
+      // Names are read from the snapshot (DPAPI-sealed like the live library; a local
+      // snapshot is never password-protected, only the manual export-to-file is), so
+      // nothing needs asking. An empty list means an older backup made before names were
+      // stored.
       let namesBox = null;
       if (b.items && b.items.length) {
         namesBox = document.createElement("ul");
@@ -605,8 +587,8 @@ export async function renderBackupPanel(body) {
         });
       }
       const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size, LANG);
-      // Opens the same read rail restoring already uses (stage, validate, read),
-      // just without ever writing the result anywhere -- see backup_contents.
+      // Opens the read rail restoring uses (stage, validate, read), but never writes the
+      // result anywhere (see backup_contents).
       const contentBox = document.createElement("div");
       contentBox.className = "backup-content hidden";
       let contentLoaded = false;
@@ -638,8 +620,8 @@ export async function renderBackupPanel(body) {
   wireClearButtons(body); // clear-X on the number fields
 }
 export async function restoreBackup(name) {
-  // Both checked (the default) = the old full-file "all" restore; only one
-  // checked = the new selective merge; the dialog itself refuses zero checked.
+  // Both checked (the default) = full "all" restore; only one checked = selective merge;
+  // the dialog refuses zero checked.
   const ok = await confirmDialog({
     title: t("backupRestore"), message: t("backupRestoreConfirm"), confirmLabel: t("backupRestore"),
     checkboxes: [
@@ -657,9 +639,8 @@ export async function restoreBackup(name) {
   catch (e) { errToast(e); } // on success the app relaunches
 }
 
-// What a single snapshot actually holds: header counts, then every entry with
-// name, date, size and kind, searchable and sortable -- restoring straight from
-// here reuses restoreBackup() above rather than a second restore path.
+// What a single snapshot holds: header counts, then every entry with name, date, size and
+// kind, searchable and sortable. Restoring from here goes through restoreBackup() above.
 export async function renderBackupContent(box, name) {
   box.innerHTML = "";
   let data;
@@ -734,9 +715,8 @@ export async function renderBackupContent(box, name) {
           if (av > bv) return 1 * sortDir;
           return 0;
         }
-        // A never-edited entry has no date and always sorts to the very end,
-        // in either direction -- the same rule the library's own "last
-        // edited" sort already uses, just not tied to one fixed direction.
+        // A never-edited entry has no date and always sorts to the very end, in either
+        // direction.
         const av = a[sortKey];
         const bv = b[sortKey];
         if (av == null && bv == null) return 0;
