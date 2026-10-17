@@ -53,15 +53,15 @@ export function applyThemeVars(vars) {
   for (const [key, value] of Object.entries(vars || {})) {
     if (THEME_VARS.includes(key) && HEX_RE.test(value)) style.setProperty(`--${key}`, value);
   }
-  // The window glow is the base theme's, so a custom accent used to sit inside a
-  // shadow of the wrong colour and never followed an edit. Derive it instead.
+  // The window glow is the base theme's, so a custom accent would sit in a shadow of the
+  // wrong colour and not follow an edit; derive it.
   const accent = vars?.accent;
   if (HEX_RE.test(accent || "")) {
     style.setProperty("--shadow", `0 8px 28px color-mix(in srgb, ${accent} 32%, transparent)`);
   }
-  // Same reasoning as --shadow above: a data-URI SVG cannot hold a var(), so a
-  // custom theme's own muted colour needs its own baked copy of the chevron
-  // or every select keeps showing the base theme's arrow colour.
+  // Same reasoning as --shadow: a data-URI SVG cannot hold a var(), so a custom theme's
+  // muted colour needs its own baked chevron or every select keeps the base theme's arrow
+  // colour.
   const muted = vars?.muted;
   if (HEX_RE.test(muted || "")) {
     style.setProperty("--select-chevron", selectChevronVar(muted));
@@ -83,11 +83,10 @@ export function themeBase(pref) {
   return BUILTIN_THEMES.includes(base) ? base : "system";
 }
 
-// Same data-URI SVG every built-in theme bakes its own copy of in main.css
-// (each with that theme's --muted colour already substituted for the stroke,
-// since a data URI cannot hold a var()) -- this is the one JS-side copy, used
-// only to derive --select-chevron for a custom theme's runtime override.
-// Keep in sync with the CSS copy if the SVG itself ever changes.
+// The one JS-side copy of the data-URI SVG every built-in theme bakes into main.css (with
+// that theme's --muted colour substituted, since a data URI cannot hold a var()); used to
+// derive --select-chevron for a custom theme's runtime override. Keep in sync with the
+// CSS copy.
 export const selectChevronVar = (hex) =>
   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23${hex.slice(1)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`;
 
@@ -176,10 +175,9 @@ export function baseThemeColors(base) {
 // (it previews on the real window, so cancelling has to undo it).
 export let themeDraft = null;
 export let themeRestore = null;
-// The draft as it looked the moment the editor opened, so "Revert changes"
-// can undo everything done in THIS session without closing the editor: a
-// separate snapshot from themeRestore, which is the real window's pre-edit
-// theme (used only when the whole editor is cancelled).
+// The draft as it looked when the editor opened, so "Revert changes" undoes this
+// session's edits without closing the editor. Separate from themeRestore, the real
+// window's pre-edit theme (used only when the whole editor is cancelled).
 export let themeDraftStart = null;
 
 export function newThemeDraft() {
@@ -196,17 +194,15 @@ export function draftFrom(theme) {
   return { id: theme.id, name: theme.name, base: theme.base, vars: { ...(theme.vars || {}) } };
 }
 
-// Live preview. Writing the variables costs a style recalc, which the browser
-// already coalesces into the next frame, and there is no grid rebuild. The
-// broadcast to the pill and folder windows (each repaints on it) is coalesced to
-// one per frame, so dragging a colour stays smooth in every window.
+// Live preview. Writing the variables costs a style recalc the browser coalesces into the
+// next frame; there is no grid rebuild. The broadcast to the pill and folder windows
+// (each repaints on it) is coalesced to one per frame, so dragging a colour stays smooth.
 export function previewThemeDraft() {
   if (!themeDraft) return;
   document.documentElement.setAttribute("data-theme", themeDraft.base);
   applyThemeVars(themeDraft.vars);
-  // The pills and folders are their own windows and only ever hear the backend's
-  // theme-changed event, which fires on a real switch: without this the preview
-  // would stop at the main window's edge while they kept the old colours.
+  // The pills and folders only hear the backend's theme-changed event, which fires on a
+  // real switch; without this broadcast the preview would stop at the main window's edge.
   broadcastThemeSoon(themeDraft.base, themeDraft.vars);
 }
 
@@ -260,7 +256,7 @@ export function closeThemeEditor(revert = true) {
   themeDraftStart = null;
 }
 
-// D75 part 2: undo every change made since the editor opened, without closing it.
+// Undo every change made since the editor opened, without closing it.
 export function revertThemeDraft() {
   if (!themeDraftStart) return;
   themeDraft = draftFrom(themeDraftStart);
@@ -513,9 +509,8 @@ export function wireTheme() {
       if (err !== "canceled") errToast(err);
     }
   });
-  // Import creates a new saved theme on the backend right away (the same validation
-  // as typing values in by hand), then opens it in the editor so it can be tweaked
-  // or just confirmed with Cancel/Save.
+  // Import creates a saved theme on the backend right away (same validation as typing
+  // values by hand), then opens it in the editor for tweaks or a plain Cancel/Save.
   $("theme-edit-import")?.addEventListener("click", async () => {
     try {
       assignSettings(await invoke("import_custom_theme"));
