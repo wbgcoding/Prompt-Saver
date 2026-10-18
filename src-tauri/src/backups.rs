@@ -385,6 +385,10 @@ pub(crate) fn auto_backup_tick(app: &AppHandle) {
     }
 }
 
+// Names a snapshot folder may be left with by an interrupted run: the unpacked copies made to
+// count rows, list names or purge the clip inbox hold a whole library and must not stay.
+const BACKUP_STRAY_FILES: [&str; 5] = ["data.db.tmp", "data.db.gz.part", "count.tmp", "names.tmp", "purge.tmp"];
+
 // Start-up sweep of what a quit or crash mid-pack leaves behind: the raw copy, the
 // half-written archive, and folders that never got a snapshot. Anything newer than `min_age`
 // may belong to a running backup and is left alone, and a folder that holds a snapshot is
@@ -403,7 +407,7 @@ pub(crate) fn cleanup_incomplete_backups(root: &std::path::Path, min_age: Durati
             continue;
         }
         if backup_db_file(&folder).is_some() {
-            for stray in ["data.db.tmp", "data.db.gz.part"] {
+            for stray in BACKUP_STRAY_FILES {
                 let f = folder.join(stray);
                 if f.exists() && old_enough(&f) {
                     let _ = fs::remove_file(&f);

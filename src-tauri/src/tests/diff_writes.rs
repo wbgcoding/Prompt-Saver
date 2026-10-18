@@ -918,6 +918,9 @@ fn startup_cleanup_removes_leftovers_and_keeps_complete_snapshots() {
     let good = dir.join("2026-01-01_10-00-00");
     std::fs::write(good.join("data.db.tmp"), b"raw").unwrap();
     std::fs::write(good.join("data.db.gz.part"), b"half").unwrap();
+    for stray in ["count.tmp", "names.tmp", "purge.tmp"] {
+        std::fs::write(good.join(stray), b"unpacked library").unwrap();
+    }
     let broken = dir.join("2026-01-02_10-00-00");
     std::fs::create_dir_all(&broken).unwrap();
     std::fs::write(broken.join("data.db.tmp"), b"raw").unwrap();
@@ -929,6 +932,9 @@ fn startup_cleanup_removes_leftovers_and_keeps_complete_snapshots() {
     assert!(!broken.exists(), "a folder without a snapshot is removed");
     assert!(!good.join("data.db.tmp").exists());
     assert!(!good.join("data.db.gz.part").exists());
+    for stray in ["count.tmp", "names.tmp", "purge.tmp"] {
+        assert!(!good.join(stray).exists(), "{stray} is swept");
+    }
     assert!(good.join(BACKUP_DB_GZ).exists(), "a complete snapshot is never touched");
     let _ = std::fs::remove_dir_all(&dir);
 }
