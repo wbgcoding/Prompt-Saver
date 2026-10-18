@@ -208,10 +208,20 @@ export function bindAbout() {
   });
 
   // The interval beside the Auto update switch only shows while the switch is on.
-  $("opt-autoupdate").addEventListener("change", (e) => {
-    settings.auto_update = e.target.checked;
+  $("opt-autoupdate").addEventListener("change", async (e) => {
+    const box = e.target;
+    const previous = settings.auto_update;
+    settings.auto_update = box.checked;
     fillUpdateIntervalSelect();
-    invoke("set_auto_update", { enabled: e.target.checked }).catch((err) => errToast(err));
+    try {
+      await invoke("set_auto_update", { enabled: box.checked });
+    } catch (err) {
+      // A refused write would bring the old choice back at the next start: show it as it is.
+      settings.auto_update = previous;
+      box.checked = !!previous;
+      fillUpdateIntervalSelect();
+      errToast(err);
+    }
   });
   attachSelectPicker($("opt-update-interval"));
   $("opt-update-interval").addEventListener("change", async (e) => {

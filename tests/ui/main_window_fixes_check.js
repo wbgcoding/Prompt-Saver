@@ -929,6 +929,23 @@ section(() => {
   });
 });
 
+// 43. The auto update switch rolls back when the write is refused.
+section(() => {
+  const src = read("about.js");
+  const m = /\$\("opt-autoupdate"\)\.addEventListener\("change", (async \(e\) => \{[\s\S]*?\n  \}\));/.exec(src);
+  check(!!m, "the auto update handler is async");
+  if (!m) return;
+  later(async () => {
+    let handler = null;
+    const settings = { auto_update: true };
+    const errs = [];
+    const sb = run("var h = " + m[1] + ";", { settings, fillUpdateIntervalSelect() {}, errToast: (e) => errs.push(e), invoke: async () => { throw new Error("save-failed"); } });
+    const box = { checked: false };
+    await sb.h({ target: box });
+    check(settings.auto_update === true && box.checked === true && errs.length === 1, "a refused auto update write restores the setting and the switch");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
