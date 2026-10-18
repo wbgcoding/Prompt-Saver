@@ -976,7 +976,9 @@ pub(crate) fn run_ffmpeg_to_staged(
     let status = match child.wait() {
         Ok(s) => s,
         Err(e) => {
+            // Forgotten from the journal, so the startup sweep would never find it: remove it here.
             forget_staged();
+            let _ = fs::remove_file(&staged);
             let text = e.to_string();
             return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
         }

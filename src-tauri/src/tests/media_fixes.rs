@@ -342,3 +342,12 @@ fn the_ffmpeg_log_buffer_keeps_only_its_newest_bytes() {
     push_bounded_tail(&mut small, b"de", 100);
     assert_eq!(small, b"abcde");
 }
+
+// Structural fix, no red unit test: child.wait() cannot be made to fail on a real child.
+#[test]
+fn a_failed_wait_removes_the_staged_export() {
+    let src = include_str!("../ffmpeg.rs");
+    let after = src.split("let status = match child.wait() {").nth(1).unwrap();
+    let err_arm = after.split("let stderr_text").next().unwrap();
+    assert!(err_arm.contains("forget_staged();") && err_arm.contains("fs::remove_file(&staged)"));
+}
