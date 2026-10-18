@@ -1003,6 +1003,16 @@ section(() => {
   check(src.includes('valueEl.setAttribute("aria-label", name)'), "a fixed variable value field is named by its variable");
 });
 
+// 51. Undo toast label and suggested search name are cut by code point.
+section(() => {
+  const src = read("library.js");
+  check(src.includes('Array.from(String(found?.text || "").trim()).slice(0, 40).join("")'), "the undo label is cut by code point");
+  const fn = extractBlock(src, "export function suggestedSearchName(").replace("export ", "");
+  const sb = run(fn + "; var out = [suggestedSearchName('a'.repeat(39) + String.fromCodePoint(0x1F600) + 'b'.repeat(10)), suggestedSearchName('short')];", {});
+  check(sb.out[0] === 'a'.repeat(39) + String.fromCodePoint(0x1F600) + "…", "an emoji at the boundary stays whole");
+  check(sb.out[1] === "short", "a short query is unchanged");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

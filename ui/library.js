@@ -471,7 +471,8 @@ export async function persistSavedSearches(list) {
 // editable in the same dialog before saving.
 export function suggestedSearchName(query) {
   const s = query.trim();
-  return s.length > 40 ? s.slice(0, 40).trim() + "…" : s;
+  const chars = Array.from(s);
+  return chars.length > 40 ? chars.slice(0, 40).join("").trim() + "…" : s;
 }
 // Reordering the saved-search chips uses pointer events, since the webview reserves HTML5
 // drag-and-drop for file drops (same as the view tabs).
@@ -1248,7 +1249,7 @@ export async function restoreBatchTag(inverseAction, ids, tag) {
 // it was. Returns true on success; a failed save shows the message and returns false.
 export async function trashPromptWithUndo(id, name) {
   const found = prompts.find((x) => x.id === id);
-  const label = String(name || "").trim() || String(found?.text || "").trim().slice(0, 40);
+  const label = String(name || "").trim() || Array.from(String(found?.text || "").trim()).slice(0, 40).join("");
   const placements = await invoke("placement_snapshot", { ids: [id] }).catch(() => null);
   try {
     await invoke("delete_prompt", { id });
