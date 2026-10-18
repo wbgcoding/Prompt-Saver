@@ -411,22 +411,10 @@ pub(crate) fn rename_tag_in_store(
     // Snapshot everything this command can touch before mutating, so a failed
     // save can put it back exactly instead of reporting success for a rename that
     // never reached disk.
-    let original_tags: Vec<(String, Vec<String>)> = store
-        .prompts
-        .iter()
-        .filter(|p| p.tags.iter().any(|t| tag_key(t) == old_key))
-        .map(|p| (p.id.clone(), p.tags.clone()))
-        .collect();
+    let original_tags = snapshot_tags(&store.prompts, old_key);
     let prompts_changed = rename_tag_in(&mut store.prompts, old_key, new);
-    let restore_prompts = |store: &mut Store, original_tags: Vec<(String, Vec<String>)>| {
-        for (id, tags) in original_tags {
-            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                p.tags = tags;
-            }
-        }
-    };
     if prompts_changed && !save_prompts_fn(store) {
-        restore_prompts(store, original_tags);
+        restore_tags(store, original_tags);
         return Err("save-failed".into());
     }
     let original_old_color = store.settings.tag_colors.get(old_key).cloned();
@@ -442,12 +430,30 @@ pub(crate) fn rename_tag_in_store(
             None => { store.settings.tag_colors.remove(new_key); }
         }
         if prompts_changed {
-            restore_prompts(store, original_tags);
+            restore_tags(store, original_tags);
             note_failed_undo(save_prompts_fn(store), "tag rename");
         }
         return Err("save-failed".into());
     }
     Ok(())
+}
+
+// The tag lists of every prompt carrying `key`, taken before a change so a failed save can
+// put exactly those back.
+fn snapshot_tags(prompts: &[Prompt], key: &str) -> Vec<(String, Vec<String>)> {
+    prompts
+        .iter()
+        .filter(|p| p.tags.iter().any(|t| tag_key(t) == key))
+        .map(|p| (p.id.clone(), p.tags.clone()))
+        .collect()
+}
+
+fn restore_tags(store: &mut Store, original_tags: Vec<(String, Vec<String>)>) {
+    for (id, tags) in original_tags {
+        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+            p.tags = tags;
+        }
+    }
 }
 
 // The write that puts the old prompts back after a failed settings write. When that one fails
@@ -463,38 +469,42 @@ pub(crate) fn note_failed_undo(written: bool, operation: &str) {
 pub(crate) async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Result<Settings, String> {
     let key = tag_key(&valid_tag_name(&name)?);
     let mut store = lock(&state);
-    let original_tags: Vec<(String, Vec<String>)> = store
-        .prompts
-        .iter()
-        .filter(|p| p.tags.iter().any(|t| tag_key(t) == key))
-        .map(|p| (p.id.clone(), p.tags.clone()))
-        .collect();
-    let prompts_changed = remove_tag_from(&mut store.prompts, &key);
-    if prompts_changed && !save_prompts(&app, &store) {
-        for (id, tags) in original_tags {
-            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                p.tags = tags;
-            }
-        }
+    delete_tag_in_store(
+        &mut store,
+        &key,
+        &mut |st| save_prompts(&app, st),
+        &mut |settings| save_settings(&app, settings),
+    )?;
+    Ok(webview_settings(&store.settings))
+}
+
+// The two-step write behind delete_tag with the saves injected, rolled back the same way as
+// the rename: a failed settings save restores the prompts in memory and on disk.
+pub(crate) fn delete_tag_in_store(
+    store: &mut Store,
+    key: &str,
+    save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
+    save_settings_fn: &mut dyn FnMut(&Settings) -> bool,
+) -> Result<(), String> {
+    let original_tags = snapshot_tags(&store.prompts, key);
+    let prompts_changed = remove_tag_from(&mut store.prompts, key);
+    if prompts_changed && !save_prompts_fn(store) {
+        restore_tags(store, original_tags);
         return Err("save-failed".into());
     }
-    let original_color = store.settings.tag_colors.remove(&key);
-    if !save_settings(&app, &store.settings) {
+    let original_color = store.settings.tag_colors.remove(key);
+    if !save_settings_fn(&store.settings) {
         if let Some(c) = original_color {
-            store.settings.tag_colors.insert(key, c);
+            store.settings.tag_colors.insert(key.to_string(), c);
         }
         // The prompts without the tag are already on disk: put them back there too.
         if prompts_changed {
-            for (id, tags) in original_tags {
-                if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                    p.tags = tags;
-                }
-            }
-            note_failed_undo(save_prompts(&app, &store), "tag delete");
+            restore_tags(store, original_tags);
+            note_failed_undo(save_prompts_fn(store), "tag delete");
         }
         return Err("save-failed".into());
     }
-    Ok(webview_settings(&store.settings))
+    Ok(())
 }
 
 #[derive(Deserialize)]
