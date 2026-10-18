@@ -195,8 +195,8 @@ pub(super) fn recognize_file(path: &Path, upscale_below_px: u32, join_lines: boo
     recognize(path, upscale_below_px, join_lines, lang, auto_pick_lang)
 }
 
-// Writes the crop out as a temp PNG under the branded temp dir (like write_snip_preview /
-// pdfium_cache_path) and runs it through recognize(); TempFileGuard deletes it on every path.
+// Writes the crop out as a temp PNG under the branded temp dir (like write_snip_preview)
+// and runs it through recognize(); TempFileGuard deletes it on every path.
 pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let path = ocr_temp_path();
     if let Some(dir) = path.parent() {

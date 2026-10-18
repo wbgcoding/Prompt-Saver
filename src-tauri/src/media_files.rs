@@ -708,6 +708,19 @@ pub(crate) async fn copy_file_to_clipboard(path: String) -> bool {
     set_clipboard_file(&path)
 }
 
+// The per-user, non-roaming app folder (LocalAppData, then the app name): where native
+// helpers the app loads or runs (pdfium, ffmpeg) are kept. Unlike the temp folder it is not
+// writable by other users' processes, and unlike the data folder it never holds user content
+// or follows a redirected store. None when the profile folder is not set.
+pub(crate) fn local_app_dir() -> Option<PathBuf> {
+    local_app_dir_in(std::env::var_os("LOCALAPPDATA"))
+}
+
+pub(crate) fn local_app_dir_in(base: Option<std::ffi::OsString>) -> Option<PathBuf> {
+    let base = base.filter(|b| !b.is_empty())?;
+    Some(PathBuf::from(base).join(brand::DATA_FOLDER))
+}
+
 // Whether `path` is a file clip_export_path_impl hands out: a clip-export name directly in the
 // app's temp folder. The parent is compared canonicalized so a `..` hop cannot slip out.
 pub(crate) fn is_clip_export_file(temp_root: &Path, path: &Path) -> bool {

@@ -68,3 +68,15 @@ fn only_clip_export_files_go_to_the_clipboard() {
     assert!(!is_clip_export_file(&own, &own.join(format!("..{}other{}{}", std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR, name))));
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn native_helpers_live_in_the_per_user_app_folder() {
+    let base = std::ffi::OsString::from("C:/Users/x/AppData/Local");
+    let dir = local_app_dir_in(Some(base)).unwrap();
+    assert!(dir.starts_with("C:/Users/x/AppData/Local") && dir.ends_with(brand::DATA_FOLDER));
+    assert!(local_app_dir_in(None).is_none());
+    assert!(local_app_dir_in(Some(std::ffi::OsString::new())).is_none());
+    if let Some(p) = pdfium_cache_path() {
+        assert!(!p.starts_with(std::env::temp_dir()), "the shared temp folder is not trusted for a loaded DLL");
+    }
+}

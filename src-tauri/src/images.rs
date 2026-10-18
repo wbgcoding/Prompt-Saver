@@ -244,12 +244,12 @@ pub(crate) async fn load_image_file(path: String) -> Option<String> {
 // single self-contained file instead of "exe plus a DLL you must not lose".
 pub(crate) static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
 
-// Where the embedded copy is unpacked. Versioned, so a newer build never binds
-// against a stale DLL left behind by an older one.
-pub(crate) fn pdfium_cache_path() -> PathBuf {
-    std::env::temp_dir()
-        .join(brand::TEMP_DIR)
-        .join(format!("pdfium-{APP_VERSION}.dll"))
+// Where the embedded copy is unpacked: the per-user app folder, never the shared temp folder
+// where any process could swap the file between the content check and the load. Versioned,
+// so a newer build never binds against a stale DLL left behind by an older one. None when
+// the profile folder is unknown (the preview is then skipped).
+pub(crate) fn pdfium_cache_path() -> Option<PathBuf> {
+    Some(local_app_dir()?.join(format!("pdfium-{APP_VERSION}.dll")))
 }
 
 // Each app version writes its own pdfium-<version>.dll (so an update never loads a stale
@@ -284,12 +284,11 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
         return Some(found);
     }
-    let cached = pdfium_cache_path();
+    let cached = pdfium_cache_path()?;
     sweep_stale_pdfium_dlls(&cached);
-    // The cache path is predictable and lives in a world-writable %TEMP%, so the file
-    // found there is only trusted when its CONTENT matches the copy compiled into this
-    // exe: a length check alone would let any process running as this user pre-plant a
-    // same-size DLL and get it loaded as native code. Rewritten otherwise, which also
+    // The cache path is predictable, so the file found there is only trusted when its
+    // CONTENT matches the copy compiled into this exe: a length check alone would let a
+    // pre-planted same-size DLL get loaded as native code. Rewritten otherwise, which also
     // repairs a truncated write from an interrupted first run.
     if fs::read(&cached).is_ok_and(|got| got == PDFIUM_DLL) {
         return Some(cached);
