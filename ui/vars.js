@@ -75,6 +75,7 @@ function buildChoice(row, options, initial) {
       value = option;
       button.textContent = option;
       list.classList.add("hidden");
+      button.focus(); // the focused item is hidden with the list: hand the focus back
     });
     list.appendChild(item);
   }

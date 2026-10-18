@@ -497,6 +497,28 @@ section(() => {
   check(btn && /vars-name-1 /.test(btn.attrs["aria-labelledby"] + " ") && btn.attrs["aria-labelledby"].includes(btn.id), "the choice button is named by the variable and its pick");
 });
 
+section(() => {
+  const src = read("vars.js");
+  let focused = 0;
+  const handlers = [];
+  const mkEl = (tag) => {
+    const e = { tag, attrs: {}, children: [], style: {}, className: "", textContent: "", classList: { add() {}, remove() {}, toggle() {} } };
+    e.setAttribute = () => {};
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.append = (...c) => { e.children.push(...c); };
+    e.addEventListener = (t, fn) => { if (t === "click" && tag === "button") handlers.push({ el: e, fn }); };
+    e.focus = () => { if (e.className.includes("vars-choice-btn")) focused++; };
+    return e;
+  };
+  const sb = { document: { createElement: mkEl } };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock(src, "function buildChoice(") + "; this.buildChoice = buildChoice;", sb);
+  sb.buildChoice(mkEl("div"), ["a", "b"], "a");
+  const item = handlers.find((h) => h.el.className === "vars-choice-item" && h.el.textContent === "b");
+  item.fn();
+  check(focused === 1, "choosing an option returns the focus to the trigger button");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
