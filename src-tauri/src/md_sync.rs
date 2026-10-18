@@ -359,11 +359,13 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
     // Media by reference. An absent field (older or hand-written file) leaves what the prompt
     // has; present but empty means "no file" and clears it. Embedded image data cannot be
     // expressed here.
+    // A file in the folder is foreign input like an import: it never gets to name a path on
+    // another machine (opening one sends the user's credentials there).
     if let Some(v) = fields.get("file") {
-        p.file_path.clone_from(v);
+        p.file_path = if is_network_path(v) { String::new() } else { v.clone() };
     }
     if let Some(v) = fields.get("icon") {
-        p.icon_path.clone_from(v);
+        p.icon_path = if is_network_path(v) { String::new() } else { v.clone() };
     }
     if let Some(v) = fields.get("pdf_page") {
         // A garbled page number is ignored rather than reset to 0: page 0 is a valid
