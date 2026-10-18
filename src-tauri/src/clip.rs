@@ -19,8 +19,8 @@ pub(crate) async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<()
     }
 }
 
-// Tunable knobs for the auto-advance clipboard session; the defaults here ship until a user
-// overrides them in the expert menu.
+// Timings of the auto-advance clipboard session. They are fixed constants for now; a future
+// expert knob belongs in auto_cfg().
 #[cfg(windows)]
 #[derive(Clone, Copy)]
 pub(crate) struct AutoCfg {
