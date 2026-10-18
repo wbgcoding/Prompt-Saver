@@ -1,7 +1,7 @@
 // Camera window (ui/camera.js): the first preview waits for the saved settings
-// (camera, frame rate, resolution), also when the permission event never arrives and
-// the 1.5 s fallback has to stand in for it. A settings read slower than the fallback
-// must not open the default camera first and then stay on it.
+// (camera, frame rate, resolution), also when the permission event fired before the page
+// listened and the backend's answer to camera_permission_ready stands in for it. A settings
+// read slower than that answer must not open the default camera first and then stay on it.
 //
 // Runs the real file in a node vm with stand-in elements and a scripted backend.
 // Run:  node tests/ui/camera_ready_check.js      Exit: 0 = clean, 1 = problems.
@@ -72,8 +72,10 @@ async function main() {
   sandbox.addEventListener = () => {};
   sandbox.__TAURI__ = {
     core: {
-      // The settings read answers after the 1.5 s fallback has already fired.
+      // Permission is already granted (its event fired before the listener); the settings
+      // read answers much later.
       invoke: async (cmd) => {
+        if (cmd === "camera_permission_ready") return true;
         if (cmd === "get_settings") { await new Promise((r) => setTimeout(r, 2200)); return JSON.parse(JSON.stringify(settings)); }
         if (cmd === "default_recording_dir") return "C:/rec";
         return null;
@@ -87,8 +89,8 @@ async function main() {
 
   const tick = (ms) => new Promise((r) => setTimeout(r, ms));
   const problems = [];
-  await tick(1900); // past the fallback, settings still pending
-  if (asked.length !== 0) problems.push(`the fallback opened the camera before the settings arrived (${asked.length} request)`);
+  await tick(1900); // permission answered, settings still pending
+  if (asked.length !== 0) problems.push(`the camera opened before the settings arrived (${asked.length} request)`);
   await tick(1200); // settings in
   if (asked.length === 0) problems.push("no preview was started once the settings arrived");
   else if (!asked[0].video.deviceId || asked[0].video.deviceId.exact !== "cam-2") {
