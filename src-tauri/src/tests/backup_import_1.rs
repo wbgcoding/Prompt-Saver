@@ -920,3 +920,14 @@ pub(super) fn import_with(conn: &mut Connection, store: &mut Store, want_data: b
         db_write_import(conn, st, &st.prompts, prompts, settings, false).is_ok()
     })
 }
+
+#[test]
+fn the_remove_examples_count_skips_examples_already_deleted_by_hand() {
+    let a = test_prompt("a");
+    let b = test_prompt("b");
+    let ids = vec!["a".to_string(), "b".to_string(), "gone".to_string()];
+    let prompts = vec![a, b];
+    assert_eq!(examples_pending_ids(&ids, &HashMap::new(), &prompts), vec!["a".to_string(), "b".to_string()]);
+    // dismiss itself still sees the missing id, which is harmless there
+    assert_eq!(examples_still_pristine(&ids, &HashMap::new(), &prompts).len(), 3);
+}

@@ -1050,12 +1050,25 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
     result
 }
 
+// The ids "Remove examples" would actually delete now: the unedited ones that still exist.
+// examples_still_pristine alone also lists an id whose prompt the user already deleted by hand,
+// which would inflate the button's count.
+pub(crate) fn examples_pending_ids<'a>(
+    ids: impl IntoIterator<Item = &'a String>,
+    seeds: &HashMap<String, u64>,
+    prompts: &[Prompt],
+) -> Vec<String> {
+    let mut out = examples_still_pristine(ids, seeds, prompts);
+    out.retain(|id| prompts.iter().any(|p| &p.id == id));
+    out
+}
+
 // Count for the "Remove examples (n)" button label: how many seeded examples would
 // actually be deleted right now, same rule dismiss_example_prompts itself applies.
 #[tauri::command(async)]
 pub(crate) fn example_prompts_pending(state: State<Db>) -> usize {
     let store = lock(&state);
-    examples_still_pristine(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
+    examples_pending_ids(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
 }
 
 // A save carries the image only when the user touched it: no field means leave the stored
