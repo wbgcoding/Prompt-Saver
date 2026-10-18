@@ -1020,6 +1020,13 @@ section(() => {
   check(n === 5, "the input, slider, both select rows and the custom number are named (" + n + ")");
 });
 
+// 53. The expert colour swatch reopens at the colour last picked.
+section(() => {
+  const src = read("expertMenu.js");
+  check(src.includes("openColorPop(swatch, hexOut.textContent, setColor)"), "the popup starts at the live colour");
+  check(!src.includes("openColorPop(swatch, cur, setColor)"), "no stale render-time colour is passed");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

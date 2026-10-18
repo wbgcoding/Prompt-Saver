@@ -1405,7 +1405,8 @@ export function colorRow(key) {
     try { await invoke("set_ui_text", { key, value: hex }); } catch (e) { errToast(e); }
     if (reset) reset.classList.toggle("hidden", hex === defColor);
   };
-  swatch.addEventListener("click", () => openColorPop(swatch, cur, setColor));
+  // The live value, not the render-time one: a colour picked earlier must be where the popup restarts.
+  swatch.addEventListener("click", () => openColorPop(swatch, hexOut.textContent, setColor));
   right.append(swatch, hexOut);
   reset = document.createElement("button");
   reset.type = "button";
