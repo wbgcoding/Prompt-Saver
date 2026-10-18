@@ -279,3 +279,34 @@ fn a_verbatim_or_nt_path_is_local_only_for_a_drive_letter_or_a_volume_guid() {
         assert!(!is_network_path(p), "{p:?} is local");
     }
 }
+
+#[test]
+fn a_failed_seal_keeps_the_history_and_a_sealed_row_is_not_rewritten() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "sec", 1, "N", "plain secret body", &[], 20).unwrap();
+    let mut sec = test_prompt("sec");
+    sec.secret = true;
+
+    // A write that fails (busy in the field, a trigger here) must not wipe the history.
+    conn.execute_batch(
+        "CREATE TRIGGER no_update BEFORE UPDATE ON prompt_versions BEGIN SELECT RAISE(ABORT, 'busy'); END;",
+    )
+    .unwrap();
+    seal_confidential_versions(&mut conn, &[sec.clone()], &key);
+    let kept: i64 = conn.query_row("SELECT COUNT(*) FROM prompt_versions", [], |r| r.get(0)).unwrap();
+    assert_eq!(kept, 1, "a failed seal leaves the rows for the next unlock");
+    conn.execute_batch("DROP TRIGGER no_update;").unwrap();
+
+    // Once sealed, a later unlock writes nothing.
+    seal_confidential_versions(&mut conn, &[sec.clone()], &key);
+    conn.execute_batch(
+        "CREATE TABLE upd_log (n INTEGER);
+         CREATE TRIGGER log_update AFTER UPDATE ON prompt_versions BEGIN INSERT INTO upd_log VALUES (1); END;",
+    )
+    .unwrap();
+    seal_confidential_versions(&mut conn, &[sec], &key);
+    let writes: i64 = conn.query_row("SELECT COUNT(*) FROM upd_log", [], |r| r.get(0)).unwrap();
+    assert_eq!(writes, 0, "an already sealed row is left alone");
+}

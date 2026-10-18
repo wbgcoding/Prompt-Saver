@@ -447,14 +447,23 @@ pub(crate) fn db_seal_versions(conn: &mut Connection, prompt_id: &str, key: &[u8
     };
     let mut n = 0;
     for (id, text, variants) in rows {
-        let sealed = dec_str_strict(&text).zip(dec_str_strict(&variants)).map(|(t, v)| {
-            let items: Vec<String> = decode_variants(&v).iter().map(|x| secret_encrypt_if_plain(x, key)).collect();
-            (enc_str(&secret_encrypt_if_plain(&t, key)), enc_str(&encode_variants(&items)))
-        });
-        match sealed {
-            Some((t, v)) => tx.execute("UPDATE prompt_versions SET text = ?1, variants = ?2 WHERE id = ?3", params![t, v, id])?,
-            None => tx.execute("DELETE FROM prompt_versions WHERE id = ?1", params![id])?,
+        let plain = dec_str_strict(&text).zip(dec_str_strict(&variants));
+        let Some((t, v)) = plain else {
+            // Only a row that cannot be decoded at all is dropped.
+            tx.execute("DELETE FROM prompt_versions WHERE id = ?1", params![id])?;
+            n += 1;
+            continue;
         };
+        let sealed_text = secret_encrypt_if_plain(&t, key);
+        let old_items = decode_variants(&v);
+        let items: Vec<String> = old_items.iter().map(|x| secret_encrypt_if_plain(x, key)).collect();
+        if sealed_text == t && items == old_items {
+            continue; // already sealed: no rewrite
+        }
+        tx.execute(
+            "UPDATE prompt_versions SET text = ?1, variants = ?2 WHERE id = ?3",
+            params![enc_str(&sealed_text), enc_str(&encode_variants(&items)), id],
+        )?;
         n += 1;
     }
     tx.commit()?;
@@ -471,10 +480,9 @@ pub(crate) fn seal_confidential_versions(conn: &mut Connection, prompts: &[Promp
         match db_seal_versions(conn, &p.id, key) {
             Ok(rows) if rows > 0 => n += 1,
             Ok(_) => {}
-            Err(e) => {
-                append_crash_log(&format!("could not seal version history of a confidential prompt: {e}"));
-                db_delete_versions(conn, &p.id);
-            }
+            // Busy or a failed write says nothing about the rows: keep them and retry at the
+            // next unlock. Rows that cannot be decoded are dropped one by one inside the seal.
+            Err(e) => append_crash_log(&format!("could not seal version history of a confidential prompt: {e}")),
         }
     }
     n
