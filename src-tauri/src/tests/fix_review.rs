@@ -201,3 +201,14 @@ fn the_stats_and_theme_file_dialogs_wait_on_a_blocking_thread() {
         assert!(body.contains("file_dialog("), "{name} still opens the dialog");
     }
 }
+
+#[test]
+fn the_skip_list_accepts_a_pre_release_tag() {
+    let mut list = Vec::new();
+    assert!(add_skipped_version(&mut list, "1.2.3-beta.1".to_string()), "a pre-release tag is stored");
+    assert!(add_skipped_version(&mut list, "2.0.0-rc.2".to_string()));
+    assert_eq!(list, ["1.2.3-beta.1", "2.0.0-rc.2"]);
+    for bad in ["beta", "-1.2.3", "1.2.3-", "1.2.3 beta", "1.2.3_beta", "1.2.3-<b>", "1.2.3-é", "1.2.3-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
+        assert!(!add_skipped_version(&mut list, bad.to_string()), "{bad:?} is not version-shaped");
+    }
+}

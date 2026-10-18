@@ -537,13 +537,14 @@ pub(crate) fn skip_version(app: AppHandle, state: State<Db>, version: String) {
 
 const SKIPPED_VERSIONS_MAX: usize = 20;
 
-// Adds a version-shaped string (digits and dots, at most 32 characters) to the skip list and
-// keeps only the newest entries. Returns whether the list changed.
+// Adds a version-shaped string to the skip list and keeps only the newest entries. Shaped means
+// at most 32 characters of [0-9A-Za-z.-], starting with a digit and not ending in a dash or dot,
+// so a pre-release tag like 1.2.3-beta.1 counts. Returns whether the list changed.
 pub(crate) fn add_skipped_version(list: &mut Vec<String>, version: String) -> bool {
-    let shaped = !version.is_empty()
-        && version.len() <= 32
-        && version.chars().all(|c| c.is_ascii_digit() || c == '.')
-        && version.chars().any(|c| c.is_ascii_digit());
+    let shaped = version.len() <= 32
+        && version.chars().next().is_some_and(|c| c.is_ascii_digit())
+        && version.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        && !version.ends_with(['.', '-']);
     if !shaped || list.contains(&version) {
         return false;
     }
