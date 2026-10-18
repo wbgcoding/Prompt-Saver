@@ -132,3 +132,17 @@ fn a_new_recording_never_takes_an_existing_name() {
     assert_eq!(free_rec_path(&root, &name), root.join("rec-2026-10-18_120000-3.mp4"));
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_mic_sidecar_that_cannot_be_created_marks_the_mic_lost() {
+    let queue = Arc::new(AudioQueueShared::new());
+    let bad = std::env::temp_dir().join(format!("ps-nodir-{}", std::process::id())).join("x").join("rec.mic.wav");
+    crate::recording::mic_wav_writer_loop(
+        queue.clone(),
+        Arc::new(RecordClock::new()),
+        Arc::new(RecFeederShared::new()),
+        Arc::new(AtomicBool::new(false)),
+        bad,
+    );
+    assert!(queue.is_lost(), "the bar must hear about a mic track that is not being written");
+}

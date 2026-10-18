@@ -449,7 +449,7 @@ fn feeder_loop_with_audio(
 // track. Same tick cadence and pause/first-frame gating as the main feeder, so the sidecar
 // lines up with the mp4 when the editor muxes them (a few ms of slack around the first
 // frame is possible, as in the main feeder).
-fn mic_wav_writer_loop(
+pub(crate) fn mic_wav_writer_loop(
     queue: Arc<AudioQueueShared>,
     clock: Arc<RecordClock>,
     shared: Arc<RecFeederShared>,
@@ -462,6 +462,8 @@ fn mic_wav_writer_loop(
         Ok(w) => w,
         Err(e) => {
             append_crash_log(&format!("recording: mic sidecar create failed: {e}"));
+            // The bar's mic-lost notice reads this flag; the recording itself carries on.
+            queue.mark_lost();
             return;
         }
     };
@@ -490,6 +492,7 @@ fn mic_wav_writer_loop(
         let chunk = queue.drain(samples_per_tick);
         if let Err(e) = writer.write_samples(&chunk) {
             append_crash_log(&format!("recording: mic sidecar write failed: {e}"));
+            queue.mark_lost();
             break;
         }
     }
@@ -1106,6 +1109,9 @@ pub fn stop(session: RecSession) -> Result<StopResult, String> {
     // tracker) is joined once finish_and_stop returns.
     let crop_rect = used_area.and_then(|u| u.get());
     let resize_crop_at_ms = shared.resize_crop_at_ms();
+    // A sidecar that was never created (its writer failed at start) is not handed on: the
+    // editor would try to mux a file that is not there.
+    let mic_wav_path = mic_wav_path.filter(|p| p.is_file());
     Ok((path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms))
 }
 
