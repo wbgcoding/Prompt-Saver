@@ -239,7 +239,7 @@ section(() => {
   let captured = 0;
   const btn = { disabled: false, setPointerCapture: () => { captured++; }, addEventListener: (n, fn) => { handlers[n] = fn; } };
   sb.armHold(btn, 1);
-  handlers.pointerdown({ shiftKey: false, pointerId: 1 });
+  handlers.pointerdown({ button: 0, shiftKey: false, pointerId: 1 });
   check(captured === 1, "pressing a step button captures the pointer");
   timers[0].fn(); // the hold delay elapsed: the repeat starts
   const rep = timers[1];
@@ -562,6 +562,26 @@ later(async () => {
   check(timers.size === 1, "a blur inside the grace period schedules one deferred close");
   await sb.openMenu();
   check(timers.size === 0, "reopening cancels the stale deferred close");
+});
+
+section(() => {
+  const src = read("floatShared.js");
+  const handlers = {};
+  let steps = 0;
+  const timers = [];
+  const sb = {
+    stepBy: () => { steps++; return true; },
+    setTimeout: (fn) => { timers.push(fn); return timers.length; }, clearTimeout() {}, setInterval: () => 1, clearInterval() {},
+  };
+  const btn = { disabled: false, setPointerCapture() {}, addEventListener: (t, fn) => { handlers[t] = fn; } };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock(src, "function armHold(") + "; this.armHold = armHold;", sb);
+  sb.armHold(btn, 1);
+  handlers.pointerdown({ button: 2, pointerId: 1, shiftKey: false });
+  handlers.pointerdown({ button: 1, pointerId: 1, shiftKey: false });
+  check(steps === 0 && timers.length === 0, "a right or middle click neither steps the value nor starts the repeat");
+  handlers.pointerdown({ button: 0, pointerId: 1, shiftKey: false });
+  check(steps === 1 && timers.length === 1, "the primary button still steps and arms the repeat");
 });
 
 let guard;

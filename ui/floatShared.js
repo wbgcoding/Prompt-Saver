@@ -635,6 +635,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
       holdInterval = null;
     };
     btn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // only the primary button steps; right and middle clicks do nothing
       // Captured, so the release reaches this button even after it turned disabled at the limit.
       try { btn.setPointerCapture(e.pointerId); } catch { /* no active pointer: the leave events still stop it */ }
       stepBy(dir, e.shiftKey);
