@@ -1,0 +1,36 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tray-menu",
+  "description": "Custom tray menu: only the commands its page calls",
+  "windows": [
+    "tray-menu"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-scale-factor",
+    "core:window:allow-theme",
+    "core:event:default",
+    "allow-current-theme",
+    "allow-get-settings",
+    "allow-ink-prefs",
+    "allow-theme-vars",
+    "allow-tray-launcher-prefill",
+    "allow-tray-open-launcher",
+    "allow-tray-window-activate",
+    "allow-tray-window-close",
+    "allow-tray-window-plan",
+    "allow-tray-window-reveal"
+  ]
+}
