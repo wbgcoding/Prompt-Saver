@@ -1277,3 +1277,16 @@ fn font_size_clamped() {
     assert_eq!(clamp_font_size(8), 10);
     assert_eq!(clamp_font_size(99), 40);
 }
+
+#[test]
+fn primary_first_moves_the_primary_monitor_to_the_front() {
+    let list = vec![
+        ("side".to_string(), -1920, 0, 1920, 1080),
+        ("main".to_string(), 0, 0, 2560, 1440),
+    ];
+    let ordered = primary_first(list.clone(), "main");
+    assert_eq!(ordered[0].0, "main");
+    assert_eq!(ordered[1].0, "side");
+    // An unknown primary keeps the enumeration order.
+    assert_eq!(primary_first(list, "").iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["side", "main"]);
+}
