@@ -1031,3 +1031,15 @@ fn settings_write_failed_command_reports_the_flag() {
     assert!(!settings_write_failed());
     SETTINGS_WRITE_FAILED.store(before, Ordering::Relaxed);
 }
+
+#[test]
+fn a_panic_log_line_never_quotes_the_data_the_panic_choked_on() {
+    let secret = "my confidential prompt text";
+    let msg = format!("byte index 3 is not a char boundary; it is inside 'é' (bytes 2..4) of `{secret}`");
+    let line = panic_log_line(Some(("src/x.rs", 12, 5)), &msg);
+    assert!(!line.contains("confidential") && !line.contains(secret), "{line}");
+    assert!(line.contains("x.rs:12:5"), "the location must stay: {line}");
+    let unwrap = format!("called `Result::unwrap()` on an `Err` value: \"{secret}\"");
+    assert!(!panic_log_line(None, &unwrap).contains("confidential"));
+    assert!(panic_log_line(None, &"a".repeat(500)).len() < 120);
+}

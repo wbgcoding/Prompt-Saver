@@ -271,7 +271,14 @@ pub fn run() {
     // failure in the field leaves a diagnosable trace.
     std::panic::set_hook(Box::new(|info| {
         eprintln!("{}", info);
-        append_crash_log(&info.to_string());
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        let location = info.location().map(|l| (l.file(), l.line(), l.column()));
+        append_crash_log(&panic_log_line(location, &payload));
     }));
 
     let mut builder = tauri::Builder::default();
