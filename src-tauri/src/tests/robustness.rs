@@ -282,7 +282,7 @@ fn a_live_lock_with_a_changing_heartbeat_is_never_taken_over() {
     let mut obs = LockObserver::new(t0);
     // The owner's clock is 2 minutes ahead, then years behind; its beat moves on.
     for i in 0..12u64 {
-        let seen = if i % 2 == 0 { unix_now() + 7200 } else { 5 };
+        let seen = if i % 2 == 0 { now_secs() + 7200 } else { 5 };
         write_data_dir_lock(&path, &lock_info("B", "idb", i, seen));
         let now = t0 + Duration::from_secs(i * 40);
         assert!(
@@ -301,7 +301,7 @@ fn a_lock_that_stands_still_for_the_whole_limit_is_taken_over() {
     let me = LockMe { host: "A", pid: 2, id: "ida" };
     let t0 = Instant::now();
     let mut obs = LockObserver::new(t0);
-    write_data_dir_lock(&path, &lock_info("B", "idb", 4, unix_now()));
+    write_data_dir_lock(&path, &lock_info("B", "idb", 4, now_secs()));
     let settle = Duration::ZERO;
     assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, settle), LockOutcome::ReadOnly(_)));
     let almost = t0 + Duration::from_secs(DATA_DIR_LOCK_STALE_SECS - 1);
@@ -361,7 +361,7 @@ fn the_refresh_tick_drops_ownership_when_someone_else_took_the_lock() {
     acquire_data_dir_lock(&dir, true);
     assert!(DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed) && !DATA_DIR_READONLY.load(Ordering::Relaxed));
     let path = data_dir_lock_path(&dir);
-    write_data_dir_lock(&path, &lock_info("OTHER-PC", "someone-else", 1, unix_now()));
+    write_data_dir_lock(&path, &lock_info("OTHER-PC", "someone-else", 1, now_secs()));
     refresh_data_dir_lock(&dir);
     assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "the folder is no longer ours");
     assert!(!DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed));
@@ -378,7 +378,7 @@ fn refreshing_the_lock_never_shows_a_reader_a_broken_file() {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let path = data_dir_lock_path(&dir);
-    assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now(), id: String::new(), beat: 0 }));
+    assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: now_secs(), id: String::new(), beat: 0 }));
     let done = Arc::new(AtomicBool::new(false));
     let reader = {
         let (path, done) = (path.clone(), done.clone());
@@ -406,7 +406,7 @@ fn refreshing_the_lock_never_shows_a_reader_a_broken_file() {
     // a write in place.
     let mut landed = 0u32;
     for n in 0..1000u64 {
-        if write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() + n, id: String::new(), beat: 0 }) {
+        if write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: now_secs() + n, id: String::new(), beat: 0 }) {
             landed += 1;
         }
     }

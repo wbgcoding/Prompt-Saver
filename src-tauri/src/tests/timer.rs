@@ -762,7 +762,7 @@ fn a_standalone_restore_is_refused_while_another_machine_holds_the_folder() {
     let (dir, name) = restore_fixture("restore-locked");
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now(), id: String::new(), beat: 0 },
+        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: now_secs(), id: String::new(), beat: 0 },
     );
     let argv: Vec<String> = ["backup", "restore", &name, "--yes"].iter().map(|s| s.to_string()).collect();
     let code = cli::run_standalone_with(|| dir.clone(), &argv, &dir);

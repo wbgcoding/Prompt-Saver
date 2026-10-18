@@ -48,7 +48,7 @@ fn acquire_data_dir_lock_reads_a_fresh_foreign_lock_as_read_only() {
     let dir = ddlock_test_dir("fresh-foreign");
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now(), id: String::new(), beat: 0 },
+        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: now_secs(), id: String::new(), beat: 0 },
     );
     acquire_data_dir_lock(&dir, true);
     assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "a fresh foreign lock must open the store read-only");
@@ -67,7 +67,7 @@ fn acquire_data_dir_lock_does_not_trust_the_other_machines_clock() {
     let path = data_dir_lock_path(&dir);
     // A timestamp far in the past says nothing: this process has not watched the
     // lock stand still for the stale limit, so it is read-only for now.
-    let old_seen = unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
+    let old_seen = now_secs().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
     write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: old_seen, id: "x".into(), beat: 3 });
     acquire_data_dir_lock(&dir, true);
     assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));
@@ -85,7 +85,7 @@ fn acquire_data_dir_lock_never_treats_its_own_hostname_as_foreign() {
     // already rules out a second live process here.
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: local_host_name(), pid: 424_242, seen: unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 999), id: String::new(), beat: 0 },
+        &DataDirLockInfo { host: local_host_name(), pid: 424_242, seen: now_secs().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 999), id: String::new(), beat: 0 },
     );
     acquire_data_dir_lock(&dir, true);
     assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "this machine's own old lock must never lock this machine out");
@@ -98,7 +98,7 @@ fn acquire_data_dir_lock_does_nothing_while_the_toggle_is_off() {
     let dir = ddlock_test_dir("toggle-off");
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: unix_now(), id: String::new(), beat: 0 },
+        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: now_secs(), id: String::new(), beat: 0 },
     );
     acquire_data_dir_lock(&dir, false);
     assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "dataDirLock off must restore today's behaviour: no read-only state");
@@ -115,10 +115,10 @@ fn refresh_data_dir_lock_keeps_an_owned_lock_fresh() {
     let path = data_dir_lock_path(&dir);
     // Back-date the file the way a real clock tick would leave it just before
     // the next scheduler round is due.
-    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() - 25, id: lock_claim_id().to_string(), beat: 0 });
+    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: now_secs() - 25, id: lock_claim_id().to_string(), beat: 0 });
     refresh_data_dir_lock(&dir);
     let refreshed = read_data_dir_lock(&path).expect("refresh must not delete the lock file");
-    assert!(unix_now().saturating_sub(refreshed.seen) < 5, "a round while owned must bring the timestamp back to now");
+    assert!(now_secs().saturating_sub(refreshed.seen) < 5, "a round while owned must bring the timestamp back to now");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -127,7 +127,7 @@ fn refresh_data_dir_lock_never_touches_a_foreign_lock_while_read_only() {
     let _g = DdlockGuard::capture();
     let dir = ddlock_test_dir("readonly-refresh");
     let path = data_dir_lock_path(&dir);
-    let foreign_seen = unix_now();
+    let foreign_seen = now_secs();
     write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: foreign_seen, id: String::new(), beat: 0 });
     acquire_data_dir_lock(&dir, true); // becomes read-only against the fresh foreign lock
     assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));

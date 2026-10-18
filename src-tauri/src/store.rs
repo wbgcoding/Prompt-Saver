@@ -136,10 +136,6 @@ pub(crate) struct DataDirLockInfo {
     pub(crate) beat: u64,
 }
 
-pub(crate) fn unix_now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
-
 // COMPUTERNAME is always set in a logged-in session; the fallback label just keeps the
 // read-only banner readable.
 pub(crate) fn local_host_name() -> String {
@@ -217,7 +213,7 @@ fn lock_content_key(e: &DataDirLockInfo) -> String {
 pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserver, now: Instant, settle: Duration) -> LockOutcome {
     use std::io::Write;
     let unknown = || LockOutcome::ReadOnly("unknown".to_string());
-    let info = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: unix_now(), id: me.id.to_string(), beat: 0 };
+    let info = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: now_secs(), id: me.id.to_string(), beat: 0 };
     let Ok(json) = serde_json::to_string(&info) else { return unknown() };
     if let Ok(mut f) = fs::OpenOptions::new().write(true).create_new(true).open(path) {
         if f.write_all(json.as_bytes()).and_then(|_| f.sync_all()).is_err() {
@@ -272,7 +268,7 @@ pub(crate) enum RefreshOutcome {
 
 // One refresh of an owned lock: read first, rewrite only our own claim.
 pub(crate) fn refresh_owned_lock(path: &Path, me: &LockMe, beat: u64) -> RefreshOutcome {
-    let fresh = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: unix_now(), id: me.id.to_string(), beat };
+    let fresh = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: now_secs(), id: me.id.to_string(), beat };
     match fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str::<DataDirLockInfo>(&text) {
             Ok(e) if e.id == me.id => {

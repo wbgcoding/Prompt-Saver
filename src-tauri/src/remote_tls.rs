@@ -8,6 +8,7 @@
 // certificate that other devices would trust. Only the server key is stored,
 // sealed with the same per-user protection as the rest of the stored secrets.
 
+use crate::backups::{civil_from_days, days_from_civil};
 use crate::{dec_str, enc_str, Settings, ENC_PREFIX};
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
@@ -142,11 +143,10 @@ fn dns_host_name() -> Option<String> {
     None
 }
 
+// Signed, because certificate dates are compared and shifted in both directions.
 fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    crate::copy::now_secs() as i64
 }
-
-use crate::backups::{civil_from_days, days_from_civil};
 
 type Ymd = (i32, u8, u8);
 
