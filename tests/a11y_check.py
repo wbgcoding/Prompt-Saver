@@ -59,6 +59,8 @@ VALUE_TARGETS = {
 # (see floating.html, folder.html, ...), so counting aria-live alone avoids
 # double-counting one element that carries both attributes.
 LIVE_RE = re.compile(r'aria-live="(?!off")')
+LIVE_TAG_RE = re.compile(r'<[^<>]*aria-live="(?!off")[^<>]*>')
+SR_ONLY_RE = re.compile(r'class="[^"]*\bsr-only\b')
 
 
 def named_control_findings():
@@ -101,10 +103,14 @@ def live_region_findings():
     for w in WINDOWS:
         html = (REPO / "ui" / f"{w}.html").read_text(encoding="utf-8")
         static_count = len(LIVE_RE.findall(html))
+        # A visually hidden announcer (sr-only) for keyboard focus is allowed beside the one
+        # visible status region; two visible ones would announce the same event twice.
+        hidden = sum(1 for tag in LIVE_TAG_RE.findall(html) if SR_ONLY_RE.search(tag))
+        visible = static_count - hidden
         if static_count == 0:
             bad.append(f"{w}.html: no live region (role=\"status\" or aria-live) found")
-        elif static_count > 1:
-            bad.append(f"{w}.html: {static_count} live regions found, exactly one is required")
+        elif visible > 1 or hidden > 1:
+            bad.append(f"{w}.html: {visible} visible and {hidden} sr-only live regions found, at most one of each is allowed")
     return bad
 
 
