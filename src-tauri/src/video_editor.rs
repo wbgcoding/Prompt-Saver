@@ -753,7 +753,7 @@ pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
     if trimmed.ends_with('.') {
         return false;
     }
-    let first_segment = trimmed.split('.').next().unwrap_or("").to_ascii_uppercase();
+    let first_segment = trimmed.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
     !EXPORT_RESERVED_STEMS.contains(&first_segment.as_str())
 }
 

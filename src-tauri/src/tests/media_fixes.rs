@@ -523,3 +523,10 @@ fn a_refused_clipboard_promise_ends_the_session() {
     assert!(src.contains("end_session_with_plain_write(is_first, true);"));
     assert!(src.contains("if AddClipboardFormatListener(hwnd) == 0 {"));
 }
+
+#[test]
+fn a_reserved_device_name_with_trailing_spaces_before_the_dot_is_refused() {
+    assert!(!crate::video_editor::export_file_name_is_valid("CON .mp4"));
+    assert!(!crate::video_editor::export_file_name_is_valid("nul  .take2.mp4"));
+    assert!(crate::video_editor::export_file_name_is_valid("CONE .mp4"));
+}
