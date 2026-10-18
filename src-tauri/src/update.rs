@@ -435,7 +435,7 @@ pub(crate) fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: 
 // Dedicated setter for the screenshot save folder: the expert menu's "Change" button calls
 // pick_folder, then this. Kept out of the generic set_ui_text path (see
 // PROTECTED_FOLDER_KEYS).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
     let value = accept_dir_setting(&dir, Path::new(&default_screenshot_dir()), "screenshot")?;
     let mut store = lock(&state);
@@ -449,7 +449,7 @@ pub(crate) fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) 
 // Dedicated setter for the video editor's export folder, like set_screenshot_dir and for
 // the same reason. There is no built-in default folder (empty means "next to the source
 // file"), so accept_dir_setting's default check is a no-op past the empty case.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
     let value = accept_dir_setting(&dir, Path::new(""), "videoExport")?;
     let mut store = lock(&state);
@@ -462,7 +462,7 @@ pub(crate) fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String
 
 // Dedicated setter for the screen-recording save folder: same shape as
 // set_screenshot_dir above, and for the same reason.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
     let value = accept_dir_setting(&dir, Path::new(&default_recording_dir()), "recording")?;
     let mut store = lock(&state);

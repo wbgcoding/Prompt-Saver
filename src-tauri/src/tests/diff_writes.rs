@@ -1086,3 +1086,14 @@ fn modal_file_dialogs_wait_on_a_blocking_thread() {
         }
     }
 }
+
+#[test]
+fn folder_setters_run_off_the_ui_thread() {
+    let src = include_str!("../update.rs");
+    for name in ["set_screenshot_dir", "set_video_export_dir", "set_recording_dir"] {
+        let at = src.find(&format!("fn {name}(")).unwrap();
+        let before = &src[..at];
+        let attr = before.rsplit('\n').nth(1).unwrap_or("");
+        assert_eq!(attr.trim(), "#[tauri::command(async)]", "{name} must run as an async command");
+    }
+}
