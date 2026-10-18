@@ -517,6 +517,17 @@ listen("camera-permission-ready", () => {
   startPreviewWhenReady();
 });
 
+// A headset plugged in or out while the window is open: the microphone list follows, and the
+// preview restarts when the picked microphone vanished or the stream died with its device.
+// refreshPreview() itself does nothing during a take.
+async function onMediaDevicesChanged() {
+  if (!permissionReady || !settingsReady) return;
+  const before = audioSelect.value;
+  await populateAudioDevices();
+  if (audioSelect.value !== before || !stream || !stream.active) refreshPreview();
+}
+navigator.mediaDevices?.addEventListener?.("devicechange", onMediaDevicesChanged);
+
 import("./floattheme.js").then(({ applyFloatTheme }) => {
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
   Promise.all([invoke("current_theme"), invoke("theme_vars")])

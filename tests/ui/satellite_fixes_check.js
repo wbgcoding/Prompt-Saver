@@ -161,6 +161,38 @@ section(() => {
   check(/snipEditBaseCv\.width = 0;[\s\S]*snipEditLiveCv\.height = 0;[\s\S]*snipEditReleaseMarkerLayer\(\)/.test(close), "closing the editor empties the base and live canvases and the marker layer");
 });
 
+// Camera window: a device change refreshes the microphone list, and restarts the preview only
+// when the picked microphone vanished or the stream is dead.
+later(async () => {
+  const src = read("camera.js");
+  check(/navigator\.mediaDevices\?\.addEventListener\?\.\("devicechange", onMediaDevicesChanged\)/.test(src), "the camera window listens for devicechange");
+  const make = (before, after, stream) => {
+    const calls = { list: 0, preview: 0 };
+    const sb = {
+      permissionReady: true, settingsReady: true, stream,
+      audioSelect: { value: before },
+      populateAudioDevices: async () => { calls.list++; sb.audioSelect.value = after; },
+      refreshPreview: () => { calls.preview++; },
+    };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock(src, "async function onMediaDevicesChanged(").replace("async function onMediaDevicesChanged", "sb_fn = async function"), Object.assign(sb, { sb_fn: null }));
+    return { sb, calls };
+  };
+  let m = make("mic1", "mic1", { active: true });
+  await m.sb.sb_fn();
+  check(m.calls.list === 1 && m.calls.preview === 0, "an unrelated device change only rebuilds the list");
+  m = make("mic1", "", { active: true });
+  await m.sb.sb_fn();
+  check(m.calls.preview === 1, "an unplugged picked microphone restarts the preview");
+  m = make("", "", { active: false });
+  await m.sb.sb_fn();
+  check(m.calls.preview === 1, "a dead stream restarts the preview");
+  m = make("", "", null);
+  m.sb.permissionReady = false;
+  await m.sb.sb_fn();
+  check(m.calls.list === 0, "nothing happens before the first preview is allowed");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
