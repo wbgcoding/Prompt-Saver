@@ -517,10 +517,29 @@ pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
 #[tauri::command(async)]
 pub(crate) fn skip_version(app: AppHandle, state: State<Db>, version: String) {
     let mut store = lock(&state);
-    if !store.settings.skipped_versions.contains(&version) {
-        store.settings.skipped_versions.push(version);
+    if add_skipped_version(&mut store.settings.skipped_versions, version) {
         save_settings(&app, &store.settings);
     }
+}
+
+const SKIPPED_VERSIONS_MAX: usize = 20;
+
+// Adds a version-shaped string (digits and dots, at most 32 characters) to the skip list and
+// keeps only the newest entries. Returns whether the list changed.
+pub(crate) fn add_skipped_version(list: &mut Vec<String>, version: String) -> bool {
+    let shaped = !version.is_empty()
+        && version.len() <= 32
+        && version.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && version.chars().any(|c| c.is_ascii_digit());
+    if !shaped || list.contains(&version) {
+        return false;
+    }
+    list.push(version);
+    if list.len() > SKIPPED_VERSIONS_MAX {
+        let excess = list.len() - SKIPPED_VERSIONS_MAX;
+        list.drain(..excess);
+    }
+    true
 }
 
 // The shipped changelog, baked into the binary at compile time: the "what's

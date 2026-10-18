@@ -1471,3 +1471,22 @@ fn update_script_escapes_percent_and_refuses_quotes() {
     assert!(update_script_content(Path::new("C:\\t\\a\"b.exe"), Path::new("C:\\a\\x.exe")).is_err());
     assert!(update_script_content(Path::new("C:\\t\\s.exe"), Path::new("C:\\a\nx.exe")).is_err());
 }
+
+// The renderer may send anything as a version to skip; only version-shaped text is stored
+// and the list stays bounded.
+#[test]
+fn the_skip_list_takes_only_version_shaped_text_and_stays_bounded() {
+    let mut list = Vec::new();
+    assert!(add_skipped_version(&mut list, "1.2.3".to_string()));
+    assert!(!add_skipped_version(&mut list, "1.2.3".to_string()));
+    for bad in ["", "abc", "1.2.3
+", &"1".repeat(33), "<script>"] {
+        assert!(!add_skipped_version(&mut list, bad.to_string()), "{bad:?}");
+    }
+    for n in 0..40 {
+        add_skipped_version(&mut list, format!("2.{n}.0"));
+    }
+    assert_eq!(list.len(), 20);
+    assert_eq!(list.last().unwrap(), "2.39.0");
+    assert!(!list.contains(&"1.2.3".to_string()));
+}
