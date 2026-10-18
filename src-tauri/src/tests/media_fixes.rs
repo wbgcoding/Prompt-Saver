@@ -474,3 +474,13 @@ fn a_failed_ocr_index_worker_marks_the_job_as_error() {
     let arm = &body[at..at + 200];
     assert!(arm.contains("push_bg_op(&app, \"ocr-index\", \"ocr-index\", \"error\""), "{arm}");
 }
+
+// Structural fix, no red unit test: install_permission_handler cannot be made to fail in a test.
+#[test]
+fn a_camera_window_without_its_permission_handler_is_destroyed() {
+    let src = include_str!("../camera.rs");
+    let at = src.find("if let Err(e) = install_permission_handler(&app, &win) {").expect("error arm");
+    let arm = &src[at..at + 120];
+    assert!(arm.contains("win.destroy()"), "{arm}");
+    assert!(!src.contains("install_permission_handler(&app, &win)?;"));
+}

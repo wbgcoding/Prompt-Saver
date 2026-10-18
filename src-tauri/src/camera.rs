@@ -380,7 +380,11 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
     crate::set_capture_exclusion(&win, excluded);
     // A new window starts unanswered, whatever the previous one reached.
     CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
-    install_permission_handler(&app, &win)?;
+    // Without its handler this window must not survive: the next open would just show it.
+    if let Err(e) = install_permission_handler(&app, &win) {
+        let _ = win.destroy();
+        return Err(e);
+    }
     // Alt+F4, the taskbar close or an app quit skip camera.js's close-button handler
     // (discardRecording) and would leave a half-written file and an active session. This is the
     // window's last chance to do the same cleanup from the session state.
