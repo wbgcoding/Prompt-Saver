@@ -1100,3 +1100,15 @@ fn custom_tray_menu_needs_no_native_rebuild_unless_one_is_installed() {
     assert!(tray_rebuild_due(false, false, true));
     assert!(!tray_rebuild_due(false, false, false));
 }
+
+#[test]
+fn a_scaled_folder_centre_follows_its_own_box() {
+    let pos = Pos { x: 100, y: 200, ..Default::default() };
+    let (x1, _) = folder_centre(&pos, 1.0, 1.0);
+    let (x3, y3) = folder_centre(&pos, 3.0, 1.0);
+    assert!(x3 > x1, "a 3x folder reaches further right than a 1x one");
+    assert_eq!(x3, 100.0 + folder_box(3.0) / 2.0);
+    assert_eq!(y3, 200.0 + folder_box(3.0) / 2.0);
+    let (x2, _) = folder_centre(&pos, 1.0, 2.0);
+    assert_eq!(x2, 100.0 + folder_box(1.0));
+}
