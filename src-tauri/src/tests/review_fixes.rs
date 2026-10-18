@@ -1466,3 +1466,22 @@ fn the_app_placing_a_parked_pill_is_not_a_user_drag() {
     assert!(moved_is_user_drag(&mut placed, "float-a", (40, 60)), "after a drag the old spot counts again");
     assert!(moved_is_user_drag(&mut placed, "float-b", (40, 60)), "a window the app never parked");
 }
+#[test]
+fn a_maximized_window_keeps_its_normal_bounds() {
+    // Moved/Resized used to store the full work-area bounds, so quitting while maximized
+    // restored a non-maximized window at that size and lost the user's own.
+    let mut g = WindowGeom { x: 100, y: 80, width: 900, height: 600, maximized: false };
+    geom_after_move(&mut g, 0, 0, true);
+    geom_after_resize(&mut g, 1920, 1040, true);
+    assert!(g.maximized);
+    assert_eq!((g.x, g.y, g.width, g.height), (100, 80, 900, 600));
+    geom_after_resize(&mut g, 820, 540, false);
+    geom_after_move(&mut g, 120, 90, false);
+    assert!(!g.maximized);
+    assert_eq!((g.x, g.y, g.width, g.height), (120, 90, 820, 540));
+}
+#[test]
+fn old_saved_geometry_without_the_flag_loads_as_not_maximized() {
+    let g: WindowGeom = serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).unwrap();
+    assert!(!g.maximized);
+}
