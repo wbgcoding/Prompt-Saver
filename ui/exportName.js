@@ -24,6 +24,6 @@ export function exportNameIsValid(name) {
   if (trimmed.endsWith(".")) return false;
   // A bare ".." inside a longer name (e.g. "v1..2") cannot climb anywhere: it only means
   // "walk up" when set off by separators, which the exact "." / ".." checks above cover.
-  const firstSegment = trimmed.split(".")[0].toUpperCase();
+  const firstSegment = trimmed.split(".")[0].trimEnd().toUpperCase();
   return !EXPORT_RESERVED_STEMS.has(firstSegment);
 }

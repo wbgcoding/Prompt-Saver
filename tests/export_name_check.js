@@ -30,6 +30,7 @@ check("a reserved device name is refused", exportNameIsValid("CON"), false);
 check("a reserved device name is case-insensitive", exportNameIsValid("con"), false);
 check("a reserved device name stays reserved with an extension-looking suffix", exportNameIsValid("CON.take2"), false);
 check("only an exact reserved segment is refused, not a prefix", exportNameIsValid("Console"), true);
+check("spaces before the dot do not hide a reserved name", exportNameIsValid("CON .mp4"), false);
 
 if (problems.length) {
   console.log("FAIL");
