@@ -146,3 +146,16 @@ fn a_mic_sidecar_that_cannot_be_created_marks_the_mic_lost() {
     );
     assert!(queue.is_lost(), "the bar must hear about a mic track that is not being written");
 }
+
+#[test]
+fn only_a_silent_ffmpeg_is_declared_stalled() {
+    assert!(!ffmpeg_stalled(0));
+    assert!(!ffmpeg_stalled(FFMPEG_STALL_SECS));
+    assert!(ffmpeg_stalled(FFMPEG_STALL_SECS + 1));
+    // Structural: the check must be fed by the time since the last progress tick, never by the
+    // total run time, and every tick must restart that clock.
+    let src = include_str!("../ffmpeg.rs");
+    assert!(src.contains("ffmpeg_stalled(last_progress.elapsed().as_secs())"));
+    assert!(src.contains("last_progress = std::time::Instant::now();"));
+    assert!(!src.contains("start.elapsed().as_secs() >"));
+}

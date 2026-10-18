@@ -53,7 +53,7 @@ fn ffmpeg_error_too_large_from_an_allocation_failure() {
 #[test]
 fn ffmpeg_error_timeout_key_has_no_matching_ffmpeg_text() {
     // Unlike every other key above, a timeout is this app's own wall-clock
-    // decision (see FFMPEG_MAX_RUN_SECS), never something ffmpeg's own log
+    // decision (see FFMPEG_STALL_SECS), never something ffmpeg's own log
     // says: so its coverage is the key itself, not a classify() case.
     assert_eq!(FfmpegErrorKey::Timeout.as_str(), "ffErrTimeout");
 }

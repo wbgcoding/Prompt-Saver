@@ -813,9 +813,14 @@ pub(crate) fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(
     });
 }
 
-// Generous on purpose: a last-resort net against a hung ffmpeg process, not a
-// quality-of-service limit, so it must never fire on a large export that is just slow.
-pub(crate) const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
+// A last-resort net against a hung ffmpeg process. It measures silence, not total run time: a
+// long recording legitimately encodes for hours, and every progress tick restarts the clock,
+// so only a process that has stopped reporting progress for this long is killed.
+pub(crate) const FFMPEG_STALL_SECS: u64 = 5 * 60;
+
+pub(crate) fn ffmpeg_stalled(secs_since_progress: u64) -> bool {
+    secs_since_progress > FFMPEG_STALL_SECS
+}
 
 // Shared by convert_recording and the video editor's export (one export path): spawns ffmpeg
 // with the given output-side arguments, streams `-progress pipe:1` into `on_progress`, tails
@@ -880,10 +885,10 @@ pub(crate) fn run_ffmpeg_to_staged(
     // unlike the carriage-return-redrawn stats ffmpeg prints to stderr. `out_time_ms` is ffmpeg's
     // name for a value that is actually in microseconds, hence the /1000 below. A thread reads the
     // lines and hands the parsed values over a channel, so this loop wakes every 200 ms whether or
-    // not ffmpeg printed anything: a cancel or the FFMPEG_MAX_RUN_SECS limit takes effect even
+    // not ffmpeg printed anything: a cancel or the stall limit takes effect even
     // while ffmpeg is silent (probing a huge input, a stalled source), not only at its next
     // progress line.
-    let start = std::time::Instant::now();
+    let mut last_progress = std::time::Instant::now();
     let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
         let (tx, rx) = std::sync::mpsc::channel::<u32>();
@@ -900,7 +905,10 @@ pub(crate) fn run_ffmpeg_to_staged(
         });
         loop {
             match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                Ok(ms) => on_progress(ms),
+                Ok(ms) => {
+                    last_progress = std::time::Instant::now();
+                    on_progress(ms);
+                }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
             }
@@ -908,7 +916,7 @@ pub(crate) fn run_ffmpeg_to_staged(
                 let _ = child.kill();
                 break;
             }
-            if start.elapsed().as_secs() > FFMPEG_MAX_RUN_SECS {
+            if ffmpeg_stalled(last_progress.elapsed().as_secs()) {
                 timed_out = true;
                 let _ = child.kill();
                 break;
