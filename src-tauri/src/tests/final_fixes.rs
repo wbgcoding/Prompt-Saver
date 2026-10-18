@@ -218,3 +218,9 @@ fn a_verbatim_share_is_the_same_place_as_the_plain_one() {
     assert!(is_foreign_network_path(r"\\?\UNC\evil\ps\data\a.pdf", &own));
     assert!(is_foreign_network_path(r"\\?\UNC\nas\ps\data\..\other\a.pdf", &own));
 }
+
+#[test]
+fn the_main_window_may_start_a_resize_drag() {
+    let caps = source!("../../capabilities/default.json");
+    assert!(caps.contains("\"core:window:allow-start-resize-dragging\""));
+}
