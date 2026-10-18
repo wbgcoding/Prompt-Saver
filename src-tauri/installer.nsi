@@ -79,6 +79,7 @@ ${StrLoc}
 
 Var PassiveMode
 Var UpdateMode
+Var KeepTools
 Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
@@ -403,6 +404,7 @@ Function PageLeaveReinstall
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
       ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
+      StrCpy $R1 "$R1 /KEEPTOOLS" ; a fresh install follows, so the downloaded ffmpeg tools stay
       StrCpy $R1 "$R1 /S" ; silent: the auto-uninstall of the old version shows no window (data kept)
       StrCpy $R1 "$R1 _?=$4" ; append uninstall directory -- forces ExecWait to actually wait
       ExecWait '$R1' $0
@@ -1186,6 +1188,11 @@ Function un.onInit
   ${IfNot} ${Errors}
     StrCpy $UpdateMode 1
   ${EndIf}
+
+  ${GetOptions} $CMDLINE "/KEEPTOOLS" $KeepTools
+  ${IfNot} ${Errors}
+    StrCpy $KeepTools 1
+  ${EndIf}
 FunctionEnd
 
 Section Uninstall
@@ -1233,8 +1240,11 @@ Section Uninstall
   RMDir /REBOOTOK "$INSTDIR\\{{this}}"
   {{/each}}
   ; ffmpeg lands beside the app when that folder is writable (downloaded on demand)
-  Delete "$INSTDIR\ffmpeg.exe"
-  Delete "$INSTDIR\ffprobe.exe"
+  ; (kept when this uninstall is only the first half of an update or reinstall)
+  ${If} $KeepTools <> 1
+    Delete "$INSTDIR\ffmpeg.exe"
+    Delete "$INSTDIR\ffprobe.exe"
+  ${EndIf}
   RMDir "$INSTDIR"
 
   ; Remove shortcuts if not updating
