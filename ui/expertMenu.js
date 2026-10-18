@@ -659,8 +659,8 @@ export function valueRow(key) {
   head.append(span, right);
   row.append(head, slider);
   // The quality slider is JPEG-only (every other screenshot format is lossless, see
-  // encode_screenshot in capture.rs). renderExpert() rebuilds this row whenever screenshotFormat
-  // changes (dropdownRow's change handler), so it needs no listener of its own.
+  // encode_screenshot in capture.rs). dropdownRow's change handler toggles this row when
+  // screenshotFormat changes, so it needs no listener of its own.
   if (key === "snipSaveQuality") {
     row.classList.toggle("hidden", txt("screenshotFormat") !== "jpeg");
   }
@@ -712,9 +712,29 @@ export function selectRow(key) {
   num.classList.toggle("hidden", isPreset);
   unit.classList.toggle("hidden", isPreset);
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
+  // Show what the store really holds: the select, the number field and its unit.
+  const resync = () => {
+    const now = Number.isFinite(settings.ui_values?.[key]) ? settings.ui_values[key] : cfg.def;
+    const preset = cfg.options.includes(now);
+    sel.value = preset ? String(now) : "custom";
+    num.value = now;
+    num.classList.toggle("hidden", preset);
+    unit.classList.toggle("hidden", preset);
+  };
+  // A refused write puts the previous value back and resyncs the controls.
   const persist = async (value) => {
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_values || {}, key);
+    const before = settings.ui_values?.[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-    try { await invoke("set_ui_value", { key, value }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_value", { key, value });
+    } catch (err) {
+      const back = { ...(settings.ui_values || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_values = back;
+      errToast(err);
+      resync();
+    }
   };
   sel.addEventListener("change", () => {
     if (sel.value === "custom") {
@@ -771,6 +791,10 @@ export function dropdownRow(key) {
     // A setter may decline the picked value; resync so the select never shows a choice that did
     // not take effect (a no-op when get() already reports what set() wrote).
     sel.value = cfg.get();
+    // The JPEG-only quality slider follows the format without rebuilding the menu.
+    if (key === "screenshotFormat") {
+      document.querySelector('[data-setting-row="snipSaveQuality"]')?.classList.toggle("hidden", cfg.get() !== "jpeg");
+    }
     if (expertOnlyChanged) renderExpert();
     else syncRowReset("dropdowns", key); // reset icon must not wait for an unrelated rebuild
   });

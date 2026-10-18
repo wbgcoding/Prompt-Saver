@@ -618,6 +618,34 @@ section(() => {
   });
 });
 
+// 26. Expert menu: the screenshot format toggles the quality row; a refused select write rolls back.
+section(() => {
+  const src = read("expertMenu.js");
+  const dd = extractBlock(src, "export function dropdownRow(");
+  check(/key === "screenshotFormat"[\s\S]*snipSaveQuality[\s\S]*classList\.toggle\("hidden"/.test(dd), "the format dropdown toggles the quality row");
+  const sel = extractBlock(src, "export function selectRow(").replace("export ", "");
+  const el = () => {
+    const cl = new Set();
+    return { value: "", dataset: {}, children: [], classList: { toggle: (c, on) => (on ? cl.add(c) : cl.delete(c)), remove: (c) => cl.delete(c), add: (c) => cl.add(c), has: (c) => cl.has(c) }, appendChild(c) { this.children.push(c); }, append() {}, addEventListener(ev, fn) { (this.h = this.h || {})[ev] = fn; }, focus() {} };
+  };
+  const made = [];
+  const settings = { ui_values: { retentionDays: 7 } };
+  const sb = run(sel, {
+    settings, EXPERT_SELECTS: { retentionDays: { label: "x", options: [1, 7, 30], def: 7, unit: "d" } },
+    document: { createElement: () => { const e = el(); made.push(e); return e; } }, t: (k) => k, withTip() {}, rowResetBtn: () => null,
+    formatValue: (c, o) => String(o), attachSelectPicker() {}, SELECT_CUSTOM_MIN: 1, SELECT_CUSTOM_MAX: 999,
+    invoke: async () => { throw new Error("denied"); }, errToast() {}, syncRowReset() {}, expertOnlyChanged: false, renderExpert() {},
+  });
+  sb.selectRow("retentionDays");
+  later(async () => {
+    const select = made.find((e) => e.h && e.h.change);
+    select.value = "30";
+    select.h.change();
+    await new Promise((r) => setTimeout(r, 20));
+    check(settings.ui_values.retentionDays === 7 && select.value === "7", "a refused select write restores the value and the control");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
