@@ -75,11 +75,7 @@ pub(crate) fn place_ids_in_view(
     let mut occupied: std::collections::HashSet<(u32, u32)> =
         layout.values().map(|c| (c[0], c[1])).collect();
     occupied.extend(extra_occupied.iter().copied());
-    let need = ids
-        .iter()
-        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
-        .count();
-    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    let (need, free) = view_capacity(layout, ids, cols, rows, extra_occupied, folder_members);
     if need > free {
         return false;
     }
@@ -104,6 +100,27 @@ pub(crate) fn place_ids_in_view(
     true
 }
 
+// The one capacity accounting for a placement: how many of ids still need a cell, and how
+// many cells are free once the layout and extra_occupied are counted.
+fn view_capacity(
+    layout: &std::collections::HashMap<String, [u32; 2]>,
+    ids: &[String],
+    cols: u32,
+    rows: u32,
+    extra_occupied: &std::collections::HashSet<(u32, u32)>,
+    folder_members: &std::collections::HashSet<String>,
+) -> (usize, usize) {
+    let mut occupied: std::collections::HashSet<(u32, u32)> =
+        layout.values().map(|c| (c[0], c[1])).collect();
+    occupied.extend(extra_occupied.iter().copied());
+    let need = ids
+        .iter()
+        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
+        .count();
+    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    (need, free)
+}
+
 // Same accounting `place_ids_in_view` does internally, so a caller that just got
 // `false` back can tell the user how many cells are still missing.
 pub(crate) fn view_capacity_deficit(
@@ -114,14 +131,7 @@ pub(crate) fn view_capacity_deficit(
     extra_occupied: &std::collections::HashSet<(u32, u32)>,
     folder_members: &std::collections::HashSet<String>,
 ) -> usize {
-    let mut occupied: std::collections::HashSet<(u32, u32)> =
-        layout.values().map(|c| (c[0], c[1])).collect();
-    occupied.extend(extra_occupied.iter().copied());
-    let need = ids
-        .iter()
-        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
-        .count();
-    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    let (need, free) = view_capacity(layout, ids, cols, rows, extra_occupied, folder_members);
     need.saturating_sub(free)
 }
 
@@ -149,17 +159,17 @@ pub(crate) fn apply_view_batch_action(
     from_view_id: &str,
     mut save: impl FnMut(&Settings) -> bool,
 ) -> Result<(), String> {
+    // A grid folder occupies a cell via tile_folders, outside view.layouts. Read both sets before
+    // views is borrowed mutably.
+    let folder_cells: std::collections::HashSet<(u32, u32)> = settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == view_id)
+        .map(|f| (f.cell[0], f.cell[1]))
+        .collect();
+    let folder_members = folder_members_in_view(settings, view_id);
     match action {
         "addView" | "removeView" => {
-            // A grid folder occupies a cell via tile_folders, outside view.layouts. Read it before
-            // views is borrowed mutably.
-            let folder_cells: std::collections::HashSet<(u32, u32)> = settings
-                .tile_folders
-                .iter()
-                .filter(|f| f.view_id == view_id)
-                .map(|f| (f.cell[0], f.cell[1]))
-                .collect();
-            let folder_members = folder_members_in_view(settings, view_id);
             let Some(vidx) = settings.views.iter().position(|v| v.id == view_id) else {
                 return Ok(());
             };
@@ -194,13 +204,6 @@ pub(crate) fn apply_view_batch_action(
         // Both layouts change in the same in-memory settings before the single save, so a failure
         // or crash is seen only before or after the whole move, never midway.
         "moveView" => {
-            let folder_cells: std::collections::HashSet<(u32, u32)> = settings
-                .tile_folders
-                .iter()
-                .filter(|f| f.view_id == view_id)
-                .map(|f| (f.cell[0], f.cell[1]))
-                .collect();
-            let folder_members = folder_members_in_view(settings, view_id);
             let to_idx = settings.views.iter().position(|v| v.id == view_id);
             let from_idx = settings.views.iter().position(|v| v.id == from_view_id);
             let (Some(to_idx), Some(from_idx)) = (to_idx, from_idx) else {
