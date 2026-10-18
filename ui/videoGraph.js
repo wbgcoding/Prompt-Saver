@@ -8,9 +8,11 @@ import { $, clamp, FONT_FILES, fontsDir, formatHasAudio, MAX_SILENT_DIM, opOf, o
 // A path inside a filter option passes two parsing levels and only one spelling survives both:
 // wrapped in single quotes with exactly one backslash before the drive colon (checked against
 // the shipped ffmpeg build; unquoted, unescaped and double-escaped all fail with "Invalid
-// argument"). The caller supplies the quotes.
+// argument"). The caller supplies the quotes. An apostrophe cannot sit inside the quotes: it
+// closes them, then a triple backslash plus quote survives the graph level as a backslash plus
+// quote and the option level as the quote itself, and a new quote reopens the literal.
 export function ffPath(path) {
-  return String(path).replace(/\\/g, "/").replace(/:/g, "\\:");
+  return String(path).replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "'\\\\\\''");
 }
 
 // The same two levels for drawtext's own text, plus one thing the parser cannot express: an

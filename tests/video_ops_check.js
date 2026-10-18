@@ -556,6 +556,32 @@ async function exportIdleCheck() {
   expect("no refresh guard is tied to focus any more", !/document\.activeElement\s*!==\s*\$\("ve-(trim|speed|fade|scale)/.test(src));
 }
 
+// A path with an apostrophe must survive both of ffmpeg's parsing levels (graph, then option
+// list), read the way the backend's graph check reads them: av_get_token with quotes and
+// backslash escapes.
+{
+  const avToken = (text, from, terms) => {
+    let i = from;
+    let out = "";
+    while (i < text.length && !terms.includes(text[i])) {
+      const ch = text[i++];
+      if (ch === "\\" && i < text.length) out += text[i++];
+      else if (ch === "'") {
+        while (i < text.length && text[i] !== "'") out += text[i++];
+        if (i < text.length) i++;
+      } else out += ch;
+    }
+    return { value: out, end: i };
+  };
+  const sb = makeSandbox();
+  for (const p of ["C:/Users/Ben/clip.mp4", "C:/Users/Ben's/Ben's logo.png", "D:/it''s/a'b'c.png", "E:/x/'.png"]) {
+    const arg = vm.runInContext("ffPath", sb)(p);
+    const lvl1 = avToken(`'${arg}'[a]`, 0, ["[", "]", ",", ";"]).value;
+    const lvl2 = avToken(lvl1, 0, [":"]);
+    expect(`ffPath survives both parsing levels: ${p}`, lvl2.value === p && lvl2.end === lvl1.length, lvl2.value);
+  }
+}
+
 cameraOverlayRaceCheck().then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
