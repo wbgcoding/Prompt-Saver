@@ -1036,6 +1036,14 @@ section(() => {
   check((fn.match(/setUnit\(/g) || []).length >= 3, "the unit refreshes on resync and on a typed value");
 });
 
+// 55. A prompts-only import re-renders once and applies no settings.
+section(() => {
+  const src = read("settingsPanel.js");
+  const fn = extractBlock(src, "export async function runImport(");
+  check((fn.match(/renderGrid\(/g) || []).length === 1, "the grid is built once after an import");
+  check(!/applyTheme|applyTileStyle|applyBars|setLang\(/.test(fn), "no preference is re-applied after a prompts-only import");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

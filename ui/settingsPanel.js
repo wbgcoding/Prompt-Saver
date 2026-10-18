@@ -134,27 +134,8 @@ export async function runImport() {
     // refuses if the file changed since the preview.
     const count = await withTaskbarBusy("import", () => invoke("import_prompts", { path: picked.path, hash: picked.hash }));
     if (count == null) return;
+    // The import adds prompts only; settings, views and layout stay untouched.
     await renderGrid(); // refreshes prompts AND settings
-    // Imported preferences apply on the spot: no restart needed.
-    await setLang(settings.language);
-    applyI18n();
-    fillSizeSelects();
-    fillFontSelects();
-    setLangSelect();
-    fillThemeSelect();
-    $("tile-font").value = settings.tile_font || "system";
-    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
-    fillScaleSelect("ui-scale", "uiScale");
-    $("opt-minimize").checked = settings.minimize_to_tray === true;
-    $("opt-screenshot-folder").checked = optFlag("screenshotSave");
-    $("opt-tooltips").checked = flag("tooltipsEnabled");
-    $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
-    $("opt-autoupdate").checked = settings.auto_update !== false;
-    fillUpdateIntervalSelect();
-    applyTheme(await invoke("current_theme"));
-    applyTileStyle();
-    applyBars();
-    await renderGrid(true); // re-render with the new tile style
     toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
     maybeDupImportToast();
   } catch (err) {
