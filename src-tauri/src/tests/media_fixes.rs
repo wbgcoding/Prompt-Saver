@@ -431,3 +431,11 @@ fn saving_the_parts_does_not_hold_the_shared_list_lock() {
     let left: Vec<String> = shared.lock().unwrap().iter().map(|p| p.path.clone()).collect();
     assert_eq!(left, vec!["b".to_string(), "c".to_string()]);
 }
+
+// Structural fix, no red unit test: the old spelling produced the same path as the constant today.
+#[test]
+fn the_key_sidecar_is_always_named_through_the_shared_builder() {
+    let src = include_str!("../media_files.rs");
+    assert!(!src.contains("with_extension(\"keys.json\")"));
+    assert_eq!(crate::media_files::sidecar_path(Path::new("a/rec.mp4"), crate::media_files::KEYS_SIDECAR_EXT), Path::new("a/rec.keys.json"));
+}

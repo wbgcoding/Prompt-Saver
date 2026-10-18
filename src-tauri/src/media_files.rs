@@ -942,9 +942,9 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
         let _ = move_file(&sidecar_src, &dst.with_extension("mic.wav"));
     }
     // The key-overlay sidecar leaves the trash with its video instead of staying orphaned.
-    let keys_src = src.with_extension("keys.json");
+    let keys_src = sidecar_path(&src, KEYS_SIDECAR_EXT);
     if keys_src.is_file() {
-        let _ = move_file(&keys_src, &dst.with_extension("keys.json"));
+        let _ = move_file(&keys_src, &sidecar_path(&dst, KEYS_SIDECAR_EXT));
     }
     let cam_sidecar_src = sidecar_path(&src, CAM_SIDECAR_EXT);
     if cam_sidecar_src.is_file() {
@@ -972,7 +972,7 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
     }
     let _ = fs::remove_file(path.with_extension("mic.wav"));
     // "Delete for good" removes the key-overlay sidecar with its video.
-    let _ = fs::remove_file(path.with_extension("keys.json"));
+    let _ = fs::remove_file(sidecar_path(&path, KEYS_SIDECAR_EXT));
     let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
     fs::remove_file(&path).is_ok()
 }
