@@ -638,10 +638,7 @@ pub(crate) fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
 pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = active_recording_path(app) {
-        out.push(p.with_extension("mic.wav"));
-        #[cfg(windows)]
-        out.push(sidecar_path(&p, KEYS_SIDECAR_EXT)); // the key-overlay sidecar, same lifetime as the mic one
-        out.push(p);
+        push_recording_with_sidecars(&mut out, &p);
     }
     out.extend(protected_take_paths());
     let mut editor_sources = Vec::new();
@@ -652,11 +649,7 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     editor_sources.extend(VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).clone());
     for (src, _origin_dir, overlay) in editor_sources {
         if !src.is_empty() {
-            let src = PathBuf::from(src);
-            out.push(src.with_extension("mic.wav"));
-            #[cfg(windows)]
-            out.push(sidecar_path(&src, KEYS_SIDECAR_EXT));
-            out.push(src);
+            push_recording_with_sidecars(&mut out, Path::new(&src));
         }
         if !overlay.is_empty() {
             let overlay = PathBuf::from(overlay);
