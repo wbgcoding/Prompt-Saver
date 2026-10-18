@@ -66,8 +66,8 @@ let recTimer = 0;
 let videoDeviceId = "";
 let frameRate = 30;
 // Bumped on every refreshPreview(); a getUserMedia that resolves after a newer generation
-// started stops its own tracks instead of replacing `stream`, so the ready-event and 1500ms
-// fallback refreshes cannot leak a stream (camera light stays on).
+// started stops its own tracks instead of replacing `stream`, so the ready-event and the
+// readiness-query refreshes cannot leak a stream (camera light stays on).
 let previewGen = 0;
 
 function t(key) {
@@ -512,10 +512,17 @@ function startPreviewWhenReady() {
   refreshPreview();
   populateAudioDevices();
 }
-listen("camera-permission-ready", () => {
+function markPermissionReady() {
   permissionReady = true; // a repeated grant re-runs the start
   startPreviewWhenReady();
-});
+}
+// The event is a one-shot and can have fired before this listener existed, so the answer is
+// also asked for once the listener is in place. No timer stands in for a missing handler:
+// without the answer the page does not touch the camera.
+listen("camera-permission-ready", markPermissionReady)
+  .then(() => invoke("camera_permission_ready"))
+  .then((ready) => { if (ready && !permissionReady) markPermissionReady(); })
+  .catch(() => {});
 
 // A headset plugged in or out while the window is open: the microphone list follows, and the
 // preview restarts when the picked microphone vanished or the stream died with its device.
@@ -579,12 +586,3 @@ listen("language-changed", () => {
     })
     .catch(() => {});
 });
-
-// Fallback in case the permission-ready event is missed (e.g. the window is reopened after
-// WebView2 already answered for this origin): counts the permission as given after a short
-// delay. The preview still waits for the saved settings.
-setTimeout(() => {
-  if (stream) return;
-  permissionReady = true;
-  startPreviewWhenReady();
-}, 1500);

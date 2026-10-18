@@ -1224,11 +1224,18 @@ pub fn cut_off_at(t_ms: u64) {
     }
 }
 
+// The error side is a path-free reason, safe for the crash log.
+pub(crate) fn try_write_sidecar(output_path: &Path, sidecar: &KeySidecar) -> Result<(), String> {
+    let json = serde_json::to_string(sidecar).map_err(|_| "serialize failed".to_string())?;
+    // Sealed like the rest of the local store: the events are the keys
+    // typed during the recording. Readers pass old plain files through.
+    fs::write(super::sidecar_path(output_path, super::KEYS_SIDECAR_EXT), super::enc_str(&json))
+        .map_err(|e| format!("write failed ({:?})", e.kind()))
+}
+
 fn write_sidecar(output_path: &Path, sidecar: &KeySidecar) {
-    if let Ok(json) = serde_json::to_string(sidecar) {
-        // Sealed like the rest of the local store: the events are the keys
-        // typed during the recording. Readers pass old plain files through.
-        let _ = fs::write(super::sidecar_path(output_path, super::KEYS_SIDECAR_EXT), super::enc_str(&json));
+    if let Err(why) = try_write_sidecar(output_path, sidecar) {
+        append_crash_log(&format!("key overlay: could not save the key sidecar, the recording has no overlay: {why}"));
     }
 }
 

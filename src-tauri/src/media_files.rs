@@ -52,6 +52,22 @@ pub(crate) fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(
     None
 }
 
+// The data URL the editor loads. The webview decodes png, jpeg, gif, webp, bmp and ico itself,
+// so those travel as the file's own bytes; any other format the image crate reads (TIFF, TGA ...)
+// is re-encoded to PNG, otherwise the editor's image element fails and nothing opens.
+pub(crate) fn editor_image_data_url(path: &Path, fmt: Option<image::ImageFormat>) -> Result<String, String> {
+    use image::ImageFormat as F;
+    if matches!(fmt, Some(F::Png | F::Jpeg | F::Gif | F::WebP | F::Bmp | F::Ico)) {
+        let bytes = fs::read(path).map_err(|e| e.to_string())?;
+        let mime = fmt.map(image_format_mime).unwrap_or("image/png");
+        return Ok(format!("data:{};base64,{}", mime, base64_encode(&bytes)));
+    }
+    let img = decode_image_oriented(image::ImageReader::open(path).map_err(|e| e.to_string())?).ok_or_else(|| "not-media".to_string())?;
+    let mut png = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok(format!("data:image/png;base64,{}", base64_encode(&png.into_inner())))
+}
+
 #[derive(Serialize)]
 #[serde(tag = "kind")]
 pub(crate) enum OpenEditResult {
@@ -160,9 +176,13 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
     .map_err(|e| e.to_string())?;
     match kind {
         Some(("image", fmt)) => {
-            let bytes = fs::read(&p).map_err(|e| e.to_string())?;
-            let mime = fmt.map(image_format_mime).unwrap_or("image/png");
-            let data_url = format!("data:{};base64,{}", mime, base64_encode(&bytes));
+            // Reading (up to the size ceiling) and a possible re-encode: off the async runtime.
+            let data_url = tauri::async_runtime::spawn_blocking({
+                let p = p.clone();
+                move || editor_image_data_url(&p, fmt)
+            })
+            .await
+            .map_err(|e| e.to_string())??;
             Ok(OpenEditResult::Image { data_url, origin_dir, name })
         }
         Some(("video", _)) => {
@@ -513,7 +533,14 @@ pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win:
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
-    let result = file_dialog_for(&app, win.label()).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file();
+    // The dialog is modal: it waits on a blocking thread, not on an async worker.
+    let dialog_app = app.clone();
+    let dialog_label = win.label().to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&dialog_app, &dialog_label).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let _ = win.set_focus();
     match result {
         Some(p) => {
@@ -588,8 +615,30 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     } else {
         recording_dir(&custom)
     };
-    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    Ok(place_recording_parts(&mut parts, &allowed, &dest))
+    // A part can be many gigabytes and the move copies across drives: the list is taken out so
+    // the lock is not held for that, and the worker thread does the copying.
+    tauri::async_runtime::spawn_blocking(move || {
+        with_parts_outside_lock(&REC_RESULT_PARTS, |parts| place_recording_parts(parts, &allowed, &dest))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+// Runs `work` on the shared list's current contents without keeping the lock: the entries are
+// taken out first, and whatever `work` leaves in the list (parts that could not be moved) is
+// put back in front of anything added meanwhile.
+pub(crate) fn with_parts_outside_lock<R>(
+    shared: &Mutex<Vec<RecordingPartInfo>>,
+    work: impl FnOnce(&mut Vec<RecordingPartInfo>) -> R,
+) -> R {
+    let mut mine = std::mem::take(&mut *shared.lock().unwrap_or_else(|e| e.into_inner()));
+    let result = work(&mut mine);
+    if !mine.is_empty() {
+        let mut guard = shared.lock().unwrap_or_else(|e| e.into_inner());
+        mine.append(&mut guard);
+        *guard = mine;
+    }
+    result
 }
 
 // Discard in the result dialog: the earlier parts go to the discard folder like the last
@@ -620,7 +669,8 @@ pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u
 // accepts.
 #[tauri::command]
 pub(crate) async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
-    let result = file_dialog_for(&app, win.label()).pick_folder();
+    let label = win.label().to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || file_dialog_for(&app, &label).pick_folder()).await.ok().flatten();
     let _ = win.set_focus();
     if let Some(dir) = &result {
         // remember_export_dest_dir authorizes exporting into this folder right away
@@ -700,7 +750,37 @@ pub(crate) async fn clip_export_path(ext: String) -> Result<String, String> {
 // copy_recording_to_clipboard.
 #[tauri::command]
 pub(crate) async fn copy_file_to_clipboard(path: String) -> bool {
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let p = Path::new(&path);
+    if !is_clip_export_file(&own_temp_dir, p) && !is_known_export_output(p) {
+        return false;
+    }
     set_clipboard_file(&path)
+}
+
+// The per-user, non-roaming app folder (LocalAppData, then the app name): where native
+// helpers the app loads or runs (pdfium, ffmpeg) are kept. Unlike the temp folder it is not
+// writable by other users' processes, and unlike the data folder it never holds user content
+// or follows a redirected store. None when the profile folder is not set.
+pub(crate) fn local_app_dir() -> Option<PathBuf> {
+    local_app_dir_in(std::env::var_os("LOCALAPPDATA"))
+}
+
+pub(crate) fn local_app_dir_in(base: Option<std::ffi::OsString>) -> Option<PathBuf> {
+    let base = base.filter(|b| !b.is_empty())?;
+    Some(PathBuf::from(base).join(brand::DATA_FOLDER))
+}
+
+// Whether `path` is a file clip_export_path_impl hands out: a clip-export name directly in the
+// app's temp folder. The parent is compared canonicalized so a `..` hop cannot slip out.
+pub(crate) fn is_clip_export_file(temp_root: &Path, path: &Path) -> bool {
+    let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !name.starts_with(&prefix) || !path.is_file() {
+        return false;
+    }
+    let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    temp_root.canonicalize().map(|c| c == parent).unwrap_or(false)
 }
 
 // recDiscardKeepH has no expert-menu row yet (like recCanvasMode above); 0 disables the
@@ -724,8 +804,16 @@ pub(crate) fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [
 // save_recording_now and copy_recording_to_clipboard cannot be made to move, replace or feed
 // ffmpeg an unrelated file by a subverted renderer.
 pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
+    is_recording_source_location(allowed, path) && path.is_file()
+}
+
+// The location half of is_own_recording_source: the "rec-" stem and an allowed parent, decided
+// without ever asking the file system about the file itself. A network (UNC) path is refused
+// on its text alone, so a refused caller path never makes this machine contact a remote host.
+pub(crate) fn is_recording_source_location(allowed: &[PathBuf], path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if !name.starts_with("rec-") || !path.is_file() {
+    let raw = path.to_string_lossy();
+    if !name.starts_with("rec-") || raw.starts_with(r"\\") || raw.starts_with("//") {
         return false;
     }
     let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
@@ -862,9 +950,9 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
         let _ = move_file(&sidecar_src, &dst.with_extension("mic.wav"));
     }
     // The key-overlay sidecar leaves the trash with its video instead of staying orphaned.
-    let keys_src = src.with_extension("keys.json");
+    let keys_src = sidecar_path(&src, KEYS_SIDECAR_EXT);
     if keys_src.is_file() {
-        let _ = move_file(&keys_src, &dst.with_extension("keys.json"));
+        let _ = move_file(&keys_src, &sidecar_path(&dst, KEYS_SIDECAR_EXT));
     }
     let cam_sidecar_src = sidecar_path(&src, CAM_SIDECAR_EXT);
     if cam_sidecar_src.is_file() {
@@ -892,7 +980,7 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
     }
     let _ = fs::remove_file(path.with_extension("mic.wav"));
     // "Delete for good" removes the key-overlay sidecar with its video.
-    let _ = fs::remove_file(path.with_extension("keys.json"));
+    let _ = fs::remove_file(sidecar_path(&path, KEYS_SIDECAR_EXT));
     let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
     fs::remove_file(&path).is_ok()
 }

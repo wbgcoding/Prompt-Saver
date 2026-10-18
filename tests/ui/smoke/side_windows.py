@@ -1248,6 +1248,9 @@ CAMERA_PROBE = """
   try {
     const noDeviceEl = document.getElementById('cam-no-device');
     const startBtn = document.getElementById('cam-start-btn');
+    // The page opens the camera only once the backend says the permission is given.
+    await until(() => startBtn.textContent.trim());
+    window.__FIRE__('camera-permission-ready', null);
     const ok = await until(() => !noDeviceEl.classList.contains('hidden'));
     if (!ok) errs.push('no-camera message never appeared for a device-less getUserMedia rejection');
     else if (!noDeviceEl.textContent.trim()) errs.push('no-camera message element is empty');

@@ -148,8 +148,10 @@ fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(P
             if let Some(dir) = out.parent() {
                 let _ = fs::create_dir_all(dir);
             }
+            // Guarded before the write: a save that dies half-way still leaves a file to remove.
+            let guard = TempFileGuard(Some(out.clone()));
             im.save(&out).map_err(|e| e.to_string())?;
-            Ok((out.clone(), TempFileGuard(Some(out))))
+            Ok((out, guard))
         }
     }
 }
@@ -195,15 +197,15 @@ pub(super) fn recognize_file(path: &Path, upscale_below_px: u32, join_lines: boo
     recognize(path, upscale_below_px, join_lines, lang, auto_pick_lang)
 }
 
-// Writes the crop out as a temp PNG under the branded temp dir (like write_snip_preview /
-// pdfium_cache_path) and runs it through recognize(); TempFileGuard deletes it on every path.
+// Writes the crop out as a temp PNG under the branded temp dir (like write_snip_preview)
+// and runs it through recognize(); TempFileGuard deletes it on every path.
 pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let path = ocr_temp_path();
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    crop.save(&path).map_err(|e| e.to_string())?;
     let _guard = TempFileGuard(Some(path.clone()));
+    crop.save(&path).map_err(|e| e.to_string())?;
     recognize(&path, upscale_below_px, join_lines, lang, auto_pick_lang)
 }
 
@@ -372,17 +374,53 @@ fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
 // directory is our own always-writable one, not the inherited one: DISM's "could not set
 // the current directory" failure had nothing to do with the query itself.
 fn run_powershell_command(script: &str) -> Result<String, String> {
-    let out = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script])
         .current_dir(dism_temp_dir())
-        .creation_flags(super::CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        .creation_flags(super::CREATE_NO_WINDOW);
+    run_with_deadline(cmd, POWERSHELL_DEADLINE)
+}
+
+// A servicing stack that is busy (Windows Update) or hung can keep Get-WindowsCapability
+// from ever returning; the dialog must get an answer instead of loading forever.
+const POWERSHELL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(120);
+
+// Runs the command to completion or kills it at the deadline. The pipes are drained on their
+// own threads so a chatty child cannot fill a pipe and stall before it exits.
+pub(crate) fn run_with_deadline(mut cmd: std::process::Command, deadline: std::time::Duration) -> Result<String, String> {
+    use std::io::Read;
+    use std::process::Stdio;
+    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_end(&mut buf);
+            }
+            buf
+        })
+    }
+    let out_reader = drain(child.stdout.take());
+    let err_reader = drain(child.stderr.take());
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if started.elapsed() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("timeout".to_string());
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    };
+    let stdout = out_reader.join().unwrap_or_default();
+    let stderr = err_reader.join().unwrap_or_default();
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
         return Err(if stderr.is_empty() { "PowerShell command failed".to_string() } else { stderr });
     }
-    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    Ok(String::from_utf8_lossy(&stdout).to_string())
 }
 
 // PowerShell single-quoted-string escaping (doubles an embedded quote). Applied

@@ -398,7 +398,7 @@ pub fn run() {
             app.manage(VarPrompt::new()); // standalone fill-in window
             app.manage(VideoEditorPending::new()); // video editor's pending target path
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
-            app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
+            app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
             app.manage(camera::CameraState(Mutex::new(None))); // live camera-recording session
             app.manage(remote::RemoteApiState::new());
@@ -1090,6 +1090,7 @@ pub fn run() {
             camera::open_camera_window,
             camera::camera_begin_recording,
             camera::camera_append_chunk,
+            camera::camera_permission_ready,
             camera::camera_finish_recording,
             camera::camera_mark_finishing,
             camera::camera_discard_recording,

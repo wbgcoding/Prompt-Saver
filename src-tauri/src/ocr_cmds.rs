@@ -139,7 +139,11 @@ pub(crate) struct VoiceHandle {
 }
 // Second field: claimed while a voice_start call is between its busy check and the real
 // VoiceHandle landing in the first field (see voice_start).
-pub(crate) struct VoiceState(pub(crate) Mutex<Option<VoiceHandle>>, pub(crate) std::sync::atomic::AtomicBool);
+pub(crate) struct VoiceState(
+    pub(crate) Mutex<Option<VoiceHandle>>,
+    pub(crate) std::sync::atomic::AtomicBool,
+    pub(crate) std::sync::atomic::AtomicBool,
+);
 
 pub(crate) const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 // Encoded length of a data URL handed over IPC; a 4K PNG from the screenshot editor is
@@ -421,20 +425,30 @@ pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join
             MAX_OCR_IMAGE_BYTES / (1024 * 1024)
         ));
     }
-    let bytes = data_url_bytes(&data_url);
-    let img = decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8();
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang))
-            .await
-            .map_err(|e| e.to_string())?
+        // The base64 and image decode of a large capture is CPU work: it runs on the blocking
+        // pool together with the recognition, never on the async command worker.
+        tauri::async_runtime::spawn_blocking(move || {
+            let img = decode_ocr_data_url(&data_url)?;
+            ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = (img, upscale_under_px, join_lines, lang, auto_pick_lang);
+        let _ = (data_url, upscale_under_px, join_lines, lang, auto_pick_lang);
         Err("ocr is only available on Windows".to_string())
     }
+}
+
+// Data URL to RGBA pixels, the CPU-heavy half of ocr_image_data.
+#[cfg(windows)]
+pub(crate) fn decode_ocr_data_url(data_url: &str) -> Result<image::RgbaImage, String> {
+    let bytes = data_url_bytes(data_url);
+    Ok(decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8())
 }
 
 // Long enough for a real screenshot of text, short enough that a photo of a wall of text
@@ -670,9 +684,15 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
         };
         if let Some(image) = image {
             if !image.is_empty() {
-                let (text, image) = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image))
-                    .await
-                    .map_err(|e| e.to_string())?;
+                let joined = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image)).await;
+                // A decoder that panicked ends the pass; the job row must not stay "running".
+                let (text, image) = match joined {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        push_bg_op(&app, "ocr-index", "ocr-index", "error", None, None);
+                        return Err(e.to_string());
+                    }
+                };
                 if !text.is_empty() {
                     let mut store = lock(&state);
                     if let Err(e) = apply_ocr_backfill_and_save(&mut store, &id, &image, text, started_epoch, |st| save_prompts(&app, st)) {

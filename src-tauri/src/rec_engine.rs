@@ -50,6 +50,22 @@ pub(crate) fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u
     format!("rec-{year:04}-{month:02}-{day:02}_{hour:02}{minute:02}{second:02}.mp4")
 }
 
+// The first free name for a new recording: `name` itself, else the same name with -2, -3 ...
+// before the extension. The one-second timestamp repeats when a take is stopped and the next
+// one starts within the second, or when the clock steps back; the encoder truncates its output,
+// so a taken name would silently overwrite a kept recording.
+pub(crate) fn free_rec_path(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, ext) = name.rsplit_once('.').unwrap_or((name, "mp4"));
+    (2u32..)
+        .map(|n| dir.join(format!("{stem}-{n}.{ext}")))
+        .find(|p| !p.exists())
+        .unwrap_or(first)
+}
+
 // Instant-based wrapper around rec_clock_ticks: accumulates active time across
 // pauses and converts to 100ns ticks.
 pub(crate) struct RecordClock {

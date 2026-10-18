@@ -85,7 +85,7 @@ fn open_endpoint(flow: EDataFlow, device_id: &str) -> windows::core::Result<IMMD
 // One capture thread. `loopback` selects system-audio capture on a render
 // endpoint vs. plain capture on a capture endpoint; `device_id` picks a
 // specific microphone (empty = the system default). Runs until `stop` is
-// set or the device is invalidated.
+// set or the device is invalidated. A refused thread spawn is the caller's start error, not a panic.
 pub fn spawn_capture(
     label: &'static str,
     flow: EDataFlow,
@@ -93,7 +93,7 @@ pub fn spawn_capture(
     device_id: String,
     queue: Arc<AudioQueueShared>,
     stop: Arc<AtomicBool>,
-) -> thread::JoinHandle<()> {
+) -> std::io::Result<thread::JoinHandle<()>> {
     thread::Builder::new()
         .name(format!("rec-audio-{label}"))
         .spawn(move || unsafe {
@@ -172,5 +172,4 @@ pub fn spawn_capture(
                 queue.mark_lost();
             }
         })
-        .expect("spawn rec-audio thread")
 }

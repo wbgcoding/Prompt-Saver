@@ -259,11 +259,18 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
     // TEMP_DIR subfolder, next to the versioned pdfium cache. Only ocr-* names are touched here;
     // the pdfium dlls are swept by version in sweep_stale_pdfium_dlls.
     let ocr_dir = dir.join(brand::TEMP_DIR);
+    // Voice dictation leftovers (install/listing results, scripts, DISM logs) live in the same
+    // folder.
+    let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
+    let voice_prefix = format!("{}-voice-", brand::TEMP_PREFIX);
+    // Working copies of a file opened for editing from outside the app (never the original),
+    // one directory per open. The editor never deletes them when it closes.
+    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    // Still frames cut out of a video land in the same folder; a crash or kill
+    // mid-extraction leaves the frame behind.
+    let still_prefix = format!("{}-still-", brand::TEMP_PREFIX);
+    // One pass over the folder for all four kinds; the prefixes never overlap.
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
-        // Voice dictation leftovers (install/listing results, scripts, DISM logs) live in the same
-        // folder.
-        let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
-        let voice_prefix = format!("{}-voice-", brand::TEMP_PREFIX);
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             let is_ours = name.starts_with(&ocr_prefix) || name.starts_with(&voice_prefix);
@@ -272,6 +279,10 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
             // script deletes itself, so a .ps1 here was left by a hard kill.
             let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
+                let _ = fs::remove_file(e.path());
+            } else if name.starts_with(&openedit_prefix) && is_stale(&e) {
+                let _ = fs::remove_dir_all(e.path());
+            } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
             }
         }
@@ -285,23 +296,6 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
         for e in entries.flatten() {
             if is_stale(&e) {
                 let _ = fs::remove_dir_all(e.path());
-            }
-        }
-    }
-
-    // Working copies of a file opened for editing from outside the app (never the original),
-    // one directory per open. The editor never deletes them when it closes.
-    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
-    // Still frames cut out of a video land in the same folder; a crash or kill
-    // mid-extraction leaves the frame behind.
-    let still_prefix = format!("{}-still-", brand::TEMP_PREFIX);
-    if let Ok(entries) = fs::read_dir(&ocr_dir) {
-        for e in entries.flatten() {
-            let name = e.file_name().to_string_lossy().to_string();
-            if name.starts_with(&openedit_prefix) && is_stale(&e) {
-                let _ = fs::remove_dir_all(e.path());
-            } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
-                let _ = fs::remove_file(e.path());
             }
         }
     }
@@ -916,9 +910,11 @@ pub(crate) async fn begin_capture(
     let win = match build_snip_window(&app) {
         Ok(w) => w,
         Err(e) => {
-            // Build failed: clear the session so the app's windows come back.
-            SNIP_ACTIVE.store(false, Ordering::SeqCst);
-            restore_app_windows_after_snip(&app);
+            // Build failed: end the session the way every other path does, so the preview
+            // encode, the frozen desktop, the pick flag and an armed OCR mode go with it.
+            if snip_session_current(gen) {
+                close_all_snip(&app);
+            }
             return Err(e);
         }
     };
@@ -1384,11 +1380,18 @@ pub(crate) async fn save_screenshot_as(
         Some(n) if !n.trim().is_empty() => format!("{}.{}", n.trim(), ext),
         _ => format!("Screenshot-{}.{}", local_stamp(), ext),
     };
-    let mut dlg = file_dialog_for(&app, win.label()).add_filter(ext.to_uppercase(), &[ext]).set_file_name(&name);
-    if let Some(dir) = default_dir.filter(|d| !d.trim().is_empty()) {
-        dlg = dlg.set_directory(dir);
-    }
-    let picked = dlg.save_file();
+    let dialog_label = win.label().to_string();
+    let dir = default_dir.filter(|d| !d.trim().is_empty());
+    // The dialog is modal: it waits on a blocking thread, not on an async worker.
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let mut dlg = file_dialog_for(&app, &dialog_label).add_filter(ext.to_uppercase(), &[ext]).set_file_name(&name);
+        if let Some(dir) = dir {
+            dlg = dlg.set_directory(dir);
+        }
+        dlg.save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let _ = win.set_focus();
     match picked {
         Some(p) => {
@@ -1518,19 +1521,34 @@ pub(crate) fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -
     Err("dir-not-picked".to_string())
 }
 
-// The native dialog title for each purpose pick_folder accepts, so the user sees what the
-// folder will be used for. An unknown purpose has no title on purpose: pick_folder refuses
+// The native dialog title for each purpose pick_folder accepts, in every UI language (the
+// dialog can open before any page string is loaded), so the user sees what the folder will be
+// used for. An unknown purpose has no title on purpose: pick_folder refuses
 // it before any dialog opens.
 pub(crate) fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
-    let de = lang == "de";
-    match purpose {
-        "screenshot" => Some(if de { "Screenshot-Ordner wählen" } else { "Choose the screenshot folder" }),
-        "videoExport" => Some(if de { "Exportordner für Videos wählen" } else { "Choose the video export folder" }),
-        "recording" => Some(if de { "Aufnahmeordner wählen" } else { "Choose the recording folder" }),
-        "sync" => Some(if de { "Sync-Ordner wählen" } else { "Choose the sync folder" }),
-        "data" => Some(if de { "Datenordner wählen" } else { "Choose the data folder" }),
-        _ => None,
-    }
+    // Order: screenshot, videoExport, recording, sync, data.
+    let titles: [&'static str; 5] = match lang {
+        "de" => ["Screenshot-Ordner wählen", "Exportordner für Videos wählen", "Aufnahmeordner wählen", "Sync-Ordner wählen", "Datenordner wählen"],
+        "es" => ["Elegir la carpeta de capturas de pantalla", "Elegir la carpeta de exportación de vídeo", "Elegir la carpeta de grabaciones", "Elegir la carpeta de sincronización", "Elegir la carpeta de datos"],
+        "it" => ["Scegli la cartella degli screenshot", "Scegli la cartella di esportazione dei video", "Scegli la cartella delle registrazioni", "Scegli la cartella di sincronizzazione", "Scegli la cartella dei dati"],
+        "pt" => ["Escolher a pasta das capturas de ecrã", "Escolher a pasta de exportação de vídeo", "Escolher a pasta das gravações", "Escolher a pasta de sincronização", "Escolher a pasta de dados"],
+        "pl" => ["Wybierz folder zrzutów ekranu", "Wybierz folder eksportu wideo", "Wybierz folder nagrań", "Wybierz folder synchronizacji", "Wybierz folder danych"],
+        "zh" => ["选择截图文件夹", "选择视频导出文件夹", "选择录制文件夹", "选择同步文件夹", "选择数据文件夹"],
+        "ja" => ["スクリーンショットのフォルダーを選択", "動画の書き出し先フォルダーを選択", "録画フォルダーを選択", "同期フォルダーを選択", "データフォルダーを選択"],
+        "nl" => ["Kies de map voor screenshots", "Kies de exportmap voor video's", "Kies de opnamemap", "Kies de synchronisatiemap", "Kies de gegevensmap"],
+        "tr" => ["Ekran görüntüsü klasörünü seçin", "Video dışa aktarma klasörünü seçin", "Kayıt klasörünü seçin", "Eşitleme klasörünü seçin", "Veri klasörünü seçin"],
+        "ro" => ["Alegeți folderul pentru capturi de ecran", "Alegeți folderul de export video", "Alegeți folderul pentru înregistrări", "Alegeți folderul de sincronizare", "Alegeți folderul de date"],
+        _ => ["Choose the screenshot folder", "Choose the video export folder", "Choose the recording folder", "Choose the sync folder", "Choose the data folder"],
+    };
+    let idx = match purpose {
+        "screenshot" => 0,
+        "videoExport" => 1,
+        "recording" => 2,
+        "sync" => 3,
+        "data" => 4,
+        _ => return None,
+    };
+    Some(titles[idx])
 }
 
 // Native folder picker (expert screenshot-dir and data-dir options). purpose names the
@@ -1543,10 +1561,12 @@ pub(crate) async fn pick_folder(app: AppHandle, win: tauri::Window, state: State
     let Some(title) = folder_picker_title(&purpose, lang) else {
         return Ok(None);
     };
-    let result = file_dialog_for(&app, win.label())
-        .set_title(title)
-        .pick_folder()
-        .map(|p| p.to_string_lossy().to_string());
+    let label = win.label().to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&app, &label).set_title(title).pick_folder().map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let _ = win.set_focus();
     if let Some(dir) = &result {
         grant_picked_dir(Path::new(dir), &purpose);

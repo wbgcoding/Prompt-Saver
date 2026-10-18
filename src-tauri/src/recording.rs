@@ -1,6 +1,6 @@
 use super::{
     append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, free_space_bytes, letterbox_frame_top_down,
-    scale_to_fit_frame_top_down, rec_filename, now_ms,
+    scale_to_fit_frame_top_down, rec_filename, free_rec_path, now_ms,
     AudioQueueShared, RecWavWriter,
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
@@ -345,6 +345,7 @@ fn drain_pending_frames(
             append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
             shared.set_encode_error(e.to_string());
             shared.request_stop(); // further frames would just fail the same way
+            return;
         }
         *last_frame = Some(item.bytes);
         *last_frame_at = Some(Instant::now());
@@ -395,7 +396,8 @@ fn feeder_loop_with_audio(
         // A frame that arrived during the sleep carries an older timestamp than the hold resend
         // below would get, so it goes out first.
         drain_pending_frames(&shared, &mut encoder, &queues, &mut video_started, &mut last_frame, &mut last_frame_at, &mut last_sent);
-        if video_started && !clock.is_paused() {
+        // After the first encoder error nothing more is fed: every further send would fail the same way.
+        if video_started && !clock.is_paused() && shared.peek_encode_error().is_none() {
             if let (Some(bytes), Some(at)) = (&last_frame, last_frame_at) {
                 if at.elapsed() >= TICK {
                     let ts = strictly_increasing_ts(&mut last_sent, clock.now_ticks());
@@ -449,7 +451,7 @@ fn feeder_loop_with_audio(
 // track. Same tick cadence and pause/first-frame gating as the main feeder, so the sidecar
 // lines up with the mp4 when the editor muxes them (a few ms of slack around the first
 // frame is possible, as in the main feeder).
-fn mic_wav_writer_loop(
+pub(crate) fn mic_wav_writer_loop(
     queue: Arc<AudioQueueShared>,
     clock: Arc<RecordClock>,
     shared: Arc<RecFeederShared>,
@@ -462,6 +464,8 @@ fn mic_wav_writer_loop(
         Ok(w) => w,
         Err(e) => {
             append_crash_log(&format!("recording: mic sidecar create failed: {e}"));
+            // The bar's mic-lost notice reads this flag; the recording itself carries on.
+            queue.mark_lost();
             return;
         }
     };
@@ -490,6 +494,7 @@ fn mic_wav_writer_loop(
         let chunk = queue.drain(samples_per_tick);
         if let Err(e) = writer.write_samples(&chunk) {
             append_crash_log(&format!("recording: mic sidecar write failed: {e}"));
+            queue.mark_lost();
             break;
         }
     }
@@ -829,7 +834,7 @@ fn start_inner(
         let q = Arc::new(AudioQueueShared::new());
         guard.audio_threads.push(super::audio::spawn_capture(
             "system", eRender, true, String::new(), q.clone(), audio_stop.clone().unwrap(),
-        ));
+        ).map_err(|e| e.to_string())?);
         audio_queues.push(q.clone());
         system_queue = Some(q);
     }
@@ -837,7 +842,7 @@ fn start_inner(
         let q = Arc::new(AudioQueueShared::new());
         guard.audio_threads.push(super::audio::spawn_capture(
             "mic", eCapture, false, audio.mic_device_id.clone(), q.clone(), audio_stop.clone().unwrap(),
-        ));
+        ).map_err(|e| e.to_string())?);
         audio_queues.push(q.clone());
         mic_queue = Some(q);
     }
@@ -1057,7 +1062,8 @@ pub fn commit_switch_target(session: Option<&mut RecSession>, pending: PendingSw
 // Shared tail of stop/cancel: drain the queue and finalise the encoder, then tear down the
 // capture thread. Finalising after stop() runs against a WM_QUIT'd capture pipeline and
 // yields an MP4 with no closed moov atom (unplayable).
-fn finish_and_stop(mut session: RecSession) -> Result<(u64, Option<String>), String> {
+// Cannot fail: every failure inside is folded into the returned encode error.
+fn finish_and_stop(mut session: RecSession) -> (u64, Option<String>) {
     // Both sides stop producing at about the same instant (audio_stop cuts the WASAPI threads,
     // is_stopping cuts new video frames) before either is joined or drained, so neither track
     // keeps growing while the other has gone silent.
@@ -1085,7 +1091,7 @@ fn finish_and_stop(mut session: RecSession) -> Result<(u64, Option<String>), Str
         append_crash_log(&format!("recording: capture control stop failed: {e}"));
         encode_error = encode_error.or_else(|| Some(e.to_string()));
     }
-    Ok((dropped, encode_error))
+    (dropped, encode_error)
 }
 
 // path, dropped-frame count, encode error, mic sidecar path (only when both system and mic
@@ -1094,19 +1100,22 @@ fn finish_and_stop(mut session: RecSession) -> Result<(u64, Option<String>), Str
 // the timestamp of the first frame the resize safety net had to shrink (None if never).
 pub type StopResult = (PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32), Option<u64>);
 
-pub fn stop(session: RecSession) -> Result<StopResult, String> {
+pub fn stop(session: RecSession) -> StopResult {
     let path = session.output_path.clone();
     let mic_wav_path = session.mic_wav_path.clone();
     let canvas_note = session.canvas_note;
     let used_area = session.used_area.clone();
     let canvas_size = session.canvas_size;
     let shared = session.shared.clone();
-    let (dropped, encode_error) = finish_and_stop(session)?;
+    let (dropped, encode_error) = finish_and_stop(session);
     // Safe to read now: the capture thread (sole writer of used_area and the resize-crop
     // tracker) is joined once finish_and_stop returns.
     let crop_rect = used_area.and_then(|u| u.get());
     let resize_crop_at_ms = shared.resize_crop_at_ms();
-    Ok((path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms))
+    // A sidecar that was never created (its writer failed at start) is not handed on: the
+    // editor would try to mux a file that is not there.
+    let mic_wav_path = mic_wav_path.filter(|p| p.is_file());
+    (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms)
 }
 
 // Live-poll accessor for the control bar, so it notices an unrecoverable encoder failure
@@ -1125,15 +1134,14 @@ pub fn take_disk_low(session: &RecSession) -> Option<(u64, u64)> {
 // VideoEncoder::new() opens the output file eagerly, so a clean cancel still finalises it
 // through finish_and_stop (one shutdown sequence) and then moves it to the holding area for
 // discarded recordings.
-pub fn cancel(session: RecSession) -> Result<(), String> {
+pub fn cancel(session: RecSession) {
     let path = session.output_path.clone();
     let mic_wav_path = session.mic_wav_path.clone();
-    finish_and_stop(session)?;
+    finish_and_stop(session);
     crate::media_files::discard_or_remove_take(&path);
     if let Some(w) = mic_wav_path {
         let _ = std::fs::remove_file(&w);
     }
-    Ok(())
 }
 
 pub fn list_mic_devices() -> Vec<super::audio::MicDevice> {
@@ -1146,7 +1154,7 @@ pub fn new_output_path(recordings_dir: &Path) -> Result<PathBuf, String> {
     let name = rec_filename(
         st.wYear as i32, st.wMonth as u32, st.wDay as u32, st.wHour as u32, st.wMinute as u32, st.wSecond as u32,
     );
-    Ok(recordings_dir.join(name))
+    Ok(free_rec_path(recordings_dir, &name))
 }
 
 // Every continuation part keeps the first file's name stem and timestamp with a numbered

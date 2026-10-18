@@ -191,6 +191,22 @@ pub(crate) struct MediaMeta {
     media_size_bytes: u64,
 }
 
+// The attachment a backfill would measure: only an entry whose media meta is still all zero,
+// and its file before its icon. Asked twice (before and after the slow probe), so a result is
+// written only to the entry state it was measured for.
+pub(crate) fn media_backfill_target(p: &Prompt) -> Option<String> {
+    if p.media_duration_ms != 0 || p.media_width != 0 || p.media_size_bytes != 0 {
+        return None;
+    }
+    if !p.file_path.is_empty() {
+        Some(p.file_path.clone())
+    } else if !p.icon_path.is_empty() {
+        Some(p.icon_path.clone())
+    } else {
+        None
+    }
+}
+
 // One-time catch-up for an entry never measured or whose first measurement failed (source
 // briefly locked, network drive asleep): called the first time such a row is shown, never
 // during render. A no-op (Ok(None), nothing saved) when the entry already has a
@@ -202,18 +218,7 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
         if !store.settings.ui_flags.get("mediaMetaBackfill").copied().unwrap_or(true) {
             return Ok(None);
         }
-        match store.prompts.iter().find(|p| p.id == id) {
-            Some(p) if p.media_duration_ms == 0 && p.media_width == 0 && p.media_size_bytes == 0 => {
-                if !p.file_path.is_empty() {
-                    Some(p.file_path.clone())
-                } else if !p.icon_path.is_empty() {
-                    Some(p.icon_path.clone())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+        store.prompts.iter().find(|p| p.id == id).and_then(media_backfill_target)
     };
     let Some(media_path) = media_path else { return Ok(None) };
     // Never opens a network path on its own: that would send credentials to the host it names.
@@ -221,15 +226,18 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
         return Ok(None);
     }
     let ffprobe = ffprobe_search_path(&app);
+    let probed_path = media_path.clone();
     let (duration_ms, width, height, size) =
-        tauri::async_runtime::spawn_blocking(move || probe_media_meta(ffprobe.as_deref(), Path::new(&media_path)))
+        tauri::async_runtime::spawn_blocking(move || probe_media_meta(ffprobe.as_deref(), Path::new(&probed_path)))
             .await
             .map_err(|e| e.to_string())?;
     if duration_ms == 0 && width == 0 && size == 0 {
         return Ok(None); // still unreadable: nothing changed, nothing to save
     }
     let mut store = lock(&state);
-    let updated = match store.prompts.iter_mut().find(|p| p.id == id) {
+    // The probe ran without the lock: the attachment may have been replaced (and measured anew)
+    // meanwhile, and then this result belongs to a file that is no longer the entry's.
+    let updated = match store.prompts.iter_mut().find(|p| p.id == id && media_backfill_target(p).as_deref() == Some(media_path.as_str())) {
         Some(p) => {
             p.media_duration_ms = duration_ms;
             p.media_width = width;
@@ -326,6 +334,10 @@ pub(crate) fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
     Some(std::env::temp_dir().join(brand::TEMP_DIR).join("video-thumbs").join(format!("{key:x}")))
 }
 
+// Counts filmstrip requests and editor closings: a running thumbnail loop that sees a newer value
+// has been superseded (another source was loaded, or the editor closed) and stops decoding.
+pub(crate) static FILMSTRIP_GEN: AtomicU64 = AtomicU64::new(0);
+
 // No duration parameter: the editor already ran probe_recording before reaching the
 // timeline, so ffprobe is known to be present.
 #[tauri::command]
@@ -337,7 +349,10 @@ pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32)
     let count = count.clamp(1, 300);
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count))
+    let my_gen = FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn_blocking(move || {
+        generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count, || FILMSTRIP_GEN.load(Ordering::SeqCst) != my_gen)
+    })
         .await
         .map_err(|e| e.to_string())?
 }
@@ -346,7 +361,11 @@ pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32)
 // `-vf select` pass: a recording's variable frame rate (WGC capture never
 // guarantees CFR) makes frame-index-based selection unreliable, while a
 // wall-clock `-ss` seek before `-i` is exact regardless of frame timing.
-pub(crate) fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32) -> Result<Vec<String>, String> {
+// `is_stale` is polled before every thumbnail; once it answers true the loop returns an empty
+// list (the page ignores a result for a source it no longer shows).
+pub(crate) fn generate_filmstrip_blocking(
+    ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32, is_stale: impl Fn() -> bool,
+) -> Result<Vec<String>, String> {
     use std::os::windows::process::CommandExt;
     let duration_ms = probe_recording_blocking(ffprobe, src)?.duration_ms;
     let Some(cache_dir) = filmstrip_cache_dir(src, count) else {
@@ -365,6 +384,9 @@ pub(crate) fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &P
         fs::create_dir_all(&cache_dir).map_err(|e| format!("thumbnail cache: {e}"))?;
         let dur_s = (duration_ms as f64 / 1000.0).max(0.1);
         for (i, p) in out.iter().enumerate() {
+            if is_stale() {
+                return Ok(Vec::new());
+            }
             let t = dur_s * (i as f64 + 0.5) / count as f64;
             let mut cmd = std::process::Command::new(ffmpeg);
             cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
@@ -735,7 +757,7 @@ pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
     if trimmed.ends_with('.') {
         return false;
     }
-    let first_segment = trimmed.split('.').next().unwrap_or("").to_ascii_uppercase();
+    let first_segment = trimmed.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
     !EXPORT_RESERVED_STEMS.contains(&first_segment.as_str())
 }
 
@@ -873,6 +895,16 @@ pub(crate) fn cancel_all_exports() {
     }
 }
 
+// The files stored as some prompt's attachment or icon: the user's own picks, which the
+// editor may open from anywhere.
+pub(crate) fn attached_media_paths(prompts: &[Prompt]) -> Vec<String> {
+    prompts
+        .iter()
+        .flat_map(|p| [p.file_path.clone(), p.icon_path.clone()])
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 // The sources the video editor currently has open or was just offered: only
 // these (besides the app's own recordings and work copies) may be exported.
 fn open_editor_source_paths(app: &AppHandle) -> Vec<String> {
@@ -953,7 +985,9 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     })
     .await;
     let _ = EDITOR_EXPORT_GEN.compare_exchange(my_gen, 0, Ordering::SeqCst, Ordering::SeqCst);
-    let result = result.map_err(|e| e.to_string())?;
+    // A panicked export task is an error result like any other, so the row below still leaves
+    // "running" and the generation still leaves the cancel set.
+    let result = result.unwrap_or_else(|e| Err(e.to_string()));
     match &result {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);
@@ -1186,6 +1220,7 @@ pub(crate) fn export_video_blocking(
         output_args.push(format!("{dur:.3}"));
     }
     let plain_copy = req.lossless_copy && req.filter_chain.is_none() && req.audio_map.is_none();
+    let mut filter_script: Option<PathBuf> = None;
     if plain_copy {
         // Without an explicit -map, ffmpeg keeps only its single "best" audio stream, and a muxed-in
         // mic track (the second audio stream) would vanish on a lossless trim-only export.
@@ -1204,8 +1239,11 @@ pub(crate) fn export_video_blocking(
             }
         }
         if !graphs.is_empty() {
-            output_args.push("-filter_complex".to_string());
-            output_args.push(graphs.join(";"));
+            let script = write_filter_script(dst, &graphs.join(";"))?;
+            // "-/filter_complex <file>" reads the graph from the file; the older -filter_complex_script is gone from the pinned ffmpeg.
+            output_args.push("-/filter_complex".to_string());
+            output_args.push(script.to_string_lossy().to_string());
+            filter_script = Some(script);
         }
         output_args.push("-map".to_string());
         output_args.push(if req.filter_chain.is_some() { "[vout]".to_string() } else { "0:v".to_string() });
@@ -1253,24 +1291,34 @@ pub(crate) fn export_video_blocking(
         }
     }
     let is_cancelled = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen);
-    let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress)?;
-    // dest_path is the frontend's "<stem>-edit.<ext>" guess, and exporting the same source twice
-    // must not replace the first result. reserve_unique_dest_path claims the final name
-    // atomically, unlike unique_dest_path, so a file appearing at the winning name before the
-    // rename below cannot be overwritten.
+    let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress);
+    if let Some(script) = &filter_script {
+        remove_filter_script(script);
+    }
+    let staged = staged?;
+    place_staged_export(&staged, dst)
+}
+
+// Moves a finished staged export to its final name. dest_path is the frontend's "<stem>.<ext>"
+// guess: two batch items with the same stem (rec.mp4 and rec.mkv both to mp4), a file already in
+// the folder, or the same source exported twice must never replace an earlier result.
+// reserve_unique_dest_path claims the final name atomically ("<stem>", then "<stem> (2)", ...),
+// unlike unique_dest_path, so a file appearing at the winning name before the rename below
+// cannot be overwritten.
+pub(crate) fn place_staged_export(staged: &Path, dst: &Path) -> Result<String, String> {
     let dir = dst.parent().unwrap_or_else(|| Path::new("."));
     let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stem = dst.file_stem().and_then(|e| e.to_str()).unwrap_or("export");
     let final_dst = reserve_unique_dest_path(dir, stem, ext).map_err(|e| {
-        let _ = fs::remove_file(&staged);
+        let _ = fs::remove_file(staged);
         let text = e.to_string();
         ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
-    if let Err(e) = fs::rename(&staged, &final_dst) {
+    if let Err(e) = fs::rename(staged, &final_dst) {
         // Remove our own empty placeholder; reserve_unique_dest_path guarantees final_dst is still
         // ours, never a file another writer claimed.
         let _ = fs::remove_file(&final_dst);
-        let _ = fs::remove_file(&staged);
+        let _ = fs::remove_file(staged);
         let text = e.to_string();
         return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
     }
@@ -1323,7 +1371,7 @@ pub(crate) struct VideoEditorSource {
 // this one.
 pub(crate) static VE_PENDING_REQUEST: Mutex<Option<(String, String, String)>> = Mutex::new(None);
 static VE_LOAD_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
-static VE_LOAD_ACKS: Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<String>>>> = Mutex::new(None);
+pub(crate) static VE_LOAD_ACKS: Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<String>>>> = Mutex::new(None);
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum EditorLoadDecision {
@@ -1362,12 +1410,25 @@ pub(crate) fn video_editor_load_ack(request_id: u64, state: String) {
     }
 }
 
+// The editor window is gone (closed while an unsaved-edits question was open, or crashed):
+// every caller still waiting for its answer gets "refused" at once instead of hanging for the
+// long window, and the offered-but-never-taken source is dropped so a freshly opened editor
+// boots on the newly requested file, not the stale offer.
+pub(crate) fn refuse_pending_editor_requests() {
+    let waiting = VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).take();
+    for tx in waiting.into_iter().flat_map(|m| m.into_values()) {
+        let _ = tx.send("refused".to_string());
+    }
+    *VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
 // Opens the editor for one recording; a second call re-targets the open window instead of
 // stacking another. origin_dir is Some only for a copy of an externally opened file (see
 // open_file_in_editor).
 #[tauri::command]
 pub(crate) async fn open_video_editor(
     app: AppHandle,
+    state: State<'_, Db>,
     pending: State<'_, VideoEditorPending>,
     src_path: String,
     origin_dir: Option<String>,
@@ -1375,6 +1436,13 @@ pub(crate) async fn open_video_editor(
 ) -> Result<bool, String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
+    }
+    // Opening makes the path an allowed export source, so only files the app knows may be
+    // opened: its own recordings, an editor work copy, or a prompt's attached file.
+    let attached = attached_media_paths(&lock(&state).prompts);
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    if !export_source_is_allowed(&recording_source_dirs(&app, &state), &own_temp_dir, &attached, Path::new(&src_path)) {
+        return Err("source-not-allowed".to_string());
     }
     let origin_dir = origin_dir.unwrap_or_default();
     // An overlay path that no longer exists is dropped rather than shown as a broken overlay op.
@@ -1439,6 +1507,12 @@ pub(crate) async fn open_video_editor(
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    win.on_window_event(|event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            refuse_pending_editor_requests();
+            FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
+        }
+    });
     set_capture_exclusion(&win, excluded);
     let geom = centered_on_primary(&win, VIDEO_WIN_W, VIDEO_WIN_H);
     let _ = win.set_position(PhysicalPosition::new(geom.x, geom.y));

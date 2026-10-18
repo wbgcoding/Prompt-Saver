@@ -504,7 +504,7 @@ pub(crate) async fn finish_and_continue_recording(
         session.canvas_mode.clone(), session.canvas_ceiling, session.disk_warn_mb, session.max_min, session.max_mb,
     );
     let app2 = app.clone();
-    let closure_result: Result<ContinueOutcome, String> = tauri::async_runtime::spawn_blocking(move || {
+    let closure_result: ContinueOutcome = tauri::async_runtime::spawn_blocking(move || {
         let switch_start = std::time::Instant::now();
         // Mark the switch instant before touching the old capture: keys from here on belong to the
         // switch or the new part. Taken before recording::stop returns (the encoder flush can take a
@@ -518,7 +518,7 @@ pub(crate) async fn finish_and_continue_recording(
         let carry_mic_muted = session.mic_queue.as_ref().is_some_and(|q| q.is_muted());
         let carry_paused = session.phase == RecPhase::Paused;
         let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) =
-            recording::stop(session)?;
+            recording::stop(session);
         let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
         let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
         let out_path = recording::continuation_output_path(&base_path, part_number);
@@ -583,14 +583,14 @@ pub(crate) async fn finish_and_continue_recording(
                     path: path.to_string_lossy().to_string(),
                     mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
                 });
-                Ok(ContinueOutcome::Continued(Box::new(new_session), RecordingContinuedPayload {
+                ContinueOutcome::Continued(Box::new(new_session), RecordingContinuedPayload {
                     finished_part_path: path.to_string_lossy().to_string(),
                     finished_part_dropped_frames: dropped,
                     finished_part_encode_error: encode_error,
                     new_path: out_path.to_string_lossy().to_string(),
                     part_number,
                     gap_ms: switch_start.elapsed().as_millis() as u64,
-                }))
+                })
             }
             Err(start_err) => {
                 // This file becomes the final one after all: same crop/result path as a real stop, with
@@ -613,22 +613,14 @@ pub(crate) async fn finish_and_continue_recording(
                 };
                 *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
                 let _ = app2.emit("recording-captured", payload);
-                Ok(ContinueOutcome::StoppedInstead(format!("recording-continue-failed-stopped:{start_err}")))
+                ContinueOutcome::StoppedInstead(format!("recording-continue-failed-stopped:{start_err}"))
             }
         }
     })
     .await
     .map_err(|e| e.to_string())?;
     match closure_result {
-        Err(e) => {
-            // recording::stop failed, which is practically unreachable (it folds failures into
-            // encode_error); the old session is gone either way.
-            hide_rec_outline(&app);
-            rearm_hotkeys(&app);
-            apply_tray_menu(&app);
-            Err(e)
-        }
-        Ok(ContinueOutcome::Continued(new_session, payload)) => {
+        ContinueOutcome::Continued(new_session, payload) => {
             let paused = new_session.phase == RecPhase::Paused;
             *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(*new_session);
             if paused {
@@ -636,7 +628,7 @@ pub(crate) async fn finish_and_continue_recording(
             }
             Ok(payload)
         }
-        Ok(ContinueOutcome::StoppedInstead(err)) => {
+        ContinueOutcome::StoppedInstead(err) => {
             // Nothing is recording any more, so the region outline goes too.
             hide_rec_outline(&app);
             rearm_hotkeys(&app);
@@ -753,7 +745,7 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     // The outline window (region recordings only) goes on every end path,
     // also when the stop failed.
     hide_rec_outline(app);
-    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = stopped?;
+    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = stopped;
     // Stops the key-overlay hook, if running, and writes its sidecar.
     keylog::maybe_stop_and_write(&path);
     // Crop only when the union of every placed frame is smaller than the canvas; a window that
@@ -842,7 +834,7 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
     // recording) never survives a cancel, even one whose cleanup fails below.
     hide_rec_outline(&app);
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        recording::cancel(session)?;
+        recording::cancel(session);
         // A cancelled take never gets a key-overlay sidecar either.
         keylog::discard();
         // A cancel discards the whole take: every part a "finish and continue" chain closed goes

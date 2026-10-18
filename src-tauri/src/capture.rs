@@ -368,11 +368,6 @@ pub(crate) async fn capture_window(
     // screenshot instead of running OCR.
     let gen = SNIP_GEN.load(Ordering::SeqCst);
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
-    // Source app name for the button label (best-effort; empty for unknown windows).
-    let app_name = xcap::Window::all()
-        .ok()
-        .and_then(|ws| ws.into_iter().find(|w| w.id() == id))
-        .map(|w| w.app_name().to_string());
     let protected = {
         #[cfg(windows)]
         {
@@ -386,25 +381,21 @@ pub(crate) async fn capture_window(
     // 1. Direct PrintWindow: best for normal windows (own content, no overlays).
     // Skipped for elevated windows: PrintWindow is unreliable there and can pass
     // the quality check with a wrong image, so route them to the robust paths.
-    let direct = if protected {
-        None
-    } else {
-        xcap::Window::all()
-            .ok()
-            .and_then(|ws| ws.into_iter().find(|w| w.id() == id))
-            .and_then(|w| w.capture_image().ok())
-            .filter(|im| !capture_looks_bad(im))
-    };
+    // One enumeration serves the app name, the direct grab and the rect (each xcap listing opens
+    // every top-level window's process), off the async worker.
+    let probe = tauri::async_runtime::spawn_blocking(move || probe_window(id, !protected))
+        .await
+        .map_err(|e| e.to_string())?;
+    // Source app name for the button label (best-effort; empty for unknown windows).
+    let app_name = probe.app_name;
+    let direct = probe.direct;
     if let Some(im) = direct {
         return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
     }
 
-    // Target's global physical rect + frozen-image origin.
-    let rect = xcap::Window::all()
-        .ok()
-        .and_then(|ws| ws.into_iter().find(|w| w.id() == id))
-        .map(|w| (w.x(), w.y(), w.width() as i32, w.height() as i32));
-    let (wx, wy, ww, wh) = match rect {
+    // Target's global physical rect + frozen-image origin. The visible frame, the same rect the
+    // overlay highlighted, so a window that falls back to a crop comes out with its title bar.
+    let (wx, wy, ww, wh) = match probe.rect {
         Some(r) => r,
         None => return Err("blocked".to_string()),
     };
@@ -480,6 +471,25 @@ pub(crate) async fn capture_window(
             None => Err("blocked".to_string()),
         }
     }
+}
+
+// What capture_window needs to know about the clicked window, read from a single listing.
+pub(crate) struct WindowProbe {
+    pub(crate) app_name: Option<String>,
+    pub(crate) direct: Option<image::RgbaImage>,
+    pub(crate) rect: Option<(i32, i32, i32, i32)>,
+}
+
+// Finds the window once and takes the app name, the visible-frame rect and (when `try_direct`)
+// its own PrintWindow image from that one match. A window that closed in between is simply
+// absent from all three, never half-present.
+pub(crate) fn probe_window(id: u32, try_direct: bool) -> WindowProbe {
+    let Some(w) = xcap::Window::all().ok().and_then(|ws| ws.into_iter().find(|w| w.id() == id)) else {
+        return WindowProbe { app_name: None, direct: None, rect: None };
+    };
+    let direct = if try_direct { w.capture_image().ok().filter(|im| !capture_looks_bad(im)) } else { None };
+    let rect = snip_window_rect(window_frame_rect(id), (w.x(), w.y(), w.width() as i32, w.height() as i32));
+    WindowProbe { app_name: Some(w.app_name().to_string()), direct, rect: Some(rect) }
 }
 
 // Passes `res` through, calling `show` first when it is an error.

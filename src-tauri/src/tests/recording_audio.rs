@@ -279,7 +279,7 @@ fn rec_audio_real_recording_produces_a_video_and_an_audio_track() {
     )
     .expect("start");
     std::thread::sleep(std::time::Duration::from_secs(4));
-    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
+    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session);
     let bytes = std::fs::read(&path).expect("read output file");
     assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
     let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -310,7 +310,7 @@ fn rec_audio_real_recording_mic_only() {
     )
     .expect("start");
     std::thread::sleep(std::time::Duration::from_secs(4));
-    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
+    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session);
     let bytes = std::fs::read(&path).expect("read output file");
     assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
     let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -338,7 +338,7 @@ fn rec_audio_real_recording_both_sources() {
     )
     .expect("start");
     std::thread::sleep(std::time::Duration::from_secs(4));
-    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
+    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session);
     let bytes = std::fs::read(&path).expect("read output file");
     assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
     let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -370,7 +370,7 @@ fn rec_audio_real_10min_drift() {
     )
     .expect("start");
     std::thread::sleep(std::time::Duration::from_secs(600));
-    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
+    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session);
     let wall_elapsed = wall_start.elapsed().as_secs_f64();
     let bytes = std::fs::read(&path).expect("read output file");
     let durations = mp4_track_durations_secs(&bytes);
@@ -417,7 +417,7 @@ fn rec_audio_real_recording_no_audio() {
     )
     .expect("start");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
+    let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session);
     let bytes = std::fs::read(&path).expect("read output file");
     let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
     let _ = std::fs::remove_file(&path);
@@ -483,7 +483,7 @@ fn rec_continue_two_parts_are_both_playable_with_matching_settings() {
     assert_eq!(session1.audio_config.mic, audio.mic);
     assert_eq!(session1.show_cursor, show_cursor);
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let (stopped1_path, _d1, _e1, _m1, _c1, _r1, _s1, _rc1) = recording::stop(session1).expect("stop part 1");
+    let (stopped1_path, _d1, _e1, _m1, _c1, _r1, _s1, _rc1) = recording::stop(session1);
     assert_eq!(stopped1_path, part1_path);
 
     let part2_path = recording::continuation_output_path(&part1_path, 2);
@@ -493,7 +493,7 @@ fn rec_continue_two_parts_are_both_playable_with_matching_settings() {
     )
     .expect("start part 2 with the SAME settings as part 1");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let (stopped2_path, _d2, _e2, _m2, _c2, _r2, _s2, _rc2) = recording::stop(session2).expect("stop part 2");
+    let (stopped2_path, _d2, _e2, _m2, _c2, _r2, _s2, _rc2) = recording::stop(session2);
     assert_eq!(stopped2_path, part2_path);
 
     assert_ne!(part1_path, part2_path, "the two parts must not collide on the same file");

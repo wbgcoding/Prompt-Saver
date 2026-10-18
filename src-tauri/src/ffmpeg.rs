@@ -60,35 +60,35 @@ pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-// Discovery order: next to the exe, then the app's data folder, then PATH; first hit wins.
+// The app-owned folders a media tool may live in, in search order: next to the exe, then the
+// per-user app folder. Never the data folder: that one can be a shared or network folder, so
+// anyone able to write there could plant an executable that runs as the local user.
+pub(crate) fn media_tool_dirs(exe_dir: Option<PathBuf>, local_dir: Option<PathBuf>) -> Vec<PathBuf> {
+    exe_dir.into_iter().chain(local_dir).collect()
+}
+
+// Discovery order: next to the exe, then the per-user app folder, then PATH; first hit wins.
 // Never touches the network (only `download_ffmpeg` does, after explicit user consent). The
 // installer's bundled copy lands next to the exe, so an installed build never reaches the
 // "not found" case.
-pub(crate) fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join(name);
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-    }
-    let p = data_dir(app).join(name);
-    if p.is_file() {
+pub(crate) fn find_media_tool(name: &str) -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
+    let dirs = media_tool_dirs(exe_dir, local_app_dir());
+    if let Some(p) = dirs.iter().map(|d| d.join(name)).find(|p| p.is_file()) {
         return Some(p);
     }
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths).map(|dir| dir.join(name)).find(|p| p.is_file())
     })
 }
-pub(crate) fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
-    find_media_tool(app, "ffmpeg.exe")
+pub(crate) fn ffmpeg_search_path(_app: &AppHandle) -> Option<PathBuf> {
+    find_media_tool("ffmpeg.exe")
 }
 // Alongside ffmpeg.exe once download_ffmpeg_blocking has run, with the same discovery order.
 // An install from before ffprobe support has only ffmpeg.exe; probing and editor features
 // degrade to "ffmpeg-missing" until the user re-runs the idempotent download.
-pub(crate) fn ffprobe_search_path(app: &AppHandle) -> Option<PathBuf> {
-    find_media_tool(app, "ffprobe.exe")
+pub(crate) fn ffprobe_search_path(_app: &AppHandle) -> Option<PathBuf> {
+    find_media_tool("ffprobe.exe")
 }
 
 // Reports where ffmpeg was found (if anywhere) so the frontend knows whether to offer the
@@ -104,18 +104,19 @@ pub(crate) fn cancel_ffmpeg_download() {
 }
 
 // Where a downloaded ffmpeg.exe is written: beside the exe when that folder is writable (the
-// portable case), otherwise the app's data folder. Never PATH, a system directory or elevated.
-pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
+// portable case), otherwise the per-user app folder. Never the data folder, PATH, a system
+// directory or elevated.
+pub(crate) fn ffmpeg_install_dir() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let probe = dir.join(format!(".wtest-{}", std::process::id()));
             if fs::write(&probe, b"").is_ok() {
                 let _ = fs::remove_file(&probe);
-                return dir.to_path_buf();
+                return Some(dir.to_path_buf());
             }
         }
     }
-    data_dir(app)
+    local_app_dir()
 }
 
 // Download, verify, extract and stage ffmpeg.exe. The frontend must already have obtained
@@ -217,7 +218,7 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
     );
     push_bg_op(app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);
     verify_ffmpeg_zip(&bytes)?;
-    let dir = ffmpeg_install_dir(app);
+    let dir = ffmpeg_install_dir().ok_or_else(|| format!("target dir: {}", "no per-user folder"))?;
     fs::create_dir_all(&dir).map_err(|e| format!("target dir: {}", e))?;
     install_ffmpeg_from_zip(&bytes, &dir)
 }
@@ -406,13 +407,14 @@ pub(crate) async fn convert_recording(
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&src_path);
-    if !src.is_file() {
-        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
-    }
     // ffmpeg re-encodes this file in place of the source, so an IPC caller that is not the
     // recording UI must not be able to point that at an arbitrary file by naming it in src_path.
-    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+    // Confined first: asking whether a UNC path exists would already reach out to that host.
+    if !is_recording_source_location(&recording_source_dirs(&app, &state), &src) {
         return Err("source-not-allowed".to_string());
+    }
+    if !src.is_file() {
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
@@ -516,6 +518,18 @@ pub(crate) fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
 // cut off mid-sentence; a sane bound on the collapsible "technical details" text, not a
 // user-facing setting.
 pub(crate) const FFMPEG_ERROR_TAIL_LINES: usize = 20;
+
+// How much of ffmpeg's stderr a run keeps: far more than the error tail needs, far less than a
+// noisy export can print.
+pub(crate) const FFMPEG_STDERR_KEEP_BYTES: usize = 64 * 1024;
+
+// Appends `chunk` and drops the oldest bytes beyond `cap`, so `buf` always holds the newest ones.
+pub(crate) fn push_bounded_tail(buf: &mut Vec<u8>, chunk: &[u8], cap: usize) {
+    buf.extend_from_slice(chunk);
+    if buf.len() > cap {
+        buf.drain(..buf.len() - cap);
+    }
+}
 
 pub(crate) fn tail_lines(text: &str, n: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
@@ -811,9 +825,43 @@ pub(crate) fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(
     });
 }
 
-// Generous on purpose: a last-resort net against a hung ffmpeg process, not a
-// quality-of-service limit, so it must never fire on a large export that is just slow.
-pub(crate) const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
+// A last-resort net against a hung ffmpeg process. It measures silence, not total run time: a
+// long recording legitimately encodes for hours, and every progress tick restarts the clock,
+// so only a process that has stopped reporting progress for this long is killed.
+pub(crate) const FFMPEG_STALL_SECS: u64 = 5 * 60;
+
+pub(crate) fn ffmpeg_stalled(secs_since_progress: u64) -> bool {
+    secs_since_progress > FFMPEG_STALL_SECS
+}
+
+// A long filter graph (one overlay term per key press, say) can pass the 32767-character
+// command-line limit, so the editor hands it to ffmpeg as a file. The file sits beside the
+// output under a `.export-<pid>-<stamp>` name and in the same journal as the staged output, so
+// a killed run's leftover is swept on the next start like any other export temp.
+pub(crate) fn filter_script_path(dst: &Path) -> PathBuf {
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    dst.with_file_name(format!(".export-{}-{}.ffgraph", std::process::id(), stamp))
+}
+
+pub(crate) fn write_filter_script(dst: &Path, graph: &str) -> Result<PathBuf, String> {
+    let path = filter_script_path(dst);
+    if let Some(journal) = EXPORT_JOURNAL.get() {
+        export_journal_add(journal, &path);
+    }
+    if let Err(e) = fs::write(&path, graph) {
+        remove_filter_script(&path);
+        let text = e.to_string();
+        return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
+    }
+    Ok(path)
+}
+
+pub(crate) fn remove_filter_script(path: &Path) {
+    let _ = fs::remove_file(path);
+    if let Some(journal) = EXPORT_JOURNAL.get() {
+        export_journal_remove(journal, path);
+    }
+}
 
 // Shared by convert_recording and the video editor's export (one export path): spawns ffmpeg
 // with the given output-side arguments, streams `-progress pipe:1` into `on_progress`, tails
@@ -868,9 +916,17 @@ pub(crate) fn run_ffmpeg_to_staged(
     let stderr_thread = child.stderr.take().map(|mut pipe| {
         std::thread::spawn(move || {
             use std::io::Read;
-            let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
-            String::from_utf8_lossy(&buf).into_owned()
+            let mut tail = Vec::new();
+            let mut chunk = [0u8; 8192];
+            // Read to the end so the pipe never fills up, but keep only the last bytes: a damaged
+            // input can make ffmpeg warn on every frame for the whole export.
+            while let Ok(n) = pipe.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                push_bounded_tail(&mut tail, &chunk[..n], FFMPEG_STDERR_KEEP_BYTES);
+            }
+            String::from_utf8_lossy(&tail).into_owned()
         })
     });
 
@@ -878,10 +934,10 @@ pub(crate) fn run_ffmpeg_to_staged(
     // unlike the carriage-return-redrawn stats ffmpeg prints to stderr. `out_time_ms` is ffmpeg's
     // name for a value that is actually in microseconds, hence the /1000 below. A thread reads the
     // lines and hands the parsed values over a channel, so this loop wakes every 200 ms whether or
-    // not ffmpeg printed anything: a cancel or the FFMPEG_MAX_RUN_SECS limit takes effect even
+    // not ffmpeg printed anything: a cancel or the stall limit takes effect even
     // while ffmpeg is silent (probing a huge input, a stalled source), not only at its next
     // progress line.
-    let start = std::time::Instant::now();
+    let mut last_progress = std::time::Instant::now();
     let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
         let (tx, rx) = std::sync::mpsc::channel::<u32>();
@@ -898,7 +954,10 @@ pub(crate) fn run_ffmpeg_to_staged(
         });
         loop {
             match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                Ok(ms) => on_progress(ms),
+                Ok(ms) => {
+                    last_progress = std::time::Instant::now();
+                    on_progress(ms);
+                }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
             }
@@ -906,7 +965,7 @@ pub(crate) fn run_ffmpeg_to_staged(
                 let _ = child.kill();
                 break;
             }
-            if start.elapsed().as_secs() > FFMPEG_MAX_RUN_SECS {
+            if ffmpeg_stalled(last_progress.elapsed().as_secs()) {
                 timed_out = true;
                 let _ = child.kill();
                 break;
@@ -917,7 +976,9 @@ pub(crate) fn run_ffmpeg_to_staged(
     let status = match child.wait() {
         Ok(s) => s,
         Err(e) => {
+            // Forgotten from the journal, so the startup sweep would never find it: remove it here.
             forget_staged();
+            let _ = fs::remove_file(&staged);
             let text = e.to_string();
             return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
         }

@@ -232,12 +232,12 @@ pub struct CamFinishResult {
 // CamSession::finishing). cam_start_ms is the real MediaRecorder start (Date.now() in
 // camera.js when recorder.start() ran), not a begin-time guess. screen_elapsed_ms is
 // camera_screen_elapsed_ms's value read at that same moment: the final, pause-aware
-// overlay offset, written straight into the sidecar.
-fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) {
+// overlay offset, written straight into the sidecar. A failed write is returned: without the
+// sidecar the editor would silently align the overlay at offset 0.
+pub(crate) fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) -> Result<(), String> {
     let sidecar = CamSidecar { start_ms: cam_start_ms, overlay_start_ms: screen_elapsed_ms };
-    if let Ok(json) = serde_json::to_string(&sidecar) {
-        let _ = fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json);
-    }
+    let json = serde_json::to_string(&sidecar).map_err(|e| e.to_string())?;
+    fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -249,7 +249,7 @@ pub fn camera_finish_recording(
     screen_elapsed_ms: Option<u64>,
 ) -> Result<CamFinishResult, String> {
     let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
-    finalize_session(&session, cam_start_ms, screen_elapsed_ms);
+    finalize_session(&session, cam_start_ms, screen_elapsed_ms)?;
     let screen_still_active = {
         #[cfg(windows)]
         {
@@ -340,6 +340,16 @@ pub fn read_camera_sidecar(path: String) -> Option<CamSidecar> {
 const CAMERA_WIN_LABEL: &str = "camera";
 const PERMISSION_READY_EVENT: &str = "camera-permission-ready";
 
+// True once the permission handler is attached to the open camera window. The one-shot event
+// can fire before the page has registered its listener, so the page also asks for this flag
+// after registering and never has to guess with a timer.
+static CAM_PERMISSION_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+pub fn camera_permission_ready() -> bool {
+    CAM_PERMISSION_READY.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 #[tauri::command]
 pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(), String> {
     let enabled = lock(&db).settings.ui_flags.get("cameraRecord") == Some(&true);
@@ -368,7 +378,13 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
     crate::set_capture_exclusion(&win, excluded);
-    install_permission_handler(&app, &win)?;
+    // A new window starts unanswered, whatever the previous one reached.
+    CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+    // Without its handler this window must not survive: the next open would just show it.
+    if let Err(e) = install_permission_handler(&app, &win) {
+        let _ = win.destroy();
+        return Err(e);
+    }
     // Alt+F4, the taskbar close or an app quit skip camera.js's close-button handler
     // (discardRecording) and would leave a half-written file and an active session. This is the
     // window's last chance to do the same cleanup from the session state.
@@ -378,7 +394,10 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
             if let Some(state) = cleanup_app.try_state::<CameraState>() {
                 if let Some(session) = state.0.lock().unwrap_or_else(|e| e.into_inner()).take() {
                     match session.finishing {
-                        Some((cam_start_ms, screen_elapsed_ms)) => finalize_session(&session, cam_start_ms, screen_elapsed_ms),
+                        Some((cam_start_ms, screen_elapsed_ms)) => {
+                            // Nobody is left to tell: the window is already gone.
+                            let _ = finalize_session(&session, cam_start_ms, screen_elapsed_ms);
+                        }
                         None => discard_session(&session),
                     }
                 }
@@ -471,6 +490,7 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
             Ok(())
         }));
         if unsafe { core.add_PermissionRequested(&handler, &mut token) }.is_ok() {
+            CAM_PERMISSION_READY.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = app_ready.emit_to(CAMERA_WIN_LABEL, PERMISSION_READY_EVENT, ());
         }
     })
@@ -479,6 +499,7 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
 
 #[cfg(not(windows))]
 fn install_permission_handler(_app: &AppHandle, _win: &tauri::WebviewWindow) -> Result<(), String> {
+    CAM_PERMISSION_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }
 

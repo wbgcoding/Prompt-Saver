@@ -207,9 +207,13 @@ pub(crate) async fn get_clipboard_file_path() -> Option<String> {
 #[tauri::command]
 pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
-    let result = file_dialog_for(&app, &label)
-        .pick_file()
-        .map(|p| p.to_string_lossy().to_string());
+    // The dialog is modal: it waits on a blocking thread, not on an async worker.
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&app, &label).pick_file().map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .ok()
+    .flatten();
     let _ = win.set_focus();
     result
 }
@@ -220,13 +224,18 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
 #[tauri::command]
 pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
-    let result = file_dialog_for(&app, &label)
-        .add_filter(
-            "Images and videos",
-            &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
-        )
-        .pick_file()
-        .map(|p| p.to_string_lossy().to_string());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&app, &label)
+            .add_filter(
+                "Images and videos",
+                &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
+            )
+            .pick_file()
+            .map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .ok()
+    .flatten();
     let _ = win.set_focus();
     result
 }
@@ -234,7 +243,14 @@ pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> 
 // Preview for an attached file that happens to be an image.
 #[tauri::command]
 pub(crate) async fn load_image_file(path: String) -> Option<String> {
-    let img = decode_image_file(&path)?;
+    // Decoding a large photo is seconds of CPU: off the async runtime's worker threads.
+    tauri::async_runtime::spawn_blocking(move || image_file_preview(&path)).await.ok().flatten()
+}
+
+// The preview as a viewer shows the picture: upright, so a phone photo stored sideways with an
+// EXIF orientation flag is not rotated differently from what text recognition reads.
+pub(crate) fn image_file_preview(path: &str) -> Option<String> {
+    let img = decode_image_oriented(image::ImageReader::open(path).ok()?)?;
     let result = scale_and_encode(img);
     if result.is_empty() { None } else { Some(result) }
 }
@@ -244,12 +260,12 @@ pub(crate) async fn load_image_file(path: String) -> Option<String> {
 // single self-contained file instead of "exe plus a DLL you must not lose".
 pub(crate) static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
 
-// Where the embedded copy is unpacked. Versioned, so a newer build never binds
-// against a stale DLL left behind by an older one.
-pub(crate) fn pdfium_cache_path() -> PathBuf {
-    std::env::temp_dir()
-        .join(brand::TEMP_DIR)
-        .join(format!("pdfium-{APP_VERSION}.dll"))
+// Where the embedded copy is unpacked: the per-user app folder, never the shared temp folder
+// where any process could swap the file between the content check and the load. Versioned,
+// so a newer build never binds against a stale DLL left behind by an older one. None when
+// the profile folder is unknown (the preview is then skipped).
+pub(crate) fn pdfium_cache_path() -> Option<PathBuf> {
+    Some(local_app_dir()?.join(format!("pdfium-{APP_VERSION}.dll")))
 }
 
 // Each app version writes its own pdfium-<version>.dll (so an update never loads a stale
@@ -270,6 +286,10 @@ pub(crate) fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
 
 // A DLL next to the exe wins (lets a user drop in a newer pdfium); otherwise the
 // embedded copy is written to the cache path once and reused.
+// The unpacked copy, once its content was compared with the compiled-in one: every later page
+// flip skips the 7 MB read and the folder sweep. It is dropped for a re-check if the file vanishes.
+static PDFIUM_VERIFIED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
 pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     let name = "pdfium.dll";
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -284,14 +304,17 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
         return Some(found);
     }
-    let cached = pdfium_cache_path();
+    if let Some(done) = PDFIUM_VERIFIED.get().filter(|p| p.exists()) {
+        return Some(done.clone());
+    }
+    let cached = pdfium_cache_path()?;
     sweep_stale_pdfium_dlls(&cached);
-    // The cache path is predictable and lives in a world-writable %TEMP%, so the file
-    // found there is only trusted when its CONTENT matches the copy compiled into this
-    // exe: a length check alone would let any process running as this user pre-plant a
-    // same-size DLL and get it loaded as native code. Rewritten otherwise, which also
+    // The cache path is predictable, so the file found there is only trusted when its
+    // CONTENT matches the copy compiled into this exe: a length check alone would let a
+    // pre-planted same-size DLL get loaded as native code. Rewritten otherwise, which also
     // repairs a truncated write from an interrupted first run.
     if fs::read(&cached).is_ok_and(|got| got == PDFIUM_DLL) {
+        let _ = PDFIUM_VERIFIED.set(cached.clone());
         return Some(cached);
     }
     fs::create_dir_all(cached.parent()?).ok()?;
@@ -301,6 +324,7 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
         append_crash_log(&format!("pdfium unpack failed: {e}"));
         return None;
     }
+    let _ = PDFIUM_VERIFIED.set(cached.clone());
     Some(cached)
 }
 
