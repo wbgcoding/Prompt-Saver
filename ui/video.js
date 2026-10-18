@@ -886,8 +886,8 @@ function drawWave(track) {
   const data = VE.peaks[track];
   const width = Math.max(1, Math.round(trackWidth()));
   // Backing store in device pixels so the waveform stays sharp on scaled displays; the CSS size
-  // stays the layout size.
-  const scale = Math.min(window.devicePixelRatio || 1, Math.max(1, WAVE_MAX_PX / width));
+  // stays the layout size. A very long track scales below one so the canvas never passes the cap.
+  const scale = Math.min(window.devicePixelRatio || 1, WAVE_MAX_PX / width);
   canvas.width = Math.round(width * scale);
   canvas.height = Math.round(WAVE_HEIGHT * scale);
   canvas.style.width = `${width}px`;

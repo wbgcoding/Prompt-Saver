@@ -224,3 +224,25 @@ fn the_main_window_may_start_a_resize_drag() {
     let caps = source!("../../capabilities/default.json");
     assert!(caps.contains("\"core:window:allow-start-resize-dragging\""));
 }
+
+#[test]
+fn a_very_long_waveform_never_passes_the_canvas_cap() {
+    let video = source!("../../../ui/video.js");
+    assert!(video.contains("Math.min(window.devicePixelRatio || 1, WAVE_MAX_PX / width)"));
+    assert!(!video.contains("Math.max(1, WAVE_MAX_PX / width)"));
+}
+
+#[test]
+fn a_voice_key_counts_as_taken_only_while_its_switches_are_on() {
+    let mut settings = Settings { voice_hotkey: "Ctrl+Alt+V".to_string(), ..Default::default() };
+    let sc = parse_accel("Ctrl+Alt+V").unwrap();
+    // The hotkey switch is not on yet, so nothing uses the key.
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.insert("voiceHotkey".to_string(), true);
+    assert!(slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.insert("voice".to_string(), false);
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.remove("voice");
+    // The voice slot never collides with itself.
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::Voice, sc));
+}

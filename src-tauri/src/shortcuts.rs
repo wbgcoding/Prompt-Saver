@@ -723,7 +723,7 @@ impl HotkeySlot {
     }
 }
 
-// Whether `sc` is already held by another hotkey slot or a prompt. The stop/pause keys count
+// Whether `sc` is already held by another hotkey slot or a prompt. The stop/pause and voice keys count
 // only while their feature and switch are on (the same gate hotkey_in_use applies), so a key
 // nothing uses is never reported as taken.
 pub(crate) fn slot_key_taken(settings: &Settings, prompts: &[Prompt], slot: HotkeySlot, sc: Accel) -> bool {
@@ -735,6 +735,7 @@ pub(crate) fn slot_key_taken(settings: &Settings, prompts: &[Prompt], slot: Hotk
             let hk = match other {
                 HotkeySlot::RecStop => active_rec_hotkey(other.get(settings), "recStopHotkey", flags),
                 HotkeySlot::RecPause => active_rec_hotkey(other.get(settings), "recPauseHotkey", flags),
+                HotkeySlot::Voice => active_voice_hotkey(other.get(settings), flags),
                 _ => other.get(settings),
             };
             parse_accel(hk) == Some(sc)
