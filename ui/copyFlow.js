@@ -49,18 +49,30 @@ export function markCopied(id) {
 // back to the stored text and must not be followed by a commit). `afterResolve` runs
 // right after the placeholders are answered, cancelled or not. Resolves to copyFn's
 // result, false when cancelled.
+// Rotating prompts being copied right now: a second activation (double press, hotkey during a
+// click) would peek the same entry and then advance the rotation twice, skipping an entry that
+// was never copied, so it is dropped while the first one runs.
+const rotatingInFlight = new Set();
 export async function peekResolveCommit(p, copyFn, opts) {
   const afterResolve = opts?.afterResolve;
   const resolve = opts?.resolve ?? resolveVars;
   const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolve(rawText);
-  afterResolve?.();
-  if (text === null || text === false) return false;
-  const ok = await copyFn(text);
-  if (ok && rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
-  return ok;
+  if (rotating) {
+    if (rotatingInFlight.has(p.id)) return false;
+    rotatingInFlight.add(p.id);
+  }
+  try {
+    const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
+    const rawText = peek ? peek.text : p.text;
+    const text = await resolve(rawText);
+    afterResolve?.();
+    if (text === null || text === false) return false;
+    const ok = await copyFn(text);
+    if (ok && rotating && peek) { await invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
+    return ok;
+  } finally {
+    if (rotating) rotatingInFlight.delete(p.id);
+  }
 }
 
 // Copy a text prompt after filling its placeholders. `paste` is only set by

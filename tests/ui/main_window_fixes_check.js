@@ -906,6 +906,29 @@ section(() => {
   check(guardAt !== -1 && guardAt < i && /box\.contains\(document\.activeElement\)/.test(render), "the list ends hotkey capture before it drops a focused input");
 });
 
+// 42. Two overlapping copies of a rotating prompt advance the rotation once.
+section(() => {
+  const src = read("copyFlow.js");
+  const set = "const rotatingInFlight = new Set();";
+  const fn = extractBlock(src, "export async function peekResolveCommit(").replace("export ", "");
+  check(src.includes(set), "the in-flight set exists");
+  later(async () => {
+    const calls = [];
+    const sb = run(set + "\n" + fn, {
+      invoke: async (cmd) => { calls.push(cmd); return cmd === "rotation_peek" ? { text: "x" } : {}; },
+      resolveVars: async (x) => x, recordToolUsage() {},
+    });
+    const p = { id: "a", text: "t", variants: ["v"] };
+    const slow = async () => { await new Promise((r) => setTimeout(r, 5)); return true; };
+    const [one, two] = await Promise.all([sb.peekResolveCommit(p, slow), sb.peekResolveCommit(p, slow)]);
+    check(one === true && two === false && calls.filter((c) => c === "rotation_commit").length === 1 && calls.filter((c) => c === "rotation_peek").length === 1, "the second overlapping copy is dropped");
+    check((await sb.peekResolveCommit(p, slow)) === true, "a later copy works again");
+    const plain = { id: "b", text: "t", variants: [] };
+    const both = await Promise.all([sb.peekResolveCommit(plain, slow), sb.peekResolveCommit(plain, slow)]);
+    check(both[0] === true && both[1] === true, "a plain prompt is never dropped");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
