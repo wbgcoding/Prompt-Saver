@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "snip",
+  "description": "Screenshot overlay windows: only the commands its page calls",
+  "windows": [
+    "snip-*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-scale-factor",
+    "core:window:allow-theme",
+    "core:event:default",
+    "allow-capture-region",
+    "allow-capture-window",
+    "allow-copy-text",
+    "allow-get-settings",
+    "allow-log-error",
+    "allow-pick-color",
+    "allow-pick-history",
+    "allow-pick-tile",
+    "allow-recorder-target-picked",
+    "allow-set-ui-value",
+    "allow-snip-background",
+    "allow-snip-cancel",
+    "allow-snip-present",
+    "allow-snip-should-begin",
+    "allow-snip-windows"
+  ]
+}

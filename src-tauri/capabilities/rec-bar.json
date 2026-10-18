@@ -1,0 +1,42 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "rec-bar",
+  "description": "Screen recording bar: only the commands its page calls",
+  "windows": [
+    "rec-bar"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-scale-factor",
+    "core:window:allow-theme",
+    "core:event:default",
+    "allow-cancel-recording",
+    "allow-current-theme",
+    "allow-finish-and-continue-recording",
+    "allow-fit-rec-bar",
+    "allow-get-settings",
+    "allow-hide-rec-bar",
+    "allow-ink-prefs",
+    "allow-open-recorder-switch",
+    "allow-pause-recording",
+    "allow-rec-bar-mark-moved",
+    "allow-recording-status",
+    "allow-resume-recording",
+    "allow-set-audio-muted",
+    "allow-stop-recording",
+    "allow-switch-recording-target",
+    "allow-theme-vars"
+  ]
+}
