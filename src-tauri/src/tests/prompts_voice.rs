@@ -654,9 +654,14 @@ fn voice_should_send_stop_skips_a_session_that_already_ended_itself() {
 
 // ---- Kind-generalized language-pack elevation ----
 
+// start_request keeps one pending nonce per kind: the tests that start requests take turns.
+#[cfg(windows)]
+static ELEVATION_REQUEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(windows)]
 #[test]
 fn ocr_elevated_capabilities_result_survives_a_truncated_read() {
+    let _serial = ELEVATION_REQUEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let nonce = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
     let path = ocr::caps_result_path(ocr::CapKind::Ocr, &nonce);
     if let Some(dir) = path.parent() {
@@ -672,6 +677,7 @@ fn ocr_elevated_capabilities_result_survives_a_truncated_read() {
 #[cfg(windows)]
 #[test]
 fn ocr_elevated_capabilities_result_deletes_on_a_complete_error_payload() {
+    let _serial = ELEVATION_REQUEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let nonce = ocr::start_request(ocr::CapKind::Speech, ocr::CAPS_TAG);
     let path = ocr::caps_result_path(ocr::CapKind::Speech, &nonce);
     if let Some(dir) = path.parent() {
@@ -688,6 +694,7 @@ fn ocr_elevated_capabilities_result_deletes_on_a_complete_error_payload() {
 #[cfg(windows)]
 #[test]
 fn ocr_and_speech_elevated_result_paths_never_collide() {
+    let _serial = ELEVATION_REQUEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let a = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
     let b = ocr::start_request(ocr::CapKind::Speech, ocr::CAPS_TAG);
     assert_ne!(
@@ -699,6 +706,7 @@ fn ocr_and_speech_elevated_result_paths_never_collide() {
 #[cfg(windows)]
 #[test]
 fn an_elevated_result_is_only_believed_while_a_request_is_in_flight() {
+    let _serial = ELEVATION_REQUEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     // The temp folder is writable by anything running as this user. With the
     // file name derived from the language tag (or the process id) another
     // process could drop a finished-looking result in ahead of time and the
