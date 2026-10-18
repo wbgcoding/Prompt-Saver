@@ -341,7 +341,7 @@ export async function promptVarsWindow(tokens) {
   const answer = await new Promise((resolve) => {
     varsWindowPending = resolve;
     invoke("open_var_window", { payload: JSON.stringify(payload), rows: rows.length })
-      .catch(() => { varsWindowPending = null; resolve(false); });
+      .catch(() => { if (varsWindowPending === resolve) varsWindowPending = null; resolve(false); });
   });
   if (answer === false) return false; // no window could be opened
   if (!answer) return null;

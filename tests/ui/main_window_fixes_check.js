@@ -1099,6 +1099,12 @@ section(() => {
   check(extractBlock(src, "export function gsSetActive(").includes('"aria-activedescendant"'), "the cursor row is the active descendant");
 });
 
+// 62. A failed var-window open clears only its own pending resolver.
+section(() => {
+  const src = read("promptVars.js");
+  check(src.includes("if (varsWindowPending === resolve) varsWindowPending = null; resolve(false);"), "a newer pending resolver survives an older failed open");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
