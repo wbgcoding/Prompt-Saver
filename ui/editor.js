@@ -171,14 +171,16 @@ export function insertVarToken(body) {
 }
 
 // Rebuild the helper for the current feature flags (chips only with promptVars,
-// the options field only with choiceVars).
-export function renderVarHelper() {
+// the options field only with choiceVars). `refresh` false (typing in the text) keeps chips that
+// already match the flag instead of rebuilding the whole row per keystroke.
+export function renderVarHelper(refresh = true) {
   const chips = $("modal-vars-chips");
   const dyn = flag("dynVars");
   chips.classList.toggle("hidden", !dyn);
   $("modal-vars-dyn-hint").classList.toggle("hidden", !dyn);
-  chips.innerHTML = "";
-  if (dyn) {
+  const upToDate = !refresh && chips.childElementCount === (dyn ? DYN_VARS.length : 0);
+  if (!upToDate) chips.innerHTML = "";
+  if (dyn && !upToDate) {
     for (const name of DYN_VARS) {
       const b = document.createElement("button");
       b.type = "button";
@@ -604,7 +606,7 @@ export function syncMdUi(textVisible, rotating = false) {
 // it with the link under the text. Once shown it stays until the editor closes, so it
 // never jumps away while a token is being typed.
 let varsRevealed = false;
-function syncVarsUi(textVisible, rotating) {
+function syncVarsUi(textVisible, rotating, fromTyping = false) {
   const varsUi = textVisible && !rotating && flag("promptVars");
   const hasVars = extractVars(modal.text.value).length > 0;
   const showBar = varsUi && (hasVars || varsRevealed);
@@ -612,7 +614,7 @@ function syncVarsUi(textVisible, rotating) {
   modal.textBar.classList.toggle("hidden", !showBar);
   modal.varsHint.classList.toggle("hidden", !showBar);
   $("modal-vars-link").classList.toggle("hidden", !varsUi || showBar);
-  if (showBar) renderVarHelper(); // chips + insert row follow their flags
+  if (showBar) renderVarHelper(!fromTyping); // chips + insert row follow their flags
 }
 
 // The prompt field grows with its content up to the visible dialog height; past
@@ -1667,7 +1669,12 @@ export function bindEditor() {
   modal.text.addEventListener("input", scheduleLenCounter); // live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
   modal.text.addEventListener("input", scheduleFitText);    // the field follows its content
-  modal.text.addEventListener("input", () => syncVarsUi(modal.root.classList.contains("tall"), rotationUiOn()));
+  // Same 60 ms settle as the preview: a long prompt is not rescanned for placeholders per key.
+  let varsTimer = 0;
+  modal.text.addEventListener("input", () => {
+    clearTimeout(varsTimer);
+    varsTimer = setTimeout(() => syncVarsUi(modal.root.classList.contains("tall"), rotationUiOn(), true), 60);
+  });
   $("modal-vars-link").addEventListener("click", () => {
     varsRevealed = true;
     syncVarsUi(true, false);

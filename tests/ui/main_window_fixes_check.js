@@ -557,6 +557,33 @@ section(() => {
   check(!/invoke\("discard_editor_draft"\)\.catch/.test(ed), "no unordered discard call is left in the editor");
 });
 
+// 24. U9: typing keeps the chip row; only a flag change or an explicit refresh rebuilds it.
+section(() => {
+  const ed = read("editor.js");
+  const src = extractBlock(ed, "export function renderVarHelper(").replace("export ", "");
+  const make = (dynOn) => {
+    const chips = { childElementCount: 0, classList: { toggle() {} }, appendChild() { this.childElementCount++; }, set innerHTML(_) { this.childElementCount = 0; } };
+    const other = { classList: { toggle() {} } };
+    const doc = { createElement: () => ({ addEventListener() {}, set className(_) {} }) };
+    const sb = run(src, { $: (id) => (id === "modal-vars-chips" ? chips : other), flag: (k) => (k === "dynVars" ? dynOn : false), document: doc, DYN_VARS: ["a", "b", "c"], dynToken: (n) => n, t: (k) => k, DYN_TIPS: { a: "", b: "", c: "" }, insertVarToken() {} });
+    return { sb, chips };
+  };
+  const on = make(true);
+  on.sb.renderVarHelper();
+  const first = on.chips.childElementCount;
+  let rebuilt = 0;
+  const orig = Object.getOwnPropertyDescriptor(on.chips, "innerHTML");
+  Object.defineProperty(on.chips, "innerHTML", { set(v) { rebuilt++; orig.set.call(on.chips, v); }, configurable: true });
+  on.sb.renderVarHelper(false);
+  check(first === 3 && on.chips.childElementCount === 3 && rebuilt === 0, "typing does not rebuild matching chips");
+  on.sb.renderVarHelper();
+  check(rebuilt === 1 && on.chips.childElementCount === 3, "a plain render still rebuilds the chips");
+  const fresh = make(true);
+  fresh.sb.renderVarHelper(false);
+  check(fresh.chips.childElementCount === 3, "typing still builds chips that are missing");
+  check(/syncVarsUi\(modal\.root\.classList\.contains\("tall"\), rotationUiOn\(\), true\), 60\)/.test(ed), "the input handler settles for 60 ms");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
