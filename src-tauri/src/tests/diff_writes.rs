@@ -1150,3 +1150,14 @@ fn both_launch_routes_find_the_link_through_one_helper() {
     assert!(!lib.contains("starts_with(\"promptsaver://\")"), "the scheme match must live in remote::find_scheme_arg only");
     assert_eq!(lib.matches("remote::find_scheme_arg(").count(), 2);
 }
+
+#[test]
+fn the_update_switches_report_a_failed_save() {
+    let src = include_str!("../update.rs");
+    for name in ["set_auto_update", "set_update_consent"] {
+        let body = fn_text(src, name);
+        assert!(body.contains("-> Result<(), String>"), "{name} must return a Result");
+        assert!(body.contains("if !save_settings("), "{name} must check the save");
+        assert!(body.contains("\"save-failed\""), "{name} must report save-failed");
+    }
+}

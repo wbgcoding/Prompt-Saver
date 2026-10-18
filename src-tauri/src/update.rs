@@ -151,20 +151,26 @@ pub(crate) fn set_bars(app: AppHandle, state: State<Db>, header: bool, composer:
 }
 
 #[tauri::command(async)]
-pub(crate) fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) {
+pub(crate) fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) -> Result<(), String> {
     let mut store = lock(&state);
     store.settings.auto_update = enabled;
     store.settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
-    save_settings(&app, &store.settings);
+    if !save_settings(&app, &store.settings) {
+        return Err("save-failed".to_string());
+    }
+    Ok(())
 }
 
 // The first-launch question: remembers the answer and the switch together.
 #[tauri::command(async)]
-pub(crate) fn set_update_consent(app: AppHandle, state: State<Db>, enabled: bool) {
+pub(crate) fn set_update_consent(app: AppHandle, state: State<Db>, enabled: bool) -> Result<(), String> {
     let mut store = lock(&state);
     store.settings.auto_update = enabled;
     store.settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
-    save_settings(&app, &store.settings);
+    if !save_settings(&app, &store.settings) {
+        return Err("save-failed".to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
