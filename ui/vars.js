@@ -83,7 +83,7 @@ function buildChoice(row, options, initial) {
   });
   wrap.append(button, list);
   row.appendChild(wrap);
-  return { focus: () => button.focus(), value: () => value };
+  return { el: button, focus: () => button.focus(), value: () => value };
 }
 
 function buildText(row, initial, placeholder) {
@@ -94,7 +94,7 @@ function buildText(row, initial, placeholder) {
   // A fixed value is only SUGGESTED, as the placeholder: an untouched field stays empty.
   if (placeholder) input.placeholder = placeholder;
   row.appendChild(input);
-  return { focus: () => { input.focus(); input.select(); }, value: () => input.value };
+  return { el: input, focus: () => { input.focus(); input.select(); }, value: () => input.value };
 }
 
 function render(data) {
@@ -106,13 +106,16 @@ function render(data) {
   okEl.textContent = T.varsCopy;
   cancelEl.textContent = T.cancel;
   fieldsEl.innerHTML = "";
-  rows = (data.rows || []).map((spec) => {
-    const row = document.createElement("label");
+  rows = (data.rows || []).map((spec, idx) => {
+    // A plain block: the name is the field's label, and the remember switch keeps its
+    // own label beside it instead of nesting inside the name.
+    const row = document.createElement("div");
     row.className = "vars-row";
     const nameRow = document.createElement("span");
     nameRow.className = "vars-name-row";
-    const name = document.createElement("span");
+    const name = document.createElement("label");
     name.className = "vars-name";
+    name.id = `vars-name-${idx}`;
     name.textContent = spec.name; // textContent: a variable name is never markup
     nameRow.appendChild(name);
     if (spec.fixed) {
@@ -126,6 +129,10 @@ function render(data) {
     const control = spec.options && spec.options.length
       ? buildChoice(row, spec.options, spec.value)
       : buildText(row, spec.value || "", spec.placeholder || "");
+    control.el.id = `vars-field-${idx}`;
+    name.htmlFor = control.el.id;
+    // A choice button shows its current pick, so it is named by the variable and the pick.
+    if (spec.options && spec.options.length) control.el.setAttribute("aria-labelledby", `${name.id} ${control.el.id}`);
     let box = null;
     // The remember switch belongs to free-text rows only: a choice keeps its last
     // pick through its own setting, with no checkbox to tick.

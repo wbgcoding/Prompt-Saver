@@ -464,6 +464,39 @@ section(() => {
   check(/searchEl\.setAttribute\("aria-label"/.test(src), "the tray search field gets an accessible name");
 });
 
+section(() => {
+  const src = read("vars.js");
+  const mkEl = (tag) => {
+    const e = { tag, attrs: {}, children: [], style: {}, className: "", textContent: "", id: "", value: "", checked: false, classList: { add() {}, remove() {}, toggle() {} } };
+    e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.append = (...c) => { e.children.push(...c); };
+    e.addEventListener = () => {};
+    e.focus = () => {}; e.select = () => {};
+    return e;
+  };
+  const fieldsEl = mkEl("div");
+  Object.defineProperty(fieldsEl, "innerHTML", { get: () => "", set: () => { fieldsEl.children = []; } });
+  const sb = {
+    fieldsEl, titleEl: mkEl("h1"), okEl: mkEl("button"), cancelEl: mkEl("button"), tooLongText: "", rows: [],
+    FIXED_PIN_SVG: "", applyFloatTheme() {}, compactTexts: () => ({ rememberValue: "Remember value", fixedValueHint: "" }),
+    document: { createElement: mkEl, documentElement: {} }, fitWindow() {},
+  };
+  vm.createContext(sb);
+  vm.runInContext([extractBlock(src, "function buildChoice("), extractBlock(src, "function buildText("), extractBlock(src, "function render("), "this.render = render;"].join(String.fromCharCode(10)), sb);
+  sb.render({ lang: "en", askRemember: true, rows: [{ name: "Who", value: "" }, { name: "Pick", options: ["a", "b"], value: "a" }] });
+  const [textRow, choiceRow] = fieldsEl.children;
+  const walk = (n, out = []) => { out.push(n); (n.children || []).forEach((c) => walk(c, out)); return out; };
+  const labelsIn = (n) => walk(n).filter((x) => x.tag === "label");
+  check(textRow.tag === "div" && choiceRow.tag === "div", "a field row is a plain block, not a label");
+  check(!labelsIn(textRow).some((l) => walk(l).some((x) => x !== l && x.tag === "label")), "no label is nested inside another label");
+  const nameLabel = labelsIn(textRow).find((l) => l.className === "vars-name");
+  const input = walk(textRow).find((x) => x.tag === "input" && x.className === "vars-input");
+  check(nameLabel && input && nameLabel.htmlFor === input.id && input.id, "the name label points at its text field");
+  const btn = walk(choiceRow).find((x) => x.className.includes("vars-choice-btn"));
+  check(btn && /vars-name-1 /.test(btn.attrs["aria-labelledby"] + " ") && btn.attrs["aria-labelledby"].includes(btn.id), "the choice button is named by the variable and its pick");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
