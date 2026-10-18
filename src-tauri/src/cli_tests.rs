@@ -1075,6 +1075,18 @@ fn export_cannot_overwrite_the_store_or_its_snapshots() {
 }
 
 #[test]
+fn export_cannot_overwrite_program_files_beside_the_store() {
+    let dir = TempDir::new("confine-program");
+    std::fs::write(dir.path().join("uninstall.exe"), "x").unwrap();
+    for target in ["uninstall.exe", "Uninstall.EXE", "datapath", "ffmpeg.exe", "tool.dll", "new.exe"] {
+        let argv = args(&["export", target, "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_err(), "{target} must be refused as an export target");
+    }
+    let argv = args(&["export", "datapath.json", "--yes"]);
+    assert!(confine_path_arg(&argv, dir.path()).is_ok());
+}
+
+#[test]
 fn import_from_inside_the_data_folder_is_allowed() {
     let dir = TempDir::new("confine-import-ok");
     let file = dir.path().join("in.json");

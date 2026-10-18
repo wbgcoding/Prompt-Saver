@@ -380,8 +380,20 @@ pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), S
         if is_store_path(&target, &canon_base) {
             return Err("refused: that path belongs to the stored data".to_string());
         }
+        if is_program_file_name(&target) {
+            return Err("refused: that path belongs to the stored data".to_string());
+        }
     }
     Ok(())
+}
+
+// True for a name an export must never replace: in a portable install the data folder is the
+// program folder, and JSON written over an executable, a library, the uninstaller or the
+// data-folder redirect file would break the next launch.
+fn is_program_file_name(target: &Path) -> bool {
+    let name = target.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ext = target.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    name == "datapath" || name == "uninstall.exe" || matches!(ext.as_str(), "exe" | "dll" | "com" | "scr" | "msi" | "bat" | "cmd")
 }
 
 // True for a path that is part of the stored data inside the data folder: the database with
