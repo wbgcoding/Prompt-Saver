@@ -152,8 +152,8 @@ pub(crate) fn install_webview2_runtime() -> bool {
         return false;
     }
     // Same two guards as the update download: a file that exactly hit the cap was probably
-    // truncated, and whatever we execute has to be a Windows executable. (Not authentication: the
-    // bootstrapper comes from Microsoft's pinned fwlink over TLS, after the user agreed.)
+    // truncated, and whatever we execute has to be a Windows executable. These only catch a
+    // corrupt download; the Authenticode check below is the gate.
     if bytes.len() as u64 >= CAP || bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return false;
     }
@@ -164,7 +164,8 @@ pub(crate) fn install_webview2_runtime() -> bool {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let dir = std::env::temp_dir().join(format!("{}-wv2-{}-{}", brand::SLUG, std::process::id(), stamp));
-    if fs::create_dir_all(&dir).is_err() {
+    // create_dir, not create_dir_all: a folder that already exists is refused, not adopted.
+    if fs::create_dir(&dir).is_err() {
         return false;
     }
     // The staging folder goes on every way out of here, installer run or not.

@@ -486,8 +486,9 @@ pub(crate) fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max:
 // just a paused one.
 #[tauri::command(async)]
 pub(crate) fn log_error(state: State<'_, Db>, text: String, origin: String, raw: Option<String>) {
-    let settings = lock(&state).settings.clone();
-    if !error_log_enabled(&settings) {
+    // Only the one flag is read: the settings (layouts, texts) are not copied for it.
+    let enabled = error_log_enabled(&lock(&state).settings);
+    if !enabled {
         return;
     }
     record_error_log(&text, &origin, raw.as_deref(), ERROR_LOG_MAX);

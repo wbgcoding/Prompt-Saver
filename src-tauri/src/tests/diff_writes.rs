@@ -1097,3 +1097,16 @@ fn folder_setters_run_off_the_ui_thread() {
         assert_eq!(attr.trim(), "#[tauri::command(async)]", "{name} must run as an async command");
     }
 }
+
+#[test]
+fn log_error_reads_its_flag_without_cloning_the_settings() {
+    let src = include_str!("../logging.rs");
+    assert!(!fn_text(src, "log_error").contains("settings.clone()"));
+}
+
+#[test]
+fn the_webview2_staging_folder_must_be_new() {
+    let src = include_str!("../webview2.rs");
+    assert!(src.contains("fs::create_dir(&dir)"));
+    assert!(!src.contains("create_dir_all(&dir)"));
+}
