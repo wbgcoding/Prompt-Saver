@@ -1019,6 +1019,14 @@ fn forwarded_request_reports_a_dropped_connection() {
     });
 }
 
+#[test]
+fn a_remote_first_argument_reaches_the_log_only_as_a_known_command() {
+    assert_eq!(logged_command_name("export"), "export");
+    assert_eq!(logged_command_name("my secret prompt text"), "unknown command");
+    assert_eq!(logged_command_name(&"x".repeat(1_000_000)), "unknown command");
+    assert_eq!(logged_command_name(""), "unknown command");
+}
+
 // ---- remote-caller path confinement ----
 
 #[test]

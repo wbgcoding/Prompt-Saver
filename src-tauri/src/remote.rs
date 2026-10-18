@@ -1363,7 +1363,7 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
             return;
         }
     };
-    let cmd_name = argv[0].clone();
+    let cmd_name = crate::cli::logged_command_name(&argv[0]);
     // A connection accepted before a stop, restart or renewed certificate belongs to a run that
     // no longer exists and must not execute anything.
     if !runs.current(generation) {

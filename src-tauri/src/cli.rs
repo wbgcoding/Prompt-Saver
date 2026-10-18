@@ -35,6 +35,12 @@ const SUBCOMMANDS: &[&str] = &[
     "import", "backup", "settings", "version", "describe",
 ];
 
+// The only caller-supplied word that may reach the log: a known subcommand, else a fixed
+// placeholder. The first argument comes from a remote client and can hold any text.
+pub(crate) fn logged_command_name(first_arg: &str) -> &'static str {
+    SUBCOMMANDS.iter().find(|c| **c == first_arg).copied().unwrap_or("unknown command")
+}
+
 fn looks_like_cli(argv: &[String]) -> bool {
     match argv.first().map(String::as_str) {
         Some(a) if SUBCOMMANDS.contains(&a) => true,
