@@ -682,6 +682,10 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
 // saved or discarded them.
 pub(crate) static REC_RESULT_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
 
+// The same parts while a Save copies them: taken out of the list above for the duration, but
+// still not the sweep's to delete.
+pub(crate) static REC_PARTS_SAVING: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
+
 // The file the result dialog currently shows (the raw capture, then the
 // converted copy). It sits unreferenced for as long as the dialog stays open,
 // which can outlast the sweep age.
@@ -704,6 +708,7 @@ pub(crate) fn protected_take_paths() -> Vec<PathBuf> {
         .unwrap_or_else(|e| e.into_inner())
         .iter()
         .chain(REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()).iter())
+        .chain(REC_PARTS_SAVING.lock().unwrap_or_else(|e| e.into_inner()).iter())
         .flat_map(|p| [Some(p.path.clone()), p.mic_wav_path.clone()])
         .flatten()
         .collect();

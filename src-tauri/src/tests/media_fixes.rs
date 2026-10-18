@@ -684,3 +684,35 @@ fn every_progress_block_keeps_a_silent_looking_export_alive() {
     let run = src.split("pub(crate) fn run_ffmpeg_to_staged").nth(1).unwrap();
     assert!(run.contains("progress_tick(&line)"), "the reader thread classifies every line");
 }
+
+#[test]
+fn a_running_parts_save_is_marked_in_flight_and_quit_waits_for_it() {
+    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None };
+    let shared = std::sync::Mutex::new(vec![part("ps-q6-inflight.mp4")]);
+    let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
+    let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+    std::thread::scope(|s| {
+        let shared = &shared;
+        s.spawn(move || {
+            with_parts_outside_lock(shared, |parts| {
+                started_tx.send(()).unwrap();
+                go_rx.recv().unwrap();
+                parts.clear();
+            })
+        });
+        started_rx.recv().unwrap();
+        // The list is empty while the copy runs, yet the sweep must still see the part as taken.
+        assert!(shared.lock().unwrap().is_empty());
+        assert!(protected_take_paths().contains(&PathBuf::from("ps-q6-inflight.mp4")));
+        // Quit gives up only after its bounded wait, and goes on as soon as the save is done.
+        assert!(!wait_for_part_saves(std::time::Duration::from_millis(100)), "a save is still running");
+        go_tx.send(()).unwrap();
+        assert!(wait_for_part_saves(std::time::Duration::from_secs(20)));
+    });
+    // Both quit routes wait: the app's exit event and the take saved on quit.
+    let lib = source!("../lib.rs");
+    assert!(lib.contains("wait_for_part_saves(REC_PARTS_QUIT_WAIT)"));
+    let media = source!("../media_files.rs");
+    let quit = media.split("pub(crate) fn save_take_on_quit").nth(1).unwrap().split("pub(crate) async fn save_recording_parts").next().unwrap();
+    assert!(quit.contains("wait_for_part_saves(REC_PARTS_QUIT_WAIT)"));
+}

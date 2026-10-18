@@ -1149,6 +1149,9 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                // A recording part save that is still copying across drives finishes first
+                // (bounded), so the exit never leaves its parts in staging.
+                wait_for_part_saves(REC_PARTS_QUIT_WAIT);
                 // Backstop for every way out of the app: whatever counter state was
                 // still being collected goes to disk before the process does.
                 flush_settings_now(app);

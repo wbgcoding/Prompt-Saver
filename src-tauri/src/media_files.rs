@@ -590,6 +590,11 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
     let allowed = recording_source_dirs(app, &state);
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = recording_dir(&custom);
+    // A Save from the result dialog may still be copying earlier parts: let it finish first, or
+    // the exit would kill the copy and leave the parts in staging for the sweep.
+    if !wait_for_part_saves(REC_PARTS_QUIT_WAIT) {
+        append_crash_log("quit: a recording part save was still running");
+    }
     let src = Path::new(&take.path);
     if src.is_file() && is_own_recording_source(&allowed, src) {
         if let Err(e) = place_in_dir(src, &dest) {
@@ -624,14 +629,48 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     .map_err(|e| e.to_string())
 }
 
+// How long a quit waits for a running parts save before it goes on.
+pub(crate) const REC_PARTS_QUIT_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+// Held for as long as a parts save runs: a second Save waits for the first instead of finding an
+// empty list, and the quit path waits on it too.
+static REC_PARTS_GATE: Mutex<()> = Mutex::new(());
+
+// True when no parts save is running, or the one that was finished within `limit`.
+pub(crate) fn wait_for_part_saves(limit: std::time::Duration) -> bool {
+    let start = std::time::Instant::now();
+    loop {
+        match REC_PARTS_GATE.try_lock() {
+            Err(std::sync::TryLockError::WouldBlock) => {}
+            _ => return true,
+        }
+        if start.elapsed() >= limit {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+// Keeps the taken parts visible to the stale sweep while they are copied.
+struct PartsInFlight;
+impl Drop for PartsInFlight {
+    fn drop(&mut self) {
+        REC_PARTS_SAVING.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
 // Runs `work` on the shared list's current contents without keeping the lock: the entries are
 // taken out first, and whatever `work` leaves in the list (parts that could not be moved) is
-// put back in front of anything added meanwhile.
+// put back in front of anything added meanwhile. The taken parts stay listed as in flight (so
+// the stale sweep leaves them alone) and a gate lets the quit path wait for the save.
 pub(crate) fn with_parts_outside_lock<R>(
     shared: &Mutex<Vec<RecordingPartInfo>>,
     work: impl FnOnce(&mut Vec<RecordingPartInfo>) -> R,
 ) -> R {
+    let _gate = REC_PARTS_GATE.lock().unwrap_or_else(|e| e.into_inner());
     let mut mine = std::mem::take(&mut *shared.lock().unwrap_or_else(|e| e.into_inner()));
+    *REC_PARTS_SAVING.lock().unwrap_or_else(|e| e.into_inner()) = mine.clone();
+    let _mark = PartsInFlight;
     let result = work(&mut mine);
     if !mine.is_empty() {
         let mut guard = shared.lock().unwrap_or_else(|e| e.into_inner());
