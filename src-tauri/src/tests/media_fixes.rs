@@ -450,3 +450,16 @@ fn the_ocr_temp_guard_exists_before_the_png_is_written() {
         assert!(at - guard < 400, "the guard sits right before {save}");
     }
 }
+
+// Structural fix, no red unit test: where the work runs cannot be observed from a unit test.
+#[cfg(windows)]
+#[test]
+fn the_ocr_data_url_is_decoded_on_the_blocking_pool() {
+    let src = include_str!("../ocr_cmds.rs");
+    let cmd = src.split("pub(crate) async fn ocr_image_data").nth(1).unwrap().split("fn decode_ocr_data_url").next().unwrap();
+    let spawn = cmd.find("spawn_blocking").expect("blocking pool");
+    let decode = cmd.find("decode_ocr_data_url(&data_url)").expect("decode call");
+    assert!(decode > spawn, "decoding must happen inside the blocking closure");
+    assert!(!cmd.contains("data_url_bytes("), "no decode before the pool");
+    assert!(crate::ocr_cmds::decode_ocr_data_url("data:image/png;base64,AAAA").is_err());
+}

@@ -425,20 +425,30 @@ pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join
             MAX_OCR_IMAGE_BYTES / (1024 * 1024)
         ));
     }
-    let bytes = data_url_bytes(&data_url);
-    let img = decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8();
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang))
-            .await
-            .map_err(|e| e.to_string())?
+        // The base64 and image decode of a large capture is CPU work: it runs on the blocking
+        // pool together with the recognition, never on the async command worker.
+        tauri::async_runtime::spawn_blocking(move || {
+            let img = decode_ocr_data_url(&data_url)?;
+            ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = (img, upscale_under_px, join_lines, lang, auto_pick_lang);
+        let _ = (data_url, upscale_under_px, join_lines, lang, auto_pick_lang);
         Err("ocr is only available on Windows".to_string())
     }
+}
+
+// Data URL to RGBA pixels, the CPU-heavy half of ocr_image_data.
+#[cfg(windows)]
+pub(crate) fn decode_ocr_data_url(data_url: &str) -> Result<image::RgbaImage, String> {
+    let bytes = data_url_bytes(data_url);
+    Ok(decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8())
 }
 
 // Long enough for a real screenshot of text, short enough that a photo of a wall of text
