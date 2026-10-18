@@ -309,10 +309,13 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
     };
     let json = serde_json::to_string_pretty(&ThemeExport { name: theme.name.clone(), base: theme.base, vars: theme.vars })
         .map_err(|e| e.to_string())?;
-    let file = file_dialog(&app)
-        .set_file_name(format!("{}.json", export_file_name_from(&theme.name, "theme")))
-        .add_filter("JSON", &["json"])
-        .save_file();
+    let dialog_app = app.clone();
+    let file_name = format!("{}.json", export_file_name_from(&theme.name, "theme"));
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&dialog_app).set_file_name(file_name).add_filter("JSON", &["json"]).save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     match file {
         Some(path) => fs::write(&path, json).map_err(|e| e.to_string()),
         None => Err("canceled".to_string()),
@@ -323,7 +326,10 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
 // more than a hand-typed value. async for the same reason as export_custom_theme.
 #[tauri::command]
 pub(crate) async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Settings, String> {
-    let file = file_dialog(&app).add_filter("JSON", &["json"]).pick_file();
+    let dialog_app = app.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || file_dialog(&dialog_app).add_filter("JSON", &["json"]).pick_file())
+        .await
+        .map_err(|e| e.to_string())?;
     let Some(path) = file else {
         return Err("canceled".to_string());
     };

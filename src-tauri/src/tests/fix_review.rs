@@ -190,3 +190,14 @@ fn an_undo_snapshot_trims_only_after_the_restore_saved() {
     db_trim_versions(&conn, "p", 5).unwrap();
     assert_eq!(version_count(&conn, "p"), 5);
 }
+
+#[test]
+fn the_stats_and_theme_file_dialogs_wait_on_a_blocking_thread() {
+    let stats = include_str!("../stats.rs");
+    let theme = include_str!("../theme.rs");
+    for (src, name) in [(stats, "export_stats"), (theme, "export_custom_theme"), (theme, "import_custom_theme")] {
+        let body = diff_writes::fn_text(src, name);
+        assert!(body.contains("spawn_blocking"), "{name} must not hold an async worker for the dialog");
+        assert!(body.contains("file_dialog("), "{name} still opens the dialog");
+    }
+}

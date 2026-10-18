@@ -319,10 +319,17 @@ pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: S
         "json" => stats_to_json(&entries, &daily, &tools),
         _ => return Err("unsupported-export-format".to_string()),
     };
-    let file = file_dialog(&app)
-        .set_file_name(format!("usage-stats.{format}"))
-        .add_filter(format.to_uppercase(), &[format.as_str()])
-        .save_file();
+    // The save dialog is modal: it waits on a blocking thread, not on an async worker.
+    let dialog_app = app.clone();
+    let dialog_format = format.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&dialog_app)
+            .set_file_name(format!("usage-stats.{dialog_format}"))
+            .add_filter(dialog_format.to_uppercase(), &[dialog_format.as_str()])
+            .save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     match file {
         Some(path) => {
             write_bytes_atomic(&path, content.as_bytes()).map_err(|e| e.to_string())?;

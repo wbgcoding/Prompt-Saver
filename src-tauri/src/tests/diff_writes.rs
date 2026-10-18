@@ -1052,7 +1052,7 @@ fn a_panic_log_line_never_quotes_the_data_the_panic_choked_on() {
 
 // The text of the first fn called `name` (from its signature to the next top-level item), for
 // source assertions about which thread a command runs its blocking work on.
-fn fn_text<'a>(src: &'a str, name: &str) -> &'a str {
+pub(super) fn fn_text<'a>(src: &'a str, name: &str) -> &'a str {
     let at = src.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("fn {name} not found"));
     let rest = &src[at..];
     let end = rest[3..].find("\n}\n").map(|i| i + 3).unwrap_or(rest.len());
