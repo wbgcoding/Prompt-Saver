@@ -781,6 +781,7 @@ export default {
     expertMenu: "Meniu expert",
     back: "Înapoi",
     chainStepHint: "Trage pentru a reordona, clic dreapta pentru a elimina.",
+    chainStepKeys: "Alt+săgeți mută, Delete elimină.",
     expGroupTiles: "Dale",
     expGroupTooltips: "Indicii",
     expGroupTileLook: "Aspectul dalelor",

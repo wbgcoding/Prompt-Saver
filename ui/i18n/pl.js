@@ -781,6 +781,7 @@ export default {
     expertMenu: "Menu eksperta",
     back: "Wstecz",
     chainStepHint: "Przeciągnij, aby zmienić kolejność, kliknij prawym przyciskiem, aby usunąć.",
+    chainStepKeys: "Alt+strzałki przesuwają, Delete usuwa.",
     expGroupTiles: "Kafelki",
     expGroupTooltips: "Podpowiedzi",
     expGroupTileLook: "Wygląd kafelków",

@@ -781,6 +781,7 @@ export default {
     expertMenu: "Menú experto",
     back: "Atrás",
     chainStepHint: "Arrastra para reordenar, clic derecho para quitar.",
+    chainStepKeys: "Alt+flechas mueven, Supr quita.",
     expGroupTiles: "Mosaicos",
     expGroupTooltips: "Información emergente",
     expGroupTileLook: "Aspecto de los mosaicos",

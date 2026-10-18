@@ -781,6 +781,7 @@ export default {
     expertMenu: "Expertmenu",
     back: "Terug",
     chainStepHint: "Sleep om te herordenen, klik met de rechtermuisknop om te verwijderen.",
+    chainStepKeys: "Alt+pijltjes verplaatsen, Delete verwijdert.",
     expGroupTiles: "Tegels",
     expGroupTooltips: "Tooltips",
     expGroupTileLook: "Weergave van tegels",

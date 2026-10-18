@@ -758,6 +758,7 @@ export default {
     expertMenu: "Expert menu",
     back: "Back",
     chainStepHint: "Drag to reorder, right-click to remove.",
+    chainStepKeys: "Alt+arrows move, Delete removes.",
     expGroupTiles: "Tiles",
     expGroupTooltips: "Tooltips",
     expGroupTileLook: "Tile appearance",

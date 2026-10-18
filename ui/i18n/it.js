@@ -781,6 +781,7 @@ export default {
     expertMenu: "Menu esperto",
     back: "Indietro",
     chainStepHint: "Trascina per riordinare, clic destro per rimuovere.",
+    chainStepKeys: "Alt+frecce spostano, Canc rimuove.",
     expGroupTiles: "Riquadri",
     expGroupTooltips: "Suggerimenti",
     expGroupTileLook: "Aspetto dei riquadri",

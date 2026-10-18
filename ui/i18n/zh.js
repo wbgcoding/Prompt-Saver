@@ -781,6 +781,7 @@ export default {
     expertMenu: "专家菜单",
     back: "返回",
     chainStepHint: "拖动可重新排序，右键单击可移除。",
+    chainStepKeys: "Alt+方向键移动，Delete 移除。",
     expGroupTiles: "磁贴",
     expGroupTooltips: "提示",
     expGroupTileLook: "磁贴外观",

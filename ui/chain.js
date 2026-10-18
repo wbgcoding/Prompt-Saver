@@ -134,7 +134,19 @@ export function renderChainOverview() {
       miss.textContent = `${t("chainMissing")} ${info.missing.join(", ")}`;
       row.append(miss);
     }
-    row.title = t("chainStepHint");
+    row.title = `${t("chainStepHint")} ${t("chainStepKeys")}`;
+    row.tabIndex = 0;
+    row.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      let handled = true;
+      if (e.key === "Delete" || e.key === "Backspace") removeChainStep(i);
+      else if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowUp")) moveChainStep(i, i - 1);
+      else if (e.altKey && (e.key === "ArrowRight" || e.key === "ArrowDown")) moveChainStep(i, i + 1);
+      else handled = false;
+      if (!handled) return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
     row.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
@@ -159,6 +171,24 @@ export function removeChainStep(i) {
   chainRaw.delete(id);
   refreshChainUi();
   pushChainClipboard();
+  focusChainStep(i);
+}
+
+// The overview is rebuilt on every change, so a keyboard action puts focus back on the row
+// now at the given position (the next step after a removal, the moved step after a reorder).
+function focusChainStep(i) {
+  const rows = document.querySelectorAll("#chain-overview .chain-ov-row");
+  if (rows.length) rows[Math.max(0, Math.min(rows.length - 1, i))].focus();
+}
+
+// Moves one step to another position by keyboard; the same reorder the drag does.
+export function moveChainStep(from, to) {
+  if (from < 0 || from >= chainSel.length || to < 0 || to >= chainSel.length || from === to) return;
+  const [moved] = chainSel.splice(from, 1);
+  chainSel.splice(to, 0, moved);
+  refreshChainUi();
+  pushChainClipboard();
+  focusChainStep(to);
 }
 
 // Reorders the chain steps with plain pointer events (the webview's own drop

@@ -781,6 +781,7 @@ export default {
     expertMenu: "Menu avançado",
     back: "Voltar",
     chainStepHint: "Arraste para reordenar, clique com o botão direito para remover.",
+    chainStepKeys: "Alt+setas movem, Delete remove.",
     expGroupTiles: "Blocos",
     expGroupTooltips: "Dicas",
     expGroupTileLook: "Aparência dos blocos",

@@ -1105,6 +1105,17 @@ section(() => {
   check(src.includes("if (varsWindowPending === resolve) varsWindowPending = null; resolve(false);"), "a newer pending resolver survives an older failed open");
 });
 
+// 63. Chain overview steps can be moved and removed by keyboard.
+section(() => {
+  const src = read("chain.js");
+  check(src.includes("row.tabIndex = 0;"), "a step row is focusable");
+  const kd = extractBlock(src, 'row.addEventListener("keydown"');
+  check(kd.includes("removeChainStep(i)") && kd.includes("moveChainStep(i, i - 1)") && kd.includes("moveChainStep(i, i + 1)"), "Delete and Alt+arrows act on the step");
+  const mv = extractBlock(src, "export function moveChainStep(").replace("export ", "");
+  const sb = run("var chainSel = [1, 2, 3], pushed = 0; function refreshChainUi() {} function pushChainClipboard() { pushed++; } function focusChainStep() {} " + mv + "; moveChainStep(0, 1); var a = chainSel.join(); moveChainStep(2, 3); var b = chainSel.join(); moveChainStep(1, 0); var c = chainSel.join();", {});
+  check(sb.a === "2,1,3" && sb.b === "2,1,3" && sb.c === "1,2,3", "a move reorders and an out of range move is ignored");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

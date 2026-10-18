@@ -758,6 +758,7 @@ export default {
     expertMenu: "Expertenmenü",
     back: "Zurück",
     chainStepHint: "Ziehen zum Umsortieren, Rechtsklick zum Entfernen.",
+    chainStepKeys: "Alt+Pfeiltasten verschieben, Entf entfernt.",
     expGroupTiles: "Kacheln",
     expGroupTooltips: "Kurzinfos",
     expGroupTileLook: "Kachel-Aussehen",

@@ -781,6 +781,7 @@ export default {
     expertMenu: "Uzman menüsü",
     back: "Geri",
     chainStepHint: "Yeniden sıralamak için sürükleyin, kaldırmak için sağ tıklayın.",
+    chainStepKeys: "Alt+oklar taşır, Delete kaldırır.",
     expGroupTiles: "Kutucuklar",
     expGroupTooltips: "Araç ipuçları",
     expGroupTileLook: "Kutucuk görünümü",

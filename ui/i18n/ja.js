@@ -781,6 +781,7 @@ export default {
     expertMenu: "エキスパートメニュー",
     back: "戻る",
     chainStepHint: "ドラッグで並べ替え、右クリックで削除します。",
+    chainStepKeys: "Alt+矢印で移動、Deleteで削除します。",
     expGroupTiles: "タイル",
     expGroupTooltips: "ツールチップ",
     expGroupTileLook: "タイルの外観",
