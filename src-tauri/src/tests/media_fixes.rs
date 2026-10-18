@@ -362,3 +362,17 @@ fn a_failed_export_task_still_closes_its_job_row() {
     assert!(body.contains("result.unwrap_or_else(|e| Err(e.to_string()))"));
     assert!(!body.contains("result.map_err(|e| e.to_string())?"));
 }
+
+#[test]
+fn a_superseded_filmstrip_loop_stops_before_its_first_thumbnail() {
+    // Structural fix, no red unit test: the stale check sits inside the per-thumbnail loop behind a
+    // real ffprobe call, so the source contrast pins the wiring and the call below pins the signature.
+    let src = include_str!("../video_editor.rs");
+    assert!(src.contains("is_stale: impl Fn() -> bool"));
+    assert!(src.contains("FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
+        }"));
+    let r = crate::video_editor::generate_filmstrip_blocking(
+        std::path::Path::new("nope-ffmpeg"), std::path::Path::new("nope-ffprobe"), std::path::Path::new("nope.mp4"), 3, || true,
+    );
+    assert!(r.is_err(), "the probe of a missing file fails first");
+}

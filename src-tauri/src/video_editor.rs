@@ -330,6 +330,10 @@ pub(crate) fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
     Some(std::env::temp_dir().join(brand::TEMP_DIR).join("video-thumbs").join(format!("{key:x}")))
 }
 
+// Counts filmstrip requests and editor closings: a running thumbnail loop that sees a newer value
+// has been superseded (another source was loaded, or the editor closed) and stops decoding.
+pub(crate) static FILMSTRIP_GEN: AtomicU64 = AtomicU64::new(0);
+
 // No duration parameter: the editor already ran probe_recording before reaching the
 // timeline, so ffprobe is known to be present.
 #[tauri::command]
@@ -341,7 +345,10 @@ pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32)
     let count = count.clamp(1, 300);
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count))
+    let my_gen = FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn_blocking(move || {
+        generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count, || FILMSTRIP_GEN.load(Ordering::SeqCst) != my_gen)
+    })
         .await
         .map_err(|e| e.to_string())?
 }
@@ -350,7 +357,11 @@ pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32)
 // `-vf select` pass: a recording's variable frame rate (WGC capture never
 // guarantees CFR) makes frame-index-based selection unreliable, while a
 // wall-clock `-ss` seek before `-i` is exact regardless of frame timing.
-pub(crate) fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32) -> Result<Vec<String>, String> {
+// `is_stale` is polled before every thumbnail; once it answers true the loop returns an empty
+// list (the page ignores a result for a source it no longer shows).
+pub(crate) fn generate_filmstrip_blocking(
+    ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32, is_stale: impl Fn() -> bool,
+) -> Result<Vec<String>, String> {
     use std::os::windows::process::CommandExt;
     let duration_ms = probe_recording_blocking(ffprobe, src)?.duration_ms;
     let Some(cache_dir) = filmstrip_cache_dir(src, count) else {
@@ -369,6 +380,9 @@ pub(crate) fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &P
         fs::create_dir_all(&cache_dir).map_err(|e| format!("thumbnail cache: {e}"))?;
         let dur_s = (duration_ms as f64 / 1000.0).max(0.1);
         for (i, p) in out.iter().enumerate() {
+            if is_stale() {
+                return Ok(Vec::new());
+            }
             let t = dur_s * (i as f64 + 0.5) / count as f64;
             let mut cmd = std::process::Command::new(ffmpeg);
             cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
@@ -1486,6 +1500,7 @@ pub(crate) async fn open_video_editor(
     win.on_window_event(|event| {
         if matches!(event, tauri::WindowEvent::Destroyed) {
             refuse_pending_editor_requests();
+            FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
         }
     });
     set_capture_exclusion(&win, excluded);
