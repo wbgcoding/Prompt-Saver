@@ -700,7 +700,24 @@ pub(crate) async fn clip_export_path(ext: String) -> Result<String, String> {
 // copy_recording_to_clipboard.
 #[tauri::command]
 pub(crate) async fn copy_file_to_clipboard(path: String) -> bool {
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let p = Path::new(&path);
+    if !is_clip_export_file(&own_temp_dir, p) && !is_known_export_output(p) {
+        return false;
+    }
     set_clipboard_file(&path)
+}
+
+// Whether `path` is a file clip_export_path_impl hands out: a clip-export name directly in the
+// app's temp folder. The parent is compared canonicalized so a `..` hop cannot slip out.
+pub(crate) fn is_clip_export_file(temp_root: &Path, path: &Path) -> bool {
+    let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !name.starts_with(&prefix) || !path.is_file() {
+        return false;
+    }
+    let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    temp_root.canonicalize().map(|c| c == parent).unwrap_or(false)
 }
 
 // recDiscardKeepH has no expert-menu row yet (like recCanvasMode above); 0 disables the

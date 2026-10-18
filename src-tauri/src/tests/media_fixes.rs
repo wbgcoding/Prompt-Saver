@@ -45,3 +45,26 @@ fn the_editor_opens_only_known_files() {
     assert!(!export_source_is_allowed(&dirs, &temp_root, &paths, &foreign), "an arbitrary readable file");
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn only_clip_export_files_go_to_the_clipboard() {
+    let root = std::env::temp_dir().join(format!("ps-clipexp-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let own = root.join("own");
+    let other = root.join("other");
+    for d in [&own, &other] {
+        fs::create_dir_all(d).unwrap();
+    }
+    let name = format!("{}-clipexport-1.mp4", brand::TEMP_PREFIX);
+    let good = own.join(&name);
+    let wrong_dir = other.join(&name);
+    let wrong_name = own.join("data.db");
+    for f in [&good, &wrong_dir, &wrong_name] {
+        fs::write(f, b"x").unwrap();
+    }
+    assert!(is_clip_export_file(&own, &good));
+    assert!(!is_clip_export_file(&own, &wrong_dir), "right name in another folder");
+    assert!(!is_clip_export_file(&own, &wrong_name), "some other file in the temp folder");
+    assert!(!is_clip_export_file(&own, &own.join(format!("..{}other{}{}", std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR, name))));
+    let _ = fs::remove_dir_all(&root);
+}
