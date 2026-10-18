@@ -1458,6 +1458,7 @@ export default {
     errRecordingUnreadable: "Înregistrarea nu a putut fi citită",
     errSourceNotAllowed: "Acest fișier se află pe alt calculator, așa că nu poate fi folosit aici.",
     errDataMoveRecording: "Oprește înregistrarea înainte de a muta dosarul de date.",
+    errDataMoveBusy: "Dosarul de date este deja în curs de mutare.",
     errToolStart: "Instrumentul video nu a putut fi pornit",
     errFfmpegTimeout: "ffmpeg nu a răspuns la timp. Fișierul se află pe o unitate lentă sau deconectată?",
     errMicMux: "Pista microfonului nu a putut fi adăugată",

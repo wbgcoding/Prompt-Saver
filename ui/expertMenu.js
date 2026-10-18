@@ -902,6 +902,9 @@ export async function refreshSettingsLocked() {
 export let settingsWriteFailed = false;
 export function assignSettingsWriteFailed(v) { settingsWriteFailed = v; }
 
+// True while set_data_dir copies the library; a second change request waits for it.
+let dataDirMoving = false;
+
 // ---- Data folder lock -----------------------------------------------------
 // Whether another machine's fresh lock on the data folder makes this process read-only, and
 // which machine. Decided once at load (or right after set_data_dir points at a new folder);
@@ -1028,12 +1031,21 @@ export const EXPERT_PATHS = {
   dataDir: {
     label: "valDataDir",
     get: () => currentDataDir,
-    change: async () => {
+    change: async (ev) => {
+      // The click's own button, taken before any await (currentTarget is gone afterwards).
+      const btn = ev?.currentTarget || null;
+      if (dataDirMoving) return;
       const dir = await invoke("pick_folder", { purpose: "data" }).catch(() => null);
       if (!dir) return;
       if (!(await confirmSyncFolderChoice(dir))) return;
       let oldPath;
-      try { oldPath = await invoke("set_data_dir", { dir }); } catch (e) { errToast(e); return; }
+      // The copy can take a while: no second pick until this one ends, however it ends.
+      dataDirMoving = true;
+      if (btn) btn.disabled = true;
+      try { oldPath = await invoke("set_data_dir", { dir }); } catch (e) { errToast(e); return; } finally {
+        dataDirMoving = false;
+        if (btn) btn.disabled = false;
+      }
       // A respelled path of the folder in use is no move: the backend hands back the
       // same current folder, and then there is nothing to offer to delete.
       const nowDir = await invoke("current_data_dir").catch(() => dir);

@@ -1832,7 +1832,7 @@ pub(crate) fn move_store_dir(
 // store in the target if present, otherwise copies the current one across. The old
 // data is left untouched; the caller may offer to delete it. Returns the old path.
 #[tauri::command]
-pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Result<String, String> {
+pub(crate) async fn set_data_dir(app: AppHandle, dir: String) -> Result<String, String> {
     let trimmed = dir.trim();
     if trimmed.is_empty() {
         return Err("empty path".to_string());
@@ -1842,10 +1842,40 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     if recording_active(&app) || REC_STARTING.load(Ordering::SeqCst) {
         return Err("data-move-recording".to_string());
     }
+    // One move at a time: a second pick while the first still copies would race it on the same files.
+    if DATA_MOVE_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return Err("data-move-busy".to_string());
+    }
+    let guard = DataMoveGuard;
     if !consume_granted_dir(Path::new(trimmed), "data") {
         return Err("dir-not-picked".to_string());
     }
     let new = PathBuf::from(trimmed);
+    // The copy of a large library, the checkpoint and the rebase block for as long as the disk
+    // takes, so they run off the async runtime. The guard moves along and is released when the
+    // work ends, whichever way it ends.
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        move_data_dir_blocking(&app, new)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// Lets exactly one data folder move run at a time; set by set_data_dir, cleared on drop.
+pub(crate) static DATA_MOVE_BUSY: AtomicBool = AtomicBool::new(false);
+
+pub(crate) struct DataMoveGuard;
+
+impl Drop for DataMoveGuard {
+    fn drop(&mut self) {
+        DATA_MOVE_BUSY.store(false, Ordering::SeqCst);
+    }
+}
+
+// The disk part of set_data_dir, in its fixed order: flush, copy, pointer write, rebase.
+fn move_data_dir_blocking(app: &AppHandle, new: PathBuf) -> Result<String, String> {
+    let state = app.state::<Db>();
     fs::create_dir_all(&new).map_err(|e| e.to_string())?;
     let current = data_dir(&app);
     let old = current.to_string_lossy().to_string();

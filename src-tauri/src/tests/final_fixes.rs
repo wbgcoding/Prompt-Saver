@@ -142,3 +142,39 @@ fn moving_the_data_folder_is_refused_while_a_recording_runs() {
         assert!(text.contains("    errDataMoveRecording: \""), "{lang}");
     }
 }
+
+#[test]
+fn the_data_folder_move_runs_off_the_runtime_and_one_at_a_time() {
+    let src = source!("../snip.rs");
+    let at = src.find("pub(crate) async fn set_data_dir").unwrap();
+    let body = &src[at..];
+    let body = &body[..body.find("fn move_data_dir_blocking").unwrap()];
+    let busy = body.find("\"data-move-busy\"").expect("a second call is refused");
+    let grant = body.find("consume_granted_dir").unwrap();
+    let spawn = body.find("tauri::async_runtime::spawn_blocking").expect("disk work is off the runtime");
+    assert!(busy < grant && grant < spawn);
+    assert!(body.contains("let _guard = guard;"), "the guard is released when the work ends");
+    // The step order inside the blocking part is the one the abort rules rely on.
+    let work = &src[src.find("fn move_data_dir_blocking").unwrap()..];
+    let work = &work[..work.find("\n}\n").unwrap()];
+    let flush = work.find("let mut flush").unwrap();
+    let rebase = work.find("let mut rebase").unwrap();
+    let mv = work.find("move_store_dir(&current, &new").unwrap();
+    assert!(flush < rebase && rebase < mv);
+    // The guard really is exclusive.
+    assert!(DATA_MOVE_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok());
+    {
+        let _g = DataMoveGuard;
+        assert!(DATA_MOVE_BUSY.load(Ordering::SeqCst));
+    }
+    assert!(!DATA_MOVE_BUSY.load(Ordering::SeqCst), "dropping the guard frees the slot");
+    let map = source!("../../../ui/errors.js");
+    assert!(map.contains("\"data-move-busy\": \"errDataMoveBusy\""));
+    let menu = source!("../../../ui/expertMenu.js");
+    assert!(menu.contains("dataDirMoving = true;") && menu.contains("dataDirMoving = false;"));
+    assert!(menu.contains("btn.disabled = true") && menu.contains("btn.disabled = false"));
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+        let text = fs::read_to_string(format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        assert!(text.contains("    errDataMoveBusy: \""), "{lang}");
+    }
+}

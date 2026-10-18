@@ -1458,6 +1458,7 @@ export default {
     errRecordingUnreadable: "无法读取该录制",
     errSourceNotAllowed: "此文件位于另一台电脑上，因此无法在这里使用。",
     errDataMoveRecording: "请先停止录制，再移动数据文件夹。",
+    errDataMoveBusy: "数据文件夹正在移动中。",
     errToolStart: "无法启动视频工具",
     errFfmpegTimeout: "ffmpeg 未能及时响应。该文件是否位于速度较慢或已断开连接的驱动器上？",
     errMicMux: "无法添加麦克风音轨",
