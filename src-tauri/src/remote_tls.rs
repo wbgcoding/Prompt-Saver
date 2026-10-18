@@ -154,12 +154,17 @@ type Ymd = (i32, u8, u8);
 // year ten years ahead. Short-lived: from yesterday, 823 days in all, so no
 // device sees a longer window than it allows.
 fn validity(short: bool) -> (Ymd, Ymd) {
-    let now = now_secs();
+    validity_at(now_secs(), short)
+}
+
+// The window for a given clock reading (seconds since the epoch): the calendar year comes
+// from the day count, since an average-year division is a day or two off around New Year.
+pub(crate) fn validity_at(now: i64, short: bool) -> (Ymd, Ymd) {
+    let today = now.div_euclid(86_400);
     if short {
-        let today = now.div_euclid(86_400);
         (civil_from_days(today - 1), civil_from_days(today - 1 + SHORT_LIVED_SPAN_DAYS))
     } else {
-        let year = 1970 + (now / 31_556_952) as i32;
+        let year = civil_from_days(today).0;
         // Starts a year back so a device with a slightly wrong clock still accepts it.
         ((year - 1, 1, 1), (year + VALIDITY_YEARS, 12, 31))
     }
@@ -454,6 +459,17 @@ mod tests {
 
     fn names() -> Vec<String> {
         names_for(Some("Test-PC"), Some("TESTPC"))
+    }
+
+    #[test]
+    fn the_default_window_takes_its_year_from_the_calendar() {
+        // The last second of 2026 and the first of 2027: an average-year division reads the
+        // old year as the new one.
+        let ((y0, m0, d0), (y1, m1, d1)) = validity_at(1_798_761_599, false);
+        assert_eq!((y0, m0, d0), (2025, 1, 1));
+        assert_eq!((y1, m1, d1), (2026 + VALIDITY_YEARS, 12, 31));
+        let ((y0, ..), _) = validity_at(1_798_761_600, false);
+        assert_eq!(y0, 2026);
     }
 
     #[test]
