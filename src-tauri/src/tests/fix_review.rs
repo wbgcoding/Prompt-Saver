@@ -57,14 +57,14 @@ fn sealing_version_rows_overwrites_the_freed_pages() {
 }
 
 #[test]
-fn a_synced_file_cannot_name_a_network_path() {
+fn a_synced_file_keeps_the_paths_it_names() {
     let p = md_sync_1::sync_test_prompt();
     let md = prompt_to_md(&p, &SyncPlacement::default());
     assert!(md.contains("file: \n") && md.contains("icon: \n"), "the fixture writes empty media lines");
     let net = md.replace("file: \n", "file: \\\\host\\share\\x.mp4\n").replace("icon: \n", "icon: //host/share/i.png\n");
     let got = apply_md_to_prompt(&p, &net).expect("valid frontmatter");
-    assert_eq!(got.file_path, "", "a network file path from the folder is cleared");
-    assert_eq!(got.icon_path, "", "a network icon path from the folder is cleared");
+    assert_eq!(got.file_path, r"\\host\share\x.mp4", "a network file path from the folder is kept as written");
+    assert_eq!(got.icon_path, "//host/share/i.png", "a network icon path from the folder is kept as written");
     let local = md.replace("file: \n", "file: C:/clips/a.mp4\n").replace("icon: \n", "icon: C:/clips/i.png\n");
     let got = apply_md_to_prompt(&p, &local).unwrap();
     assert_eq!((got.file_path.as_str(), got.icon_path.as_str()), ("C:/clips/a.mp4", "C:/clips/i.png"));

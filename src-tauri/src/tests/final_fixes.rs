@@ -178,3 +178,15 @@ fn the_data_folder_move_runs_off_the_runtime_and_one_at_a_time() {
         assert!(text.contains("    errDataMoveBusy: \""), "{lang}");
     }
 }
+
+#[test]
+fn a_synced_file_keeps_a_network_path_as_written() {
+    let mut p = sync_blank_prompt("p1".into());
+    p.file_path = String::new();
+    let md = format!("---\nname: x\ncolor: \ntags: \nnotes: \nfile: {}\nicon: //nas/ps/i.png\n---\nbody\n", r"\\nas\ps\a.pdf");
+    let out = apply_md_to_prompt(&p, &md).unwrap();
+    assert_eq!(out.file_path, r"\\nas\ps\a.pdf");
+    assert_eq!(out.icon_path, "//nas/ps/i.png");
+    let src = source!("../md_sync.rs");
+    assert!(!src.contains("is_network_path"), "the sync reader no longer blanks a path");
+}
