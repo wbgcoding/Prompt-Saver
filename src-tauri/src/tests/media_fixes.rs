@@ -904,3 +904,31 @@ fn a_clip_export_path_is_judged_by_its_parent_before_the_file_is_touched() {
     assert!(body.find("is_network_path(").is_some_and(|n| n < parent_at), "text check first");
     assert!(parent_at < file_at, "the parent decides before the file is touched");
 }
+
+// A still taken with the playhead on the clip's very end (it just played through) used to fail:
+// seeking to the duration leaves ffmpeg no frame to write. Runs the bundled ffmpeg when the
+// checkout has it (it is a build input) and skips otherwise.
+#[test]
+fn still_frame_at_clip_end_falls_back_to_last_frame() {
+    let ffmpeg = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffmpeg.exe");
+    if !ffmpeg.is_file() {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("ps-still-end-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let clip = dir.join("clip.mp4");
+    let made = std::process::Command::new(&ffmpeg)
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=30:duration=1", "-pix_fmt", "yuv420p"])
+        .arg(&clip)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    for format in ["png", "jpeg", "webp"] {
+        for at_ms in [500, 1000, 4000] {
+            let bytes = extract_still_frame_blocking(&ffmpeg, &clip, at_ms, format)
+                .unwrap_or_else(|e| panic!("{format} at {at_ms} ms: {e}"));
+            assert!(!bytes.is_empty(), "{format} at {at_ms} ms");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

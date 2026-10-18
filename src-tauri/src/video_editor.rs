@@ -587,24 +587,35 @@ pub(crate) async fn extract_still_frame(app: AppHandle, state: State<'_, Db>, pa
 // extension picks the encoder, -q:v is JPEG's quality knob (unset for lossless targets), and
 // -lossless 1 keeps WebP lossless like encode_screenshot's WebP.
 pub(crate) fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &str) -> Result<Vec<u8>, String> {
-    use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let tmp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
     fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
     let tmp = tmp_dir.join(format!("{}-still-{}-{}.{}", brand::TEMP_PREFIX, std::process::id(), stamp, screenshot_format_ext(format)));
-    let secs = at_ms as f64 / 1000.0;
+    let seek = ["-ss".to_string(), format!("{:.3}", at_ms as f64 / 1000.0)];
+    match run_still_ffmpeg(ffmpeg, src, &seek, &["-frames:v", "1"], format, &tmp) {
+        Ok(bytes) => Ok(bytes),
+        // A playhead parked on the very end (the clip just played through) seeks past the last
+        // frame, and ffmpeg writes nothing. Fall back to the last frame: decode the final second
+        // and let each frame overwrite the same file.
+        Err(_) if at_ms > 0 => run_still_ffmpeg(ffmpeg, src, &["-sseof".to_string(), "-1".to_string()], &["-update", "1"], format, &tmp),
+        Err(e) => Err(e),
+    }
+}
+
+fn run_still_ffmpeg(ffmpeg: &Path, src: &Path, seek: &[String], pick: &[&str], format: &str, tmp: &Path) -> Result<Vec<u8>, String> {
+    use std::os::windows::process::CommandExt;
     let mut cmd = std::process::Command::new(ffmpeg);
-    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
-        .arg(format!("{secs:.3}"))
+    cmd.args(["-y", "-hide_banner", "-loglevel", "error"])
+        .args(seek)
         .arg("-i")
         .arg(src)
-        .args(["-frames:v", "1"]);
+        .args(pick);
     match format {
         "jpeg" => { cmd.args(["-q:v", "2"]); }
         "webp" => { cmd.args(["-lossless", "1"]); }
         _ => {}
     }
-    cmd.arg(&tmp);
+    cmd.arg(tmp);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
@@ -612,11 +623,11 @@ pub(crate) fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64
     let status = match status_in_job(&mut cmd, Duration::from_secs(60)) {
         Ok(s) => s,
         Err(e) => {
-            let _ = take_still_output(&tmp, false);
+            let _ = take_still_output(tmp, false);
             return Err(tool_run_error("ffmpeg", &e));
         }
     };
-    take_still_output(&tmp, status.success())
+    take_still_output(tmp, status.success())
 }
 
 // Reads the extracted frame and removes it; on a failed run the file is removed
