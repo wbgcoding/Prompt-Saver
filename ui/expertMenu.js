@@ -1327,8 +1327,22 @@ export function paletteRow() {
 export async function savePalette(colors) {
   const oldHues = COLORS.slice(1);
   const value = colors ? JSON.stringify(colors) : "";
-  settings.ui_texts = { ...(settings.ui_texts || {}), palette: value };
-  try { await invoke("set_ui_text", { key: "palette", value }); } catch (e) { errToast(e); }
+  const texts = settings.ui_texts || {};
+  const had = Object.prototype.hasOwnProperty.call(texts, "palette");
+  const before = texts.palette;
+  settings.ui_texts = { ...texts, palette: value };
+  try {
+    await invoke("set_ui_text", { key: "palette", value });
+  } catch (e) {
+    // The store kept the old palette: put it back and leave every saved colour alone.
+    const back = { ...(settings.ui_texts || {}) };
+    if (had) back.palette = before; else delete back.palette;
+    settings.ui_texts = back;
+    errToast(e);
+    loadPalette();
+    renderExpert();
+    return;
+  }
   loadPalette();
   const newHues = COLORS.slice(1);
   const pairs = [];

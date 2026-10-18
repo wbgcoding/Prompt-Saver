@@ -676,6 +676,23 @@ section(() => {
   check(!/type\s*=\s*"color"/.test(row) && /openColorPop\(/.test(row) && /aria-label/.test(row), "the palette swatches use the themed picker with a label");
 });
 
+// 29. A refused palette write skips the colour remap and restores the stored palette.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function savePalette(").replace("export ", "");
+  later(async () => {
+    const calls = [];
+    const settings = { ui_texts: { palette: "[\"#111111\"]" } };
+    const sb = run(fn, {
+      settings, COLORS: ["", "#111111"], PALETTE_LEN: 1, loadPalette() {}, renderExpert() {}, refreshColorUI() {}, renderViews() {}, renderGrid: async () => {},
+      assignPrompts() {}, assignSettings() {}, errToast() {},
+      invoke: async (cmd) => { calls.push(cmd); if (cmd === "set_ui_text") throw new Error("denied"); return {}; },
+    });
+    await sb.savePalette(["#222222"]);
+    check(!calls.includes("remap_colors") && settings.ui_texts.palette === "[\"#111111\"]", "a refused palette write neither remaps colours nor keeps the new palette");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
