@@ -538,6 +538,14 @@ pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
 pub(crate) const DATA_WIPE_TABLES: [&str; 7] =
     ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state", "editor_drafts"];
 
+// After a wipe the deleted rows still sit in SQLite's free pages and in the write-ahead log.
+// Repacks the file, then folds the log back and truncates it, so the old bytes are overwritten.
+pub(crate) fn scrub_freed_pages(conn: &Connection) -> bool {
+    let packed = conn.execute("VACUUM", []).is_ok();
+    let folded = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())).is_ok();
+    packed && folded
+}
+
 // Empties every table in DATA_WIPE_TABLES; returns the ones that failed with their error.
 pub(crate) fn wipe_data_tables(c: &Connection) -> Vec<(&'static str, rusqlite::Error)> {
     let mut failed = Vec::new();
@@ -607,6 +615,21 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
         // next write to skip.
         store.forget_written_rows();
     }
+    // With the lock dropped: every picture and attachment the deleted prompts named is an orphan
+    // now (the sweep re-checks the live store and keeps pending captures), and the freed
+    // database pages and the log must not keep the old rows.
+    let sweep_app = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        sweep_orphan_files(&sweep_app, &std::collections::HashSet::new());
+        db_conn(&sweep_app).is_some_and(|c| scrub_freed_pages(&c))
+    })
+    .await
+    .map(|scrubbed| {
+        if !scrubbed {
+            incomplete = true;
+            append_crash_log("delete_all_data: could not repack the database");
+        }
+    });
     rearm_hotkeys(&app); // No prompts left to keep accelerators bound
     rebuild_tray(&app); // Nothing left to offer in the tray either
     if incomplete {

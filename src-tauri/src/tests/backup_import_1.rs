@@ -967,3 +967,29 @@ fn imported_rows_never_keep_a_network_path() {
     assert!(store.prompts[0].file_path.is_empty(), "a full backup is cleared too");
     assert_eq!(store.prompts[0].icon_path, "C:/ok/local.mp4");
 }
+
+#[test]
+fn a_wiped_library_leaves_no_old_row_bytes_in_the_database_or_its_log() {
+    let dir = std::env::temp_dir().join(format!("ps-wipe-scrub-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let db = dir.join("data.db");
+    let conn = Connection::open(&db).unwrap();
+    conn.query_row("PRAGMA journal_mode=WAL", [], |_| Ok(())).unwrap();
+    conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);").unwrap();
+    let marker = "ZQXJ-confidential-marker-ZQXJ";
+    for i in 0..40 {
+        conn.execute("INSERT INTO prompts VALUES (?1, ?1, ?2)", rusqlite::params![i, format!("{marker} {i}")]).unwrap();
+    }
+    conn.execute("DELETE FROM prompts", []).unwrap();
+    let holds_marker = || {
+        ["data.db", "data.db-wal"].iter().any(|n| {
+            fs::read(dir.join(n)).map(|b| b.windows(marker.len()).any(|w| w == marker.as_bytes())).unwrap_or(false)
+        })
+    };
+    assert!(holds_marker(), "the fixture must show the leftover first");
+    assert!(scrub_freed_pages(&conn));
+    assert!(!holds_marker(), "deleted rows must not survive in free pages or the log");
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
