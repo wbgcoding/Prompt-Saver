@@ -294,8 +294,11 @@ listen("recorder-target-picked", async (e) => {
 
 pauseBtn.addEventListener("click", async () => {
   try {
-    await invoke(paused ? "resume_recording" : "pause_recording");
-    applyPaused(!paused);
+    // Decide before the await: a poll tick landing meanwhile may already have flipped
+    // `paused`, and re-reading it afterwards would toggle back to the old state.
+    const next = !paused;
+    await invoke(next ? "pause_recording" : "resume_recording");
+    applyPaused(next);
   } catch {}
 });
 // Closes the running file like Stop, then opens the next one with the same

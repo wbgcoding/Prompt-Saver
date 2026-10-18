@@ -519,6 +519,27 @@ section(() => {
   check(focused === 1, "choosing an option returns the focus to the trigger button");
 });
 
+later(async () => {
+  const src = read("recbar.js");
+  let handler;
+  const calls = [];
+  const applied = [];
+  let release;
+  const sb = {
+    paused: false,
+    pauseBtn: { addEventListener: (t, fn) => { handler = fn; } },
+    invoke: (cmd) => { calls.push(cmd); return new Promise((r) => { release = r; }); },
+    applyPaused: (v) => { applied.push(v); sb.paused = v; },
+  };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock(src, 'pauseBtn.addEventListener("click", async () =>') + ");", sb);
+  const done = handler();
+  sb.paused = true; // the poll lands while the request is in flight
+  release();
+  await done;
+  check(calls[0] === "pause_recording" && applied.length === 1 && applied[0] === true, "the pause click applies the state it asked for, not the flipped poll state");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
