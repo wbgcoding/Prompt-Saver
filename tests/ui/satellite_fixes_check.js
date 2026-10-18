@@ -218,6 +218,38 @@ later(async () => {
   check(/videoEverPlayed = false;[^\n]*\n\s+userPaused = false;/.test(src), "a new video source resets the user pause");
 });
 
+// Number field: a held "+" stops at the limit instead of repeating change events forever.
+section(() => {
+  const src = read("floatShared.js");
+  const code = extractBlock(src, "function stepBy(") + "\n" + extractBlock(src, "function armHold(");
+  const timers = [];
+  const el = { value: "8", min: "0", max: "10", step: "1", changes: 0, dispatchEvent() { this.changes++; return true; } };
+  const sb = {
+    el, bigStep: 0, Event: function Event() {},
+    liveStep: () => 1,
+    clampVal: (v) => Math.min(10, Math.max(0, v)),
+    setTimeout: (fn) => { timers.push({ fn, interval: false, live: true }); return timers.length; },
+    setInterval: (fn) => { timers.push({ fn, interval: true, live: true }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].live = false; },
+    clearInterval: (id) => { if (timers[id - 1]) timers[id - 1].live = false; },
+  };
+  vm.createContext(sb);
+  vm.runInContext(code + "\nthis.armHold = armHold;", sb);
+  const handlers = {};
+  let captured = 0;
+  const btn = { disabled: false, setPointerCapture: () => { captured++; }, addEventListener: (n, fn) => { handlers[n] = fn; } };
+  sb.armHold(btn, 1);
+  handlers.pointerdown({ shiftKey: false, pointerId: 1 });
+  check(captured === 1, "pressing a step button captures the pointer");
+  timers[0].fn(); // the hold delay elapsed: the repeat starts
+  const rep = timers[1];
+  for (let i = 0; i < 6 && rep.live; i++) rep.fn();
+  check(el.value === "10", `the held value ends at the maximum (got ${el.value})`);
+  check(rep.live === false, "the repeat stops once a step changes nothing");
+  check(el.changes <= 4, `no change event is sent for an unchanged value more than once (got ${el.changes})`);
+  check(typeof handlers.lostpointercapture === "function", "losing the capture also ends the hold");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

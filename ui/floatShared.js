@@ -601,10 +601,14 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   // to re-check its disabled state; see the call sites next to those writes in ui/video.js.
   el.numFieldRefresh = refreshButtons;
 
+  // Returns whether the step moved the value, so a held button can stop at the limit.
   function stepBy(dir, big) {
     const delta = (big ? (bigStep || liveStep() * 10) : liveStep()) * dir;
-    el.value = String(clampVal((Number(el.value) || 0) + delta));
+    const cur = Number(el.value) || 0;
+    const next = clampVal(cur + delta);
+    el.value = String(next);
     el.dispatchEvent(new Event("change", { bubbles: true }));
+    return next !== cur;
   }
 
   el.addEventListener(
@@ -627,12 +631,16 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
       holdInterval = null;
     };
     btn.addEventListener("pointerdown", (e) => {
+      // Captured, so the release reaches this button even after it turned disabled at the limit.
+      try { btn.setPointerCapture(e.pointerId); } catch { /* no active pointer: the leave events still stop it */ }
       stepBy(dir, e.shiftKey);
       holdTimeout = setTimeout(() => {
-        holdInterval = setInterval(() => stepBy(dir, e.shiftKey), 60);
+        holdInterval = setInterval(() => {
+          if (!stepBy(dir, e.shiftKey) || btn.disabled) stop();
+        }, 60);
       }, 400);
     });
-    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, stop));
+    ["pointerup", "pointerleave", "pointercancel", "lostpointercapture"].forEach((ev) => btn.addEventListener(ev, stop));
   }
   // steppers: false leaves the minus and plus buttons out of the control (wheel and
   // arrow keys still step the input); refreshButtons then only touches detached nodes.
