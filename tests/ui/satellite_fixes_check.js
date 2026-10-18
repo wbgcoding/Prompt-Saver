@@ -104,6 +104,13 @@ section(() => {
   check(!src.includes('if (id === "ve-export-format") VE.destOverride = null;') &&/VE\.destOverride = withExtension\(VE\.destOverride/.test(src), "the format dropdown no longer clears the chosen destination");
 });
 
+// Only the backend's exact "cancelled" answer is a user cancel; a failure whose text merely
+// mentions "cancel" (a file name, an ffmpeg line) still shows the error with its details.
+section(() => {
+  check(!/raw\.includes\("cancel"\)/.test(read("videoExport.js")) && /raw\.trim\(\) === "cancelled"/.test(read("videoExport.js")), "the video export treats only the exact cancelled answer as a cancel");
+  check(!/raw\.includes\("cancel"\)/.test(read("capture.js")) && /raw\.trim\(\) === "cancelled"/.test(read("capture.js")), "the recording conversion treats only the exact cancelled answer as a cancel");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

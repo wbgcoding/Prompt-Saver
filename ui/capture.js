@@ -459,7 +459,7 @@ export function bindCapture() {
       // Cancelled by the user, ffmpeg missing, or a real failure: the untouched raw recording is
       // still there to fall back to, and only a real failure gets the "Technical details" row.
       const raw = String(err);
-      if (raw.includes("cancel")) {
+      if (raw.trim() === "cancelled") {
         recStatus.textContent = t("recConvertCancelled");
       } else if (raw.includes("ffmpeg-missing")) {
         recStatus.textContent = `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`;

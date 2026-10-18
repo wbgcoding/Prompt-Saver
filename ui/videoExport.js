@@ -287,7 +287,7 @@ export async function startExport(toClipboard) {
     // by the shared classifier, with the raw text only under "Technical details".
     if (!stillHere()) {
       // the editor moved on to another recording; nothing of this one to show
-    } else if (raw.includes("cancel")) {
+    } else if (raw.trim() === "cancelled") {
       $("ve-export-status").textContent = t("veExportCancelled");
     } else if (raw.includes("ffmpeg-missing")) {
       $("ve-export-status").textContent = t("recFfmpegMissingHint");
