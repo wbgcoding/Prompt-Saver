@@ -356,6 +356,12 @@ section(() => {
   check(/\.snip-size\.inside\s*\{[^}]*top:\s*4px/.test(fs.readFileSync(path.join(uiDir, "styles", "snip.css"), "utf8")), "the inside placement exists in the stylesheet");
 });
 
+section(() => {
+  const html = read("video.html");
+  const tag = (html.match(/<div id="confirm-modal"[^>]*>/) || [""])[0];
+  check(/aria-labelledby="confirm-title"/.test(tag) && /aria-describedby="confirm-msg"/.test(tag), "the video window confirm dialog is named and described");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
