@@ -1124,6 +1124,28 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
     }
 }
 
+// The boxes float_recall spreads out, in physical pixels: every pill (in a stable
+// id order) and then every folder, each sized by its own scale and the screen's
+// scale factor. Returns the pill ids in the same order as their boxes.
+pub(crate) fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
+    let mut wishes: Vec<Rect> = Vec::new();
+    let mut pill_ids: Vec<String> = settings.floating.keys().cloned().collect();
+    pill_ids.sort(); // stable fan-out order across runs
+    for id in &pill_ids {
+        let scale = float_scale_of(settings, id);
+        let (w, h) = match prompts.iter().find(|p| &p.id == id) {
+            Some(p) => pill_dims(is_image_prompt(p), scale),
+            None => pill_dims(false, scale),
+        };
+        wishes.push(Rect { x: work.x, y: work.y, w: w * dpi, h: h * dpi });
+    }
+    for folder in &settings.float_folders {
+        let side = folder_box(folder.scale) * dpi;
+        wishes.push(Rect { x: work.x, y: work.y, w: side, h: side });
+    }
+    (pill_ids, wishes)
+}
+
 // Expert action "Bring every floating window back to the main screen": the emergency exit
 // when monitor changes have left positions not worth untangling. Every pill and folder,
 // parked or not, gets a fresh spread-out spot on the main screen and forgets its old
