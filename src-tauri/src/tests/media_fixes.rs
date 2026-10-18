@@ -118,3 +118,17 @@ fn a_failed_overlay_build_ends_the_whole_snip_session() {
     assert!(arm.contains("close_all_snip(&app)"));
     assert!(!arm.contains("SNIP_ACTIVE.store(false"), "clearing one flag leaves the rest of the session behind");
 }
+
+#[test]
+fn a_new_recording_never_takes_an_existing_name() {
+    let root = std::env::temp_dir().join(format!("ps-recname-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let name = rec_filename(2026, 10, 18, 12, 0, 0);
+    assert_eq!(free_rec_path(&root, &name), root.join(&name));
+    fs::write(root.join(&name), b"x").unwrap();
+    assert_eq!(free_rec_path(&root, &name), root.join("rec-2026-10-18_120000-2.mp4"));
+    fs::write(root.join("rec-2026-10-18_120000-2.mp4"), b"x").unwrap();
+    assert_eq!(free_rec_path(&root, &name), root.join("rec-2026-10-18_120000-3.mp4"));
+    let _ = fs::remove_dir_all(&root);
+}

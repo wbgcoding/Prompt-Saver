@@ -1,6 +1,6 @@
 use super::{
     append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, free_space_bytes, letterbox_frame_top_down,
-    scale_to_fit_frame_top_down, rec_filename, now_ms,
+    scale_to_fit_frame_top_down, rec_filename, free_rec_path, now_ms,
     AudioQueueShared, RecWavWriter,
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
@@ -1146,7 +1146,7 @@ pub fn new_output_path(recordings_dir: &Path) -> Result<PathBuf, String> {
     let name = rec_filename(
         st.wYear as i32, st.wMonth as u32, st.wDay as u32, st.wHour as u32, st.wMinute as u32, st.wSecond as u32,
     );
-    Ok(recordings_dir.join(name))
+    Ok(free_rec_path(recordings_dir, &name))
 }
 
 // Every continuation part keeps the first file's name stem and timestamp with a numbered
