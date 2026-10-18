@@ -1609,6 +1609,7 @@ export default {
     recBusy: "O înregistrare rulează deja. Oprește-o mai întâi, apoi pornește una nouă.",
     recBarCancel: "Anulează înregistrarea",
     cameraMenuItem: "Înregistrează camera",
+    cameraDeviceN: "Cameră {n}",
     cameraStart: "Începe înregistrarea",
     cameraNoDevice: "Nu a fost găsită nicio cameră. Conectează o cameră și încearcă din nou.",
     cameraAudioSource: "Sursă audio",

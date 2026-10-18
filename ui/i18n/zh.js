@@ -1609,6 +1609,7 @@ export default {
     recBusy: "已经有一个录制正在进行。请先停止它，然后再开始新的录制。",
     recBarCancel: "取消录制",
     cameraMenuItem: "录制摄像头画面",
+    cameraDeviceN: "摄像头 {n}",
     cameraStart: "开始录制",
     cameraNoDevice: "未检测到摄像头。请连接摄像头后重试。",
     cameraAudioSource: "音频来源",

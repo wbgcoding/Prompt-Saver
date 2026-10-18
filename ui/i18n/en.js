@@ -1617,6 +1617,7 @@ export default {
     recBusy: "A recording is already running. Stop it first, then start a new one.",
     recBarCancel: "Cancel recording",
     cameraMenuItem: "Record camera",
+    cameraDeviceN: "Camera {n}",
     cameraStart: "Start recording",
     cameraNoDevice: "No camera found. Connect a camera and try again.",
     cameraAudioSource: "Audio source",

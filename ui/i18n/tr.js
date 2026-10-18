@@ -1609,6 +1609,7 @@ export default {
     recBusy: "Zaten bir kayıt sürüyor. Önce onu durdurun, sonra yenisini başlatın.",
     recBarCancel: "Kaydı iptal et",
     cameraMenuItem: "Kamerayı kaydet",
+    cameraDeviceN: "Kamera {n}",
     cameraStart: "Kaydı başlat",
     cameraNoDevice: "Kamera bulunamadı. Bir kamera bağlayıp tekrar deneyin.",
     cameraAudioSource: "Ses kaynağı",

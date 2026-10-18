@@ -1609,6 +1609,7 @@ export default {
     recBusy: "Nagrywanie już trwa. Zatrzymaj je najpierw, a potem rozpocznij nowe.",
     recBarCancel: "Anuluj nagrywanie",
     cameraMenuItem: "Nagraj kamerę",
+    cameraDeviceN: "Kamera {n}",
     cameraStart: "Rozpocznij nagrywanie",
     cameraNoDevice: "Nie znaleziono kamery. Podłącz kamerę i spróbuj ponownie.",
     cameraAudioSource: "Źródło dźwięku",

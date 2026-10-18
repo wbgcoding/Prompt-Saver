@@ -1609,6 +1609,7 @@ export default {
     recBusy: "Er loopt al een opname. Stop deze eerst en start daarna een nieuwe.",
     recBarCancel: "Opname annuleren",
     cameraMenuItem: "Camera opnemen",
+    cameraDeviceN: "Camera {n}",
     cameraStart: "Opname starten",
     cameraNoDevice: "Geen camera gevonden. Sluit een camera aan en probeer het opnieuw.",
     cameraAudioSource: "Audiobron",

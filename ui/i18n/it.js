@@ -1609,6 +1609,7 @@ export default {
     recBusy: "È già in corso una registrazione. Fermala prima di avviarne una nuova.",
     recBarCancel: "Annulla registrazione",
     cameraMenuItem: "Registra fotocamera",
+    cameraDeviceN: "Fotocamera {n}",
     cameraStart: "Avvia registrazione",
     cameraNoDevice: "Nessuna fotocamera trovata. Collega una fotocamera e riprova.",
     cameraAudioSource: "Sorgente audio",

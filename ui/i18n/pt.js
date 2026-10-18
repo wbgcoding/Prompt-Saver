@@ -1609,6 +1609,7 @@ export default {
     recBusy: "Já existe uma gravação em curso. Pare-a primeiro e depois inicie uma nova.",
     recBarCancel: "Cancelar gravação",
     cameraMenuItem: "Gravar câmera",
+    cameraDeviceN: "Câmera {n}",
     cameraStart: "Iniciar gravação",
     cameraNoDevice: "Nenhuma câmera encontrada. Conecte uma câmera e tente novamente.",
     cameraAudioSource: "Fonte de áudio",

@@ -1617,6 +1617,7 @@ export default {
     recBusy: "Es läuft bereits eine Aufnahme. Beende sie zuerst, dann starte eine neue.",
     recBarCancel: "Aufnahme verwerfen",
     cameraMenuItem: "Kamera aufnehmen",
+    cameraDeviceN: "Kamera {n}",
     cameraStart: "Aufnahme starten",
     cameraNoDevice: "Keine Kamera gefunden. Kamera anschließen und erneut versuchen.",
     cameraAudioSource: "Tonquelle",

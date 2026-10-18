@@ -988,6 +988,14 @@ section(() => {
   check(/id="confirm-modal"[^>]*aria-labelledby="confirm-title"[^>]*aria-describedby="confirm-msg"/.test(html), "the confirm alertdialog names its title and message");
 });
 
+// 49. Camera fallback names use a keyed template and the draft preview cuts by code point.
+section(() => {
+  const src = read("main.js");
+  check(src.includes('t("cameraDeviceN").replace("{n}", () => String(i + 1))'), "the camera fallback name uses the {n} template");
+  check(!src.includes('${t("cameraMenuItem")} ${i + 1}'), "no hard-coded word order remains");
+  check(/Array\.from\([^;]*\.trim\(\)\)\.slice\(0, 140\)\.join\(""\)/.test(src), "the draft preview is cut by code point");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

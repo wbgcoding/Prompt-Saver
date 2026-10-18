@@ -1609,6 +1609,7 @@ export default {
     recBusy: "すでに録画が実行中です。先に停止してから、新しい録画を開始してください。",
     recBarCancel: "録画をキャンセル",
     cameraMenuItem: "カメラを録画",
+    cameraDeviceN: "カメラ {n}",
     cameraStart: "録画を開始",
     cameraNoDevice: "カメラが見つかりません。カメラを接続してもう一度お試しください。",
     cameraAudioSource: "音声ソース",
