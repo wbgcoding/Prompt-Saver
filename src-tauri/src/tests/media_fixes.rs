@@ -220,8 +220,10 @@ fn closing_the_editor_refuses_every_waiting_open_request() {
 #[test]
 fn the_window_fallback_crops_the_frame_the_overlay_showed() {
     let src = include_str!("../capture.rs");
-    let at = src.find("Target's global physical rect").expect("rect resolution block");
-    assert!(src[at..at + 500].contains("snip_window_rect(window_frame_rect(id)"));
+    // The rect comes from the one window probe, which crops the visible frame the overlay showed.
+    let at = src.find("pub(crate) fn probe_window(").expect("probe");
+    assert!(src[at..at + 600].contains("snip_window_rect(window_frame_rect(id)"));
+    assert!(src.contains("match probe.rect"));
 }
 
 #[test]
