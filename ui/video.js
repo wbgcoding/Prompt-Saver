@@ -1879,12 +1879,17 @@ listen("video-editor-load", async (e) => {
   // discard unsaved edits: it guards the same case closeWindow() does, with its exact confirm.
   if (VE.ops.length && VE.dirty) {
     ack("asking");
+    const askedSrc = VE.src;
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
     if (!ok) { ack("refused"); return; }
-    // Thrown away on purpose: stop the autosave for the old source and forget what an
-    // earlier tick stored, or reopening that recording would offer the work back.
-    stopEditStateAutosave();
-    if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+    // A second request queued behind the first confirm: once the first was accepted the old
+    // edits are gone and another source is loaded, so there is nothing left to discard.
+    if (VE.src === askedSrc && VE.ops.length && VE.dirty) {
+      // Thrown away on purpose: stop the autosave for the old source and forget what an
+      // earlier tick stored, or reopening that recording would offer the work back.
+      stopEditStateAutosave();
+      if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+    }
   }
   loadRecording(path, originDir, overlayPath);
   ack("accepted");

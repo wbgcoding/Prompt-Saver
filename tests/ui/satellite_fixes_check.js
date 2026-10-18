@@ -38,6 +38,33 @@ section(() => {
   check(/batchDestNames\(names, format\)/.test(src), "the batch export builds its destinations with batchDestNames");
 });
 
+// Video editor: a second "load" request queued behind the first confirm must not discard the
+// edit state of the source the first request just loaded.
+later(async () => {
+  const src = read("video.js");
+  let handler = null;
+  const discards = [];
+  const gates = [];
+  const sb = {
+    listen: (name, fn) => { if (name === "video-editor-load") handler = fn; },
+    VE: { src: "A.mp4", ops: [1], dirty: true },
+    t: (k) => k,
+    stopEditStateAutosave: () => {},
+    invoke: async (cmd, args) => { if (cmd === "discard_edit_state") discards.push(args.target); },
+    confirmDialog: () => new Promise((resolve) => gates.push(resolve)),
+    loadRecording: (p) => { sb.VE.src = p; sb.VE.ops = []; sb.VE.dirty = false; },
+  };
+  run(extractBlock(src, 'listen("video-editor-load", async (e)') + ");", sb);
+  const first = handler({ payload: "B.mp4" });
+  const second = handler({ payload: "C.mp4" });
+  gates[0](true);
+  await first;
+  gates[1](true);
+  await second;
+  check(discards.length === 1 && discards[0] === "A.mp4", `only the replaced source loses its edit state (got ${JSON.stringify(discards)})`);
+  check(sb.VE.src === "C.mp4", "the last confirmed request is the one that ends up loaded");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
