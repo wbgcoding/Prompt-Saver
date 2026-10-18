@@ -786,7 +786,7 @@ pub(crate) fn update_script_content(installer: &Path, app_exe: &Path) -> Result<
     fn quoted(p: &Path) -> Result<String, String> {
         let t = p.to_string_lossy();
         if t.contains(['"', '\r', '\n']) {
-            return Err("update path not usable".to_string());
+            return Err("invalid update source".to_string());
         }
         Ok(t.replace('%', "%%"))
     }
