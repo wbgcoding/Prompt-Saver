@@ -101,3 +101,39 @@ fn every_leading_separator_pair_and_nt_prefix_counts_as_a_network_path() {
         assert!(!is_network_path(p), "{p:?} is local");
     }
 }
+
+fn locked_copies(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.starts_with("data.db.locked"))
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn locked_database_copies_are_kept_per_incident_newest_two_and_aged_out() {
+    let root = std::env::temp_dir().join(format!("{}-test-locked-rotate", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("data.db"), b"rows").unwrap();
+    let day = 86_400u64;
+    let t0 = 1_700_000_000u64;
+    keep_locked_backup(&root, t0);
+    assert_eq!(locked_copies(&root).len(), 1, "the first incident leaves a timestamped copy");
+    keep_locked_backup(&root, t0 + 60);
+    assert_eq!(locked_copies(&root).len(), 1, "a relaunch within the hour is the same incident");
+    keep_locked_backup(&root, t0 + 2 * day);
+    keep_locked_backup(&root, t0 + 4 * day);
+    let left = locked_copies(&root);
+    assert_eq!(left.len(), 2, "only the newest two copies stay: {left:?}");
+    assert!(left.iter().all(|n| !n.ends_with(&format!(".{t0}.bak"))), "the oldest copy rotated out");
+    // A clean launch keeps the copies (they may be the only pre-lock rows) until they are 90 days old.
+    prune_locked_backups(&root, t0 + 5 * day);
+    assert_eq!(locked_copies(&root).len(), 2, "a clean launch does not delete a young copy");
+    prune_locked_backups(&root, t0 + 4 * day + 91 * day);
+    assert!(locked_copies(&root).is_empty(), "copies older than 90 days are removed at launch");
+    let _ = std::fs::remove_dir_all(&root);
+}

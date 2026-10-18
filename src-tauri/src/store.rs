@@ -1651,12 +1651,65 @@ pub(crate) fn db_upgrade_version_rows(conn: &mut Connection) -> rusqlite::Result
     Ok(rewritten)
 }
 
-// The raw copy kept while writes were locked by an unreadable row. Gone once a launch loads clean
-// and with a data wipe, so it never outlives the situation it was kept for.
+// The raw copies kept while writes were locked by an unreadable row. Each incident gets its own
+// timestamped copy (`data.db.locked.<unix seconds>.bak`); the newest two stay and anything older
+// than 90 days goes at launch. A data wipe removes them all, so they never outlive the library.
+const LOCKED_BAK_KEEP: usize = 2;
+const LOCKED_BAK_MAX_AGE_SECS: u64 = 90 * 86_400;
+// A relaunch inside this window is the same incident, not a new copy.
+const LOCKED_BAK_SAME_INCIDENT_SECS: u64 = 3600;
+
+// (timestamp, path) of every locked copy, newest first. The legacy un-numbered name takes its
+// file time.
+fn locked_backups(dir: &Path) -> Vec<(u64, PathBuf)> {
+    let mut out: Vec<(u64, PathBuf)> = Vec::new();
+    let Ok(rd) = fs::read_dir(dir) else { return out };
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let ts = if name == "data.db.locked.bak" {
+            e.metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        } else if let Some(n) = name.strip_prefix("data.db.locked.").and_then(|r| r.strip_suffix(".bak")) {
+            match n.parse::<u64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            }
+        } else {
+            continue;
+        };
+        out.push((ts, e.path()));
+    }
+    out.sort_by(|a, b| b.0.cmp(&a.0));
+    out
+}
+
+// Drops the copies past the newest two or older than 90 days.
+pub(crate) fn prune_locked_backups(dir: &Path, now: u64) {
+    for (i, (ts, path)) in locked_backups(dir).into_iter().enumerate() {
+        if i >= LOCKED_BAK_KEEP || now.saturating_sub(ts) > LOCKED_BAK_MAX_AGE_SECS {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+// Copies the raw database aside for a lock incident (unless one was made within the hour) and
+// rotates the older copies.
+pub(crate) fn keep_locked_backup(dir: &Path, now: u64) {
+    let newest = locked_backups(dir).first().map(|(ts, _)| *ts);
+    if newest.is_none_or(|ts| now.saturating_sub(ts) >= LOCKED_BAK_SAME_INCIDENT_SECS) {
+        let _ = fs::copy(dir.join("data.db"), dir.join(format!("data.db.locked.{now}.bak")));
+    }
+    prune_locked_backups(dir, now);
+}
+
+// Removes every locked copy: the data wipe only.
 pub(crate) fn remove_locked_backup(dir: &Path) {
-    let bak = dir.join("data.db.locked.bak");
-    if bak.exists() {
-        let _ = fs::remove_file(&bak);
+    for (_, path) in locked_backups(dir) {
+        let _ = fs::remove_file(path);
     }
 }
 
@@ -1673,20 +1726,17 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
         // A row (prompts, trash or settings) could not be read back or decrypted: preserve the raw
         // DB and lock the affected writes (prompts_locked, SETTINGS_LOCKED).
         if decrypt_fails > 0 || settings_unreadable {
-            let db_path = dir.join("data.db");
-            let bak = dir.join("data.db.locked.bak");
-            if !bak.exists() {
-                let _ = fs::copy(&db_path, &bak);
-            }
+            keep_locked_backup(&dir, crate::copy::now_secs());
             append_crash_log(&format!(
                 "{} row(s) failed to load reliably (query error, unreadable row, or decrypt failure){}; \
-                 writes locked, raw DB copied to data.db.locked.bak",
+                 writes locked, raw DB copied to data.db.locked.<time>.bak",
                 decrypt_fails,
                 if settings_unreadable { " (settings row included)" } else { "" }
             ));
         } else {
-            // The lock is resolved: the raw copy would keep every row purged since, for good.
-            remove_locked_backup(&dir);
+            // The lock is resolved. The copies may be the only pre-lock rows, so they stay for a
+            // while; the newest two and 90 days cap what they keep of rows purged since.
+            prune_locked_backups(&dir, crate::copy::now_secs());
         }
         SETTINGS_LOCKED.store(settings_unreadable, Ordering::Relaxed);
         let mut settings = settings_opt.clone().unwrap_or_default();
