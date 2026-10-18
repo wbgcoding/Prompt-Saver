@@ -236,3 +236,21 @@ fn an_attached_photo_previews_upright() {
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!((img.width(), img.height()), (1, 2));
 }
+
+#[test]
+fn a_tiff_reaches_the_editor_as_a_png() {
+    let dir = std::env::temp_dir().join(format!("ps-tiff-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("scan.tif");
+    image::RgbaImage::from_pixel(3, 2, image::Rgba([10, 20, 30, 255])).save_with_format(&file, image::ImageFormat::Tiff).unwrap();
+    let (kind, fmt) = detect_media_kind(&file, None).expect("a tiff is an image");
+    assert_eq!(kind, "image");
+    let url = editor_image_data_url(&file, fmt).expect("converts");
+    let png = file.with_file_name("plain.png");
+    image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 255])).save(&png).unwrap();
+    let plain = editor_image_data_url(&png, Some(image::ImageFormat::Png)).expect("passes through");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(url.starts_with("data:image/png;base64,"), "the webview cannot decode tiff");
+    assert_eq!(decode_image_mem(&data_url_bytes(&url)).map(|i| (i.width(), i.height())), Some((3, 2)));
+    assert!(plain.starts_with("data:image/png;base64,"));
+}

@@ -52,6 +52,22 @@ pub(crate) fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(
     None
 }
 
+// The data URL the editor loads. The webview decodes png, jpeg, gif, webp, bmp and ico itself,
+// so those travel as the file's own bytes; any other format the image crate reads (TIFF, TGA ...)
+// is re-encoded to PNG, otherwise the editor's image element fails and nothing opens.
+pub(crate) fn editor_image_data_url(path: &Path, fmt: Option<image::ImageFormat>) -> Result<String, String> {
+    use image::ImageFormat as F;
+    if matches!(fmt, Some(F::Png | F::Jpeg | F::Gif | F::WebP | F::Bmp | F::Ico)) {
+        let bytes = fs::read(path).map_err(|e| e.to_string())?;
+        let mime = fmt.map(image_format_mime).unwrap_or("image/png");
+        return Ok(format!("data:{};base64,{}", mime, base64_encode(&bytes)));
+    }
+    let img = decode_image_oriented(image::ImageReader::open(path).map_err(|e| e.to_string())?).ok_or_else(|| "not-media".to_string())?;
+    let mut png = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok(format!("data:image/png;base64,{}", base64_encode(&png.into_inner())))
+}
+
 #[derive(Serialize)]
 #[serde(tag = "kind")]
 pub(crate) enum OpenEditResult {
@@ -160,9 +176,13 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
     .map_err(|e| e.to_string())?;
     match kind {
         Some(("image", fmt)) => {
-            let bytes = fs::read(&p).map_err(|e| e.to_string())?;
-            let mime = fmt.map(image_format_mime).unwrap_or("image/png");
-            let data_url = format!("data:{};base64,{}", mime, base64_encode(&bytes));
+            // Reading (up to the size ceiling) and a possible re-encode: off the async runtime.
+            let data_url = tauri::async_runtime::spawn_blocking({
+                let p = p.clone();
+                move || editor_image_data_url(&p, fmt)
+            })
+            .await
+            .map_err(|e| e.to_string())??;
             Ok(OpenEditResult::Image { data_url, origin_dir, name })
         }
         Some(("video", _)) => {
