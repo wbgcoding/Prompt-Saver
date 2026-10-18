@@ -420,8 +420,51 @@ export async function resetSettings() {
   clearTimeout(resetSettingsTimer);
   disarmButton(btn, t("resetSettings"));
   if (!(await maybeBackupBeforeWipe("reset"))) return;
-  await invoke("reset_settings");
+  try {
+    await invoke("reset_settings");
+  } catch (e) {
+    errToast(e);
+  }
   await reloadEverything(); // in place: a page reload repaints the whole window
+}
+
+// A boolean ui flag behind a settings switch: write it at once, and when the store refuses,
+// put the switch and the stored flag back so the panel never shows what was not saved.
+export async function persistFlagSwitch(box, key) {
+  const enabled = box.checked;
+  const before = settings.ui_flags || {};
+  const had = Object.prototype.hasOwnProperty.call(before, key);
+  const previous = before[key];
+  settings.ui_flags = { ...before, [key]: enabled };
+  try {
+    await invoke("set_ui_flag", { key, enabled });
+  } catch (err) {
+    const flags = { ...(settings.ui_flags || {}) };
+    if (had) flags[key] = previous; else delete flags[key];
+    settings.ui_flags = flags;
+    box.checked = !enabled;
+    errToast(err);
+  }
+}
+
+// Always-on-top: the header pin and the settings switch stay in sync; the pin tints itself
+// (accent) while active. A refused call puts both back.
+function paintOnTop(on) {
+  $("opt-ontop").checked = on;
+  $("pin-top").classList.toggle("active", on);
+  $("pin-top").setAttribute("aria-pressed", String(on));
+}
+export async function setOnTop(on) {
+  const before = settings.always_on_top;
+  settings.always_on_top = on;
+  paintOnTop(on);
+  try {
+    await invoke("set_always_on_top", { enabled: on });
+  } catch (err) {
+    settings.always_on_top = before;
+    paintOnTop(!!before);
+    errToast(err);
+  }
 }
 
 export function bindSettingsPanel() {
@@ -435,23 +478,23 @@ export function bindSettingsPanel() {
   // pointerdown (not click): selecting text that ends outside an input must not close.
   settingsEl.addEventListener("pointerdown", (e) => { if (e.target === settingsEl) hideSettings(); });
 
-  $("opt-minimize").addEventListener("change", (e) => {
-    invoke("set_minimize_on_close", { enabled: e.target.checked }).catch((err) => errToast(err));
+  $("opt-minimize").addEventListener("change", async (e) => {
+    const box = e.target;
+    const before = settings.minimize_to_tray;
+    settings.minimize_to_tray = box.checked;
+    try {
+      await invoke("set_minimize_on_close", { enabled: box.checked });
+    } catch (err) {
+      settings.minimize_to_tray = before;
+      box.checked = !box.checked;
+      errToast(err);
+    }
   });
-  $("opt-screenshot-folder").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: e.target.checked };
-    invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
+  $("opt-screenshot-folder").addEventListener("change", (e) => persistFlagSwitch(e.target, "screenshotSave"));
   // Master tooltip switch (default on): off = no hover tooltips anywhere.
-  $("opt-tooltips").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), tooltipsEnabled: e.target.checked };
-    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
+  $("opt-tooltips").addEventListener("change", (e) => persistFlagSwitch(e.target, "tooltipsEnabled"));
   // Auto-paste (default on): normal setting; enter-after stays in the expert menu.
-  $("opt-autopaste").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
-    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
+  $("opt-autopaste").addEventListener("change", (e) => persistFlagSwitch(e.target, "autoPaste"));
   // Recording copies from other apps is switched in the expert menu and in the copy history tab.
   $("opt-autostart").addEventListener("change", async (e) => {
     try {
@@ -470,15 +513,6 @@ export function bindSettingsPanel() {
       errToast(err);
     }
   });
-  // Always-on-top: the header pin and the settings switch stay in sync; the
-  // pin tints itself (accent) while active.
-  const setOnTop = (on) => {
-    settings.always_on_top = on;
-    $("opt-ontop").checked = on;
-    $("pin-top").classList.toggle("active", on);
-    $("pin-top").setAttribute("aria-pressed", String(on));
-    invoke("set_always_on_top", { enabled: on }).catch((err) => errToast(err));
-  };
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
 

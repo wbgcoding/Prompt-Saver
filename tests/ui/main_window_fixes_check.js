@@ -736,6 +736,35 @@ section(() => {
   check(dialogs.length >= 28 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
 });
 
+// 33. Settings switches: a refused write puts the switch and the stored value back; a refused settings reset still reloads.
+section(() => {
+  const src = read("settingsPanel.js");
+  const persist = extractBlock(src, "export async function persistFlagSwitch(").replace("export ", "");
+  const onTop = extractBlock(src, "function paintOnTop(") + "\n" + extractBlock(src, "export async function setOnTop(").replace("export ", "");
+  const reset = extractBlock(src, "export async function resetSettings(").replace("export ", "");
+  later(async () => {
+    const pin = { classes: {}, attrs: {}, classList: { toggle(c, v) { pin.classes[c] = v; } }, setAttribute(k, v) { pin.attrs[k] = v; } };
+    const ontop = { checked: false };
+    const els = { "opt-ontop": ontop, "pin-top": pin };
+    const settings = { ui_flags: { autoPaste: true }, always_on_top: false };
+    const errs = [];
+    const sb = run([persist, onTop].join("\n"), { settings, $: (id) => els[id], invoke: async () => { throw new Error("denied"); }, errToast: (e) => errs.push(e) });
+    const box = { checked: false };
+    await sb.persistFlagSwitch(box, "autoPaste");
+    check(box.checked === true && settings.ui_flags.autoPaste === true && errs.length === 1, "a refused flag write flips the switch back and keeps the old flag");
+    const fresh = { checked: true };
+    await sb.persistFlagSwitch(fresh, "tooltipsEnabled");
+    check(fresh.checked === false && !("tooltipsEnabled" in settings.ui_flags), "a refused first write leaves no flag behind");
+    await sb.setOnTop(true);
+    check(settings.always_on_top === false && ontop.checked === false && pin.attrs["aria-pressed"] === "false" && pin.classes.active === false, "a refused pin restores state, switch and pin");
+    let reloaded = 0;
+    const r = run(reset, { $: () => ({}), armButton: () => true, clearTimeout() {}, disarmButton() {}, t: (k) => k, maybeBackupBeforeWipe: async () => true, resetSettingsTimer: null,
+      invoke: async () => { throw new Error("denied"); }, errToast: (e) => errs.push(e), reloadEverything: async () => { reloaded++; } });
+    await r.resetSettings();
+    check(errs.length === 4 && reloaded === 1, "a refused settings reset is reported and the window still resyncs");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
