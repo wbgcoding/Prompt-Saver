@@ -208,6 +208,8 @@ function bind() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
+    // tourKeydown owns Escape while the tour is the topmost thing, same bow-out as the Tab trap above.
+    if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
     if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
@@ -473,7 +475,8 @@ async function maybeOfferEditorDraftRecovery() {
   try { draft = await invoke("load_editor_draft"); } catch (_) { return; }
   if (!draft) return;
   const when = new Date(draft.updatedAt * 1000).toLocaleString(LANG);
-  const preview = (draft.name || draft.text || "").split("\n").slice(0, 2).join(" ").trim().slice(0, 140);
+  // Cut by code point: a UTF-16 cut at the limit could leave half of an emoji.
+  const preview = Array.from((draft.name || draft.text || "").split("\n").slice(0, 2).join(" ").trim()).slice(0, 140).join("");
   const restore = await confirmDialog({
     title: t("draftRecoverTitle"),
     message: t("draftRecoverBody").replace("{time}", () => when).replace("{preview}", () => preview),
@@ -556,7 +559,7 @@ async function init() {
     // prompt happens here.
     navigator.mediaDevices?.enumerateDevices?.()
       .then((devs) => {
-        assignCameraDevicesCache(devs.filter((d) => d.kind === "videoinput").map((d, i) => ({ id: d.deviceId, name: d.label || `${t("cameraMenuItem")} ${i + 1}` })));
+        assignCameraDevicesCache(devs.filter((d) => d.kind === "videoinput").map((d, i) => ({ id: d.deviceId, name: d.label || t("cameraDeviceN").replace("{n}", () => String(i + 1)) })));
       })
       .catch(() => {});
     invoke("voice_languages").then((langs) => { assignVoiceLangsCache(langs || []); }).catch(() => {});

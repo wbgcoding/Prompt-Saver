@@ -1,5 +1,5 @@
 // Grid tiles: building, auto-fit, images, video thumbs, drag-out and auto-paste.
-import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, LOCK_SVG, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, undoToast, val, videoCache } from "./core.js";
+import { assignDrag, assignMemberDrag, assignSettings, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, LOCK_SVG, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, undoToast, val, videoCache } from "./core.js";
 import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
@@ -343,6 +343,9 @@ export function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
   tile.dataset.id = p.id;
+  // A tile acts as a button named after the prompt (a locked one only says that it is secret).
+  tile.setAttribute("role", "button");
+  tile.setAttribute("aria-label", p.locked ? t("editorSecretLabel") : p.name);
   if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
   // A tag filter dims what does not match instead of hiding it: the cell stays occupied, so
   // drag, reorder and grid geometry never treat it as empty.
@@ -763,7 +766,8 @@ export function moveTileDom(id, col, row) {
 }
 
 // Place a tile at [col,row]; swaps with the occupant. Renders from local
-// state immediately, persistence runs in the background.
+// state immediately; when the backend refuses a write the stored state is read back and redrawn,
+// and the result is false.
 export async function placeTile(id, col, row) {
   // A grid folder is not part of the layout: a tile dropped on its cell takes the cell and the
   // folder moves to the cell the tile leaves. A tile with no cell yet leaves nothing to swap
@@ -772,17 +776,18 @@ export async function placeTile(id, col, row) {
   const folderThere = onFolder ? folderById(onFolder.dataset.folderId) : null;
   if (folderThere) {
     const from = layoutOf(activeView())[id];
-    if (!from) return;
-    if (!(await saveFolder(folderThere, { cell: [from[0], from[1]] }))) return;
+    if (!from) return false;
+    if (!(await saveFolder(folderThere, { cell: [from[0], from[1]] }))) return false;
   }
   const view = activeView();
+  const writes = [];
   // Off by default: placing a prompt drops it from every other view it sits in first (one
   // placement). On, a prompt can sit in several views at once (same object, same data).
   if (!optFlag("multiViewPrompt")) {
     for (const other of viewsContaining(id, view.id)) {
       delete layoutOf(other)[id];
       other.members = (other.members || []).filter((m) => m !== id);
-      invoke("batch_prompts", { ids: [id], action: "removeView", color: null, favorite: null, viewId: other.id }).catch(() => {});
+      writes.push(invoke("batch_prompts", { ids: [id], action: "removeView", color: null, favorite: null, viewId: other.id }));
     }
   }
   const layout = { ...layoutOf(view) };
@@ -798,8 +803,15 @@ export async function placeTile(id, col, row) {
   view.layouts[gridKeyOf(view)] = layout;
   // The backend seats a placed prompt as a member too (set_layout); mirror it here.
   if (!(view.members || []).includes(id)) (view.members ||= []).push(id);
-  invoke("set_layout", { layout }).catch((e) => errToast(e));
-  if (!moveTileDom(id, col, row)) await renderGrid(true);
+  writes.push(invoke("set_layout", { layout }));
+  const drawn = moveTileDom(id, col, row);
+  if (!drawn) await renderGrid(true);
+  const failed = (await Promise.allSettled(writes)).find((r) => r.status === "rejected");
+  if (!failed) return true;
+  errToast(failed.reason);
+  try { assignSettings(await invoke("get_settings")); } catch (_) { /* the redraw below shows the local state */ }
+  await renderGrid(true);
+  return false;
 }
 
 export function wireTiles() {
@@ -954,8 +966,8 @@ export function wireTiles() {
     const prevCell = layoutOf(activeView())[id];
     const destCol = Number(cell.dataset.col);
     const destRow = Number(cell.dataset.row);
-    await placeTile(id, destCol, destRow);
-    if (prevCell && (prevCell[0] !== destCol || prevCell[1] !== destRow)) {
+    const placed = await placeTile(id, destCol, destRow);
+    if (placed && prevCell && (prevCell[0] !== destCol || prevCell[1] !== destRow)) {
       const [fromCol, fromRow] = prevCell;
       // The undo belongs to the view the tile was moved in: placeTile reads the view on screen, so
       // after a tab switch it would pull the tile out of its own view.

@@ -69,7 +69,8 @@ section(() => {
 // 2. Selection Escape listeners stand back for any other open overlay.
 section(() => {
   const lib = read("library.js");
-  const make = (open, libraryFront) => run(extractBlock(lib, "export function otherOverlayOpen(").replace("export ", ""), {
+  const make = (open, libraryFront, popOpen = false) => run(extractBlock(lib, "export function otherOverlayOpen(").replace("export ", ""), {
+    isValuePopOpen: () => popOpen,
     document: {
       body: { classList: { contains: (c) => c === "library-front" && libraryFront } },
       querySelectorAll: () => open.map((id) => ({ id })),
@@ -81,6 +82,7 @@ section(() => {
   check(make(["modal"], false).otherOverlayOpen("") === true, "the editor open: the grid selection keeps its hands off Escape");
   check(make(["library", "backup-modal"], true).otherOverlayOpen("library") === false, "backups under a raised library do not count");
   check(make(["library", "backup-modal", "confirm-modal"], true).otherOverlayOpen("library") === true, "a confirm over a raised library still counts");
+  check(make([], false, true).otherOverlayOpen("") === true, "an open value list keeps Escape for itself");
   check(/Escape" && libSelectMode[^\n]*otherOverlayOpen\("library"\)/.test(lib), "library select Escape listener must use otherOverlayOpen");
   check(/Escape" && gridSelected\.size[^\n]*otherOverlayOpen\(""\)/.test(lib), "grid select Escape listener must use otherOverlayOpen");
 });
@@ -439,6 +441,728 @@ section(() => {
   check(sb.dropTargetsField(target(["[contenteditable]"])) === true, "a drop on an editable element is left to the field");
   check(sb.dropTargetsField(target([])) === false, "a drop on the page still creates a prompt");
   check(/flag\("dragDrop"\) \|\| dropTargetsField\(e\)/.test(ed), "the window drop handler asks dropTargetsField");
+});
+
+// 18. U7: a close request is ignored while a save is in flight.
+section(() => {
+  const ed = read("editor.js");
+  const mk = (saving) => run(
+    `let modalSaving = ${saving};\nvar confirmAsked = 0;\nfunction flag() { return true; }\nconst modalState = { mode: "create" };\nfunction modalSnapshot() { return "x"; }\nlet modalInitial = "";\nconst confirmDialog = async () => { confirmAsked++; return true; };\nfunction t(k) { return k; }\n${extractBlock(ed, "export async function confirmDiscardIfDirty(").replace("export ", "")}`,
+    {},
+  );
+  const sb = mk(true);
+  later(async () => {
+    check((await sb.confirmDiscardIfDirty()) === false && sb.confirmAsked === 0, "no discard prompt and no close while a save is in flight");
+    const idle = mk(false);
+    check((await idle.confirmDiscardIfDirty()) === true, "an idle editor still asks and closes");
+  });
+  check(/export function closeModal\(\) \{\n  \/\/[^\n]*\n  if \(modalSaving\) return;/.test(ed), "closeModal waits for the save in flight");
+});
+
+// 19. U25: a failed safety backup before a wipe asks before the wipe goes on.
+section(() => {
+  const sp = read("settingsPanel.js");
+  const src = extractBlock(sp, "export async function maybeBackupBeforeWipe(").replace("export ", "");
+  const make = (backupFails, answer) => {
+    const asked = [];
+    const sb = run(src, {
+      flag: () => true, val: () => 3, t: (k) => k, errText: (e) => String(e),
+      invoke: async () => { if (backupFails) throw "disk-full"; },
+      confirmDialog: async (o) => { asked.push(o); return answer; },
+    });
+    return { sb, asked };
+  };
+  later(async () => {
+    const ok = make(false, false);
+    check((await ok.sb.maybeBackupBeforeWipe("delete")) === true && ok.asked.length === 0, "a made backup lets the wipe go on without a question");
+    const no = make(true, false);
+    check((await no.sb.maybeBackupBeforeWipe("delete")) === false && no.asked.length === 1, "a failed backup, Cancel: the wipe stops");
+    check(no.asked[0] && no.asked[0].focusCancel === true && no.asked[0].message === "backupFailedDelete", "the question defaults to Cancel and names the delete");
+    const yes = make(true, true);
+    check((await yes.sb.maybeBackupBeforeWipe("reset")) === true, "a failed backup, confirmed: the reset goes on");
+  });
+  check(/if \(!\(await maybeBackupBeforeWipe\("delete"\)\)\) return;/.test(sp) && /if \(!\(await maybeBackupBeforeWipe\("reset"\)\)\) return;/.test(sp), "both wipes honour the answer");
+});
+
+// 20. U57: the Escape dispatcher bows out for the tour like the Tab trap does.
+section(() => {
+  const main = read("main.js");
+  const escAt = main.indexOf('if (e.key !== "Escape")');
+  const escBlock = main.slice(escAt, main.indexOf('listen("theme-changed"'));
+  const guardAt = escBlock.indexOf('$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")');
+  check(guardAt > 0 && guardAt < escBlock.indexOf("closeShortcutsModal"), "Escape returns early while the tour is topmost, before any overlay closes");
+});
+
+// 21. U1: the thumb cache prune builds the live id set once, not a scan per cached id.
+section(() => {
+  const src = extractBlock(read("core.js"), "export function pruneThumbCache(").replace("export ", "");
+  let reads = 0;
+  const list = [{ id: "a" }, { id: "b" }];
+  const prompts = new Proxy(list, { get(t, k) { if (k === "some") reads += 100; return t[k]; } });
+  const sb = run(src, { prompts });
+  const cache = new Map([["a", 1], ["b", 2], ["gone", 3]]);
+  sb.pruneThumbCache(cache);
+  check([...cache.keys()].join() === "a,b", "prune drops only ids no prompt has");
+  check(reads === 0, "prune does not scan the prompts once per cached id");
+});
+
+// 22. U5: the grid batch bar builds its palette once and keeps a picked view while the selection grows.
+section(() => {
+  const lib = read("library.js");
+  const bc = extractBlock(lib, "export function buildBatchColors(").replace("export ", "");
+  let built = 0;
+  const wrap = { childElementCount: 0 };
+  const sb = run(bc, { $: () => wrap, doGridBatch() {}, doBatch() {}, openColorPop() {}, buildSwatches: () => { built++; wrap.childElementCount = 5; } });
+  sb.buildBatchColors("grid-batch-colors");
+  sb.buildBatchColors("grid-batch-colors");
+  check(built === 1, "the batch palette is built once, not on every checkbox click");
+  const upd = extractBlock(lib, "export function updateGridBatchBar(").replace("export ", "");
+  const make = (hidden) => {
+    let filled = 0;
+    const bar = { classList: { contains: () => hidden, toggle() {} } };
+    const el = { classList: { toggle() {} }, textContent: "" };
+    const s = run(upd, { $: (id) => (id === "grid-batch-bar" ? bar : el), gridSelected: new Set(["a"]), t: () => "", LANG: "en", tagsOn: () => true, buildBatchColors() {}, fillBatchViews: () => { filled++; } });
+    s.updateGridBatchBar();
+    return filled;
+  };
+  check(make(true) === 1, "the view list is filled when a selection starts");
+  check(make(false) === 0, "the view list is left alone while the bar is already showing");
+});
+
+// 23. U8: closing the editor drops the draft only after a tick's write has landed.
+section(() => {
+  const ed = read("editor.js");
+  const src = ["let draftWrite = null;", extractBlock(ed, "export async function saveDraftNow(").replace("export ", ""), extractBlock(ed, "export async function discardEditorDraft(").replace("export ", "")].join("\n");
+  later(async () => {
+    const log = [];
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const sb = run(src, {
+      draftEditorFields: () => ({ promptId: "x", name: "n", text: "t", variants: "[]" }),
+      draftLastSaved: null,
+      invoke: async (cmd) => { if (cmd === "save_editor_draft") { await gate; log.push("saved"); } else log.push("discarded"); },
+    });
+    const tick = sb.saveDraftNow();
+    const drop = sb.discardEditorDraft();
+    await new Promise((r) => setTimeout(r, 5));
+    check(log.length === 0, "the discard waits while the draft write is in flight");
+    release();
+    await Promise.all([tick, drop]);
+    check(log.join() === "saved,discarded", "the discard lands after the write");
+    const idle = [];
+    const sb2 = run(src, { draftEditorFields: () => null, invoke: async (c) => { idle.push(c); } });
+    await sb2.discardEditorDraft();
+    check(idle.join() === "discard_editor_draft", "an idle editor discards at once");
+  });
+  check(!/invoke\("discard_editor_draft"\)\.catch/.test(ed), "no unordered discard call is left in the editor");
+});
+
+// 24. U9: typing keeps the chip row; only a flag change or an explicit refresh rebuilds it.
+section(() => {
+  const ed = read("editor.js");
+  const src = extractBlock(ed, "export function renderVarHelper(").replace("export ", "");
+  const make = (dynOn) => {
+    const chips = { childElementCount: 0, classList: { toggle() {} }, appendChild() { this.childElementCount++; }, set innerHTML(_) { this.childElementCount = 0; } };
+    const other = { classList: { toggle() {} } };
+    const doc = { createElement: () => ({ addEventListener() {}, set className(_) {} }) };
+    const sb = run(src, { $: (id) => (id === "modal-vars-chips" ? chips : other), flag: (k) => (k === "dynVars" ? dynOn : false), document: doc, DYN_VARS: ["a", "b", "c"], dynToken: (n) => n, t: (k) => k, DYN_TIPS: { a: "", b: "", c: "" }, insertVarToken() {} });
+    return { sb, chips };
+  };
+  const on = make(true);
+  on.sb.renderVarHelper();
+  const first = on.chips.childElementCount;
+  let rebuilt = 0;
+  const orig = Object.getOwnPropertyDescriptor(on.chips, "innerHTML");
+  Object.defineProperty(on.chips, "innerHTML", { set(v) { rebuilt++; orig.set.call(on.chips, v); }, configurable: true });
+  on.sb.renderVarHelper(false);
+  check(first === 3 && on.chips.childElementCount === 3 && rebuilt === 0, "typing does not rebuild matching chips");
+  on.sb.renderVarHelper();
+  check(rebuilt === 1 && on.chips.childElementCount === 3, "a plain render still rebuilds the chips");
+  const fresh = make(true);
+  fresh.sb.renderVarHelper(false);
+  check(fresh.chips.childElementCount === 3, "typing still builds chips that are missing");
+  check(/syncVarsUi\(modal\.root\.classList\.contains\("tall"\), rotationUiOn\(\), true\), 60\)/.test(ed), "the input handler settles for 60 ms");
+});
+
+// 25. Expert menu: a refused write puts the previous value back instead of keeping the optimistic one.
+section(() => {
+  const src = read("expertMenu.js");
+  const persist = extractBlock(src, "export async function persistUiText(").replace("export ", "");
+  const reset = extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
+  const make = (fail, settings) => {
+    const toasts = [];
+    const sb = run([persist, reset].join("\n"), {
+      settings, invoke: async () => { if (fail) throw new Error("denied"); }, errToast: (e) => toasts.push(String(e.message || e)),
+      EXPERT_BULK_NEVER: [], shipsOn: () => true, applyFlags() {}, applyValues() {}, fitAllTiles() {}, refreshTiles: async () => {},
+      renderGrid: async () => {}, renderExpert() {}, TILE_DOM_FLAGS: new Set(), EXPERT_VALUES: { gap: { def: 9 } }, EXPERT_SELECTS: {}, EXPERT_DROPDOWNS: {},
+    });
+    return { sb, toasts };
+  };
+  later(async () => {
+    const kept = { ui_texts: { ocrLang: "eng" } };
+    const a = make(true, kept);
+    const ok = await a.sb.persistUiText("ocrLang", "deu");
+    check(ok === false && kept.ui_texts.ocrLang === "eng" && a.toasts.length === 1, "a refused text write keeps the old value");
+    const fresh = { ui_texts: {} };
+    const b = make(true, fresh);
+    await b.sb.persistUiText("voiceLang", "de");
+    check(!("voiceLang" in fresh.ui_texts), "a refused first write leaves no key behind");
+    const good = { ui_texts: {} };
+    const c = make(false, good);
+    check((await c.sb.persistUiText("voiceLang", "de")) === true && good.ui_texts.voiceLang === "de", "an accepted write stays");
+    const flags = { ui_flags: { dynVars: false }, ui_values: { gap: 3 } };
+    const d = make(true, flags);
+    await d.sb.resetOneExpertValue("flags", "dynVars");
+    await d.sb.resetOneExpertValue("values", "gap");
+    check(flags.ui_flags.dynVars === false && flags.ui_values.gap === 3, "a refused reset keeps the flag and the value");
+  });
+});
+
+// 26. Expert menu: the screenshot format toggles the quality row; a refused select write rolls back.
+section(() => {
+  const src = read("expertMenu.js");
+  const dd = extractBlock(src, "export function dropdownRow(");
+  check(/key === "screenshotFormat"[\s\S]*snipSaveQuality[\s\S]*classList\.toggle\("hidden"/.test(dd), "the format dropdown toggles the quality row");
+  const sel = extractBlock(src, "export function selectRow(").replace("export ", "");
+  const el = () => {
+    const cl = new Set();
+    return { value: "", dataset: {}, children: [], classList: { toggle: (c, on) => (on ? cl.add(c) : cl.delete(c)), remove: (c) => cl.delete(c), add: (c) => cl.add(c), has: (c) => cl.has(c) }, appendChild(c) { this.children.push(c); }, append() {}, setAttribute() {}, addEventListener(ev, fn) { (this.h = this.h || {})[ev] = fn; }, focus() {} };
+  };
+  const made = [];
+  const settings = { ui_values: { retentionDays: 7 } };
+  const sb = run(sel, {
+    settings, EXPERT_SELECTS: { retentionDays: { label: "x", options: [1, 7, 30], def: 7, unit: "d" } },
+    document: { createElement: () => { const e = el(); made.push(e); return e; } }, t: (k) => k, withTip() {}, rowResetBtn: () => null,
+    formatValue: (c, o) => String(o), TIME_UNITS: { d: "day" }, fmtUnitName: () => "d", LANG: "en", attachSelectPicker() {}, SELECT_CUSTOM_MIN: 1, SELECT_CUSTOM_MAX: 999,
+    invoke: async () => { throw new Error("denied"); }, errToast() {}, syncRowReset() {}, expertOnlyChanged: false, renderExpert() {},
+  });
+  sb.selectRow("retentionDays");
+  later(async () => {
+    const select = made.find((e) => e.h && e.h.change);
+    select.value = "30";
+    select.h.change();
+    await new Promise((r) => setTimeout(r, 20));
+    check(settings.ui_values.retentionDays === 7 && select.value === "7", "a refused select write restores the value and the control");
+  });
+});
+
+// 27. Expert menu: a capture folder the backend refuses is shown as the old one again.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function setDirText(").replace("export ", "");
+  const make = (fail, settings) => {
+    let renders = 0;
+    const sb = run(fn, { settings, invoke: async () => { if (fail) throw new Error("denied"); }, errToast() {}, renderExpert() { renders++; } });
+    return { sb, renders: () => renders };
+  };
+  later(async () => {
+    const st = { ui_texts: { screenshotDir: "C:/old" } };
+    const a = make(true, st);
+    await a.sb.setDirText("screenshotDir", "set_screenshot_dir", "C:/new");
+    check(st.ui_texts.screenshotDir === "C:/old" && a.renders() === 1, "a refused folder keeps the old one");
+    const st2 = { ui_texts: {} };
+    await make(true, st2).sb.setDirText("recordingDir", "set_recording_dir", "C:/new");
+    check(!("recordingDir" in st2.ui_texts), "a refused first folder leaves no key");
+    const st3 = { ui_texts: {} };
+    await make(false, st3).sb.setDirText("recordingDir", "set_recording_dir", "C:/new");
+    check(st3.ui_texts.recordingDir === "C:/new", "an accepted folder stays");
+  });
+});
+
+// 28. Expert menu palette: themed swatch buttons, never a native colour input.
+section(() => {
+  const src = read("expertMenu.js");
+  const row = extractBlock(src, "export function paletteRow(");
+  check(!/type\s*=\s*"color"/.test(row) && /openColorPop\(/.test(row) && /aria-label/.test(row), "the palette swatches use the themed picker with a label");
+});
+
+// 29. A refused palette write skips the colour remap and restores the stored palette.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function savePalette(").replace("export ", "");
+  later(async () => {
+    const calls = [];
+    const settings = { ui_texts: { palette: "[\"#111111\"]" } };
+    const sb = run(fn, {
+      settings, COLORS: ["", "#111111"], PALETTE_LEN: 1, loadPalette() {}, renderExpert() {}, refreshColorUI() {}, renderViews() {}, renderGrid: async () => {},
+      assignPrompts() {}, assignSettings() {}, errToast() {},
+      invoke: async (cmd) => { calls.push(cmd); if (cmd === "set_ui_text") throw new Error("denied"); return {}; },
+    });
+    await sb.savePalette(["#222222"]);
+    check(!calls.includes("remap_colors") && settings.ui_texts.palette === "[\"#111111\"]", "a refused palette write neither remaps colours nor keeps the new palette");
+  });
+});
+
+// 30. Expert group titles: a real button with aria-expanded that follows the fold state.
+section(() => {
+  const src = read("expertMenu.js");
+  check(/createElement\(globalView \? "span" : "button"\)/.test(src) && /setAttribute\("aria-expanded", String\(!isCollapsed\)\)/.test(src), "the collapsible group title is a button with aria-expanded");
+  const fn = extractBlock(src, "export function toggleExpertGroup(").replace("export ", "");
+  const attrs = {};
+  const set = new Set();
+  const sec = { classList: { toggle() {} }, querySelector: () => ({ setAttribute: (k, v) => { attrs[k] = v; } }) };
+  const sb = run(fn, { expertCollapsedSet: () => set, settings: {}, invoke: async () => {}, renderExpert() {} });
+  sb.toggleExpertGroup("g", sec);
+  check(attrs["aria-expanded"] === "false", "folding sets aria-expanded to false");
+  sb.toggleExpertGroup("g", sec);
+  check(attrs["aria-expanded"] === "true", "opening sets aria-expanded to true");
+});
+
+// 31. A refused expert reset restores the three setting maps and shows no success toast.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function onResetExpert(").replace("export ", "");
+  later(async () => {
+    const settings = { ui_flags: { a: true }, ui_values: { b: 1 }, ui_texts: { c: "x" } };
+    const toasts = [];
+    const sb = run(fn, {
+      settings, EXPERT_RESET_KEEP: [], flag: () => false, invoke: async () => { throw new Error("denied"); }, errToast() {}, loadPalette() {}, refreshColorUI() {}, applyFlags() {},
+      renderExpert() {}, syncSettingsControls() {}, refreshFavViewUi() {}, renderViews() {}, renderGrid: async () => {}, toast: (m) => toasts.push(m), t: (k) => k,
+    });
+    await sb.onResetExpert();
+    check(settings.ui_flags.a === true && settings.ui_values.b === 1 && settings.ui_texts.c === "x" && !toasts.length, "a refused reset keeps the stored settings and says nothing is done");
+  });
+});
+
+// 32. Every dialog overlay is named: aria-labelledby points at an existing id, or an aria label key is set.
+section(() => {
+  const html = read("index.html");
+  const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+  const dialogs = [...html.matchAll(/<div id="([^"]+)"[^>]*role="dialog"[^>]*>/g)];
+  const bad = dialogs.filter((m) => {
+    const ref = /aria-labelledby="([^"]+)"/.exec(m[0]);
+    return ref ? !ids.has(ref[1]) : !/data-i18n-aria=|aria-label=/.test(m[0]);
+  }).map((m) => m[1]);
+  check(dialogs.length >= 28 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
+});
+
+// 33. Settings switches: a refused write puts the switch and the stored value back; a refused settings reset still reloads.
+section(() => {
+  const src = read("settingsPanel.js");
+  const persist = extractBlock(src, "export async function persistFlagSwitch(").replace("export ", "");
+  const onTop = extractBlock(src, "function paintOnTop(") + "\n" + extractBlock(src, "export async function setOnTop(").replace("export ", "");
+  const reset = extractBlock(src, "export async function resetSettings(").replace("export ", "");
+  later(async () => {
+    const pin = { classes: {}, attrs: {}, classList: { toggle(c, v) { pin.classes[c] = v; } }, setAttribute(k, v) { pin.attrs[k] = v; } };
+    const ontop = { checked: false };
+    const els = { "opt-ontop": ontop, "pin-top": pin };
+    const settings = { ui_flags: { autoPaste: true }, always_on_top: false };
+    const errs = [];
+    const sb = run([persist, onTop].join("\n"), { settings, $: (id) => els[id], invoke: async () => { throw new Error("denied"); }, errToast: (e) => errs.push(e) });
+    const box = { checked: false };
+    await sb.persistFlagSwitch(box, "autoPaste");
+    check(box.checked === true && settings.ui_flags.autoPaste === true && errs.length === 1, "a refused flag write flips the switch back and keeps the old flag");
+    const fresh = { checked: true };
+    await sb.persistFlagSwitch(fresh, "tooltipsEnabled");
+    check(fresh.checked === false && !("tooltipsEnabled" in settings.ui_flags), "a refused first write leaves no flag behind");
+    await sb.setOnTop(true);
+    check(settings.always_on_top === false && ontop.checked === false && pin.attrs["aria-pressed"] === "false" && pin.classes.active === false, "a refused pin restores state, switch and pin");
+    let reloaded = 0;
+    const r = run(reset, { $: () => ({}), armButton: () => true, clearTimeout() {}, disarmButton() {}, t: (k) => k, maybeBackupBeforeWipe: async () => true, resetSettingsTimer: null,
+      invoke: async () => { throw new Error("denied"); }, errToast: (e) => errs.push(e), reloadEverything: async () => { reloaded++; } });
+    await r.resetSettings();
+    check(errs.length === 4 && reloaded === 1, "a refused settings reset is reported and the window still resyncs");
+  });
+});
+
+// 34. Tile style and interface size: a refused write restores the stored values and the selects.
+section(() => {
+  const src = read("settingsPanel.js");
+  const tile = extractBlock(src, "export async function tileStyleChanged(").replace("export ", "");
+  const scale = extractBlock(src, "export const scaleChanged = ").replace("export const scaleChanged", "var scaleChanged");
+  later(async () => {
+    const font = { value: "mono" };
+    const size = { value: "20" };
+    const els = { "tile-font": font, "tile-size": size };
+    const settings = { tile_font: "system", tile_size: 14, ui_values: { uiScale: 100 } };
+    const errs = [];
+    let applied = 0;
+    const filled = [];
+    const sb = run([tile, scale].join("\n"), {
+      settings, $: (id) => els[id], normSize: (n) => n, applyTileStyle() { applied++; }, renderGrid: async () => {}, applyValues() {},
+      fillScaleSelect: (id, key) => filled.push(id + ":" + key), invoke: async () => { throw new Error("denied"); }, errToast: (e) => errs.push(e),
+    });
+    await sb.tileStyleChanged();
+    check(settings.tile_font === "system" && settings.tile_size === 14 && font.value === "system" && size.value === "14" && errs.length === 1 && applied === 2, "a refused tile style restores font, size and both selects");
+    await sb.scaleChanged("uiScale")({ target: { value: "150", id: "ui-scale" } });
+    check(settings.ui_values.uiScale === 100 && filled.join() === "ui-scale:uiScale" && errs.length === 2, "a refused scale restores the value and the select");
+    await sb.scaleChanged("iconScale")({ target: { value: "90", id: "x" } });
+    check(!("iconScale" in settings.ui_values), "a refused first scale write leaves no key behind");
+  });
+});
+
+// 35. Every settings directory area has a badge label key.
+section(() => {
+  const dir = read("settingsSearch.js");
+  const areas = new Set([...dir.matchAll(/area: "([a-z]+)"/g)].map((m) => m[1]));
+  const cfg = read("expertConfig.js");
+  const labels = /SETTINGS_AREA_LABEL = \{([^}]*)\}/.exec(cfg)[1];
+  const missing = [...areas].filter((a) => !new RegExp("\\b" + a + ":").test(labels));
+  check(areas.size >= 5 && !missing.length, "area badge labels missing for: " + missing.join(","));
+});
+
+// 36. A backup hit from settings search opens the dialog through the shared path and waits for every panel.
+section(() => {
+  const open = extractBlock(read("backups.js"), "export function openBackups(");
+  check(/renderStoragePanel/.test(open) && /renderRetentionPanel/.test(open) && /renderBackupPanel/.test(open) && /Promise\.all/.test(open), "openBackups returns the render of all three panels");
+  const search = extractBlock(read("settingsSearch.js"), "export async function openSettingsDirectoryEntry(");
+  check(/await openBackups\(\)/.test(search) && !/renderBackupPanel/.test(search), "settings search uses the shared backup open path");
+});
+
+// 37. Views: a half-finished undo still redraws; a half-saved edit shows what landed.
+section(() => {
+  const src = read("views.js");
+  const restore = extractBlock(src, "export async function restoreDeletedView(").replace("export ", "");
+  const confirm = extractBlock(src, "export async function confirmViewModal(").replace("export ", "");
+  later(async () => {
+    const calls = [];
+    const settings = { active_view: "v9", views: [] };
+    const sb = run(restore, {
+      settings, val: () => 8, libraryEl: { classList: { contains: () => true } }, renderLibrary() {}, batchErrorToast() {},
+      assignSettings: () => {}, invoke: async (cmd) => { if (cmd === "set_view_grid") throw new Error("denied"); return {}; },
+      renderViews: () => calls.push("views"), renderGrid: async () => { calls.push("grid"); },
+    });
+    let threw = false;
+    try { await sb.restoreDeletedView({ name: "A", cols: 2, rows: 2, members: [] }, null); } catch (_) { threw = true; }
+    check(threw && calls.join() === "views,grid", "a failing undo step still redraws the tab bar and the grid");
+
+    const assigned = [];
+    const redraw = [];
+    const errs = [];
+    const modal = { name: { value: "New name", focus() {} }, cols: { value: "2" }, rows: { value: "2" } };
+    const sb2 = run(confirm, {
+      viewModal: modal, viewModalId: "v1", viewModalColor: "", viewModalSaving: false, settings: { views: [] }, clampGrid: (v) => Number(v),
+      assignSettings: (r) => assigned.push(r), errToast: (e) => errs.push(e), closeViewModal() {}, renderViews: () => redraw.push("views"), renderGrid: async () => {},
+      invoke: async (cmd) => { if (cmd === "set_view_color") throw new Error("denied"); return { renamed: true }; },
+    });
+    await sb2.confirmViewModal();
+    check(assigned.length === 1 && assigned[0].renamed && redraw.length === 1 && errs.length === 1, "a rename that landed is assigned and drawn even when a later step fails");
+  });
+});
+
+// 38. Placing a tile: a refused write reads the stored layout back and redraws; no undo is offered.
+section(() => {
+  const src = read("tiles.js");
+  const place = extractBlock(src, "export async function placeTile(").replace("export ", "");
+  later(async () => {
+    for (const bad of ["set_layout", "batch_prompts"]) {
+      const view = { id: "v1", members: [], layouts: {}, cols: 2, rows: 2 };
+      const other = { id: "v2", members: ["p1"], layouts: { k: { p1: [0, 0] } } };
+      const log = [];
+      const sb = run(place, {
+        gridEl: { querySelector: () => null }, activeView: () => view, optFlag: () => false, viewsContaining: () => [other],
+        layoutOf: (v) => v.layouts.k || (v.layouts.k = {}), gridKeyOf: () => "k", moveTileDom: () => true,
+        invoke: async (cmd) => { log.push(cmd); if (cmd === bad) throw new Error("denied"); return {}; },
+        errToast: () => log.push("toast"), assignSettings: () => log.push("assign"), renderGrid: async () => { log.push("grid"); },
+        folderById: () => null, saveFolder: async () => true,
+      });
+      const ok = await sb.placeTile("p1", 1, 1);
+      check(ok === false && log.includes("toast") && log.includes("assign") && log[log.length - 1] === "grid", "a refused " + bad + " is toasted, re-read and redrawn");
+    }
+    const okLog = [];
+    const sb2 = run(place, {
+      gridEl: { querySelector: () => null }, activeView: () => ({ id: "v1", members: [], layouts: {} }), optFlag: () => true, viewsContaining: () => [],
+      layoutOf: (v) => v.layouts.k || (v.layouts.k = {}), gridKeyOf: () => "k", moveTileDom: () => true,
+      invoke: async () => ({}), errToast: () => okLog.push("toast"), assignSettings: () => okLog.push("assign"), renderGrid: async () => okLog.push("grid"),
+      folderById: () => null, saveFolder: async () => true,
+    });
+    check((await sb2.placeTile("p1", 0, 0)) === true && !okLog.length, "an accepted placement stays quiet and returns true");
+  });
+});
+
+// 39. Grid tiles carry a role and a name, and the keyboard ring is announced.
+section(() => {
+  const build = extractBlock(read("tiles.js"), "export function buildTile(");
+  check(/setAttribute\("role", "button"\)/.test(build) && /setAttribute\("aria-label", p\.locked/.test(build), "a tile is a named button");
+  const focus = extractBlock(read("copyFlow.js"), "export function focusTile(");
+  check(/aria-current/.test(focus) && /grid-live/.test(focus), "the focus ring moves aria-current and a live region");
+  check(/id="grid-live"[^>]*aria-live="polite"/.test(read("index.html")), "the live region exists in the page");
+});
+
+// 40. A refused backup setting is rolled back so the dialog shows what the backend uses.
+section(() => {
+  const save = extractBlock(read("backups.js"), "export async function saveBackupSetting(").replace("export ", "");
+  later(async () => {
+    const settings = { ui_flags: { autoBackup: true }, ui_values: { backupKeep: 5 } };
+    const errs = [];
+    let applied = 0;
+    const sb = run(save, { settings, invoke: async () => { throw new Error("readonly"); }, errToast: (e) => errs.push(e), applyFlags() { applied++; }, applyValues() { applied++; } });
+    await sb.saveBackupSetting("flag", "autoBackup", false);
+    await sb.saveBackupSetting("value", "backupKeep", 9);
+    await sb.saveBackupSetting("value", "backupGfsDays", 3);
+    check(settings.ui_flags.autoBackup === true && settings.ui_values.backupKeep === 5 && !("backupGfsDays" in settings.ui_values) && errs.length === 3 && applied === 3, "a refused backup write restores the old value and redraws");
+    const ok = { ui_flags: {}, ui_values: {} };
+    const sb2 = run(save, { settings: ok, invoke: async () => ({}), errToast() {}, applyFlags() {}, applyValues() {} });
+    await sb2.saveBackupSetting("value", "backupKeep", 7);
+    check(ok.ui_values.backupKeep === 7, "an accepted backup write stays");
+  });
+});
+
+// 41. Rebuilding the hotkey list while one of its inputs has the focus ends the capture switch.
+section(() => {
+  const render = extractBlock(read("hotkeys.js"), "export function renderHotkeysList(");
+  const i = render.indexOf("box.innerHTML");
+  const guardAt = render.indexOf("hotkeyCapture(false)");
+  check(guardAt !== -1 && guardAt < i && /box\.contains\(document\.activeElement\)/.test(render), "the list ends hotkey capture before it drops a focused input");
+});
+
+// 42. Two overlapping copies of a rotating prompt advance the rotation once.
+section(() => {
+  const src = read("copyFlow.js");
+  const set = "const rotatingInFlight = new Set();";
+  const fn = extractBlock(src, "export async function peekResolveCommit(").replace("export ", "");
+  check(src.includes(set), "the in-flight set exists");
+  later(async () => {
+    const calls = [];
+    const sb = run(set + "\n" + fn, {
+      invoke: async (cmd) => { calls.push(cmd); return cmd === "rotation_peek" ? { text: "x" } : {}; },
+      resolveVars: async (x) => x, recordToolUsage() {},
+    });
+    const p = { id: "a", text: "t", variants: ["v"] };
+    const slow = async () => { await new Promise((r) => setTimeout(r, 5)); return true; };
+    const [one, two] = await Promise.all([sb.peekResolveCommit(p, slow), sb.peekResolveCommit(p, slow)]);
+    check(one === true && two === false && calls.filter((c) => c === "rotation_commit").length === 1 && calls.filter((c) => c === "rotation_peek").length === 1, "the second overlapping copy is dropped");
+    check((await sb.peekResolveCommit(p, slow)) === true, "a later copy works again");
+    const plain = { id: "b", text: "t", variants: [] };
+    const both = await Promise.all([sb.peekResolveCommit(plain, slow), sb.peekResolveCommit(plain, slow)]);
+    check(both[0] === true && both[1] === true, "a plain prompt is never dropped");
+  });
+});
+
+// 43. The auto update switch rolls back when the write is refused.
+section(() => {
+  const src = read("about.js");
+  const m = /\$\("opt-autoupdate"\)\.addEventListener\("change", (async \(e\) => \{[\s\S]*?\n  \})\);/.exec(src);
+  check(!!m, "the auto update handler is async");
+  if (!m) return;
+  later(async () => {
+    let handler = null;
+    const settings = { auto_update: true };
+    const errs = [];
+    const sb = run("var h = " + m[1] + ";", { settings, fillUpdateIntervalSelect() {}, errToast: (e) => errs.push(e), invoke: async () => { throw new Error("save-failed"); } });
+    const box = { checked: false };
+    await sb.h({ target: box });
+    check(settings.auto_update === true && box.checked === true && errs.length === 1, "a refused auto update write restores the setting and the switch");
+  });
+});
+
+// 44. A dictation delivered to the composer fires an input event.
+section(() => {
+  const src = read("dictation.js");
+  const fn = extractBlock(src, "export async function deliverVoiceHotkeyText(").replace("export ", "");
+  later(async () => {
+    const events = [];
+    const inputEl = { value: "", dispatchEvent: (e) => events.push(e.type) };
+    const sb = run(fn, { inputEl, txt: () => "input", autoGrow() {}, Event: class { constructor(type) { this.type = type; } } });
+    await sb.deliverVoiceHotkeyText("hello");
+    check(inputEl.value === "hello" && events.join() === "input", "dictated text into the composer dispatches an input event");
+  });
+});
+
+// 45. A help article head is a button that reports its folded state.
+section(() => {
+  const src = read("helpView.js");
+  check(/titleSpan = document\.createElement\("button"\)/.test(src), "the help article title is a button");
+  check(/titleSpan\.setAttribute\("aria-expanded", String\(!collapsedNow\)\)/.test(src), "the button starts with its folded state");
+  check(/titleSpan\.setAttribute\("aria-expanded", String\(!sec\.classList\.contains\("collapsed"\)\)\)/.test(src), "a toggle updates aria-expanded");
+});
+
+// 46. The all-hotkeys list carries the dictation hotkey row.
+section(() => {
+  const src = read("hotkeys.js");
+  check(/voice: \{ current: \(\) => settings\.voice_hotkey, onCommit: commitVoiceHotkey \}/.test(src), "the list has a voice kind");
+  check(/flagState\("voiceHotkey"\) \? \[\{ kind: "voice"/.test(src), "the voice row is gated like the settings field");
+  const fn = extractBlock(src, "export async function commitVoiceHotkey(");
+  check(fn.includes("renderHotkeysList()"), "committing the dictation hotkey refreshes an open list");
+});
+
+// 47. The favorite context entry carries its translation key.
+section(() => {
+  const html = read("index.html");
+  check(html.includes('<span class="ctx-label" data-i18n="favoriteAdd">Add to favorites</span>'), "the favorite menu label has data-i18n");
+});
+
+// 48. The confirm dialog is named and described.
+section(() => {
+  const html = read("index.html");
+  check(/id="confirm-modal"[^>]*aria-labelledby="confirm-title"[^>]*aria-describedby="confirm-msg"/.test(html), "the confirm alertdialog names its title and message");
+});
+
+// 49. Camera fallback names use a keyed template and the draft preview cuts by code point.
+section(() => {
+  const src = read("main.js");
+  check(src.includes('t("cameraDeviceN").replace("{n}", () => String(i + 1))'), "the camera fallback name uses the {n} template");
+  check(!src.includes('${t("cameraMenuItem")} ${i + 1}'), "no hard-coded word order remains");
+  check(/Array\.from\([^;]*\.trim\(\)\)\.slice\(0, 140\)\.join\(""\)/.test(src), "the draft preview is cut by code point");
+});
+
+// 50. Rotation entry and fixed variable inputs carry accessible names.
+section(() => {
+  const src = read("editor.js");
+  check(src.includes('ta.setAttribute("aria-label", t("rotateEntryN").replace("{n}", () => String(i + 1)))'), "a rotation text field is named by its position");
+  check(src.includes('valueEl.setAttribute("aria-label", name)'), "a fixed variable value field is named by its variable");
+});
+
+// 51. Undo toast label and suggested search name are cut by code point.
+section(() => {
+  const src = read("library.js");
+  check(src.includes('Array.from(String(found?.text || "").trim()).slice(0, 40).join("")'), "the undo label is cut by code point");
+  const fn = extractBlock(src, "export function suggestedSearchName(").replace("export ", "");
+  const sb = run(fn + "; var out = [suggestedSearchName('a'.repeat(39) + String.fromCodePoint(0x1F600) + 'b'.repeat(10)), suggestedSearchName('short')];", {});
+  check(sb.out[0] === 'a'.repeat(39) + String.fromCodePoint(0x1F600) + "…", "an emoji at the boundary stays whole");
+  check(sb.out[1] === "short", "a short query is unchanged");
+});
+
+// 52. Expert value controls are named by their row label.
+section(() => {
+  const src = read("expertMenu.js");
+  const n = (src.match(/\.setAttribute\("aria-label", span\.textContent\)/g) || []).length;
+  check(n === 5, "the input, slider, both select rows and the custom number are named (" + n + ")");
+});
+
+// 53. The expert colour swatch reopens at the colour last picked.
+section(() => {
+  const src = read("expertMenu.js");
+  check(src.includes("openColorPop(swatch, hexOut.textContent, setColor)"), "the popup starts at the live colour");
+  check(!src.includes("openColorPop(swatch, cur, setColor)"), "no stale render-time colour is passed");
+});
+
+// 54. The custom-entry unit of a select row is localized and follows the count.
+section(() => {
+  const src = read("expertMenu.js");
+  check(src.includes("fmtUnitName(n, TIME_UNITS[cfg.unit], LANG)"), "the custom unit goes through the Intl unit name");
+  check(!src.includes("unit.textContent = cfg.unit;"), "no raw config unit is written beside the number");
+  const fn = extractBlock(src, "export function selectRow(");
+  check((fn.match(/setUnit\(/g) || []).length >= 3, "the unit refreshes on resync and on a typed value");
+});
+
+// 55. A prompts-only import re-renders once and applies no settings.
+section(() => {
+  const src = read("settingsPanel.js");
+  const fn = extractBlock(src, "export async function runImport(");
+  check((fn.match(/renderGrid\(/g) || []).length === 1, "the grid is built once after an import");
+  check(!/applyTheme|applyTileStyle|applyBars|setLang\(/.test(fn), "no preference is re-applied after a prompts-only import");
+});
+
+// 56. The scale and update-interval selects follow the UI language.
+section(() => {
+  const src = read("settingsPanel.js");
+  const sc = extractBlock(src, "export function fillScaleSelect(").replace("export ", "");
+  check(sc.includes('style: "percent"') && !sc.includes("`${p}"), "scale options use the Intl percent style");
+  const iv = extractBlock(src, "export function fillUpdateIntervalSelect(");
+  check(iv.includes('fmtUnit(cur, "hour", LANG)') && !iv.includes("`${cur}h`"), "an off-list interval reads through fmtUnit");
+  const lc = src.slice(src.indexOf('$("lang-select").addEventListener("change"'));
+  check(/fillScaleSelect\("ui-scale", "uiScale"\)/.test(lc.slice(0, 900)), "a language switch refills the scale select");
+});
+
+// 57. The favorites toggle and the active view tab expose their state.
+section(() => {
+  const html = read("index.html");
+  check(/id="fav-view-btn"[^>]*aria-pressed="false"/.test(html), "the star starts as not pressed");
+  const src = read("views.js");
+  check(/refreshFavViewUi\(\)[\s\S]*?setAttribute\("aria-pressed", String\(favView\)\)/.test(src), "the star keeps aria-pressed in step");
+  check(/classList\.contains\("active"\)\) btn\.setAttribute\("aria-current", "true"\)/.test(src), "the active view tab carries aria-current");
+});
+
+// 58. The folder and tag filter popovers are named containers, not empty menus.
+section(() => {
+  const f = read("gridFolders.js");
+  check(/tileFolderPop\.setAttribute\("role", "dialog"\)/.test(f) && /tileFolderPop\.setAttribute\("aria-label", title\.textContent\)/.test(f), "the folder popover is a dialog named by the folder");
+  const g = read("gridMenus.js");
+  check(/gridTagPop\.setAttribute\("role", "group"\)/.test(g), "the tag filter popover is a group");
+  check(extractBlock(g, "export function renderGridTagPop(").includes('gridTagPop.setAttribute("aria-label", t("gridTagFilter"))'), "it is named per open, so the name follows the language");
+});
+
+// 59. The themed select list announces its keyboard cursor through the active descendant.
+section(() => {
+  const src = read("selectpop.js");
+  check(src.includes('row.id = `select-pop-opt-${pop.children.length}`'), "every option row has an id");
+  check(extractBlock(src, "function highlight(").includes('"aria-activedescendant", rows[cursor].id'), "arrowing moves the active descendant");
+  check(extractBlock(src, "export function closeValuePop(").includes('removeAttribute("aria-activedescendant")'), "closing clears it");
+});
+
+// 60. The error log list shows the date only; the origin id stays in the copy.
+section(() => {
+  const src = read("management.js");
+  check(src.includes("head.textContent = new Date(entry.ts * 1000).toLocaleString(LANG);"), "the row head carries no raw origin id");
+  check(extractBlock(src, "export async function copyErrorLogAll(").includes("${e.origin}"), "the copied text keeps the origin");
+});
+
+// 61. Global search announces its keyboard cursor and is a labelled listbox.
+section(() => {
+  const src = read("globalSearch.js");
+  const html = read("index.html");
+  check(/id="gs-results"[^>]*role="listbox"/.test(html), "the result container is a listbox");
+  check(/id="gs-input"[^>]*aria-controls="gs-results"/.test(html), "the field controls the list");
+  check(/aria-labelledby="global-search-title"/.test(html), "the dialog is named by its title");
+  check((src.match(/setAttribute\("role", "option"\)/g) || []).length === 2, "both row kinds are options");
+  check(extractBlock(src, "export function gsSetActive(").includes('"aria-activedescendant"'), "the cursor row is the active descendant");
+});
+
+// 62. A failed var-window open clears only its own pending resolver.
+section(() => {
+  const src = read("promptVars.js");
+  check(src.includes("if (varsWindowPending === resolve) varsWindowPending = null; resolve(false);"), "a newer pending resolver survives an older failed open");
+});
+
+// 63. Chain overview steps can be moved and removed by keyboard.
+section(() => {
+  const src = read("chain.js");
+  check(src.includes("row.tabIndex = 0;"), "a step row is focusable");
+  const kd = extractBlock(src, 'row.addEventListener("keydown"');
+  check(kd.includes("removeChainStep(i)") && kd.includes("moveChainStep(i, i - 1)") && kd.includes("moveChainStep(i, i + 1)"), "Delete and Alt+arrows act on the step");
+  const mv = extractBlock(src, "export function moveChainStep(").replace("export ", "");
+  const sb = run("var chainSel = [1, 2, 3], pushed = 0; function refreshChainUi() {} function pushChainClipboard() { pushed++; } function focusChainStep() {} " + mv + "; moveChainStep(0, 1); var a = chainSel.join(); moveChainStep(2, 3); var b = chainSel.join(); moveChainStep(1, 0); var c = chainSel.join();", {});
+  check(sb.a === "2,1,3" && sb.b === "2,1,3" && sb.c === "1,2,3", "a move reorders and an out of range move is ignored");
+});
+
+// 64. The journal refetch drops stale results and the grouped toggle rolls back.
+section(() => {
+  const src = read("journal.js");
+  const fn = extractBlock(src, "export async function loadJournal(");
+  check(fn.includes("const seq = ++journalLoadSeq;") && fn.includes("if (seq !== journalLoadSeq) return;"), "an older refetch no longer overwrites a newer one");
+  check(fn.indexOf("journalLog = log;") > fn.indexOf("if (seq !== journalLoadSeq) return;"), "the log is written only after the sequence check");
+  check(src.includes("settings.ui_flags = prevFlags; errToast(err);"), "a failed flag save restores the previous flags before the refetch");
+});
+
+// 65. Undo of clear history merges counters instead of replacing them.
+section(() => {
+  const src = read("journal.js");
+  const fn = extractBlock(src, "export function mergeRestoredCounts(").replace("export ", "");
+  const sb = run(fn + "; var out = mergeRestoredCounts({ a: 3, b: 1 }, { a: 100, b: 50 }, { a: 2, c: 4 }, { a: 90, c: 200 });", {});
+  check(sb.out.usage.a === 5 && sb.out.usage.b === 1 && sb.out.usage.c === 4, "counts add up");
+  check(sb.out.lastUsed.a === 100 && sb.out.lastUsed.b === 50 && sb.out.lastUsed.c === 200, "the newer last-used time wins");
+  const restore = extractBlock(src, "export async function restoreCopyHistory(");
+  check(restore.includes("mergeRestoredCounts(") && restore.includes("usage: merged.usage"), "the restore sends the merged counters");
+  check(src.includes("Copies made while the dialog was open"), "the snapshot is taken again after the confirmation");
+});
+
+// 66. The media bar names its seek and volume sliders.
+section(() => {
+  const media = read("media.js");
+  check(media.includes("nameBtn(seek, L.seek);") && media.includes("nameBtn(vol, L.volume);"), "applyLabels names both sliders");
+  check(read("core.js").includes('seek: t("mediaSeek"), volume: t("mediaVolume")'), "the main window passes both labels");
+  check(read("floating.js").includes("seek: t.mediaSeek, volume: t.mediaVolume"), "the pill passes both labels");
+});
+
+// 67. The recent search list is announced as a combobox listbox.
+section(() => {
+  const src = read("windowChrome.js");
+  const fn = extractBlock(src, "export function wireSearchSuggest(");
+  check(/input\.setAttribute\("role", "combobox"\)/.test(fn) && /pop\.setAttribute\("role", "listbox"\)/.test(fn), "the field is a combobox and the list a listbox");
+  check(fn.includes('row.setAttribute("role", "option")') && fn.includes("row.id ="), "each row is an option with an id");
+  check(extractBlock(fn, "const hide = () =>").includes('input.setAttribute("aria-expanded", "false")'), "hide collapses the combobox");
+  check(extractBlock(fn, "const setActive = (i) =>").includes('input.setAttribute("aria-activedescendant", rows[activeIdx].id)'), "the arrow keys move aria-activedescendant");
+  check(fn.includes('input.setAttribute("aria-expanded", "true")'), "show expands the combobox");
+});
+
+// 68. The elevated language scan keeps one live poll chain.
+section(() => {
+  const src = read("dictation.js");
+  const poll = extractBlock(src, "export function pollElevatedCaps(");
+  check(poll.includes("const chain = st.elevChain = (st.elevChain || 0) + 1;"), "each poll start takes a new chain id");
+  check(poll.indexOf("if (st.elevChain !== chain) return;\n    if (res == null)") > 0 || /if \(st\.elevChain !== chain\) return;\s+if \(res == null\)/.test(poll), "a stale chain stops after the await, before re-arming");
+  check(extractBlock(src, "export function closeLangsModal(").includes("st.elevChain = (st.elevChain || 0) + 1"), "closing the dialog retires the chain");
 });
 
 let guard;

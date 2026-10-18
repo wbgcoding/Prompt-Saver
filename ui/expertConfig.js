@@ -680,4 +680,4 @@ export const TILE_DOM_FLAGS = new Set(["captions", "promptNotes", "notesInToolti
 // flash through the translucent settings overlay. Only these change tile DOM.
 export const GRID_DOM_VALUES = new Set(["gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
 
-export const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup" };
+export const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup", stats: "settingsAreaStats" };

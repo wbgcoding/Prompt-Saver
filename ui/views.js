@@ -119,6 +119,7 @@ export function refreshFavViewUi() {
   if (btn) {
     btn.classList.toggle("hidden", !favViewEnabled());
     btn.classList.toggle("active", favView);
+    btn.setAttribute("aria-pressed", String(favView));
   }
   const qg = $("quick-grid");
   if (qg) qg.classList.toggle("qg-readonly", favView);
@@ -432,6 +433,7 @@ export function viewTabEl(v) {
   // While the favorites view is open, no normal view is the active one.
   btn.className = "view-btn" + (!favView && v.id === settings.active_view ? " active" : "");
   btn.dataset.viewId = v.id;
+  if (btn.classList.contains("active")) btn.setAttribute("aria-current", "true");
   if (v.color) {
     btn.classList.add("colored");
     btn.style.setProperty("--view-color", v.color);
@@ -754,35 +756,40 @@ export function closeViewModal() {
 // lockstep. The per-size layout arrangement is not restored, only membership and the current
 // grid size: the members reflow into free cells, as a resize would.
 export async function restoreDeletedView(deleted, reactivateId) {
-  assignSettings(await invoke("add_view", { name: deleted.name, color: deleted.color || "" }));
-  const newId = settings.active_view;
-  assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows: deleted.rows }));
-  if (deleted.members && deleted.members.length) {
-    const addAll = async () => assignSettings(await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId }));
-    try {
-      await addAll();
-    } catch (e) {
-      // A view that had more members than cells (the overflow row) is all-or-nothing on the way
-      // back in: grow it by the missing rows once, so no member is lost.
-      const m = String(e).match(/view-full:(\d+)/);
-      let restored = false;
-      if (m) {
-        const rows = Math.min(val("gridMax"), deleted.rows + Math.ceil(Number(m[1]) / Math.max(1, deleted.cols)));
-        try {
-          assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows }));
-          await addAll();
-          restored = true;
-        } catch (_) { /* reported below */ }
+  // The view may exist after only some of the steps ran, so the tab bar and the grid are
+  // redrawn whatever happens (a thrown step still reaches the undo handler's error toast).
+  try {
+    assignSettings(await invoke("add_view", { name: deleted.name, color: deleted.color || "" }));
+    const newId = settings.active_view;
+    assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows: deleted.rows }));
+    if (deleted.members && deleted.members.length) {
+      const addAll = async () => assignSettings(await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId }));
+      try {
+        await addAll();
+      } catch (e) {
+        // A view that had more members than cells (the overflow row) is all-or-nothing on the way
+        // back in: grow it by the missing rows once, so no member is lost.
+        const m = String(e).match(/view-full:(\d+)/);
+        let restored = false;
+        if (m) {
+          const rows = Math.min(val("gridMax"), deleted.rows + Math.ceil(Number(m[1]) / Math.max(1, deleted.cols)));
+          try {
+            assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows }));
+            await addAll();
+            restored = true;
+          } catch (_) { /* reported below */ }
+        }
+        if (!restored) batchErrorToast(e);
       }
-      if (!restored) batchErrorToast(e);
     }
+    if (reactivateId && settings.views.some((v) => v.id === reactivateId)) {
+      assignSettings(await invoke("set_active_view", { id: reactivateId }));
+    }
+  } finally {
+    renderViews();
+    await renderGrid(true);
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
   }
-  if (reactivateId && settings.views.some((v) => v.id === reactivateId)) {
-    assignSettings(await invoke("set_active_view", { id: reactivateId }));
-  }
-  renderViews();
-  await renderGrid(true);
-  if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
 let viewModalSaving = false; // a double Enter or Enter plus a click must not save twice
@@ -793,8 +800,8 @@ export async function confirmViewModal() {
   viewModalSaving = true;
   try {
     if (viewModalId) {
-      await invoke("rename_view", { id: viewModalId, name });
-      await invoke("set_view_color", { id: viewModalId, color: viewModalColor });
+      assignSettings(await invoke("rename_view", { id: viewModalId, name }));
+      assignSettings(await invoke("set_view_color", { id: viewModalId, color: viewModalColor }));
       // Apply the grid size too (clamped to the expert gridMax).
       const view = settings.views.find((v) => v.id === viewModalId);
       const cols = clampGrid(viewModal.cols.value, view?.cols ?? 1);
@@ -805,6 +812,7 @@ export async function confirmViewModal() {
     }
   } catch (err) {
     errToast(err);
+    renderViews(); // a rename that already landed shows even though a later step failed
     return;
   } finally {
     viewModalSaving = false;

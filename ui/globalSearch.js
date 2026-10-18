@@ -22,6 +22,7 @@ export let gsOpen = false;
 export let gsQuery = "";
 export let gsActive = -1; // index into gsFlatRows, the flat list a rendered pass produced
 export let gsExpanded = new Set(); // group keys currently past their "show more"
+let gsRowSeq = 0; // unique ids for the result rows
 export let gsFlatRows = []; // [{ el, run }], in on-screen order, across every group
 export let gsHistoryLog = []; // recent_copies, refetched each time the overlay opens
 
@@ -221,6 +222,8 @@ export function gsGroupHead(headerKey, groupKey, clearAll) {
 export function gsRow(label, sub, color, onActivate) {
   const row = document.createElement("div");
   row.className = "gs-row";
+  row.setAttribute("role", "option");
+  row.id = `gs-opt-${++gsRowSeq}`;
   if (color) row.style.setProperty("--row-color", color);
   const name = document.createElement("span");
   name.className = "gs-row-name";
@@ -243,6 +246,8 @@ export function gsRow(label, sub, color, onActivate) {
 export function gsRecentRow(term) {
   const row = document.createElement("div");
   row.className = "gs-row gs-recent-row";
+  row.setAttribute("role", "option");
+  row.id = `gs-opt-${++gsRowSeq}`;
   const name = document.createElement("span");
   name.className = "gs-row-name";
   name.textContent = term;
@@ -306,7 +311,15 @@ export function gsRemember(term) {
 
 export function gsSetActive(i) {
   gsActive = i;
-  gsFlatRows.forEach((r, idx) => r.el.classList.toggle("active", idx === i));
+  gsFlatRows.forEach((r, idx) => {
+    r.el.classList.toggle("active", idx === i);
+    r.el.setAttribute("aria-selected", idx === i ? "true" : "false");
+  });
+  // Focus stays in the search field, so the highlighted row is announced through the active descendant.
+  const input = $("gs-input");
+  const cur = gsFlatRows[i]?.el;
+  if (cur) input.setAttribute("aria-activedescendant", cur.id);
+  else input.removeAttribute("aria-activedescendant");
   gsFlatRows[i]?.el.scrollIntoView({ block: "nearest" });
 }
 

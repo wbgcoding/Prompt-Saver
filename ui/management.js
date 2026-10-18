@@ -611,7 +611,8 @@ export function renderErrorLogList() {
     row.className = "clip-row";
     const head = document.createElement("span");
     head.className = "clip-time";
-    head.textContent = `${new Date(entry.ts * 1000).toLocaleString(LANG)} · ${entry.origin}`;
+    // The internal origin id is not translated, so it only goes into the copied text.
+    head.textContent = new Date(entry.ts * 1000).toLocaleString(LANG);
     const prev = document.createElement("div");
     prev.className = "clip-preview";
     prev.textContent = entry.text;

@@ -4,7 +4,7 @@ import { confirmSecretExport, renderLibrary } from "./library.js";
 import { favViewEnabled, refreshFavViewUi, renderGrid, seedExamplesIfNeeded } from "./views.js";
 import { applyBars, applyI18n, wireClearButtons } from "./windowChrome.js";
 import { applyTheme, applyTileStyle, fillThemeSelect, loadPalette, openThemeEditor, THEME_EDITOR_ENTRY } from "./theme.js";
-import { fmtBytes } from "./floatShared.js";
+import { fmtBytes, fmtUnit } from "./floatShared.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { isHistoryTabOpen, renderJournal } from "./journal.js";
 import { attachSelectPicker } from "./selectpop.js";
@@ -134,27 +134,8 @@ export async function runImport() {
     // refuses if the file changed since the preview.
     const count = await withTaskbarBusy("import", () => invoke("import_prompts", { path: picked.path, hash: picked.hash }));
     if (count == null) return;
+    // The import adds prompts only; settings, views and layout stay untouched.
     await renderGrid(); // refreshes prompts AND settings
-    // Imported preferences apply on the spot: no restart needed.
-    await setLang(settings.language);
-    applyI18n();
-    fillSizeSelects();
-    fillFontSelects();
-    setLangSelect();
-    fillThemeSelect();
-    $("tile-font").value = settings.tile_font || "system";
-    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
-    fillScaleSelect("ui-scale", "uiScale");
-    $("opt-minimize").checked = settings.minimize_to_tray === true;
-    $("opt-screenshot-folder").checked = optFlag("screenshotSave");
-    $("opt-tooltips").checked = flag("tooltipsEnabled");
-    $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
-    $("opt-autoupdate").checked = settings.auto_update !== false;
-    fillUpdateIntervalSelect();
-    applyTheme(await invoke("current_theme"));
-    applyTileStyle();
-    applyBars();
-    await renderGrid(true); // re-render with the new tile style
     toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
     maybeDupImportToast();
   } catch (err) {
@@ -377,7 +358,7 @@ export async function deleteData() {
   }
   clearTimeout(deleteAllTimer);
   disarmButton(btn, t("deleteData"));
-  await maybeBackupBeforeWipe("delete");
+  if (!(await maybeBackupBeforeWipe("delete"))) return;
   try {
     await invoke("delete_all_data");
   } catch (e) {
@@ -391,9 +372,22 @@ export async function deleteData() {
 
 // Expert opt (Standard-an, split so a user who only wants one of the two can
 // switch the other off). Take a safety backup before a destructive reset/delete.
+// Resolves true when the wipe may go on: no backup wanted, the backup made, or the user chose to
+// continue without one after it failed (Cancel is the default).
 export async function maybeBackupBeforeWipe(kind) {
-  if (!flag(kind === "reset" ? "backupBeforeReset" : "backupBeforeDelete")) return;
-  try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); } catch { /* best-effort */ }
+  if (!flag(kind === "reset" ? "backupBeforeReset" : "backupBeforeDelete")) return true;
+  try {
+    await invoke("create_backup", { keep: Math.round(val("backupKeep")) });
+    return true;
+  } catch (err) {
+    const message = t(kind === "reset" ? "backupFailedReset" : "backupFailedDelete").replace("{error}", () => errText(err));
+    return confirmDialog({
+      title: t("backupFailedTitle"),
+      message,
+      confirmLabel: t(kind === "reset" ? "resetSettings" : "deleteData"),
+      focusCancel: true,
+    });
+  }
 }
 
 // Reset all SETTINGS to defaults (theme, views, toggles, expert values): prompts kept.
@@ -406,10 +400,91 @@ export async function resetSettings() {
   }
   clearTimeout(resetSettingsTimer);
   disarmButton(btn, t("resetSettings"));
-  await maybeBackupBeforeWipe("reset");
-  await invoke("reset_settings");
+  if (!(await maybeBackupBeforeWipe("reset"))) return;
+  try {
+    await invoke("reset_settings");
+  } catch (e) {
+    errToast(e);
+  }
   await reloadEverything(); // in place: a page reload repaints the whole window
 }
+
+// A boolean ui flag behind a settings switch: write it at once, and when the store refuses,
+// put the switch and the stored flag back so the panel never shows what was not saved.
+export async function persistFlagSwitch(box, key) {
+  const enabled = box.checked;
+  const before = settings.ui_flags || {};
+  const had = Object.prototype.hasOwnProperty.call(before, key);
+  const previous = before[key];
+  settings.ui_flags = { ...before, [key]: enabled };
+  try {
+    await invoke("set_ui_flag", { key, enabled });
+  } catch (err) {
+    const flags = { ...(settings.ui_flags || {}) };
+    if (had) flags[key] = previous; else delete flags[key];
+    settings.ui_flags = flags;
+    box.checked = !enabled;
+    errToast(err);
+  }
+}
+
+// Always-on-top: the header pin and the settings switch stay in sync; the pin tints itself
+// (accent) while active. A refused call puts both back.
+function paintOnTop(on) {
+  $("opt-ontop").checked = on;
+  $("pin-top").classList.toggle("active", on);
+  $("pin-top").setAttribute("aria-pressed", String(on));
+}
+export async function setOnTop(on) {
+  const before = settings.always_on_top;
+  settings.always_on_top = on;
+  paintOnTop(on);
+  try {
+    await invoke("set_always_on_top", { enabled: on });
+  } catch (err) {
+    settings.always_on_top = before;
+    paintOnTop(!!before);
+    errToast(err);
+  }
+}
+
+// Prompt-tile font + size. A refused write puts the previous style back, selects included.
+export async function tileStyleChanged() {
+  const before = { font: settings.tile_font, size: settings.tile_size };
+  settings.tile_font = $("tile-font").value;
+  settings.tile_size = Number($("tile-size").value); // 0 = auto-fit
+  applyTileStyle();
+  try {
+    await invoke("set_tile_style", { font: settings.tile_font, size: settings.tile_size });
+  } catch (err) {
+    settings.tile_font = before.font;
+    settings.tile_size = before.size;
+    $("tile-font").value = settings.tile_font || "system";
+    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
+    applyTileStyle();
+    errToast(err);
+  }
+  await renderGrid(true); // re-render so auto-fit (or fixed size) applies cleanly
+}
+
+// Interface size select: a refused write restores the stored value and the select before the rescale.
+export const scaleChanged = (key) => async (e) => {
+  const v = Number(e.target.value);
+  const before = settings.ui_values || {};
+  const had = Object.prototype.hasOwnProperty.call(before, key);
+  const previous = before[key];
+  settings.ui_values = { ...before, [key]: v };
+  try {
+    await invoke("set_ui_value", { key, value: v });
+  } catch (err) {
+    const values = { ...(settings.ui_values || {}) };
+    if (had) values[key] = previous; else delete values[key];
+    settings.ui_values = values;
+    fillScaleSelect(e.target.id, key);
+    errToast(err);
+  }
+  applyValues();
+};
 
 export function bindSettingsPanel() {
   $("gear").addEventListener("click", () => {
@@ -422,23 +497,23 @@ export function bindSettingsPanel() {
   // pointerdown (not click): selecting text that ends outside an input must not close.
   settingsEl.addEventListener("pointerdown", (e) => { if (e.target === settingsEl) hideSettings(); });
 
-  $("opt-minimize").addEventListener("change", (e) => {
-    invoke("set_minimize_on_close", { enabled: e.target.checked }).catch((err) => errToast(err));
+  $("opt-minimize").addEventListener("change", async (e) => {
+    const box = e.target;
+    const before = settings.minimize_to_tray;
+    settings.minimize_to_tray = box.checked;
+    try {
+      await invoke("set_minimize_on_close", { enabled: box.checked });
+    } catch (err) {
+      settings.minimize_to_tray = before;
+      box.checked = !box.checked;
+      errToast(err);
+    }
   });
-  $("opt-screenshot-folder").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: e.target.checked };
-    invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
+  $("opt-screenshot-folder").addEventListener("change", (e) => persistFlagSwitch(e.target, "screenshotSave"));
   // Master tooltip switch (default on): off = no hover tooltips anywhere.
-  $("opt-tooltips").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), tooltipsEnabled: e.target.checked };
-    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
+  $("opt-tooltips").addEventListener("change", (e) => persistFlagSwitch(e.target, "tooltipsEnabled"));
   // Auto-paste (default on): normal setting; enter-after stays in the expert menu.
-  $("opt-autopaste").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
-    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
+  $("opt-autopaste").addEventListener("change", (e) => persistFlagSwitch(e.target, "autoPaste"));
   // Recording copies from other apps is switched in the expert menu and in the copy history tab.
   $("opt-autostart").addEventListener("change", async (e) => {
     try {
@@ -457,15 +532,6 @@ export function bindSettingsPanel() {
       errToast(err);
     }
   });
-  // Always-on-top: the header pin and the settings switch stay in sync; the
-  // pin tints itself (accent) while active.
-  const setOnTop = (on) => {
-    settings.always_on_top = on;
-    $("opt-ontop").checked = on;
-    $("pin-top").classList.toggle("active", on);
-    $("pin-top").setAttribute("aria-pressed", String(on));
-    invoke("set_always_on_top", { enabled: on }).catch((err) => errToast(err));
-  };
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
 
@@ -521,6 +587,7 @@ export function bindSettingsPanel() {
     // Re-fill the JS-built selects, then restore their current values.
     fillSizeSelects();
     fillUpdateIntervalSelect();
+    fillScaleSelect("ui-scale", "uiScale"); // the percent style follows the language
     fillFontSelects();
     fillThemeSelect(); // the custom-theme separator is a translated label too
     $("tile-font").value = settings.tile_font || "system";
@@ -530,14 +597,6 @@ export function bindSettingsPanel() {
     if (isHistoryTabOpen()) renderJournal();
   });
 
-  // Prompt-tile font + size.
-  const tileStyleChanged = async () => {
-    settings.tile_font = $("tile-font").value;
-    settings.tile_size = Number($("tile-size").value); // 0 = auto-fit
-    applyTileStyle();
-    invoke("set_tile_style", { font: settings.tile_font, size: settings.tile_size }).catch(() => {});
-    await renderGrid(true); // re-render so auto-fit (or fixed size) applies cleanly
-  };
   $("tile-font").addEventListener("change", tileStyleChanged);
   $("tile-size").addEventListener("change", tileStyleChanged);
   // Every dropdown uses the same popup style (scrollbar only when needed).
@@ -552,12 +611,6 @@ export function bindSettingsPanel() {
 
   // Interface size: a percentage-preset select mirroring the expert scale.
   fillScaleSelect("ui-scale", "uiScale");
-  const scaleChanged = (key) => async (e) => {
-    const v = Number(e.target.value);
-    settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
-    await invoke("set_ui_value", { key, value: v }).catch((err) => errToast(err));
-    applyValues();
-  };
   $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
   attachSelectPicker($("ui-scale"));
 }
@@ -570,10 +623,12 @@ export function fillScaleSelect(id, key) {
   if (!sel) return;
   const cur = Math.round(val(key));
   sel.innerHTML = "";
+  let pct;
+  try { pct = new Intl.NumberFormat(LANG, { style: "percent" }); } catch { pct = new Intl.NumberFormat("en", { style: "percent" }); }
   for (const p of [...new Set([...SCALE_PRESETS, cur])].sort((a, b) => a - b)) {
     const o = document.createElement("option");
     o.value = String(p);
-    o.textContent = `${p} %`;
+    o.textContent = pct.format(p / 100); // the language's own percent style ("100 %", "%100")
     sel.appendChild(o);
   }
   sel.value = String(cur);
@@ -590,7 +645,7 @@ export function fillUpdateIntervalSelect() {
   const raw = Number(val("updateCheckH"));
   const cur = Number.isFinite(raw) ? Math.min(168, Math.max(1, raw)) : 24;
   const rows = UPDATE_INTERVALS.map(([h, key]) => [h, t(key)]);
-  if (!rows.some(([h]) => h === cur)) rows.push([cur, `${cur}h`]);
+  if (!rows.some(([h]) => h === cur)) rows.push([cur, fmtUnit(cur, "hour", LANG)]);
   rows.sort((a, b) => a[0] - b[0]);
   sel.innerHTML = "";
   for (const [h, label] of rows) {

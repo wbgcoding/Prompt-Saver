@@ -171,14 +171,16 @@ export function insertVarToken(body) {
 }
 
 // Rebuild the helper for the current feature flags (chips only with promptVars,
-// the options field only with choiceVars).
-export function renderVarHelper() {
+// the options field only with choiceVars). `refresh` false (typing in the text) keeps chips that
+// already match the flag instead of rebuilding the whole row per keystroke.
+export function renderVarHelper(refresh = true) {
   const chips = $("modal-vars-chips");
   const dyn = flag("dynVars");
   chips.classList.toggle("hidden", !dyn);
   $("modal-vars-dyn-hint").classList.toggle("hidden", !dyn);
-  chips.innerHTML = "";
-  if (dyn) {
+  const upToDate = !refresh && chips.childElementCount === (dyn ? DYN_VARS.length : 0);
+  if (!upToDate) chips.innerHTML = "";
+  if (dyn && !upToDate) {
     for (const name of DYN_VARS) {
       const b = document.createElement("button");
       b.type = "button";
@@ -231,6 +233,7 @@ export function varFixedListRow() {
     const valueEl = document.createElement("input");
     valueEl.type = "text";
     valueEl.className = "modal-input var-fixed-value";
+    valueEl.setAttribute("aria-label", name);
     valueEl.value = fixed[name];
     valueEl.addEventListener("change", () => {
       const next = { ...readFixedVars() };
@@ -309,17 +312,30 @@ export function draftEditorFields() {
   return { promptId, name: modal.name.value, text: entries[0] || "", variants: JSON.stringify(entries.slice(1)) };
 }
 
+let draftWrite = null; // the draft write still in flight, so a discard can queue behind it
+
 export async function saveDraftNow() {
   const fields = draftEditorFields();
   if (!fields) return;
   const fp = JSON.stringify(fields);
   if (fp === draftLastSaved) return; // nothing changed since the last write
   draftLastSaved = fp;
+  const write = invoke("save_editor_draft", fields);
+  draftWrite = write;
   try {
-    await invoke("save_editor_draft", fields);
+    await write;
   } catch (_) {
     draftLastSaved = null; // let the next tick retry a failed write
+  } finally {
+    if (draftWrite === write) draftWrite = null;
   }
+}
+
+// The discard goes out only after a tick's write has landed, or that write could arrive second
+// and leave a stale draft behind for the boot recovery to offer.
+export async function discardEditorDraft() {
+  if (draftWrite) await draftWrite.catch(() => {});
+  try { await invoke("discard_editor_draft"); } catch (_) { /* nothing to drop */ }
 }
 
 export function armDraftAutosave() {
@@ -387,7 +403,7 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   syncModalImageUi(mode);
   modalInitial = modalSnapshot();
   armDraftAutosave();
-  if (secret) invoke("discard_editor_draft").catch(() => {});
+  if (secret) discardEditorDraft();
   focusOnOpen(mode);
 }
 
@@ -591,7 +607,7 @@ export function syncMdUi(textVisible, rotating = false) {
 // it with the link under the text. Once shown it stays until the editor closes, so it
 // never jumps away while a token is being typed.
 let varsRevealed = false;
-function syncVarsUi(textVisible, rotating) {
+function syncVarsUi(textVisible, rotating, fromTyping = false) {
   const varsUi = textVisible && !rotating && flag("promptVars");
   const hasVars = extractVars(modal.text.value).length > 0;
   const showBar = varsUi && (hasVars || varsRevealed);
@@ -599,7 +615,7 @@ function syncVarsUi(textVisible, rotating) {
   modal.textBar.classList.toggle("hidden", !showBar);
   modal.varsHint.classList.toggle("hidden", !showBar);
   $("modal-vars-link").classList.toggle("hidden", !varsUi || showBar);
-  if (showBar) renderVarHelper(); // chips + insert row follow their flags
+  if (showBar) renderVarHelper(!fromTyping); // chips + insert row follow their flags
 }
 
 // The prompt field grows with its content up to the visible dialog height; past
@@ -1057,6 +1073,7 @@ export function renderRotateEntries() {
     const ta = document.createElement("textarea");
     ta.className = "modal-input rotate-entry-input";
     ta.rows = 1;
+    ta.setAttribute("aria-label", t("rotateEntryN").replace("{n}", () => String(i + 1)));
     ta.value = entry;
     // Typing can flip an entry between blank/filled (eligibility) or add/remove
     // a placeholder (the button's hint tooltip): both must stay live, not just on open.
@@ -1215,6 +1232,8 @@ export async function startFileFromClipboard() {
   });
 }
 export function closeModal() {
+  // A save in flight still reads modalState after its awaits: a close request waits for it.
+  if (modalSaving) return;
   if (voiceState !== "idle" && voiceTargetEl === modal.text) stopVoice(); // its field is about to disappear
   closeColorPop();
   closeTagSuggest();
@@ -1228,7 +1247,7 @@ export function closeModal() {
   // drops the autosave draft at once instead of leaving it for the boot-time recovery check to
   // offer back for nothing.
   disarmDraftAutosave();
-  if (modalState) invoke("discard_editor_draft").catch(() => {});
+  if (modalState) discardEditorDraft();
   assignModalState(null);
   modalInitial = "";
   // A tile the editor was opened from can be gone by the time it closes (deleted mid-edit, or
@@ -1240,6 +1259,7 @@ export function closeModal() {
 // Ask before dismissing the modal via the background. A new save dialog (text,
 // image, file, screenshot) always holds unsaved work; an edit only when changed.
 export async function confirmDiscardIfDirty() {
+  if (modalSaving) return false; // Escape, X, cancel and the backdrop are ignored while the save runs
   if (!flag("confirmDiscard")) return true;
   const isNew = modalState && modalState.mode !== "edit";
   if (!isNew && modalSnapshot() === modalInitial) return true;
@@ -1651,7 +1671,12 @@ export function bindEditor() {
   modal.text.addEventListener("input", scheduleLenCounter); // live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
   modal.text.addEventListener("input", scheduleFitText);    // the field follows its content
-  modal.text.addEventListener("input", () => syncVarsUi(modal.root.classList.contains("tall"), rotationUiOn()));
+  // Same 60 ms settle as the preview: a long prompt is not rescanned for placeholders per key.
+  let varsTimer = 0;
+  modal.text.addEventListener("input", () => {
+    clearTimeout(varsTimer);
+    varsTimer = setTimeout(() => syncVarsUi(modal.root.classList.contains("tall"), rotationUiOn(), true), 60);
+  });
   $("modal-vars-link").addEventListener("click", () => {
     varsRevealed = true;
     syncVarsUi(true, false);

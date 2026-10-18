@@ -317,6 +317,14 @@ export function fmtUnit(n, unit, lang = "en", digits = 0) {
   return f.format(n);
 }
 
+// Just the unit word of fmtUnit ("Tg.", "days"), for a number field that sits beside it.
+export function fmtUnitName(n, unit, lang = "en") {
+  const opts = { style: "unit", unit, unitDisplay: "short" };
+  let f;
+  try { f = new Intl.NumberFormat(lang, opts); } catch { f = new Intl.NumberFormat("en", opts); }
+  return f.formatToParts(n).filter((p) => p.type === "unit").map((p) => p.value).join("").trim();
+}
+
 export function fmtNum(n, digits = 0, lang = "en") {
   const key = `${lang}|${digits}`;
   let f = numFormats.get(key);

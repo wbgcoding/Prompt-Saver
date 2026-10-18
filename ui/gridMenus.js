@@ -256,6 +256,7 @@ export function updateGridTagBtn() {
 }
 export function renderGridTagPop() {
   gridTagPop.innerHTML = "";
+  gridTagPop.setAttribute("aria-label", t("gridTagFilter")); // rebuilt per open, so it follows the language
   const names = allTags();
   for (const name of names) {
     const chip = tagChipEl(name, "button");
@@ -483,7 +484,7 @@ export function wireGridMenus() {
   moveToFolderPop.setAttribute("role", "menu");
   document.body.appendChild(moveToFolderPop);
   gridTagPop.className = "ctx grid-tag-pop hidden";
-  gridTagPop.setAttribute("role", "menu");
+  gridTagPop.setAttribute("role", "group"); // toggle chips, not menu items
   document.body.appendChild(gridTagPop);
   toolbarMenu.className = "ctx toolbar-menu hidden";
   toolbarMenu.setAttribute("role", "menu");

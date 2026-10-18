@@ -292,11 +292,20 @@ export async function wireWindowControls() {
 // Themed recent-searches dropdown for a search field, replacing the browser's
 // unstyled native autofill. Terms live in ui_texts (DPAPI-encrypted like the rest),
 // most-recent first, deduped, capped. Picking one re-runs the field's own search.
+let searchSuggestSeq = 0;
 export function wireSearchSuggest(input, storeKey) {
   if (!input) return;
   input.setAttribute("autocomplete", "off");
   const pop = document.createElement("div");
   pop.className = "search-suggest hidden";
+  const popId = `search-suggest-${++searchSuggestSeq}`;
+  pop.id = popId;
+  pop.setAttribute("role", "listbox");
+  pop.setAttribute("aria-label", input.getAttribute("aria-label") || input.placeholder || "");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", popId);
+  input.setAttribute("aria-expanded", "false");
   document.body.appendChild(pop);
   const load = () => {
     try { const a = JSON.parse(settings.ui_texts?.[storeKey] || "[]"); return Array.isArray(a) ? a : []; }
@@ -318,12 +327,22 @@ export function wireSearchSuggest(input, storeKey) {
   };
   // Row highlighted by the arrow keys (-1 = none); the field keeps the focus throughout.
   let activeIdx = -1;
-  const hide = () => { pop.classList.add("hidden"); activeIdx = -1; };
+  const hide = () => {
+    pop.classList.add("hidden");
+    activeIdx = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  };
   const isOpen = () => !pop.classList.contains("hidden");
   const setActive = (i) => {
     const rows = [...pop.querySelectorAll(".search-suggest-item")];
     activeIdx = rows.length ? Math.max(-1, Math.min(i, rows.length - 1)) : -1;
-    rows.forEach((r, n) => r.classList.toggle("active", n === activeIdx));
+    rows.forEach((r, n) => {
+      r.classList.toggle("active", n === activeIdx);
+      r.setAttribute("aria-selected", n === activeIdx ? "true" : "false");
+    });
+    if (rows[activeIdx]) input.setAttribute("aria-activedescendant", rows[activeIdx].id);
+    else input.removeAttribute("aria-activedescendant");
     rows[activeIdx]?.scrollIntoView({ block: "nearest" });
   };
   const pick = (term) => {
@@ -334,6 +353,7 @@ export function wireSearchSuggest(input, storeKey) {
   };
   const show = () => {
     activeIdx = -1;
+    input.removeAttribute("aria-activedescendant");
     if (!flag("searchSuggest")) { hide(); return; }
     const q = input.value.trim().toLowerCase();
     const items = load().filter((x) => !q || x.toLowerCase().includes(q)).slice(0, val("searchListMax"));
@@ -342,6 +362,9 @@ export function wireSearchSuggest(input, storeKey) {
     for (const term of items) {
       const row = document.createElement("div");
       row.className = "search-suggest-item";
+      row.id = `${popId}-opt-${pop.children.length}`;
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", "false");
       const label = document.createElement("span");
       label.className = "search-suggest-text";
       label.textContent = term;
@@ -371,6 +394,7 @@ export function wireSearchSuggest(input, storeKey) {
     pop.style.width = "";
     pop.style.minWidth = `${Math.min(220, r.width)}px`;
     pop.style.maxWidth = `${r.width}px`;
+    input.setAttribute("aria-expanded", "true");
     placePopover(pop, r);
   };
   // Open on an explicit click/type, NOT on the focus the dialog may grab on open.

@@ -1,5 +1,5 @@
 // Hotkey recording and the hotkey list.
-import { $, errToast, EXPERT_ACTIONS, flag, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
+import { $, errToast, EXPERT_ACTIONS, flag, flagState, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
 import { hotkeyClearX, openAllShortcuts } from "./windowChrome.js";
 import { assignSettingsOpener } from "./settingsPanel.js";
 import { showExpertPage } from "./expertMenu.js";
@@ -216,6 +216,7 @@ export async function commitVoiceHotkey(accel) {
   await invoke("set_voice_hotkey", { hotkey: accel });
   settings.voice_hotkey = accel;
   if (accel) toast(t("hotkeySet"));
+  renderHotkeysList(); // a no-op while the popup is closed
   return accel;
 }
 // The recording stop hotkey: only registered while a recording runs (see rearm_hotkeys on
@@ -298,6 +299,7 @@ export const HOTKEYS_LIST_KINDS = {
     current: (id) => prompts.find((x) => x.id === id)?.hotkey || "",
     onCommit: (accel, id) => commitPromptHotkeyDirect(id, accel),
   },
+  voice: { current: () => settings.voice_hotkey, onCommit: commitVoiceHotkey },
   recStop: { current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
   recPause: { current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
 };
@@ -307,10 +309,14 @@ export function renderHotkeysList() {
   const q = ($("hotkeys-search").value || "").trim().toLowerCase();
   const rows = [{ kind: "global", id: null, name: t("hotkeysGlobalRow"), accel: settings.hotkey }]
     .concat(promptHotkeysOn() ? prompts.filter((p) => p.hotkey).map((p) => ({ kind: "prompt", id: p.id, name: p.name, accel: p.hotkey })) : [])
+    .concat(flagState("voiceHotkey") ? [{ kind: "voice", id: null, name: t("voiceHotkeyLabel"), accel: settings.voice_hotkey }] : [])
     .concat(flag("screenRecord") && flag("recStopHotkey") ? [{ kind: "recStop", id: null, name: t("recStopHotkeyLabel"), accel: settings.rec_stop_hotkey }] : [])
     .concat(flag("screenRecord") && flag("recPauseHotkey") ? [{ kind: "recPause", id: null, name: t("recPauseHotkeyLabel"), accel: settings.rec_pause_hotkey }] : []);
   const hit = (r) => !q || r.name.toLowerCase().includes(q) || prettyAccel(r.accel).toLowerCase().includes(q);
   const filtered = rows.filter(hit);
+  // Rebuilding removes the focused row input without a blur, so the capture switch would stay
+  // on and every global hotkey stay unregistered; end it here instead.
+  if (box.contains(document.activeElement)) hotkeyCapture(false);
   box.innerHTML = "";
   if (!filtered.length) {
     const empty = document.createElement("p");

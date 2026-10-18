@@ -33,16 +33,23 @@ export function parseStamp(name) {
   const dt = new Date(`${d}T${(tm || "00-00-00").replace(/-/g, ":")}`);
   return isNaN(dt.getTime()) ? null : dt;
 }
+// Written optimistically; a refused write (read-only data folder) puts the stored value back,
+// so the dialog never shows a setting the backend does not use.
 export async function saveBackupSetting(kind, key, value) {
-  if (kind === "flag") {
-    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: value };
-    await invoke("set_ui_flag", { key, enabled: value }).catch((e) => errToast(e));
-    applyFlags();
-  } else {
-    settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-    await invoke("set_ui_value", { key, value }).catch((e) => errToast(e));
-    applyValues();
+  const flag = kind === "flag";
+  const field = flag ? "ui_flags" : "ui_values";
+  const had = Object.prototype.hasOwnProperty.call(settings[field] || {}, key);
+  const previous = (settings[field] || {})[key];
+  settings[field] = { ...(settings[field] || {}), [key]: value };
+  try {
+    await (flag ? invoke("set_ui_flag", { key, enabled: value }) : invoke("set_ui_value", { key, value }));
+  } catch (e) {
+    const back = { ...settings[field] };
+    if (had) back[key] = previous; else delete back[key];
+    settings[field] = back;
+    errToast(e);
   }
+  if (flag) applyFlags(); else applyValues();
 }
 // Backups live in their own dialog (opened from settings), not in the expert menu:
 // the page carries settings, diagnostics and a restore list and needs the room.
@@ -52,9 +59,12 @@ export async function saveBackupSetting(kind, key, value) {
 export let backupPwDraft = "";
 export function openBackups() {
   $("backup-modal").classList.remove("hidden");
-  renderStoragePanel($("storage-panel"));
-  renderRetentionPanel($("retention-panel"));
-  renderBackupPanel($("backup-panel"));
+  // The promise lets a caller (settings search) wait until every section is drawn.
+  return Promise.all([
+    renderStoragePanel($("storage-panel")),
+    renderRetentionPanel($("retention-panel")),
+    renderBackupPanel($("backup-panel")),
+  ]);
 }
 export function closeBackups() {
   $("backup-modal").classList.add("hidden");

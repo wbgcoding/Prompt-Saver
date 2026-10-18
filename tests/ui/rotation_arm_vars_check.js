@@ -21,6 +21,7 @@ function extractBlock(marker) {
   throw new Error(`unbalanced braces after: ${marker}`);
 }
 const code = [
+  "const rotatingInFlight = new Set();",
   extractBlock("async function resolveVarsList("),
   extractBlock("async function peekResolveCommit("),
   extractBlock("async function copyResolved("),

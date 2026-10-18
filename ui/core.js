@@ -263,6 +263,7 @@ export const mediaBarLabels = () => ({
   play: t("mediaPlay"), pause: t("mediaPause"),
   loopOn: t("mediaLoopOn"), loopOff: t("mediaLoopOff"),
   mute: t("mediaMute"), unmute: t("mediaUnmute"),
+  seek: t("mediaSeek"), volume: t("mediaVolume"),
 });
 
 // The product name never appears in the markup: every [data-brand] element (the <title> and
@@ -592,8 +593,10 @@ export const videoCache = new Map(); // prompt id -> { src, wrap }
 export const libThumbCache = new Map(); // prompt id -> { key, el }
 export const journalThumbCache = new Map();
 export function pruneThumbCache(cache) {
+  if (!cache.size) return;
+  const live = new Set(prompts.map((p) => p.id));
   for (const id of cache.keys()) {
-    if (!prompts.some((p) => p.id === id)) cache.delete(id);
+    if (!live.has(id)) cache.delete(id);
   }
 }
 

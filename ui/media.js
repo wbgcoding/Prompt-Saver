@@ -191,6 +191,8 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
     nameBtn(playBtn, video.paused ? L.play : L.pause);
     nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
     nameBtn(soundBtn, video.muted ? L.unmute : L.mute);
+    nameBtn(seek, L.seek);
+    nameBtn(vol, L.volume);
   };
   bar.setLabels = (newLabels) => { L = newLabels; applyLabels(); };
   // mkBtn(ICON_PAUSE) assumes autoplay wins the race; wrong when flag("videoAutoplay") is

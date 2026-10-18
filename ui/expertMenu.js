@@ -11,7 +11,7 @@ import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
 import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { ffmpegDownloadActive, fmtBytes, fmtUnit, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
+import { ffmpegDownloadActive, fmtBytes, fmtUnit, fmtUnitName, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { reloadEverything, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import { toggleShortLivedCert } from "./management.js";
@@ -23,6 +23,26 @@ import { EXPERT_NOTICES, noticeRow, noticeActionRow, actionRow } from "./expertN
 
 export let expertResetTimer = null;
 
+// Write one ui_texts entry optimistically and put the previous value back when the store refuses
+// it (a read-only data folder), so the dropdown, the CSS state and isRowChanged never show a
+// value that was not kept. Resolves to whether the write stuck.
+export async function persistUiText(key, value) {
+  const texts = settings.ui_texts || {};
+  const had = Object.prototype.hasOwnProperty.call(texts, key);
+  const before = texts[key];
+  settings.ui_texts = { ...texts, [key]: value };
+  try {
+    await invoke("set_ui_text", { key, value });
+    return true;
+  } catch (e) {
+    const back = { ...(settings.ui_texts || {}) };
+    if (had) back[key] = before; else delete back[key];
+    settings.ui_texts = back;
+    errToast(e);
+    return false;
+  }
+}
+
 // Build a simple string-enum dropdown backed by ui_texts (default when unset).
 // `opts` is [[value, i18nLabelKey], …]. Used by expert enum params.
 export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
@@ -33,8 +53,7 @@ export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
     options: () => opts.map(([v, lk]) => [v, t(lk)]),
     get: () => norm(settings.ui_texts?.[key] || def),
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), [key]: v };
-      try { await invoke("set_ui_text", { key, value: v }); } catch (e) { errToast(e); }
+      await persistUiText(key, v);
       applyValues();
     },
   };
@@ -86,8 +105,7 @@ export const EXPERT_DROPDOWNS = {
       return settings.ui_flags?.snipTextPlate === false ? "none" : "plate";
     },
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), snipTextBack: v };
-      try { await invoke("set_ui_text", { key: "snipTextBack", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("snipTextBack", v);
       applyValues();
     },
   },
@@ -101,8 +119,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label])],
     get: () => settings.ui_texts?.ocrLang || "auto",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), ocrLang: v };
-      try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("ocrLang", v);
     },
   },
   // Which microphone to capture for recAudioMic. Options are fetched once
@@ -115,8 +132,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["", t("langAuto")], ...micDevicesCache.map((d) => [d.id, d.name])],
     get: () => settings.ui_texts?.recMicDevice || "",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), recMicDevice: v };
-      try { await invoke("set_ui_text", { key: "recMicDevice", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("recMicDevice", v);
     },
   },
   // Which camera the camera window opens with. Options come from
@@ -130,8 +146,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["", t("langAuto")], ...cameraDevicesCache.map((d) => [d.id, d.name])],
     get: () => settings.ui_texts?.cameraDevice || "",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), cameraDevice: v };
-      try { await invoke("set_ui_text", { key: "cameraDevice", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("cameraDevice", v);
     },
   },
   cameraResolution: enumDropdown("cameraResolution", "valCameraResolution",
@@ -149,11 +164,18 @@ export const EXPERT_DROPDOWNS = {
     ],
     get: () => settings.ui_texts?.recQuality || "high",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), recQuality: v };
-      try { await invoke("set_ui_text", { key: "recQuality", value: v }); } catch (e) { errToast(e); }
+      if (!(await persistUiText("recQuality", v))) { applyValues(); return; }
       if (REC_QUALITY_BITRATE[v] != null) {
+        const before = settings.ui_values?.recBitrateKbps;
         settings.ui_values = { ...(settings.ui_values || {}), recBitrateKbps: REC_QUALITY_BITRATE[v] };
-        try { await invoke("set_ui_value", { key: "recBitrateKbps", value: REC_QUALITY_BITRATE[v] }); } catch (e) { errToast(e); }
+        try {
+          await invoke("set_ui_value", { key: "recBitrateKbps", value: REC_QUALITY_BITRATE[v] });
+        } catch (e) {
+          const back = { ...(settings.ui_values || {}) };
+          if (before === undefined) delete back.recBitrateKbps; else back.recBitrateKbps = before;
+          settings.ui_values = back;
+          errToast(e);
+        }
       }
       applyValues();
     },
@@ -180,8 +202,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["auto", t("langAuto")], ...voiceLangsCache.map((l) => [l.tag, l.label])],
     get: () => settings.ui_texts?.voiceLang || "auto",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), voiceLang: v };
-      try { await invoke("set_ui_text", { key: "voiceLang", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("voiceLang", v);
     },
   },
   voiceInsert: enumDropdown("voiceInsert", "valVoiceInsert",
@@ -323,14 +344,32 @@ export async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags" && EXPERT_BULK_NEVER.includes(key)) return;
   if (kind === "flags") {
     const enabled = shipsOn(key);
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_flags || {}, key);
+    const before = settings.ui_flags?.[key];
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_flag", { key, enabled });
+    } catch (err) {
+      const back = { ...(settings.ui_flags || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_flags = back;
+      errToast(err);
+    }
     applyFlags();
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true); else fitAllTiles();
   } else if (kind === "values" || kind === "selects") {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_values || {}, key);
+    const before = settings.ui_values?.[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
-    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_value", { key, value: cfg.def });
+    } catch (err) {
+      const back = { ...(settings.ui_values || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_values = back;
+      errToast(err);
+    }
     applyValues();
     await refreshTiles(key);
   } else if (kind === "dropdowns") {
@@ -519,6 +558,9 @@ export async function commitValue(key, value) {
   else syncRowReset("values", key); // reset icon must not wait for an unrelated rebuild
 }
 
+// Config unit abbreviation to the Intl unit it stands for.
+const TIME_UNITS = { d: "day", h: "hour", min: "minute" };
+
 // How a number reads on its row. The stored value never changes, only the text:
 // milliseconds show as seconds and the error log size in megabytes.
 // A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0 min".
@@ -528,7 +570,7 @@ export function formatValue(cfg, v) {
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
   // seconds keep the SI symbol, which reads the same in every language
   if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
-  const timeUnit = { d: "day", h: "hour", min: "minute" }[cfg.unit];
+  const timeUnit = TIME_UNITS[cfg.unit];
   if (timeUnit) return fmtUnit(v, timeUnit, LANG, 2);
   // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.
   return `${v}${cfg.unit && !/^[%×]$|^\//.test(cfg.unit) ? " " : ""}${cfg.unit}`;
@@ -559,6 +601,7 @@ export function valueRow(key) {
     input.type = "text";
     input.inputMode = "numeric";
     input.className = "modal-input expert-num";
+    input.setAttribute("aria-label", span.textContent);
     input.value = String(val(key));
     input.setAttribute("aria-invalid", "false");
     const hint = document.createElement("div");
@@ -584,6 +627,7 @@ export function valueRow(key) {
   const slider = document.createElement("input");
   slider.type = "range";
   slider.className = "value-range";
+  slider.setAttribute("aria-label", span.textContent);
   // topUnlimited adds one extra stop past the real max: a slider parked there shows the
   // "unlimited" label and stores 0, like a 0-stop's zeroLabel at the low end.
   const unlimitedStop = cfg.topUnlimited ? cfg.max + cfg.step : null;
@@ -620,8 +664,8 @@ export function valueRow(key) {
   head.append(span, right);
   row.append(head, slider);
   // The quality slider is JPEG-only (every other screenshot format is lossless, see
-  // encode_screenshot in capture.rs). renderExpert() rebuilds this row whenever screenshotFormat
-  // changes (dropdownRow's change handler), so it needs no listener of its own.
+  // encode_screenshot in capture.rs). dropdownRow's change handler toggles this row when
+  // screenshotFormat changes, so it needs no listener of its own.
   if (key === "snipSaveQuality") {
     row.classList.toggle("hidden", txt("screenshotFormat") !== "jpeg");
   }
@@ -645,6 +689,7 @@ export function selectRow(key) {
   if (resetBtn) head.appendChild(resetBtn);
   const sel = document.createElement("select");
   sel.className = "modal-input expert-select";
+  sel.setAttribute("aria-label", span.textContent);
   for (const o of cfg.options) {
     const opt = document.createElement("option");
     opt.value = String(o);
@@ -661,21 +706,45 @@ export function selectRow(key) {
   num.min = SELECT_CUSTOM_MIN;
   num.max = SELECT_CUSTOM_MAX;
   num.className = "modal-input expert-num";
+  num.setAttribute("aria-label", span.textContent);
   // The presets show their unit ("7d", "24h") on the option, but the free-entry field holds only
   // the number, so the unit sits beside it: otherwise a typed value looks unit-less and invites
   // typing the unit into it, which a number input silently discards.
   const unit = document.createElement("span");
   unit.className = "expert-num-unit";
-  unit.textContent = cfg.unit;
+  // Written the way the presets beside it are, in the UI language, and agreeing with the count.
+  const setUnit = (n) => { unit.textContent = TIME_UNITS[cfg.unit] ? fmtUnitName(n, TIME_UNITS[cfg.unit], LANG) : cfg.unit; };
+  setUnit(cur);
   const isPreset = cfg.options.includes(cur);
   sel.value = isPreset ? String(cur) : "custom";
   num.value = cur;
   num.classList.toggle("hidden", isPreset);
   unit.classList.toggle("hidden", isPreset);
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
+  // Show what the store really holds: the select, the number field and its unit.
+  const resync = () => {
+    const now = Number.isFinite(settings.ui_values?.[key]) ? settings.ui_values[key] : cfg.def;
+    const preset = cfg.options.includes(now);
+    sel.value = preset ? String(now) : "custom";
+    num.value = now;
+    setUnit(now);
+    num.classList.toggle("hidden", preset);
+    unit.classList.toggle("hidden", preset);
+  };
+  // A refused write puts the previous value back and resyncs the controls.
   const persist = async (value) => {
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_values || {}, key);
+    const before = settings.ui_values?.[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-    try { await invoke("set_ui_value", { key, value }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_value", { key, value });
+    } catch (err) {
+      const back = { ...(settings.ui_values || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_values = back;
+      errToast(err);
+      resync();
+    }
   };
   sel.addEventListener("change", () => {
     if (sel.value === "custom") {
@@ -696,6 +765,7 @@ export function selectRow(key) {
   num.addEventListener("change", () => {
     const v = Math.max(SELECT_CUSTOM_MIN, Math.min(SELECT_CUSTOM_MAX, Number(num.value) || cfg.def));
     num.value = v;
+    setUnit(v);
     persist(v).then(() => syncRowReset("selects", key));
     if (expertOnlyChanged) renderExpert();
   });
@@ -719,6 +789,7 @@ export function dropdownRow(key) {
   if (resetBtn) head.appendChild(resetBtn);
   const sel = document.createElement("select");
   sel.className = "modal-input expert-select";
+  sel.setAttribute("aria-label", span.textContent);
   for (const [value, lbl, stack] of cfg.options()) {
     const o = document.createElement("option");
     o.value = value;
@@ -732,6 +803,10 @@ export function dropdownRow(key) {
     // A setter may decline the picked value; resync so the select never shows a choice that did
     // not take effect (a no-op when get() already reports what set() wrote).
     sel.value = cfg.get();
+    // The JPEG-only quality slider follows the format without rebuilding the menu.
+    if (key === "screenshotFormat") {
+      document.querySelector('[data-setting-row="snipSaveQuality"]')?.classList.toggle("hidden", cfg.get() !== "jpeg");
+    }
     if (expertOnlyChanged) renderExpert();
     else syncRowReset("dropdowns", key); // reset icon must not wait for an unrelated rebuild
   });
@@ -900,6 +975,24 @@ export async function confirmSyncFolderChoice(dir) {
   });
 }
 
+// A capture folder the backend refused is shown as the old one again: the row only changes
+// once the command took the new path.
+export async function setDirText(key, cmd, dir) {
+  const texts = settings.ui_texts || {};
+  const had = Object.prototype.hasOwnProperty.call(texts, key);
+  const before = texts[key];
+  settings.ui_texts = { ...texts, [key]: dir };
+  try {
+    await invoke(cmd, { dir });
+  } catch (e) {
+    const back = { ...(settings.ui_texts || {}) };
+    if (had) back[key] = before; else delete back[key];
+    settings.ui_texts = back;
+    errToast(e);
+  }
+  renderExpert();
+}
+
 export const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -909,14 +1002,10 @@ export const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder", { purpose: "screenshot" }).catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: dir };
-      invoke("set_screenshot_dir", { dir }).catch((e) => errToast(e));
-      renderExpert();
+      await setDirText("screenshotDir", "set_screenshot_dir", dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: "" };
-      invoke("set_screenshot_dir", { dir: "" }).catch((e) => errToast(e));
-      renderExpert();
+    onReset: async () => {
+      await setDirText("screenshotDir", "set_screenshot_dir", "");
     },
   },
   // Same storage key as the video editor's "Export to…" folder picker (video.js
@@ -930,14 +1019,10 @@ export const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder", { purpose: "videoExport" }).catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: dir };
-      invoke("set_video_export_dir", { dir }).catch((e) => errToast(e));
-      renderExpert();
+      await setDirText("videoExportDir", "set_video_export_dir", dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: "" };
-      invoke("set_video_export_dir", { dir: "" }).catch((e) => errToast(e));
-      renderExpert();
+    onReset: async () => {
+      await setDirText("videoExportDir", "set_video_export_dir", "");
     },
   },
   dataDir: {
@@ -997,14 +1082,10 @@ export const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder", { purpose: "recording" }).catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: dir };
-      invoke("set_recording_dir", { dir }).catch((e) => errToast(e));
-      renderExpert();
+      await setDirText("recordingDir", "set_recording_dir", dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: "" };
-      invoke("set_recording_dir", { dir: "" }).catch((e) => errToast(e));
-      renderExpert();
+    onReset: async () => {
+      await setDirText("recordingDir", "set_recording_dir", "");
     },
     // The only path row that also shows how much space its folder holds, plus a cleanup button;
     // pathRow() renders both only when this is set.
@@ -1214,23 +1295,27 @@ export function isRowChanged(kind, key) {
   }
   return false;
 }
-// Editable default-color palette: one native color picker per hue + reset.
+// Editable default-color palette: one themed color picker per hue + reset.
 export function paletteRow() {
   const row = document.createElement("div");
   row.className = "field palette-field";
   const grid = document.createElement("div");
   grid.className = "palette-grid";
   const cur = COLORS.slice(1);
-  const inputs = [];
+  const hues = [];
   for (let i = 0; i < PALETTE_LEN; i++) {
-    const c = document.createElement("input");
-    c.type = "color";
+    hues.push(HEX_RE.test(cur[i]) ? cur[i] : DEFAULT_COLORS[i + 1]);
+    const c = document.createElement("button");
+    c.type = "button";
     c.className = "palette-swatch";
-    c.value = HEX_RE.test(cur[i]) ? cur[i] : DEFAULT_COLORS[i + 1];
-    c.title = c.value;
-    c.addEventListener("input", () => { c.title = c.value; });
-    c.addEventListener("change", () => savePalette(inputs.map((x) => x.value)));
-    inputs.push(c);
+    const paint = (hex) => { c.style.background = hex; c.title = hex; };
+    paint(hues[i]);
+    c.setAttribute("aria-label", t("paletteSlot").replace("{n}", () => String(i + 1)));
+    c.addEventListener("click", () => openColorPop(c, hues[i], (hex) => {
+      hues[i] = hex;
+      paint(hex);
+      savePalette(hues.slice());
+    }));
     grid.appendChild(c);
   }
   // Only show it while a hue actually differs from DEFAULT_COLORS: same rule
@@ -1254,8 +1339,22 @@ export function paletteRow() {
 export async function savePalette(colors) {
   const oldHues = COLORS.slice(1);
   const value = colors ? JSON.stringify(colors) : "";
-  settings.ui_texts = { ...(settings.ui_texts || {}), palette: value };
-  try { await invoke("set_ui_text", { key: "palette", value }); } catch (e) { errToast(e); }
+  const texts = settings.ui_texts || {};
+  const had = Object.prototype.hasOwnProperty.call(texts, "palette");
+  const before = texts.palette;
+  settings.ui_texts = { ...texts, palette: value };
+  try {
+    await invoke("set_ui_text", { key: "palette", value });
+  } catch (e) {
+    // The store kept the old palette: put it back and leave every saved colour alone.
+    const back = { ...(settings.ui_texts || {}) };
+    if (had) back.palette = before; else delete back.palette;
+    settings.ui_texts = back;
+    errToast(e);
+    loadPalette();
+    renderExpert();
+    return;
+  }
   loadPalette();
   const newHues = COLORS.slice(1);
   const pairs = [];
@@ -1313,7 +1412,8 @@ export function colorRow(key) {
     try { await invoke("set_ui_text", { key, value: hex }); } catch (e) { errToast(e); }
     if (reset) reset.classList.toggle("hidden", hex === defColor);
   };
-  swatch.addEventListener("click", () => openColorPop(swatch, cur, setColor));
+  // The live value, not the render-time one: a colour picked earlier must be where the popup restarts.
+  swatch.addEventListener("click", () => openColorPop(swatch, hexOut.textContent, setColor));
   right.append(swatch, hexOut);
   reset = document.createElement("button");
   reset.type = "button";
@@ -1431,6 +1531,7 @@ export function toggleExpertGroup(title, sec, fill) {
   invoke("set_ui_text", { key: "expertCollapsed", value }).catch(() => {});
   if (!sec) { renderExpert(); return; }
   sec.classList.toggle("collapsed", collapsed);
+  sec.querySelector(".expert-group-title-btn")?.setAttribute("aria-expanded", String(!collapsed));
   if (!collapsed) fill?.(); // custom panels fill on first open
 }
 
@@ -1623,10 +1724,15 @@ export function renderExpert() {
       sec.className = "expert-group" + (isCollapsed ? " collapsed" : "");
       const head = document.createElement("div");
       head.className = "expert-group-title";
-      const titleSpan = document.createElement("span");
+      // A collapsible title is a real button so the keyboard can open and fold the group; its
+      // click bubbles to the header, which owns the one toggle listener.
+      const titleSpan = document.createElement(globalView ? "span" : "button");
       titleSpan.textContent = t(group.title);
       head.appendChild(titleSpan);
       if (!globalView) {
+        titleSpan.type = "button";
+        titleSpan.className = "expert-group-title-btn";
+        titleSpan.setAttribute("aria-expanded", String(!isCollapsed));
         head.classList.add("collapsible");
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
@@ -1803,14 +1909,25 @@ export async function onResetExpert() {
   // session must stay one (leaving it is the switch's own confirmed restart), so
   // its marker is written back straight after.
   const keep = EXPERT_RESET_KEEP.filter((k) => flag(k));
+  const snapshot = { ui_flags: settings.ui_flags, ui_values: settings.ui_values, ui_texts: settings.ui_texts };
   settings.ui_flags = Object.fromEntries(keep.map((k) => [k, true]));
   settings.ui_values = {};
   settings.ui_texts = {};
+  let refused = false;
   try {
     await invoke("reset_expert");
-    for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
   } catch (err) {
+    // The store kept everything: bring the three maps back before the redraw.
+    refused = true;
+    Object.assign(settings, snapshot);
     errToast(err);
+  }
+  if (!refused) {
+    try {
+      for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
+    } catch (err) {
+      errToast(err);
+    }
   }
   loadPalette();
   refreshColorUI();
@@ -1823,7 +1940,7 @@ export async function onResetExpert() {
   refreshFavViewUi();
   renderViews();
   await renderGrid(true);
-  toast(t("expertResetDone"));
+  if (!refused) toast(t("expertResetDone"));
 }
 
 // Switch between the main settings page and the expert sub-page.

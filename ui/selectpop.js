@@ -47,6 +47,8 @@ function highlight(i) {
   cursor = Math.max(0, Math.min(rows.length - 1, i));
   rows.forEach((r, k) => r.classList.toggle("kb", k === cursor));
   rows[cursor].scrollIntoView({ block: "nearest" });
+  // Focus stays on the select, so the cursor row is announced through the active descendant.
+  if (anchor && anchor.setAttribute) anchor.setAttribute("aria-activedescendant", rows[cursor].id);
 }
 
 export function openValuePop(a, items, current, pick) {
@@ -70,6 +72,7 @@ export function openValuePop(a, items, current, pick) {
       continue;
     }
     row.setAttribute("role", "option");
+    row.id = `select-pop-opt-${pop.children.length}`;
     if (String(item.value) === String(current)) {
       row.className = "sel";
       row.setAttribute("aria-selected", "true");
@@ -90,10 +93,19 @@ export function openValuePop(a, items, current, pick) {
   if (selected) selected.scrollIntoView({ block: "center" });
   const rows = rowsOf();
   cursor = selected ? rows.indexOf(selected) : -1;
+  if (selected && anchor.setAttribute) anchor.setAttribute("aria-activedescendant", selected.id);
+}
+
+// True while a value list is open, so a caller's Escape handler can leave the key to the list.
+export function isValuePopOpen() {
+  return !!onPick;
 }
 
 export function closeValuePop() {
-  if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "false");
+  if (anchor && anchor.setAttribute) {
+    anchor.setAttribute("aria-expanded", "false");
+    anchor.removeAttribute("aria-activedescendant");
+  }
   onPick = null;
   anchor = null;
   cursor = -1;
