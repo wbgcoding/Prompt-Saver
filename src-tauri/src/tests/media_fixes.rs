@@ -254,3 +254,18 @@ fn a_tiff_reaches_the_editor_as_a_png() {
     assert_eq!(decode_image_mem(&data_url_bytes(&url)).map(|i| (i.width(), i.height())), Some((3, 2)));
     assert!(plain.starts_with("data:image/png;base64,"));
 }
+
+#[cfg(windows)]
+#[test]
+fn a_hung_powershell_query_is_killed_at_its_deadline() {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60"]).creation_flags(0x0800_0000);
+    let t = std::time::Instant::now();
+    let res = ocr::run_with_deadline(cmd, std::time::Duration::from_millis(1500));
+    assert_eq!(res, Err("timeout".to_string()));
+    assert!(t.elapsed() < std::time::Duration::from_secs(20), "the child must not be waited out");
+    let mut quick = std::process::Command::new("powershell.exe");
+    quick.args(["-NoProfile", "-NonInteractive", "-Command", "Write-Output ok"]).creation_flags(0x0800_0000);
+    assert_eq!(ocr::run_with_deadline(quick, std::time::Duration::from_secs(60)).map(|s| s.trim().to_string()), Ok("ok".to_string()));
+}
