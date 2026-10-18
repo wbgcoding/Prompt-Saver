@@ -780,6 +780,23 @@ pub(crate) fn update_signature_valid(digest: &[u8], sig_text: &str, public_key_b
         .is_ok()
 }
 
+/// Text of the helper script. A batch file expands `%NAME%` even inside quotes, so a percent
+/// sign in either path is doubled; a quote or line break cannot be quoted safely and is refused.
+pub(crate) fn update_script_content(installer: &Path, app_exe: &Path) -> Result<String, String> {
+    fn quoted(p: &Path) -> Result<String, String> {
+        let t = p.to_string_lossy();
+        if t.contains(['"', '\r', '\n']) {
+            return Err("update path not usable".to_string());
+        }
+        Ok(t.replace('%', "%%"))
+    }
+    let inst = quoted(installer)?;
+    let exe = quoted(app_exe)?;
+    Ok(format!(
+        "@echo off\r\n\"{inst}\" /S\r\nstart \"\" \"{exe}\"\r\ndel \"{inst}\"\r\ndel \"%~f0\"\r\n"
+    ))
+}
+
 // The blocking body of `install_update`, split out so it runs in spawn_blocking without an
 // AppHandle crossing the boundary.
 pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
@@ -851,12 +868,7 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     // Helper script: silent install, relaunch the app, delete the installer + itself.
     let app_exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let script = stage.join("update.cmd");
-    let content = format!(
-        "@echo off\r\n\"{}\" /S\r\nstart \"\" \"{}\"\r\ndel \"{}\"\r\ndel \"%~f0\"\r\n",
-        installer.display(),
-        app_exe.display(),
-        installer.display()
-    );
+    let content = update_script_content(&installer, &app_exe)?;
     fs::write(&script, content).map_err(|e| format!("save script: {}", e))?;
 
     let mut cmd = std::process::Command::new("cmd");

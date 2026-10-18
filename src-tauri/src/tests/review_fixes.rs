@@ -1460,3 +1460,14 @@ fn an_update_signature_must_match_the_digest_and_the_key() {
     assert!(!update_signature_valid(&digest, "", &key));
     assert!(!update_signature_valid(&digest, &sig, UPDATE_PUBLIC_KEY_B64));
 }
+
+// The helper script is a batch file: `%NAME%` expands even inside quotes, so a user folder
+// named with percent signs must not run an environment lookup, and a quote cannot be escaped.
+#[test]
+fn update_script_escapes_percent_and_refuses_quotes() {
+    let s = update_script_content(Path::new("C:\\t\\%TEMP%\\setup.exe"), Path::new("C:\\a\\x.exe")).unwrap();
+    assert!(s.contains("\"C:\\t\\%%TEMP%%\\setup.exe\" /S"));
+    assert!(s.contains("del \"%~f0\""));
+    assert!(update_script_content(Path::new("C:\\t\\a\"b.exe"), Path::new("C:\\a\\x.exe")).is_err());
+    assert!(update_script_content(Path::new("C:\\t\\s.exe"), Path::new("C:\\a\nx.exe")).is_err());
+}
