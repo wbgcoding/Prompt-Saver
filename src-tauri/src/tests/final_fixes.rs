@@ -123,3 +123,22 @@ fn a_file_on_another_computer_gets_a_translated_message() {
         assert!(text.contains("    errSourceNotAllowed: \""), "{lang} lacks the message");
     }
 }
+
+#[test]
+fn moving_the_data_folder_is_refused_while_a_recording_runs() {
+    let src = source!("../snip.rs");
+    let at = src.find("pub(crate) async fn set_data_dir").unwrap();
+    let body = &src[at..];
+    let rec = body.find("recording_active(&app) || REC_STARTING.load(Ordering::SeqCst)").expect("recording check");
+    let grant = body.find("consume_granted_dir(Path::new(trimmed), \"data\")").unwrap();
+    assert!(rec < grant, "the pick must survive a refusal");
+    assert!(body.contains("\"data-move-recording\""));
+    // A code of its own: the update message for the same running recording would mislead here.
+    let map = source!("../../../ui/errors.js");
+    assert!(map.contains("\"data-move-recording\": \"errDataMoveRecording\""));
+    assert!(map.contains("\"recording-active\": \"errUpdateRecordingActive\""));
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+        let text = fs::read_to_string(format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        assert!(text.contains("    errDataMoveRecording: \""), "{lang}");
+    }
+}

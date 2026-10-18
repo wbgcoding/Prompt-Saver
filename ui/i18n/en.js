@@ -1465,6 +1465,7 @@ export default {
     errExportDest: "The export destination is not valid",
     errRecordingUnreadable: "The recording could not be read",
     errSourceNotAllowed: "This file is on another computer, so it cannot be used here.",
+    errDataMoveRecording: "Stop the recording before moving the data folder.",
     errToolStart: "The video tool could not be started",
     errFfmpegTimeout: "ffmpeg did not respond in time. Is the file on a slow or disconnected drive?",
     errMicMux: "The microphone track could not be added",

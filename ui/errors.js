@@ -39,6 +39,7 @@ export const ERROR_MSG_KEYS = {
   "portable-update-manual": "errUpdatePortableManual",
   "recording-active": "errUpdateRecordingActive",
   "source-not-allowed": "errSourceNotAllowed",
+  "data-move-recording": "errDataMoveRecording",
   "restore-recording-active": "errRestoreRecordingActive",
   "jobs-running": "errUpdateJobsRunning",
   "ffmpeg-busy": "ffmpegDownloadBusy",

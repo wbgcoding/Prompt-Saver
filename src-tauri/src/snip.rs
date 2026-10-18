@@ -1837,6 +1837,11 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     if trimmed.is_empty() {
         return Err("empty path".to_string());
     }
+    // A live capture writes into the folder being left: moving it under the encoder would lose
+    // the take. Checked before the pick is consumed, so the user can retry after stopping.
+    if recording_active(&app) || REC_STARTING.load(Ordering::SeqCst) {
+        return Err("data-move-recording".to_string());
+    }
     if !consume_granted_dir(Path::new(trimmed), "data") {
         return Err("dir-not-picked".to_string());
     }

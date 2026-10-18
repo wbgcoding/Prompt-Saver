@@ -1457,6 +1457,7 @@ export default {
     errExportDest: "Dışa aktarma hedefi geçerli değil",
     errRecordingUnreadable: "Kayıt okunamadı",
     errSourceNotAllowed: "Bu dosya başka bir bilgisayarda olduğu için burada kullanılamaz.",
+    errDataMoveRecording: "Veri klasörünü taşımadan önce kaydı durdurun.",
     errToolStart: "Video aracı başlatılamadı",
     errFfmpegTimeout: "ffmpeg zamanında yanıt vermedi. Dosya yavaş veya bağlantısı kesilmiş bir sürücüde mi?",
     errMicMux: "Mikrofon izi eklenemedi",

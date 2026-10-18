@@ -1457,6 +1457,7 @@ export default {
     errExportDest: "書き出し先が無効です",
     errRecordingUnreadable: "録画を読み込めませんでした",
     errSourceNotAllowed: "このファイルは別のコンピューターにあるため、ここでは使用できません。",
+    errDataMoveRecording: "データフォルダーを移動する前に録画を停止してください。",
     errToolStart: "動画ツールを起動できませんでした",
     errFfmpegTimeout: "ffmpeg が時間内に応答しませんでした。ファイルが低速なドライブ、または接続が切れたドライブにありませんか？",
     errMicMux: "マイクのトラックを追加できませんでした",
