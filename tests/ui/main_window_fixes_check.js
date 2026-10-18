@@ -646,6 +646,29 @@ section(() => {
   });
 });
 
+// 27. Expert menu: a capture folder the backend refuses is shown as the old one again.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function setDirText(").replace("export ", "");
+  const make = (fail, settings) => {
+    let renders = 0;
+    const sb = run(fn, { settings, invoke: async () => { if (fail) throw new Error("denied"); }, errToast() {}, renderExpert() { renders++; } });
+    return { sb, renders: () => renders };
+  };
+  later(async () => {
+    const st = { ui_texts: { screenshotDir: "C:/old" } };
+    const a = make(true, st);
+    await a.sb.setDirText("screenshotDir", "set_screenshot_dir", "C:/new");
+    check(st.ui_texts.screenshotDir === "C:/old" && a.renders() === 1, "a refused folder keeps the old one");
+    const st2 = { ui_texts: {} };
+    await make(true, st2).sb.setDirText("recordingDir", "set_recording_dir", "C:/new");
+    check(!("recordingDir" in st2.ui_texts), "a refused first folder leaves no key");
+    const st3 = { ui_texts: {} };
+    await make(false, st3).sb.setDirText("recordingDir", "set_recording_dir", "C:/new");
+    check(st3.ui_texts.recordingDir === "C:/new", "an accepted folder stays");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

@@ -963,6 +963,24 @@ export async function confirmSyncFolderChoice(dir) {
   });
 }
 
+// A capture folder the backend refused is shown as the old one again: the row only changes
+// once the command took the new path.
+export async function setDirText(key, cmd, dir) {
+  const texts = settings.ui_texts || {};
+  const had = Object.prototype.hasOwnProperty.call(texts, key);
+  const before = texts[key];
+  settings.ui_texts = { ...texts, [key]: dir };
+  try {
+    await invoke(cmd, { dir });
+  } catch (e) {
+    const back = { ...(settings.ui_texts || {}) };
+    if (had) back[key] = before; else delete back[key];
+    settings.ui_texts = back;
+    errToast(e);
+  }
+  renderExpert();
+}
+
 export const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -972,14 +990,10 @@ export const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder", { purpose: "screenshot" }).catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: dir };
-      invoke("set_screenshot_dir", { dir }).catch((e) => errToast(e));
-      renderExpert();
+      await setDirText("screenshotDir", "set_screenshot_dir", dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: "" };
-      invoke("set_screenshot_dir", { dir: "" }).catch((e) => errToast(e));
-      renderExpert();
+    onReset: async () => {
+      await setDirText("screenshotDir", "set_screenshot_dir", "");
     },
   },
   // Same storage key as the video editor's "Export to…" folder picker (video.js
@@ -993,14 +1007,10 @@ export const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder", { purpose: "videoExport" }).catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: dir };
-      invoke("set_video_export_dir", { dir }).catch((e) => errToast(e));
-      renderExpert();
+      await setDirText("videoExportDir", "set_video_export_dir", dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: "" };
-      invoke("set_video_export_dir", { dir: "" }).catch((e) => errToast(e));
-      renderExpert();
+    onReset: async () => {
+      await setDirText("videoExportDir", "set_video_export_dir", "");
     },
   },
   dataDir: {
@@ -1060,14 +1070,10 @@ export const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder", { purpose: "recording" }).catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: dir };
-      invoke("set_recording_dir", { dir }).catch((e) => errToast(e));
-      renderExpert();
+      await setDirText("recordingDir", "set_recording_dir", dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: "" };
-      invoke("set_recording_dir", { dir: "" }).catch((e) => errToast(e));
-      renderExpert();
+    onReset: async () => {
+      await setDirText("recordingDir", "set_recording_dir", "");
     },
     // The only path row that also shows how much space its folder holds, plus a cleanup button;
     // pathRow() renders both only when this is set.
