@@ -178,7 +178,7 @@ fn the_export_filter_graph_travels_in_a_swept_file() {
     // Contrast: the old inline argument is gone from the export path.
     let src = include_str!("../video_editor.rs");
     assert!(!src.contains("push(\"-filter_complex\".to_string())"));
-    assert!(src.contains("\"-filter_complex_script\""));
+    assert!(src.contains("\"-/filter_complex\""));
 }
 
 #[test]
@@ -323,4 +323,22 @@ pub(crate) fn spawn_rec_bar_follow("));
     assert!(!bar.contains("// periodic jobs.
 #[cfg(windows)]
 // Bumped"));
+}
+
+#[test]
+fn the_ffmpeg_log_buffer_keeps_only_its_newest_bytes() {
+    let mut buf = Vec::new();
+    for i in 0..1000u32 {
+        push_bounded_tail(&mut buf, format!("warning {i}
+").as_bytes(), 100);
+        assert!(buf.len() <= 100);
+    }
+    let text = String::from_utf8(buf).unwrap();
+    assert!(text.ends_with("warning 999
+"));
+    assert!(!text.contains("warning 1
+"));
+    let mut small = b"abc".to_vec();
+    push_bounded_tail(&mut small, b"de", 100);
+    assert_eq!(small, b"abcde");
 }

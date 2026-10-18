@@ -519,6 +519,18 @@ pub(crate) fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
 // user-facing setting.
 pub(crate) const FFMPEG_ERROR_TAIL_LINES: usize = 20;
 
+// How much of ffmpeg's stderr a run keeps: far more than the error tail needs, far less than a
+// noisy export can print.
+pub(crate) const FFMPEG_STDERR_KEEP_BYTES: usize = 64 * 1024;
+
+// Appends `chunk` and drops the oldest bytes beyond `cap`, so `buf` always holds the newest ones.
+pub(crate) fn push_bounded_tail(buf: &mut Vec<u8>, chunk: &[u8], cap: usize) {
+    buf.extend_from_slice(chunk);
+    if buf.len() > cap {
+        buf.drain(..buf.len() - cap);
+    }
+}
+
 pub(crate) fn tail_lines(text: &str, n: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let start = lines.len().saturating_sub(n);
@@ -904,9 +916,17 @@ pub(crate) fn run_ffmpeg_to_staged(
     let stderr_thread = child.stderr.take().map(|mut pipe| {
         std::thread::spawn(move || {
             use std::io::Read;
-            let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
-            String::from_utf8_lossy(&buf).into_owned()
+            let mut tail = Vec::new();
+            let mut chunk = [0u8; 8192];
+            // Read to the end so the pipe never fills up, but keep only the last bytes: a damaged
+            // input can make ffmpeg warn on every frame for the whole export.
+            while let Ok(n) = pipe.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                push_bounded_tail(&mut tail, &chunk[..n], FFMPEG_STDERR_KEEP_BYTES);
+            }
+            String::from_utf8_lossy(&tail).into_owned()
         })
     });
 
