@@ -708,6 +708,22 @@ section(() => {
   check(attrs["aria-expanded"] === "true", "opening sets aria-expanded to true");
 });
 
+// 31. A refused expert reset restores the three setting maps and shows no success toast.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function onResetExpert(").replace("export ", "");
+  later(async () => {
+    const settings = { ui_flags: { a: true }, ui_values: { b: 1 }, ui_texts: { c: "x" } };
+    const toasts = [];
+    const sb = run(fn, {
+      settings, EXPERT_RESET_KEEP: [], flag: () => false, invoke: async () => { throw new Error("denied"); }, errToast() {}, loadPalette() {}, refreshColorUI() {}, applyFlags() {},
+      renderExpert() {}, syncSettingsControls() {}, refreshFavViewUi() {}, renderViews() {}, renderGrid: async () => {}, toast: (m) => toasts.push(m), t: (k) => k,
+    });
+    await sb.onResetExpert();
+    check(settings.ui_flags.a === true && settings.ui_values.b === 1 && settings.ui_texts.c === "x" && !toasts.length, "a refused reset keeps the stored settings and says nothing is done");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

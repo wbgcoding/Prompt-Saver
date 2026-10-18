@@ -1896,14 +1896,25 @@ export async function onResetExpert() {
   // session must stay one (leaving it is the switch's own confirmed restart), so
   // its marker is written back straight after.
   const keep = EXPERT_RESET_KEEP.filter((k) => flag(k));
+  const snapshot = { ui_flags: settings.ui_flags, ui_values: settings.ui_values, ui_texts: settings.ui_texts };
   settings.ui_flags = Object.fromEntries(keep.map((k) => [k, true]));
   settings.ui_values = {};
   settings.ui_texts = {};
+  let refused = false;
   try {
     await invoke("reset_expert");
-    for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
   } catch (err) {
+    // The store kept everything: bring the three maps back before the redraw.
+    refused = true;
+    Object.assign(settings, snapshot);
     errToast(err);
+  }
+  if (!refused) {
+    try {
+      for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
+    } catch (err) {
+      errToast(err);
+    }
   }
   loadPalette();
   refreshColorUI();
@@ -1916,7 +1927,7 @@ export async function onResetExpert() {
   refreshFavViewUi();
   renderViews();
   await renderGrid(true);
-  toast(t("expertResetDone"));
+  if (!refused) toast(t("expertResetDone"));
 }
 
 // Switch between the main settings page and the expert sub-page.
