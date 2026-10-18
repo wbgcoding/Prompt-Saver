@@ -848,11 +848,12 @@ pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool 
 
 // The location half of is_own_recording_source: the "rec-" stem and an allowed parent, decided
 // without ever asking the file system about the file itself. A network (UNC) path is refused
-// on its text alone, so a refused caller path never makes this machine contact a remote host.
+// on its text alone (every spelling, through the one shared gate), so a refused caller path
+// never makes this machine contact a remote host.
 pub(crate) fn is_recording_source_location(allowed: &[PathBuf], path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let raw = path.to_string_lossy();
-    if !name.starts_with("rec-") || raw.starts_with(r"\\") || raw.starts_with("//") {
+    if !name.starts_with("rec-") || is_network_path(&raw) {
         return false;
     }
     let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };

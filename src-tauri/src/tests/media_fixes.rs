@@ -716,3 +716,17 @@ fn a_running_parts_save_is_marked_in_flight_and_quit_waits_for_it() {
     let quit = media.split("pub(crate) fn save_take_on_quit").nth(1).unwrap().split("pub(crate) async fn save_recording_parts").next().unwrap();
     assert!(quit.contains("wait_for_part_saves(REC_PARTS_QUIT_WAIT)"));
 }
+
+// No behavioural red: the old text check and a failing canonicalize both end in `false`; the
+// difference is that canonicalize contacts the host first. So the contrast is on the source.
+#[test]
+fn the_recording_source_check_refuses_every_network_spelling_by_text() {
+    let src = source!("../media_files.rs");
+    let body = src.split("pub(crate) fn is_recording_source_location").nth(1).unwrap().split("\n}\n").next().unwrap();
+    assert!(body.contains("is_network_path(&raw)"), "the one shared gate decides");
+    assert!(!body.contains("starts_with(r\"\\\\\")"), "no private two-prefix check");
+    let allowed = vec![std::env::temp_dir()];
+    for p in [r"/\host\share\rec-1.mp4", r"\??\UNC\host\share\rec-1.mp4", r"\?\UNC\host\share\rec-1.mp4", r"\.\GLOBALROOT\Device\x\rec-1.mp4"] {
+        assert!(!is_recording_source_location(&allowed, Path::new(p)), "{p}");
+    }
+}
