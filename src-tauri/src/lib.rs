@@ -601,9 +601,8 @@ pub fn run() {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
-                if geom.maximized {
-                    let _ = main.maximize();
-                }
+                // No maximize here: the window is still hidden, and a hidden window shown later comes
+                // back at its normal size. show_main_window maximizes it once it is visible.
                 // A pill/folder left fully off-screen by an unplugged monitor is parked on the main screen by
                 // sync_float_windows() below (via open_floating/open_folder_window), keeping its real
                 // position and screen id so it returns once that screen is back.

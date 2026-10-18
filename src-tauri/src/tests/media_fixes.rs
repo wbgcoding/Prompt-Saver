@@ -967,3 +967,27 @@ fn every_native_dialog_call_runs_inside_the_dialog_thread_helper() {
     }
     assert!(checked >= 17, "the scan must actually see the dialog calls, saw {checked}");
 }
+
+// A window closed maximized came back at its normal size: the start set the normal bounds on the
+// still hidden window, whose resize event cleared the remembered flag, and the maximize done
+// while hidden was lost on the show. Geometry is now only tracked for a visible window and the
+// maximize waits for the show.
+#[test]
+fn maximized_main_window_is_restored_after_the_show() {
+    let lib = source!("../lib.rs");
+    let setup = &lib[lib.find("build_main_window(&handle)").expect("startup build")..];
+    let setup = &setup[..setup.find("start_hidden").unwrap_or(setup.len()).min(1500)];
+    assert!(!setup.contains(".maximize()"), "no maximize on the hidden window at start");
+    let mw = source!("../main_window.rs");
+    for ev in ["WindowEvent::Moved(p) => {", "WindowEvent::Resized(s) => {"] {
+        let at = mw.find(ev).expect("geometry handler");
+        assert!(mw[at..at + 160].contains("main_is_visible("), "{ev} ignores a hidden window");
+    }
+    let show = &mw[mw.find("pub(crate) fn show_main(").unwrap()..];
+    let show = &show[..show.find("\n}\n").unwrap()];
+    assert!(show.find("win.show()").unwrap() < show.find(".maximize()").unwrap(), "maximize after the show");
+    let mf = source!("../media_files.rs");
+    let reveal = &mf[mf.find("pub(crate) fn show_main_window(").unwrap()..];
+    let reveal = &reveal[..reveal.find("\n}\n").unwrap()];
+    assert!(reveal.find("w.show()").unwrap() < reveal.find("w.maximize()").expect("first reveal maximizes"));
+}

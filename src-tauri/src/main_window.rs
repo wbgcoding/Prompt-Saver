@@ -19,12 +19,13 @@ pub(crate) fn show_main(app: &AppHandle) {
         if !(g.maximized && win.is_maximized().unwrap_or(false)) {
             let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
             let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
-            if g.maximized {
-                let _ = win.maximize();
-            }
         }
     }
     let _ = win.show();
+    // After the show: a maximize on the hidden window is lost when it appears.
+    if geom.flatten().is_some_and(|g| g.maximized) && !win.is_maximized().unwrap_or(false) {
+        let _ = win.maximize();
+    }
     let _ = win.unminimize();
     let _ = win.set_focus();
     reapply_taskbar_state(app);
@@ -85,14 +86,16 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
     }
     let handle2 = app.clone();
     win.on_window_event(move |event| match event {
+        // Only a visible window's geometry is the user's: the size and position set on the hidden
+        // window at start would otherwise clear the remembered maximized state before it is applied.
         WindowEvent::Moved(p) => {
-            if p.x > -30000 && p.y > -30000 {
+            if p.x > -30000 && p.y > -30000 && main_is_visible(&handle2) {
                 let maximized = main_is_maximized(&handle2);
                 update_geom(&handle2, |g| geom_after_move(g, p.x, p.y, maximized));
             }
         }
         WindowEvent::Resized(s) => {
-            if s.width > 0 && s.height > 0 {
+            if s.width > 0 && s.height > 0 && main_is_visible(&handle2) {
                 // Store LOGICAL pixels: physical values re-scaled
                 // by the monitor factor on every start.
                 let scale = handle2
@@ -427,6 +430,10 @@ pub(crate) fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<Window
 }
 
 // Whether the main window is maximized right now (false when it cannot be asked).
+fn main_is_visible(handle: &AppHandle) -> bool {
+    handle.get_webview_window("main").and_then(|w| w.is_visible().ok()).unwrap_or(false)
+}
+
 fn main_is_maximized(handle: &AppHandle) -> bool {
     handle.get_webview_window("main").and_then(|w| w.is_maximized().ok()).unwrap_or(false)
 }
