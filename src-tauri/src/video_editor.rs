@@ -221,10 +221,8 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
         store.prompts.iter().find(|p| p.id == id).and_then(media_backfill_target)
     };
     let Some(media_path) = media_path else { return Ok(None) };
-    // Never opens a network path on its own: that would send credentials to the host it names.
-    if is_network_path(&media_path) {
-        return Ok(None);
-    }
+    // Network paths are cleared where a file from outside enters (import, sync folder); one that is
+    // still here was picked by the user, so a NAS attachment gets its meta like any other.
     let ffprobe = ffprobe_search_path(&app);
     let probed_path = media_path.clone();
     let (duration_ms, width, height, size) =
