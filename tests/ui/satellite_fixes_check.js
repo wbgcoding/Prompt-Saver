@@ -250,6 +250,42 @@ section(() => {
   check(typeof handlers.lostpointercapture === "function", "losing the capture also ends the hold");
 });
 
+// Number field preset list: a row also reacts to click (Enter or Space), the selected row takes
+// the focus on open, and a keyboard close hands the focus back to the list button.
+section(() => {
+  const src = read("floatShared.js");
+  const mkEl = () => {
+    const e = { handlers: {}, children: [], cls: new Set(), focused: 0, removed: false, parentNode: null };
+    e.addEventListener = (n, fn) => { e.handlers[n] = fn; };
+    e.appendChild = (c) => { e.children.push(c); c.parentNode = e; return c; };
+    e.classList = { add: (c) => e.cls.add(c), contains: (c) => e.cls.has(c) };
+    e.querySelector = (sel) => e.children.find((c) => c.cls.has(sel.slice(1))) || null;
+    Object.defineProperty(e, "firstElementChild", { get: () => e.children[0] || null });
+    e.focus = () => { e.focused++; sb.document.activeElement = e; };
+    e.contains = (n) => n === e || e.children.includes(n);
+    e.remove = () => { e.removed = true; };
+    e.getBoundingClientRect = () => ({});
+    return e;
+  };
+  const el = { value: "50", changes: 0, dispatchEvent() { this.changes++; return true; } };
+  const listBtn = mkEl();
+  const body = mkEl();
+  const sb = { document: { createElement: mkEl, body, activeElement: null }, el, listBtn, presets: [25, 50, 100], clampVal: (v) => v, placePopover: () => {}, Event: function Event() {}, activeNumPop: null, activeNumPopTrigger: null };
+  vm.createContext(sb);
+  const closeFn = extractBlock(src, "function closeActiveNumPop(");
+  const openFn = extractBlock(src, 'listBtn.addEventListener("click", () =>');
+  vm.runInContext(closeFn + "\nthis.closeActiveNumPop = closeActiveNumPop;\nthis.open = () => {" + openFn.replace(/^listBtn\.addEventListener\("click", \(\) => \{/, "").replace(/\}\)?;?$/, "") + "};", sb);
+  sb.open();
+  const pop = body.children[0];
+  const rows = pop.children;
+  check(rows.length === 3 && rows[1].focused === 1, "the selected preset row takes the focus on open");
+  rows[2].handlers.click();
+  check(el.value === "100" && el.changes === 1, "Enter or Space on a row (a click) picks the preset");
+  check(pop.removed && listBtn.focused === 1, "the list closes and the focus returns to the list button");
+  rows[2].handlers.click();
+  check(el.changes === 1, "a pointerdown followed by its click picks only once");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

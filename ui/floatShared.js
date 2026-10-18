@@ -527,9 +527,13 @@ export function makeHoldOrTapToggle(onChange) {
 let activeNumPop = null;
 let activeNumPopTrigger = null;
 function closeActiveNumPop() {
-  if (activeNumPop) activeNumPop.remove();
-  activeNumPop = null;
+  // A list closed from the keyboard hands the focus back to the button that opened it.
+  const pop = activeNumPop;
+  const back = pop && pop.contains(document.activeElement) ? activeNumPopTrigger : null;
+  activeNumPop = null; // cleared first: removing a focused row fires focusout, which closes again
   activeNumPopTrigger = null;
+  if (pop) pop.remove();
+  if (back) back.focus();
 }
 document.addEventListener("pointerdown", (e) => {
   if (!activeNumPop) return;
@@ -675,18 +679,30 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
         row.type = "button";
         row.textContent = String(p);
         if (Number(el.value) === p) row.classList.add("sel");
-        row.addEventListener("pointerdown", (e) => {
-          e.preventDefault(); // keep the input focused
+        let picked = false;
+        const pick = () => {
+          if (picked) return;
+          picked = true;
           el.value = String(clampVal(p));
           el.dispatchEvent(new Event("change", { bubbles: true }));
           closeActiveNumPop();
+        };
+        row.addEventListener("pointerdown", (e) => {
+          e.preventDefault(); // keep the input focused
+          pick();
         });
+        row.addEventListener("click", pick); // Enter and Space on a focused row
         pop.appendChild(row);
       }
+      // Tabbing out of the list closes it, like clicking elsewhere.
+      pop.addEventListener("focusout", (e) => {
+        if (!pop.contains(e.relatedTarget) && e.relatedTarget !== listBtn) closeActiveNumPop();
+      });
       document.body.appendChild(pop);
       placePopover(pop, listBtn.getBoundingClientRect());
       activeNumPop = pop;
       activeNumPopTrigger = listBtn;
+      (pop.querySelector(".sel") || pop.firstElementChild)?.focus();
     });
     wrap.appendChild(listBtn);
   }
