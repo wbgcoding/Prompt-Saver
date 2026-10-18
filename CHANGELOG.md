@@ -958,6 +958,31 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Long video edits export again.** An edit with many key presses or
+  keyframes no longer fails on Windows' command length limit, a file name with
+  an apostrophe no longer breaks the export, long exports that still make
+  progress are no longer stopped after 30 minutes, and a batch export never
+  overwrites a file.
+- **Recordings and the microphone.** Two recordings started within the same
+  second no longer overwrite each other, a lost microphone track is reported,
+  and closing the window to the tray while dictation is starting no longer
+  leaves the microphone open.
+- **Windows and buttons remember where they belong.** A floating button whose
+  screen was unplugged returns to that screen, and a maximized main window
+  keeps its normal size for the next start.
+- **No freeze when quitting during a backup or import**, and several settings
+  that wrote to disk on the interface thread no longer stall every window.
+- **Deleting all data asks again when the safety backup fails** instead of
+  deleting without one.
+- **Closing the editor while it saves** no longer loses the new prompt from
+  the grid.
+- **Copy history after Undo** shows the newest copies first again, and the
+  history limit counts correctly after single entries were deleted.
+- **Finding duplicates is much faster** in large libraries.
+- **Screen readers** now hear the quick launcher, the tray menu, folder
+  members and dialog titles, and every window reports its language.
+- **Many smaller fixes** in the video editor, screenshot editor, camera,
+  recording bar, settings and expert menu.
 - **Video export and the library under fast clicks.** A double click on Export
   in the video editor starts one export, not two, and deleting many library
   entries at once no longer freezes the window or loses a selection made while
@@ -1695,6 +1720,31 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **Earlier versions of a confidential prompt are sealed too.** Making a prompt
+  confidential now also seals its older saved versions, and versions of prompts
+  that were already confidential are sealed the next time the vault is unlocked.
+  The overwritten plain text is cleared from the database file.
+- **Imported prompts can no longer point at network files.** Links to files on
+  other machines in an imported prompt pack, a backup or a synced folder are
+  removed, so opening the library never makes Windows contact a foreign host.
+  The import says how many were removed.
+- **Plain text of a confidential prompt does not stay in the sync folder** when
+  the prompt was made confidential while syncing was off.
+- **Confidential rotating prompts stay out of the clipboard history** also when
+  automatic rotation ends or the app quits with a rotation running, and a locked
+  vault never hands out the text.
+- **The video export can only read the files you added.** Option forms that
+  make ffmpeg load a value from a file are refused.
+- **ffmpeg is only taken from the app's own folders**, never from the data
+  folder, which can be shared with other machines.
+- **The crash log keeps no text from your prompts**, only where the error
+  happened.
+- **Remote access and the command line refuse more unsafe targets:** an export
+  can no longer replace program files beside a portable app, the command name
+  is logged only when it is a real command, and the number of open connections
+  is capped.
+- **"Delete all data" also removes attachments and screenshots** the deleted
+  prompts used, and clears the deleted rows from the database file.
 - **Updates are signed.** Every installer ships with a signature made by the
   publisher's own key, and the updater refuses a download whose signature does
   not match, even when the release page and its checksum were replaced.
