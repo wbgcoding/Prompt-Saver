@@ -959,6 +959,14 @@ section(() => {
   });
 });
 
+// 45. A help article head is a button that reports its folded state.
+section(() => {
+  const src = read("helpView.js");
+  check(/titleSpan = document\.createElement\("button"\)/.test(src), "the help article title is a button");
+  check(/titleSpan\.setAttribute\("aria-expanded", String\(!collapsedNow\)\)/.test(src), "the button starts with its folded state");
+  check(/titleSpan\.setAttribute\("aria-expanded", String\(!sec\.classList\.contains\("collapsed"\)\)\)/.test(src), "a toggle updates aria-expanded");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

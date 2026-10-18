@@ -185,8 +185,12 @@ export function renderHelp() {
     sec.className = "expert-group help-group" + (collapsedNow ? " collapsed" : "");
     const head = document.createElement("div");
     head.className = "expert-group-title collapsible";
-    const titleSpan = document.createElement("span");
-    titleSpan.className = "help-group-title-text";
+    // A real button so the keyboard can open and fold the article; its click bubbles to the
+    // header, which owns the one toggle listener.
+    const titleSpan = document.createElement("button");
+    titleSpan.type = "button";
+    titleSpan.className = "expert-group-title-btn help-group-title-text";
+    titleSpan.setAttribute("aria-expanded", String(!collapsedNow));
     setHelpText(titleSpan, cat.title, terms, searching);
     head.appendChild(titleSpan);
     if (searching) {
@@ -199,6 +203,7 @@ export function renderHelp() {
       if (helpCollapsed.has(cat.title)) helpCollapsed.delete(cat.title);
       else helpCollapsed.add(cat.title);
       sec.classList.toggle("collapsed");
+      titleSpan.setAttribute("aria-expanded", String(!sec.classList.contains("collapsed")));
     });
     sec.appendChild(head);
     const body = document.createElement("div");
