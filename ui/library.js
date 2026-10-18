@@ -1195,9 +1195,14 @@ export async function doBatch(action, extra = {}) {
   gridDirty = true;
   if (action === "delete") {
     // Remove the deleted rows in place instead of rebuilding the whole list.
-    for (const id of ids) $("library-list").querySelector(`.lib-item[data-id="${CSS.escape(id)}"]`)?.remove();
+    // One pass over the rows, not one list scan per deleted id.
+    for (const row of $("library-list").querySelectorAll(".lib-item")) {
+      if (idset.has(row.dataset.id)) row.remove();
+    }
     libDisplayOrder = libDisplayOrder.filter((x) => !idset.has(x));
-    libSelected.clear(); libLastId = null;
+    // Only the ids that were sent: a row picked while the call was pending stays selected.
+    for (const id of ids) libSelected.delete(id);
+    if (idset.has(libLastId)) libLastId = null;
     // An emptied list needs its hint; otherwise only the counts above it are stale.
     if (!libDisplayOrder.length) renderLibrary();
     else updateLibraryCount(prompts.filter(libMatches).length);
