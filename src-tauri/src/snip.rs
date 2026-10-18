@@ -1668,7 +1668,7 @@ pub(crate) fn move_store_dir(
     // Adopt an existing store in the target, otherwise copy ours across, aborting before the
     // redirect pointer is written so a launch is never pointed at a truncated store. All store
     // files are copied: a prompts.json or settings.json from a failed DB write may be the only
-    // copy of that change, and delete_data_dir removes the old folder right after.
+    // copy of that change, and delete_data_dir removes the app's data from the old folder right after.
     let adopted = new.join("data.db").exists();
     if !adopted {
         let mut landed = false;
@@ -1756,8 +1756,59 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     Ok(old)
 }
 
-// Delete the store files in a folder (old location after a move). Only ever
-// removes our known data files: never the folder itself or anything else.
+// Whether a file name is something the app itself wrote into its data folder: the store
+// files, their atomic-write leftovers, the locked-database copies, the export journal, the
+// folder lock, the redirect pointer and vault backups. Anything else is the user's.
+fn is_app_data_file(name: &str, keep_pointer: bool) -> bool {
+    let lower = name.to_lowercase();
+    if lower == "datapath" {
+        return !keep_pointer;
+    }
+    if lower.ends_with(".psb") {
+        return true;
+    }
+    let known = ["data.db", "data.db-wal", "data.db-shm", "prompts.json", "settings.json", "export-staging.txt", DATA_DIR_LOCK_FILE];
+    if known.iter().any(|k| lower == *k) {
+        return true;
+    }
+    if lower == "data.db.locked.bak" || (lower.starts_with("data.db.locked.") && lower.ends_with(".bak")) {
+        return true;
+    }
+    for k in ["data.db", "prompts.json", "settings.json"] {
+        if lower == format!("{k}.tmp") || (is_atomic_temp_name(name) && lower.starts_with(&format!("{k}.tmp-"))) {
+            return true;
+        }
+    }
+    false
+}
+
+// Removes what the app created inside a data folder and nothing else: the store files and
+// their leftovers, vault backups, the pointer (unless it is the live redirect), and the
+// backups/, files/ and recordings/ subfolders. A file or folder the app did not create stays,
+// and the folder itself goes only when it is empty afterwards. True when everything went.
+pub(crate) fn remove_app_data_in(dir: &Path, keep_pointer: bool) -> bool {
+    let Ok(rd) = fs::read_dir(dir) else { return false };
+    let mut ok = true;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let path = e.path();
+        let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        if is_dir {
+            if matches!(name.to_lowercase().as_str(), "backups" | "files" | "recordings") {
+                ok &= fs::remove_dir_all(&path).is_ok();
+            }
+        } else if is_app_data_file(&name, keep_pointer) {
+            ok &= fs::remove_file(&path).is_ok();
+        }
+    }
+    if ok && fs::read_dir(dir).map(|mut r| r.next().is_none()).unwrap_or(false) {
+        let _ = fs::remove_dir(dir);
+    }
+    ok
+}
+
+// Delete what the app stored in a folder (old location after a move). Only ever the folder
+// the last move came from, and only entries the app created there (see remove_app_data_in).
 #[tauri::command]
 pub(crate) async fn delete_data_dir(app: AppHandle, path: String) -> bool {
     let dir = PathBuf::from(&path);
@@ -1773,12 +1824,7 @@ pub(crate) async fn delete_data_dir(app: AppHandle, path: String) -> bool {
     if !allowed {
         return false;
     }
-    let mut ok = true;
-    for f in ["data.db", "data.db-wal", "data.db-shm", "prompts.json", "settings.json"] {
-        let p = dir.join(f);
-        if p.exists() {
-            ok &= fs::remove_file(&p).is_ok();
-        }
-    }
-    ok
+    // The pointer in the canonical folder is what sends the next launch to the new location.
+    let keep_pointer = path_matches_configured_dir(&dir, &default_data_dir(&app));
+    remove_app_data_in(&dir, keep_pointer)
 }

@@ -30,6 +30,7 @@ mod placeholders;
 mod review_fixes;
 mod fix_review;
 mod media_fixes;
+mod data_dir_cleanup;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;
@@ -79,3 +80,5 @@ pub(super) use review_fixes::*;
 pub(super) use fix_review::*;
 #[allow(unused_imports)]
 pub(super) use media_fixes::*;
+#[allow(unused_imports)]
+pub(super) use data_dir_cleanup::*;
