@@ -983,6 +983,14 @@ the video editor and the introduction tour ship on).
   members and dialog titles, and every window reports its language.
 - **Many smaller fixes** in the video editor, screenshot editor, camera,
   recording bar, settings and expert menu.
+- **Moving the data folder takes everything along.** Attachments and
+  recordings move with the library and their links point to the new place.
+  Afterwards the app offers to delete what it stored in the old folder and says
+  what that is. A move waits until a running recording has stopped, and the
+  window stays usable while a large library is copied.
+- **A maximized main window opens maximized again** after a restart and still
+  knows its normal size.
+- **A still frame taken at the very end of a clip** no longer fails.
 - **Video export and the library under fast clicks.** A double click on Export
   in the video editor starts one export, not two, and deleting many library
   entries at once no longer freezes the window or loses a selection made while
@@ -1725,9 +1733,14 @@ the video editor and the introduction tour ship on).
   that were already confidential are sealed the next time the vault is unlocked.
   The overwritten plain text is cleared from the database file.
 - **Imported prompts can no longer point at network files.** Links to files on
-  other machines in an imported prompt pack, a backup or a synced folder are
-  removed, so opening the library never makes Windows contact a foreign host.
-  The import says how many were removed.
+  other machines in an imported prompt pack or a backup are removed, so opening
+  the library never makes Windows contact a foreign host. The import says how
+  many were removed. A synced folder keeps such links as written, but the app
+  never opens them. Drive letters, including mapped network drives, and a data
+  or recording folder on a network share keep working.
+- **Each window can only use its own functions.** A side window such as the
+  floating buttons or the video editor can no longer delete all data, move the
+  data folder or read the remote access password.
 - **Plain text of a confidential prompt does not stay in the sync folder** when
   the prompt was made confidential while syncing was off.
 - **Confidential rotating prompts stay out of the clipboard history** also when
