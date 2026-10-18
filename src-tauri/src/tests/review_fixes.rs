@@ -1498,3 +1498,17 @@ fn the_quit_save_does_not_wait_behind_a_busy_store() {
     assert!(with_store_if_free(&m, |v| assert_eq!(*v, 7)));
 }
 
+
+#[test]
+fn a_failed_restore_takes_its_undo_snapshot_back_out() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "first", &[], 20).unwrap();
+    db_add_version(&conn, "p2", 11, "Other", "keep", &[], 20).unwrap();
+    // The snapshot the restore took of the live state.
+    db_add_version(&conn, "p1", 12, "Name", "live", &[], 20).unwrap();
+    db_drop_latest_version(&conn, "p1");
+    let texts: Vec<String> = db_list_versions(&conn, "p1").into_iter().map(|v| v.text).collect();
+    assert_eq!(texts, ["first"]);
+    assert_eq!(db_list_versions(&conn, "p2").len(), 1, "another prompt's history is untouched");
+}

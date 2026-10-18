@@ -1386,6 +1386,17 @@ pub(crate) async fn last_edited_map(app: AppHandle) -> Result<std::collections::
     Ok(db_conn(&app).map(|c| db_last_edited(&c)).unwrap_or_default())
 }
 
+// Removes the newest version row of a prompt: the undo snapshot a restore took before its
+// save failed.
+pub(crate) fn db_drop_latest_version(conn: &Connection, prompt_id: &str) {
+    if let Err(e) = conn.execute(
+        "DELETE FROM prompt_versions WHERE id = (SELECT MAX(id) FROM prompt_versions WHERE prompt_id = ?1)",
+        params![prompt_id],
+    ) {
+        append_crash_log(&format!("could not drop the undo snapshot of prompt {prompt_id}: {e}"));
+    }
+}
+
 // Restore a snapshot. The current state is snapshotted first, so a restore is
 // itself undoable and nothing is ever lost.
 #[tauri::command]
@@ -1406,6 +1417,11 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
         let (text, variants) = open_snapshot(&text, &variants, secret_key)?;
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
             let original = p.clone();
+            // A locked vault refuses before anything is written, so no snapshot row exists for a
+            // restore that never happens.
+            if p.secret && secret_key.is_none() {
+                return Err("secret-locked".to_string());
+            }
             // The undo snapshot of the current state must itself succeed before overwriting it, or a
             // restore could not be undone and "nothing is ever lost" would break.
             let snapshot_ok = db_conn(&app)
@@ -1451,6 +1467,11 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             if !save_prompts(&app, &store) {
                 if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == pid) {
                     *slot = original;
+                }
+                // The restore did not happen: take its undo snapshot back out so retries do not
+                // push real history out of the history cap.
+                if let Some(c) = db_conn(&app) {
+                    db_drop_latest_version(&c, &pid);
                 }
                 return Err("save-failed".into());
             }
