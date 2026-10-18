@@ -646,6 +646,8 @@ function onMove() {
     setRegion(x, y, w, h, 0);
     const a = toImg(x, y), b = toImg(x + w, y + h);
     sizeLabel.textContent = `${Math.round(b.x - a.x)} × ${Math.round(b.y - a.y)}`;
+    // The label normally sits above the box; with no room above it moves inside.
+    sizeLabel.classList.toggle("inside", y < 27);
     return;
   }
   const win = windowAt(e.clientX, e.clientY);

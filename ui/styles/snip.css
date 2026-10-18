@@ -40,6 +40,7 @@ html, body {
   font: 12px system-ui, sans-serif;
   white-space: nowrap;
 }
+.snip-size.inside { top: 4px; left: 4px; }
 .snip-hint {
   position: fixed;
   bottom: 26px;

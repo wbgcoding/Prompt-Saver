@@ -338,6 +338,24 @@ section(() => {
   });
 });
 
+section(() => {
+  const src = read("snip.js");
+  const toggles = [];
+  const sb = {
+    busy: false, start: { x: 10, y: 5 }, lastMove: { clientX: 80, clientY: 90 }, moveRaf: 1,
+    sizeLabel: { textContent: "", classList: { toggle: (c, on) => toggles.push([c, on]) } },
+    setRegion() {}, toImg: (x, y) => ({ x, y }), windowAt: () => null, fullDim() {}, WIN_RADIUS: 0,
+  };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock(src, "function onMove(") + "; this.onMove = onMove;", sb);
+  sb.onMove();
+  check(toggles.length === 1 && toggles[0][0] === "inside" && toggles[0][1] === true, "a drag whose box starts in the top 27 px puts the size label inside the box");
+  sb.start = { x: 10, y: 60 }; sb.lastMove = { clientX: 80, clientY: 90 }; toggles.length = 0;
+  sb.onMove();
+  check(toggles.length === 1 && toggles[0][1] === false, "a drag below the top strip keeps the label above the box");
+  check(/\.snip-size\.inside\s*\{[^}]*top:\s*4px/.test(fs.readFileSync(path.join(uiDir, "styles", "snip.css"), "utf8")), "the inside placement exists in the stylesheet");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
