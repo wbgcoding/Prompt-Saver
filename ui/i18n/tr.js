@@ -523,6 +523,7 @@ export default {
     veStill: "Kareyi dışa aktar",
     veStillTip: "Kareyi dışa aktar: oynatma kafasındaki kareyi ekran görüntüsü gibi resim olarak kaydeder.",
     veStillSaved: "Kare kaydedildi: {path}",
+    veStillNotSaved: "Kare kaydedilemedi.",
     veNeedSelection: "Önce zaman çizelgesinde bir aralık seçin.",
     veZoomOut: "Uzaklaştır",
     veZoomIn: "Yakınlaştır",

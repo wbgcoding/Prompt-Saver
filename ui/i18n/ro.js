@@ -523,6 +523,7 @@ export default {
     veStill: "Exportă cadrul",
     veStillTip: "Exportă cadrul: salvează cadrul de la capul de redare ca imagine, la fel ca o captură de ecran.",
     veStillSaved: "Cadru salvat: {path}",
+    veStillNotSaved: "Cadrul nu a putut fi salvat.",
     veNeedSelection: "Selectează mai întâi un interval pe cronologie.",
     veZoomOut: "Micșorează",
     veZoomIn: "Mărește",

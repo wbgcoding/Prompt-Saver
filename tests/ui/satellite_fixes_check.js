@@ -584,6 +584,31 @@ section(() => {
   check(steps === 1 && timers.length === 1, "the primary button still steps and arms the repeat");
 });
 
+section(() => {
+  const src = read("video.js");
+  const block = extractBlock(src, '$("ve-still").addEventListener("click", async () =>');
+  const run = async (saved) => {
+    const toasts = [];
+    let handler;
+    const sb = {
+      $: () => ({ addEventListener: (_n, fn) => { handler = fn; } }),
+      invoke: async () => saved,
+      VE: { src: "a.mp4", playhead: 1000 },
+      toast: (m) => toasts.push(m),
+      t: (k) => ({ veStillSaved: "Saved {path}", veStillNotSaved: "Not saved" }[k] || k),
+      noteFfmpeg() {}, errMessageLogged: () => "err", Math,
+    };
+    vm.createContext(sb);
+    vm.runInContext(block + ");", sb);
+    await handler();
+    return toasts[0];
+  };
+  later(async () => {
+    check(await run("out/f.png") === "Saved out/f.png", "a saved frame reports its path");
+    check(await run("") === "Not saved", "an empty result must not claim the frame was saved");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

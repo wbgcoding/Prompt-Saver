@@ -523,6 +523,7 @@ export default {
     veStill: "Frame exporteren",
     veStillTip: "Frame exporteren: slaat het frame bij de afspeelkop op als afbeelding, op dezelfde manier als een schermafbeelding.",
     veStillSaved: "Frame opgeslagen: {path}",
+    veStillNotSaved: "Het frame kon niet worden opgeslagen.",
     veNeedSelection: "Selecteer eerst een bereik op de tijdlijn.",
     veZoomOut: "Uitzoomen",
     veZoomIn: "Inzoomen",

@@ -523,6 +523,7 @@ export default {
     veStill: "Eksportuj klatkę",
     veStillTip: "Eksportuj klatkę: zapisuje klatkę w pozycji głowicy odtwarzania jako obraz, tak jak zrzut ekranu.",
     veStillSaved: "Zapisano klatkę: {path}",
+    veStillNotSaved: "Nie udało się zapisać klatki.",
     veNeedSelection: "Najpierw zaznacz zakres na osi czasu.",
     veZoomOut: "Pomniejsz",
     veZoomIn: "Powiększ",

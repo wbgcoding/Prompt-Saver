@@ -1346,7 +1346,7 @@ $("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "c
 $("ve-still").addEventListener("click", async () => {
   try {
     const saved = await invoke("extract_still_frame", { path: VE.src, atMs: Math.round(VE.playhead) });
-    toast(saved ? t("veStillSaved").replace("{path}", String(saved)) : t("veStillSaved").replace("{path}", ""));
+    toast(saved ? t("veStillSaved").replace("{path}", () => String(saved)) : t("veStillNotSaved"));
   } catch (err) {
     noteFfmpeg(err);
     toast(errMessageLogged(err, t, "video"));
