@@ -1070,6 +1070,8 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
 // single place that turns settings into windows, so every mutation just calls it.
 // MUST NOT run while the store mutex is held: it creates and closes windows.
 pub(crate) fn sync_float_windows(app: &AppHandle) {
+    // Window queries before the store lock (never call window APIs while holding it).
+    let live: std::collections::HashSet<String> = app.webview_windows().keys().cloned().collect();
     let (want_pills, want_folders, pills, folders) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
@@ -1086,6 +1088,12 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
             .prompts
             .iter()
             .filter(|p| want_pills.contains(&p.id))
+            // open_floating would return at once for a pill whose window is up and not closing;
+            // skipping it here keeps its (possibly large) picture from being cloned on every sync.
+            .filter(|p| {
+                let label = flabel(&p.id);
+                reopen_step(live.contains(&label), is_closing(&label)) != ReopenStep::Keep
+            })
             .cloned()
             .collect();
         let folders: Vec<FloatFolder> = store
