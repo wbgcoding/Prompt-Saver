@@ -642,6 +642,18 @@ section(() => {
   check(end(2000, 30000) === 10000, "the overlay never runs past the clip end");
 });
 
+section(() => {
+  const vsrc = read("video.js");
+  const ids = [...vsrc.slice(vsrc.indexOf("export const FONT_FILES"), vsrc.indexOf("];", vsrc.indexOf("export const FONT_FILES"))).matchAll(/\["(\w+)", "/g)].map((m) => m[1]);
+  const labelBlock = vsrc.match(/export const FONT_LABELS = (\{[^}]*\});/);
+  check(!!labelBlock, "font display names exist");
+  if (!labelBlock) return;
+  const labels = vm.runInNewContext("(" + labelBlock[1] + ")");
+  check(ids.length >= 5 && ids.every((id) => labels[id] && labels[id] !== id), "every font id has a readable display name");
+  const osrc = read("videoOverlays.js");
+  check(/selectInput\(FONT_FILES\.map\(\(\[id\]\) => \[id, FONT_LABELS\[id\] \|\| id\]\)/.test(osrc), "the font select shows the display names");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

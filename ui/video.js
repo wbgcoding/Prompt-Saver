@@ -67,6 +67,10 @@ export const FONT_FILES = [
   ["consola", "consola.ttf"],
   ["georgia", "georgia.ttf"],
 ];
+// Font names are proper names and stay untranslated.
+export const FONT_LABELS = {
+  segoeui: "Segoe UI", arial: "Arial", arialbd: "Arial Bold", consola: "Consolas", georgia: "Georgia",
+};
 // The live preview draws text with the browser's own font shaping (drawtext's fontfile is only
 // reachable by ffmpeg at export time), so each id gets the closest real CSS family.
 export const FONT_CSS = {

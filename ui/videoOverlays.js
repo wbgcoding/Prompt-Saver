@@ -3,7 +3,7 @@ import { numberField, parseFfmpegError } from "./floatShared.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { keysPickerRow } from "./videoKeys.js";
-import { $, clamp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
+import { $, clamp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
 import { renderRects, snapRect } from "./videoPreview.js";
 
 // ---------------------------------------------------------------- overlays
@@ -604,7 +604,7 @@ export function renderOverlayEditor() {
 
   if (op.kind === "text") {
     box.appendChild(fieldRow(t("veOvTextValue"), ovTrack("text", textInput(op.text, (v) => commitOverlay(op, { text: v })), (o) => o.text)));
-    box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
+    box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, FONT_LABELS[id] || id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
     box.appendChild(fieldRow(t("veOvFontSize"), ovTrack("fontPx", numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v }), [12, 16, 24, 32, 48, 64, 96]), (o) => String(o.fontPx))));
     const pos = document.createElement("div");
     pos.className = "ve-row2";
