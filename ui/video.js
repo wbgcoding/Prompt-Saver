@@ -705,6 +705,13 @@ export function layoutTrack() {
 // Tick spacing is picked so labels never collide: the smallest step from the
 // list that is at least ~70px wide at the current zoom.
 const TICK_STEPS_MS = [100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000, 1200000, 1800000, 3600000, 7200000];
+// A ruler tick label: minutes and seconds, with the milliseconds only on a fine scale. Cut at the
+// dot rather than at a fixed width, so a recording of 100 minutes or more keeps its full minutes.
+export function rulerLabel(ms, withMs) {
+  const label = fmtTime(ms);
+  return withMs ? label : label.slice(0, label.indexOf("."));
+}
+
 function renderRuler() {
   const ruler = $("ve-ruler");
   ruler.innerHTML = "";
@@ -714,7 +721,7 @@ function renderRuler() {
     const tick = document.createElement("span");
     tick.className = "ve-tick";
     tick.style.left = `${msToPx(ms)}px`;
-    tick.textContent = fmtTime(ms).slice(0, step < 1000 ? 9 : 5);
+    tick.textContent = rulerLabel(ms, step < 1000);
     ruler.appendChild(tick);
   }
 }
@@ -1328,8 +1335,11 @@ $("ve-trim-set").addEventListener("click", () => {
 });
 $("ve-cut-add").addEventListener("click", () => {
   if (!VE.sel || Math.abs(VE.sel.b - VE.sel.a) < MIN_CLIP_MS) { toast(t("veNeedSelection")); return; }
-  pushOp({ tool: "cut", startMs: Math.min(VE.sel.a, VE.sel.b), endMs: Math.max(VE.sel.a, VE.sel.b) });
+  const startMs = Math.min(VE.sel.a, VE.sel.b);
+  const endMs = Math.max(VE.sel.a, VE.sel.b);
+  // Cleared before the push: pushOp redraws the timeline, and the band must not outlive the cut.
   VE.sel = null;
+  pushOp({ tool: "cut", startMs, endMs });
 });
 $("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut"));
 

@@ -111,6 +111,23 @@ section(() => {
   check(!/raw\.includes\("cancel"\)/.test(read("capture.js")) && /raw\.trim\(\) === "cancelled"/.test(read("capture.js")), "the recording conversion treats only the exact cancelled answer as a cancel");
 });
 
+// Video editor timeline: "Add cut" clears the selection before the redraw, and the ruler labels
+// of a recording of 100 minutes or more keep their full minutes.
+section(() => {
+  const src = read("video.js");
+  const code = ["export const pad", "export function fmtTime(", "export function rulerLabel("]
+    .map((m) => (m.includes("(") ? extractBlock(src, m) : src.slice(src.indexOf(m)).split("\n")[0].replace(/;$/, "") + ";").replace("export ", ""))
+    .join("\n");
+  const sb = {};
+  vm.createContext(sb);
+  sb.rulerLabel = vm.runInContext(code + "\nrulerLabel", sb);
+  check(sb.rulerLabel(125000, false) === "02:05" && sb.rulerLabel(125250, true) === "02:05.250", "ruler labels keep their short and fine forms");
+  check(sb.rulerLabel(100 * 60000 + 5000, false) === "100:05", "a ruler label past 100 minutes is not cut short");
+  check(sb.rulerLabel(100 * 60000, true) === "100:00.000", "a fine ruler label past 100 minutes is whole");
+  const add = extractBlock(src, '$("ve-cut-add").addEventListener("click", () =>');
+  check(add.indexOf("VE.sel = null") !== -1 && add.indexOf("VE.sel = null") < add.indexOf("pushOp("), "Add cut clears the selection before pushOp redraws the timeline");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
