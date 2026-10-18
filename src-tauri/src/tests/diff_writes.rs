@@ -1120,3 +1120,26 @@ fn the_uninstaller_removes_the_downloaded_ffmpeg_before_the_folder() {
         assert!(del < rm, "{exe} must go before the non-recursive RMDir");
     }
 }
+
+#[test]
+fn every_crate_version_is_pinned_exactly() {
+    let toml = include_str!("../../Cargo.toml");
+    let mut in_deps = false;
+    let mut loose = Vec::new();
+    for line in toml.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_deps = t.contains("dependencies");
+            continue;
+        }
+        if !in_deps || t.starts_with('#') {
+            continue;
+        }
+        // `name = "1.2"` or `name = { version = "1.2", ... }`
+        let spec = if let Some(i) = t.find("version = \"") { &t[i + 11..] } else if let Some((_, v)) = t.split_once(" = \"") { v } else { continue };
+        if !spec.starts_with('=') {
+            loose.push(t.to_string());
+        }
+    }
+    assert!(loose.is_empty(), "crates must be pinned with =x.y.z: {loose:?}");
+}
