@@ -384,6 +384,12 @@ pub fn run() {
                 });
             }
 
+            // A data wipe whose repack ran out of time is finished here, off the setup thread.
+            {
+                let h = handle.clone();
+                std::thread::spawn(move || finish_pending_scrub(&h));
+            }
+
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;

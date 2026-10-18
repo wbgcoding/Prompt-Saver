@@ -538,29 +538,87 @@ pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
 pub(crate) const DATA_WIPE_TABLES: [&str; 7] =
     ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state", "editor_drafts"];
 
-// A repack that meets another connection mid-write answers SQLITE_BUSY at once (the wait for the
-// lock is per connection and may be short); it is tried again this often, this far apart.
-const SCRUB_TRIES: u32 = 25;
+// A repack that meets another connection mid-write answers SQLITE_BUSY; it is tried again this
+// far apart, and the whole wait is capped by a budget (a connection's own lock wait is 3 s per
+// statement, so counting tries would let a held lock stall the wipe for minutes).
 const SCRUB_PAUSE_MS: u64 = 120;
+const SCRUB_BUDGET_MS: u64 = 10_000;
+// The longest a single try may wait on the lock.
+const SCRUB_TRY_WAIT_MS: u64 = 1_000;
+
+// A wipe whose repack ran out of budget leaves this marker in the data folder; the next start
+// finishes the repack.
+const SCRUB_PENDING_FILE: &str = "scrub.pending";
 
 // After a wipe the deleted rows still sit in SQLite's free pages and in the write-ahead log.
 // Repacks the file, then folds the log back and truncates it, so the old bytes are overwritten.
 // A busy file is retried for a few seconds; each step is only repeated until it has worked once.
 pub(crate) fn scrub_freed_pages(conn: &Connection) -> bool {
+    scrub_freed_pages_within(conn, std::time::Duration::from_millis(SCRUB_BUDGET_MS))
+}
+
+// The same with an explicit total budget. Returns false when the budget ran out first.
+pub(crate) fn scrub_freed_pages_within(conn: &Connection, budget: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + budget;
     let mut packed = false;
     let mut folded = false;
-    for attempt in 0..SCRUB_TRIES {
-        if attempt > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(SCRUB_PAUSE_MS));
+    let mut first = true;
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if !first && left.is_zero() {
+            break;
         }
+        // One try never waits on the lock longer than what is left of the budget.
+        let wait = left.min(std::time::Duration::from_millis(SCRUB_TRY_WAIT_MS));
+        let _ = conn.busy_timeout(wait);
         packed = packed || conn.execute("VACUUM", []).is_ok();
         // The first column is 1 when a reader kept the log from being truncated.
         folded = folded || conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get::<_, i64>(0)).is_ok_and(|busy| busy == 0);
         if packed && folded {
+            let _ = conn.busy_timeout(std::time::Duration::from_millis(3000));
             return true;
         }
+        first = false;
+        let pause = std::time::Duration::from_millis(SCRUB_PAUSE_MS).min(deadline.saturating_duration_since(std::time::Instant::now()));
+        std::thread::sleep(pause);
+    }
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(3000));
+    false
+}
+
+pub(crate) fn scrub_pending_marker(dir: &Path) -> PathBuf {
+    dir.join(SCRUB_PENDING_FILE)
+}
+
+// Remembers an unfinished repack for the next start.
+pub(crate) fn mark_scrub_pending(dir: &Path) {
+    let _ = std::fs::write(scrub_pending_marker(dir), b"1");
+}
+
+// Finishes a repack an earlier wipe could not. False when nothing was pending or it still
+// does not work (the marker stays then); the marker goes only once the scrub worked.
+pub(crate) fn finish_pending_scrub_in(dir: &Path, conn: &Connection) -> bool {
+    let marker = scrub_pending_marker(dir);
+    if !marker.exists() {
+        return false;
+    }
+    if scrub_freed_pages(conn) {
+        let _ = std::fs::remove_file(&marker);
+        return true;
     }
     false
+}
+
+pub(crate) fn finish_pending_scrub(app: &AppHandle) {
+    let dir = data_dir(app);
+    if !scrub_pending_marker(&dir).exists() {
+        return;
+    }
+    if let Some(conn) = db_conn(app) {
+        if finish_pending_scrub_in(&dir, &conn) {
+            append_crash_log("start-up: finished the database repack a data wipe had left open");
+        }
+    }
 }
 
 // True while any wiped table still holds a row; a table that cannot be counted counts as
@@ -655,7 +713,8 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
     .await
     .map(|(scrubbed, rows_left)| {
         if !scrubbed {
-            append_crash_log("delete_all_data: could not repack the database");
+            mark_scrub_pending(&data_dir(&app));
+            append_crash_log("delete_all_data: could not repack the database, it is finished on the next start");
         }
         // A busy repack leaves the rows deleted; only rows still in a table make the wipe incomplete.
         if rows_left {
