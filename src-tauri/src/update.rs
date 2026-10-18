@@ -811,8 +811,11 @@ pub(crate) fn update_script_content(installer: &Path, app_exe: &Path) -> Result<
     }
     let inst = quoted(installer)?;
     let exe = quoted(app_exe)?;
+    // The stage folder goes last, on the line that also removes the script itself (the line is
+    // already read, so it still runs); the working folder is moved away from it first.
+    let stage = quoted(installer.parent().unwrap_or(installer))?;
     Ok(format!(
-        "@echo off\r\n\"{inst}\" /S\r\nstart \"\" \"{exe}\"\r\ndel \"{inst}\"\r\ndel \"%~f0\"\r\n"
+        "@echo off\r\n\"{inst}\" /S\r\nstart \"\" \"{exe}\"\r\ndel \"{inst}\"\r\ncd /d \"%TEMP%\"\r\ndel \"%~f0\" & rmdir \"{stage}\"\r\n"
     ))
 }
 

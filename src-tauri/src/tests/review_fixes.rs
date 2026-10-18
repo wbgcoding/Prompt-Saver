@@ -1468,6 +1468,8 @@ fn update_script_escapes_percent_and_refuses_quotes() {
     let s = update_script_content(Path::new("C:\\t\\%TEMP%\\setup.exe"), Path::new("C:\\a\\x.exe")).unwrap();
     assert!(s.contains("\"C:\\t\\%%TEMP%%\\setup.exe\" /S"));
     assert!(s.contains("del \"%~f0\""));
+    // The unique stage folder does not stay behind in the temp folder.
+    assert!(s.trim_end().ends_with("rmdir \"C:\\t\\%%TEMP%%\""));
     assert!(update_script_content(Path::new("C:\\t\\a\"b.exe"), Path::new("C:\\a\\x.exe")).is_err());
     assert!(update_script_content(Path::new("C:\\t\\s.exe"), Path::new("C:\\a\nx.exe")).is_err());
 }
