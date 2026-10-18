@@ -1808,6 +1808,7 @@ export default {
     settingsAreaNormal: "Impostazioni",
     settingsAreaLibrary: "Libreria",
     settingsAreaBackup: "Backup",
+    settingsAreaStats: "Statistiche",
     settingsAreaToolbar: "Barra degli strumenti",
     historyRestoreAsNew: "Salva come nuova voce",
     historyRestoreAsNewSuffix: "(versione del {date})",

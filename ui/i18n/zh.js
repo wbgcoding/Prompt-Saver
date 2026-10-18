@@ -1808,6 +1808,7 @@ export default {
     settingsAreaNormal: "设置",
     settingsAreaLibrary: "提示词库",
     settingsAreaBackup: "备份",
+    settingsAreaStats: "统计",
     settingsAreaToolbar: "工具栏",
     historyRestoreAsNew: "另存为新条目",
     historyRestoreAsNewSuffix: "(来自 {date} 的版本)",

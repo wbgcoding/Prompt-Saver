@@ -1808,6 +1808,7 @@ export default {
     settingsAreaNormal: "Setări",
     settingsAreaLibrary: "Bibliotecă",
     settingsAreaBackup: "Copii de rezervă",
+    settingsAreaStats: "Statistici",
     settingsAreaToolbar: "Bară de instrumente",
     historyRestoreAsNew: "Salvează ca intrare nouă",
     historyRestoreAsNewSuffix: "(versiunea din {date})",

@@ -791,6 +791,16 @@ section(() => {
   });
 });
 
+// 35. Every settings directory area has a badge label key.
+section(() => {
+  const dir = read("settingsSearch.js");
+  const areas = new Set([...dir.matchAll(/area: "([a-z]+)"/g)].map((m) => m[1]));
+  const cfg = read("expertConfig.js");
+  const labels = /SETTINGS_AREA_LABEL = \{([^}]*)\}/.exec(cfg)[1];
+  const missing = [...areas].filter((a) => !new RegExp("\\b" + a + ":").test(labels));
+  check(areas.size >= 5 && !missing.length, "area badge labels missing for: " + missing.join(","));
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

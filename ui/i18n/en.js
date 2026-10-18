@@ -1068,6 +1068,7 @@ export default {
     settingsAreaNormal: "Settings",
     settingsAreaLibrary: "Library",
     settingsAreaBackup: "Backups",
+    settingsAreaStats: "Statistics",
     settingsAreaToolbar: "Toolbar",
     expertResetGroupBtn: "Reset this category",
     expertResetOne: "Reset this value",

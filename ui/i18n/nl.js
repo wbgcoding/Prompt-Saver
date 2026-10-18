@@ -1808,6 +1808,7 @@ export default {
     settingsAreaNormal: "Instellingen",
     settingsAreaLibrary: "Bibliotheek",
     settingsAreaBackup: "Back-ups",
+    settingsAreaStats: "Statistieken",
     settingsAreaToolbar: "Werkbalk",
     historyRestoreAsNew: "Opslaan als nieuw item",
     historyRestoreAsNewSuffix: "(versie van {date})",

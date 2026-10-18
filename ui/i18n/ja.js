@@ -1808,6 +1808,7 @@ export default {
     settingsAreaNormal: "設定",
     settingsAreaLibrary: "ライブラリ",
     settingsAreaBackup: "バックアップ",
+    settingsAreaStats: "統計",
     settingsAreaToolbar: "ツールバー",
     historyRestoreAsNew: "新しいエントリとして保存",
     historyRestoreAsNewSuffix: "（{date} のバージョン）",

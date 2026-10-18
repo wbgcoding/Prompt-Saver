@@ -1068,6 +1068,7 @@ export default {
     settingsAreaNormal: "Einstellungen",
     settingsAreaLibrary: "Bibliothek",
     settingsAreaBackup: "Sicherungen",
+    settingsAreaStats: "Statistik",
     settingsAreaToolbar: "Werkzeugleiste",
     expertResetGroupBtn: "Diese Kategorie zurücksetzen",
     expertResetOne: "Diesen Wert zurücksetzen",

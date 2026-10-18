@@ -1808,6 +1808,7 @@ export default {
     settingsAreaNormal: "Ayarlar",
     settingsAreaLibrary: "Kütüphane",
     settingsAreaBackup: "Yedekler",
+    settingsAreaStats: "İstatistikler",
     settingsAreaToolbar: "Araç çubuğu",
     historyRestoreAsNew: "Yeni kayıt olarak kaydet",
     historyRestoreAsNewSuffix: "({date} sürümü)",
