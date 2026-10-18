@@ -529,6 +529,34 @@ section(() => {
   check(make(false) === 0, "the view list is left alone while the bar is already showing");
 });
 
+// 23. U8: closing the editor drops the draft only after a tick's write has landed.
+section(() => {
+  const ed = read("editor.js");
+  const src = ["let draftWrite = null;", extractBlock(ed, "export async function saveDraftNow(").replace("export ", ""), extractBlock(ed, "export async function discardEditorDraft(").replace("export ", "")].join("\n");
+  later(async () => {
+    const log = [];
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const sb = run(src, {
+      draftEditorFields: () => ({ promptId: "x", name: "n", text: "t", variants: "[]" }),
+      draftLastSaved: null,
+      invoke: async (cmd) => { if (cmd === "save_editor_draft") { await gate; log.push("saved"); } else log.push("discarded"); },
+    });
+    const tick = sb.saveDraftNow();
+    const drop = sb.discardEditorDraft();
+    await new Promise((r) => setTimeout(r, 5));
+    check(log.length === 0, "the discard waits while the draft write is in flight");
+    release();
+    await Promise.all([tick, drop]);
+    check(log.join() === "saved,discarded", "the discard lands after the write");
+    const idle = [];
+    const sb2 = run(src, { draftEditorFields: () => null, invoke: async (c) => { idle.push(c); } });
+    await sb2.discardEditorDraft();
+    check(idle.join() === "discard_editor_draft", "an idle editor discards at once");
+  });
+  check(!/invoke\("discard_editor_draft"\)\.catch/.test(ed), "no unordered discard call is left in the editor");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

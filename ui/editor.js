@@ -309,17 +309,30 @@ export function draftEditorFields() {
   return { promptId, name: modal.name.value, text: entries[0] || "", variants: JSON.stringify(entries.slice(1)) };
 }
 
+let draftWrite = null; // the draft write still in flight, so a discard can queue behind it
+
 export async function saveDraftNow() {
   const fields = draftEditorFields();
   if (!fields) return;
   const fp = JSON.stringify(fields);
   if (fp === draftLastSaved) return; // nothing changed since the last write
   draftLastSaved = fp;
+  const write = invoke("save_editor_draft", fields);
+  draftWrite = write;
   try {
-    await invoke("save_editor_draft", fields);
+    await write;
   } catch (_) {
     draftLastSaved = null; // let the next tick retry a failed write
+  } finally {
+    if (draftWrite === write) draftWrite = null;
   }
+}
+
+// The discard goes out only after a tick's write has landed, or that write could arrive second
+// and leave a stale draft behind for the boot recovery to offer.
+export async function discardEditorDraft() {
+  if (draftWrite) await draftWrite.catch(() => {});
+  try { await invoke("discard_editor_draft"); } catch (_) { /* nothing to drop */ }
 }
 
 export function armDraftAutosave() {
@@ -387,7 +400,7 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   syncModalImageUi(mode);
   modalInitial = modalSnapshot();
   armDraftAutosave();
-  if (secret) invoke("discard_editor_draft").catch(() => {});
+  if (secret) discardEditorDraft();
   focusOnOpen(mode);
 }
 
@@ -1230,7 +1243,7 @@ export function closeModal() {
   // drops the autosave draft at once instead of leaving it for the boot-time recovery check to
   // offer back for nothing.
   disarmDraftAutosave();
-  if (modalState) invoke("discard_editor_draft").catch(() => {});
+  if (modalState) discardEditorDraft();
   assignModalState(null);
   modalInitial = "";
   // A tile the editor was opened from can be gone by the time it closes (deleted mid-edit, or
