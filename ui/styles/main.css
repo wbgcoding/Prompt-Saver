@@ -4763,11 +4763,9 @@ body.drag-over::after {
   padding: 0;
   border: 1px solid var(--control-border);
   border-radius: 8px;
-  background: none;
   cursor: pointer;
 }
-.palette-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
-.palette-swatch::-webkit-color-swatch { border: none; border-radius: 6px; }
+.palette-swatch:hover { border-color: var(--accent); }
 .palette-reset { align-self: flex-start; }
 
 /* Fixed placeholder values, the expert menu's variables group. */

@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Sicherung fehlgeschlagen",
     backupFailedDelete: "Die Sicherheitskopie konnte nicht erstellt werden ({error}). Trotzdem löschen?",
     backupFailedReset: "Die Sicherheitskopie konnte nicht erstellt werden ({error}). Trotzdem zurücksetzen?",
+    paletteSlot: "Farbe {n}",
 };

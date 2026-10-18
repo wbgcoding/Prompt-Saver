@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Yedekleme başarısız",
     backupFailedDelete: "Güvenlik yedeği oluşturulamadı ({error}). Yine de silinsin mi?",
     backupFailedReset: "Güvenlik yedeği oluşturulamadı ({error}). Yine de sıfırlansın mı?",
+    paletteSlot: "Renk {n}",
 };

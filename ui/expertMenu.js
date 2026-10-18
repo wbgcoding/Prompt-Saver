@@ -1283,23 +1283,27 @@ export function isRowChanged(kind, key) {
   }
   return false;
 }
-// Editable default-color palette: one native color picker per hue + reset.
+// Editable default-color palette: one themed color picker per hue + reset.
 export function paletteRow() {
   const row = document.createElement("div");
   row.className = "field palette-field";
   const grid = document.createElement("div");
   grid.className = "palette-grid";
   const cur = COLORS.slice(1);
-  const inputs = [];
+  const hues = [];
   for (let i = 0; i < PALETTE_LEN; i++) {
-    const c = document.createElement("input");
-    c.type = "color";
+    hues.push(HEX_RE.test(cur[i]) ? cur[i] : DEFAULT_COLORS[i + 1]);
+    const c = document.createElement("button");
+    c.type = "button";
     c.className = "palette-swatch";
-    c.value = HEX_RE.test(cur[i]) ? cur[i] : DEFAULT_COLORS[i + 1];
-    c.title = c.value;
-    c.addEventListener("input", () => { c.title = c.value; });
-    c.addEventListener("change", () => savePalette(inputs.map((x) => x.value)));
-    inputs.push(c);
+    const paint = (hex) => { c.style.background = hex; c.title = hex; };
+    paint(hues[i]);
+    c.setAttribute("aria-label", t("paletteSlot").replace("{n}", () => String(i + 1)));
+    c.addEventListener("click", () => openColorPop(c, hues[i], (hex) => {
+      hues[i] = hex;
+      paint(hex);
+      savePalette(hues.slice());
+    }));
     grid.appendChild(c);
   }
   // Only show it while a hue actually differs from DEFAULT_COLORS: same rule

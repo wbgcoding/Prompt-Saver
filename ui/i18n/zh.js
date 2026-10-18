@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "备份失败",
     backupFailedDelete: "无法创建安全备份（{error}）。仍要删除吗？",
     backupFailedReset: "无法创建安全备份（{error}）。仍要重置吗？",
+    paletteSlot: "颜色 {n}",
 };

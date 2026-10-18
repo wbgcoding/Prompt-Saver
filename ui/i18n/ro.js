@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Copia de rezervă a eșuat",
     backupFailedDelete: "Copia de rezervă de siguranță nu a putut fi creată ({error}). Ștergi oricum?",
     backupFailedReset: "Copia de rezervă de siguranță nu a putut fi creată ({error}). Resetezi oricum?",
+    paletteSlot: "Culoare {n}",
 };

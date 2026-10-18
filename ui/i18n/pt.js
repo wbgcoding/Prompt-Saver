@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Falha no backup",
     backupFailedDelete: "Não foi possível criar o backup de segurança ({error}). Apagar mesmo assim?",
     backupFailedReset: "Não foi possível criar o backup de segurança ({error}). Redefinir mesmo assim?",
+    paletteSlot: "Cor {n}",
 };

@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "バックアップに失敗しました",
     backupFailedDelete: "安全のためのバックアップを作成できませんでした（{error}）。このまま削除しますか？",
     backupFailedReset: "安全のためのバックアップを作成できませんでした（{error}）。このままリセットしますか？",
+    paletteSlot: "色 {n}",
 };

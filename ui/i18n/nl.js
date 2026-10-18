@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Back-up mislukt",
     backupFailedDelete: "De veiligheidsback-up kon niet worden gemaakt ({error}). Toch verwijderen?",
     backupFailedReset: "De veiligheidsback-up kon niet worden gemaakt ({error}). Toch resetten?",
+    paletteSlot: "Kleur {n}",
 };

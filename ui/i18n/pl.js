@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Kopia zapasowa nie powiodła się",
     backupFailedDelete: "Nie udało się utworzyć kopii zapasowej ({error}). Usunąć mimo to?",
     backupFailedReset: "Nie udało się utworzyć kopii zapasowej ({error}). Zresetować mimo to?",
+    paletteSlot: "Kolor {n}",
 };

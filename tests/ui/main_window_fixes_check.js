@@ -669,6 +669,13 @@ section(() => {
   });
 });
 
+// 28. Expert menu palette: themed swatch buttons, never a native colour input.
+section(() => {
+  const src = read("expertMenu.js");
+  const row = extractBlock(src, "export function paletteRow(");
+  check(!/type\s*=\s*"color"/.test(row) && /openColorPop\(/.test(row) && /aria-label/.test(row), "the palette swatches use the themed picker with a label");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

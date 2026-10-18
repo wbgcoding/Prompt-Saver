@@ -2021,4 +2021,5 @@ export default {
     backupFailedTitle: "Falló la copia de seguridad",
     backupFailedDelete: "No se pudo crear la copia de seguridad ({error}). ¿Borrar de todos modos?",
     backupFailedReset: "No se pudo crear la copia de seguridad ({error}). ¿Restablecer de todos modos?",
+    paletteSlot: "Color {n}",
 };
