@@ -144,6 +144,23 @@ section(() => {
   check(/clearLiveOverlays\(\$\("ve-overlay-live"\)\)/.test(read("video.js")), "loading another source uses the helper");
 });
 
+// Closing the screenshot editor gives the full-size canvases back (base, live, marker layer).
+section(() => {
+  const draw = read("snipDraw.js");
+  const sb = { document: { createElement: () => ({ width: 10, height: 10 }) }, SE: { w: 10, h: 10 } };
+  vm.createContext(sb);
+  const body = draw.slice(draw.indexOf("let snipEditMarkerTmp = null;"), draw.indexOf("function snipEditDrawMarkerOp(") + 40);
+  const code = body.replace(/function snipEditDrawMarkerOp\([\s\S]*$/, "") + "\nfunction grab() { return snipEditMarkerTmp = document.createElement('canvas'); }";
+  vm.runInContext(code + "\nthis.release = snipEditReleaseMarkerLayer; this.grab = grab;", sb);
+  sb.release();
+  const tmp = sb.grab();
+  sb.release();
+  check(tmp.width === 0 && tmp.height === 0, "the marker stroke layer shrinks to nothing");
+  const ed = read("snipEditor.js");
+  const close = extractBlock(ed, "function snipEditClose(");
+  check(/snipEditBaseCv\.width = 0;[\s\S]*snipEditLiveCv\.height = 0;[\s\S]*snipEditReleaseMarkerLayer\(\)/.test(close), "closing the editor empties the base and live canvases and the marker layer");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

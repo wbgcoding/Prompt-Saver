@@ -171,7 +171,7 @@ export function initSnipEditor() {
   const {
     snipEditDrawPenOp, snipEditDrawMarkerOp, snipEditDrawLineOp, snipEditDrawArrowOp,
     snipEditDrawRectOp, snipEditDrawEllipseOp, snipEditDrawTextOp, snipEditMeasureTextWidth,
-    snipEditDrawPixelate, snipEditDrawSpotlight, snipEditDrawCropDim, snipEditDrawOp,
+    snipEditDrawPixelate, snipEditDrawSpotlight, snipEditDrawCropDim, snipEditDrawOp, snipEditReleaseMarkerLayer,
   } = createSnipDraw(SE, snipEditBaseCtx, SNIP_DEFAULT_SIZES, SNIP_ARROW_HEAD_SCALE);
 
   // Hold the toolbar button (or V) to peek at the untouched capture, or tap it to lock the
@@ -1719,6 +1719,12 @@ export function initSnipEditor() {
     SE.ops = [];
     SE.redo = [];
     SE.floor = 0;
+    // The three full-size canvases give their pixels back too; the next open resizes them.
+    snipEditBaseCv.width = 0;
+    snipEditBaseCv.height = 0;
+    snipEditLiveCv.width = 0;
+    snipEditLiveCv.height = 0;
+    snipEditReleaseMarkerLayer();
   }
   function snipEditCancel() {
     const cb = SE.onCancel;

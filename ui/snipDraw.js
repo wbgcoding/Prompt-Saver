@@ -40,6 +40,10 @@ export function createSnipDraw(SE, snipEditBaseCtx, SNIP_DEFAULT_SIZES, SNIP_ARR
   // calls: this runs once per marker op on every redraw, so a fresh full-resolution canvas each
   // time would cost marker count times image resolution.
   let snipEditMarkerTmp = null;
+  // Shrinks the reused stroke layer (full capture size) once the editor closes.
+  function snipEditReleaseMarkerLayer() {
+    if (snipEditMarkerTmp) { snipEditMarkerTmp.width = 0; snipEditMarkerTmp.height = 0; }
+  }
   function snipEditDrawMarkerOp(ctx, op) {
     const tmp = snipEditMarkerTmp || (snipEditMarkerTmp = document.createElement("canvas"));
     if (tmp.width !== SE.w) tmp.width = SE.w;
@@ -219,6 +223,6 @@ export function createSnipDraw(SE, snipEditBaseCtx, SNIP_DEFAULT_SIZES, SNIP_ARR
   return {
     snipEditDrawPenOp, snipEditDrawMarkerOp, snipEditDrawLineOp, snipEditDrawArrowOp,
     snipEditDrawRectOp, snipEditDrawEllipseOp, snipEditDrawTextOp, snipEditMeasureTextWidth,
-    snipEditDrawPixelate, snipEditDrawSpotlight, snipEditDrawCropDim, snipEditDrawOp,
+    snipEditDrawPixelate, snipEditDrawSpotlight, snipEditDrawCropDim, snipEditDrawOp, snipEditReleaseMarkerLayer,
   };
 }
