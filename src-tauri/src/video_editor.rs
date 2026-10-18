@@ -191,6 +191,22 @@ pub(crate) struct MediaMeta {
     media_size_bytes: u64,
 }
 
+// The attachment a backfill would measure: only an entry whose media meta is still all zero,
+// and its file before its icon. Asked twice (before and after the slow probe), so a result is
+// written only to the entry state it was measured for.
+pub(crate) fn media_backfill_target(p: &Prompt) -> Option<String> {
+    if p.media_duration_ms != 0 || p.media_width != 0 || p.media_size_bytes != 0 {
+        return None;
+    }
+    if !p.file_path.is_empty() {
+        Some(p.file_path.clone())
+    } else if !p.icon_path.is_empty() {
+        Some(p.icon_path.clone())
+    } else {
+        None
+    }
+}
+
 // One-time catch-up for an entry never measured or whose first measurement failed (source
 // briefly locked, network drive asleep): called the first time such a row is shown, never
 // during render. A no-op (Ok(None), nothing saved) when the entry already has a
@@ -202,30 +218,22 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
         if !store.settings.ui_flags.get("mediaMetaBackfill").copied().unwrap_or(true) {
             return Ok(None);
         }
-        match store.prompts.iter().find(|p| p.id == id) {
-            Some(p) if p.media_duration_ms == 0 && p.media_width == 0 && p.media_size_bytes == 0 => {
-                if !p.file_path.is_empty() {
-                    Some(p.file_path.clone())
-                } else if !p.icon_path.is_empty() {
-                    Some(p.icon_path.clone())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+        store.prompts.iter().find(|p| p.id == id).and_then(media_backfill_target)
     };
     let Some(media_path) = media_path else { return Ok(None) };
     let ffprobe = ffprobe_search_path(&app);
+    let probed_path = media_path.clone();
     let (duration_ms, width, height, size) =
-        tauri::async_runtime::spawn_blocking(move || probe_media_meta(ffprobe.as_deref(), Path::new(&media_path)))
+        tauri::async_runtime::spawn_blocking(move || probe_media_meta(ffprobe.as_deref(), Path::new(&probed_path)))
             .await
             .map_err(|e| e.to_string())?;
     if duration_ms == 0 && width == 0 && size == 0 {
         return Ok(None); // still unreadable: nothing changed, nothing to save
     }
     let mut store = lock(&state);
-    let updated = match store.prompts.iter_mut().find(|p| p.id == id) {
+    // The probe ran without the lock: the attachment may have been replaced (and measured anew)
+    // meanwhile, and then this result belongs to a file that is no longer the entry's.
+    let updated = match store.prompts.iter_mut().find(|p| p.id == id && media_backfill_target(p).as_deref() == Some(media_path.as_str())) {
         Some(p) => {
             p.media_duration_ms = duration_ms;
             p.media_width = width;

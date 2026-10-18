@@ -180,3 +180,20 @@ fn the_export_filter_graph_travels_in_a_swept_file() {
     assert!(!src.contains("push(\"-filter_complex\".to_string())"));
     assert!(src.contains("\"-filter_complex_script\""));
 }
+
+#[test]
+fn a_media_backfill_only_applies_to_the_entry_state_it_measured() {
+    let mut p: Prompt = serde_json::from_str(r#"{"id":"a","name":"N","text":"T"}"#).unwrap();
+    assert_eq!(media_backfill_target(&p), None, "no attachment, nothing to measure");
+    p.file_path = "D:/old.mp4".into();
+    let probed = media_backfill_target(&p).unwrap();
+    assert_eq!(probed, "D:/old.mp4");
+    // The attachment is replaced and measured anew while the probe ran.
+    p.file_path = "D:/new.mp4".into();
+    assert_ne!(media_backfill_target(&p).as_deref(), Some(probed.as_str()));
+    p.media_duration_ms = 4000;
+    assert_eq!(media_backfill_target(&p), None, "a measured entry is never overwritten");
+    // Structural: the write step re-asks the same question under the second lock.
+    let src = include_str!("../video_editor.rs");
+    assert!(src.contains("media_backfill_target(p).as_deref() == Some(media_path.as_str())"));
+}
