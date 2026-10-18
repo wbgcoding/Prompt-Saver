@@ -530,3 +530,11 @@ fn a_reserved_device_name_with_trailing_spaces_before_the_dot_is_refused() {
     assert!(!crate::video_editor::export_file_name_is_valid("nul  .take2.mp4"));
     assert!(crate::video_editor::export_file_name_is_valid("CONE .mp4"));
 }
+
+// Structural fix, no red unit test: the sweep results stay the same, only the directory reads drop.
+#[test]
+fn the_startup_sweep_reads_the_app_temp_folder_once() {
+    let src = include_str!("../snip.rs");
+    let body = src.split("pub(crate) fn sweep_stale_temp_files_in").nth(1).unwrap().split("pub(crate) fn remove_own_temp_leftovers_in").next().unwrap();
+    assert_eq!(body.matches("fs::read_dir(&ocr_dir)").count(), 1);
+}

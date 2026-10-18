@@ -259,11 +259,18 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
     // TEMP_DIR subfolder, next to the versioned pdfium cache. Only ocr-* names are touched here;
     // the pdfium dlls are swept by version in sweep_stale_pdfium_dlls.
     let ocr_dir = dir.join(brand::TEMP_DIR);
+    // Voice dictation leftovers (install/listing results, scripts, DISM logs) live in the same
+    // folder.
+    let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
+    let voice_prefix = format!("{}-voice-", brand::TEMP_PREFIX);
+    // Working copies of a file opened for editing from outside the app (never the original),
+    // one directory per open. The editor never deletes them when it closes.
+    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    // Still frames cut out of a video land in the same folder; a crash or kill
+    // mid-extraction leaves the frame behind.
+    let still_prefix = format!("{}-still-", brand::TEMP_PREFIX);
+    // One pass over the folder for all four kinds; the prefixes never overlap.
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
-        // Voice dictation leftovers (install/listing results, scripts, DISM logs) live in the same
-        // folder.
-        let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
-        let voice_prefix = format!("{}-voice-", brand::TEMP_PREFIX);
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             let is_ours = name.starts_with(&ocr_prefix) || name.starts_with(&voice_prefix);
@@ -272,6 +279,10 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
             // script deletes itself, so a .ps1 here was left by a hard kill.
             let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
+                let _ = fs::remove_file(e.path());
+            } else if name.starts_with(&openedit_prefix) && is_stale(&e) {
+                let _ = fs::remove_dir_all(e.path());
+            } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
             }
         }
@@ -285,23 +296,6 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
         for e in entries.flatten() {
             if is_stale(&e) {
                 let _ = fs::remove_dir_all(e.path());
-            }
-        }
-    }
-
-    // Working copies of a file opened for editing from outside the app (never the original),
-    // one directory per open. The editor never deletes them when it closes.
-    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
-    // Still frames cut out of a video land in the same folder; a crash or kill
-    // mid-extraction leaves the frame behind.
-    let still_prefix = format!("{}-still-", brand::TEMP_PREFIX);
-    if let Ok(entries) = fs::read_dir(&ocr_dir) {
-        for e in entries.flatten() {
-            let name = e.file_name().to_string_lossy().to_string();
-            if name.starts_with(&openedit_prefix) && is_stale(&e) {
-                let _ = fs::remove_dir_all(e.path());
-            } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
-                let _ = fs::remove_file(e.path());
             }
         }
     }
