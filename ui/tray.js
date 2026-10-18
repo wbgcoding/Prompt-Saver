@@ -117,8 +117,13 @@ function actionIcon(kind) {
 
 function setActive(i) {
   rows[active]?.el.classList.remove("active");
+  rows[active]?.el.setAttribute("aria-selected", "false");
   active = i;
   rows[active]?.el.classList.add("active");
+  rows[active]?.el.setAttribute("aria-selected", "true");
+  // The search field keeps the focus, so the highlighted row is announced through it.
+  if (rows[active]) searchEl.setAttribute("aria-activedescendant", rows[active].el.id);
+  else searchEl.removeAttribute("aria-activedescendant");
   rows[active]?.el.scrollIntoView({ block: "nearest" });
 }
 
@@ -126,6 +131,9 @@ function addRow(id, label, icon, cls) {
   const row = document.createElement("div");
   row.className = "tray-menu-row" + (cls ? " " + cls : "");
   row.dataset.id = id;
+  row.id = `tray-opt-${rows.length}`;
+  row.setAttribute("role", "option");
+  row.setAttribute("aria-selected", "false");
   if (icon) row.appendChild(icon);
   const name = document.createElement("span");
   name.className = "tray-menu-row-name";
@@ -143,12 +151,15 @@ function addHeader(text) {
   if (!text) return; // the search-result section has no title, so it draws no bar
   const head = document.createElement("div");
   head.className = "tray-menu-head";
+  head.setAttribute("role", "presentation");
   head.textContent = text;
   rowsEl.appendChild(head);
 }
 
 function addSeparator() {
-  rowsEl.appendChild(document.createElement("div")).className = "tray-menu-sep";
+  const sep = rowsEl.appendChild(document.createElement("div"));
+  sep.className = "tray-menu-sep";
+  sep.setAttribute("role", "presentation");
 }
 
 // Draws the rows below the always-present search field: the recording controls, then the
@@ -261,6 +272,7 @@ async function openMenu() {
   searchEl.value = "";
   render(plan);
   searchEl.placeholder = plan.searchPh || "";
+  searchEl.setAttribute("aria-label", plan.searchPh || "");
   searchEl.hidden = !plan.searchOn;
   syncDocLang();
   openedAt = Date.now();

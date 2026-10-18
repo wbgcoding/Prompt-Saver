@@ -12,8 +12,8 @@
        tray_window_activate) -- this file only draws rows and handles keyboard,
        mouse and focus; it never decides what an entry copies. -->
   <div id="card" class="tray-menu-card">
-    <input id="tray-search" class="tray-menu-search" type="text" autocomplete="off" spellcheck="false" hidden />
-    <div id="rows"></div>
+    <input id="tray-search" class="tray-menu-search" type="text" autocomplete="off" spellcheck="false" aria-controls="rows" aria-autocomplete="list" hidden />
+    <div id="rows" role="listbox"></div>
   </div>
 
   <div id="live" class="sr-only" role="status" aria-live="polite"></div>

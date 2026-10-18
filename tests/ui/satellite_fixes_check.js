@@ -433,6 +433,37 @@ section(() => {
   check(badge && badge.attrs["aria-hidden"] === "true" && ok && ok.attrs["aria-hidden"] === "true", "the rotate badge and the copied hint stay out of the accessible name");
 });
 
+section(() => {
+  const src = read("tray.js");
+  const mkEl = () => {
+    const e = { attrs: {}, children: [], dataset: {}, style: {}, className: "", textContent: "" };
+    e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
+    e.removeAttribute = (k) => { delete e.attrs[k]; };
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.addEventListener = () => {};
+    e.scrollIntoView = () => {};
+    const set = new Set();
+    e.classList = { add: (c) => set.add(c), remove: (c) => set.delete(c) };
+    Object.defineProperty(e, "innerHTML", { get: () => "", set: () => { e.children = []; } });
+    return e;
+  };
+  const rowsEl = mkEl();
+  const searchEl = mkEl();
+  const sb = { rowsEl, searchEl, rows: [], active: -1, document: { createElement: mkEl }, activate() {}, iconEl: () => null, actionIcon: () => null };
+  vm.createContext(sb);
+  vm.runInContext([extractBlock(src, "function setActive("), extractBlock(src, "function addRow("), extractBlock(src, "function addHeader("), extractBlock(src, "function addSeparator("), extractBlock(src, "function renderRows("), "this.renderRows = renderRows; this.setActive = setActive;"].join(String.fromCharCode(10)), sb);
+  sb.renderRows([], [{ title: "Favs", entries: [{ id: "p1", label: "One" }, { id: "p2", label: "Two" }] }], "Show", "Quit");
+  const opts = rowsEl.children.filter((c) => c.attrs.role === "option");
+  check(opts.length === 4 && opts.every((o) => o.id), "tray rows are options with an id");
+  check(rowsEl.children.filter((c) => c.className === "tray-menu-head" || c.className === "tray-menu-sep").every((c) => c.attrs.role === "presentation"), "headers and separators are presentational");
+  check(opts[0].attrs["aria-selected"] === "true" && searchEl.attrs["aria-activedescendant"] === opts[0].id, "the first row is referenced by the search field");
+  sb.setActive(2);
+  check(opts[0].attrs["aria-selected"] === "false" && opts[2].attrs["aria-selected"] === "true" && searchEl.attrs["aria-activedescendant"] === opts[2].id, "moving the highlight updates aria-activedescendant");
+  const html = read("tray.html");
+  check(/id="rows"[^>]*role="listbox"/.test(html) && /id="tray-search"[^>]*aria-controls="rows"/.test(html), "the tray markup has the listbox and its controlling field");
+  check(/searchEl\.setAttribute\("aria-label"/.test(src), "the tray search field gets an accessible name");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
