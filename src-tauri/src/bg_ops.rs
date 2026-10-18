@@ -115,15 +115,17 @@ pub(crate) fn bg_ops_running_count() -> usize {
 }
 
 pub(crate) fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
-    state_db
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .settings
-        .ui_values
-        .get("bgDoneKeepMin")
-        .copied()
-        .unwrap_or(10.0)
-        .max(0.0)
+    bg_keep_min_of(&state_db.lock().unwrap_or_else(|e| e.into_inner()).settings)
+}
+
+fn bg_keep_min_of(settings: &Settings) -> f64 {
+    settings.ui_values.get("bgDoneKeepMin").copied().unwrap_or(10.0).max(0.0)
+}
+
+// Both settings a progress tick reads, taken under ONE store lock: a tick used to lock twice,
+// waiting twice behind a long holder.
+pub(crate) fn bg_tick_settings(settings: &Settings) -> (f64, bool) {
+    (bg_keep_min_of(settings), settings.ui_flags.get("taskbarProgress").copied().unwrap_or(true))
 }
 
 // The entry a progress or start report writes to. The ids are fixed ("backup", "import"),
@@ -341,24 +343,15 @@ pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: Stri
 // command-invocation round trip required. `id` is this job's own unique
 // registry key; `kind` is the feature grouping shown to the frontend.
 pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
-    let keep_min = app.try_state::<Db>().map(|s| bg_done_keep_min(&s)).unwrap_or(10.0);
+    let (keep_min, enabled) = app
+        .try_state::<Db>()
+        .map(|s| bg_tick_settings(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+        .unwrap_or((10.0, true));
     let (agg_state, agg_value) = record_bg_op(id, kind, state, value, target, keep_min);
     // One broadcast point for every state change (running tick, done, error): the header
     // popover listens instead of polling, so a job finishing shows even when the window that
     // started it (the video editor, say) is the one whose own promise resolves.
     let _ = app.emit("bg-ops-changed", ());
-    let enabled = app
-        .try_state::<Db>()
-        .map(|s| {
-            s.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .ui_flags
-                .get("taskbarProgress")
-                .copied()
-                .unwrap_or(true)
-        })
-        .unwrap_or(true);
     apply_taskbar_aggregate(app, enabled, agg_state, agg_value);
 }
 
