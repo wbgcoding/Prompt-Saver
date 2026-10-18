@@ -1344,7 +1344,7 @@ pub(crate) struct VideoEditorSource {
 // this one.
 pub(crate) static VE_PENDING_REQUEST: Mutex<Option<(String, String, String)>> = Mutex::new(None);
 static VE_LOAD_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
-static VE_LOAD_ACKS: Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<String>>>> = Mutex::new(None);
+pub(crate) static VE_LOAD_ACKS: Mutex<Option<HashMap<u64, std::sync::mpsc::Sender<String>>>> = Mutex::new(None);
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum EditorLoadDecision {
@@ -1381,6 +1381,18 @@ pub(crate) fn video_editor_load_ack(request_id: u64, state: String) {
     if let Some(tx) = VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&request_id)) {
         let _ = tx.send(state);
     }
+}
+
+// The editor window is gone (closed while an unsaved-edits question was open, or crashed):
+// every caller still waiting for its answer gets "refused" at once instead of hanging for the
+// long window, and the offered-but-never-taken source is dropped so a freshly opened editor
+// boots on the newly requested file, not the stale offer.
+pub(crate) fn refuse_pending_editor_requests() {
+    let waiting = VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).take();
+    for tx in waiting.into_iter().flat_map(|m| m.into_values()) {
+        let _ = tx.send("refused".to_string());
+    }
+    *VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 // Opens the editor for one recording; a second call re-targets the open window instead of
@@ -1468,6 +1480,11 @@ pub(crate) async fn open_video_editor(
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    win.on_window_event(|event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            refuse_pending_editor_requests();
+        }
+    });
     set_capture_exclusion(&win, excluded);
     let geom = centered_on_primary(&win, VIDEO_WIN_W, VIDEO_WIN_H);
     let _ = win.set_position(PhysicalPosition::new(geom.x, geom.y));

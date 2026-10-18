@@ -197,3 +197,20 @@ fn a_media_backfill_only_applies_to_the_entry_state_it_measured() {
     let src = include_str!("../video_editor.rs");
     assert!(src.contains("media_backfill_target(p).as_deref() == Some(media_path.as_str())"));
 }
+
+#[test]
+fn closing_the_editor_refuses_every_waiting_open_request() {
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    crate::video_editor::VE_LOAD_ACKS.lock().unwrap().get_or_insert_with(std::collections::HashMap::new).insert(u64::MAX - 7, tx);
+    *crate::video_editor::VE_PENDING_REQUEST.lock().unwrap() = Some(("a".into(), "b".into(), "c".into()));
+    // The caller has been told "asking": it waits the long window for the person's answer.
+    let waiter = std::thread::spawn(move || crate::video_editor::wait_for_editor_decision(&rx, std::time::Duration::from_secs(5), std::time::Duration::from_secs(3600)));
+    crate::video_editor::VE_LOAD_ACKS.lock().unwrap().as_ref().unwrap()[&(u64::MAX - 7)].send("asking".into()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    crate::video_editor::refuse_pending_editor_requests();
+    assert_eq!(waiter.join().unwrap(), crate::video_editor::EditorLoadDecision::Refused);
+    assert!(crate::video_editor::VE_PENDING_REQUEST.lock().unwrap().is_none(), "a stale offer must not outlive its window");
+    let src = include_str!("../video_editor.rs");
+    let hook = src.find("tauri::WindowEvent::Destroyed").expect("the editor window must watch its own destruction");
+    assert!(src[hook..hook + 200].contains("refuse_pending_editor_requests"));
+}
