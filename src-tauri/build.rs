@@ -6,8 +6,58 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    tauri_build::build();
+    // Every app command becomes an `allow-<name>` / `deny-<name>` permission, so each
+    // window's capability file can grant exactly the commands its page calls.
+    let commands: &'static [&'static str] = Box::leak(handler_commands().into_boxed_slice());
+    let attributes = tauri_build::Attributes::new()
+        .app_manifest(tauri_build::AppManifest::new().commands(commands));
+    if let Err(e) = tauri_build::try_build(attributes) {
+        panic!("tauri build setup failed: {e:#}");
+    }
     generate_third_party_notices();
+}
+
+// The command names from the `generate_handler!` block of src/lib.rs, in list order. The
+// last `::` segment of each path is the command name. A missing block or an
+// entry that is not a plain path stops the build instead of leaving a command ungated.
+fn handler_commands() -> Vec<&'static str> {
+    println!("cargo:rerun-if-changed=src/lib.rs");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is not set");
+    let path = Path::new(&manifest_dir).join("src").join("lib.rs");
+    let raw = fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display()));
+    let src: String = raw
+        .lines()
+        .map(|l| l.split("//").next().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let start = src
+        .find("generate_handler![")
+        .expect("src/lib.rs has no generate_handler! block");
+    let open = start + "generate_handler!".len();
+    let close = open + src[open..].find(']').expect("generate_handler! block is not closed");
+    let mut names: Vec<&'static str> = Vec::new();
+    for entry in src[open + 1..close].split(',') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        let plain = entry
+            .split("::")
+            .all(|seg| !seg.is_empty() && seg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+        if !plain {
+            panic!("generate_handler! entry `{entry}` is not a plain path");
+        }
+        let name: &'static str = Box::leak(entry.rsplit("::").next().unwrap_or(entry).to_string().into_boxed_str());
+        if names.contains(&name) {
+            panic!("command `{name}` is listed twice in generate_handler!");
+        }
+        names.push(name);
+    }
+    if names.is_empty() {
+        panic!("generate_handler! lists no commands");
+    }
+    names
 }
 
 #[derive(Deserialize)]
