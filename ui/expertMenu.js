@@ -1518,6 +1518,7 @@ export function toggleExpertGroup(title, sec, fill) {
   invoke("set_ui_text", { key: "expertCollapsed", value }).catch(() => {});
   if (!sec) { renderExpert(); return; }
   sec.classList.toggle("collapsed", collapsed);
+  sec.querySelector(".expert-group-title-btn")?.setAttribute("aria-expanded", String(!collapsed));
   if (!collapsed) fill?.(); // custom panels fill on first open
 }
 
@@ -1710,10 +1711,15 @@ export function renderExpert() {
       sec.className = "expert-group" + (isCollapsed ? " collapsed" : "");
       const head = document.createElement("div");
       head.className = "expert-group-title";
-      const titleSpan = document.createElement("span");
+      // A collapsible title is a real button so the keyboard can open and fold the group; its
+      // click bubbles to the header, which owns the one toggle listener.
+      const titleSpan = document.createElement(globalView ? "span" : "button");
       titleSpan.textContent = t(group.title);
       head.appendChild(titleSpan);
       if (!globalView) {
+        titleSpan.type = "button";
+        titleSpan.className = "expert-group-title-btn";
+        titleSpan.setAttribute("aria-expanded", String(!isCollapsed));
         head.classList.add("collapsible");
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }

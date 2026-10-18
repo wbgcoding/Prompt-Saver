@@ -2297,6 +2297,10 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .expert-group-title.collapsible .expert-group-title-right::after { content: "▾"; font-size: 15px; opacity: 0.7; }
 .expert-group.collapsed .expert-group-title.collapsible .expert-group-title-right::after { content: "▸"; }
 .expert-group-title.collapsible:hover { color: var(--fg); }
+.expert-group-title-btn {
+  padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  letter-spacing: inherit; text-transform: inherit; text-align: left; cursor: inherit;
+}
 .expert-group.collapsed > *:not(.expert-group-title) { display: none; }
 .expert-group-reset {
   display: flex;
@@ -2565,7 +2569,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .lib-type:focus-visible, .head-toggle:focus-visible,
 .expert-tab:focus-visible, .tile:focus-visible, .switch:focus-visible,
 .win-btn:focus-visible, .swatch:focus-visible, .toolbar-item:focus-visible,
-.color-swatch:focus-visible {
+.color-swatch:focus-visible, .expert-group-title-btn:focus-visible, .palette-swatch:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

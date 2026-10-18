@@ -693,6 +693,21 @@ section(() => {
   });
 });
 
+// 30. Expert group titles: a real button with aria-expanded that follows the fold state.
+section(() => {
+  const src = read("expertMenu.js");
+  check(/createElement\(globalView \? "span" : "button"\)/.test(src) && /setAttribute\("aria-expanded", String\(!isCollapsed\)\)/.test(src), "the collapsible group title is a button with aria-expanded");
+  const fn = extractBlock(src, "export function toggleExpertGroup(").replace("export ", "");
+  const attrs = {};
+  const set = new Set();
+  const sec = { classList: { toggle() {} }, querySelector: () => ({ setAttribute: (k, v) => { attrs[k] = v; } }) };
+  const sb = run(fn, { expertCollapsedSet: () => set, settings: {}, invoke: async () => {}, renderExpert() {} });
+  sb.toggleExpertGroup("g", sec);
+  check(attrs["aria-expanded"] === "false", "folding sets aria-expanded to false");
+  sb.toggleExpertGroup("g", sec);
+  check(attrs["aria-expanded"] === "true", "opening sets aria-expanded to true");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
