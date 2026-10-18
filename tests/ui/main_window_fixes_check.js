@@ -801,6 +801,14 @@ section(() => {
   check(areas.size >= 5 && !missing.length, "area badge labels missing for: " + missing.join(","));
 });
 
+// 36. A backup hit from settings search opens the dialog through the shared path and waits for every panel.
+section(() => {
+  const open = extractBlock(read("backups.js"), "export function openBackups(");
+  check(/renderStoragePanel/.test(open) && /renderRetentionPanel/.test(open) && /renderBackupPanel/.test(open) && /Promise\.all/.test(open), "openBackups returns the render of all three panels");
+  const search = extractBlock(read("settingsSearch.js"), "export async function openSettingsDirectoryEntry(");
+  check(/await openBackups\(\)/.test(search) && !/renderBackupPanel/.test(search), "settings search uses the shared backup open path");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

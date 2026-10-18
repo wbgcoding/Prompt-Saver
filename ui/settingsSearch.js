@@ -5,7 +5,7 @@ import { EXPERT_TIP_SET } from "./expertConfig.js";
 import { hideSettings } from "./settingsPanel.js";
 import EN from "./i18n/en.js";
 import { openStats } from "./management.js";
-import { renderBackupPanel } from "./backups.js";
+import { openBackups } from "./backups.js";
 import { showExpertPage } from "./expertMenu.js";
 
 // A search matches if the term is in the active language OR in English: English
@@ -100,8 +100,7 @@ export async function openSettingsDirectoryEntry(entry) {
     $("library-btn").click();
   } else if (entry.area === "backup") {
     hideSettings();
-    $("backup-modal").classList.remove("hidden");
-    await renderBackupPanel($("backup-panel"));
+    await openBackups();
   } else if (entry.area === "stats") {
     hideSettings();
     await openStats();

@@ -52,9 +52,12 @@ export async function saveBackupSetting(kind, key, value) {
 export let backupPwDraft = "";
 export function openBackups() {
   $("backup-modal").classList.remove("hidden");
-  renderStoragePanel($("storage-panel"));
-  renderRetentionPanel($("retention-panel"));
-  renderBackupPanel($("backup-panel"));
+  // The promise lets a caller (settings search) wait until every section is drawn.
+  return Promise.all([
+    renderStoragePanel($("storage-panel")),
+    renderRetentionPanel($("retention-panel")),
+    renderBackupPanel($("backup-panel")),
+  ]);
 }
 export function closeBackups() {
   $("backup-modal").classList.add("hidden");
