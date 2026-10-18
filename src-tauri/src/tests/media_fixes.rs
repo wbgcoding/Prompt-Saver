@@ -590,3 +590,32 @@ fn the_media_dialogs_wait_on_a_blocking_thread() {
         }
     }
 }
+
+#[test]
+fn an_ffmpeg_older_than_the_export_graph_syntax_is_skipped_on_path() {
+    assert_eq!(ffmpeg_major_version("ffmpeg version 7.1-essentials_build-www.gyan.dev Copyright (c) 2000-2024"), Some(7));
+    assert_eq!(ffmpeg_major_version("ffmpeg version n6.1.1 Copyright (c) 2000-2023"), Some(6));
+    assert_eq!(ffmpeg_major_version("ffmpeg version 9.0.1-essentials_build"), Some(9));
+    assert_eq!(ffmpeg_major_version("ffmpeg version N-113000-gabcdef Copyright"), None);
+    assert_eq!(ffmpeg_major_version("not an ffmpeg banner"), None);
+    assert_eq!(ffmpeg_major_version(""), None);
+
+    let root = std::env::temp_dir().join(format!("ps-pathff-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let (old, new) = (root.join("old"), root.join("new"));
+    fs::create_dir_all(&old).unwrap();
+    fs::create_dir_all(&new).unwrap();
+    fs::write(old.join("ffmpeg.exe"), b"x").unwrap();
+    fs::write(new.join("ffmpeg.exe"), b"x").unwrap();
+    let paths = std::env::join_paths([&old, &new]).unwrap();
+    let only_new = |p: &Path| p.starts_with(&new);
+    assert_eq!(first_usable_on_path(&paths, "ffmpeg.exe", only_new), Some(new.join("ffmpeg.exe")));
+    assert_eq!(first_usable_on_path(&paths, "ffmpeg.exe", |_| false), None);
+    assert_eq!(first_usable_on_path(&paths, "missing.exe", |_| true), None);
+    let _ = fs::remove_dir_all(&root);
+
+    // The real lookup applies that check to ffmpeg only; ffprobe has no version floor.
+    let src = source!("../ffmpeg.rs");
+    let finder = src.split("pub(crate) fn find_media_tool").nth(1).unwrap().split("pub(crate) fn ffmpeg_search_path").next().unwrap();
+    assert!(finder.contains("path_ffmpeg_is_current"));
+}

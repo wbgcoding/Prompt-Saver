@@ -67,19 +67,57 @@ pub(crate) fn media_tool_dirs(exe_dir: Option<PathBuf>, local_dir: Option<PathBu
     exe_dir.into_iter().chain(local_dir).collect()
 }
 
+// The export graph is passed as a script file (`-/filter_complex`), which ffmpeg reads from 7.0 on.
+pub(crate) const FFMPEG_MIN_MAJOR: u32 = 7;
+
+// The major version in an `ffmpeg -version` banner ("ffmpeg version 7.1-essentials_build",
+// "ffmpeg version n6.1.1"). A development build named by revision has none.
+pub(crate) fn ffmpeg_major_version(banner: &str) -> Option<u32> {
+    let rest = banner.lines().next()?.trim().strip_prefix("ffmpeg version ")?;
+    let token = rest.split_whitespace().next()?;
+    let token = token.strip_prefix(['n', 'N']).unwrap_or(token);
+    let digits: String = token.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
+// Whether the ffmpeg at `path` is new enough, asked once per path and remembered: a short
+// `-version` run, so a broken or hanging binary simply counts as unusable.
+fn path_ffmpeg_is_current(path: &Path) -> bool {
+    use std::os::windows::process::CommandExt;
+    static VERDICTS: Mutex<Vec<(PathBuf, bool)>> = Mutex::new(Vec::new());
+    if let Some((_, ok)) = VERDICTS.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(p, _)| p == path) {
+        return *ok;
+    }
+    let mut cmd = std::process::Command::new(path);
+    cmd.arg("-version");
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    let ok = output_in_job(&mut cmd, Duration::from_secs(5))
+        .ok()
+        .and_then(|out| ffmpeg_major_version(&String::from_utf8_lossy(&out.stdout)))
+        .is_some_and(|major| major >= FFMPEG_MIN_MAJOR);
+    VERDICTS.lock().unwrap_or_else(|e| e.into_inner()).push((path.to_path_buf(), ok));
+    ok
+}
+
+// The first `name` on a PATH-style list that exists and passes `usable`.
+pub(crate) fn first_usable_on_path(paths: &std::ffi::OsStr, name: &str, usable: impl Fn(&Path) -> bool) -> Option<PathBuf> {
+    std::env::split_paths(paths).map(|dir| dir.join(name)).find(|p| p.is_file() && usable(p))
+}
+
 // Discovery order: next to the exe, then the per-user app folder, then PATH; first hit wins.
 // Never touches the network (only `download_ffmpeg` does, after explicit user consent). The
 // installer's bundled copy lands next to the exe, so an installed build never reaches the
-// "not found" case.
+// "not found" case. An ffmpeg found only on PATH must be version 7 or newer; an older one is
+// skipped like a missing one (the app-owned copies are the pinned build).
 pub(crate) fn find_media_tool(name: &str) -> Option<PathBuf> {
     let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
     let dirs = media_tool_dirs(exe_dir, local_app_dir());
     if let Some(p) = dirs.iter().map(|d| d.join(name)).find(|p| p.is_file()) {
         return Some(p);
     }
-    std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths).map(|dir| dir.join(name)).find(|p| p.is_file())
-    })
+    let needs_current = name.eq_ignore_ascii_case("ffmpeg.exe");
+    std::env::var_os("PATH").and_then(|paths| first_usable_on_path(&paths, name, |p| !needs_current || path_ffmpeg_is_current(p)))
 }
 pub(crate) fn ffmpeg_search_path(_app: &AppHandle) -> Option<PathBuf> {
     find_media_tool("ffmpeg.exe")
