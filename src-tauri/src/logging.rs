@@ -415,15 +415,14 @@ pub(crate) fn error_log_enabled(settings: &Settings) -> bool {
 // so a future call site cannot leak one by accident.
 pub(crate) const ERROR_LOG_TEXT_MAX_CHARS: usize = 160;
 
-// The crash-log line for a panic. A std panic message can quote the data it choked on (a slice
-// on a char boundary quotes the string, an unwrap prints the error's Debug), so only the
-// location and the message up to its first quote or backtick are kept, capped in length.
+// The crash-log line for a panic. A panic message can carry user data, quoted or not (a slice on
+// a char boundary quotes the string, an unwrap prints the error's Debug, a formatted message
+// holds whatever was interpolated), so only the location and the message length are kept.
 pub(crate) fn panic_log_line(location: Option<(&str, u32, u32)>, payload: &str) -> String {
-    let cut = payload.find(['`', '\'', '"']).unwrap_or(payload.len());
-    let msg: String = payload[..cut].trim_end().chars().take(80).collect();
+    let len = payload.chars().count();
     match location {
-        Some((file, line, col)) => scrub_log_line(&format!("panicked at {file}:{line}:{col}: {msg}")),
-        None => scrub_log_line(&format!("panicked: {msg}")),
+        Some((file, line, col)) => scrub_log_line(&format!("panicked at {file}:{line}:{col} (message of {len} chars)")),
+        None => format!("panicked (message of {len} chars)"),
     }
 }
 

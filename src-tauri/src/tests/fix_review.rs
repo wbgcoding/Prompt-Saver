@@ -212,3 +212,13 @@ fn the_skip_list_accepts_a_pre_release_tag() {
         assert!(!add_skipped_version(&mut list, bad.to_string()), "{bad:?} is not version-shaped");
     }
 }
+
+#[test]
+fn a_panic_log_line_keeps_only_the_location_and_the_message_length() {
+    let msg = "no such prompt for hunter2 and friends";
+    let line = panic_log_line(Some(("src/x.rs", 12, 5)), msg);
+    assert!(!line.contains("hunter2") && !line.contains("no such"), "unquoted data stays out too: {line}");
+    assert!(line.contains("x.rs:12:5") && line.contains(&msg.chars().count().to_string()), "{line}");
+    let none = panic_log_line(None, msg);
+    assert!(!none.contains("hunter2") && none.contains(&msg.chars().count().to_string()), "{none}");
+}
