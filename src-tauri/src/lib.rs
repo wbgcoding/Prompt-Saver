@@ -408,7 +408,8 @@ pub fn run() {
             let _ = remote::start(handle.clone());
             // A promptsaver:// link that started this process (the app was not running) waits in
             // PendingLaunchUrl until the main window's script asks for it; see run_pending_launch_url.
-            if let Some(url) = std::env::args().skip(1).find(|a| a.starts_with("promptsaver://")) {
+            let launch_args: Vec<String> = std::env::args().skip(1).collect();
+            if let Some(url) = remote::find_scheme_arg(&launch_args).map(str::to_string) {
                 if let Ok(mut g) = handle.state::<remote::PendingLaunchUrl>().0.lock() {
                     *g = Some(url);
                 }

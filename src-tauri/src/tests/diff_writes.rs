@@ -1143,3 +1143,10 @@ fn every_crate_version_is_pinned_exactly() {
     }
     assert!(loose.is_empty(), "crates must be pinned with =x.y.z: {loose:?}");
 }
+
+#[test]
+fn both_launch_routes_find_the_link_through_one_helper() {
+    let lib = include_str!("../lib.rs");
+    assert!(!lib.contains("starts_with(\"promptsaver://\")"), "the scheme match must live in remote::find_scheme_arg only");
+    assert_eq!(lib.matches("remote::find_scheme_arg(").count(), 2);
+}
