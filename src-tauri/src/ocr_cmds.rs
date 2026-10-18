@@ -139,7 +139,11 @@ pub(crate) struct VoiceHandle {
 }
 // Second field: claimed while a voice_start call is between its busy check and the real
 // VoiceHandle landing in the first field (see voice_start).
-pub(crate) struct VoiceState(pub(crate) Mutex<Option<VoiceHandle>>, pub(crate) std::sync::atomic::AtomicBool);
+pub(crate) struct VoiceState(
+    pub(crate) Mutex<Option<VoiceHandle>>,
+    pub(crate) std::sync::atomic::AtomicBool,
+    pub(crate) std::sync::atomic::AtomicBool,
+);
 
 pub(crate) const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 // Encoded length of a data URL handed over IPC; a 4K PNG from the screenshot editor is

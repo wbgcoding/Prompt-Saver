@@ -70,6 +70,7 @@ pub(crate) async fn voice_start(
         if vstate.1.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return Err("voice-busy".to_string());
         }
+        vstate.2.store(false, std::sync::atomic::Ordering::SeqCst);
     }
     #[cfg(windows)]
     {
@@ -83,6 +84,12 @@ pub(crate) async fn voice_start(
                 return Err(e);
             }
         };
+        // The window closed to the tray while prepare() was awaited: voice_shutdown found no live
+        // session to signal and left this flag instead. Never open the microphone for it.
+        if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+            return Err("voice-cancelled".to_string());
+        }
         // Never opens the microphone without consent: checked before the session thread (and Create())
         // starts. A later 0x80045509 from Windows itself (declined at the OS level after voiceOnlineOk
         // was set) is handled by the session as voice-privacy-off.
@@ -198,5 +205,14 @@ pub(crate) fn voice_shutdown(app: &AppHandle) {
                 let _ = h.stop.send("shutdown");
             }
         }
+        mark_pending_start_cancelled(&vs.1, &vs.2);
+    }
+}
+
+// A start that is still preparing (claim bit set, no handle stored yet) cannot be signalled:
+// leave it a cancel flag that voice_start checks before it spawns the session.
+pub(crate) fn mark_pending_start_cancelled(claiming: &std::sync::atomic::AtomicBool, cancel: &std::sync::atomic::AtomicBool) {
+    if claiming.load(std::sync::atomic::Ordering::SeqCst) {
+        cancel.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 }
