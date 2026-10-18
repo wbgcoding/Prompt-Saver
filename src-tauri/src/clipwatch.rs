@@ -496,26 +496,24 @@ fn handle_render_format() {
             let eligible = store.prompts.iter().find(|p| p.id == session.id)
                 .filter(|p| super::auto_eligible(p, &store.settings))
                 .map(super::rotation_core);
-            match eligible {
-                Some(p) => {
-                    // A confidential entry is stored encrypted: decrypt it first, and
-                    // end the session when the vault locked meanwhile, so ciphertext
-                    // never becomes the next paste.
-                    let key = super::secret_session_key(super::secret_timeout_min(&store.settings));
-                    if let Some(plain) = super::revealed_prompt(&p, key) {
-                        let (idx, _, raw) = super::rotation_next(&plain, &store.settings);
-                        let next = session.resolved.get(idx).cloned().unwrap_or(raw);
-                        super::rotation_advance(&p, &mut store.settings);
-                        // Once per paste: collected, never a disk write per Ctrl+V.
-                        super::save_settings_soon();
-                        super::emit_rotation_changed(&app, &p, &store.settings);
-                        session.text = next;
-                        session.last_paste = now;
-                        session.uncounted_rearms = 0;
-                        rearm = true;
-                    }
+            // A prompt gone or turned off mid-session ends the session quietly.
+            if let Some(p) = eligible {
+                // A confidential entry is stored encrypted: decrypt it first, and
+                // end the session when the vault locked meanwhile, so ciphertext
+                // never becomes the next paste.
+                let key = super::secret_session_key(super::secret_timeout_min(&store.settings));
+                if let Some(plain) = super::revealed_prompt(&p, key) {
+                    let (idx, _, raw) = super::rotation_next(&plain, &store.settings);
+                    let next = session.resolved.get(idx).cloned().unwrap_or(raw);
+                    super::rotation_advance(&p, &mut store.settings);
+                    // Once per paste: collected, never a disk write per Ctrl+V.
+                    super::save_settings_soon();
+                    super::emit_rotation_changed(&app, &p, &store.settings);
+                    session.text = next;
+                    session.last_paste = now;
+                    session.uncounted_rearms = 0;
+                    rearm = true;
                 }
-                None => {} // prompt gone or turned off mid-session: end quietly
             }
         } else if !timed_out {
             session.uncounted_rearms += 1;
