@@ -983,20 +983,32 @@ pub(crate) async fn backup_contents(app: AppHandle, name: String) -> Result<Back
         return Err("missing".into());
     };
     let dir = data_dir(&app);
-    let staged = stage_and_validate_backup(&backup_db, &dir)?;
-    let result = Connection::open(&staged)
-        .map(|conn| backup_contents_from(&conn, &folder))
-        .map_err(|e| e.to_string());
-    let _ = fs::remove_file(&staged);
-    result
+    // Off the async runtime: inflating the snapshot (up to its size cap) blocks.
+    tauri::async_runtime::spawn_blocking(move || {
+        let staged = stage_and_validate_backup(&backup_db, &dir)?;
+        let result = Connection::open(&staged)
+            .map(|conn| backup_contents_from(&conn, &folder))
+            .map_err(|e| e.to_string());
+        let _ = fs::remove_file(&staged);
+        result
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // Restore: snapshot the current store first (safety), then either swap the whole data.db
 // (scope "all") or merge just the requested tables in place (scope "data"/"settings"). Either
 // way the app relaunches after, so nothing can half-apply.
 #[tauri::command]
-pub(crate) async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
-    restore_backup_core(app.clone(), state, name, keep, scope)?;
+pub(crate) async fn restore_backup(app: AppHandle, name: String, keep: usize, scope: String) -> Result<(), String> {
+    // Off the async runtime: the store-lock wait, the safety snapshot and the inflate all block.
+    let worker = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = worker.state::<Db>();
+        restore_backup_core(worker.clone(), state, name, keep, scope)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     app.restart();
 }
 

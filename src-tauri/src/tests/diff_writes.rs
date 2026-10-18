@@ -1049,3 +1049,20 @@ fn a_panic_log_line_never_quotes_the_data_the_panic_choked_on() {
     assert!(!panic_log_line(None, &unwrap).contains("confidential"));
     assert!(panic_log_line(None, &"a".repeat(500)).len() < 120);
 }
+
+// The text of the first fn called `name` (from its signature to the next top-level item), for
+// source assertions about which thread a command runs its blocking work on.
+fn fn_text<'a>(src: &'a str, name: &str) -> &'a str {
+    let at = src.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("fn {name} not found"));
+    let rest = &src[at..];
+    let end = rest[3..].find("\n}\n").map(|i| i + 3).unwrap_or(rest.len());
+    &rest[..end]
+}
+
+#[test]
+fn heavy_backup_commands_run_off_the_async_runtime() {
+    let src = include_str!("../backups.rs");
+    for name in ["backup_contents", "restore_backup"] {
+        assert!(fn_text(src, name).contains("spawn_blocking"), "{name} must not inflate or lock on an async worker");
+    }
+}
