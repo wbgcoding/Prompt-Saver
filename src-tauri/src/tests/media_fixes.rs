@@ -80,3 +80,16 @@ fn native_helpers_live_in_the_per_user_app_folder() {
         assert!(!p.starts_with(std::env::temp_dir()), "the shared temp folder is not trusted for a loaded DLL");
     }
 }
+
+#[test]
+fn media_tools_are_searched_only_in_app_owned_folders() {
+    let exe = PathBuf::from("C:/app");
+    let local = PathBuf::from("C:/local/app");
+    assert_eq!(media_tool_dirs(Some(exe.clone()), Some(local.clone())), vec![exe.clone(), local.clone()]);
+    assert_eq!(media_tool_dirs(None, Some(local.clone())), vec![local]);
+    assert!(media_tool_dirs(None, None).is_empty());
+    // The data folder is not a parameter any more: a planted copy there cannot be found.
+    let src = include_str!("../ffmpeg.rs");
+    let discovery = src.split("pub(crate) fn find_media_tool").nth(1).unwrap().split("pub(crate) fn ffmpeg_search_path").next().unwrap();
+    assert!(!discovery.contains("data_dir"));
+}

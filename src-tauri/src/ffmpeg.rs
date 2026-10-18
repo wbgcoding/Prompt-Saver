@@ -60,35 +60,35 @@ pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-// Discovery order: next to the exe, then the app's data folder, then PATH; first hit wins.
+// The app-owned folders a media tool may live in, in search order: next to the exe, then the
+// per-user app folder. Never the data folder: that one can be a shared or network folder, so
+// anyone able to write there could plant an executable that runs as the local user.
+pub(crate) fn media_tool_dirs(exe_dir: Option<PathBuf>, local_dir: Option<PathBuf>) -> Vec<PathBuf> {
+    exe_dir.into_iter().chain(local_dir).collect()
+}
+
+// Discovery order: next to the exe, then the per-user app folder, then PATH; first hit wins.
 // Never touches the network (only `download_ffmpeg` does, after explicit user consent). The
 // installer's bundled copy lands next to the exe, so an installed build never reaches the
 // "not found" case.
-pub(crate) fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join(name);
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-    }
-    let p = data_dir(app).join(name);
-    if p.is_file() {
+pub(crate) fn find_media_tool(name: &str) -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
+    let dirs = media_tool_dirs(exe_dir, local_app_dir());
+    if let Some(p) = dirs.iter().map(|d| d.join(name)).find(|p| p.is_file()) {
         return Some(p);
     }
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths).map(|dir| dir.join(name)).find(|p| p.is_file())
     })
 }
-pub(crate) fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
-    find_media_tool(app, "ffmpeg.exe")
+pub(crate) fn ffmpeg_search_path(_app: &AppHandle) -> Option<PathBuf> {
+    find_media_tool("ffmpeg.exe")
 }
 // Alongside ffmpeg.exe once download_ffmpeg_blocking has run, with the same discovery order.
 // An install from before ffprobe support has only ffmpeg.exe; probing and editor features
 // degrade to "ffmpeg-missing" until the user re-runs the idempotent download.
-pub(crate) fn ffprobe_search_path(app: &AppHandle) -> Option<PathBuf> {
-    find_media_tool(app, "ffprobe.exe")
+pub(crate) fn ffprobe_search_path(_app: &AppHandle) -> Option<PathBuf> {
+    find_media_tool("ffprobe.exe")
 }
 
 // Reports where ffmpeg was found (if anywhere) so the frontend knows whether to offer the
@@ -104,18 +104,19 @@ pub(crate) fn cancel_ffmpeg_download() {
 }
 
 // Where a downloaded ffmpeg.exe is written: beside the exe when that folder is writable (the
-// portable case), otherwise the app's data folder. Never PATH, a system directory or elevated.
-pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
+// portable case), otherwise the per-user app folder. Never the data folder, PATH, a system
+// directory or elevated.
+pub(crate) fn ffmpeg_install_dir() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let probe = dir.join(format!(".wtest-{}", std::process::id()));
             if fs::write(&probe, b"").is_ok() {
                 let _ = fs::remove_file(&probe);
-                return dir.to_path_buf();
+                return Some(dir.to_path_buf());
             }
         }
     }
-    data_dir(app)
+    local_app_dir()
 }
 
 // Download, verify, extract and stage ffmpeg.exe. The frontend must already have obtained
@@ -217,7 +218,7 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
     );
     push_bg_op(app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);
     verify_ffmpeg_zip(&bytes)?;
-    let dir = ffmpeg_install_dir(app);
+    let dir = ffmpeg_install_dir().ok_or_else(|| "target dir: no per-user folder".to_string())?;
     fs::create_dir_all(&dir).map_err(|e| format!("target dir: {}", e))?;
     install_ffmpeg_from_zip(&bytes, &dir)
 }
