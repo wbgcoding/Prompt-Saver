@@ -1215,6 +1215,8 @@ export async function startFileFromClipboard() {
   });
 }
 export function closeModal() {
+  // A save in flight still reads modalState after its awaits: a close request waits for it.
+  if (modalSaving) return;
   if (voiceState !== "idle" && voiceTargetEl === modal.text) stopVoice(); // its field is about to disappear
   closeColorPop();
   closeTagSuggest();
@@ -1240,6 +1242,7 @@ export function closeModal() {
 // Ask before dismissing the modal via the background. A new save dialog (text,
 // image, file, screenshot) always holds unsaved work; an edit only when changed.
 export async function confirmDiscardIfDirty() {
+  if (modalSaving) return false; // Escape, X, cancel and the backdrop are ignored while the save runs
   if (!flag("confirmDiscard")) return true;
   const isNew = modalState && modalState.mode !== "edit";
   if (!isNew && modalSnapshot() === modalInitial) return true;

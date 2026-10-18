@@ -441,6 +441,22 @@ section(() => {
   check(/flag\("dragDrop"\) \|\| dropTargetsField\(e\)/.test(ed), "the window drop handler asks dropTargetsField");
 });
 
+// 18. U7: a close request is ignored while a save is in flight.
+section(() => {
+  const ed = read("editor.js");
+  const mk = (saving) => run(
+    `let modalSaving = ${saving};\nvar confirmAsked = 0;\nfunction flag() { return true; }\nconst modalState = { mode: "create" };\nfunction modalSnapshot() { return "x"; }\nlet modalInitial = "";\nconst confirmDialog = async () => { confirmAsked++; return true; };\nfunction t(k) { return k; }\n${extractBlock(ed, "export async function confirmDiscardIfDirty(").replace("export ", "")}`,
+    {},
+  );
+  const sb = mk(true);
+  later(async () => {
+    check((await sb.confirmDiscardIfDirty()) === false && sb.confirmAsked === 0, "no discard prompt and no close while a save is in flight");
+    const idle = mk(false);
+    check((await idle.confirmDiscardIfDirty()) === true, "an idle editor still asks and closes");
+  });
+  check(/export function closeModal\(\) \{\n  \/\/[^\n]*\n  if \(modalSaving\) return;/.test(ed), "closeModal waits for the save in flight");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
