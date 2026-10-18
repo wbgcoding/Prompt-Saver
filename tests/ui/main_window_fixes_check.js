@@ -724,6 +724,18 @@ section(() => {
   });
 });
 
+// 32. Every dialog overlay is named: aria-labelledby points at an existing id, or an aria label key is set.
+section(() => {
+  const html = read("index.html");
+  const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+  const dialogs = [...html.matchAll(/<div id="([^"]+)"[^>]*role="dialog"[^>]*>/g)];
+  const bad = dialogs.filter((m) => {
+    const ref = /aria-labelledby="([^"]+)"/.exec(m[0]);
+    return ref ? !ids.has(ref[1]) : !/data-i18n-aria=|aria-label=/.test(m[0]);
+  }).map((m) => m[1]);
+  check(dialogs.length >= 28 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
