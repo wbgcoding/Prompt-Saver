@@ -207,9 +207,13 @@ pub(crate) async fn get_clipboard_file_path() -> Option<String> {
 #[tauri::command]
 pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
-    let result = file_dialog_for(&app, &label)
-        .pick_file()
-        .map(|p| p.to_string_lossy().to_string());
+    // The dialog is modal: it waits on a blocking thread, not on an async worker.
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&app, &label).pick_file().map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .ok()
+    .flatten();
     let _ = win.set_focus();
     result
 }
@@ -220,13 +224,18 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
 #[tauri::command]
 pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
-    let result = file_dialog_for(&app, &label)
-        .add_filter(
-            "Images and videos",
-            &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
-        )
-        .pick_file()
-        .map(|p| p.to_string_lossy().to_string());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&app, &label)
+            .add_filter(
+                "Images and videos",
+                &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
+            )
+            .pick_file()
+            .map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .ok()
+    .flatten();
     let _ = win.set_focus();
     result
 }

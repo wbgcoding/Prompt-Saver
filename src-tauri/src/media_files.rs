@@ -533,7 +533,14 @@ pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win:
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
-    let result = file_dialog_for(&app, win.label()).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file();
+    // The dialog is modal: it waits on a blocking thread, not on an async worker.
+    let dialog_app = app.clone();
+    let dialog_label = win.label().to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&dialog_app, &dialog_label).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let _ = win.set_focus();
     match result {
         Some(p) => {
@@ -662,7 +669,8 @@ pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u
 // accepts.
 #[tauri::command]
 pub(crate) async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
-    let result = file_dialog_for(&app, win.label()).pick_folder();
+    let label = win.label().to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || file_dialog_for(&app, &label).pick_folder()).await.ok().flatten();
     let _ = win.set_focus();
     if let Some(dir) = &result {
         // remember_export_dest_dir authorizes exporting into this folder right away

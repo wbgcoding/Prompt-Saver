@@ -1380,11 +1380,18 @@ pub(crate) async fn save_screenshot_as(
         Some(n) if !n.trim().is_empty() => format!("{}.{}", n.trim(), ext),
         _ => format!("Screenshot-{}.{}", local_stamp(), ext),
     };
-    let mut dlg = file_dialog_for(&app, win.label()).add_filter(ext.to_uppercase(), &[ext]).set_file_name(&name);
-    if let Some(dir) = default_dir.filter(|d| !d.trim().is_empty()) {
-        dlg = dlg.set_directory(dir);
-    }
-    let picked = dlg.save_file();
+    let dialog_label = win.label().to_string();
+    let dir = default_dir.filter(|d| !d.trim().is_empty());
+    // The dialog is modal: it waits on a blocking thread, not on an async worker.
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let mut dlg = file_dialog_for(&app, &dialog_label).add_filter(ext.to_uppercase(), &[ext]).set_file_name(&name);
+        if let Some(dir) = dir {
+            dlg = dlg.set_directory(dir);
+        }
+        dlg.save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let _ = win.set_focus();
     match picked {
         Some(p) => {
@@ -1554,10 +1561,12 @@ pub(crate) async fn pick_folder(app: AppHandle, win: tauri::Window, state: State
     let Some(title) = folder_picker_title(&purpose, lang) else {
         return Ok(None);
     };
-    let result = file_dialog_for(&app, win.label())
-        .set_title(title)
-        .pick_folder()
-        .map(|p| p.to_string_lossy().to_string());
+    let label = win.label().to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog_for(&app, &label).set_title(title).pick_folder().map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let _ = win.set_focus();
     if let Some(dir) = &result {
         grant_picked_dir(Path::new(dir), &purpose);

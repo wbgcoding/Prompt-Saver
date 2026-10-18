@@ -562,3 +562,23 @@ fn batch_exports_with_one_target_name_never_overwrite_each_other() {
     assert_ne!(placed[0], placed[1]);
     let _ = fs::remove_dir_all(&dir);
 }
+
+// Structural fix, no red unit test: a modal dialog cannot be opened in a test.
+#[test]
+fn the_media_dialogs_wait_on_a_blocking_thread() {
+    for (name, src, anchors) in [
+        ("images", include_str!("../images.rs"), &["fn pick_file_path", "fn pick_media_file_path"][..]),
+        ("media_files", include_str!("../media_files.rs"), &["fn save_recording_as", "fn pick_export_folder"][..]),
+        ("snip", include_str!("../snip.rs"), &["fn save_screenshot_as", "fn pick_folder"][..]),
+    ] {
+        for anchor in anchors {
+            let at = src.find(anchor).unwrap_or_else(|| panic!("{name}: {anchor}"));
+            let body = &src[at..];
+            let end = body.find("
+}
+").unwrap();
+            let body = &body[..end];
+            assert!(body.contains("spawn_blocking"), "{name} {anchor} must open its dialog on a blocking thread");
+        }
+    }
+}
