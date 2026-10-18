@@ -1088,6 +1088,17 @@ section(() => {
   check(extractBlock(src, "export async function copyErrorLogAll(").includes("${e.origin}"), "the copied text keeps the origin");
 });
 
+// 61. Global search announces its keyboard cursor and is a labelled listbox.
+section(() => {
+  const src = read("globalSearch.js");
+  const html = read("index.html");
+  check(/id="gs-results"[^>]*role="listbox"/.test(html), "the result container is a listbox");
+  check(/id="gs-input"[^>]*aria-controls="gs-results"/.test(html), "the field controls the list");
+  check(/aria-labelledby="global-search-title"/.test(html), "the dialog is named by its title");
+  check((src.match(/setAttribute\("role", "option"\)/g) || []).length === 2, "both row kinds are options");
+  check(extractBlock(src, "export function gsSetActive(").includes('"aria-activedescendant"'), "the cursor row is the active descendant");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

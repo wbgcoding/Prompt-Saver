@@ -964,9 +964,9 @@
             </svg>
           </button>
         </div>
-        <input id="gs-input" class="modal-input gs-input-full" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="globalSearchPh" data-i18n-aria="globalSearchPh" />
+        <input id="gs-input" class="modal-input gs-input-full" type="text" role="combobox" aria-expanded="true" aria-controls="gs-results" aria-autocomplete="list" autocomplete="off" spellcheck="false" data-i18n-ph="globalSearchPh" data-i18n-aria="globalSearchPh" />
       </div>
-      <div id="gs-results" class="gs-results"></div>
+      <div id="gs-results" class="gs-results" role="listbox" data-i18n-aria="globalSearchBtn"></div>
       <div id="gs-empty" class="gs-empty hidden"></div>
     </div>
   </div>
