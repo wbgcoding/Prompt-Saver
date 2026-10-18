@@ -869,6 +869,16 @@ pub(crate) fn cancel_all_exports() {
     }
 }
 
+// The files stored as some prompt's attachment or icon: the user's own picks, which the
+// editor may open from anywhere.
+pub(crate) fn attached_media_paths(prompts: &[Prompt]) -> Vec<String> {
+    prompts
+        .iter()
+        .flat_map(|p| [p.file_path.clone(), p.icon_path.clone()])
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 // The sources the video editor currently has open or was just offered: only
 // these (besides the app's own recordings and work copies) may be exported.
 fn open_editor_source_paths(app: &AppHandle) -> Vec<String> {
@@ -1364,6 +1374,7 @@ pub(crate) fn video_editor_load_ack(request_id: u64, state: String) {
 #[tauri::command]
 pub(crate) async fn open_video_editor(
     app: AppHandle,
+    state: State<'_, Db>,
     pending: State<'_, VideoEditorPending>,
     src_path: String,
     origin_dir: Option<String>,
@@ -1371,6 +1382,13 @@ pub(crate) async fn open_video_editor(
 ) -> Result<bool, String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
+    }
+    // Opening makes the path an allowed export source, so only files the app knows may be
+    // opened: its own recordings, an editor work copy, or a prompt's attached file.
+    let attached = attached_media_paths(&lock(&state).prompts);
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    if !export_source_is_allowed(&recording_source_dirs(&app, &state), &own_temp_dir, &attached, Path::new(&src_path)) {
+        return Err("source-not-allowed".to_string());
     }
     let origin_dir = origin_dir.unwrap_or_default();
     // An overlay path that no longer exists is dropped rather than shown as a broken overlay op.
