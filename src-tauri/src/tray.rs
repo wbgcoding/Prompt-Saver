@@ -346,6 +346,22 @@ pub(crate) fn tray_custom_menu_on(settings: &Settings) -> bool {
     settings.ui_flags.get(TRAY_CUSTOM_MENU_KEY) != Some(&false)
 }
 
+// Whether the Stop/Pause rows show while a recording runs: one rule for the native and the
+// custom menu, which must agree on it.
+pub(crate) fn tray_rec_entries_on(settings: &Settings) -> bool {
+    settings.ui_flags.get("screenRecord") != Some(&false) && settings.ui_flags.get("recTrayEntries") != Some(&false)
+}
+
+// Whether a data change has any native menu to refresh: the custom window is built fresh on
+// every open, so with it on only an installed native popup (still to be detached) is stale.
+pub(crate) fn tray_rebuild_due(custom: bool, sections_wanted: bool, extras_installed: bool) -> bool {
+    if custom {
+        extras_installed
+    } else {
+        sections_wanted || extras_installed
+    }
+}
+
 // Build the tray menu from the current store and install it. The store lock is
 // dropped before the first menu call: building a menu while holding it is the
 // classic deadlock shape here.
@@ -353,15 +369,20 @@ pub(crate) fn apply_tray_menu(app: &AppHandle) {
     let (lang, plan, custom, rec_entries_on) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
-            let cfg = tray_cfg(&store.settings);
-            let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
-            let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
-                && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
-            (resolve_lang(&store.settings.language), plan, tray_custom_menu_on(&store.settings), rec_entries_on)
+            let custom = tray_custom_menu_on(&store.settings);
+            // The custom window needs no plan: skip the sort and the label allocations.
+            let plan = if custom {
+                Vec::new()
+            } else {
+                let cfg = tray_cfg(&store.settings);
+                tray_plan(&store.prompts, &store.settings.last_used, &cfg)
+            };
+            (resolve_lang(&store.settings.language), plan, custom, tray_rec_entries_on(&store.settings))
         }
         None => return,
     };
     if custom {
+        TRAY_EXTRAS.store(false, Ordering::SeqCst); // no native extras remain once the popup is detached
         // The custom window's content is prepared fresh (tray_open_prep) on every right-click, so
         // nothing is precomputed here: just detach any native popup so it cannot fight the window
         // for the right-click, which also skips every rebuild this function would otherwise do
@@ -421,14 +442,15 @@ pub(crate) fn apply_tray_menu(app: &AppHandle) {
 // into a single rebuild off the UI thread; with both features off and no entries
 // installed there is nothing to do at all.
 pub(crate) fn rebuild_tray(app: &AppHandle) {
-    let wanted = match app.try_state::<Db>() {
+    let (wanted, custom) = match app.try_state::<Db>() {
         Some(state) => {
-            let cfg = tray_cfg(&lock(&state).settings);
-            cfg.recent || cfg.favs
+            let store = lock(&state);
+            let cfg = tray_cfg(&store.settings);
+            (cfg.recent || cfg.favs, tray_custom_menu_on(&store.settings))
         }
-        None => false,
+        None => (false, false),
     };
-    if !wanted && !TRAY_EXTRAS.load(Ordering::SeqCst) {
+    if !tray_rebuild_due(custom, wanted, TRAY_EXTRAS.load(Ordering::SeqCst)) {
         return; // the legacy menu is already what the settings ask for
     }
     if TRAY_PENDING.swap(true, Ordering::SeqCst) {
@@ -529,8 +551,7 @@ pub(crate) fn tray_win_plan_from_store(store: &Store, phase: Option<RecPhase>) -
     let lang = resolve_lang(&store.settings.language);
     let (open_label, quit_label) = tray_labels(lang);
     let (recent_title, favs_title) = tray_section_labels(lang);
-    let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
-        && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
+    let rec_entries_on = tray_rec_entries_on(&store.settings);
     let search_on = tray_search_on(&store.settings);
     let rec_entries = if rec_entries_on {
         match phase {
