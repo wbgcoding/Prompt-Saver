@@ -218,7 +218,7 @@ pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String
     );
     push_bg_op(app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);
     verify_ffmpeg_zip(&bytes)?;
-    let dir = ffmpeg_install_dir().ok_or_else(|| "target dir: no per-user folder".to_string())?;
+    let dir = ffmpeg_install_dir().ok_or_else(|| format!("target dir: {}", "no per-user folder"))?;
     fs::create_dir_all(&dir).map_err(|e| format!("target dir: {}", e))?;
     install_ffmpeg_from_zip(&bytes, &dir)
 }
@@ -407,13 +407,14 @@ pub(crate) async fn convert_recording(
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&src_path);
-    if !src.is_file() {
-        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
-    }
     // ffmpeg re-encodes this file in place of the source, so an IPC caller that is not the
     // recording UI must not be able to point that at an arbitrary file by naming it in src_path.
-    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+    // Confined first: asking whether a UNC path exists would already reach out to that host.
+    if !is_recording_source_location(&recording_source_dirs(&app, &state), &src) {
         return Err("source-not-allowed".to_string());
+    }
+    if !src.is_file() {
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);

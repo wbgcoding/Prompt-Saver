@@ -754,8 +754,16 @@ pub(crate) fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [
 // save_recording_now and copy_recording_to_clipboard cannot be made to move, replace or feed
 // ffmpeg an unrelated file by a subverted renderer.
 pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
+    is_recording_source_location(allowed, path) && path.is_file()
+}
+
+// The location half of is_own_recording_source: the "rec-" stem and an allowed parent, decided
+// without ever asking the file system about the file itself. A network (UNC) path is refused
+// on its text alone, so a refused caller path never makes this machine contact a remote host.
+pub(crate) fn is_recording_source_location(allowed: &[PathBuf], path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if !name.starts_with("rec-") || !path.is_file() {
+    let raw = path.to_string_lossy();
+    if !name.starts_with("rec-") || raw.starts_with(r"\\") || raw.starts_with("//") {
         return false;
     }
     let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };

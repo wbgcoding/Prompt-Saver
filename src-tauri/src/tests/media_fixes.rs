@@ -93,3 +93,17 @@ fn media_tools_are_searched_only_in_app_owned_folders() {
     let discovery = src.split("pub(crate) fn find_media_tool").nth(1).unwrap().split("pub(crate) fn ffmpeg_search_path").next().unwrap();
     assert!(!discovery.contains("data_dir"));
 }
+
+#[test]
+fn a_network_path_is_refused_before_any_file_check() {
+    let root = std::env::temp_dir().join(format!("ps-recloc-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let allowed = [root.clone()];
+    let missing = root.join("rec-gone.mp4");
+    assert!(is_recording_source_location(&allowed, &missing), "the location check never needs the file");
+    assert!(!is_own_recording_source(&allowed, &missing));
+    assert!(!is_recording_source_location(&allowed, Path::new(r"\host\share\rec-1.mp4")));
+    assert!(!is_recording_source_location(&allowed, Path::new("//host/share/rec-1.mp4")));
+    let _ = fs::remove_dir_all(&root);
+}
