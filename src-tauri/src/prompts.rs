@@ -1034,9 +1034,17 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
         let seeds = std::mem::take(&mut store.settings.example_prompt_seeds);
         (examples_still_pristine(&ids, &seeds, &store.prompts), ids, seeds)
     };
+    // The lists were cleared in memory above; nothing else may write the settings soon, so
+    // persist the cleared lists here or they come back on the next start.
+    let persist = |app: &AppHandle| {
+        let store = lock(&state);
+        save_settings(app, &store.settings);
+    };
     if ids_to_delete.is_empty() {
+        persist(&app);
         return Ok(());
     }
+    let app_for_save = app.clone();
     let result = batch_prompts(app, state.clone(), ids_to_delete, "delete".to_string(), None, None, None, None, None)
         .await
         .map(|_| ());
@@ -1046,6 +1054,8 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
         let mut store = lock(&state);
         store.settings.example_prompt_ids = taken_ids;
         store.settings.example_prompt_seeds = taken_seeds;
+    } else {
+        persist(&app_for_save);
     }
     result
 }
