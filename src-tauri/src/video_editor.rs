@@ -1292,23 +1292,29 @@ pub(crate) fn export_video_blocking(
         remove_filter_script(script);
     }
     let staged = staged?;
-    // dest_path is the frontend's "<stem>-edit.<ext>" guess, and exporting the same source twice
-    // must not replace the first result. reserve_unique_dest_path claims the final name
-    // atomically, unlike unique_dest_path, so a file appearing at the winning name before the
-    // rename below cannot be overwritten.
+    place_staged_export(&staged, dst)
+}
+
+// Moves a finished staged export to its final name. dest_path is the frontend's "<stem>.<ext>"
+// guess: two batch items with the same stem (rec.mp4 and rec.mkv both to mp4), a file already in
+// the folder, or the same source exported twice must never replace an earlier result.
+// reserve_unique_dest_path claims the final name atomically ("<stem>", then "<stem> (2)", ...),
+// unlike unique_dest_path, so a file appearing at the winning name before the rename below
+// cannot be overwritten.
+pub(crate) fn place_staged_export(staged: &Path, dst: &Path) -> Result<String, String> {
     let dir = dst.parent().unwrap_or_else(|| Path::new("."));
     let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stem = dst.file_stem().and_then(|e| e.to_str()).unwrap_or("export");
     let final_dst = reserve_unique_dest_path(dir, stem, ext).map_err(|e| {
-        let _ = fs::remove_file(&staged);
+        let _ = fs::remove_file(staged);
         let text = e.to_string();
         ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
-    if let Err(e) = fs::rename(&staged, &final_dst) {
+    if let Err(e) = fs::rename(staged, &final_dst) {
         // Remove our own empty placeholder; reserve_unique_dest_path guarantees final_dst is still
         // ours, never a file another writer claimed.
         let _ = fs::remove_file(&final_dst);
-        let _ = fs::remove_file(&staged);
+        let _ = fs::remove_file(staged);
         let text = e.to_string();
         return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
     }

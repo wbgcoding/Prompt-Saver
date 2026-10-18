@@ -538,3 +538,25 @@ fn the_startup_sweep_reads_the_app_temp_folder_once() {
     let body = src.split("pub(crate) fn sweep_stale_temp_files_in").nth(1).unwrap().split("pub(crate) fn remove_own_temp_leftovers_in").next().unwrap();
     assert_eq!(body.matches("fs::read_dir(&ocr_dir)").count(), 1);
 }
+
+// Two batch items that map to one name (rec.mp4 and rec.mkv, both exported to mp4) and a file
+// already in the folder must each end up under their own name, nothing replaced.
+#[test]
+fn batch_exports_with_one_target_name_never_overwrite_each_other() {
+    let dir = std::env::temp_dir().join(format!("ps-v24-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let dst = dir.join("rec.mp4");
+    fs::write(&dst, b"already there").unwrap();
+    let mut placed = Vec::new();
+    for body in [&b"first"[..], &b"second"[..]] {
+        let staged = dir.join(format!(".export-{}.mp4", placed.len()));
+        fs::write(&staged, body).unwrap();
+        placed.push(video_editor::place_staged_export(&staged, &dst).unwrap());
+    }
+    assert_eq!(fs::read(&dst).unwrap(), b"already there");
+    assert_eq!(fs::read(dir.join("rec (2).mp4")).unwrap(), b"first");
+    assert_eq!(fs::read(dir.join("rec (3).mp4")).unwrap(), b"second");
+    assert_ne!(placed[0], placed[1]);
+    let _ = fs::remove_dir_all(&dir);
+}
