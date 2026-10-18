@@ -150,27 +150,34 @@ pub(crate) fn set_bars(app: AppHandle, state: State<Db>, header: bool, composer:
     save_settings(&app, &store.settings);
 }
 
-#[tauri::command(async)]
-pub(crate) fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) -> Result<(), String> {
-    let mut store = lock(&state);
-    store.settings.auto_update = enabled;
-    store.settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
-    if !save_settings(&app, &store.settings) {
+// Stores the update choice and saves it. A failed save puts the previous values back, so the
+// background check never acts on a switch the user saw revert.
+pub(crate) fn set_update_choice(
+    settings: &mut Settings,
+    enabled: bool,
+    save: impl FnOnce(&Settings) -> bool,
+) -> Result<(), String> {
+    let previous = (settings.auto_update, settings.update_consent);
+    settings.auto_update = enabled;
+    settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
+    if !save(settings) {
+        (settings.auto_update, settings.update_consent) = previous;
         return Err("save-failed".to_string());
     }
     Ok(())
+}
+
+#[tauri::command(async)]
+pub(crate) fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) -> Result<(), String> {
+    let mut store = lock(&state);
+    set_update_choice(&mut store.settings, enabled, |s| save_settings(&app, s))
 }
 
 // The first-launch question: remembers the answer and the switch together.
 #[tauri::command(async)]
 pub(crate) fn set_update_consent(app: AppHandle, state: State<Db>, enabled: bool) -> Result<(), String> {
     let mut store = lock(&state);
-    store.settings.auto_update = enabled;
-    store.settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
-    if !save_settings(&app, &store.settings) {
-        return Err("save-failed".to_string());
-    }
-    Ok(())
+    set_update_choice(&mut store.settings, enabled, |s| save_settings(&app, s))
 }
 
 #[tauri::command]

@@ -1157,7 +1157,7 @@ fn the_update_switches_report_a_failed_save() {
     for name in ["set_auto_update", "set_update_consent"] {
         let body = fn_text(src, name);
         assert!(body.contains("-> Result<(), String>"), "{name} must return a Result");
-        assert!(body.contains("if !save_settings("), "{name} must check the save");
-        assert!(body.contains("\"save-failed\""), "{name} must report save-failed");
+        assert!(body.contains("set_update_choice(") && body.contains("save_settings("), "{name} must check the save");
     }
+    assert!(fn_text(src, "set_update_choice").contains("\"save-failed\""), "a failed save is reported");
 }

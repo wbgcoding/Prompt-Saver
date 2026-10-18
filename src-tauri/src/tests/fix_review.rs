@@ -154,3 +154,15 @@ fn the_startup_seed_removes_a_plaintext_file_of_a_confidential_prompt_itself() {
     assert!(foreign.exists(), "a file that is not ours is never touched");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_failed_update_switch_save_restores_the_previous_values() {
+    let mut s = Settings::default();
+    s.auto_update = false;
+    s.update_consent = UpdateConsent::No;
+    assert_eq!(set_update_choice(&mut s, true, |_| false), Err("save-failed".to_string()));
+    assert!(!s.auto_update, "the background check must not see a switch that failed to save");
+    assert_eq!(s.update_consent, UpdateConsent::No);
+    assert!(set_update_choice(&mut s, true, |_| true).is_ok());
+    assert!(s.auto_update && s.update_consent == UpdateConsent::Yes);
+}
