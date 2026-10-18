@@ -148,8 +148,10 @@ fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(P
             if let Some(dir) = out.parent() {
                 let _ = fs::create_dir_all(dir);
             }
+            // Guarded before the write: a save that dies half-way still leaves a file to remove.
+            let guard = TempFileGuard(Some(out.clone()));
             im.save(&out).map_err(|e| e.to_string())?;
-            Ok((out.clone(), TempFileGuard(Some(out))))
+            Ok((out, guard))
         }
     }
 }
@@ -202,8 +204,8 @@ pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    crop.save(&path).map_err(|e| e.to_string())?;
     let _guard = TempFileGuard(Some(path.clone()));
+    crop.save(&path).map_err(|e| e.to_string())?;
     recognize(&path, upscale_below_px, join_lines, lang, auto_pick_lang)
 }
 

@@ -439,3 +439,14 @@ fn the_key_sidecar_is_always_named_through_the_shared_builder() {
     assert!(!src.contains("with_extension(\"keys.json\")"));
     assert_eq!(crate::media_files::sidecar_path(Path::new("a/rec.mp4"), crate::media_files::KEYS_SIDECAR_EXT), Path::new("a/rec.keys.json"));
 }
+
+// Structural fix, no red unit test: a write that fails half-way cannot be provoked on demand.
+#[test]
+fn the_ocr_temp_guard_exists_before_the_png_is_written() {
+    let src = include_str!("../ocr.rs");
+    for save in ["im.save(&out)", "crop.save(&path)"] {
+        let at = src.find(save).expect(save);
+        let guard = src[..at].rfind("TempFileGuard(Some(").expect("guard");
+        assert!(at - guard < 400, "the guard sits right before {save}");
+    }
+}
