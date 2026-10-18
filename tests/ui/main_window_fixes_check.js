@@ -967,6 +967,15 @@ section(() => {
   check(/titleSpan\.setAttribute\("aria-expanded", String\(!sec\.classList\.contains\("collapsed"\)\)\)/.test(src), "a toggle updates aria-expanded");
 });
 
+// 46. The all-hotkeys list carries the dictation hotkey row.
+section(() => {
+  const src = read("hotkeys.js");
+  check(/voice: \{ current: \(\) => settings\.voice_hotkey, onCommit: commitVoiceHotkey \}/.test(src), "the list has a voice kind");
+  check(/flagState\("voiceHotkey"\) \? \[\{ kind: "voice"/.test(src), "the voice row is gated like the settings field");
+  const fn = extractBlock(src, "export async function commitVoiceHotkey(");
+  check(fn.includes("renderHotkeysList()"), "committing the dictation hotkey refreshes an open list");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
