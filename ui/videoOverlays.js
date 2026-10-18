@@ -417,6 +417,11 @@ export function colorRow(current, onPick) {
 // values back over fields changed since.
 export const liveOverlay = (op) => VE.ops.find((o) => o.id === op.id) || op;
 
+// True while `op` is still in the recording that was loaded when `gen` was read. A picker or a
+// probe awaited in between can outlive the overlay (removed) or the recording (another one
+// loaded), and committing then would push the old overlay back in.
+export const overlayStillInEditor = (op, gen) => VE.loadGen === gen && VE.ops.some((o) => o.id === op.id);
+
 export function commitOverlay(op, changes) {
   pushReplacing((o) => o.id === op.id, { ...liveOverlay(op), ...changes }, { keepEditor: true });
   rememberOverlayValues(op.kind, changes);
@@ -538,8 +543,9 @@ export function renderOverlayEditor() {
     change.className = "ghost-btn ve-wide";
     change.textContent = t("pathChange");
     change.addEventListener("click", async () => {
+      const gen = VE.loadGen;
       const path = await invoke("pick_file_path").catch(() => null);
-      if (!path) return;
+      if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
       commitOverlay(op, { path });
     });
@@ -564,11 +570,13 @@ export function renderOverlayEditor() {
     change.className = "ghost-btn ve-wide";
     change.textContent = t("pathChange");
     change.addEventListener("click", async () => {
+      const gen = VE.loadGen;
       const path = await invoke("pick_file_path").catch(() => null);
-      if (!path) return;
+      if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
       try {
         const probe = await invoke("probe_extra_video_source", { path });
+        if (!overlayStillInEditor(op, gen)) return;
         commitOverlay(op, { path, hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0, missing: false });
       } catch (err) {
         const { message } = parseFfmpegError(err, t);

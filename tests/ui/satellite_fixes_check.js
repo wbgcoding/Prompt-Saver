@@ -65,6 +65,22 @@ later(async () => {
   check(sb.VE.src === "C.mp4", "the last confirmed request is the one that ends up loaded");
 });
 
+// Overlay "Change file": the commit after the picker/probe is skipped when the overlay was removed
+// or another recording was loaded meanwhile.
+section(() => {
+  const src = read("videoOverlays.js");
+  const sb = { VE: { loadGen: 3, ops: [{ id: "o1" }] } };
+  const line = src.slice(src.indexOf("export const overlayStillInEditor")).split("\n")[0].replace("export ", "");
+  vm.createContext(sb);
+  sb.overlayStillInEditor = vm.runInContext(line + "\noverlayStillInEditor", sb);
+  check(sb.overlayStillInEditor({ id: "o1" }, 3) === true, "an overlay still in the same recording may be committed");
+  check(sb.overlayStillInEditor({ id: "o1" }, 2) === false, "another recording was loaded: no commit");
+  check(sb.overlayStillInEditor({ id: "o2" }, 3) === false, "the overlay was removed: no commit");
+  const guards = src.match(/const gen = VE\.loadGen;\n\s+const path = await invoke\("pick_file_path"\)\.catch\(\(\) => null\);\n\s+if \(!path \|\| !overlayStillInEditor\(op, gen\)\) return;/g) || [];
+  check(guards.length === 2, "both Change file handlers re-check the overlay after the picker");
+  check(/probe_extra_video_source[^\n]*\n\s+if \(!overlayStillInEditor\(op, gen\)\) return;/.test(src), "the video handler re-checks after the probe");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
