@@ -91,6 +91,19 @@ section(() => {
   check(/ve-stage-msg"\)\.dataset\.i18n = "veLoading"/.test(read("videoLoad.js")), "loading a recording restores the loading label's hook");
 });
 
+// Video editor: a format change keeps the destination the user chose and swaps only the extension.
+section(() => {
+  const src = read("video.js");
+  const line = src.slice(src.indexOf("export const withExtension")).split("\n")[0].replace("export ", "");
+  const sb = {};
+  vm.createContext(sb);
+  sb.withExtension = vm.runInContext(line + "\nwithExtension", sb);
+  check(sb.withExtension("D:\\clips\\talk.mp4", "webm") === "D:\\clips\\talk.webm", "the extension is swapped, folder and name stay");
+  check(sb.withExtension("D:\\my.clips\\talk", "gif") === "D:\\my.clips\\talk.gif", "a dot in a folder name is not an extension");
+  check(sb.withExtension("D:\\clips\\a.b.mkv", "mp4") === "D:\\clips\\a.b.mp4", "only the last extension is replaced");
+  check(!src.includes('if (id === "ve-export-format") VE.destOverride = null;') &&/VE\.destOverride = withExtension\(VE\.destOverride/.test(src), "the format dropdown no longer clears the chosen destination");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

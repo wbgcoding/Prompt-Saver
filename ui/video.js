@@ -83,6 +83,8 @@ export const EXPORT_KBPS = { high: 12000, small: 4000, lossless: null };
 export const SILENT_FORMATS = new Set(["gif"]);
 export const formatHasAudio = (fmt) => !SILENT_FORMATS.has(fmt);
 export const formatExt = (fmt) => fmt;
+// A chosen destination path with only its extension swapped: the folder and file name stay.
+export const withExtension = (path, ext) => `${String(path).replace(/\.[^\\/.]+$/, "")}.${ext}`;
 // A length above which a GIF tends to balloon in size: shown as a warning, never enforced.
 export const SILENT_FORMAT_LENGTH_WARN_MS = 10000;
 // Enforced, unlike the length warning: these formats never encode above this on their long
@@ -1568,10 +1570,9 @@ fillVideoFormatSelect($("ve-export-format"));
 for (const id of ["ve-export-format", "ve-export-quality"]) {
   attachSelectPicker($(id));
   $(id).addEventListener("change", () => {
-    // A full manual destination names its own extension, so picking a different container format
-    // makes it wrong: the format dropdown alone drops back to the auto-named file (still inside a
-    // remembered "Export to…" folder).
-    if (id === "ve-export-format") VE.destOverride = null;
+    // A full manual destination names its own extension, so a different container format makes
+    // it wrong: only that extension follows the format, the folder and name the user chose stay.
+    if (id === "ve-export-format" && VE.destOverride) VE.destOverride = withExtension(VE.destOverride, formatExt(exportFormat()));
     persistExportSettings();
     updateExportNote();
   });
