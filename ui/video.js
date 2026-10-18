@@ -864,21 +864,38 @@ async function loadWave(track) {
   }
 }
 
+// Waveform colours are read once per theme, not on every redraw of a zoom or resize.
+const waveColors = [null, null];
+const WAVE_HEIGHT = 34;
+const WAVE_MAX_PX = 16384;
+
+function waveColor(track) {
+  if (!waveColors[track]) {
+    const style = getComputedStyle(document.documentElement);
+    waveColors[track] = (style.getPropertyValue(track === 0 ? "--accent" : "--muted") || "#3b82f6").trim();
+  }
+  return waveColors[track];
+}
+
 function drawWave(track) {
   const canvas = track === 0 ? $("ve-wave-sys") : $("ve-wave-mic");
   const data = VE.peaks[track];
-  const width = Math.round(trackWidth());
-  canvas.width = Math.max(1, width);
-  canvas.height = 34;
+  const width = Math.max(1, Math.round(trackWidth()));
+  // Backing store in device pixels so the waveform stays sharp on scaled displays; the CSS size
+  // stays the layout size.
+  const scale = Math.min(window.devicePixelRatio || 1, Math.max(1, WAVE_MAX_PX / width));
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(WAVE_HEIGHT * scale);
   canvas.style.width = `${width}px`;
+  canvas.style.height = `${WAVE_HEIGHT}px`;
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, width, WAVE_HEIGHT);
   if (!data || !data.values.length) return;
-  const style = getComputedStyle(document.documentElement);
-  ctx.fillStyle = (style.getPropertyValue(track === 0 ? "--accent" : "--muted") || "#3b82f6").trim();
-  const mid = canvas.height / 2;
-  for (let x = 0; x < canvas.width; x++) {
-    const value = data.values[Math.min(data.values.length - 1, Math.floor((x / canvas.width) * data.values.length))];
+  ctx.fillStyle = waveColor(track);
+  const mid = WAVE_HEIGHT / 2;
+  for (let x = 0; x < width; x++) {
+    const value = data.values[Math.min(data.values.length - 1, Math.floor((x / width) * data.values.length))];
     const h = Math.max(1, Math.abs(Number(value) || 0) * mid);
     ctx.fillRect(x, mid - h, 1, h * 2);
   }
@@ -1873,7 +1890,7 @@ window.addEventListener("resize", () => {
 });
 
 // ---------------------------------------------------------------- backend events
-listen("theme-changed", (e) => { applyTheme(e.payload?.theme, e.payload?.vars); drawWave(0); if (VE.hasMic) drawWave(1); });
+listen("theme-changed", (e) => { applyTheme(e.payload?.theme, e.payload?.vars); waveColors[0] = waveColors[1] = null; drawWave(0); if (VE.hasMic) drawWave(1); });
 listen("language-changed", () => { invoke("get_settings").then((s) => loadTexts(s)).catch(() => {}); });
 listen("settings-changed", () => { invoke("get_settings").then((s) => { settings = s; applySettings(s); }).catch(() => {}); });
 // Opening a second recording reuses this window instead of stacking another one.

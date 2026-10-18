@@ -609,6 +609,28 @@ section(() => {
   });
 });
 
+section(() => {
+  const src = read("video.js");
+  const consts = src.match(/^const (waveColors|WAVE_HEIGHT|WAVE_MAX_PX).*$/gm) || [];
+  const code = [...consts, extractBlock(src, "function waveColor("), extractBlock(src, "function drawWave(")].join(String.fromCharCode(10));
+  let styleReads = 0;
+  const canvas = { style: {}, getContext: () => ctx };
+  const ctx = { setTransform() {}, clearRect() {}, fillRect() {}, fillStyle: "" };
+  const sb = {
+    $: () => canvas, VE: { peaks: [{ values: [0.5, 0.5] }] }, trackWidth: () => 200, Math, Number,
+    window: { devicePixelRatio: 2 }, document: { documentElement: {} },
+    getComputedStyle: () => { styleReads++; return { getPropertyValue: () => " #123456 " }; },
+  };
+  vm.createContext(sb);
+  vm.runInContext(code + String.fromCharCode(10) + "this.drawWave = drawWave;", sb);
+  sb.drawWave(0);
+  sb.drawWave(0);
+  check(canvas.width === 400 && canvas.height === 68, "the waveform backing store is scaled by the device pixel ratio");
+  check(canvas.style.width === "200px" && canvas.style.height === "34px", "the waveform keeps its CSS layout size");
+  check(styleReads === 1 && ctx.fillStyle === "#123456", "the waveform colour is read once and reused");
+  check(/waveColors\[0\] = waveColors\[1\] = null/.test(src), "a theme change drops the cached waveform colours");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
