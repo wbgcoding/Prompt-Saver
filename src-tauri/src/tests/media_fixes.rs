@@ -463,3 +463,14 @@ fn the_ocr_data_url_is_decoded_on_the_blocking_pool() {
     assert!(!cmd.contains("data_url_bytes("), "no decode before the pool");
     assert!(crate::ocr_cmds::decode_ocr_data_url("data:image/png;base64,AAAA").is_err());
 }
+
+// Structural fix, no red unit test: a panicking decoder inside the blocking pool cannot be
+// provoked without the real engine.
+#[test]
+fn a_failed_ocr_index_worker_marks_the_job_as_error() {
+    let src = include_str!("../ocr_cmds.rs");
+    let body = src.split("pub(crate) async fn ocr_index_backfill").nth(1).unwrap().split("pub(crate) async fn ocr_capabilities(").next().unwrap();
+    let at = body.find("Err(e) => {").expect("join error arm");
+    let arm = &body[at..at + 200];
+    assert!(arm.contains("push_bg_op(&app, \"ocr-index\", \"ocr-index\", \"error\""), "{arm}");
+}

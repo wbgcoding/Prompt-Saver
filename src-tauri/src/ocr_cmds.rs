@@ -684,9 +684,15 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
         };
         if let Some(image) = image {
             if !image.is_empty() {
-                let (text, image) = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image))
-                    .await
-                    .map_err(|e| e.to_string())?;
+                let joined = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image)).await;
+                // A decoder that panicked ends the pass; the job row must not stay "running".
+                let (text, image) = match joined {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        push_bg_op(&app, "ocr-index", "ocr-index", "error", None, None);
+                        return Err(e.to_string());
+                    }
+                };
                 if !text.is_empty() {
                     let mut store = lock(&state);
                     if let Err(e) = apply_ocr_backfill_and_save(&mut store, &id, &image, text, started_epoch, |st| save_prompts(&app, st)) {
