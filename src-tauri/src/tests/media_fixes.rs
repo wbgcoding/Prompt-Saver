@@ -214,3 +214,12 @@ fn closing_the_editor_refuses_every_waiting_open_request() {
     let hook = src.find("tauri::WindowEvent::Destroyed").expect("the editor window must watch its own destruction");
     assert!(src[hook..hook + 200].contains("refuse_pending_editor_requests"));
 }
+
+// Structural fix, no red unit test: the rect comes from a live window enumeration, which a unit
+// test cannot fake. The pure choice (frame over client) is covered by snip_window_rect_prefers_the_frame.
+#[test]
+fn the_window_fallback_crops_the_frame_the_overlay_showed() {
+    let src = include_str!("../capture.rs");
+    let at = src.find("Target's global physical rect").expect("rect resolution block");
+    assert!(src[at..at + 500].contains("snip_window_rect(window_frame_rect(id)"));
+}

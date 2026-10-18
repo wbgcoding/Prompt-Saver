@@ -399,11 +399,12 @@ pub(crate) async fn capture_window(
         return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
     }
 
-    // Target's global physical rect + frozen-image origin.
+    // Target's global physical rect + frozen-image origin. The visible frame, the same rect the
+    // overlay highlighted, so a window that falls back to a crop comes out with its title bar.
     let rect = xcap::Window::all()
         .ok()
         .and_then(|ws| ws.into_iter().find(|w| w.id() == id))
-        .map(|w| (w.x(), w.y(), w.width() as i32, w.height() as i32));
+        .map(|w| snip_window_rect(window_frame_rect(id), (w.x(), w.y(), w.width() as i32, w.height() as i32)));
     let (wx, wy, ww, wh) = match rect {
         Some(r) => r,
         None => return Err("blocked".to_string()),
