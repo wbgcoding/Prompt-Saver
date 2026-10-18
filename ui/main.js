@@ -208,6 +208,8 @@ function bind() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
+    // tourKeydown owns Escape while the tour is the topmost thing, same bow-out as the Tab trap above.
+    if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
     if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }

@@ -482,6 +482,15 @@ section(() => {
   check(/if \(!\(await maybeBackupBeforeWipe\("delete"\)\)\) return;/.test(sp) && /if \(!\(await maybeBackupBeforeWipe\("reset"\)\)\) return;/.test(sp), "both wipes honour the answer");
 });
 
+// 20. U57: the Escape dispatcher bows out for the tour like the Tab trap does.
+section(() => {
+  const main = read("main.js");
+  const escAt = main.indexOf('if (e.key !== "Escape")');
+  const escBlock = main.slice(escAt, main.indexOf('listen("theme-changed"'));
+  const guardAt = escBlock.indexOf('$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")');
+  check(guardAt > 0 && guardAt < escBlock.indexOf("closeShortcutsModal"), "Escape returns early while the tour is topmost, before any overlay closes");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
