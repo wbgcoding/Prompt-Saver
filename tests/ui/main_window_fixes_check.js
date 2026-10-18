@@ -1156,6 +1156,15 @@ section(() => {
   check(fn.includes('input.setAttribute("aria-expanded", "true")'), "show expands the combobox");
 });
 
+// 68. The elevated language scan keeps one live poll chain.
+section(() => {
+  const src = read("dictation.js");
+  const poll = extractBlock(src, "export function pollElevatedCaps(");
+  check(poll.includes("const chain = st.elevChain = (st.elevChain || 0) + 1;"), "each poll start takes a new chain id");
+  check(poll.indexOf("if (st.elevChain !== chain) return;\n    if (res == null)") > 0 || /if \(st\.elevChain !== chain\) return;\s+if \(res == null\)/.test(poll), "a stale chain stops after the await, before re-arming");
+  check(extractBlock(src, "export function closeLangsModal(").includes("st.elevChain = (st.elevChain || 0) + 1"), "closing the dialog retires the chain");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

@@ -62,6 +62,7 @@ export function closeLangsModal() {
   st.installTimers = {};
   st.installChain = {};
   if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
+  st.elevChain = (st.elevChain || 0) + 1; // a tick still awaiting its result must not re-arm
 }
 export async function loadLangCaps(kind, force) {
   const st = LANG_DIALOG[kind];
@@ -119,11 +120,18 @@ export async function startElevatedCapsScan(kind) {
 // spent (elevLeft lives on LANG_DIALOG, not in a closure local).
 export function pollElevatedCaps(kind) {
   const st = LANG_DIALOG[kind];
+  // One live chain per kind: closing the dialog or starting another chain makes this one stale.
+  const chain = st.elevChain = (st.elevChain || 0) + 1;
+  if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
   const tick = async () => {
     st.elevTimer = null;
     let res;
     try { res = await invoke(LANG_CMDS[kind].elevatedResult); }
-    catch (e) { st.elevRunning = false; renderLangsRetry(kind, errText(e)); return; }
+    catch (e) {
+      if (st.elevChain !== chain) return;
+      st.elevRunning = false; renderLangsRetry(kind, errText(e)); return;
+    }
+    if (st.elevChain !== chain) return;
     if (res == null) {
       if (--st.elevLeft <= 0) { st.elevRunning = false; renderLangsRetry(kind, t("ocrLangsNeedElevation")); return; }
       st.elevTimer = setTimeout(tick, 2000);
