@@ -262,7 +262,7 @@ pub(crate) fn unregister_running_instance(canonical: &Path) {
 // canonicalized (the file replaced under a running process, access denied). Its own
 // function so the comparison is unit-testable without a live pid.
 pub(crate) fn same_exe_path(a: &Path, b: &Path) -> bool {
-    let same = |a: &Path, b: &Path| a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase();
+    let same = |a: &Path, b: &Path| fold_path(&a.to_string_lossy()) == fold_path(&b.to_string_lossy());
     match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => same(&a, &b),
         _ => same(a, b),

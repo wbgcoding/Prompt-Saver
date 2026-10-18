@@ -251,8 +251,14 @@ pub(crate) fn store_files_enabled(store: &Store) -> bool {
 // prompt in the store. sweep_orphan_files treats them as referenced.
 pub(crate) static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
 
+// The one way two spellings of a Windows path are compared: extended-length prefix dropped,
+// forward slashes turned into backslashes, case folded.
+pub(crate) fn fold_path(path: &str) -> String {
+    path.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase()
+}
+
 pub(crate) fn pending_key(path: &str) -> String {
-    path.replace('/', "\\").to_lowercase()
+    fold_path(path)
 }
 
 pub(crate) fn pending_attachments_contain(path: &str) -> bool {
@@ -362,7 +368,7 @@ pub(crate) fn sweep_orphan_files_in(
     };
     // Compare case-insensitively with normalized separators (Windows) so a still
     // referenced file is never mistaken for an orphan and deleted.
-    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let norm = pending_key;
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
@@ -471,7 +477,7 @@ pub(crate) fn sweep_stale_recordings_in(
     retention_age: Option<Duration>,
 ) -> (u32, u64) {
     let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
-    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let norm = pending_key;
     let mut count = 0u32;
     let mut bytes = 0u64;
     for e in entries.flatten() {
@@ -729,7 +735,7 @@ pub(crate) fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
 // A trashed prompt owns its files until purged: leaving trash out of this scan would let an
 // unrelated cleanup sweep away a file a trashed prompt needs to be restorable.
 pub(crate) fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<String> {
-    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let norm = pending_key;
     store
         .prompts
         .iter()
