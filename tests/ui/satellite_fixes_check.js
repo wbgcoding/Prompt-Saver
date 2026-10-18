@@ -654,6 +654,46 @@ section(() => {
   check(/selectInput\(FONT_FILES\.map\(\(\[id\]\) => \[id, FONT_LABELS\[id\] \|\| id\]\)/.test(osrc), "the font select shows the display names");
 });
 
+section(() => {
+  const src = read("recordingTools.js");
+  const code = extractBlock(src, "export async function openVideoCleanup(").replace("export ", "");
+  const listeners = {};
+  const mkEl = (id) => {
+    const e = { id, value: "30", textContent: "", disabled: false, checked: false, children: [] };
+    e.classList = { add() {}, remove() {}, toggle() {} };
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.append = (...c) => { e.children.push(...c); };
+    e.addEventListener = (n, fn) => { listeners[id + ":" + n] = fn; };
+    e.removeEventListener = () => {};
+    Object.defineProperty(e, "innerHTML", { get: () => "", set: () => { e.children = []; } });
+    return e;
+  };
+  const els = {};
+  const toasts = [];
+  const errs = [];
+  const sb = {
+    $: (id) => (els[id] = els[id] || mkEl(id)),
+    invoke: async (cmd) => {
+      if (cmd === "video_folder_cleanup_preview") return [{ name: "a.mp4", size: 5 }];
+      if (cmd === "list_discarded_recordings") return [];
+      throw new Error("cleanup failed");
+    },
+    errToast: (e) => errs.push(String(e.message || e)), toast: (m) => toasts.push(m),
+    t: (k) => k, LANG: "en", fmtBytes: () => "5 B", confirmDialog: async () => true,
+    refreshVideoFolderInfo() {}, document: { createElement: () => mkEl("x") }, Number, String,
+  };
+  vm.createContext(sb);
+  vm.runInContext(code + String.fromCharCode(10) + "this.run = openVideoCleanup;", sb);
+  later(async () => {
+    const done = sb.run("C:/rec");
+    await new Promise((r) => setTimeout(r, 20));
+    listeners["video-cleanup-confirm:click"]();
+    await done;
+    check(errs.length === 1, "a failed cleanup shows its error");
+    check(!toasts.includes("videoFolderCleanupDone"), "a failed cleanup must not also report zero files deleted");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

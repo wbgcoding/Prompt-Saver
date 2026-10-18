@@ -133,7 +133,8 @@ export async function openVideoCleanup(dir) {
   });
   if (!confirmed) return;
   const ageDays = Number(ageSel.value);
-  const deleted = await invoke("video_folder_cleanup", { dir, ageDays, names: shownNames }).catch((e) => { errToast(e); return 0; });
+  const deleted = await invoke("video_folder_cleanup", { dir, ageDays, names: shownNames }).catch((e) => { errToast(e); return null; });
+  if (deleted === null) return;
   toast(t("videoFolderCleanupDone").replace("{n}", () => deleted));
   refreshVideoFolderInfo(dir);
 }
