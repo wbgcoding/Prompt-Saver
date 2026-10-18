@@ -300,3 +300,15 @@ fn the_feeder_stops_feeding_after_the_first_encoder_error() {
     assert!(drain.contains("shared.request_stop();") && drain.contains("return;"), "the drain must leave at the first error");
     assert!(rec.contains("!clock.is_paused() && shared.peek_encode_error().is_none()"), "hold and audio sends must stop after an error");
 }
+
+// Structural fix, no red unit test: the old shape could not fail at run time, which is the finding.
+#[test]
+fn stopping_and_cancelling_a_recording_return_plain_values() {
+    let rec = include_str!("../recording.rs");
+    assert!(rec.contains("pub fn stop(session: RecSession) -> StopResult {"));
+    assert!(rec.contains("pub fn cancel(session: RecSession) {"));
+    assert!(rec.contains("fn finish_and_stop(mut session: RecSession) -> (u64, Option<String>) {"));
+    let cmds = include_str!("../rec_cmds.rs");
+    assert!(!cmds.contains("recording::cancel(session)?"));
+    assert!(!cmds.contains("= stopped?;"));
+}
