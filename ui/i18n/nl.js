@@ -1456,6 +1456,7 @@ export default {
     errAudioNotActive: "Die geluidsbron is niet actief in deze opname",
     errExportDest: "De exportbestemming is ongeldig",
     errRecordingUnreadable: "De opname kon niet worden gelezen",
+    errSourceNotAllowed: "Dit bestand staat op een andere computer en kan hier niet worden gebruikt.",
     errToolStart: "Het videohulpprogramma kon niet worden gestart",
     errFfmpegTimeout: "ffmpeg reageerde niet op tijd. Staat het bestand op een trage of losgekoppelde schijf?",
     errMicMux: "Het microfoonspoor kon niet worden toegevoegd",

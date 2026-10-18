@@ -1456,6 +1456,7 @@ export default {
     errAudioNotActive: "Bu ses kaynağı bu kayıtta etkin değil",
     errExportDest: "Dışa aktarma hedefi geçerli değil",
     errRecordingUnreadable: "Kayıt okunamadı",
+    errSourceNotAllowed: "Bu dosya başka bir bilgisayarda olduğu için burada kullanılamaz.",
     errToolStart: "Video aracı başlatılamadı",
     errFfmpegTimeout: "ffmpeg zamanında yanıt vermedi. Dosya yavaş veya bağlantısı kesilmiş bir sürücüde mi?",
     errMicMux: "Mikrofon izi eklenemedi",

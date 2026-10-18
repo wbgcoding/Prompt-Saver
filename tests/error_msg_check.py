@@ -18,7 +18,7 @@ ALLOW = {
     "the caller branches on the code and shows its own text": [
         "canceled", "cancelled", "demo-mode-active", "focus-failed", "no-target", "import-changed",
         "ocr-no-language", "ocr-index-busy", "voice-no-language", "voice-busy", "voice-online-required",
-        "recording-too-young-to-continue", "source-not-allowed", "not-media", "no-source",
+        "recording-too-young-to-continue", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
         "view-full:{deficit}", "{RESTART_FAILED_PREFIX}{e}",
         "not a valid address or range: {part}", "invalid-exe",

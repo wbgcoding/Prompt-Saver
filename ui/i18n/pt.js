@@ -1456,6 +1456,7 @@ export default {
     errAudioNotActive: "Essa fonte de áudio não está ativa nesta gravação",
     errExportDest: "O destino da exportação não é válido",
     errRecordingUnreadable: "Não foi possível ler a gravação",
+    errSourceNotAllowed: "Este arquivo está em outro computador, então não pode ser usado aqui.",
     errToolStart: "Não foi possível iniciar a ferramenta de vídeo",
     errFfmpegTimeout: "O ffmpeg não respondeu a tempo. O ficheiro está numa unidade lenta ou desligada?",
     errMicMux: "Não foi possível adicionar a faixa do microfone",

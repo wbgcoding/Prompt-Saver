@@ -1456,6 +1456,7 @@ export default {
     errAudioNotActive: "此录制中未启用该音频源",
     errExportDest: "导出目标无效",
     errRecordingUnreadable: "无法读取该录制",
+    errSourceNotAllowed: "此文件位于另一台电脑上，因此无法在这里使用。",
     errToolStart: "无法启动视频工具",
     errFfmpegTimeout: "ffmpeg 未能及时响应。该文件是否位于速度较慢或已断开连接的驱动器上？",
     errMicMux: "无法添加麦克风音轨",

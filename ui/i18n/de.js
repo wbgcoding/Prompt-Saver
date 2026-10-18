@@ -1464,6 +1464,7 @@ export default {
     errAudioNotActive: "Diese Tonquelle ist in dieser Aufnahme nicht aktiv",
     errExportDest: "Das Exportziel ist ungültig",
     errRecordingUnreadable: "Die Aufnahme konnte nicht gelesen werden",
+    errSourceNotAllowed: "Diese Datei liegt auf einem anderen Rechner und kann hier nicht verwendet werden.",
     errToolStart: "Das Videowerkzeug konnte nicht gestartet werden",
     errFfmpegTimeout: "ffmpeg hat nicht rechtzeitig geantwortet. Liegt die Datei auf einem langsamen oder getrennten Laufwerk?",
     errMicMux: "Die Mikrofonspur konnte nicht hinzugefügt werden",
