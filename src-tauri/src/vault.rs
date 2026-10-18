@@ -434,7 +434,11 @@ pub(crate) fn apply_prompt_secret(
 // per-machine seal on top). Re-seals text and variants of every row with the vault key, in one
 // transaction; a row that cannot be read is deleted rather than left readable. Returns the
 // number of rows touched.
+// The version name stays unsealed on purpose: like the prompt's own name it is what the tiles
+// and the history list show. secure_delete zeroes the pages the plain rows leave behind; the
+// setting belongs to this short-lived connection.
 pub(crate) fn db_seal_versions(conn: &mut Connection, prompt_id: &str, key: &[u8; 32]) -> rusqlite::Result<usize> {
+    conn.pragma_update(None, "secure_delete", "ON")?;
     let tx = conn.transaction()?;
     let rows: Vec<(i64, String, String)> = {
         let mut stmt = tx.prepare("SELECT id, text, variants FROM prompt_versions WHERE prompt_id = ?1")?;
@@ -455,6 +459,25 @@ pub(crate) fn db_seal_versions(conn: &mut Connection, prompt_id: &str, key: &[u8
     }
     tx.commit()?;
     Ok(n)
+}
+
+// A prompt can turn confidential while no session is open (an import, a sync folder, an older
+// build), leaving plain version rows behind. Every unlock re-checks all of them; sealing a row
+// that is already sealed is a no-op, so this is safe to repeat. Returns the number of prompts
+// whose rows were processed.
+pub(crate) fn seal_confidential_versions(conn: &mut Connection, prompts: &[Prompt], key: &[u8; 32]) -> usize {
+    let mut n = 0;
+    for p in prompts.iter().filter(|p| p.secret) {
+        match db_seal_versions(conn, &p.id, key) {
+            Ok(rows) if rows > 0 => n += 1,
+            Ok(_) => {}
+            Err(e) => {
+                append_crash_log(&format!("could not seal version history of a confidential prompt: {e}"));
+                db_delete_versions(conn, &p.id);
+            }
+        }
+    }
+    n
 }
 
 // Argon2id takes a noticeable moment: run it on the blocking pool so an unlock never ties up an
@@ -538,6 +561,10 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
     });
     schedule_session_expiry(app.clone());
     let store = lock(&state);
+    if let Some(mut conn) = db_conn(&app) {
+        let all: Vec<Prompt> = store.prompts.iter().chain(store.trash.iter()).filter(|p| p.secret).cloned().collect();
+        seal_confidential_versions(&mut conn, &all, &key);
+    }
     let secret_key = secret_session_key(secret_timeout_min(&store.settings));
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),

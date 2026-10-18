@@ -17,6 +17,45 @@ fn an_update_uninstall_keeps_the_downloaded_ffmpeg() {
     assert!(nsi.contains("GetOptions} $CMDLINE \"/KEEPTOOLS\""), "un.onInit reads the marker");
 }
 
+fn raw_version_text(conn: &Connection, id: &str) -> String {
+    let raw: String = conn
+        .query_row("SELECT text FROM prompt_versions WHERE prompt_id = ?1", [id], |r| r.get(0))
+        .unwrap();
+    dec_str(&raw)
+}
+
+#[test]
+fn unlocking_the_vault_seals_every_confidential_prompts_plain_version_rows() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "sec", 1, "N", "plain secret body", &[], 20).unwrap();
+    db_add_version(&conn, "open", 2, "N", "plain open body", &[], 20).unwrap();
+    let mut sec = test_prompt("sec");
+    sec.secret = true;
+    let open = test_prompt("open");
+    assert_eq!(seal_confidential_versions(&mut conn, &[sec.clone(), open.clone()], &key), 1);
+    assert!(!raw_version_text(&conn, "sec").contains("plain secret body"));
+    assert_eq!(raw_version_text(&conn, "open"), "plain open body", "a plain prompt keeps its history");
+    // Idempotent: a second pass leaves the sealed text readable and untouched.
+    seal_confidential_versions(&mut conn, &[sec], &key);
+    let v = db_list_versions(&conn, "sec");
+    assert_eq!(open_snapshot(&v[0].text, &v[0].variants, Some(key)).unwrap().0, "plain secret body");
+}
+
+#[test]
+fn sealing_version_rows_overwrites_the_freed_pages() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "a", 1, "N", "old body", &[], 20).unwrap();
+    let before: i64 = conn.query_row("PRAGMA secure_delete", [], |r| r.get(0)).unwrap();
+    assert_eq!(before, 0);
+    db_seal_versions(&mut conn, "a", &key).unwrap();
+    let after: i64 = conn.query_row("PRAGMA secure_delete", [], |r| r.get(0)).unwrap();
+    assert_eq!(after, 1, "the plain pages are zeroed when the rows are rewritten");
+}
+
 #[test]
 fn every_leading_separator_pair_and_nt_prefix_counts_as_a_network_path() {
     for p in [
