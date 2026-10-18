@@ -232,12 +232,12 @@ pub struct CamFinishResult {
 // CamSession::finishing). cam_start_ms is the real MediaRecorder start (Date.now() in
 // camera.js when recorder.start() ran), not a begin-time guess. screen_elapsed_ms is
 // camera_screen_elapsed_ms's value read at that same moment: the final, pause-aware
-// overlay offset, written straight into the sidecar.
-fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) {
+// overlay offset, written straight into the sidecar. A failed write is returned: without the
+// sidecar the editor would silently align the overlay at offset 0.
+pub(crate) fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) -> Result<(), String> {
     let sidecar = CamSidecar { start_ms: cam_start_ms, overlay_start_ms: screen_elapsed_ms };
-    if let Ok(json) = serde_json::to_string(&sidecar) {
-        let _ = fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json);
-    }
+    let json = serde_json::to_string(&sidecar).map_err(|e| e.to_string())?;
+    fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -249,7 +249,7 @@ pub fn camera_finish_recording(
     screen_elapsed_ms: Option<u64>,
 ) -> Result<CamFinishResult, String> {
     let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
-    finalize_session(&session, cam_start_ms, screen_elapsed_ms);
+    finalize_session(&session, cam_start_ms, screen_elapsed_ms)?;
     let screen_still_active = {
         #[cfg(windows)]
         {
@@ -394,7 +394,10 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
             if let Some(state) = cleanup_app.try_state::<CameraState>() {
                 if let Some(session) = state.0.lock().unwrap_or_else(|e| e.into_inner()).take() {
                     match session.finishing {
-                        Some((cam_start_ms, screen_elapsed_ms)) => finalize_session(&session, cam_start_ms, screen_elapsed_ms),
+                        Some((cam_start_ms, screen_elapsed_ms)) => {
+                            // Nobody is left to tell: the window is already gone.
+                            let _ = finalize_session(&session, cam_start_ms, screen_elapsed_ms);
+                        }
                         None => discard_session(&session),
                     }
                 }

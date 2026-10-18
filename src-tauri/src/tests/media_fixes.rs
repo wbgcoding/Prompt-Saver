@@ -484,3 +484,19 @@ fn a_camera_window_without_its_permission_handler_is_destroyed() {
     assert!(arm.contains("win.destroy()"), "{arm}");
     assert!(!src.contains("install_permission_handler(&app, &win)?;"));
 }
+
+#[test]
+fn a_failed_camera_sidecar_write_is_reported() {
+    let root = std::env::temp_dir().join(format!("ps-camside-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let session = |dir: &std::path::Path| crate::camera::CamSession {
+        output_path: dir.join("cam-1.webm"),
+        companion_path: None,
+        finishing: None,
+    };
+    // The folder does not exist, so the sidecar cannot be written.
+    assert!(crate::camera::finalize_session(&session(&root.join("missing")), 5, None).is_err());
+    std::fs::create_dir_all(&root).unwrap();
+    assert!(crate::camera::finalize_session(&session(&root), 5, Some(7)).is_ok());
+    let _ = std::fs::remove_dir_all(&root);
+}
