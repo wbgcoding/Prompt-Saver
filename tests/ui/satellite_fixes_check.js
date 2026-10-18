@@ -303,6 +303,41 @@ section(() => {
   });
 });
 
+section(() => {
+  const src = read("snip.js");
+  const calls = [];
+  const mkBtn = () => { const b = { handlers: {}, classList: { add() {}, remove() {} }, style: {}, setAttribute() {}, addEventListener(n, f) { b.handlers[n] = f; } }; return b; };
+  const buttons = [];
+  const sb = {
+    pickHistory: ["#ff0000"], pickMode: true, pickBusy: false, pickFmt: "hex", cur: { x: 1, y: 1 }, picks: 0,
+    historyEl: { innerHTML: "", classList: { toggle() {} }, appendChild: (b) => buttons.push(b) },
+    document: { createElement: () => mkBtn() },
+    hexToRgb: () => [255, 0, 0], formatColor: () => "#ff0000",
+    invoke: async (cmd) => { calls.push(cmd); return true; },
+    pickHere() { sb.picks++; }, saveZoom() {}, setCur() {}, setZoom() {}, setTimeout: () => 0,
+    NUDGE: {}, ZOOM_KEYS: {},
+    window: { addEventListener: (n, f) => { sb.onKey = f; } },
+  };
+  vm.createContext(sb);
+  vm.runInContext([extractBlock(src, "function renderHistory("), extractBlock(src, 'window.addEventListener("keydown"') + ");", "renderHistory();"].join(String.fromCharCode(10)), sb);
+  const swatch = buttons[0];
+  const evt = (extra) => Object.assign({ key: "Enter", preventDefault() { this.prevented = true; }, stopPropagation() {} }, extra);
+  const onSwatch = evt({ target: { closest: (sel) => (sel === ".pick-history-item" ? swatch : null) } });
+  sb.onKey(onSwatch);
+  check(sb.picks === 0 && !onSwatch.prevented, "Enter on a focused history swatch does not pick the crosshair pixel");
+  sb.onKey(evt({ target: { closest: () => null } }));
+  check(sb.picks === 1, "Enter elsewhere still picks the crosshair pixel");
+  later(async () => {
+    swatch.handlers.click(evt({ detail: 0 }));
+    await Promise.resolve();
+    check(calls.includes("copy_text"), "a keyboard click on a swatch copies that swatch");
+    calls.length = 0;
+    swatch.handlers.click(evt({ detail: 1 }));
+    await Promise.resolve();
+    check(calls.length === 0, "a mouse click does not copy a second time after mouseup");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

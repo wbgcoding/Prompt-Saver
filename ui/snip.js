@@ -559,8 +559,7 @@ function renderHistory() {
     // drag, mouseup would otherwise fire pickHere() for whatever the crosshair is
     // currently over (the window-level pick handlers, above).
     btn.addEventListener("mousedown", (e) => e.stopPropagation());
-    btn.addEventListener("mouseup", async (e) => {
-      e.stopPropagation();
+    const copySwatch = async () => {
       try {
         // Check the return value too: a resolved false (write rejected) must
         // not flash "copied" any more than a thrown error would.
@@ -570,7 +569,11 @@ function renderHistory() {
           setTimeout(() => btn.classList.remove("copied"), 250);
         }
       } catch { /* clipboard write failed: nothing to show inside this overlay */ }
-    });
+    };
+    btn.addEventListener("mouseup", (e) => { e.stopPropagation(); copySwatch(); });
+    // Tab-focus plus Enter or Space arrives as a click without a pointer (detail 0); a mouse
+    // click already copied on mouseup.
+    btn.addEventListener("click", (e) => { e.stopPropagation(); if (e.detail === 0) copySwatch(); });
     historyEl.appendChild(btn);
   }
 }
@@ -784,6 +787,8 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setZoom(pickZoom + zk);
   } else if (e.key === "Enter" || e.key === " ") {
+    // A focused history swatch takes the key itself (its click copies that swatch).
+    if (e.target && e.target.closest && e.target.closest(".pick-history-item")) return;
     e.preventDefault();
     pickHere();
   }
