@@ -254,6 +254,7 @@ fn forget_closing(label: &str) {
 // teardown was still running left the reopen undone, so the plan is replayed once here, off
 // the event loop that runs this handler.
 pub(crate) fn float_destroyed(app: &AppHandle, label: &str) {
+    note_app_placement(label, None);
     let gave_up = watch_destroyed(&mut CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()), label);
     if gave_up {
         let app2 = app.clone();
@@ -360,6 +361,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        note_app_placement(&label, parked.then(|| (x.round() as i32, y.round() as i32)));
         spawn_reveal_fallback(app, label.clone());
 
         let app2 = app.clone();
@@ -369,7 +371,10 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
             WindowEvent::Moved(p) => {
                 // Fires for every pixel of a drag, so never block on a busy store; the next event carries
                 // the position. A drag is the user placing the pill, so it becomes the real position and
-                // ends parking.
+                // ends parking. The app's own placement of a parked pill is not a drag.
+                if !move_is_user_drag(&wlabel, (p.x, p.y)) {
+                    return;
+                }
                 let screen = screen_id_at(&app2, p.x, p.y);
                 if let Some(state) = app2.try_state::<Db>() {
                     if let Ok(mut store) = state.try_lock() {
@@ -796,6 +801,37 @@ pub(crate) struct FolderExpand(pub(crate) Mutex<HashMap<String, Rect>>);
 // on restart, never written to settings.
 pub(crate) struct HiddenFloats(pub(crate) Mutex<std::collections::HashSet<String>>);
 
+// Where a window was last placed by the app itself, per label. The window's own Moved event
+// fires for that placement too, and it must not count as the user dragging the pill: that
+// would overwrite the stored home of a parked pill with its park spot.
+static PLACED_BY_APP: Mutex<Vec<(String, (i32, i32))>> = Mutex::new(Vec::new());
+
+// Remembers (or, with None, forgets) the spot the app just moved a window to.
+fn note_app_placement(label: &str, spot: Option<(i32, i32)>) {
+    let mut v = PLACED_BY_APP.lock().unwrap_or_else(|e| e.into_inner());
+    v.retain(|(l, _)| l != label);
+    if let Some(s) = spot {
+        v.push((label.to_string(), s));
+    }
+}
+
+// Whether a Moved event is the user dragging. An event that lands on the spot the app set
+// is not; the first event anywhere else is, and it drops the remembered spot.
+pub(crate) fn moved_is_user_drag(placed: &mut Vec<(String, (i32, i32))>, label: &str, at: (i32, i32)) -> bool {
+    match placed.iter().position(|(l, _)| l == label) {
+        Some(i) if placed[i].1 == at => false,
+        Some(i) => {
+            placed.remove(i);
+            true
+        }
+        None => true,
+    }
+}
+
+fn move_is_user_drag(label: &str, at: (i32, i32)) -> bool {
+    moved_is_user_drag(&mut PLACED_BY_APP.lock().unwrap_or_else(|e| e.into_inner()), label, at)
+}
+
 // A pill/folder currently parked (its saved screen is not among today's monitors) and when
 // this run first noticed. In memory only: the marker and cleanup clock reset on restart,
 // while the position and screen id in Settings are never touched. floating.js/folder.js ask
@@ -976,6 +1012,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        note_app_placement(&label, parked.then(|| (x.round() as i32, y.round() as i32)));
         spawn_reveal_fallback(app, label.clone());
 
         let app2 = app.clone();
@@ -985,7 +1022,10 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
             WindowEvent::Moved(p) => {
                 // While the folder is open the window origin is not the icon, so the stored position
                 // follows the icon. A drag is the user placing the folder, so it becomes the real position
-                // and ends parking.
+                // and ends parking. The app's own placement of a parked folder is not a drag.
+                if !move_is_user_drag(&wlabel, (p.x, p.y)) {
+                    return;
+                }
                 let off = folder_expansion(&app2, &fid).unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
                 let icon_x = p.x + off.x.round() as i32;
                 let icon_y = p.y + off.y.round() as i32;

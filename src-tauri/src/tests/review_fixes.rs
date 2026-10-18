@@ -1455,3 +1455,14 @@ fn an_update_signature_must_match_the_digest_and_the_key() {
     assert!(!update_signature_valid(&digest, "", &key));
     assert!(!update_signature_valid(&digest, &sig, UPDATE_PUBLIC_KEY_B64));
 }
+#[test]
+fn the_app_placing_a_parked_pill_is_not_a_user_drag() {
+    // open_floating's own set_position fires Moved too; counting it as a drag wrote the park
+    // spot over the stored home and ended parking.
+    let mut placed = vec![("float-a".to_string(), (40, 60))];
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 60)), "the app's own placement");
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 60)), "a repeated event for it");
+    assert!(moved_is_user_drag(&mut placed, "float-a", (45, 61)), "a real drag");
+    assert!(moved_is_user_drag(&mut placed, "float-a", (40, 60)), "after a drag the old spot counts again");
+    assert!(moved_is_user_drag(&mut placed, "float-b", (40, 60)), "a window the app never parked");
+}
