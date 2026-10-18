@@ -236,6 +236,7 @@ document.addEventListener("keydown", (e) => {
 // in that hand-off would close the menu before anything was on screen.
 let openedAt = Date.now();
 const BLUR_GRACE_MS = 400;
+let blurTimer = 0; // the deferred close of a blur inside the grace window
 window.addEventListener("blur", () => {
   if (handover) { sendTail(); return; } // the launcher took the focus: pass on the text, then close
   if (closed) return; // hidden between opens: nothing to close
@@ -245,7 +246,10 @@ window.addEventListener("blur", () => {
   // another app in that same instant, ignoring the blur would strand this always-on-top
   // menu on screen. Close once the grace window ends, unless this window is focused again
   // by then.
-  else setTimeout(() => { if (!document.hasFocus() && !handover) close(); }, left);
+  else {
+    clearTimeout(blurTimer);
+    blurTimer = setTimeout(() => { if (!document.hasFocus() && !handover) close(); }, left);
+  }
 });
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target) && !handover) close();
@@ -266,6 +270,7 @@ async function openMenu() {
   const plan = await invoke("tray_window_plan").catch(() => null);
   if (!plan) return;
   clearTimeout(tailTimer);
+  clearTimeout(blurTimer); // a stale deferred close must not hit this fresh open
   handover = null;
   tailSent = false;
   closed = false;

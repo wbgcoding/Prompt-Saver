@@ -540,6 +540,30 @@ later(async () => {
   check(calls[0] === "pause_recording" && applied.length === 1 && applied[0] === true, "the pause click applies the state it asked for, not the flipped poll state");
 });
 
+later(async () => {
+  const src = read("tray.js");
+  let blurFn;
+  const timers = new Map();
+  let nextId = 1;
+  let closes = 0;
+  const el = () => ({ value: "", hidden: false, setAttribute() {}, focus() {} });
+  const sb = {
+    handover: null, closed: false, openedAt: Date.now(), BLUR_GRACE_MS: 400, tailTimer: 0, tailSent: false, searchEl: el(),
+    window: { addEventListener: (t, fn) => { if (t === "blur") blurFn = fn; } },
+    document: { hasFocus: () => false },
+    setTimeout: (fn) => { const id = nextId++; timers.set(id, fn); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+    Date, close: () => { closes++; }, sendTail() {}, render() {}, syncDocLang() {},
+    invoke: async (cmd) => (cmd === "tray_window_plan" ? { searchOn: false, searchPh: "x" } : undefined),
+  };
+  vm.createContext(sb);
+  vm.runInContext(["var blurTimer = 0;", extractBlock(src, 'window.addEventListener("blur", () =>') + ");", extractBlock(src, "async function openMenu("), "this.openMenu = openMenu;"].join(String.fromCharCode(10)), sb);
+  blurFn(); // a blur inside the grace period defers the close
+  check(timers.size === 1, "a blur inside the grace period schedules one deferred close");
+  await sb.openMenu();
+  check(timers.size === 0, "reopening cancels the stale deferred close");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
