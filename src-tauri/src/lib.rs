@@ -373,6 +373,16 @@ pub fn run() {
             // One startup pass; the periodic job below keeps it up afterwards.
             sweep_clip_export_temp(clip_export_ttl());
 
+            // An ffmpeg an earlier version left in the data folder moves to the per-user folder (or is
+            // deleted when it is not the pinned build). Off the setup thread: it hashes two big files.
+            {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
+                    migrate_old_media_tools(&data_dir(&h), exe_dir.as_deref(), local_app_dir().as_deref());
+                });
+            }
+
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;

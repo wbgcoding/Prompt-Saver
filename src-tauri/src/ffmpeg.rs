@@ -10,6 +10,11 @@ use super::*;
 pub(crate) const FFMPEG_URL: &str =
     "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip";
 pub(crate) const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
+// SHA-256 of the two executables inside that archive (the copies shipped beside the installer).
+// A copy an earlier version left in the data folder moves to the per-user folder only when it
+// is byte for byte one of these (see `migrate_old_media_tools`).
+pub(crate) const FFMPEG_EXE_SHA256: &str = "72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3";
+pub(crate) const FFPROBE_EXE_SHA256: &str = "19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52f";
 pub(crate) const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
 // The video editor needs structured probing (duration, fps, dimensions, stream count for the
 // mic-mux check) that ffmpeg's banner text cannot give reliably but ffprobe's JSON can. Same
@@ -322,6 +327,77 @@ pub(crate) fn install_ffmpeg_from_zip(bytes: &[u8], dir: &Path) -> Result<String
         let _ = fs::remove_file(&probe_staged);
     }
     Ok(final_path.to_string_lossy().to_string())
+}
+
+fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1024 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum OldToolFate {
+    Absent,
+    Moved,
+    Dropped,
+    // Could not be read or moved right now (in use, disk error); tried again at the next start.
+    Kept,
+}
+
+// An ffmpeg or ffprobe an earlier version downloaded into the data folder is no longer searched
+// there (that folder can be shared, so a planted program could run as the user). A copy whose
+// SHA-256 equals the pinned build moves to the per-user folder, so nobody downloads 100 MB again;
+// any other file under that name is deleted, and a copy already present at the new place wins.
+pub(crate) fn migrate_old_media_tool(old: &Path, new_dir: &Path, want_hex: &str) -> OldToolFate {
+    if !old.is_file() {
+        return OldToolFate::Absent;
+    }
+    let Some(name) = old.file_name() else { return OldToolFate::Absent };
+    let Ok(got) = sha256_file_hex(old) else { return OldToolFate::Kept };
+    if !ct_eq(got.as_bytes(), want_hex.to_ascii_lowercase().as_bytes()) {
+        return if fs::remove_file(old).is_ok() { OldToolFate::Dropped } else { OldToolFate::Kept };
+    }
+    let dest = new_dir.join(name);
+    if dest.is_file() {
+        return if fs::remove_file(old).is_ok() { OldToolFate::Dropped } else { OldToolFate::Kept };
+    }
+    if fs::create_dir_all(new_dir).is_err() {
+        return OldToolFate::Kept;
+    }
+    let staged = new_dir.join(format!(".migrate-{}-{}.tmp", std::process::id(), name.to_string_lossy()));
+    let placed = fs::rename(old, &dest).is_ok()
+        || (fs::copy(old, &staged).is_ok() && fs::rename(&staged, &dest).is_ok() && fs::remove_file(old).is_ok());
+    if !placed {
+        let _ = fs::remove_file(&staged);
+        return OldToolFate::Kept;
+    }
+    OldToolFate::Moved
+}
+
+// The start-up pass over both tools. A portable run keeps its data beside the exe, where the
+// tools are still searched, so nothing there is touched.
+pub(crate) fn migrate_old_media_tools(data_dir: &Path, exe_dir: Option<&Path>, local_dir: Option<&Path>) {
+    let Some(local_dir) = local_dir else { return };
+    let same = |a: &Path, b: &Path| matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y);
+    if exe_dir.is_some_and(|e| same(e, data_dir)) || same(local_dir, data_dir) {
+        return;
+    }
+    for (name, hash) in [("ffmpeg.exe", FFMPEG_EXE_SHA256), ("ffprobe.exe", FFPROBE_EXE_SHA256)] {
+        let fate = migrate_old_media_tool(&data_dir.join(name), local_dir, hash);
+        if fate != OldToolFate::Absent {
+            append_crash_log(&format!("old {name} in the data folder: {fate:?}"));
+        }
+    }
 }
 
 // ---------- Video conversion (ffmpeg) ----------

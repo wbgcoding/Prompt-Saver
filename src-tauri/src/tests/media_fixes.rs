@@ -619,3 +619,52 @@ fn an_ffmpeg_older_than_the_export_graph_syntax_is_skipped_on_path() {
     let finder = src.split("pub(crate) fn find_media_tool").nth(1).unwrap().split("pub(crate) fn ffmpeg_search_path").next().unwrap();
     assert!(finder.contains("path_ffmpeg_is_current"));
 }
+
+#[test]
+fn an_old_data_folder_ffmpeg_moves_only_when_it_is_the_pinned_build() {
+    use sha2::{Digest, Sha256};
+    let root = std::env::temp_dir().join(format!("ps-oldtool-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let (data, local) = (root.join("data"), root.join("local"));
+    fs::create_dir_all(&data).unwrap();
+    let bytes = b"pinned build bytes";
+    let want: String = Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+
+    // The pinned copy moves, and the old place is empty afterwards.
+    fs::write(data.join("ffmpeg.exe"), bytes).unwrap();
+    assert_eq!(migrate_old_media_tool(&data.join("ffmpeg.exe"), &local, &want), OldToolFate::Moved);
+    assert_eq!(fs::read(local.join("ffmpeg.exe")).unwrap(), bytes);
+    assert!(!data.join("ffmpeg.exe").exists());
+
+    // A planted or damaged file under the same name is deleted, never moved.
+    fs::write(data.join("ffprobe.exe"), b"something else").unwrap();
+    assert_eq!(migrate_old_media_tool(&data.join("ffprobe.exe"), &local, &want), OldToolFate::Dropped);
+    assert!(!data.join("ffprobe.exe").exists());
+    assert!(!local.join("ffprobe.exe").exists());
+
+    // A copy already at the new place wins; the old one is removed.
+    fs::write(data.join("ffmpeg.exe"), bytes).unwrap();
+    assert_eq!(migrate_old_media_tool(&data.join("ffmpeg.exe"), &local, &want), OldToolFate::Dropped);
+    assert!(!data.join("ffmpeg.exe").exists());
+
+    // Nothing there, nothing to do.
+    assert_eq!(migrate_old_media_tool(&data.join("ffmpeg.exe"), &local, &want), OldToolFate::Absent);
+
+    // The pass leaves a data folder that is also the exe folder (portable) alone.
+    fs::write(data.join("ffmpeg.exe"), b"portable copy").unwrap();
+    migrate_old_media_tools(&data, Some(&data), Some(&local));
+    assert!(data.join("ffmpeg.exe").exists());
+
+    // The pinned hashes are the shipped executables' hashes.
+    assert_eq!(FFMPEG_EXE_SHA256.len(), 64);
+    assert_eq!(FFPROBE_EXE_SHA256.len(), 64);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn start_up_moves_old_media_tools_off_the_ui_thread() {
+    let lib = source!("../lib.rs");
+    assert!(lib.contains("migrate_old_media_tools"));
+    let at = lib.find("migrate_old_media_tools").unwrap();
+    assert!(lib[..at].rfind("std::thread::spawn").is_some_and(|t| at - t < 400), "hashing two 100 MB files must not block setup");
+}
