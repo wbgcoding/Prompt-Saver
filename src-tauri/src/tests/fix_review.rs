@@ -310,3 +310,13 @@ fn a_failed_seal_keeps_the_history_and_a_sealed_row_is_not_rewritten() {
     let writes: i64 = conn.query_row("SELECT COUNT(*) FROM upd_log", [], |r| r.get(0)).unwrap();
     assert_eq!(writes, 0, "an already sealed row is left alone");
 }
+
+#[test]
+fn deleting_my_data_also_removes_the_per_user_local_tool_folder() {
+    let nsi = include_str!("../../installer.nsi").replace("\r\n", "\n");
+    let un = nsi.find("Section Uninstall").unwrap();
+    let branch = &nsi[un..];
+    let roaming = branch.find("RmDir /r \"$APPDATA\\${DATAFOLDER}\"").expect("roaming delete");
+    let local = branch.find("RmDir /r \"$LOCALAPPDATA\\${DATAFOLDER}\"").expect("local data folder delete");
+    assert!(local > roaming && local - roaming < 300, "the local folder is removed beside the roaming one");
+}

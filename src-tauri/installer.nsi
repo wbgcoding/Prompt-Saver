@@ -1312,6 +1312,7 @@ Section Uninstall
     ; its parent.
     RmDir /r "$APPDATA\${DATAFOLDER}"
     RmDir /r "$APPDATA\${BUNDLEID}"
+    RmDir /r "$LOCALAPPDATA\${DATAFOLDER}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
     ; Scratch files hold picture crops, filmstrips and working copies of the user's
     ; own files, so "delete my data" takes them along. Only the app's own folder
