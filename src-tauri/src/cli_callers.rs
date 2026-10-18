@@ -379,19 +379,28 @@ pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), S
         let target = if resolved.exists() {
             canon_target
         } else {
-            match resolved.file_name() {
-                Some(name) => canon_target.join(name),
-                None => return Err("refused: the path has no file name".to_string()),
+            // Compared the way Windows will open it, not as typed.
+            match resolved.file_name().map(normalized_file_name) {
+                Some(name) if !name.is_empty() => canon_target.join(name),
+                _ => return Err("refused: the path has no file name".to_string()),
             }
         };
         if is_store_path(&target, &canon_base) {
             return Err("refused: that path belongs to the stored data".to_string());
         }
         if is_program_file_name(&target) {
-            return Err("refused: that path belongs to the stored data".to_string());
+            return Err("refused: that path belongs to the program files".to_string());
         }
     }
     Ok(())
+}
+
+// The name Windows resolves a typed file name to: everything from the first ':' is a stream
+// of the base file, and trailing dots and spaces are dropped when the file is created.
+fn normalized_file_name(name: &std::ffi::OsStr) -> String {
+    let name = name.to_string_lossy();
+    let base = name.split(':').next().unwrap_or("");
+    base.trim_end_matches(['.', ' ']).to_string()
 }
 
 // True for a name an export must never replace: in a portable install the data folder is the

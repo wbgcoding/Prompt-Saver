@@ -1387,6 +1387,7 @@ export default {
     errRestoreRecordingActive: "Hay una grabación en curso. Termínala y luego restaura la copia de seguridad.",
     errUpdateJobsRunning: "Aún hay tareas en segundo plano. Espera a que terminen y luego instala la actualización.",
     errUpdatePortableManual: "Esta es la versión portátil. La página de la versión está abierta: descarga el nuevo exe portátil y reemplaza este.",
+    errExportProgramFile: "Ese archivo pertenece al programa y no puede ser un destino de exportación.",
     errBackupTooLarge: "Esta copia de seguridad supera los 512 MB y no se restauró",
     errStoreTooLargeForBackup: "El almacén de datos supera los 512 MB y no se puede respaldar",
     errBackupSchemaMismatch: "Este archivo no parece una base de datos de {app} y no se restauró",

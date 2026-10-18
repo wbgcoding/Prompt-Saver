@@ -1387,6 +1387,7 @@ export default {
     errRestoreRecordingActive: "Una registrazione è in corso. Terminala, poi ripristina il backup.",
     errUpdateJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi installa l'aggiornamento.",
     errUpdatePortableManual: "Questa è la versione portatile. La pagina della release è aperta: scarica il nuovo exe portatile e sostituisci questo.",
+    errExportProgramFile: "Quel file appartiene al programma e non può essere una destinazione di esportazione.",
     errBackupTooLarge: "Questo backup supera i 512 MB e non è stato ripristinato",
     errStoreTooLargeForBackup: "L'archivio dati supera i 512 MB e non può essere sottoposto a backup",
     errBackupSchemaMismatch: "Questo file non sembra un database di {app} e non è stato ripristinato",

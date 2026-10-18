@@ -1387,6 +1387,7 @@ export default {
     errRestoreRecordingActive: "録画中です。録画を終えてからバックアップを復元してください。",
     errUpdateJobsRunning: "バックグラウンド処理がまだ実行中です。完了してから更新をインストールしてください。",
     errUpdatePortableManual: "これはポータブル版です。リリースページを開きました。新しいポータブル版の exe をダウンロードして、この exe と置き換えてください。",
+    errExportProgramFile: "このファイルはプログラムの一部のため、書き出し先にできません。",
     errBackupTooLarge: "このバックアップは512MBを超えるため復元されませんでした",
     errStoreTooLargeForBackup: "データストアが512MBを超えているため、バックアップできません",
     errBackupSchemaMismatch: "このファイルは{app}のデータベースではないようなので、復元されませんでした",

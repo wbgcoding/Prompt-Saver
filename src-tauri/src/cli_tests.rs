@@ -1095,6 +1095,38 @@ fn export_cannot_overwrite_program_files_beside_the_store() {
 }
 
 #[test]
+fn export_names_are_checked_the_way_windows_will_read_them() {
+    let dir = TempDir::new("confine-spelling");
+    // None of these exist yet; Windows drops trailing dots and spaces and treats ":x" as a
+    // stream of the base name, so each one lands on a program or store file.
+    for target in [
+        "uninstall.exe.",
+        "uninstall.exe...",
+        "uninstall.exe ",
+        "uninstall.exe:x",
+        "datapath.",
+        "ffmpeg.exe.",
+        "data.db-wal.",
+        "data.db-wal:s",
+        "DATA.DB.",
+    ] {
+        let argv = args(&["export", target, "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_err(), "{target} must be refused as an export target");
+    }
+    let argv = args(&["export", "report.json.", "--yes"]);
+    assert!(confine_path_arg(&argv, dir.path()).is_ok(), "an ordinary name with a stray dot stays allowed");
+}
+
+#[test]
+fn a_program_file_refusal_has_its_own_message() {
+    let dir = TempDir::new("confine-program-msg");
+    let program = confine_path_arg(&args(&["export", "uninstall.exe", "--yes"]), dir.path()).unwrap_err();
+    let store = confine_path_arg(&args(&["export", "data.db", "--yes"]), dir.path()).unwrap_err();
+    assert_ne!(program, store, "a program file is not stored data");
+    assert!(program.contains("program"), "{program}");
+}
+
+#[test]
 fn import_from_inside_the_data_folder_is_allowed() {
     let dir = TempDir::new("confine-import-ok");
     let file = dir.path().join("in.json");

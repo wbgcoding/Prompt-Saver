@@ -1395,6 +1395,7 @@ export default {
     errRestoreRecordingActive: "Eine Aufnahme läuft. Beende sie und stelle dann das Backup wieder her.",
     errUpdateJobsRunning: "Hintergrundaufgaben laufen noch. Warte, bis sie fertig sind, und installiere dann das Update.",
     errUpdatePortableManual: "Das ist die portable Version. Die Release-Seite ist geöffnet: Lade die neue portable Exe herunter und ersetze diese.",
+    errExportProgramFile: "Diese Datei gehört zum Programm und kann kein Exportziel sein.",
     errBackupTooLarge: "Diese Sicherung ist größer als 512 MB und wurde nicht wiederhergestellt",
     errStoreTooLargeForBackup: "Der Datenspeicher ist größer als 512 MB und kann nicht gesichert werden",
     errBackupSchemaMismatch: "Diese Datei sieht nicht wie eine {app}-Datenbank aus und wurde nicht wiederhergestellt",

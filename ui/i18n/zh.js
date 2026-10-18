@@ -1387,6 +1387,7 @@ export default {
     errRestoreRecordingActive: "正在录制。请先结束录制，再恢复备份。",
     errUpdateJobsRunning: "后台任务仍在运行。请等它们完成后再安装更新。",
     errUpdatePortableManual: "这是便携版。已打开发布页面：请下载新的便携版 exe 并替换当前文件。",
+    errExportProgramFile: "该文件属于程序本身，不能作为导出目标。",
     errBackupTooLarge: "此备份超过 512 MB，未能恢复",
     errStoreTooLargeForBackup: "数据存储超过 512 MB，无法备份",
     errBackupSchemaMismatch: "此文件看起来不是 {app} 的数据库，未能恢复",

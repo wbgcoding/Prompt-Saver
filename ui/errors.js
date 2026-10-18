@@ -42,6 +42,7 @@ export const ERROR_MSG_KEYS = {
   "jobs-running": "errUpdateJobsRunning",
   "ffmpeg-busy": "ffmpegDownloadBusy",
   "save-failed": "persistFailed",
+  "refused: that path belongs to the program files": "errExportProgramFile",
   "remote-off-not-saved": "remoteOffNotSaved",
   "remote-tls-short-lived-has-own-command": "remoteTlsShortLivedOwnCommand",
   "remote-network-off-not-saved": "remoteNetworkOffNotSaved",
