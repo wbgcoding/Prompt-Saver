@@ -694,6 +694,17 @@ section(() => {
   });
 });
 
+section(() => {
+  const ro = read("i18n/ro.js");
+  const keys = ["tileFolderNew", "tileFolderNameMsg", "tileFolderPickSecond", "tileFolderNamePh", "tileFolderDefaultName", "tileFolderRename", "tileFolderColor", "tileFolderDissolve", "tileFolderCount", "errFolderNeedsTwo", "errMaxFolders", "errFolderNameTooLong", "errNotInFolder", "errNotFolderMember"];
+  for (const k of keys) {
+    const m = ro.match(new RegExp("^\\s*" + k + ': "([^"]*)"', "m"));
+    check(!!m && !/dosar/i.test(m[1]) && /folder/i.test(m[1]), "Romanian " + k + " uses the folder term");
+  }
+  const fl = read("i18n/float.js").split(String.fromCharCode(10)).find((l) => /^\s*ro:/.test(l)) || "";
+  check(/members: "[^"]*folder/.test(fl) && !/dosar/i.test(fl), "the Romanian pill strings use the folder term");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
