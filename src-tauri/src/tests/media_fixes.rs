@@ -312,3 +312,15 @@ fn stopping_and_cancelling_a_recording_return_plain_values() {
     assert!(!cmds.contains("recording::cancel(session)?"));
     assert!(!cmds.contains("= stopped?;"));
 }
+
+// Structural fix, no red unit test: only comments and an attribute moved.
+#[test]
+fn the_follow_comment_and_cfg_sit_on_the_follow_function() {
+    let bar = include_str!("../rec_bar.rs");
+    assert!(bar.contains("// periodic jobs.
+#[cfg(windows)]
+pub(crate) fn spawn_rec_bar_follow("));
+    assert!(!bar.contains("// periodic jobs.
+#[cfg(windows)]
+// Bumped"));
+}

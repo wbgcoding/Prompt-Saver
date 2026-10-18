@@ -75,10 +75,6 @@ pub(crate) fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hw
     }
 }
 
-// Re-asserts the bar's position every 200ms while a window target moves or resizes,
-// stopping once the bar is hidden/closed or the recorded window is gone. Tauri has no
-// "external window moved" event, so this is a poll loop like the scheduler module's
-// periodic jobs.
 #[cfg(windows)]
 // Bumped on every spawn_rec_bar_follow call so an old follow thread notices it was
 // superseded (a hide+show within one poll tick spawns a new thread for a new hwnd) and
@@ -103,6 +99,11 @@ pub(crate) fn follow_stop_settled(stop_ok: bool, recording: bool, switching: boo
     stop_ok || (!recording && !switching)
 }
 
+// Re-asserts the bar's position every 200ms while a window target moves or resizes,
+// stopping once the bar is hidden/closed or the recorded window is gone. Tauri has no
+// "external window moved" event, so this is a poll loop like the scheduler module's
+// periodic jobs.
+#[cfg(windows)]
 pub(crate) fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     let my_gen = REC_BAR_FOLLOW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     REC_BAR_FOLLOWING.store(true, Ordering::SeqCst);
