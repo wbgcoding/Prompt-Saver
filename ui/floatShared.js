@@ -303,6 +303,20 @@ export function fmtBytes(n, lang = "en") {
 // falls back to English. Only for text a person reads: a CSS value, file name or ffmpeg
 // argument keeps toFixed.
 const numFormats = new Map();
+// A duration in the UI language's own unit spelling ("30 days", "30 Tg.", "30 日").
+// `unit` is one of day, hour, minute, second.
+const unitFormats = new Map();
+export function fmtUnit(n, unit, lang = "en", digits = 0) {
+  const key = `${lang}|${unit}|${digits}`;
+  let f = unitFormats.get(key);
+  if (!f) {
+    const opts = { style: "unit", unit, unitDisplay: "short", minimumFractionDigits: 0, maximumFractionDigits: digits };
+    try { f = new Intl.NumberFormat(lang, opts); } catch { f = new Intl.NumberFormat("en", opts); }
+    unitFormats.set(key, f);
+  }
+  return f.format(n);
+}
+
 export function fmtNum(n, digits = 0, lang = "en") {
   const key = `${lang}|${digits}`;
   let f = numFormats.get(key);

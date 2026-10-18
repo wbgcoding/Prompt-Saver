@@ -15,7 +15,7 @@ const expect = (label, got, want) => {
 
 async function main() {
   globalThis.document = globalThis.document || { addEventListener() {}, removeEventListener() {} };
-  const { fmtNum, fmtBytes, fmtSizeCompact } = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
+  const { fmtNum, fmtBytes, fmtSizeCompact, fmtUnit } = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
 
   expect("fmtBytes 600000000 de", fmtBytes(600000000, "de"), "572,2 MB");
   expect("fmtBytes 600000000 en", fmtBytes(600000000, "en"), "572.2 MB");
@@ -37,6 +37,11 @@ async function main() {
   expect("fmtNum 0 digits", fmtNum(2.6, 0, "de"), "3");
   expect("fmtNum unknown language falls back to English", fmtNum(1.5, 1, "not a language"), "1.5");
   expect("fmtNum caches one formatter per language and digits", fmtNum(1.5, 1, "de"), fmtNum(1.5, 1, "de"));
+  expect("fmtUnit days in English", fmtUnit(30, "day", "en"), "30 days");
+  expect("fmtUnit days in German", fmtUnit(30, "day", "de"), "30 Tg.");
+  expect("fmtUnit hours in Japanese", fmtUnit(2, "hour", "ja"), "2 時間");
+  expect("fmtUnit seconds with a decimal comma", fmtUnit(1.5, "second", "de", 1), "1,5 Sek.");
+  expect("fmtUnit unknown language falls back to English", fmtUnit(7, "day", "not a language"), "7 days");
 
   // Every call site passes its window's language, so no size reads in English by accident.
   for (const f of fs.readdirSync(uiDir).filter((n) => n.endsWith(".js"))) {

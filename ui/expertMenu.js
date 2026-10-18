@@ -11,7 +11,7 @@ import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
 import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { ffmpegDownloadActive, fmtBytes, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
+import { ffmpegDownloadActive, fmtBytes, fmtUnit, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { hideSettings, reloadEverything, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
@@ -524,7 +524,9 @@ export function formatValue(cfg, v) {
   if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
   const nf = (opts) => new Intl.NumberFormat(LANG, opts);
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
-  if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
+  if (cfg.unit === "ms") return fmtUnit(v / 1000, "second", LANG, (cfg.step ?? 100) < 100 ? 2 : 1);
+  const timeUnit = { d: "day", h: "hour", min: "minute", s: "second" }[cfg.unit];
+  if (timeUnit) return fmtUnit(v, timeUnit, LANG, 2);
   // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.
   return `${v}${cfg.unit && !/^[%×]$|^\//.test(cfg.unit) ? " " : ""}${cfg.unit}`;
 }
@@ -1105,7 +1107,11 @@ export function syncAgoText(unixSecs) {
   const mins = Math.max(0, Math.round((Date.now() / 1000 - unixSecs) / 60));
   if (mins < 1) return t("syncStatsJustNow");
   if (mins < 60) return t("syncStatsMinsAgo").replace("{n}", () => mins);
-  return new Date(unixSecs * 1000).toLocaleTimeString();
+  const when = new Date(unixSecs * 1000);
+  const today = when.toDateString() === new Date().toDateString();
+  return today
+    ? when.toLocaleTimeString(LANG, { hour: "2-digit", minute: "2-digit" })
+    : when.toLocaleString(LANG, { dateStyle: "short", timeStyle: "short" });
 }
 
 export function pathRow(key) {

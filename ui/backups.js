@@ -2,7 +2,7 @@
 import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
 import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, openVideoCleanup, rowResetBtn, withTip } from "./expertMenu.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
-import { fmtBytes } from "./floatShared.js";
+import { fmtBytes, fmtUnit } from "./floatShared.js";
 import { restoreClipInbox } from "./journal.js";
 import { runExportAll, runImportAll } from "./settingsPanel.js";
 import { attachSelectPicker } from "./selectpop.js";
@@ -302,7 +302,7 @@ export async function renderBackupPanel(body) {
   };
   const collapseHead = collapsibleHead;
 
-  const fmtInterval = (h) => (h < 24 ? `${h} h` : `${h / 24} d`); // ≥24h shown in days
+  const fmtInterval = (h) => (h < 24 ? fmtUnit(h, "hour", LANG) : fmtUnit(h / 24, "day", LANG, 1)); // ≥24h shown in days
 
   const switchRow = (labelText, on, onChange, tipKey) => {
     const l = document.createElement("label"); l.className = "field switch-field";
@@ -534,7 +534,7 @@ export async function renderBackupPanel(body) {
     statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : EMPTY_VALUE, t("backupLargest")),
     statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : EMPTY_VALUE, t("backupSmallest")),
     statCard(newest && oldest
-      ? `${nf(Math.max(0, Math.round((newest - oldest) / 86400000)))} d`
+      ? fmtUnit(Math.max(0, Math.round((newest - oldest) / 86400000)), "day", LANG)
       : EMPTY_VALUE, t("backupSpan")),
     dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
     dtCard(t("backupNewest"), newest),
