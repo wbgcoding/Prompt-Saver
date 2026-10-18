@@ -73,6 +73,32 @@ pub(crate) fn edit_state_seal_all(conn: &Connection) -> usize {
     done
 }
 
+// Points every saved editor state whose source file lay below the old data folder at the same
+// file in the new one. A row is keyed by a hash of its path, so it is rewritten under the new
+// key and the old one dropped, keeping its timestamp. Returns how many rows moved.
+pub(crate) fn rebase_edit_state(conn: &Connection, old: &Path, new: &Path) -> Result<usize, String> {
+    type Row = (String, String, i64, i64, String, String, i64);
+    let rows: Vec<Row> = {
+        let mut st = conn
+            .prepare("SELECT kind, target, size, mtime, ops, id, updated_at FROM edit_state")
+            .map_err(|e| e.to_string())?;
+        let it = st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))
+            .map_err(|e| e.to_string())?;
+        it.flatten().collect()
+    };
+    let mut moved = 0;
+    for (kind, target, size, mtime, ops, old_id, updated_at) in rows {
+        let Some(new_target) = rebase_media_path(&dec_str(&target), old, new) else { continue };
+        edit_state_write(conn, &kind, &new_target, size, mtime, &dec_str(&ops), updated_at)?;
+        if old_id != edit_state_id(&kind, &new_target) {
+            conn.execute("DELETE FROM edit_state WHERE id = ?1", params![old_id]).map_err(|e| e.to_string())?;
+        }
+        moved += 1;
+    }
+    Ok(moved)
+}
+
 // (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
 pub(crate) fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
     for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {

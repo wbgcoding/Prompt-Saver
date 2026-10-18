@@ -798,7 +798,7 @@ fn the_live_data_folder_is_never_cleaned_whatever_was_remembered() {
     let mut flush = || { flushed = true; Ok(()) };
     let mut rebind = || {};
     *LAST_OLD_DATA_DIR.lock().unwrap() = None;
-    assert_eq!(move_store_dir(&dir, &respelled, &dir.join("pointer"), &mut flush, &mut rebind), Ok(false));
+    assert_eq!(move_store_dir(&dir, &respelled, &dir.join("pointer"), &mut flush, &mut rebind, &mut || Ok(())), Ok(false));
     assert!(!flushed);
     assert!(LAST_OLD_DATA_DIR.lock().unwrap().is_none());
     let _ = fs::remove_dir_all(&dir);

@@ -447,7 +447,7 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
     {
         let mut refuses = || -> Result<(), String> { Err("folder is read-only".to_string()) };
         let mut rebind = || rebound = true;
-        let moved = move_store_dir(&current, &new, &pointer, &mut refuses, &mut rebind);
+        let moved = move_store_dir(&current, &new, &pointer, &mut refuses, &mut rebind, &mut || Ok(()));
         assert!(moved.is_err(), "a flush that could not persist the live state must fail the move");
     }
     assert!(!rebound, "the process must keep writing to the folder it never left");
@@ -465,7 +465,7 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
     {
         let mut works = || -> Result<(), String> { Ok(()) };
         let mut rebind = || rebound = true;
-        let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind).unwrap();
+        let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind, &mut || Ok(())).unwrap();
         assert!(!adopted, "a store copied across is the session's own: nothing to reload");
     }
     assert!(rebound, "the live store must be told it is writing to a different file now");
@@ -502,7 +502,7 @@ fn moving_into_a_folder_with_a_store_reports_the_adoption_and_keeps_its_files() 
     std::fs::write(new.join("data.db"), b"the other library").unwrap();
     let mut works = || -> Result<(), String> { Ok(()) };
     let mut rebind = || {};
-    let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind).unwrap();
+    let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind, &mut || Ok(())).unwrap();
     assert!(adopted, "an existing store in the target must be reported as adopted");
     assert_eq!(std::fs::read(new.join("data.db")).unwrap(), b"the other library");
     *LAST_OLD_DATA_DIR.lock().unwrap() = None;

@@ -1644,6 +1644,106 @@ pub(crate) fn data_dir_cleanup_allowed(dir: &Path, last_old: Option<&Path>, live
     last_old.is_some_and(|p| p == dir)
 }
 
+// Subfolders of the data folder that hold files stored rows refer to by absolute path:
+// attachments (files/) and raw recordings not saved elsewhere yet (recordings/).
+const MEDIA_SUBDIRS: [&str; 2] = ["files", "recordings"];
+
+// A path split into its components for comparison: either separator, no empty or "." parts, and
+// a leading verbatim marker dropped. Case is kept; callers compare it folded, like Windows does.
+fn split_path_parts(p: &str) -> Vec<String> {
+    let s = p.replace('\\', "/");
+    let s = s.strip_prefix("//?/").unwrap_or(&s);
+    s.split('/').filter(|c| !c.is_empty() && *c != ".").map(str::to_string).collect()
+}
+
+fn parts_start_with(path: &[String], prefix: &[String]) -> bool {
+    path.len() >= prefix.len() && path.iter().zip(prefix).all(|(a, b)| a.to_lowercase() == b.to_lowercase())
+}
+
+// Whether `child` is `parent` or lies below it, compared on spelling only (case and separators
+// ignored), for folders that may not exist.
+pub(crate) fn path_is_inside_dir(child: &Path, parent: &Path) -> bool {
+    let p = split_path_parts(&parent.to_string_lossy());
+    !p.is_empty() && parts_start_with(&split_path_parts(&child.to_string_lossy()), &p)
+}
+
+// Moves a stored absolute path from `<old>/files` or `<old>/recordings` onto the same place
+// below `new`. None when the path is somewhere else (a foreign file stays where it is), or when
+// it climbs out with ".." (it would resolve to another file under the new root).
+pub(crate) fn rebase_media_path(path: &str, old: &Path, new: &Path) -> Option<String> {
+    let old_parts = split_path_parts(&old.to_string_lossy());
+    if old_parts.is_empty() {
+        return None;
+    }
+    let parts = split_path_parts(path);
+    for sub in MEDIA_SUBDIRS {
+        let mut prefix = old_parts.clone();
+        prefix.push(sub.to_string());
+        if !parts_start_with(&parts, &prefix) {
+            continue;
+        }
+        let rest = &parts[prefix.len()..];
+        if rest.iter().any(|c| c == "..") {
+            return None;
+        }
+        let mut out = new.join(sub);
+        for c in rest {
+            out.push(c);
+        }
+        return Some(out.to_string_lossy().to_string());
+    }
+    None
+}
+
+// Which parts of the store a rebase changed, so only those are written again.
+#[derive(Default, Debug, PartialEq, Eq)]
+pub(crate) struct MediaRebase {
+    pub(crate) prompts: bool,
+    pub(crate) trash: bool,
+    pub(crate) settings: bool,
+}
+
+fn rebase_field(field: &mut String, old: &Path, new: &Path) -> bool {
+    match rebase_media_path(field, old, new) {
+        Some(moved) if moved != *field => {
+            *field = moved;
+            true
+        }
+        _ => false,
+    }
+}
+
+fn rebase_prompt_rows(rows: &mut [Prompt], old: &Path, new: &Path) -> bool {
+    let mut changed = false;
+    for p in rows.iter_mut() {
+        changed |= rebase_field(&mut p.file_path, old, new);
+        changed |= rebase_field(&mut p.icon_path, old, new);
+    }
+    changed
+}
+
+// Every persisted field that can name a file below the old data folder: the attachment and
+// icon paths of prompts and trash, and the settings' free-text options (a custom recording or
+// screenshot folder can be one of the app's own subfolders). Pure, so a test can run it
+// without an AppHandle.
+pub(crate) fn rebase_store_media(
+    prompts: &mut [Prompt],
+    trash: &mut [Prompt],
+    settings: &mut Settings,
+    old: &Path,
+    new: &Path,
+) -> MediaRebase {
+    let mut out = MediaRebase {
+        prompts: rebase_prompt_rows(prompts, old, new),
+        trash: rebase_prompt_rows(trash, old, new),
+        settings: false,
+    };
+    for v in settings.ui_texts.values_mut() {
+        out.settings |= rebase_field(v, old, new);
+    }
+    out
+}
+
 // The disk half of a data-folder move, free of the AppHandle so the order of its steps is
 // testable: flush the live state into the folder being left, copy the store across, point
 // future launches at the new folder, and only then mark the old folder as the one
@@ -1651,13 +1751,16 @@ pub(crate) fn data_dir_cleanup_allowed(dir: &Path, last_old: Option<&Path>, live
 // since until the copy is complete the old folder may hold the only copy. flush persists the
 // live store into `current`; rebind runs once the process writes to a different file.
 // Returns whether the target already held a store that was adopted as is; the in-memory
-// store then describes the other library and must be reloaded.
+// store then describes the other library and must be reloaded. After a copy (not an adoption)
+// rebase repoints the stored attachment paths at the new folder; if it fails, the old folder
+// is not offered for cleanup, since files/ and recordings/ there are what those rows still name.
 pub(crate) fn move_store_dir(
     current: &Path,
     new: &Path,
     pointer_dir: &Path,
     flush: &mut dyn FnMut() -> Result<(), String>,
     rebind: &mut dyn FnMut(),
+    rebase: &mut dyn FnMut() -> Result<(), String>,
 ) -> Result<bool, String> {
     // The same folder under another spelling (casing, a trailing separator) is no
     // move: treating it as one would mark the live folder as the redundant old copy.
@@ -1671,6 +1774,22 @@ pub(crate) fn move_store_dir(
     // copy of that change, and delete_data_dir removes the app's data from the old folder right after.
     let adopted = new.join("data.db").exists();
     if !adopted {
+        // Attachments and unsaved recordings come first and are critical: stored rows name them
+        // by absolute path and the cleanup deletes the old copies. Copying them before the store
+        // also means a failure leaves no data.db behind that a retry would take for a library
+        // to adopt.
+        for sub in MEDIA_SUBDIRS {
+            let from = current.join(sub);
+            if !from.is_dir() {
+                continue;
+            }
+            // Copying a directory into its own descendant would recurse forever, and the
+            // cleanup would delete the new folder along with it.
+            if path_is_inside_dir(new, &from) {
+                return Err(format!("the new folder lies inside {sub}/, which has to be copied"));
+            }
+            copy_dir_all(&from, &new.join(sub)).map_err(|e| format!("copy {sub}/: {e}"))?;
+        }
         let mut landed = false;
         copy_store_files(current, new, &mut landed).map_err(|e| format!("copy store: {}", e))?;
         // Bring the local backup history along, or the Backup panel shows no snapshots at the new
@@ -1692,6 +1811,14 @@ pub(crate) fn move_store_dir(
     // Everything the move consists of has landed, so the folder we came from is now
     // a redundant copy: and the only one delete_data_dir is allowed to clean.
     *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.to_path_buf());
+    if !adopted {
+        if let Err(e) = rebase() {
+            // The rows could not be repointed (save failed, or a locked store cannot be rewritten),
+            // so they still name files/ and recordings/ in the old folder: refuse its cleanup.
+            *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            append_crash_log(&format!("data dir move: attachment paths not updated, old folder kept ({e})"));
+        }
+    }
     Ok(adopted)
 }
 
@@ -1739,7 +1866,32 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     // From the next db_conn on, "the database" is a different file (just copied or already
     // there), which the old folder's row hashes do not describe.
     let mut rebind = || lock(&state).forget_written_rows();
-    let adopted = move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind)?;
+    // After the pointer write data_dir() answers with the new folder, so these saves land there.
+    let mut rebase = || -> Result<(), String> {
+        {
+            let mut guard = lock(&state);
+            let store = &mut *guard;
+            if store.prompts_locked {
+                return Err("the stored prompts are unreadable and cannot be rewritten".to_string());
+            }
+            let changed = rebase_store_media(&mut store.prompts, &mut store.trash, &mut store.settings, &current, &new);
+            if (changed.prompts && !save_prompts(&app, store))
+                || (changed.trash && !save_trash(&app, store))
+                || (changed.settings && !save_settings(&app, &store.settings))
+            {
+                return Err("the updated paths could not be saved".to_string());
+            }
+        }
+        // Saved editor work names its source file too. Losing it only costs the saved edits, so a
+        // failure here does not keep the old folder.
+        if let Some(c) = db_conn(&app) {
+            if let Err(e) = rebase_edit_state(&c, &current, &new) {
+                append_crash_log(&format!("data dir move: saved editor state not updated ({e})"));
+            }
+        }
+        Ok(())
+    };
+    let adopted = move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind, &mut rebase)?;
     if adopted {
         // The folder already held a library, and data_dir() points here: the in-memory store from
         // the folder just left would be written over it (or merge both libraries). Load what is
