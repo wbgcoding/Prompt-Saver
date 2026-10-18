@@ -651,6 +651,8 @@ export async function deliverVoiceHotkeyText(text) {
   if (target === "input") {
     inputEl.value = inputEl.value ? `${inputEl.value}\n${text}` : text;
     autoGrow(inputEl);
+    // The composer reacts to input events (save button state), so tell it the text changed.
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
     return;
   }
   // Clipboard and paste both copy first; paste then adds the paste-into-previous-app step a

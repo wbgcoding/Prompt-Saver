@@ -946,6 +946,19 @@ section(() => {
   });
 });
 
+// 44. A dictation delivered to the composer fires an input event.
+section(() => {
+  const src = read("dictation.js");
+  const fn = extractBlock(src, "export async function deliverVoiceHotkeyText(").replace("export ", "");
+  later(async () => {
+    const events = [];
+    const inputEl = { value: "", dispatchEvent: (e) => events.push(e.type) };
+    const sb = run(fn, { inputEl, txt: () => "input", autoGrow() {}, Event: class { constructor(type) { this.type = type; } } });
+    await sb.deliverVoiceHotkeyText("hello");
+    check(inputEl.value === "hello" && events.join() === "input", "dictated text into the composer dispatches an input event");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
