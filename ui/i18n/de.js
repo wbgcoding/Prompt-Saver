@@ -894,7 +894,7 @@ export default {
     dataDirKeep: "Alten Ordner behalten",
     pathDefault: "Standard",
     pathChange: "Ändern…",
-    dataDirConfirm: "Neuer Speicherort gesetzt. {app} neu starten, um ihn anzuwenden. Daten im alten Ordner jetzt löschen? Das entfernt Datenbank, Sicherungen, Screenshots und Anhänge, die die App dort abgelegt hat.",
+    dataDirConfirm: "Neuer Speicherort gesetzt. {app} neu starten, um ihn anzuwenden. Daten im alten Ordner jetzt löschen? Das entfernt Datenbank, Sicherungen, Aufnahmen und Anhänge, die die App dort abgelegt hat.",
     dataDirCleanFailed: "Der alte Ordner konnte nicht geleert werden.",
     snipKeepBtn: "Als Button speichern",
     flagScreenshot: "Screenshot-Werkzeug",

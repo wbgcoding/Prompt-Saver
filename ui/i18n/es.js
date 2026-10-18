@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Conservar carpeta anterior",
     pathDefault: "Predeterminado",
     pathChange: "Cambiar…",
-    dataDirConfirm: "Nueva ubicación establecida: reinicia {app} para aplicarla. ¿Eliminar ahora los datos de la carpeta anterior? Se borrarán la base de datos, las copias de seguridad, las capturas y los adjuntos que la app guardó allí.",
+    dataDirConfirm: "Nueva ubicación establecida: reinicia {app} para aplicarla. ¿Eliminar ahora los datos de la carpeta anterior? Se borrarán la base de datos, las copias de seguridad, las grabaciones y los adjuntos que la app guardó allí.",
     dataDirCleanFailed: "No se pudo limpiar la carpeta anterior.",
     snipKeepBtn: "Guardar como botón",
     viewColor: "Color",

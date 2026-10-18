@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "保留旧文件夹",
     pathDefault: "默认",
     pathChange: "更改…",
-    dataDirConfirm: "已设置新位置。重启 {app} 以生效。现在删除旧文件夹中的数据吗？这会移除应用存放在那里的数据库、备份、截图和附件。",
+    dataDirConfirm: "已设置新位置。重启 {app} 以生效。现在删除旧文件夹中的数据吗？这会移除应用存放在那里的数据库、备份、录制内容和附件。",
     dataDirCleanFailed: "无法清理旧文件夹。",
     snipKeepBtn: "保存为按钮",
     viewColor: "颜色",

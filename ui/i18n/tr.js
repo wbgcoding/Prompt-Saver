@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Eski klasörü koru",
     pathDefault: "Varsayılan",
     pathChange: "Değiştir…",
-    dataDirConfirm: "Yeni konum ayarlandı: uygulamak için {app}'ı yeniden başlatın. Eski klasördeki veriler şimdi silinsin mi? Bu, uygulamanın orada sakladığı veritabanını, yedekleri, ekran görüntülerini ve ekleri kaldırır.",
+    dataDirConfirm: "Yeni konum ayarlandı: uygulamak için {app}'ı yeniden başlatın. Eski klasördeki veriler şimdi silinsin mi? Bu, uygulamanın orada sakladığı veritabanını, yedekleri, kayıtları ve ekleri kaldırır.",
     dataDirCleanFailed: "Eski klasör temizlenemedi.",
     snipKeepBtn: "Düğme olarak kaydet",
     viewColor: "Renk",

@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Zachowaj stary folder",
     pathDefault: "Domyślny",
     pathChange: "Zmień…",
-    dataDirConfirm: "Ustawiono nową lokalizację. Uruchom ponownie {app}, aby ją zastosować. Usunąć teraz dane ze starego folderu? Zostaną usunięte baza danych, kopie zapasowe, zrzuty ekranu i załączniki zapisane tam przez aplikację.",
+    dataDirConfirm: "Ustawiono nową lokalizację. Uruchom ponownie {app}, aby ją zastosować. Usunąć teraz dane ze starego folderu? Zostaną usunięte baza danych, kopie zapasowe, nagrania i załączniki zapisane tam przez aplikację.",
     dataDirCleanFailed: "Nie udało się wyczyścić poprzedniego folderu.",
     snipKeepBtn: "Zapisz jako przycisk",
     viewColor: "Kolor",
