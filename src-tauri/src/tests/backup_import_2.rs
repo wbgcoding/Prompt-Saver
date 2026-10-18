@@ -732,15 +732,18 @@ fn copy_log_caps_groups_and_prunes() {
 fn restore_copy_history_reinserts_every_snapshotted_row() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
+    // The snapshot comes from recent_copies, newest first.
     let rows = vec![
-        CopyLogRow { ts: 10, id: "a".into() },
         CopyLogRow { ts: 20, id: "b".into() },
+        CopyLogRow { ts: 10, id: "a".into() },
     ];
     db_restore_copy_log(&conn, &rows).unwrap();
-    // db_recent_copies orders by rowid DESC: the later insert (b) comes first,
-    // same order the journal would have shown it in before the clear.
+    // db_recent_copies orders by rowid DESC: the newest copy (b) must come first again,
+    // the order the journal showed before the clear.
     let restored: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
     assert_eq!(restored, ["b", "a"]);
+    let ts: Vec<u64> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.ts).collect();
+    assert_eq!(ts, [20, 10]);
 }
 
 #[test]

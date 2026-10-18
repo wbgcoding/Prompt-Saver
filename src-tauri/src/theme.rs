@@ -227,7 +227,7 @@ pub(crate) fn set_theme(app: AppHandle, state: State<Db>, theme: String) -> Stri
 
 // Create (empty id) or update one custom theme, then apply it. Every field is
 // validated here: the frontend is not the only way into this command.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn save_custom_theme(
     app: AppHandle,
     state: State<Db>,
@@ -265,7 +265,7 @@ pub(crate) fn save_custom_theme(
 }
 
 // Drop a custom theme; deleting the active one falls back to the system theme.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
     let settings = {
         let mut store = lock(&state);

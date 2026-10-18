@@ -931,6 +931,18 @@ fn same_exe_path_refuses_a_different_file() {
     assert!(!same_exe_path(&exe, &other));
 }
 
+// One fold helper decides whether two spellings name the same path: separator, case and the
+// extended-length prefix must not matter, in every caller.
+#[test]
+fn fold_path_ignores_separator_case_and_extended_prefix() {
+    let a = r"C:\Tools\App.EXE";
+    assert_eq!(fold_path(a), fold_path("c:/tools/app.exe"));
+    assert_eq!(fold_path(a), fold_path(r"\\?\C:\Tools\App.exe"));
+    assert_ne!(fold_path(a), fold_path(r"C:\Tools\Other.exe"));
+    assert!(same_program_path(a, "c:/TOOLS/app.exe"));
+    assert!(!same_program_path(a, r"C:\Tools\Other.exe"));
+}
+
 // Finding 2 (HIGH, portable mode): build_demo_store must never delete a
 // pre-existing folder at the demo subfolder's path unless it carries the
 // marker this function itself writes: portable installs put the demo

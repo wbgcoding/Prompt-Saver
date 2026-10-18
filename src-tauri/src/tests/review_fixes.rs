@@ -1492,3 +1492,61 @@ fn the_skip_list_takes_only_version_shaped_text_and_stays_bounded() {
     assert_eq!(list.last().unwrap(), "2.39.0");
     assert!(!list.contains(&"1.2.3".to_string()));
 }
+
+#[test]
+fn the_app_placing_a_parked_pill_is_not_a_user_drag() {
+    // open_floating's own set_position fires Moved too; counting it as a drag wrote the park
+    // spot over the stored home and ended parking.
+    let mut placed = vec![("float-a".to_string(), (40, 60))];
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 60)), "the app's own placement");
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 60)), "a repeated event for it");
+    assert!(moved_is_user_drag(&mut placed, "float-a", (45, 61)), "a real drag");
+    assert!(moved_is_user_drag(&mut placed, "float-a", (40, 60)), "after a drag the old spot counts again");
+    assert!(moved_is_user_drag(&mut placed, "float-b", (40, 60)), "a window the app never parked");
+}
+#[test]
+fn a_maximized_window_keeps_its_normal_bounds() {
+    // Moved/Resized used to store the full work-area bounds, so quitting while maximized
+    // restored a non-maximized window at that size and lost the user's own.
+    let mut g = WindowGeom { x: 100, y: 80, width: 900, height: 600, maximized: false };
+    geom_after_move(&mut g, 0, 0, true);
+    geom_after_resize(&mut g, 1920, 1040, true);
+    assert!(g.maximized);
+    assert_eq!((g.x, g.y, g.width, g.height), (100, 80, 900, 600));
+    geom_after_resize(&mut g, 820, 540, false);
+    geom_after_move(&mut g, 120, 90, false);
+    assert!(!g.maximized);
+    assert_eq!((g.x, g.y, g.width, g.height), (120, 90, 820, 540));
+}
+#[test]
+fn old_saved_geometry_without_the_flag_loads_as_not_maximized() {
+    let g: WindowGeom = serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).unwrap();
+    assert!(!g.maximized);
+}
+#[test]
+fn the_quit_save_does_not_wait_behind_a_busy_store() {
+    // do_full_exit used a blocking lock on the event-loop thread; a backup holding the store
+    // froze every window. With the lock held the helper must report busy instead of waiting.
+    let m = Mutex::new(7);
+    let guard = m.lock().unwrap();
+    let mut ran = false;
+    assert!(!with_store_if_free(&m, |_| ran = true));
+    assert!(!ran);
+    drop(guard);
+    assert!(with_store_if_free(&m, |v| assert_eq!(*v, 7)));
+}
+
+
+#[test]
+fn a_failed_restore_takes_its_undo_snapshot_back_out() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "first", &[], 20).unwrap();
+    db_add_version(&conn, "p2", 11, "Other", "keep", &[], 20).unwrap();
+    // The snapshot the restore took of the live state.
+    db_add_version(&conn, "p1", 12, "Name", "live", &[], 20).unwrap();
+    db_drop_latest_version(&conn, "p1");
+    let texts: Vec<String> = db_list_versions(&conn, "p1").into_iter().map(|v| v.text).collect();
+    assert_eq!(texts, ["first"]);
+    assert_eq!(db_list_versions(&conn, "p2").len(), 1, "another prompt's history is untouched");
+}

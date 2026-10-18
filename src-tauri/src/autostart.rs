@@ -148,8 +148,7 @@ pub(crate) fn command_program(command: &str) -> Option<String> {
 }
 
 pub(crate) fn same_program_path(a: &str, b: &str) -> bool {
-    let norm = |p: &str| p.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase();
-    norm(a) == norm(b)
+    fold_path(a) == fold_path(b)
 }
 
 pub(crate) fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl Fn(&str) -> bool) -> RegistryOwner {

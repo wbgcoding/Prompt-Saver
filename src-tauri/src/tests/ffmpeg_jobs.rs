@@ -371,3 +371,12 @@ fn ct_eq_matches_plain_equality_without_short_circuiting() {
     assert!(!ct_eq(b"abcdef", b"abcdeg"));
     assert!(!ct_eq(b"abc", b"abcd")); // different lengths never match
 }
+
+#[test]
+fn a_progress_tick_reads_both_settings_in_one_pass() {
+    let mut s = Settings::default();
+    assert_eq!(bg_tick_settings(&s), (10.0, true), "defaults: keep ten minutes, taskbar progress on");
+    s.ui_values.insert("bgDoneKeepMin".into(), -3.0);
+    s.ui_flags.insert("taskbarProgress".into(), false);
+    assert_eq!(bg_tick_settings(&s), (0.0, false), "a negative keep time clamps to zero");
+}

@@ -242,6 +242,18 @@ fn check_hotkey_ignores_recording_hotkeys_that_are_switched_off() {
     assert!(!hotkey_in_use(&settings, &[], None, stop));
 }
 
+#[test]
+fn setting_a_slot_ignores_a_stored_rec_key_whose_switch_is_off() {
+    let mut settings = Settings { rec_stop_hotkey: "Ctrl+Alt+S".to_string(), ..Default::default() };
+    let sc = parse_accel("Ctrl+Alt+S").unwrap();
+    assert!(slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.insert("recStopHotkey".to_string(), false);
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    // The slot being set never collides with itself.
+    settings.ui_flags.remove("recStopHotkey");
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::RecStop, sc));
+}
+
 // A prompt stored before per-prompt hotkeys existed has no hotkey field at all: it must load with an
 // empty binding instead of failing the whole row.
 #[test]

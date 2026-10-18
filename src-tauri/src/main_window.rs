@@ -15,8 +15,14 @@ pub(crate) fn show_main(app: &AppHandle) {
         .and_then(|state| try_lock_ignoring_poison(&state).map(|store| store.settings.window));
     if let Some(geom) = geom {
         let g = resolve_geometry(&win, geom);
-        let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
-        let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
+        // A window that is still maximized (hidden to the tray) comes back as it is.
+        if !(g.maximized && win.is_maximized().unwrap_or(false)) {
+            let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
+            let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
+            if g.maximized {
+                let _ = win.maximize();
+            }
+        }
     }
     let _ = win.show();
     let _ = win.unminimize();
@@ -81,10 +87,8 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
     win.on_window_event(move |event| match event {
         WindowEvent::Moved(p) => {
             if p.x > -30000 && p.y > -30000 {
-                update_geom(&handle2, |g| {
-                    g.x = p.x;
-                    g.y = p.y;
-                });
+                let maximized = main_is_maximized(&handle2);
+                update_geom(&handle2, |g| geom_after_move(g, p.x, p.y, maximized));
             }
         }
         WindowEvent::Resized(s) => {
@@ -96,9 +100,9 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                     .and_then(|w| w.scale_factor().ok())
                     .unwrap_or(1.0);
                 let logical = s.to_logical::<f64>(scale);
+                let maximized = main_is_maximized(&handle2);
                 update_geom(&handle2, |g| {
-                    g.width = logical.width.round() as u32;
-                    g.height = logical.height.round() as u32;
+                    geom_after_resize(g, logical.width.round() as u32, logical.height.round() as u32, maximized)
                 });
             }
         }
@@ -377,9 +381,9 @@ pub(crate) fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, heigh
         let ph = (height as f64 * m.scale_factor()) as u32;
         let x = p.x + (s.width.saturating_sub(pw) / 2) as i32;
         let y = p.y + (s.height.saturating_sub(ph) / 2) as i32;
-        return WindowGeom { x, y, width, height };
+        return WindowGeom { x, y, width, height, maximized: false };
     }
-    WindowGeom { x: 100, y: 100, width, height }
+    WindowGeom { x: 100, y: 100, width, height, maximized: false }
 }
 
 // A monitor's usable size in logical pixels, or effectively no cap when none is given
@@ -409,7 +413,9 @@ pub(crate) fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<Window
             if point_on_monitor(&monitors, g.x + 40, g.y + 20) {
                 return g;
             }
-            return centered_on_primary(main, g.width, g.height);
+            let mut c = centered_on_primary(main, g.width, g.height);
+            c.maximized = g.maximized;
+            return c;
         }
     }
     // First start: 50% x 50% of the primary screen (logical), centered.
@@ -418,6 +424,29 @@ pub(crate) fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<Window
         (cap.1 / 2).max(MAIN_WIN_MIN_H).min(cap.1),
     );
     centered_on_primary(main, width, height)
+}
+
+// Whether the main window is maximized right now (false when it cannot be asked).
+fn main_is_maximized(handle: &AppHandle) -> bool {
+    handle.get_webview_window("main").and_then(|w| w.is_maximized().ok()).unwrap_or(false)
+}
+
+// A maximized window only sets the flag: its bounds are the work area, not the user's size, so the
+// stored normal bounds stay for the next un-maximize or start.
+pub(crate) fn geom_after_move(g: &mut WindowGeom, x: i32, y: i32, maximized: bool) {
+    g.maximized = maximized;
+    if !maximized {
+        g.x = x;
+        g.y = y;
+    }
+}
+
+pub(crate) fn geom_after_resize(g: &mut WindowGeom, width: u32, height: u32, maximized: bool) {
+    g.maximized = maximized;
+    if !maximized {
+        g.width = width;
+        g.height = height;
+    }
 }
 
 // Persist a partial geometry update in memory (flushed to disk on close).
@@ -436,6 +465,7 @@ pub(crate) fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) 
             y: 0,
             width: 0,
             height: 0,
+            maximized: false,
         });
         f(&mut g);
         store.settings.window = Some(g);

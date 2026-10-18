@@ -723,6 +723,25 @@ impl HotkeySlot {
     }
 }
 
+// Whether `sc` is already held by another hotkey slot or a prompt. The stop/pause keys count
+// only while their feature and switch are on (the same gate hotkey_in_use applies), so a key
+// nothing uses is never reported as taken.
+pub(crate) fn slot_key_taken(settings: &Settings, prompts: &[Prompt], slot: HotkeySlot, sc: Accel) -> bool {
+    let flags = &settings.ui_flags;
+    HOTKEY_SLOTS
+        .iter()
+        .filter(|other| **other != slot)
+        .any(|other| {
+            let hk = match other {
+                HotkeySlot::RecStop => active_rec_hotkey(other.get(settings), "recStopHotkey", flags),
+                HotkeySlot::RecPause => active_rec_hotkey(other.get(settings), "recPauseHotkey", flags),
+                _ => other.get(settings),
+            };
+            parse_accel(hk) == Some(sc)
+        })
+        || prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+}
+
 // The shared body of the four set_*hotkey commands: validated BEFORE the setting is
 // written, so a refused combination leaves the previous one live and the UI field in
 // step with what is actually bound; then stored and re-armed together with every
@@ -733,11 +752,7 @@ fn apply_hotkey(app: &AppHandle, state: &State<'_, Db>, slot: HotkeySlot, accel:
         let sc = accel_error(&hk).map_err(|e| e.to_string())?;
         let taken = {
             let store = lock(state);
-            HOTKEY_SLOTS
-                .iter()
-                .filter(|other| **other != slot)
-                .any(|other| parse_accel(other.get(&store.settings)) == Some(sc))
-                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+            slot_key_taken(&store.settings, &store.prompts, slot, sc)
         };
         if taken {
             return Err(HK_TAKEN.to_string());

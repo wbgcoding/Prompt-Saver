@@ -110,6 +110,46 @@ fn stats_export_entries_sorts_by_copies_and_carries_last_used() {
     assert_eq!(entries[1].last_used, 1700000100);
 }
 
+#[test]
+fn stats_export_entries_break_copy_ties_by_lowercase_name() {
+    let mut store = Store {
+        prompts: Vec::new(),
+        trash: Vec::new(),
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: Default::default(),
+    };
+    for (id, name) in [("1", "beta"), ("2", "Alpha"), ("3", "alpine")] {
+        let mut p = test_prompt(id);
+        p.name = name.into();
+        store.prompts.push(p);
+        store.settings.usage.insert(id.into(), 4);
+    }
+    let names: Vec<String> = stats_export_entries(&store).into_iter().map(|e| e.name).collect();
+    assert_eq!(names, vec!["Alpha", "alpine", "beta"]);
+}
+
+#[test]
+fn stats_label_falls_back_from_name_to_text_to_id() {
+    assert_eq!(stats_label("Name", "text", "id"), "Name");
+    assert_eq!(stats_label("", &"x".repeat(60), "id"), "x".repeat(40));
+    assert_eq!(stats_label("", "", "id"), "id");
+    let mut p = test_prompt("sealed");
+    p.name.clear();
+    p.text = "ciphertext".into();
+    p.secret = true;
+    assert_eq!(stats_display_name(&p), "sealed", "a confidential text never labels a row");
+}
+
+#[test]
+fn edit_state_stats_counts_rows_and_bytes() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    assert_eq!(edit_state_stats(&conn), (0, 0), "a missing table reads as empty");
+    conn.execute_batch("CREATE TABLE edit_state (id TEXT, ops TEXT); INSERT INTO edit_state VALUES ('a', 'xxxx'), ('b', 'yy');")
+        .unwrap();
+    assert_eq!(edit_state_stats(&conn), (2, 6));
+}
+
 // The statistics export reuses csv_row/csv_cell, but this asserts the
 // guarantee directly against the stats formatter: a semicolon or a quote
 // in a prompt name must not shift or break the row it sits in.
@@ -1276,4 +1316,45 @@ fn font_size_clamped() {
     assert_eq!(clamp_font_size(1), 1);
     assert_eq!(clamp_font_size(8), 10);
     assert_eq!(clamp_font_size(99), 40);
+}
+
+#[test]
+fn primary_first_moves_the_primary_monitor_to_the_front() {
+    let list = vec![
+        ("side".to_string(), -1920, 0, 1920, 1080),
+        ("main".to_string(), 0, 0, 2560, 1440),
+    ];
+    let ordered = primary_first(list.clone(), "main");
+    assert_eq!(ordered[0].0, "main");
+    assert_eq!(ordered[1].0, "side");
+    // An unknown primary keeps the enumeration order.
+    assert_eq!(primary_first(list, "").iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["side", "main"]);
+}
+
+#[test]
+fn a_refused_batch_leaves_no_empty_layout_behind() {
+    // A 1x1 target whose only cell a folder holds: both actions answer view-full, and the
+    // layout map created for the size check must not stay in the settings.
+    for action in ["addView", "moveView"] {
+        let mut settings = Settings::default();
+        let mut from_view = test_view("home");
+        from_view.members = vec!["a".to_string()];
+        let mut to_view = test_view("work");
+        to_view.cols = 1;
+        to_view.rows = 1;
+        settings.views = vec![from_view, to_view];
+        settings.tile_folders.push(TileFolder {
+            id: "tf1".to_string(),
+            name: "Drafts".to_string(),
+            color: String::new(),
+            view_id: "work".to_string(),
+            cell: [0, 0],
+            members: vec!["z".to_string()],
+        });
+        let ids: Vec<String> = vec!["a".to_string()];
+        let result = apply_view_batch_action(&mut settings, action, &ids, "work", "home", |_s| true);
+        assert!(matches!(result, Err(ref e) if e.starts_with("view-full")), "{action}: {result:?}");
+        assert!(settings.views[1].layouts.is_empty(), "{action}: the empty layout must be rolled back");
+        assert!(settings.views[1].members.is_empty(), "{action}: no member may be added");
+    }
 }

@@ -412,6 +412,13 @@ pub(crate) async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, 
     Ok(())
 }
 
+// Centre of a folder's window in physical pixels. The box grows with the folder's own scale,
+// so the centre (which picks the monitor) must use it, not the unscaled size.
+pub(crate) fn folder_centre(pos: &Pos, scale: f64, dpi: f64) -> (f64, f64) {
+    let side = folder_box(scale) * dpi;
+    (pos.x as f64 + side / 2.0, pos.y as f64 + side / 2.0)
+}
+
 // Dissolve a folder: every member goes back to being a free pill. Nothing is deleted.
 // Each one asks for the position it kept all along, but they are fanned apart first:
 // merging put them on top of each other, so restoring the wishes unchanged would leave
@@ -423,7 +430,7 @@ pub(crate) async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, 
         .and_then(|w| w.scale_factor().ok())
         .unwrap_or(1.0);
     // Wished-for box of every member, in physical pixels.
-    let (members, folder_pos) = {
+    let (members, folder_pos, folder_scale) = {
         let store = lock(&state);
         let folder = match store.settings.float_folders.iter().find(|f| f.id == id) {
             Some(f) => f.clone(),
@@ -442,7 +449,7 @@ pub(crate) async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, 
                 ))
             })
             .collect();
-        (members, folder.pos)
+        (members, folder.pos, folder.scale)
     };
     // Pills and folders already on screen are obstacles: this folder's own window is
     // about to close, so it is not one.
@@ -454,8 +461,8 @@ pub(crate) async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, 
         })
         .filter_map(|(_, win)| window_rect(win))
         .collect();
-    let side = folder_box(1.0) * dpi;
-    let work = work_rect_at(&app, folder_pos.x as f64 + side / 2.0, folder_pos.y as f64 + side / 2.0);
+    let (cx, cy) = folder_centre(&folder_pos, folder_scale, dpi);
+    let work = work_rect_at(&app, cx, cy);
     let wishes: Vec<Rect> = members.iter().map(|(_, r)| *r).collect();
     let spread = spread_free_positions(&wishes, &taken, work);
     {

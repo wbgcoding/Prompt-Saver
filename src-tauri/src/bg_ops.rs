@@ -115,15 +115,17 @@ pub(crate) fn bg_ops_running_count() -> usize {
 }
 
 pub(crate) fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
-    state_db
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .settings
-        .ui_values
-        .get("bgDoneKeepMin")
-        .copied()
-        .unwrap_or(10.0)
-        .max(0.0)
+    bg_keep_min_of(&state_db.lock().unwrap_or_else(|e| e.into_inner()).settings)
+}
+
+fn bg_keep_min_of(settings: &Settings) -> f64 {
+    settings.ui_values.get("bgDoneKeepMin").copied().unwrap_or(10.0).max(0.0)
+}
+
+// Both settings a progress tick reads, taken under ONE store lock: a tick used to lock twice,
+// waiting twice behind a long holder.
+pub(crate) fn bg_tick_settings(settings: &Settings) -> (f64, bool) {
+    (bg_keep_min_of(settings), settings.ui_flags.get("taskbarProgress").copied().unwrap_or(true))
 }
 
 // The entry a progress or start report writes to. The ids are fixed ("backup", "import"),
@@ -341,24 +343,15 @@ pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: Stri
 // command-invocation round trip required. `id` is this job's own unique
 // registry key; `kind` is the feature grouping shown to the frontend.
 pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
-    let keep_min = app.try_state::<Db>().map(|s| bg_done_keep_min(&s)).unwrap_or(10.0);
+    let (keep_min, enabled) = app
+        .try_state::<Db>()
+        .map(|s| bg_tick_settings(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+        .unwrap_or((10.0, true));
     let (agg_state, agg_value) = record_bg_op(id, kind, state, value, target, keep_min);
     // One broadcast point for every state change (running tick, done, error): the header
     // popover listens instead of polling, so a job finishing shows even when the window that
     // started it (the video editor, say) is the one whose own promise resolves.
     let _ = app.emit("bg-ops-changed", ());
-    let enabled = app
-        .try_state::<Db>()
-        .map(|s| {
-            s.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .ui_flags
-                .get("taskbarProgress")
-                .copied()
-                .unwrap_or(true)
-        })
-        .unwrap_or(true);
     apply_taskbar_aggregate(app, enabled, agg_state, agg_value);
 }
 
@@ -436,15 +429,48 @@ pub(crate) static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 // The app's one real shutdown sequence: same three steps whether it runs
 // straight from CloseRequested (nothing was running) or from
 // confirm_quit_with_running_ops (the user chose to quit anyway).
+//
+// A backup or import holds the store for its whole run and has no cancel. This can run on the
+// event-loop thread, which must never wait behind it: with the store busy the save and the exit
+// move to a worker, and the windows stay responsive until the job lets go.
 pub(crate) fn do_full_exit(handle: &AppHandle) {
-    if let Some(state) = handle.try_state::<Db>() {
-        let store = state.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(state) = handle.try_state::<Db>() else {
+        finish_exit(handle);
+        return;
+    };
+    if with_store_if_free(&*state, |store| {
         save_settings(handle, &store.settings);
+    }) {
+        finish_exit(handle);
+        return;
     }
+    let app2 = handle.clone();
+    std::thread::spawn(move || {
+        if let Some(state) = app2.try_state::<Db>() {
+            let store = state.lock().unwrap_or_else(|e| e.into_inner());
+            save_settings(&app2, &store.settings);
+        }
+        finish_exit(&app2);
+    });
+}
+
+fn finish_exit(handle: &AppHandle) {
     #[cfg(windows)]
     clipwatch::stop();
     voice_shutdown(handle);
     handle.exit(0);
+}
+
+// Runs `f` on the data when the mutex is free right now; false (and `f` not run) when
+// someone else holds it.
+pub(crate) fn with_store_if_free<T>(m: &Mutex<T>, f: impl FnOnce(&T)) -> bool {
+    match try_lock_ignoring_poison(m) {
+        Some(g) => {
+            f(&g);
+            true
+        }
+        None => false,
+    }
 }
 
 // The one gate every full-quit path goes through (the main window's close button and the

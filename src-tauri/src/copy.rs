@@ -42,6 +42,20 @@ pub(crate) fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
     auto && !variants.is_empty()
 }
 
+// Just the fields the rotation and reveal code reads (id, entries, mode, confidential flag).
+// A tile with a picture carries up to a 1024 px data URL; the per-copy paths clone this
+// instead of the whole prompt.
+pub(crate) fn rotation_core(p: &Prompt) -> Prompt {
+    Prompt {
+        id: p.id.clone(),
+        text: p.text.clone(),
+        variants: p.variants.clone(),
+        rotate_mode: p.rotate_mode.clone(),
+        secret: p.secret,
+        ..Prompt::default()
+    }
+}
+
 // "text" is entry 0 (every non-rotating consumer stays correct unchanged),
 // `variants` hold entries 1..n.
 pub(crate) fn rotation_total(p: &Prompt) -> usize {
@@ -185,10 +199,7 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
             // as the real text.
             Some(p) => {
                 let key = secret_session_key(secret_timeout_min(&store.settings));
-                let (text, variants) = reveal_secret_text(p, key)?;
-                let mut plain = p.clone();
-                plain.text = text;
-                plain.variants = variants;
+                let plain = reveal_rotation(p, key)?;
                 CopyPayload::Text(rotation_next(&plain, &store.settings).2)
             }
             None => CopyPayload::Missing,
@@ -206,7 +217,7 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
     if ok && is_text {
         let mut store = lock(&state);
         if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
-            let p = store.prompts[pos].clone();
+            let p = rotation_core(&store.prompts[pos]);
             rotation_advance(&p, &mut store.settings);
             // The pointer survives a restart. Collected rather than written per
             // copy: it is already correct in memory for the next copy.
@@ -220,11 +231,17 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
 // The prompt with a confidential entry decrypted, so rotation_next() on it can never
 // hand ciphertext out. None while the vault is locked (or the key is wrong).
 pub(crate) fn revealed_prompt(p: &Prompt, key: Option<[u8; 32]>) -> Option<Prompt> {
-    let (text, variants) = reveal_secret_text(p, key).ok()?;
-    let mut plain = p.clone();
+    reveal_rotation(p, key).ok()
+}
+
+// The one decrypt-and-slim step: the rotation fields of p with the confidential entries in
+// the clear, or the vault's refusal while it is locked.
+fn reveal_rotation(p: &Prompt, key: Option<[u8; 32]>) -> Result<Prompt, String> {
+    let (text, variants) = reveal_secret_text(p, key)?;
+    let mut plain = rotation_core(p);
     plain.text = text;
     plain.variants = variants;
-    Some(plain)
+    Ok(plain)
 }
 
 // What rotation_peek() reports for a "next: n/total" badge or a copy path that needs the
@@ -247,10 +264,7 @@ pub(crate) fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek
     // A locked confidential entry has no peek at all: the "next" badge simply
     // does not show rather than reveal ciphertext or the wrong text.
     let key = secret_session_key(secret_timeout_min(&store.settings));
-    let (text, variants) = reveal_secret_text(p, key).ok()?;
-    let mut plain = p.clone();
-    plain.text = text;
-    plain.variants = variants;
+    let plain = revealed_prompt(p, key)?;
     let (index, pos, text) = rotation_next(&plain, &store.settings);
     Some(RotationPeek { index, pos, total: rotation_total(&plain), text })
 }
@@ -275,12 +289,9 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
     // Same rule as rotation_peek: a locked confidential entry emits nothing
     // rather than send ciphertext through a window event.
     let key = secret_session_key(secret_timeout_min(settings));
-    let Ok((text, variants)) = reveal_secret_text(p, key) else {
+    let Some(plain) = revealed_prompt(p, key) else {
         return;
     };
-    let mut plain = p.clone();
-    plain.text = text;
-    plain.variants = variants;
     let (index, pos, text) = rotation_next(&plain, settings);
     let _ = app.emit(
         "rotation-changed",
@@ -292,7 +303,7 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
 pub(crate) fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
     if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
-        let p = store.prompts[pos].clone();
+        let p = rotation_core(&store.prompts[pos]);
         rotation_advance(&p, &mut store.settings);
         // The hottest settings write in the app: this runs on every paste of an
         // auto-advancing prompt, so it is collected instead of hitting the disk.
@@ -320,6 +331,10 @@ pub(crate) fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
     rotation_forget(&mut store.settings, std::slice::from_ref(&id));
     save_settings(&app, &store.settings);
+    // The pointer moved back to entry 1: tell every window's "next: n/total" badge.
+    if let Some(p) = store.prompts.iter().find(|p| p.id == id).map(rotation_core) {
+        emit_rotation_changed(&app, &p, &store.settings);
+    }
 }
 
 // The placeholder round's entry point. The frontend resolves every entry's placeholders
@@ -642,9 +657,12 @@ pub(crate) struct CopyLogRow {
 // The insert loop behind restore_copy_history, kept apart from the command so it
 // can be exercised with a bare in-memory connection. One transaction: a row that
 // fails leaves the table exactly as it was, never a half-restored history.
+//
+// `rows` is the snapshot as recent_copies lists it, newest first. The log orders by rowid, so
+// the rows go in oldest first: the newest copy ends up with the highest rowid again.
 pub(crate) fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
     let tx = conn.unchecked_transaction()?;
-    for row in rows {
+    for row in rows.iter().rev() {
         tx.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
     }
     tx.commit()
@@ -701,24 +719,3 @@ pub(crate) async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
         .unwrap_or(false)
 }
 
-// The boxes float_recall spreads out, in physical pixels: every pill (in a stable
-// id order) and then every folder, each sized by its own scale and the screen's
-// scale factor. Returns the pill ids in the same order as their boxes.
-pub(crate) fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
-    let mut wishes: Vec<Rect> = Vec::new();
-    let mut pill_ids: Vec<String> = settings.floating.keys().cloned().collect();
-    pill_ids.sort(); // stable fan-out order across runs
-    for id in &pill_ids {
-        let scale = float_scale_of(settings, id);
-        let (w, h) = match prompts.iter().find(|p| &p.id == id) {
-            Some(p) => pill_dims(is_image_prompt(p), scale),
-            None => pill_dims(false, scale),
-        };
-        wishes.push(Rect { x: work.x, y: work.y, w: w * dpi, h: h * dpi });
-    }
-    for folder in &settings.float_folders {
-        let side = folder_box(folder.scale) * dpi;
-        wishes.push(Rect { x: work.x, y: work.y, w: side, h: side });
-    }
-    (pill_ids, wishes)
-}

@@ -38,6 +38,16 @@ pub(crate) fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
     folder_cells_in_view(settings, &vid)
 }
 
+// The cells and member ids of one view's grid folders, read once. Both live outside
+// view.layouts, so every layout rebuild or batch placement has to exclude them.
+pub(crate) fn view_folder_sets(
+    settings: &Settings,
+    view_id: &str,
+) -> (std::collections::HashSet<(u32, u32)>, std::collections::HashSet<String>) {
+    let cells = folder_cells_in_view(settings, view_id).into_iter().map(|c| (c[0], c[1])).collect();
+    (cells, folder_members_in_view(settings, view_id))
+}
+
 // Same, but also treats `extra` cells (e.g. another grid folder's own cell, which
 // lives outside view.layouts) as taken. Without this, a cell handed out here could
 // coincide with a folder's cell: the tile would save fine but never draw, since
@@ -75,11 +85,7 @@ pub(crate) fn place_ids_in_view(
     let mut occupied: std::collections::HashSet<(u32, u32)> =
         layout.values().map(|c| (c[0], c[1])).collect();
     occupied.extend(extra_occupied.iter().copied());
-    let need = ids
-        .iter()
-        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
-        .count();
-    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    let (need, free) = view_capacity(layout, ids, cols, rows, extra_occupied, folder_members);
     if need > free {
         return false;
     }
@@ -104,6 +110,27 @@ pub(crate) fn place_ids_in_view(
     true
 }
 
+// The one capacity accounting for a placement: how many of ids still need a cell, and how
+// many cells are free once the layout and extra_occupied are counted.
+fn view_capacity(
+    layout: &std::collections::HashMap<String, [u32; 2]>,
+    ids: &[String],
+    cols: u32,
+    rows: u32,
+    extra_occupied: &std::collections::HashSet<(u32, u32)>,
+    folder_members: &std::collections::HashSet<String>,
+) -> (usize, usize) {
+    let mut occupied: std::collections::HashSet<(u32, u32)> =
+        layout.values().map(|c| (c[0], c[1])).collect();
+    occupied.extend(extra_occupied.iter().copied());
+    let need = ids
+        .iter()
+        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
+        .count();
+    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    (need, free)
+}
+
 // Same accounting `place_ids_in_view` does internally, so a caller that just got
 // `false` back can tell the user how many cells are still missing.
 pub(crate) fn view_capacity_deficit(
@@ -114,14 +141,7 @@ pub(crate) fn view_capacity_deficit(
     extra_occupied: &std::collections::HashSet<(u32, u32)>,
     folder_members: &std::collections::HashSet<String>,
 ) -> usize {
-    let mut occupied: std::collections::HashSet<(u32, u32)> =
-        layout.values().map(|c| (c[0], c[1])).collect();
-    occupied.extend(extra_occupied.iter().copied());
-    let need = ids
-        .iter()
-        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
-        .count();
-    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    let (need, free) = view_capacity(layout, ids, cols, rows, extra_occupied, folder_members);
     need.saturating_sub(free)
 }
 
@@ -149,17 +169,11 @@ pub(crate) fn apply_view_batch_action(
     from_view_id: &str,
     mut save: impl FnMut(&Settings) -> bool,
 ) -> Result<(), String> {
+    // A grid folder occupies a cell via tile_folders, outside view.layouts. Read both sets before
+    // views is borrowed mutably.
+    let (folder_cells, folder_members) = view_folder_sets(settings, view_id);
     match action {
         "addView" | "removeView" => {
-            // A grid folder occupies a cell via tile_folders, outside view.layouts. Read it before
-            // views is borrowed mutably.
-            let folder_cells: std::collections::HashSet<(u32, u32)> = settings
-                .tile_folders
-                .iter()
-                .filter(|f| f.view_id == view_id)
-                .map(|f| (f.cell[0], f.cell[1]))
-                .collect();
-            let folder_members = folder_members_in_view(settings, view_id);
             let Some(vidx) = settings.views.iter().position(|v| v.id == view_id) else {
                 return Ok(());
             };
@@ -175,6 +189,8 @@ pub(crate) fn apply_view_batch_action(
             } else {
                 if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
                     let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
+                    // The empty layout entry created above must not linger to be saved later.
+                    settings.views = before;
                     return Err(format!("view-full:{deficit}"));
                 }
                 for id in ids {
@@ -192,13 +208,6 @@ pub(crate) fn apply_view_batch_action(
         // Both layouts change in the same in-memory settings before the single save, so a failure
         // or crash is seen only before or after the whole move, never midway.
         "moveView" => {
-            let folder_cells: std::collections::HashSet<(u32, u32)> = settings
-                .tile_folders
-                .iter()
-                .filter(|f| f.view_id == view_id)
-                .map(|f| (f.cell[0], f.cell[1]))
-                .collect();
-            let folder_members = folder_members_in_view(settings, view_id);
             let to_idx = settings.views.iter().position(|v| v.id == view_id);
             let from_idx = settings.views.iter().position(|v| v.id == from_view_id);
             let (Some(to_idx), Some(from_idx)) = (to_idx, from_idx) else {
@@ -212,6 +221,7 @@ pub(crate) fn apply_view_batch_action(
             // target has durably accepted every id.
             if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
                 let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
+                settings.views = before;
                 return Err(format!("view-full:{deficit}"));
             }
             for id in ids {
@@ -241,8 +251,14 @@ pub(crate) fn store_files_enabled(store: &Store) -> bool {
 // prompt in the store. sweep_orphan_files treats them as referenced.
 pub(crate) static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
 
+// The one way two spellings of a Windows path are compared: extended-length prefix dropped,
+// forward slashes turned into backslashes, case folded.
+pub(crate) fn fold_path(path: &str) -> String {
+    path.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase()
+}
+
 pub(crate) fn pending_key(path: &str) -> String {
-    path.replace('/', "\\").to_lowercase()
+    fold_path(path)
 }
 
 pub(crate) fn pending_attachments_contain(path: &str) -> bool {
@@ -352,7 +368,7 @@ pub(crate) fn sweep_orphan_files_in(
     };
     // Compare case-insensitively with normalized separators (Windows) so a still
     // referenced file is never mistaken for an orphan and deleted.
-    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let norm = pending_key;
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
@@ -461,7 +477,7 @@ pub(crate) fn sweep_stale_recordings_in(
     retention_age: Option<Duration>,
 ) -> (u32, u64) {
     let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
-    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let norm = pending_key;
     let mut count = 0u32;
     let mut bytes = 0u64;
     for e in entries.flatten() {
@@ -586,7 +602,7 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
     let mut count = 0u32;
     let mut bytes = 0u64;
     for dir in [default_dir.clone(), custom_dir].into_iter().collect::<std::collections::HashSet<_>>() {
-        let (c, b) = discarded_stale_in(&dir.join("verworfen"), age);
+        let (c, b) = discarded_stale_in(&dir.join(DISCARD_SUBDIR), age);
         count += c;
         bytes += b;
     }
@@ -617,7 +633,7 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             bytes += size;
             let _ = fs::remove_file(path.with_extension("mic.wav"));
             // The key-overlay sidecar goes with its video.
-            let _ = fs::remove_file(path.with_extension("keys.json"));
+            let _ = fs::remove_file(sidecar_path(&path, KEYS_SIDECAR_EXT));
             let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
         }
     }
@@ -638,10 +654,7 @@ pub(crate) fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
 pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = active_recording_path(app) {
-        out.push(p.with_extension("mic.wav"));
-        #[cfg(windows)]
-        out.push(sidecar_path(&p, KEYS_SIDECAR_EXT)); // the key-overlay sidecar, same lifetime as the mic one
-        out.push(p);
+        push_recording_with_sidecars(&mut out, &p);
     }
     out.extend(protected_take_paths());
     let mut editor_sources = Vec::new();
@@ -652,11 +665,7 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     editor_sources.extend(VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).clone());
     for (src, _origin_dir, overlay) in editor_sources {
         if !src.is_empty() {
-            let src = PathBuf::from(src);
-            out.push(src.with_extension("mic.wav"));
-            #[cfg(windows)]
-            out.push(sidecar_path(&src, KEYS_SIDECAR_EXT));
-            out.push(src);
+            push_recording_with_sidecars(&mut out, Path::new(&src));
         }
         if !overlay.is_empty() {
             let overlay = PathBuf::from(overlay);
@@ -726,7 +735,7 @@ pub(crate) fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
 // A trashed prompt owns its files until purged: leaving trash out of this scan would let an
 // unrelated cleanup sweep away a file a trashed prompt needs to be restorable.
 pub(crate) fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<String> {
-    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let norm = pending_key;
     store
         .prompts
         .iter()
@@ -1034,9 +1043,17 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
         let seeds = std::mem::take(&mut store.settings.example_prompt_seeds);
         (examples_still_pristine(&ids, &seeds, &store.prompts), ids, seeds)
     };
+    // The lists were cleared in memory above; nothing else may write the settings soon, so
+    // persist the cleared lists here or they come back on the next start.
+    let persist = |app: &AppHandle| {
+        let store = lock(&state);
+        save_settings(app, &store.settings);
+    };
     if ids_to_delete.is_empty() {
+        persist(&app);
         return Ok(());
     }
+    let app_for_save = app.clone();
     let result = batch_prompts(app, state.clone(), ids_to_delete, "delete".to_string(), None, None, None, None, None)
         .await
         .map(|_| ());
@@ -1046,8 +1063,23 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
         let mut store = lock(&state);
         store.settings.example_prompt_ids = taken_ids;
         store.settings.example_prompt_seeds = taken_seeds;
+    } else {
+        persist(&app_for_save);
     }
     result
+}
+
+// The ids "Remove examples" would actually delete now: the unedited ones that still exist.
+// examples_still_pristine alone also lists an id whose prompt the user already deleted by hand,
+// which would inflate the button's count.
+pub(crate) fn examples_pending_ids<'a>(
+    ids: impl IntoIterator<Item = &'a String>,
+    seeds: &HashMap<String, u64>,
+    prompts: &[Prompt],
+) -> Vec<String> {
+    let mut out = examples_still_pristine(ids, seeds, prompts);
+    out.retain(|id| prompts.iter().any(|p| &p.id == id));
+    out
 }
 
 // Count for the "Remove examples (n)" button label: how many seeded examples would
@@ -1055,7 +1087,7 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
 #[tauri::command(async)]
 pub(crate) fn example_prompts_pending(state: State<Db>) -> usize {
     let store = lock(&state);
-    examples_still_pristine(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
+    examples_pending_ids(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
 }
 
 // A save carries the image only when the user touched it: no field means leave the stored
@@ -1386,6 +1418,17 @@ pub(crate) async fn last_edited_map(app: AppHandle) -> Result<std::collections::
     Ok(db_conn(&app).map(|c| db_last_edited(&c)).unwrap_or_default())
 }
 
+// Removes the newest version row of a prompt: the undo snapshot a restore took before its
+// save failed.
+pub(crate) fn db_drop_latest_version(conn: &Connection, prompt_id: &str) {
+    if let Err(e) = conn.execute(
+        "DELETE FROM prompt_versions WHERE id = (SELECT MAX(id) FROM prompt_versions WHERE prompt_id = ?1)",
+        params![prompt_id],
+    ) {
+        append_crash_log(&format!("could not drop the undo snapshot of prompt {prompt_id}: {e}"));
+    }
+}
+
 // Restore a snapshot. The current state is snapshotted first, so a restore is
 // itself undoable and nothing is ever lost.
 #[tauri::command]
@@ -1406,6 +1449,11 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
         let (text, variants) = open_snapshot(&text, &variants, secret_key)?;
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
             let original = p.clone();
+            // A locked vault refuses before anything is written, so no snapshot row exists for a
+            // restore that never happens.
+            if p.secret && secret_key.is_none() {
+                return Err("secret-locked".to_string());
+            }
             // The undo snapshot of the current state must itself succeed before overwriting it, or a
             // restore could not be undone and "nothing is ever lost" would break.
             let snapshot_ok = db_conn(&app)
@@ -1451,6 +1499,11 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             if !save_prompts(&app, &store) {
                 if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == pid) {
                     *slot = original;
+                }
+                // The restore did not happen: take its undo snapshot back out so retries do not
+                // push real history out of the history cap.
+                if let Some(c) = db_conn(&app) {
+                    db_drop_latest_version(&c, &pid);
                 }
                 return Err("save-failed".into());
             }

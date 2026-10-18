@@ -1080,3 +1080,35 @@ fn snip_background_still_loads_without_the_picker_fields() {
     assert_eq!(j["pick_cells"], serde_json::json!(21));
     assert_eq!(j["pick_history"], serde_json::json!(["#FF0000"]));
 }
+
+#[test]
+fn tray_rec_entries_follow_both_flags() {
+    let mut s = Settings::default();
+    assert!(tray_rec_entries_on(&s), "on by default");
+    s.ui_flags.insert("recTrayEntries".into(), false);
+    assert!(!tray_rec_entries_on(&s));
+    s.ui_flags.insert("recTrayEntries".into(), true);
+    s.ui_flags.insert("screenRecord".into(), false);
+    assert!(!tray_rec_entries_on(&s), "recording switched off hides the rows too");
+}
+
+#[test]
+fn custom_tray_menu_needs_no_native_rebuild_unless_one_is_installed() {
+    assert!(!tray_rebuild_due(true, true, false), "custom window is built fresh on open");
+    assert!(tray_rebuild_due(true, false, true), "an installed native popup must still be detached");
+    assert!(tray_rebuild_due(false, true, false));
+    assert!(tray_rebuild_due(false, false, true));
+    assert!(!tray_rebuild_due(false, false, false));
+}
+
+#[test]
+fn a_scaled_folder_centre_follows_its_own_box() {
+    let pos = Pos { x: 100, y: 200, ..Default::default() };
+    let (x1, _) = folder_centre(&pos, 1.0, 1.0);
+    let (x3, y3) = folder_centre(&pos, 3.0, 1.0);
+    assert!(x3 > x1, "a 3x folder reaches further right than a 1x one");
+    assert_eq!(x3, 100.0 + folder_box(3.0) / 2.0);
+    assert_eq!(y3, 200.0 + folder_box(3.0) / 2.0);
+    let (x2, _) = folder_centre(&pos, 1.0, 2.0);
+    assert_eq!(x2, 100.0 + folder_box(1.0));
+}

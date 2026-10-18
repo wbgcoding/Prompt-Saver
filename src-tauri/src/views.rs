@@ -148,20 +148,7 @@ pub(crate) fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: 
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
-    let folder_cells: std::collections::HashSet<(u32, u32)> = store
-        .settings
-        .tile_folders
-        .iter()
-        .filter(|f| f.view_id == id)
-        .map(|f| (f.cell[0], f.cell[1]))
-        .collect();
-    let folder_members: std::collections::HashSet<String> = store
-        .settings
-        .tile_folders
-        .iter()
-        .filter(|f| f.view_id == id)
-        .flat_map(|f| f.members.iter().cloned())
-        .collect();
+    let (folder_cells, folder_members) = view_folder_sets(&store.settings, &id);
     let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) else {
         return webview_settings(&store.settings);
     };
@@ -424,22 +411,10 @@ pub(crate) fn rename_tag_in_store(
     // Snapshot everything this command can touch before mutating, so a failed
     // save can put it back exactly instead of reporting success for a rename that
     // never reached disk.
-    let original_tags: Vec<(String, Vec<String>)> = store
-        .prompts
-        .iter()
-        .filter(|p| p.tags.iter().any(|t| tag_key(t) == old_key))
-        .map(|p| (p.id.clone(), p.tags.clone()))
-        .collect();
+    let original_tags = snapshot_tags(&store.prompts, old_key);
     let prompts_changed = rename_tag_in(&mut store.prompts, old_key, new);
-    let restore_prompts = |store: &mut Store, original_tags: Vec<(String, Vec<String>)>| {
-        for (id, tags) in original_tags {
-            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                p.tags = tags;
-            }
-        }
-    };
     if prompts_changed && !save_prompts_fn(store) {
-        restore_prompts(store, original_tags);
+        restore_tags(store, original_tags);
         return Err("save-failed".into());
     }
     let original_old_color = store.settings.tag_colors.get(old_key).cloned();
@@ -455,12 +430,30 @@ pub(crate) fn rename_tag_in_store(
             None => { store.settings.tag_colors.remove(new_key); }
         }
         if prompts_changed {
-            restore_prompts(store, original_tags);
+            restore_tags(store, original_tags);
             note_failed_undo(save_prompts_fn(store), "tag rename");
         }
         return Err("save-failed".into());
     }
     Ok(())
+}
+
+// The tag lists of every prompt carrying `key`, taken before a change so a failed save can
+// put exactly those back.
+fn snapshot_tags(prompts: &[Prompt], key: &str) -> Vec<(String, Vec<String>)> {
+    prompts
+        .iter()
+        .filter(|p| p.tags.iter().any(|t| tag_key(t) == key))
+        .map(|p| (p.id.clone(), p.tags.clone()))
+        .collect()
+}
+
+fn restore_tags(store: &mut Store, original_tags: Vec<(String, Vec<String>)>) {
+    for (id, tags) in original_tags {
+        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+            p.tags = tags;
+        }
+    }
 }
 
 // The write that puts the old prompts back after a failed settings write. When that one fails
@@ -476,38 +469,42 @@ pub(crate) fn note_failed_undo(written: bool, operation: &str) {
 pub(crate) async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Result<Settings, String> {
     let key = tag_key(&valid_tag_name(&name)?);
     let mut store = lock(&state);
-    let original_tags: Vec<(String, Vec<String>)> = store
-        .prompts
-        .iter()
-        .filter(|p| p.tags.iter().any(|t| tag_key(t) == key))
-        .map(|p| (p.id.clone(), p.tags.clone()))
-        .collect();
-    let prompts_changed = remove_tag_from(&mut store.prompts, &key);
-    if prompts_changed && !save_prompts(&app, &store) {
-        for (id, tags) in original_tags {
-            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                p.tags = tags;
-            }
-        }
+    delete_tag_in_store(
+        &mut store,
+        &key,
+        &mut |st| save_prompts(&app, st),
+        &mut |settings| save_settings(&app, settings),
+    )?;
+    Ok(webview_settings(&store.settings))
+}
+
+// The two-step write behind delete_tag with the saves injected, rolled back the same way as
+// the rename: a failed settings save restores the prompts in memory and on disk.
+pub(crate) fn delete_tag_in_store(
+    store: &mut Store,
+    key: &str,
+    save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
+    save_settings_fn: &mut dyn FnMut(&Settings) -> bool,
+) -> Result<(), String> {
+    let original_tags = snapshot_tags(&store.prompts, key);
+    let prompts_changed = remove_tag_from(&mut store.prompts, key);
+    if prompts_changed && !save_prompts_fn(store) {
+        restore_tags(store, original_tags);
         return Err("save-failed".into());
     }
-    let original_color = store.settings.tag_colors.remove(&key);
-    if !save_settings(&app, &store.settings) {
+    let original_color = store.settings.tag_colors.remove(key);
+    if !save_settings_fn(&store.settings) {
         if let Some(c) = original_color {
-            store.settings.tag_colors.insert(key, c);
+            store.settings.tag_colors.insert(key.to_string(), c);
         }
         // The prompts without the tag are already on disk: put them back there too.
         if prompts_changed {
-            for (id, tags) in original_tags {
-                if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                    p.tags = tags;
-                }
-            }
-            note_failed_undo(save_prompts(&app, &store), "tag delete");
+            restore_tags(store, original_tags);
+            note_failed_undo(save_prompts_fn(store), "tag delete");
         }
         return Err("save-failed".into());
     }
-    Ok(webview_settings(&store.settings))
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -559,7 +556,7 @@ pub(crate) fn set_tag_color(app: AppHandle, state: State<Db>, name: String, colo
 
 // ---------- View commands ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn add_view(app: AppHandle, state: State<Db>, name: String, color: String) -> Result<Settings, String> {
     let mut store = lock(&state);
     if store.settings.views.len() >= MAX_VIEWS {
@@ -649,7 +646,7 @@ pub(crate) fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashM
 
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) -> Result<(), String> {
     if pairs.is_empty() {
         return Ok(());
@@ -738,7 +735,7 @@ pub(crate) fn remove_view_from_settings(settings: &mut Settings, id: &str, promp
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
     let mut store = lock(&state);
     let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
@@ -804,7 +801,7 @@ pub(crate) fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: 
 // and the full member list. Prompts handed in are pulled out of every other folder.
 // One parameter per field the grid-folder editor can set.
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn save_tile_folder(
     app: AppHandle,
     state: State<Db>,
@@ -939,7 +936,7 @@ pub(crate) fn take_out_target_cell(
 // Take one prompt out of its folder and put it on `cell` of the folder's view. The
 // second-to-last member leaving dissolves the folder (normalize), which is what makes
 // "drag the last one out" work without a case of its own.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn take_out_of_tile_folder(
     app: AppHandle,
     state: State<Db>,
@@ -1030,7 +1027,7 @@ pub(crate) fn seat_dissolved_members(view: &mut View, members: &[String], other_
 // free by then). Cells held by other folders in that view are excluded too: they live
 // outside view.layouts, so first_free_cell alone would hand a member a cell another folder
 // owns and it would never appear.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
     let mut store = lock(&state);
     let removed = store.settings.tile_folders.iter().find(|f| f.id == id).cloned();

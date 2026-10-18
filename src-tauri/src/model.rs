@@ -2,7 +2,7 @@ use super::*;
 
 // ---------- Data model ----------
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub(crate) struct Prompt {
     pub(crate) id: String,
     pub(crate) name: String,
@@ -121,6 +121,10 @@ pub(crate) struct WindowGeom {
     pub(crate) y: i32,
     pub(crate) width: u32,
     pub(crate) height: u32,
+    // The window was maximized when last seen. The bounds above stay the normal (restored)
+    // ones, so closing while maximized and starting again restores the old size under it.
+    #[serde(default)]
+    pub(crate) maximized: bool,
 }
 
 // A named page with its own grid size and one placement map per grid size,

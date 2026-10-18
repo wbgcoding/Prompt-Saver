@@ -125,11 +125,8 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
         .iter()
         .filter(|p| usage.get(&p.id).copied().unwrap_or(0) > 0)
         .collect();
-    used.sort_by(|a, b| {
-        let ua = usage.get(&a.id).copied().unwrap_or(0);
-        let ub = usage.get(&b.id).copied().unwrap_or(0);
-        ub.cmp(&ua).then_with(|| name_of(a).to_lowercase().cmp(&name_of(b).to_lowercase()))
-    });
+    // The lowercase name is built once per row, not twice per comparison under the lock.
+    used.sort_by_cached_key(|p| (std::cmp::Reverse(usage.get(&p.id).copied().unwrap_or(0)), name_of(p).to_lowercase()));
     let top: Vec<StatBar> = used
         .iter()
         .take(top_n)
@@ -166,12 +163,17 @@ pub(crate) struct StatsExportEntry {
 // The label a statistics row shows. A confidential prompt's text can be sealed
 // ciphertext, so it never stands in for a missing name; the id does.
 pub(crate) fn stats_display_name(p: &Prompt) -> String {
-    if !p.name.is_empty() {
-        p.name.clone()
-    } else if !p.text.is_empty() && !p.secret {
-        p.text.chars().take(40).collect()
+    stats_label(&p.name, if p.secret { "" } else { &p.text }, &p.id)
+}
+
+// Name, else the first 40 characters of the text, else the id.
+pub(crate) fn stats_label(name: &str, text: &str, id: &str) -> String {
+    if !name.is_empty() {
+        name.to_string()
+    } else if !text.is_empty() {
+        text.chars().take(40).collect()
     } else {
-        p.id.clone()
+        id.to_string()
     }
 }
 
@@ -189,7 +191,7 @@ pub(crate) fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
             last_used: last_used.get(&p.id).copied().unwrap_or(0),
         })
         .collect();
-    entries.sort_by(|a, b| b.copies.cmp(&a.copies).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    entries.sort_by_cached_key(|e| (std::cmp::Reverse(e.copies), e.name.to_lowercase()));
     entries
 }
 
@@ -457,6 +459,19 @@ pub(crate) fn backup_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, 
 // counting here rather than freezing the window open while it walks on.
 pub(crate) const STORAGE_SCAN_CAP: usize = 20_000;
 
+// Row count and stored bytes of the saved editor states, as the storage and retention
+// readouts both show them.
+pub(crate) fn edit_state_stats(conn: &rusqlite::Connection) -> (u64, u64) {
+    let count = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64;
+    let bytes = conn
+        .query_row("SELECT COALESCE(SUM(LENGTH(ops)), 0) FROM edit_state", [], |r| r.get::<_, i64>(0))
+        .unwrap_or(0) as u64;
+    (count, bytes)
+}
+
+// Subfolder of a media folder that holds discarded files until the retention sweep.
+pub(crate) const DISCARD_SUBDIR: &str = "verworfen";
+
 #[tauri::command]
 pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<StorageBreakdown, String> {
     if !force {
@@ -467,13 +482,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
     // The edit-state byte count lives in SQLite, so it is read before the
     // store is locked, same reasoning as usage_stats' copy_log reads.
     let (edit_state_count, edit_state_bytes) = db_conn(&app)
-        .map(|c| {
-            let count = c.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64;
-            let bytes = c
-                .query_row("SELECT COALESCE(SUM(LENGTH(ops)), 0) FROM edit_state", [], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64;
-            (count, bytes)
-        })
+        .map(|c| edit_state_stats(&c))
         .unwrap_or((0, 0));
     let (file_paths, screenshot_custom, recording_custom) = {
         let store = lock(&state);
@@ -517,7 +526,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
         let target = recording_dir(&recording_custom);
         let (count, bytes) = video_folder_stats_in(&target);
         items.push(StorageItem { key: "recordings".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
-        let discard = target.join("verworfen");
+        let discard = target.join(DISCARD_SUBDIR);
         let (dcount, dbytes) = video_folder_stats_in(&discard);
         items.push(StorageItem { key: "discarded_recordings".into(), path: discard.to_string_lossy().into_owned(), bytes: dbytes, count: dcount, capped: false, denied: false });
     }
@@ -632,16 +641,10 @@ pub(crate) async fn retention_overview(app: AppHandle, state: State<'_, Db>, for
         .unwrap_or((0, 0));
     let rec_dir = recording_dir(&recording_custom);
     let (rec_count, rec_bytes) = video_folder_stats_in(&rec_dir);
-    let (discarded_count, discarded_bytes) = video_folder_stats_in(&rec_dir.join("verworfen"));
+    let (discarded_count, discarded_bytes) = video_folder_stats_in(&rec_dir.join(DISCARD_SUBDIR));
     let (temp_count, temp_bytes) = clip_export_temp_stats();
     let (edit_count, edit_bytes) = db_conn(&app)
-        .map(|c| {
-            let count = c.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64;
-            let bytes = c
-                .query_row("SELECT COALESCE(SUM(LENGTH(ops)), 0) FROM edit_state", [], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64;
-            (count, bytes)
-        })
+        .map(|c| edit_state_stats(&c))
         .unwrap_or((0, 0));
     let items = vec![
         RetentionItem { key: "trash".into(), count: trash_count, bytes: trash_bytes },
@@ -687,7 +690,8 @@ pub(crate) fn dup_dice(a: &std::collections::HashSet<[char; 3]>, b: &std::collec
     if a.is_empty() || b.is_empty() {
         return 0.0;
     }
-    let inter = a.iter().filter(|t| b.contains(*t)).count();
+    let (small, large) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    let inter = small.iter().filter(|t| large.contains(*t)).count();
     2.0 * inter as f64 / (a.len() + b.len()) as f64
 }
 pub(crate) fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
@@ -781,12 +785,17 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
         return Ok(Vec::new());
     }
     let grams: Vec<Set<[char; 3]>> = items.par_iter().map(|(_, s)| dup_trigrams(s)).collect();
+    // Normalized lengths, so a pair that cannot reach the threshold is skipped before any set work.
+    let lens: Vec<usize> = items.iter().map(|(_, s)| s.chars().count()).collect();
     let edges: Vec<(usize, usize, f64)> = (0..n)
         .into_par_iter()
         .flat_map(|i| {
             let gi = &grams[i];
             let mut local = Vec::new();
             for j in (i + 1)..n {
+                if !dup_length_could_match(lens[i], lens[j], thr) {
+                    continue;
+                }
                 let d = dup_dice(gi, &grams[j]);
                 if d >= thr && !dup_pair_is_ignored(&dup_ignored, &items[i].0.id, &items[j].0.id) {
                     local.push((i, j, d));
@@ -830,7 +839,7 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
                     let p = items[i].0;
                     DupMember {
                         id: p.id.clone(),
-                        name: if p.name.is_empty() { p.text.chars().take(40).collect() } else { p.name.clone() },
+                        name: stats_label(&p.name, &p.text, &p.id),
                         text: p.text.clone(),
                         usage: usage.get(&p.id).copied().unwrap_or(0),
                         views: in_views.get(p.id.as_str()).cloned().unwrap_or_default(),
@@ -900,7 +909,7 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
         let d = dup_dice(&target_grams, &dup_trigrams(&norm));
         if d >= thr && best.as_ref().map_or(true, |(_, b)| d > *b) {
             best = Some((
-                SimilarHit { id: p.id.clone(), name: if p.name.is_empty() { p.text.chars().take(40).collect() } else { p.name.clone() } },
+                SimilarHit { id: p.id.clone(), name: stats_display_name(p) },
                 d,
             ));
         }

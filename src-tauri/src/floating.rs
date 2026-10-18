@@ -165,9 +165,12 @@ fn spawn_reveal_fallback(app: &AppHandle, label: String) {
 // The main screen's scale factor, the one factor every park spot calculation uses to
 // turn logical box sizes into the physical pixels the work areas are measured in.
 fn main_scale_factor(app: &AppHandle) -> f64 {
-    app.get_webview_window("main")
-        .and_then(|w| w.available_monitors().ok())
-        .and_then(|m| m.first().map(|m| m.scale_factor()))
+    let win = app.get_webview_window("main");
+    // The primary monitor, the one the park spots are measured on (screen_snapshot puts it first).
+    win.as_ref()
+        .and_then(|w| w.primary_monitor().ok().flatten())
+        .or_else(|| win.as_ref().and_then(|w| w.available_monitors().ok()).and_then(|m| m.into_iter().next()))
+        .map(|m| m.scale_factor())
         .unwrap_or(1.0)
 }
 
@@ -254,6 +257,7 @@ fn forget_closing(label: &str) {
 // teardown was still running left the reopen undone, so the plan is replayed once here, off
 // the event loop that runs this handler.
 pub(crate) fn float_destroyed(app: &AppHandle, label: &str) {
+    note_app_placement(label, None);
     let gave_up = watch_destroyed(&mut CLOSING_FLOATS.lock().unwrap_or_else(|e| e.into_inner()), label);
     if gave_up {
         let app2 = app.clone();
@@ -360,6 +364,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        note_app_placement(&label, parked.then(|| (x.round() as i32, y.round() as i32)));
         spawn_reveal_fallback(app, label.clone());
 
         let app2 = app.clone();
@@ -369,7 +374,10 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
             WindowEvent::Moved(p) => {
                 // Fires for every pixel of a drag, so never block on a busy store; the next event carries
                 // the position. A drag is the user placing the pill, so it becomes the real position and
-                // ends parking.
+                // ends parking. The app's own placement of a parked pill is not a drag.
+                if !move_is_user_drag(&wlabel, (p.x, p.y)) {
+                    return;
+                }
                 let screen = screen_id_at(&app2, p.x, p.y);
                 if let Some(state) = app2.try_state::<Db>() {
                     if let Ok(mut store) = state.try_lock() {
@@ -655,18 +663,31 @@ pub(crate) fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> Str
 // shape, which also lets resolve_float_spot be tested with a mocked list.
 pub(crate) type ScreenRect = (String, i32, i32, i32, i32); // (identity, x, y, width, height)
 
+fn monitor_rect(m: &tauri::Monitor) -> ScreenRect {
+    let p = m.position();
+    let s = m.size();
+    let name = m.name().cloned().unwrap_or_default();
+    (screen_identity(&name, p.x, p.y, s.width as i32, s.height as i32), p.x, p.y, s.width as i32, s.height as i32)
+}
+
+// The monitor list with the primary one first. The OS enumeration order carries no such
+// promise, yet the park and recall code treats the first entry as the main screen. An
+// unknown primary leaves the order as it was.
+pub(crate) fn primary_first(mut screens: Vec<ScreenRect>, primary_id: &str) -> Vec<ScreenRect> {
+    if let Some(i) = screens.iter().position(|(id, ..)| id == primary_id) {
+        let primary = screens.remove(i);
+        screens.insert(0, primary);
+    }
+    screens
+}
+
 pub(crate) fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
-    app.get_webview_window("main")
-        .and_then(|w| w.available_monitors().ok())
-        .unwrap_or_default()
-        .iter()
-        .map(|m| {
-            let p = m.position();
-            let s = m.size();
-            let name = m.name().cloned().unwrap_or_default();
-            (screen_identity(&name, p.x, p.y, s.width as i32, s.height as i32), p.x, p.y, s.width as i32, s.height as i32)
-        })
-        .collect()
+    let Some(win) = app.get_webview_window("main") else {
+        return Vec::new();
+    };
+    let list: Vec<ScreenRect> = win.available_monitors().unwrap_or_default().iter().map(monitor_rect).collect();
+    let primary = win.primary_monitor().ok().flatten().map(|m| monitor_rect(&m).0).unwrap_or_default();
+    primary_first(list, &primary)
 }
 
 // The identity of the screen containing (x, y), or empty if none does (a probe failure
@@ -680,8 +701,8 @@ pub(crate) fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
 }
 
 // Where a saved floating position ends up today: unchanged if its screen is still there,
-// else parked on the main screen (the first entry of `screens`, always the primary
-// monitor). Never mutates `pos`: the caller keeps the stored position and screen id and
+// else parked on the main screen (the first entry of `screens`, which screen_snapshot makes
+// the primary monitor). Never mutates `pos`: the caller keeps the stored position and screen id and
 // only places the window at the returned point, so a screen that comes back finds its pill
 // where it was. `taken` is every other window's box, so several pills parked in one pass
 // fan out instead of stacking.
@@ -795,6 +816,37 @@ pub(crate) struct FolderExpand(pub(crate) Mutex<HashMap<String, Rect>>);
 // permanent Remove/Dissolve). In memory only, like FolderExpand above: cleared
 // on restart, never written to settings.
 pub(crate) struct HiddenFloats(pub(crate) Mutex<std::collections::HashSet<String>>);
+
+// Where a window was last placed by the app itself, per label. The window's own Moved event
+// fires for that placement too, and it must not count as the user dragging the pill: that
+// would overwrite the stored home of a parked pill with its park spot.
+static PLACED_BY_APP: Mutex<Vec<(String, (i32, i32))>> = Mutex::new(Vec::new());
+
+// Remembers (or, with None, forgets) the spot the app just moved a window to.
+fn note_app_placement(label: &str, spot: Option<(i32, i32)>) {
+    let mut v = PLACED_BY_APP.lock().unwrap_or_else(|e| e.into_inner());
+    v.retain(|(l, _)| l != label);
+    if let Some(s) = spot {
+        v.push((label.to_string(), s));
+    }
+}
+
+// Whether a Moved event is the user dragging. An event that lands on the spot the app set
+// is not; the first event anywhere else is, and it drops the remembered spot.
+pub(crate) fn moved_is_user_drag(placed: &mut Vec<(String, (i32, i32))>, label: &str, at: (i32, i32)) -> bool {
+    match placed.iter().position(|(l, _)| l == label) {
+        Some(i) if placed[i].1 == at => false,
+        Some(i) => {
+            placed.remove(i);
+            true
+        }
+        None => true,
+    }
+}
+
+fn move_is_user_drag(label: &str, at: (i32, i32)) -> bool {
+    moved_is_user_drag(&mut PLACED_BY_APP.lock().unwrap_or_else(|e| e.into_inner()), label, at)
+}
 
 // A pill/folder currently parked (its saved screen is not among today's monitors) and when
 // this run first noticed. In memory only: the marker and cleanup clock reset on restart,
@@ -976,6 +1028,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        note_app_placement(&label, parked.then(|| (x.round() as i32, y.round() as i32)));
         spawn_reveal_fallback(app, label.clone());
 
         let app2 = app.clone();
@@ -985,7 +1038,10 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
             WindowEvent::Moved(p) => {
                 // While the folder is open the window origin is not the icon, so the stored position
                 // follows the icon. A drag is the user placing the folder, so it becomes the real position
-                // and ends parking.
+                // and ends parking. The app's own placement of a parked folder is not a drag.
+                if !move_is_user_drag(&wlabel, (p.x, p.y)) {
+                    return;
+                }
                 let off = folder_expansion(&app2, &fid).unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
                 let icon_x = p.x + off.x.round() as i32;
                 let icon_y = p.y + off.y.round() as i32;
@@ -1014,6 +1070,8 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
 // single place that turns settings into windows, so every mutation just calls it.
 // MUST NOT run while the store mutex is held: it creates and closes windows.
 pub(crate) fn sync_float_windows(app: &AppHandle) {
+    // Window queries before the store lock (never call window APIs while holding it).
+    let live: std::collections::HashSet<String> = app.webview_windows().keys().cloned().collect();
     let (want_pills, want_folders, pills, folders) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
@@ -1030,6 +1088,12 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
             .prompts
             .iter()
             .filter(|p| want_pills.contains(&p.id))
+            // open_floating would return at once for a pill whose window is up and not closing;
+            // skipping it here keeps its (possibly large) picture from being cloned on every sync.
+            .filter(|p| {
+                let label = flabel(&p.id);
+                reopen_step(live.contains(&label), is_closing(&label)) != ReopenStep::Keep
+            })
             .cloned()
             .collect();
         let folders: Vec<FloatFolder> = store
@@ -1066,6 +1130,28 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
             let _ = app.emit_to(label.as_str(), "folder-changed", ());
         }
     }
+}
+
+// The boxes float_recall spreads out, in physical pixels: every pill (in a stable
+// id order) and then every folder, each sized by its own scale and the screen's
+// scale factor. Returns the pill ids in the same order as their boxes.
+pub(crate) fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
+    let mut wishes: Vec<Rect> = Vec::new();
+    let mut pill_ids: Vec<String> = settings.floating.keys().cloned().collect();
+    pill_ids.sort(); // stable fan-out order across runs
+    for id in &pill_ids {
+        let scale = float_scale_of(settings, id);
+        let (w, h) = match prompts.iter().find(|p| &p.id == id) {
+            Some(p) => pill_dims(is_image_prompt(p), scale),
+            None => pill_dims(false, scale),
+        };
+        wishes.push(Rect { x: work.x, y: work.y, w: w * dpi, h: h * dpi });
+    }
+    for folder in &settings.float_folders {
+        let side = folder_box(folder.scale) * dpi;
+        wishes.push(Rect { x: work.x, y: work.y, w: side, h: side });
+    }
+    (pill_ids, wishes)
 }
 
 // Expert action "Bring every floating window back to the main screen": the emergency exit
@@ -1186,6 +1272,18 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
                 }
                 // An unpin just before closes the window asynchronously: build only once its label is free.
                 wait_label_gone(&app, &flabel(&id)).await;
+                // Record the pin before building: open_floating may defer while the old window is
+                // still tearing down, and the replay builds only what settings.floating lists.
+                // The monitor probe in default_pos runs before the store lock is taken.
+                let count = lock(&state).settings.floating.len();
+                let spot = default_pos(&app, count);
+                {
+                    let mut store = lock(&state);
+                    if !store.settings.floating.contains_key(&id) {
+                        store.settings.floating.insert(id.clone(), spot);
+                        save_settings(&app, &store.settings);
+                    }
+                }
                 let mut taken: Vec<Rect> = app.webview_windows().values().filter_map(window_rect).collect();
                 open_floating(&app, &p, &mut taken);
                 let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": true }));
