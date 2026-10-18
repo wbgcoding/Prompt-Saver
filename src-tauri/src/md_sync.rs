@@ -1876,6 +1876,24 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
         let hash = if handled { hash } else { 0 };
         sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled, hash });
     }
+    // A prompt made confidential while sync was off (or while its sweep was postponed) left a
+    // plaintext file of ours behind. Noting it as known and handled lets the next write sweep
+    // it, since the library no longer owns a file for that id.
+    for p in prompts.iter().filter(|p| p.secret && sync_safe_id(&p.id)) {
+        let path = dir.join(format!("{}.md", p.id));
+        if !path.is_file() {
+            continue;
+        }
+        let Some(stamp) = sync_stamp_of(&path) else { continue };
+        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { continue };
+        let hash = sync_hash(&bytes);
+        let ours = sync_decode_text(bytes).and_then(|c| parse_frontmatter(&c)).is_some_and(|(fields, _)| md_is_ours(&fields));
+        if !ours {
+            continue;
+        }
+        sync_known_note(&path);
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash });
+    }
 }
 
 pub(crate) fn start_sync_poll(app: AppHandle) {

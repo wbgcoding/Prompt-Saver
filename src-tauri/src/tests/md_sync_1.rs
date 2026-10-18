@@ -1195,3 +1195,19 @@ fn a_round_trip_keeps_multi_line_notes_and_a_trailing_newline() {
     assert!(!md.contains("notes_enc"), "{md}");
     assert_eq!(apply_md_to_prompt(&plain, &md).unwrap().notes, "C:\\new\\file is fine");
 }
+
+#[test]
+fn sync_startup_seed_lets_the_next_write_sweep_a_plaintext_file_of_a_now_confidential_prompt() {
+    let dir = sync_tmp_dir("secret-left-behind");
+    let mut p = sync_test_prompt();
+    fs::write(dir.join("p1.md"), prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+    let foreign = dir.join("p9.md");
+    fs::write(&foreign, "just my own notes, no header").unwrap();
+    // The prompt became confidential while sync was off; the file stayed behind.
+    p.secret = true;
+    sync_seed_seen(&dir, &[p.clone()], &Settings::default());
+    sync_write_dir(&dir, &[p], &Settings::default());
+    assert!(!dir.join("p1.md").exists(), "the plaintext copy of a confidential prompt must not survive");
+    assert!(foreign.exists(), "a file that is not ours is never touched");
+    let _ = fs::remove_dir_all(&dir);
+}
