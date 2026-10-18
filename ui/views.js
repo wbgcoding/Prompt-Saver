@@ -119,6 +119,7 @@ export function refreshFavViewUi() {
   if (btn) {
     btn.classList.toggle("hidden", !favViewEnabled());
     btn.classList.toggle("active", favView);
+    btn.setAttribute("aria-pressed", String(favView));
   }
   const qg = $("quick-grid");
   if (qg) qg.classList.toggle("qg-readonly", favView);
@@ -432,6 +433,7 @@ export function viewTabEl(v) {
   // While the favorites view is open, no normal view is the active one.
   btn.className = "view-btn" + (!favView && v.id === settings.active_view ? " active" : "");
   btn.dataset.viewId = v.id;
+  if (btn.classList.contains("active")) btn.setAttribute("aria-current", "true");
   if (v.color) {
     btn.classList.add("colored");
     btn.style.setProperty("--view-color", v.color);

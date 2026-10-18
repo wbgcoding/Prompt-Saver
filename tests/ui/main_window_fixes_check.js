@@ -1055,6 +1055,15 @@ section(() => {
   check(/fillScaleSelect\("ui-scale", "uiScale"\)/.test(lc.slice(0, 900)), "a language switch refills the scale select");
 });
 
+// 57. The favorites toggle and the active view tab expose their state.
+section(() => {
+  const html = read("index.html");
+  check(/id="fav-view-btn"[^>]*aria-pressed="false"/.test(html), "the star starts as not pressed");
+  const src = read("views.js");
+  check(/refreshFavViewUi\(\)[\s\S]*?setAttribute\("aria-pressed", String\(favView\)\)/.test(src), "the star keeps aria-pressed in step");
+  check(/classList\.contains\("active"\)\) btn\.setAttribute\("aria-current", "true"\)/.test(src), "the active view tab carries aria-current");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
