@@ -16,3 +16,22 @@ fn an_update_uninstall_keeps_the_downloaded_ffmpeg() {
     assert!(guard.contains("$KeepTools"), "the ffmpeg delete is guarded by the keep marker");
     assert!(nsi.contains("GetOptions} $CMDLINE \"/KEEPTOOLS\""), "un.onInit reads the marker");
 }
+
+#[test]
+fn every_leading_separator_pair_and_nt_prefix_counts_as_a_network_path() {
+    for p in [
+        r"\/host/share/x.mp4",
+        r"/\host\share\x.mp4",
+        r"\??\UNC\host\share\x.mp4",
+        r"\??\unc/host/share",
+        r"\\?\UNC\host\share",
+        "//?/UNC/host/share",
+        r"\/?\UNC\host\share",
+        r"  \\host\share",
+    ] {
+        assert!(is_network_path(p), "{p:?} must count as a network path");
+    }
+    for p in [r"\??\C:\Users\x\a.png", "/rooted/only.png", r"\single\lead.png", "C:/Users/x/clip.mp4"] {
+        assert!(!is_network_path(p), "{p:?} is local");
+    }
+}

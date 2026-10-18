@@ -926,14 +926,23 @@ pub(crate) fn lenient_import_note(raw: &str) -> String {
 // credentials to that host, so a file from outside never gets to name one.
 pub(crate) fn is_network_path(raw: &str) -> bool {
     let t = raw.trim();
-    if t.starts_with("\\\\?\\") || t.starts_with("//?/") {
-        let rest = &t[4..];
-        if rest.get(..4).is_some_and(|h| h.eq_ignore_ascii_case("unc\\") || h.eq_ignore_ascii_case("unc/")) {
+    let b = t.as_bytes();
+    let sep = |c: u8| c == b'\\' || c == b'/';
+    // The NT form `\??\` names the same objects as the verbatim form `\\?\`.
+    let rest = if t.get(..4) == Some(r"\??\") || (b.len() >= 4 && sep(b[0]) && sep(b[1]) && b[2] == b'?' && sep(b[3])) {
+        Some(&t[4..])
+    } else {
+        None
+    };
+    if let Some(rest) = rest {
+        let rb = rest.as_bytes();
+        if rb.len() >= 4 && rb[..3].eq_ignore_ascii_case(b"unc") && sep(rb[3]) {
             return true;
         }
         return drive_is_remote(rest);
     }
-    if t.starts_with("\\\\") || t.starts_with("//") {
+    // Any two leading separators, mixed kinds included, reach a host.
+    if b.len() >= 2 && sep(b[0]) && sep(b[1]) {
         return true;
     }
     drive_is_remote(t)
