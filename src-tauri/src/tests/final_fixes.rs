@@ -38,6 +38,7 @@ fn the_apps_own_network_folders_pass_the_path_gate() {
         r"\\nas\ps\data\files\a.pdf",
         r"\\NAS\PS\DATA\files\a.pdf",
         "//nas/ps/data/files/a.pdf",
+        r"\\?\UNC\nas\ps\data\files\a.pdf",
         r"\\nas\videos\rec\rec-1.mp4",
     ] {
         assert!(is_network_path(p), "{p:?} is still a network spelling");
@@ -189,4 +190,31 @@ fn a_synced_file_keeps_a_network_path_as_written() {
     assert_eq!(out.icon_path, "//nas/ps/i.png");
     let src = source!("../md_sync.rs");
     assert!(!src.contains("is_network_path"), "the sync reader no longer blanks a path");
+}
+
+#[test]
+fn the_backups_self_copy_guard_ignores_case() {
+    let src = source!("../snip.rs");
+    assert!(src.contains("old_backups.is_dir() && !path_is_inside_dir(new, &old_backups)"));
+    assert!(!src.contains("!new.starts_with(&old_backups)"));
+    let old = Path::new(r"C:\Data\backups");
+    assert!(path_is_inside_dir(Path::new(r"c:\data\BACKUPS\sub"), old));
+    assert!(!path_is_inside_dir(Path::new(r"C:\Data\backups2"), old));
+}
+
+#[test]
+fn a_verbatim_share_is_the_same_place_as_the_plain_one() {
+    assert_eq!(split_path_parts(r"\\?\UNC\nas\ps\data"), split_path_parts(r"\\nas\ps\data"));
+    assert_eq!(split_path_parts(r"\\?\unc\NAS\ps"), vec!["NAS".to_string(), "ps".to_string()]);
+    assert_eq!(split_path_parts(r"\\?\C:\x\y"), split_path_parts(r"C:\x\y"));
+    // A folder that merely starts with "unc" is no prefix.
+    assert_eq!(split_path_parts("uncle/x"), vec!["uncle".to_string(), "x".to_string()]);
+    let data = Path::new(r"\\nas\ps\data");
+    assert!(path_is_inside_dir(Path::new(r"\\?\UNC\nas\ps\data\files\a.pdf"), data));
+    assert!(!path_is_inside_dir(Path::new(r"\\?\UNC\nas\ps\data2\a.pdf"), data));
+    let own = [PathBuf::from(r"\\nas\ps\data")];
+    assert!(!is_foreign_network_path(r"\\?\UNC\nas\ps\data\files\a.pdf", &own));
+    assert!(is_foreign_network_path(r"\\?\UNC\nas\ps\other\a.pdf", &own));
+    assert!(is_foreign_network_path(r"\\?\UNC\evil\ps\data\a.pdf", &own));
+    assert!(is_foreign_network_path(r"\\?\UNC\nas\ps\data\..\other\a.pdf", &own));
 }

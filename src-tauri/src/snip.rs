@@ -1656,9 +1656,15 @@ const MEDIA_SUBDIRS: [&str; 2] = ["files", "recordings"];
 
 // A path split into its components for comparison: either separator, no empty or "." parts, and
 // a leading verbatim marker dropped. Case is kept; callers compare it folded, like Windows does.
-fn split_path_parts(p: &str) -> Vec<String> {
+pub(crate) fn split_path_parts(p: &str) -> Vec<String> {
     let s = p.replace('\\', "/");
     let s = s.strip_prefix("//?/").unwrap_or(&s);
+    // The verbatim spelling of a share names the same host and share as the plain one, so its
+    // parts start at the server too.
+    let s = match s.get(..4) {
+        Some(head) if head.eq_ignore_ascii_case("unc/") => &s[4..],
+        _ => s,
+    };
     s.split('/').filter(|c| !c.is_empty() && *c != ".").map(str::to_string).collect()
 }
 
@@ -1804,7 +1810,7 @@ pub(crate) fn move_store_dir(
         let old_backups = current.join("backups");
         // The new folder may itself sit inside old_backups; copying a directory into its own
         // descendant would recurse forever.
-        if old_backups.is_dir() && !new.starts_with(&old_backups) {
+        if old_backups.is_dir() && !path_is_inside_dir(new, &old_backups) {
             if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
                 append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
             }
