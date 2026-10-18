@@ -39,6 +39,9 @@ ALLOW = {
         "not a folder that can be removed", "the elevated script is too long for a command line",
         "unexpected PowerShell output shape",
     ],
+    "raw reason for the crash log or the technical details row, wrapped in a mapped code": [
+        "serialize failed", "write failed ({:?})", "timeout",
+    ],
     "background save of editor state, the caller ignores the failure": [
         "db unavailable",
     ],
