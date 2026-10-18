@@ -809,6 +809,37 @@ section(() => {
   check(/await openBackups\(\)/.test(search) && !/renderBackupPanel/.test(search), "settings search uses the shared backup open path");
 });
 
+// 37. Views: a half-finished undo still redraws; a half-saved edit shows what landed.
+section(() => {
+  const src = read("views.js");
+  const restore = extractBlock(src, "export async function restoreDeletedView(").replace("export ", "");
+  const confirm = extractBlock(src, "export async function confirmViewModal(").replace("export ", "");
+  later(async () => {
+    const calls = [];
+    const settings = { active_view: "v9", views: [] };
+    const sb = run(restore, {
+      settings, val: () => 8, libraryEl: { classList: { contains: () => true } }, renderLibrary() {}, batchErrorToast() {},
+      assignSettings: () => {}, invoke: async (cmd) => { if (cmd === "set_view_grid") throw new Error("denied"); return {}; },
+      renderViews: () => calls.push("views"), renderGrid: async () => { calls.push("grid"); },
+    });
+    let threw = false;
+    try { await sb.restoreDeletedView({ name: "A", cols: 2, rows: 2, members: [] }, null); } catch (_) { threw = true; }
+    check(threw && calls.join() === "views,grid", "a failing undo step still redraws the tab bar and the grid");
+
+    const assigned = [];
+    const redraw = [];
+    const errs = [];
+    const modal = { name: { value: "New name", focus() {} }, cols: { value: "2" }, rows: { value: "2" } };
+    const sb2 = run(confirm, {
+      viewModal: modal, viewModalId: "v1", viewModalColor: "", viewModalSaving: false, settings: { views: [] }, clampGrid: (v) => Number(v),
+      assignSettings: (r) => assigned.push(r), errToast: (e) => errs.push(e), closeViewModal() {}, renderViews: () => redraw.push("views"), renderGrid: async () => {},
+      invoke: async (cmd) => { if (cmd === "set_view_color") throw new Error("denied"); return { renamed: true }; },
+    });
+    await sb2.confirmViewModal();
+    check(assigned.length === 1 && assigned[0].renamed && redraw.length === 1 && errs.length === 1, "a rename that landed is assigned and drawn even when a later step fails");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
