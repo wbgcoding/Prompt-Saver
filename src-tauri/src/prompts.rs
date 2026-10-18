@@ -38,6 +38,16 @@ pub(crate) fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
     folder_cells_in_view(settings, &vid)
 }
 
+// The cells and member ids of one view's grid folders, read once. Both live outside
+// view.layouts, so every layout rebuild or batch placement has to exclude them.
+pub(crate) fn view_folder_sets(
+    settings: &Settings,
+    view_id: &str,
+) -> (std::collections::HashSet<(u32, u32)>, std::collections::HashSet<String>) {
+    let cells = folder_cells_in_view(settings, view_id).into_iter().map(|c| (c[0], c[1])).collect();
+    (cells, folder_members_in_view(settings, view_id))
+}
+
 // Same, but also treats `extra` cells (e.g. another grid folder's own cell, which
 // lives outside view.layouts) as taken. Without this, a cell handed out here could
 // coincide with a folder's cell: the tile would save fine but never draw, since
@@ -161,13 +171,7 @@ pub(crate) fn apply_view_batch_action(
 ) -> Result<(), String> {
     // A grid folder occupies a cell via tile_folders, outside view.layouts. Read both sets before
     // views is borrowed mutably.
-    let folder_cells: std::collections::HashSet<(u32, u32)> = settings
-        .tile_folders
-        .iter()
-        .filter(|f| f.view_id == view_id)
-        .map(|f| (f.cell[0], f.cell[1]))
-        .collect();
-    let folder_members = folder_members_in_view(settings, view_id);
+    let (folder_cells, folder_members) = view_folder_sets(settings, view_id);
     match action {
         "addView" | "removeView" => {
             let Some(vidx) = settings.views.iter().position(|v| v.id == view_id) else {

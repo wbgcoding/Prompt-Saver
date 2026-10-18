@@ -148,20 +148,7 @@ pub(crate) fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: 
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
-    let folder_cells: std::collections::HashSet<(u32, u32)> = store
-        .settings
-        .tile_folders
-        .iter()
-        .filter(|f| f.view_id == id)
-        .map(|f| (f.cell[0], f.cell[1]))
-        .collect();
-    let folder_members: std::collections::HashSet<String> = store
-        .settings
-        .tile_folders
-        .iter()
-        .filter(|f| f.view_id == id)
-        .flat_map(|f| f.members.iter().cloned())
-        .collect();
+    let (folder_cells, folder_members) = view_folder_sets(&store.settings, &id);
     let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) else {
         return webview_settings(&store.settings);
     };
