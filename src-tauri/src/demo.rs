@@ -72,14 +72,14 @@ pub(crate) fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Vec
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            let ok = std::process::Command::new(ffmpeg)
-                .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10"])
+            let mut cmd = std::process::Command::new(ffmpeg);
+            cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10"])
                 .args(["-c:v", "libx264", "-pix_fmt", "yuv420p"])
                 .arg(&video)
-                .creation_flags(CREATE_NO_WINDOW)
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+                .creation_flags(CREATE_NO_WINDOW);
+            // Time-boxed and tied to the app job: a stalled ffmpeg must neither hang the switch
+            // nor outlive the app.
+            let ok = status_in_job(&mut cmd, std::time::Duration::from_secs(20)).map(|s| s.success()).unwrap_or(false);
             if ok {
                 list.push(Prompt {
                     // Relative for the same reason as the attachment row above; load_store() resolves it.
@@ -398,7 +398,13 @@ pub(crate) async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>, lang:
     let ffmpeg = ffmpeg_search_path(&app);
     let demo = canonical.join(DEMO_SUBFOLDER);
     // The language the interface resolved, sent by the window; none means English.
-    build_demo_store(&demo, ffmpeg.as_deref(), lang.as_deref().unwrap_or("en"))?;
+    let lang_owned = lang.unwrap_or_else(|| "en".to_string());
+    {
+        let (demo, ffmpeg) = (demo.clone(), ffmpeg.clone());
+        tauri::async_runtime::spawn_blocking(move || build_demo_store(&demo, ffmpeg.as_deref(), &lang_owned))
+            .await
+            .map_err(|e| e.to_string())??;
+    }
     {
         let store = lock(&state);
         demo_flush_result(store.prompts_locked, || save_prompts(&app, &store), || save_settings_paired(&app, &store.settings))?;
