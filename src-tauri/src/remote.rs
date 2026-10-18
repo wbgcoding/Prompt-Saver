@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, OwnedSemaphorePermit, Semaphore};
 use tokio_rustls::TlsAcceptor;
 
 // ---------- Settings ----------
@@ -32,6 +32,8 @@ const DEFAULT_RATE_LIMIT: f64 = 60.0;
 const MAX_BODY_BYTES: usize = 1_000_000; // 1 MB, the spec's own cap
 const MAX_HEAD_BYTES: usize = 16 * 1024; // request line + headers only
 const MAX_ARGV_LEN: usize = 64;
+// Connections handled at once; more are dropped on accept so idle sockets cannot pile up.
+const MAX_OPEN_CONNECTIONS: usize = 64;
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const FAIL_LOCKOUT_THRESHOLD: u32 = 10;
 const FAIL_LOCKOUT_SECS: u64 = 10 * 60;
@@ -981,6 +983,7 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
     let guard = state.guard.clone();
     let runs = state.runs.clone();
     let runs_for_run = runs.clone();
+    let slots = Arc::new(Semaphore::new(MAX_OPEN_CONNECTIONS));
     runs.start_run(|ticket| {
         let generation = ticket.generation;
         let runs_conn = runs_for_run.clone();
@@ -1008,7 +1011,13 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
                 let guard2 = guard.clone();
                 let acceptor2 = acceptor.clone();
                 let runs2 = runs_conn.clone();
-                tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2, acceptor2, runs2, generation).await });
+                let Some(permit) = take_connection_slot(&slots) else {
+                    return; // all slots busy: the socket is dropped unanswered
+                };
+                tauri::async_runtime::spawn(async move {
+                    let _permit = permit;
+                    handle_connection(stream, peer, app3, guard2, acceptor2, runs2, generation).await
+                });
             },
             move |current| {
                 // A run that is no longer current must not touch the shared status: its stop() already
@@ -1023,6 +1032,11 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
         ))
     });
     Ok(())
+}
+
+// One slot per open connection, held until its task ends; `None` when all are in use.
+fn take_connection_slot(slots: &Arc<Semaphore>) -> Option<OwnedSemaphorePermit> {
+    slots.clone().try_acquire_owned().ok()
 }
 
 // The stored identity (made and saved first when missing or unreadable) turned into a

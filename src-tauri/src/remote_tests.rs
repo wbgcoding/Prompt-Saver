@@ -956,3 +956,14 @@ fn busy_peers_inside_their_window_are_capped_oldest_first() {
     assert!(!peers.contains_key(&IpAddr::V4(Ipv4Addr::from(0x0A00_0000))), "the oldest window goes first");
     assert!(peers.contains_key(&IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + 1999))), "the newest window stays");
 }
+
+// Idle sockets must not pile up without a limit: the 65th open connection gets no slot until
+// one of the first ones ends.
+#[test]
+fn open_connections_are_capped_and_a_slot_returns_when_one_ends() {
+    let slots = Arc::new(Semaphore::new(MAX_OPEN_CONNECTIONS));
+    let mut held: Vec<_> = (0..MAX_OPEN_CONNECTIONS).map(|_| take_connection_slot(&slots).expect("a free slot")).collect();
+    assert!(take_connection_slot(&slots).is_none());
+    held.pop();
+    assert!(take_connection_slot(&slots).is_some());
+}
