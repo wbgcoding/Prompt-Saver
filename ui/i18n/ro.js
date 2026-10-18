@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "Redă o dată",
     mediaMute: "Dezactivează sunetul",
     mediaUnmute: "Activează sunetul",
+    mediaSeek: "Poziție",
+    mediaVolume: "Volum",
     flagVideoMuted: "Dezactivează sunetul videoclipurilor implicit",
     flagVideoLoop: "Repetă videoclipurile implicit",
     flagMediaMeta: "Afișează durata, rezoluția și dimensiunea pentru fișierele media",

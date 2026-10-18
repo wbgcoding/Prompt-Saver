@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "Eenmaal afspelen",
     mediaMute: "Dempen",
     mediaUnmute: "Dempen opheffen",
+    mediaSeek: "Positie",
+    mediaVolume: "Volume",
     flagVideoMuted: "Video's standaard dempen",
     flagVideoLoop: "Video's standaard herhalen",
     flagMediaMeta: "Duur, resolutie en grootte bij media tonen",

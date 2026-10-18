@@ -1137,6 +1137,14 @@ section(() => {
   check(src.includes("Copies made while the dialog was open"), "the snapshot is taken again after the confirmation");
 });
 
+// 66. The media bar names its seek and volume sliders.
+section(() => {
+  const media = read("media.js");
+  check(media.includes("nameBtn(seek, L.seek);") && media.includes("nameBtn(vol, L.volume);"), "applyLabels names both sliders");
+  check(read("core.js").includes('seek: t("mediaSeek"), volume: t("mediaVolume")'), "the main window passes both labels");
+  check(read("floating.js").includes("seek: t.mediaSeek, volume: t.mediaVolume"), "the pill passes both labels");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

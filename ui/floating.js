@@ -185,6 +185,7 @@ function applyTexts(s) {
     play: t.mediaPlay, pause: t.mediaPause,
     loopOn: t.mediaLoopOn, loopOff: t.mediaLoopOff,
     mute: t.mediaMute, unmute: t.mediaUnmute,
+    seek: t.mediaSeek, volume: t.mediaVolume,
   });
 }
 

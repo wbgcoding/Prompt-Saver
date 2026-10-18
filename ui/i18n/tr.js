@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "Bir kez oynat",
     mediaMute: "Sesi kapat",
     mediaUnmute: "Sesi aç",
+    mediaSeek: "Konum",
+    mediaVolume: "Ses",
     flagVideoMuted: "Videoları varsayılan olarak sessize al",
     flagVideoLoop: "Videoları varsayılan olarak döngüye al",
     flagMediaMeta: "Medya için süre, çözünürlük ve boyutu göster",

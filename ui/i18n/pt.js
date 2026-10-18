@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "Reproduzir uma vez",
     mediaMute: "Silenciar",
     mediaUnmute: "Ativar som",
+    mediaSeek: "Posição",
+    mediaVolume: "Volume",
     flagVideoMuted: "Silenciar vídeos por padrão",
     flagVideoLoop: "Repetir vídeos por padrão",
     flagMediaMeta: "Mostrar duração, resolução e tamanho dos arquivos de mídia",

@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "播放一次",
     mediaMute: "静音",
     mediaUnmute: "取消静音",
+    mediaSeek: "进度",
+    mediaVolume: "音量",
     flagVideoMuted: "默认静音视频",
     flagVideoLoop: "默认循环视频",
     flagMediaMeta: "显示媒体的时长、分辨率和大小",

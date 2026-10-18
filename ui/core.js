@@ -263,6 +263,7 @@ export const mediaBarLabels = () => ({
   play: t("mediaPlay"), pause: t("mediaPause"),
   loopOn: t("mediaLoopOn"), loopOff: t("mediaLoopOff"),
   mute: t("mediaMute"), unmute: t("mediaUnmute"),
+  seek: t("mediaSeek"), volume: t("mediaVolume"),
 });
 
 // The product name never appears in the markup: every [data-brand] element (the <title> and

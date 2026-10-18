@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "Odtwórz raz",
     mediaMute: "Wycisz",
     mediaUnmute: "Wyłącz wyciszenie",
+    mediaSeek: "Przewijanie",
+    mediaVolume: "Głośność",
     flagVideoMuted: "Domyślnie wycisz wideo",
     flagVideoLoop: "Domyślnie zapętlaj wideo",
     flagMediaMeta: "Pokaż czas trwania, rozdzielczość i rozmiar mediów",

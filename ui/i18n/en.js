@@ -771,6 +771,8 @@ export default {
     mediaLoopOff: "Play once",
     mediaMute: "Mute",
     mediaUnmute: "Unmute",
+    mediaSeek: "Seek",
+    mediaVolume: "Volume",
     flagVideoMuted: "Mute videos by default",
     flagVideoLoop: "Loop videos by default",
     flagMediaMeta: "Show duration, resolution and size for media",

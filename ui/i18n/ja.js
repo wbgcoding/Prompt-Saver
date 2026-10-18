@@ -794,6 +794,8 @@ export default {
     mediaLoopOff: "1回再生",
     mediaMute: "ミュート",
     mediaUnmute: "ミュート解除",
+    mediaSeek: "シーク",
+    mediaVolume: "音量",
     flagVideoMuted: "動画を既定でミュート",
     flagVideoLoop: "動画を既定でループ",
     flagMediaMeta: "メディアの長さ、解像度、サイズを表示",

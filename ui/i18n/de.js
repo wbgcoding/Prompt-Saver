@@ -771,6 +771,8 @@ export default {
     mediaLoopOff: "Einmal abspielen",
     mediaMute: "Stummschalten",
     mediaUnmute: "Stummschaltung aufheben",
+    mediaSeek: "Position",
+    mediaVolume: "Lautstärke",
     flagVideoMuted: "Videos standardmäßig stumm",
     flagVideoLoop: "Videos standardmäßig wiederholen",
     flagMediaMeta: "Dauer, Auflösung und Größe bei Medien anzeigen",
