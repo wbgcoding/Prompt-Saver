@@ -208,16 +208,29 @@ export async function loadJournal() {
 
 // Undo for "clear copy history": writes the row-level log back plus the two
 // counter maps clear_copy_history wipes alongside it.
+// Folds the counters of copies made since the clear into the snapshot: counts add up, the
+// newer last-used time wins, so an Undo never drops a copy made in between.
+export function mergeRestoredCounts(usage, lastUsed, curUsage, curLastUsed) {
+  const u = { ...usage };
+  for (const [id, n] of Object.entries(curUsage || {})) u[id] = (u[id] || 0) + n;
+  const l = { ...lastUsed };
+  for (const [id, ts] of Object.entries(curLastUsed || {})) l[id] = Math.max(l[id] || 0, ts);
+  return { usage: u, lastUsed: l };
+}
+
 export async function restoreCopyHistory(rows, usage, lastUsed) {
+  let cur = null;
+  try { cur = await invoke("get_settings"); } catch (_) { cur = null; }
+  const merged = mergeRestoredCounts(usage, lastUsed, cur ? cur.usage : settings.usage, cur ? cur.last_used : settings.last_used);
   try {
     await invoke("restore_copy_history", {
       entries: rows.map((r) => ({ ts: r.ts, id: r.id })),
-      usage,
-      lastUsed,
+      usage: merged.usage,
+      lastUsed: merged.lastUsed,
     });
   } catch (err) { errToast(err); return; }
-  settings.usage = usage;
-  settings.last_used = lastUsed;
+  settings.usage = merged.usage;
+  settings.last_used = merged.lastUsed;
   await loadJournal();
 }
 
@@ -534,8 +547,8 @@ export function bindJournal() {
     // the row-level log, the two counter maps and the stored entries.
     let rows = [];
     let items = [];
-    const usage = { ...(settings.usage || {}) };
-    const lastUsed = { ...(settings.last_used || {}) };
+    let usage = { ...(settings.usage || {}) };
+    let lastUsed = { ...(settings.last_used || {}) };
     try {
       if (clearApp) rows = await invoke("recent_copies", { limit: 1000000, grouped: false });
       if (clearElsewhere) items = await invoke("clip_inbox_list");
@@ -585,6 +598,15 @@ export function bindJournal() {
       if (offerPurge) purgeBackups = document.getElementById("confirm-cb-purgeBackups")?.checked === true;
     }
     if (appAffected) {
+      // Copies made while the dialog was open must come back on Undo too: snapshot again.
+      if (flag("confirmClearHistory")) {
+        try {
+          rows = await invoke("recent_copies", { limit: 1000000, grouped: false });
+          const fresh = await invoke("get_settings");
+          usage = { ...(fresh.usage || {}) };
+          lastUsed = { ...(fresh.last_used || {}) };
+        } catch (e) { errToast(e); return; }
+      }
       try { await invoke("clear_copy_history"); } catch (e) { errToast(e); return; }
       settings.usage = {};
       settings.last_used = {};

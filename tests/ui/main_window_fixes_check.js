@@ -1125,6 +1125,18 @@ section(() => {
   check(src.includes("settings.ui_flags = prevFlags; errToast(err);"), "a failed flag save restores the previous flags before the refetch");
 });
 
+// 65. Undo of clear history merges counters instead of replacing them.
+section(() => {
+  const src = read("journal.js");
+  const fn = extractBlock(src, "export function mergeRestoredCounts(").replace("export ", "");
+  const sb = run(fn + "; var out = mergeRestoredCounts({ a: 3, b: 1 }, { a: 100, b: 50 }, { a: 2, c: 4 }, { a: 90, c: 200 });", {});
+  check(sb.out.usage.a === 5 && sb.out.usage.b === 1 && sb.out.usage.c === 4, "counts add up");
+  check(sb.out.lastUsed.a === 100 && sb.out.lastUsed.b === 50 && sb.out.lastUsed.c === 200, "the newer last-used time wins");
+  const restore = extractBlock(src, "export async function restoreCopyHistory(");
+  check(restore.includes("mergeRestoredCounts(") && restore.includes("usage: merged.usage"), "the restore sends the merged counters");
+  check(src.includes("Copies made while the dialog was open"), "the snapshot is taken again after the confirmation");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
