@@ -432,6 +432,8 @@ fn a_missing_prompts_json_beside_a_database_locks_prompt_writes() {
 // deletion of the original is how the newest prompts would go for good.
 #[test]
 fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
+    // LAST_OLD_DATA_DIR is one global; the other tests that set it hold the same lock.
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = std::env::temp_dir().join(format!("{}-test-datadir-move", brand::SLUG));
     let _ = std::fs::remove_dir_all(&root);
     let current = root.join("old");
@@ -441,7 +443,7 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
         std::fs::create_dir_all(d).unwrap();
     }
     std::fs::write(current.join("data.db"), b"the real store").unwrap();
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
 
     let mut rebound = false;
     {
@@ -457,7 +459,7 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
         "future launches must still be pointed at the folder that holds the data"
     );
     assert!(
-        LAST_OLD_DATA_DIR.lock().unwrap().is_none(),
+        LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none(),
         "the folder still holding the only copy must never be offered for deletion"
     );
 
@@ -476,12 +478,12 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
         "the next launch must find the new folder"
     );
     assert_eq!(
-        *LAST_OLD_DATA_DIR.lock().unwrap(),
+        *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()),
         Some(current.clone()),
         "only a completed move may authorise cleaning up the old folder"
     );
 
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -490,6 +492,8 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
 // must leave the adopted files alone.
 #[test]
 fn moving_into_a_folder_with_a_store_reports_the_adoption_and_keeps_its_files() {
+    // LAST_OLD_DATA_DIR is one global; the other tests that set it hold the same lock.
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = std::env::temp_dir().join(format!("{}-test-datadir-adopt", brand::SLUG));
     let _ = std::fs::remove_dir_all(&root);
     let current = root.join("old");
@@ -505,7 +509,7 @@ fn moving_into_a_folder_with_a_store_reports_the_adoption_and_keeps_its_files() 
     let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind, &mut || Ok(())).unwrap();
     assert!(adopted, "an existing store in the target must be reported as adopted");
     assert_eq!(std::fs::read(new.join("data.db")).unwrap(), b"the other library");
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let _ = std::fs::remove_dir_all(&root);
 }
 

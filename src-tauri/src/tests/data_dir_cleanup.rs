@@ -72,7 +72,7 @@ fn a_move_copies_attachments_and_recordings_and_runs_the_rebase() {
     touch(&current.join("files/a/b.png"));
     touch(&current.join("recordings/clip.mp4"));
     fs::create_dir_all(&pointer).unwrap();
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let mut ran = false;
     let adopted = move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || {
         ran = true;
@@ -82,7 +82,7 @@ fn a_move_copies_attachments_and_recordings_and_runs_the_rebase() {
     assert!(!adopted && ran);
     assert!(new.join("files/a/b.png").is_file() && new.join("recordings/clip.mp4").is_file());
     assert!(new.join("data.db").is_file() && pointer.join("datapath").is_file());
-    assert_eq!(LAST_OLD_DATA_DIR.lock().unwrap().as_deref(), Some(current.as_path()));
+    assert_eq!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).as_deref(), Some(current.as_path()));
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -96,7 +96,7 @@ fn a_failed_media_copy_aborts_before_the_pointer_is_written() {
     // A plain file where the target folder has to go makes the copy fail.
     touch(&new.join("files"));
     fs::create_dir_all(&pointer).unwrap();
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let mut rebased = false;
     let moved = move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || {
         rebased = true;
@@ -106,7 +106,7 @@ fn a_failed_media_copy_aborts_before_the_pointer_is_written() {
     assert!(!rebased, "nothing may be rewritten for a move that did not happen");
     assert!(!pointer.join("datapath").exists(), "launches must stay on the old folder");
     assert!(!new.join("data.db").exists(), "a retry must not mistake the half copy for a library");
-    assert!(LAST_OLD_DATA_DIR.lock().unwrap().is_none());
+    assert!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none());
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -119,9 +119,9 @@ fn a_target_inside_the_media_folders_is_refused() {
     touch(&current.join("files/a.png"));
     fs::create_dir_all(&pointer).unwrap();
     let new = current.join("Files").join("nested");
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     assert!(move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || Ok(())).is_err());
-    assert!(!pointer.join("datapath").exists() && LAST_OLD_DATA_DIR.lock().unwrap().is_none());
+    assert!(!pointer.join("datapath").exists() && LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none());
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -133,11 +133,11 @@ fn a_failed_rebase_keeps_the_old_folder_out_of_the_cleanup() {
     touch(&current.join("data.db"));
     touch(&current.join("files/a.png"));
     fs::create_dir_all(&pointer).unwrap();
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let moved = move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || Err("locked".to_string()));
     assert_eq!(moved, Ok(false), "the move itself stands");
     assert!(pointer.join("datapath").is_file());
-    assert!(LAST_OLD_DATA_DIR.lock().unwrap().is_none(), "the cleanup must be refused");
+    assert!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none(), "the cleanup must be refused");
     assert!(current.join("files/a.png").is_file());
     let _ = fs::remove_dir_all(&root);
 }

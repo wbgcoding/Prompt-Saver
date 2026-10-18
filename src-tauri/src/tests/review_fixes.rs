@@ -783,6 +783,8 @@ fn a_copy_restored_from_a_confidential_entry_is_confidential_and_sealed() {
 
 #[test]
 fn the_live_data_folder_is_never_cleaned_whatever_was_remembered() {
+    // LAST_OLD_DATA_DIR is one global; the other tests that set it hold the same lock.
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = std::env::temp_dir().join(format!("ps-test-live-dir-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
@@ -797,10 +799,10 @@ fn the_live_data_folder_is_never_cleaned_whatever_was_remembered() {
     let mut flushed = false;
     let mut flush = || { flushed = true; Ok(()) };
     let mut rebind = || {};
-    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
     assert_eq!(move_store_dir(&dir, &respelled, &dir.join("pointer"), &mut flush, &mut rebind, &mut || Ok(())), Ok(false));
     assert!(!flushed);
-    assert!(LAST_OLD_DATA_DIR.lock().unwrap().is_none());
+    assert!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none());
     let _ = fs::remove_dir_all(&dir);
 }
 
