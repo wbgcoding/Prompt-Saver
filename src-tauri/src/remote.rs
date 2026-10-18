@@ -1473,13 +1473,38 @@ fn consent(app: &AppHandle, settings: &Settings, flag_key: &str, kind: &str) -> 
     if let Some(v) = settings.ui_flags.get(flag_key) {
         return *v;
     }
+    // One question per kind at a time: a second link arriving while the dialog is open is
+    // dropped instead of opening another dialog whose answer would overwrite the first.
+    static ASKING_OPEN: AtomicBool = AtomicBool::new(false);
+    static ASKING_COPY: AtomicBool = AtomicBool::new(false);
+    let slot = if kind == "open" { &ASKING_OPEN } else { &ASKING_COPY };
+    let Some(_asking) = AskingGuard::claim(slot) else {
+        return false;
+    };
     let lang = crate::resolve_lang(&settings.language);
     let allowed = confirm_native(lang, kind);
     let state: State<Db> = app.state();
     let mut store = lock(&state);
     store.settings.ui_flags.insert(flag_key.to_string(), allowed);
-    save_settings(app, &store.settings);
+    if !save_settings(app, &store.settings) {
+        log_remote(settings, "urlScheme", "the answer to the link question could not be saved, it will be asked again");
+    }
     allowed
+}
+
+// Holds a "question open" flag for its lifetime; `claim` fails while another holder exists.
+struct AskingGuard<'a>(&'a AtomicBool);
+
+impl<'a> AskingGuard<'a> {
+    fn claim(flag: &'a AtomicBool) -> Option<Self> {
+        (!flag.swap(true, Ordering::SeqCst)).then_some(Self(flag))
+    }
+}
+
+impl Drop for AskingGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 fn handle_open(app: &AppHandle, settings: &Settings, id: String) {

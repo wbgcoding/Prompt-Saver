@@ -967,3 +967,13 @@ fn open_connections_are_capped_and_a_slot_returns_when_one_ends() {
     held.pop();
     assert!(take_connection_slot(&slots).is_some());
 }
+
+// A second link must not open a second consent dialog while the first is still open.
+#[test]
+fn a_second_consent_question_is_refused_while_one_is_open() {
+    let flag = AtomicBool::new(false);
+    let first = AskingGuard::claim(&flag).expect("the first question may open");
+    assert!(AskingGuard::claim(&flag).is_none());
+    drop(first);
+    assert!(AskingGuard::claim(&flag).is_some());
+}
