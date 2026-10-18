@@ -4332,7 +4332,7 @@ body.drag-over::after {
   align-self: center;
   pointer-events: none;
 }
-/* Duration badge overlay: library/history only: wraps thumbEl's own element
+/* Duration badge overlay (library/history only): wraps thumbEl's own element
    without changing its own sizing rules above. */
 .lib-thumb-wrap {
   position: relative;
@@ -4407,7 +4407,7 @@ body.drag-over::after {
 .lib-saved-search-chip.tab-dragging { opacity: 0.45; }
 /* List/tiles toggle next to the type filter. */
 .lib-view-toggle { display: inline-flex; align-items: center; gap: 6px; }
-/* Tiles: same rows, same selection and right-click behaviour: only the layout
+/* Tiles: same rows, same selection and right-click behaviour; only the layout
    and what each one shows changes. A tile is just its picture and its name. */
 .library-list.lib-tiles-view {
   grid-template-columns: repeat(auto-fill, minmax(var(--lib-tile-size, 140px), 1fr));

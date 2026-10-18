@@ -255,10 +255,10 @@ fn audio_queue_lost_flag_starts_false_and_latches_true() {
 }
 
 // Real hardware, not run by a plain `cargo test --lib` (needs a live
-// display + default playback device): `cargo test --lib: --ignored
+// display + default playback device): `cargo test --lib -- --ignored
 // rec_audio_real_recording_produces_a_video_and_an_audio_track`. Proves
 // the whole path end to end: WASAPI capture, the feeder's audio tick,
-// send_audio_buffer: without needing a Media Foundation reader: an MP4
+// send_audio_buffer (without needing a Media Foundation reader); an MP4
 // with N tracks has exactly N "trak" box markers, so one video + one
 // system-audio track means exactly two.
 #[test]
@@ -291,7 +291,7 @@ fn rec_audio_real_recording_produces_a_video_and_an_audio_track() {
     assert_eq!(durations.len(), 2, "expected a declared duration for each track");
 }
 
-// Same proof, mic-only: `cargo test --lib: --ignored rec_audio_real_recording_mic_only`.
+// Same proof, mic-only: `cargo test --lib -- --ignored rec_audio_real_recording_mic_only`.
 #[test]
 #[cfg(windows)]
 #[ignore]
@@ -350,7 +350,7 @@ fn rec_audio_real_recording_both_sources() {
 // 50ms over 10 minutes, clocked from WASAPI timestamps... measure it
 // over a real 10-minute recording, do not assume it." Runs for a real
 // ~10 real minutes: not part of any normal or CI run.
-// `cargo test --lib: --ignored --exact tests::rec_audio_real_10min_drift --nocapture`.
+// `cargo test --lib -- --ignored --exact tests::rec_audio_real_10min_drift --nocapture`.
 #[test]
 #[cfg(windows)]
 #[ignore]
@@ -398,7 +398,7 @@ fn rec_audio_real_10min_drift() {
 // pre-existing since 191, not something to "fix" here; this test exists
 // to pin the fact down so a future change that assumes "1 track = no
 // audio enabled" does not get surprised by it again.
-// `cargo test --lib: --ignored rec_audio_real_recording_no_audio`.
+// `cargo test --lib -- --ignored rec_audio_real_recording_no_audio`.
 #[test]
 #[cfg(windows)]
 #[ignore]
@@ -453,7 +453,7 @@ fn continuation_output_path_keeps_the_stem_and_numbers_from_two() {
 // values (the same variables handed to `start` twice: the actual
 // command instead reads them off the finishing session itself, but the
 // effect this proves, identical settings on both calls, is the same).
-// Needs a real display: `cargo test --lib: --ignored
+// Needs a real display: `cargo test --lib -- --ignored
 // rec_continue_two_parts_are_both_playable_with_matching_settings`.
 #[test]
 #[cfg(windows)]

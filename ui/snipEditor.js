@@ -1538,7 +1538,7 @@ export function initSnipEditor() {
     if (!SE.spaceDown && SE.tool !== "hand") snipEditWrap.classList.remove("panning");
   }
 
-  // ---- zoom: pure CSS scaling of the native-resolution canvas: no redraw needed ----
+  // ---- zoom: pure CSS scaling of the native-resolution canvas, no redraw needed ----
   function snipEditSetZoom(z) {
     SE.zoom = snipEditClamp(z, 0.05, snipZoomMax);
     const sw = SE.w * snipEditScale(), sh = SE.h * snipEditScale();

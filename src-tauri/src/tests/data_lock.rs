@@ -80,7 +80,7 @@ fn acquire_data_dir_lock_never_treats_its_own_hostname_as_foreign() {
     let _g = DdlockGuard::capture();
     let dir = ddlock_test_dir("own-host");
     // Same host, different (long-gone) pid and a timestamp that would count as
-    // stale too: neither should matter: a crash-and-restart on THIS machine
+    // stale too (neither should matter); a crash-and-restart on THIS machine
     // is not the two-machine case this guards against, and single-instance
     // already rules out a second live process here.
     write_data_dir_lock(
@@ -1149,7 +1149,7 @@ fn strip_data_dir_prefix_leaves_an_unrelated_absolute_path_alone() {
 }
 
 // A trashed demo attachment must resolve to an absolute path exactly like
-// a live one: a third review finding: load_store used to only run this
+// a live one; load_store used to only run this
 // loop over `prompts`, so a demo attachment deleted during the session
 // restored from trash with the bare, unresolvable filename db_load_trash
 // handed back, instead of a path under the live data dir.

@@ -524,8 +524,9 @@ export function formatValue(cfg, v) {
   if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
   const nf = (opts) => new Intl.NumberFormat(LANG, opts);
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
-  if (cfg.unit === "ms") return fmtUnit(v / 1000, "second", LANG, (cfg.step ?? 100) < 100 ? 2 : 1);
-  const timeUnit = { d: "day", h: "hour", min: "minute", s: "second" }[cfg.unit];
+  // seconds keep the SI symbol, which reads the same in every language
+  if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
+  const timeUnit = { d: "day", h: "hour", min: "minute" }[cfg.unit];
   if (timeUnit) return fmtUnit(v, timeUnit, LANG, 2);
   // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.
   return `${v}${cfg.unit && !/^[%×]$|^\//.test(cfg.unit) ? " " : ""}${cfg.unit}`;
