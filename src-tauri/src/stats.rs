@@ -687,7 +687,8 @@ pub(crate) fn dup_dice(a: &std::collections::HashSet<[char; 3]>, b: &std::collec
     if a.is_empty() || b.is_empty() {
         return 0.0;
     }
-    let inter = a.iter().filter(|t| b.contains(*t)).count();
+    let (small, large) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    let inter = small.iter().filter(|t| large.contains(*t)).count();
     2.0 * inter as f64 / (a.len() + b.len()) as f64
 }
 pub(crate) fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
@@ -781,12 +782,17 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
         return Ok(Vec::new());
     }
     let grams: Vec<Set<[char; 3]>> = items.par_iter().map(|(_, s)| dup_trigrams(s)).collect();
+    // Normalized lengths, so a pair that cannot reach the threshold is skipped before any set work.
+    let lens: Vec<usize> = items.iter().map(|(_, s)| s.chars().count()).collect();
     let edges: Vec<(usize, usize, f64)> = (0..n)
         .into_par_iter()
         .flat_map(|i| {
             let gi = &grams[i];
             let mut local = Vec::new();
             for j in (i + 1)..n {
+                if !dup_length_could_match(lens[i], lens[j], thr) {
+                    continue;
+                }
                 let d = dup_dice(gi, &grams[j]);
                 if d >= thr && !dup_pair_is_ignored(&dup_ignored, &items[i].0.id, &items[j].0.id) {
                     local.push((i, j, d));
