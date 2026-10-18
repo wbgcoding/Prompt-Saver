@@ -62,6 +62,8 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 
 ### Also in this release
 
+- **Signed updates**: the updater installs only an installer signed by the publisher and rejects anything else, even if the download page was tampered with.
+- **Confidential prompts stay out of Win+V**: copying one keeps it out of the Windows clipboard history and the cloud clipboard.
 - **Grid folders**: drop one tile onto another and both move into a folder in that cell; drag one out and it goes back to the layout.
 - **Restore data and settings separately**: restoring a backup, or importing a `.psb`/`.json` backup file, now offers two checkboxes instead of an all-or-nothing swap: bring back your prompts without touching your current setup, or the other way around.
 - **Markdown folder sync** (expert menu, off by default, beta): mirrors every prompt as its own readable `.md` file in a folder you pick, kept in sync both ways. The files are plain text (the database is not), so keep anything sensitive out of a folder other people or services can read. Switching to a different folder asks what should happen to the old one, and a delete there only ever removes the files the app wrote itself.

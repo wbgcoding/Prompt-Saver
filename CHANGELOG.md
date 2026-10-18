@@ -958,6 +958,16 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Video export and the library under fast clicks.** A double click on Export
+  in the video editor starts one export, not two, and deleting many library
+  entries at once no longer freezes the window or loses a selection made while
+  it runs.
+- **Dates and units in your language.** The statistics text export uses the
+  interface language and real dates instead of second counts, durations in the
+  expert menu and the backups window use the language's own unit names, and the
+  last folder sync shows the date when it was not today.
+- **The version history row wraps** instead of cutting off its buttons in
+  longer languages.
 - **A failed save no longer leaves half a change behind.** Adding, deleting,
   restoring and resetting now either land completely or report the error and
   keep the previous state, a counter write that failed is retried, backups are
@@ -1685,6 +1695,15 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **Updates are signed.** Every installer ships with a signature made by the
+  publisher's own key, and the updater refuses a download whose signature does
+  not match, even when the release page and its checksum were replaced.
+- **Confidential prompts stay out of the clipboard history.** Copying a
+  confidential prompt marks the text so Windows keeps it out of the clipboard
+  history (Win+V) and out of the cloud clipboard on your other devices.
+- **The vault key leaves memory when the vault locks.** The key and the working
+  copy of the password are wiped when the vault locks or times out, and the
+  Windows encryption buffers are cleared after use.
 - **Media commands only touch the app's own files.** Video export, batch export,
   the recording folder cleanup and the duration readout refuse files outside the
   recording folder and the editor's own work copies, and the cleanup deletes only
