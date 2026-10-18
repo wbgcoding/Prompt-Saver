@@ -137,3 +137,20 @@ fn locked_database_copies_are_kept_per_incident_newest_two_and_aged_out() {
     assert!(locked_copies(&root).is_empty(), "copies older than 90 days are removed at launch");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn the_startup_seed_removes_a_plaintext_file_of_a_confidential_prompt_itself() {
+    let dir = md_sync_1::sync_tmp_dir("seed-removes-secret");
+    let mut p = md_sync_1::sync_test_prompt();
+    std::fs::write(dir.join("p1.md"), prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+    let foreign = dir.join("p9.md");
+    std::fs::write(&foreign, "just my own notes, no header").unwrap();
+    p.secret = true;
+    let mut other = md_sync_1::sync_test_prompt();
+    other.id = "p9".into();
+    other.secret = true;
+    sync_seed_seen(&dir, &[p, other], &Settings::default());
+    assert!(!dir.join("p1.md").exists(), "the seed itself removes our plaintext copy");
+    assert!(foreign.exists(), "a file that is not ours is never touched");
+    let _ = std::fs::remove_dir_all(&dir);
+}

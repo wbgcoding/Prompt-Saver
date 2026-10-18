@@ -1842,22 +1842,18 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
         sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled, hash });
     }
     // A prompt made confidential while sync was off (or while its sweep was postponed) left a
-    // plaintext file of ours behind. Noting it as known and handled lets the next write sweep
-    // it, since the library no longer owns a file for that id.
+    // plaintext file of ours behind. It goes now, at seed time, instead of waiting for the next
+    // library write; a file that is not ours stays untouched.
     for p in prompts.iter().filter(|p| p.secret && sync_safe_id(&p.id)) {
         let path = dir.join(format!("{}.md", p.id));
         if !path.is_file() {
             continue;
         }
-        let Some(stamp) = sync_stamp_of(&path) else { continue };
         let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { continue };
-        let hash = sync_hash(&bytes);
         let ours = sync_decode_text(bytes).and_then(|c| parse_frontmatter(&c)).is_some_and(|(fields, _)| md_is_ours(&fields));
-        if !ours {
-            continue;
+        if ours {
+            let _ = fs::remove_file(&path);
         }
-        sync_known_note(&path);
-        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash });
     }
 }
 
