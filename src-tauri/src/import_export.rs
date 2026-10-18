@@ -959,12 +959,24 @@ fn drive_is_remote(p: &str) -> bool {
 }
 
 // Clears every network path an imported row carries; the row itself stays.
-pub(crate) fn clear_network_paths(p: &mut Prompt) {
+// Returns how many links were cut, so an import can tell the user.
+pub(crate) fn clear_network_paths(p: &mut Prompt) -> usize {
+    let mut n = 0;
     for f in [&mut p.file_path, &mut p.icon_path, &mut p.image] {
         if is_network_path(f) {
             f.clear();
+            n += 1;
         }
     }
+    n
+}
+
+// How many links clear_network_paths would cut from these rows.
+pub(crate) fn count_network_links(prompts: &[Prompt]) -> usize {
+    prompts
+        .iter()
+        .map(|p| [&p.file_path, &p.icon_path, &p.image].into_iter().filter(|f| is_network_path(f)).count())
+        .sum()
 }
 
 // Shared by import_prompts and import_folder_files: builds a real Prompt for each parsed

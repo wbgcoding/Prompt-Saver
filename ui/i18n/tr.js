@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "Yalnızca kopyala",
     promptHotkeyPaste: "Kopyala ve yapıştır",
     importHotkeysDropped: "{n} istem kısayolu zaten doluydu ve geri yüklenmedi.",
+    importNetworkLinksRemoved: "Ağ dosyalarına giden {n} bağlantı kaldırıldı.",
     importBackupPwKept: "Dosyanın kendi yedekleme şifresi bu cihazda kullanılamadı ve yok sayıldı; mevcut yedekleme şifresi korundu.",
     importVaultMismatch: "Çöp kutusundaki bazı gizli istemler başka bir kasa parolasıyla kilitlenmişti ve artık açılamıyor.",
     flagPromptHotkeys: "İstem başına kısayol",

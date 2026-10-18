@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "Alleen kopiëren",
     promptHotkeyPaste: "Kopiëren en plakken",
     importHotkeysDropped: "{n} promptsneltoets(en) waren al bezet en zijn niet teruggezet.",
+    importNetworkLinksRemoved: "{n} koppeling(en) naar netwerkbestanden zijn verwijderd.",
     importBackupPwKept: "Het back-upwachtwoord uit het bestand kon hier niet worden gebruikt en is genegeerd; je bestaande wachtwoord is behouden.",
     importVaultMismatch: "Enkele vertrouwelijke prompts in de prullenbak zijn met een ander kluiswachtwoord vergrendeld en kunnen niet meer worden geopend.",
     flagPromptHotkeys: "Sneltoets per prompt",

@@ -704,6 +704,8 @@ pub(crate) struct ImportSummary {
     // Confidential entries in the trash were sealed with a vault key that the
     // imported prompt set replaced.
     pub(crate) vault_mismatch: bool,
+    // Links to files on other machines that the restore cut from the prompts.
+    pub(crate) network_links_removed: usize,
 }
 
 #[tauri::command]
@@ -1261,6 +1263,7 @@ pub(crate) async fn import_all(
         serde_json::from_str(&content).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?;
     let want_data = scope != "settings";
     let want_settings = scope != "data";
+    let network_links_removed = if want_data { count_network_links(&backup.prompts) } else { 0 };
 
     let (settings, count, dropped_hotkeys, backup_pw_dropped, vault_mismatch) = {
         let mut store = lock(&state);
@@ -1289,5 +1292,6 @@ pub(crate) async fn import_all(
         dropped_hotkeys,
         backup_pw_dropped,
         vault_mismatch,
+        network_links_removed,
     })
 }

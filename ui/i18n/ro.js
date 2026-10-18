@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "Doar copiază",
     promptHotkeyPaste: "Copiază și lipește",
     importHotkeysDropped: "{n} scurtături de prompt erau deja ocupate și nu au fost restaurate.",
+    importNetworkLinksRemoved: "{n} legătură/legături către fișiere din rețea au fost eliminate.",
     importBackupPwKept: "Parola de backup din fișier nu a putut fi folosită aici și a fost ignorată; parola ta actuală a fost păstrată.",
     importVaultMismatch: "Unele prompturi confidențiale din coșul de gunoi au fost blocate cu altă parolă a seifului și nu se mai pot deschide.",
     flagPromptHotkeys: "Scurtătură pentru fiecare prompt",

@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "仅复制",
     promptHotkeyPaste: "复制并粘贴",
     importHotkeysDropped: "有 {n} 个提示词快捷键已被占用，未能恢复。",
+    importNetworkLinksRemoved: "已移除 {n} 个指向网络文件的链接。",
     importBackupPwKept: "文件自带的备份密码在此设备上无法使用，已被忽略；已保留你现有的备份密码。",
     importVaultMismatch: "回收站中的一些机密条目是用另一个保险库密码锁定的，无法再打开。",
     flagPromptHotkeys: "每条提示词的快捷键",

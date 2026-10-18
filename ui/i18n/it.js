@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "Solo copia",
     promptHotkeyPaste: "Copia e incolla",
     importHotkeysDropped: "{n} scorciatoia/e dei prompt erano già occupate e non sono state ripristinate.",
+    importNetworkLinksRemoved: "{n} collegamento/i a file di rete sono stati rimossi.",
     importBackupPwKept: "La password di backup del file non ha potuto essere usata qui ed è stata ignorata; è stata mantenuta la tua password attuale.",
     importVaultMismatch: "Alcuni prompt riservati nel cestino erano bloccati con un'altra password della cassaforte e non si possono più aprire.",
     flagPromptHotkeys: "Scorciatoia per prompt",

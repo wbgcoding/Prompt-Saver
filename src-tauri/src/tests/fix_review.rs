@@ -71,6 +71,19 @@ fn a_synced_file_cannot_name_a_network_path() {
 }
 
 #[test]
+fn a_backup_import_counts_the_network_links_it_removes() {
+    let mut a = test_prompt("a");
+    a.file_path = r"\\nas\share\a.mp4".into();
+    a.icon_path = "//nas/share/i.png".into();
+    let mut b = test_prompt("b");
+    b.file_path = "C:/local/b.mp4".into();
+    assert_eq!(count_network_links(&[a.clone(), b.clone()]), 2);
+    assert_eq!(clear_network_paths(&mut a), 2, "the clearing reports how many links it cut");
+    assert_eq!(clear_network_paths(&mut b), 0);
+    assert_eq!(count_network_links(&[a, b]), 0);
+}
+
+#[test]
 fn every_leading_separator_pair_and_nt_prefix_counts_as_a_network_path() {
     for p in [
         r"\/host/share/x.mp4",

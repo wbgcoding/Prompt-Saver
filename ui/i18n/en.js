@@ -1584,6 +1584,7 @@ export default {
     promptHotkeyCopy: "Copy only",
     promptHotkeyPaste: "Copy and paste",
     importHotkeysDropped: "{n} prompt hotkey(s) were already taken and were not restored.",
+    importNetworkLinksRemoved: "{n} link(s) to network files were removed.",
     importBackupPwKept: "The file's own backup password could not be used here and was ignored; your existing backup password was kept.",
     importVaultMismatch: "Some confidential prompts in the trash were locked with a different vault password and can no longer be opened.",
     flagPromptHotkeys: "Hotkey per prompt",

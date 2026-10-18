@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "コピーのみ",
     promptHotkeyPaste: "コピーして貼り付け",
     importHotkeysDropped: "{n} 件のプロンプトのホットキーはすでに使われていたため復元されませんでした。",
+    importNetworkLinksRemoved: "ネットワーク上のファイルへのリンクを {n} 件削除しました。",
     importBackupPwKept: "バックアップファイル自体のパスワードはこの端末では使用できないため無視されました。既存のバックアップパスワードはそのまま保持されます。",
     importVaultMismatch: "ゴミ箱にある一部の機密プロンプトは別の保管庫パスワードでロックされていたため、開けなくなりました。",
     flagPromptHotkeys: "プロンプトごとのホットキー",

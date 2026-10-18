@@ -1584,6 +1584,7 @@ export default {
     promptHotkeyCopy: "Nur kopieren",
     promptHotkeyPaste: "Kopieren und einfügen",
     importHotkeysDropped: "{n} Prompt-Tastenkürzel waren bereits vergeben und wurden nicht übernommen.",
+    importNetworkLinksRemoved: "{n} Verweis(e) auf Netzwerkdateien wurden entfernt.",
     importBackupPwKept: "Das in der Sicherung gespeicherte Passwort konnte hier nicht verwendet werden und wurde ignoriert; dein bestehendes Sicherungspasswort wurde beibehalten.",
     importVaultMismatch: "Einige vertrauliche Prompts im Papierkorb wurden mit einem anderen Tresor-Passwort gesperrt und lassen sich nicht mehr öffnen.",
     flagPromptHotkeys: "Tastenkürzel pro Prompt",

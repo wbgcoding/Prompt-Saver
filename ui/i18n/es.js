@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "Solo copiar",
     promptHotkeyPaste: "Copiar y pegar",
     importHotkeysDropped: "{n} atajo(s) de prompt ya estaban ocupados y no se han restaurado.",
+    importNetworkLinksRemoved: "Se quitaron {n} enlace(s) a archivos de red.",
     importBackupPwKept: "La contraseña de copia de seguridad del archivo no se pudo usar aquí y se ha ignorado; se ha conservado tu contraseña actual.",
     importVaultMismatch: "Algunas entradas confidenciales de la papelera se bloquearon con otra contraseña de la caja fuerte y ya no se pueden abrir.",
     flagPromptHotkeys: "Atajo por prompt",

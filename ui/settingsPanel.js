@@ -286,6 +286,8 @@ export async function runImportAll() {
       if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
       // Confidential entries left in the trash were sealed with the vault key this import replaced.
       if (res.vault_mismatch) msg += "\n" + t("importVaultMismatch");
+      // Links to files on other machines are never restored; the count tells the user why a file is gone.
+      if (res.network_links_removed) msg += "\n" + t("importNetworkLinksRemoved").replace("{n}", Number(res.network_links_removed).toLocaleString(LANG));
       await infoDialog(t("backupImport"), msg);
       return;
     } catch (err) {

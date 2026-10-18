@@ -1576,6 +1576,7 @@ export default {
     promptHotkeyCopy: "Tylko kopiuj",
     promptHotkeyPaste: "Kopiuj i wklej",
     importHotkeysDropped: "{n} skrót(y) promptów były już zajęte i nie zostały przywrócone.",
+    importNetworkLinksRemoved: "Usunięto {n} łączy do plików sieciowych.",
     importBackupPwKept: "Hasła kopii zapasowej z pliku nie można było tu użyć i zostało zignorowane; zachowano Twoje obecne hasło.",
     importVaultMismatch: "Niektóre poufne wpisy w koszu zostały zablokowane innym hasłem skarbca i nie można ich już otworzyć.",
     flagPromptHotkeys: "Skrót dla każdego promptu",
