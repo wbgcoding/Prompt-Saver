@@ -42,6 +42,14 @@ fn hot_path_commands_run_off_the_main_thread() {
         (include_str!("../autostart.rs"), "set_always_on_top"),
         (include_str!("../theme.rs"), "current_theme"),
         (include_str!("../update.rs"), "set_ui_value"),
+        (include_str!("../views.rs"), "add_view"),
+        (include_str!("../views.rs"), "remap_colors"),
+        (include_str!("../views.rs"), "delete_view"),
+        (include_str!("../views.rs"), "save_tile_folder"),
+        (include_str!("../views.rs"), "take_out_of_tile_folder"),
+        (include_str!("../views.rs"), "delete_tile_folder"),
+        (include_str!("../theme.rs"), "save_custom_theme"),
+        (include_str!("../theme.rs"), "delete_custom_theme"),
     ] {
         let at = src.find(&format!("fn {name}(")).expect(name);
         let head = &src[..at];

@@ -559,7 +559,7 @@ pub(crate) fn set_tag_color(app: AppHandle, state: State<Db>, name: String, colo
 
 // ---------- View commands ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn add_view(app: AppHandle, state: State<Db>, name: String, color: String) -> Result<Settings, String> {
     let mut store = lock(&state);
     if store.settings.views.len() >= MAX_VIEWS {
@@ -649,7 +649,7 @@ pub(crate) fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashM
 
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) -> Result<(), String> {
     if pairs.is_empty() {
         return Ok(());
@@ -738,7 +738,7 @@ pub(crate) fn remove_view_from_settings(settings: &mut Settings, id: &str, promp
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
     let mut store = lock(&state);
     let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
@@ -804,7 +804,7 @@ pub(crate) fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: 
 // and the full member list. Prompts handed in are pulled out of every other folder.
 // One parameter per field the grid-folder editor can set.
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn save_tile_folder(
     app: AppHandle,
     state: State<Db>,
@@ -939,7 +939,7 @@ pub(crate) fn take_out_target_cell(
 // Take one prompt out of its folder and put it on `cell` of the folder's view. The
 // second-to-last member leaving dissolves the folder (normalize), which is what makes
 // "drag the last one out" work without a case of its own.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn take_out_of_tile_folder(
     app: AppHandle,
     state: State<Db>,
@@ -1030,7 +1030,7 @@ pub(crate) fn seat_dissolved_members(view: &mut View, members: &[String], other_
 // free by then). Cells held by other folders in that view are excluded too: they live
 // outside view.layouts, so first_free_cell alone would hand a member a cell another folder
 // owns and it would never appear.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
     let mut store = lock(&state);
     let removed = store.settings.tile_folders.iter().find(|f| f.id == id).cloned();
