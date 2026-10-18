@@ -780,3 +780,51 @@ fn old_pdfium_copies_in_the_shared_temp_folder_are_removed_once_at_start() {
     let snip = source!("../snip.rs");
     assert!(!snip.contains("next to the versioned pdfium cache"), "the comment no longer places the cache in TEMP");
 }
+
+#[test]
+fn an_attachment_path_naming_the_store_or_a_network_share_is_refused() {
+    let root = std::env::temp_dir().join(format!("ps-attach-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let data = root.join("data");
+    fs::create_dir_all(data.join("files")).unwrap();
+    fs::write(data.join("data.db"), b"db").unwrap();
+    fs::write(data.join("data.db-wal"), b"wal").unwrap();
+    fs::write(data.join("settings.json"), b"{}").unwrap();
+    fs::write(data.join("files").join("copy.pdf"), b"pdf").unwrap();
+    fs::write(root.join("mine.txt"), b"x").unwrap();
+    // The store's own files directly in the data folder never feed a copy or an editor.
+    assert!(attachment_path_refused(&data, &data.join("data.db").to_string_lossy()));
+    assert!(attachment_path_refused(&data, &data.join("data.db-wal").to_string_lossy()));
+    assert!(attachment_path_refused(&data, &data.join("settings.json").to_string_lossy()));
+    // A dot-dot hop and a different spelling of the same file are the same file.
+    let hop = format!("{}{}files{}..{}data.db", data.display(), std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR);
+    assert!(attachment_path_refused(&data, &hop));
+    // The app's own attachment copies and the user's own files stay fine.
+    assert!(!attachment_path_refused(&data, &data.join("files").join("copy.pdf").to_string_lossy()));
+    assert!(!attachment_path_refused(&data, &root.join("mine.txt").to_string_lossy()));
+    // A missing file is not this gate's business (a moved file must stay re-savable), and empty means none.
+    assert!(!attachment_path_refused(&data, &root.join("gone.txt").to_string_lossy()));
+    assert!(!attachment_path_refused(&data, ""));
+    // A network spelling is refused by text, before the disk is asked anything.
+    assert!(attachment_path_refused(&data, r"\\host\share\a.mp4"));
+    assert!(attachment_path_refused(&data, "//host/share/a.mp4"));
+    let _ = fs::remove_dir_all(&root);
+
+    // Every path that stores or uses an attachment asks the gate before touching it.
+    let prompts = source!("../prompts.rs");
+    for f in ["pub(crate) async fn update_prompt", "pub(crate) async fn add_prompt"] {
+        let at = prompts.find(f).unwrap_or_else(|| panic!("{f}"));
+        let body = &prompts[at..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        let gate = body.find("attachment_path_refused(").unwrap_or_else(|| panic!("{f} asks the gate"));
+        let stage = body.find("staged_copies.stage(").expect("stage");
+        assert!(gate < stage, "{f} checks before a copy is made");
+    }
+    let copy = source!("../copy.rs");
+    let at = copy.find("pub(crate) async fn copy_prompt").unwrap();
+    assert!(copy[at..].contains("attachment_path_refused("), "the file clipboard path asks again at use");
+    let images = source!("../images.rs");
+    let at = images.find("pub(crate) fn set_clipboard_file(path: &str)").unwrap();
+    let head = &images[at..at + 300];
+    assert!(head.find("is_network_path(").is_some_and(|n| n < head.find(".exists()").unwrap()), "text check before exists()");
+}

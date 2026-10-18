@@ -367,6 +367,23 @@ pub(crate) fn is_network_path(raw: &str) -> bool {
     drive_is_remote(t)
 }
 
+// Whether a path handed in from the UI may not become (or stay) a prompt's attachment: it
+// names another machine, or it is one of the app's own store files (the database, its journal,
+// the settings) directly inside the data folder. The attachment copies live in the `files`
+// subfolder and stay allowed. Judged on text first, so a refused network path is never
+// touched; a file that does not exist is not refused here (an attachment that moved must
+// remain re-savable), and an empty path means "none".
+pub(crate) fn attachment_path_refused(data_dir: &Path, raw: &str) -> bool {
+    if raw.trim().is_empty() {
+        return false;
+    }
+    if is_network_path(raw) {
+        return true;
+    }
+    let (Ok(file), Ok(dir)) = (fs::canonicalize(raw), fs::canonicalize(data_dir)) else { return false };
+    file.parent() == Some(dir.as_path())
+}
+
 // `Volume{01234567-89ab-cdef-0123-456789abcdef}` followed by nothing or a separator.
 fn is_volume_guid_path(rest: &str) -> bool {
     let b = rest.as_bytes();

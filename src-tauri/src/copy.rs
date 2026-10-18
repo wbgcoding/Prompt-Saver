@@ -192,7 +192,14 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
         let store = lock(&state);
         match store.prompts.iter().find(|p| p.id == id) {
             Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
-            Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
+            // Asked again at use: the stored path may predate the check on save.
+            Some(p) if !p.file_path.is_empty() => {
+                if attachment_path_refused(&data_dir(&app), &p.file_path) {
+                    CopyPayload::Missing
+                } else {
+                    CopyPayload::File(p.file_path.clone())
+                }
+            }
             // rotation_next() itself falls back to p.text when there is nothing to rotate, so a plain
             // prompt takes this branch too. A confidential entry is decrypted with the session key, or
             // the copy is refused while the vault is locked: ciphertext must never reach the clipboard

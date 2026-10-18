@@ -798,6 +798,14 @@ pub(crate) async fn add_prompt(
             OCR_INDEX_MAX_CHARS,
         )
     };
+    // A path naming another machine or the app's own store files is refused before any copy
+    // or probe touches it (the editor's pickers never produce one).
+    let store_dir = data_dir(&app);
+    for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
+        if attachment_path_refused(&store_dir, p) {
+            return Err("source-not-allowed".to_string());
+        }
+    }
     let mut fp = file_path.unwrap_or_default();
     let mut ip = icon_path.unwrap_or_default();
     let mut staged_copies = StagedCopies::new();
@@ -1203,8 +1211,16 @@ pub(crate) async fn update_prompt(
             cur,
         )
     };
+    // A path naming another machine or the app's own store files is refused before any copy
+    // or probe touches it (the editor's pickers never produce one).
+    let store_dir = data_dir(&app);
+    for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
+        if attachment_path_refused(&store_dir, p) {
+            return Err("source-not-allowed".to_string());
+        }
+    }
     let mut staged_copies = StagedCopies::new();
-    let files_dir = data_dir(&app).join("files");
+    let files_dir = store_dir.join("files");
     let file_path = file_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
     let icon_path = icon_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
     let ffprobe = ffprobe_search_path(&app);
