@@ -513,3 +513,13 @@ fn a_failed_key_sidecar_write_is_an_error_without_the_path() {
     assert!(crate::keylog::try_write_sidecar(&root.join("ok").join("rec-1.mp4"), &Default::default()).is_ok());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// Structural fix, no red unit test: a refused clipboard promise or listener cannot be provoked
+// without owning the system clipboard.
+#[test]
+fn a_refused_clipboard_promise_ends_the_session() {
+    let src = include_str!("../clipwatch.rs");
+    assert!(src.contains("promised = SetClipboardData(CF_UNICODETEXT, 0) != 0;"));
+    assert!(src.contains("end_session_with_plain_write(is_first, true);"));
+    assert!(src.contains("if AddClipboardFormatListener(hwnd) == 0 {"));
+}

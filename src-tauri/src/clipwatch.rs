@@ -1,4 +1,4 @@
-use super::{clip_inbox_cap, db_add_clip, db_conn, lock, now_secs, text_hash, Db};
+use super::{append_crash_log, clip_inbox_cap, db_add_clip, db_conn, lock, now_secs, text_hash, Db};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -404,6 +404,25 @@ pub(crate) fn read_text_self() -> String {
     read.unwrap_or_default()
 }
 
+// Ends the running session when its promise cannot be made. With `rewrite` the text goes to the
+// clipboard as a plain copy (private when the session was secret); a failed re-arm also tells
+// the UI the session is gone, or the tile badge stays "active". The first arm never reached the UI.
+fn end_session_with_plain_write(is_first: bool, rewrite: bool) {
+    let dropped = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if let Some(session) = dropped {
+        if rewrite {
+            if session.secret {
+                write_private_text(&session.text);
+            } else {
+                let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(session.text));
+            }
+        }
+        if !is_first {
+            emit_active(&session.id, false);
+        }
+    }
+}
+
 // (Re-)claim ownership and promise CF_UNICODETEXT without delivering data yet; used for the
 // first arm (is_first) and every re-arm after a render. Must run on the window thread (posted
 // here, never called directly).
@@ -419,30 +438,26 @@ fn open_and_promise(hwnd: isize, is_first: bool) {
         // has reached the real clipboard yet, so fall back to a plain untracked write (as arm() does
         // when the watcher is not running). A failed re-arm keeps the text already delivered, but
         // must tell the UI the session is gone, or the tile badge stays "active".
-        let dropped = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
-        if let Some(session) = dropped {
-            if is_first {
-                if session.secret {
-                    write_private_text(&session.text);
-                } else {
-                    let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(session.text));
-                }
-            } else {
-                emit_active(&session.id, false);
-            }
-        }
+        end_session_with_plain_write(is_first, is_first);
         return;
     }
     let secret = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|s| s.secret);
+    let promised;
     unsafe {
         OWN_EMPTY.store(true, Ordering::Release);
         EmptyClipboard();
         OWN_EMPTY.store(false, Ordering::Release);
-        SetClipboardData(CF_UNICODETEXT, 0);
-        if secret {
+        promised = SetClipboardData(CF_UNICODETEXT, 0) != 0;
+        if promised && secret {
             set_private_markers();
         }
         CloseClipboard();
+    }
+    if !promised {
+        // The clipboard was emptied but nothing is promised: a paste would yield nothing while the
+        // tile says "active". End the session and leave the text there as a plain copy.
+        end_session_with_plain_write(is_first, true);
+        return;
     }
     let now = tick();
     let id = {
@@ -748,7 +763,10 @@ pub fn start(app: AppHandle) {
         if hwnd == 0 {
             return;
         }
-        AddClipboardFormatListener(hwnd);
+        if AddClipboardFormatListener(hwnd) == 0 {
+            // The window still serves a promised paste; only foreign copies go unseen.
+            append_crash_log("clipboard inbox: could not register the clipboard format listener, copies will not be recorded this run");
+        }
         WATCHER_HWND.store(hwnd, Ordering::Release);
         // stop() may have fired before the window existed (its PostMessage would
         // have been lost): tear down now instead of blocking on GetMessageW forever.
