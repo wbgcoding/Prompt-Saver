@@ -88,7 +88,7 @@ pub(crate) async fn voice_start(
         // session to signal and left this flag instead. Never open the microphone for it.
         if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
-            return Err("voice-cancelled".to_string());
+            return Err("cancelled".to_string());
         }
         // Never opens the microphone without consent: checked before the session thread (and Create())
         // starts. A later 0x80045509 from Windows itself (declined at the OS level after voiceOnlineOk
