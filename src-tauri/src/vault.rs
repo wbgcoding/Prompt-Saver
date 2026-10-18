@@ -430,6 +430,33 @@ pub(crate) fn apply_prompt_secret(
     Ok(())
 }
 
+// Earlier version rows of a prompt that turns confidential still hold its plain text (only the
+// per-machine seal on top). Re-seals text and variants of every row with the vault key, in one
+// transaction; a row that cannot be read is deleted rather than left readable. Returns the
+// number of rows touched.
+pub(crate) fn db_seal_versions(conn: &mut Connection, prompt_id: &str, key: &[u8; 32]) -> rusqlite::Result<usize> {
+    let tx = conn.transaction()?;
+    let rows: Vec<(i64, String, String)> = {
+        let mut stmt = tx.prepare("SELECT id, text, variants FROM prompt_versions WHERE prompt_id = ?1")?;
+        let mapped = stmt.query_map(params![prompt_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        mapped.flatten().collect()
+    };
+    let mut n = 0;
+    for (id, text, variants) in rows {
+        let sealed = dec_str_strict(&text).zip(dec_str_strict(&variants)).map(|(t, v)| {
+            let items: Vec<String> = decode_variants(&v).iter().map(|x| secret_encrypt_if_plain(x, key)).collect();
+            (enc_str(&secret_encrypt_if_plain(&t, key)), enc_str(&encode_variants(&items)))
+        });
+        match sealed {
+            Some((t, v)) => tx.execute("UPDATE prompt_versions SET text = ?1, variants = ?2 WHERE id = ?3", params![t, v, id])?,
+            None => tx.execute("DELETE FROM prompt_versions WHERE id = ?1", params![id])?,
+        };
+        n += 1;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
 // Argon2id takes a noticeable moment: run it on the blocking pool so an unlock never ties up an
 // async worker other commands are waiting for. The password copy is wiped when the job ends.
 async fn derive_off_thread<F>(password: &str, derive: F) -> Result<[u8; 32], String>
@@ -532,8 +559,13 @@ pub(crate) async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: 
     apply_prompt_secret(&mut store, &id, secret, &key, |st| save_prompts(&app, st))?;
     if secret {
         // A draft written before the entry turned confidential holds its plain text.
-        if let Some(conn) = db_conn(&app) {
+        if let Some(mut conn) = db_conn(&app) {
             discard_editor_draft_if(&conn, |t| t == id);
+            // Older versions of the entry hold its plain text as well.
+            if let Err(e) = db_seal_versions(&mut conn, &id, &key) {
+                append_crash_log(&format!("could not seal version history of a confidential prompt: {e}"));
+                db_delete_versions(&conn, &id);
+            }
         }
     }
     let secret_key = secret_session_key(timeout);

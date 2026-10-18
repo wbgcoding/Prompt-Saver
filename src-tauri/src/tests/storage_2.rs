@@ -554,6 +554,29 @@ fn set_secret_decrypt_with_a_corrupt_middle_variant_changes_nothing() {
 }
 
 #[test]
+fn older_versions_of_a_prompt_made_confidential_are_sealed_with_the_vault_key() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "a", 1, "Name", "old api key", &["old variant".to_string()], 20).unwrap();
+    db_add_version(&conn, "b", 2, "Other", "other prompt", &[], 20).unwrap();
+    assert_eq!(db_seal_versions(&mut conn, "a", &key).unwrap(), 1);
+    let raw: (String, String) = conn
+        .query_row("SELECT text, variants FROM prompt_versions WHERE prompt_id = 'a'", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    let (text, variants) = (dec_str(&raw.0), dec_str(&raw.1));
+    assert!(!text.contains("old api key") && !variants.contains("old variant"));
+    let v = db_list_versions(&conn, "a");
+    let (t, vars) = open_snapshot(&v[0].text, &v[0].variants, Some(key)).unwrap();
+    assert_eq!((t.as_str(), vars), ("old api key", vec!["old variant".to_string()]));
+    assert_eq!(db_list_versions(&conn, "b")[0].text, "other prompt", "other prompts stay as they were");
+    // Running it again must not seal twice.
+    db_seal_versions(&mut conn, "a", &key).unwrap();
+    let v = db_list_versions(&conn, "a");
+    assert_eq!(open_snapshot(&v[0].text, &v[0].variants, Some(key)).unwrap().0, "old api key");
+}
+
+#[test]
 fn set_secret_save_failure_restores_the_prompt_in_both_directions() {
     let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
     let mut plain = test_prompt("a");
