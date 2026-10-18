@@ -223,3 +223,16 @@ fn the_window_fallback_crops_the_frame_the_overlay_showed() {
     let at = src.find("Target's global physical rect").expect("rect resolution block");
     assert!(src[at..at + 500].contains("snip_window_rect(window_frame_rect(id)"));
 }
+
+#[test]
+fn an_attached_photo_previews_upright() {
+    let dir = std::env::temp_dir().join(format!("ps-photo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("sideways.jpg");
+    // 2x1 pixels with an orientation flag of 6: shown upright it is 1x2.
+    std::fs::write(&file, shots::jpeg_with_orientation(6)).unwrap();
+    let url = image_file_preview(&file.to_string_lossy()).expect("previews");
+    let img = decode_image_mem(&data_url_bytes(&url)).expect("the preview decodes");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!((img.width(), img.height()), (1, 2));
+}

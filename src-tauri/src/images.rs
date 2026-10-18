@@ -234,7 +234,14 @@ pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> 
 // Preview for an attached file that happens to be an image.
 #[tauri::command]
 pub(crate) async fn load_image_file(path: String) -> Option<String> {
-    let img = decode_image_file(&path)?;
+    // Decoding a large photo is seconds of CPU: off the async runtime's worker threads.
+    tauri::async_runtime::spawn_blocking(move || image_file_preview(&path)).await.ok().flatten()
+}
+
+// The preview as a viewer shows the picture: upright, so a phone photo stored sideways with an
+// EXIF orientation flag is not rotated differently from what text recognition reads.
+pub(crate) fn image_file_preview(path: &str) -> Option<String> {
+    let img = decode_image_oriented(image::ImageReader::open(path).ok()?)?;
     let result = scale_and_encode(img);
     if result.is_empty() { None } else { Some(result) }
 }
