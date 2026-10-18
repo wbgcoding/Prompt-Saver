@@ -506,6 +506,29 @@ section(() => {
   check(reads === 0, "prune does not scan the prompts once per cached id");
 });
 
+// 22. U5: the grid batch bar builds its palette once and keeps a picked view while the selection grows.
+section(() => {
+  const lib = read("library.js");
+  const bc = extractBlock(lib, "export function buildBatchColors(").replace("export ", "");
+  let built = 0;
+  const wrap = { childElementCount: 0 };
+  const sb = run(bc, { $: () => wrap, doGridBatch() {}, doBatch() {}, openColorPop() {}, buildSwatches: () => { built++; wrap.childElementCount = 5; } });
+  sb.buildBatchColors("grid-batch-colors");
+  sb.buildBatchColors("grid-batch-colors");
+  check(built === 1, "the batch palette is built once, not on every checkbox click");
+  const upd = extractBlock(lib, "export function updateGridBatchBar(").replace("export ", "");
+  const make = (hidden) => {
+    let filled = 0;
+    const bar = { classList: { contains: () => hidden, toggle() {} } };
+    const el = { classList: { toggle() {} }, textContent: "" };
+    const s = run(upd, { $: (id) => (id === "grid-batch-bar" ? bar : el), gridSelected: new Set(["a"]), t: () => "", LANG: "en", tagsOn: () => true, buildBatchColors() {}, fillBatchViews: () => { filled++; } });
+    s.updateGridBatchBar();
+    return filled;
+  };
+  check(make(true) === 1, "the view list is filled when a selection starts");
+  check(make(false) === 0, "the view list is left alone while the bar is already showing");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

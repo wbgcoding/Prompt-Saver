@@ -1039,7 +1039,7 @@ export function updateBatchBar() {
 export let batchColorDebounce = 0;
 export function buildBatchColors(wrapId = "lib-batch-colors") {
   const wrap = $(wrapId);
-  if (!wrap) return;
+  if (!wrap || wrap.childElementCount) return; // built once; the palette never changes
   const run = wrapId === "grid-batch-colors"
     ? (color) => doGridBatch("color", { color })
     : (color) => doBatch("color", { color });
@@ -1097,7 +1097,9 @@ export function applyGridSelectionDom() {
 }
 export function updateGridBatchBar() {
   const n = gridSelected.size;
-  $("grid-batch-bar")?.classList.toggle("hidden", n === 0);
+  const bar = $("grid-batch-bar");
+  const wasHidden = !bar || bar.classList.contains("hidden");
+  bar?.classList.toggle("hidden", n === 0);
   const count = $("grid-batch-count");
   if (count) count.textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
   // Favorites and archive hide through flag classes in the stylesheet; the tag buttons follow
@@ -1105,9 +1107,12 @@ export function updateGridBatchBar() {
   const tagsEnabled = tagsOn();
   $("grid-batch-tag-add").classList.toggle("hidden", !tagsEnabled);
   $("grid-batch-tag-remove").classList.toggle("hidden", !tagsEnabled);
-  // buildBatchColors() no-ops once built; fillBatchViews() resets the dropdown to the active
-  // view, the right default for a selection that just grew.
-  if (n > 0) { buildBatchColors("grid-batch-colors"); fillBatchViews("grid-batch-view"); }
+  // The palette is built once. The view list is refilled only when a selection starts (the bar
+  // was hidden), so a view picked while ticking more tiles survives each click.
+  if (n > 0) {
+    buildBatchColors("grid-batch-colors");
+    if (wasHidden) fillBatchViews("grid-batch-view");
+  }
 }
 // True when a dialog other than `selfId` is open, so Escape belongs to the main
 // dispatcher and a selection must stay alive. A library raised over the backup,
