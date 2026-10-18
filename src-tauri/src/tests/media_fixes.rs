@@ -403,3 +403,14 @@ fn a_window_click_lists_the_windows_once() {
     let missing = crate::capture::probe_window(u32::MAX, true);
     assert!(missing.app_name.is_none() && missing.direct.is_none() && missing.rect.is_none());
 }
+
+// Structural fix, no red unit test: the cost is a 7 MB read per call, not a visible result.
+#[test]
+fn the_verified_pdfium_copy_is_remembered_after_the_first_check() {
+    let src = include_str!("../images.rs");
+    let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
+    let lookup = body.find("PDFIUM_VERIFIED.get()").expect("lookup");
+    let read = body.find("fs::read(&cached)").expect("content check");
+    assert!(lookup < read, "the remembered path is consulted before the content check");
+    assert_eq!(body.matches("PDFIUM_VERIFIED.set(").count(), 2);
+}

@@ -277,6 +277,10 @@ pub(crate) fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
 
 // A DLL next to the exe wins (lets a user drop in a newer pdfium); otherwise the
 // embedded copy is written to the cache path once and reused.
+// The unpacked copy, once its content was compared with the compiled-in one: every later page
+// flip skips the 7 MB read and the folder sweep. It is dropped for a re-check if the file vanishes.
+static PDFIUM_VERIFIED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
 pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     let name = "pdfium.dll";
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -291,6 +295,9 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
         return Some(found);
     }
+    if let Some(done) = PDFIUM_VERIFIED.get().filter(|p| p.exists()) {
+        return Some(done.clone());
+    }
     let cached = pdfium_cache_path()?;
     sweep_stale_pdfium_dlls(&cached);
     // The cache path is predictable, so the file found there is only trusted when its
@@ -298,6 +305,7 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     // pre-planted same-size DLL get loaded as native code. Rewritten otherwise, which also
     // repairs a truncated write from an interrupted first run.
     if fs::read(&cached).is_ok_and(|got| got == PDFIUM_DLL) {
+        let _ = PDFIUM_VERIFIED.set(cached.clone());
         return Some(cached);
     }
     fs::create_dir_all(cached.parent()?).ok()?;
@@ -307,6 +315,7 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
         append_crash_log(&format!("pdfium unpack failed: {e}"));
         return None;
     }
+    let _ = PDFIUM_VERIFIED.set(cached.clone());
     Some(cached)
 }
 
