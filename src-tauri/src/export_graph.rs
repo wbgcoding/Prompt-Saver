@@ -188,8 +188,16 @@ pub(crate) fn validate_export_graph(graph: &str, allowed: &[PathBuf]) -> Result<
                 return refuse("media file not named by the request");
             }
         } else if let Some(args) = &f.args {
-            // drawtext can read its text from a file.
-            if parse_filter_args(args).iter().any(|(k, _)| k.as_deref().is_some_and(|k| k.eq_ignore_ascii_case("textfile"))) {
+            let pairs = parse_filter_args(args);
+            // ffmpeg loads any option's value from a file when its key starts with `/`.
+            if pairs.iter().any(|(k, _)| k.as_deref().is_some_and(|k| k.trim_start().starts_with('/'))) {
+                return refuse("file-loaded option");
+            }
+            // drawtext can read its text from a file, by key or as the third positional value.
+            if pairs.iter().any(|(k, _)| k.as_deref().is_some_and(|k| k.eq_ignore_ascii_case("textfile"))) {
+                return refuse("text file");
+            }
+            if base == "drawtext" && pairs.iter().enumerate().any(|(n, (k, _))| k.is_none() && n >= 2) {
                 return refuse("text file");
             }
         }

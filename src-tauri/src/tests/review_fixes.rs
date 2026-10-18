@@ -728,6 +728,11 @@ fn an_export_graph_may_only_read_the_source_and_the_media_the_request_names() {
     // File-reading filters and options, and filters the editor never builds.
     assert!(check(r"[0:v]drawtext=textfile='C\:/Users/x/.ssh/config':fontsize=20[vout]").is_err());
     assert!(check("[0:v]drawtext=fontsize=20:TextFile=x[vout]").is_err());
+    assert!(check(r"[0:v]drawtext=/text=C\:/Users/x/secrets.txt[vout]").is_err());
+    assert!(check("[0:v]drawtext=fontsize=20:/fontfile=x[vout]").is_err());
+    assert!(check("[0:v]scale=/w=x[vout]").is_err());
+    assert!(check(r"[0:v]drawtext=a.ttf:hi:C\:/Users/x/secrets.txt[vout]").is_err());
+    assert!(check("[0:v]drawtext=a.ttf:hi[vout]").is_ok());
     assert!(check(r"[0:v]subtitles='C\:/x/y.srt'[vout]").is_err());
     assert!(check("[0:v]sendcmd=f=cmds.txt[vout]").is_err());
     assert!(check("[0:v]zmq[vout]").is_err());
