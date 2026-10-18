@@ -1242,6 +1242,18 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
                 }
                 // An unpin just before closes the window asynchronously: build only once its label is free.
                 wait_label_gone(&app, &flabel(&id)).await;
+                // Record the pin before building: open_floating may defer while the old window is
+                // still tearing down, and the replay builds only what settings.floating lists.
+                // The monitor probe in default_pos runs before the store lock is taken.
+                let count = lock(&state).settings.floating.len();
+                let spot = default_pos(&app, count);
+                {
+                    let mut store = lock(&state);
+                    if !store.settings.floating.contains_key(&id) {
+                        store.settings.floating.insert(id.clone(), spot);
+                        save_settings(&app, &store.settings);
+                    }
+                }
                 let mut taken: Vec<Rect> = app.webview_windows().values().filter_map(window_rect).collect();
                 open_floating(&app, &p, &mut taken);
                 let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": true }));
