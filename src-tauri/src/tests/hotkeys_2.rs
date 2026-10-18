@@ -110,6 +110,46 @@ fn stats_export_entries_sorts_by_copies_and_carries_last_used() {
     assert_eq!(entries[1].last_used, 1700000100);
 }
 
+#[test]
+fn stats_export_entries_break_copy_ties_by_lowercase_name() {
+    let mut store = Store {
+        prompts: Vec::new(),
+        trash: Vec::new(),
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: Default::default(),
+    };
+    for (id, name) in [("1", "beta"), ("2", "Alpha"), ("3", "alpine")] {
+        let mut p = test_prompt(id);
+        p.name = name.into();
+        store.prompts.push(p);
+        store.settings.usage.insert(id.into(), 4);
+    }
+    let names: Vec<String> = stats_export_entries(&store).into_iter().map(|e| e.name).collect();
+    assert_eq!(names, vec!["Alpha", "alpine", "beta"]);
+}
+
+#[test]
+fn stats_label_falls_back_from_name_to_text_to_id() {
+    assert_eq!(stats_label("Name", "text", "id"), "Name");
+    assert_eq!(stats_label("", &"x".repeat(60), "id"), "x".repeat(40));
+    assert_eq!(stats_label("", "", "id"), "id");
+    let mut p = test_prompt("sealed");
+    p.name.clear();
+    p.text = "ciphertext".into();
+    p.secret = true;
+    assert_eq!(stats_display_name(&p), "sealed", "a confidential text never labels a row");
+}
+
+#[test]
+fn edit_state_stats_counts_rows_and_bytes() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    assert_eq!(edit_state_stats(&conn), (0, 0), "a missing table reads as empty");
+    conn.execute_batch("CREATE TABLE edit_state (id TEXT, ops TEXT); INSERT INTO edit_state VALUES ('a', 'xxxx'), ('b', 'yy');")
+        .unwrap();
+    assert_eq!(edit_state_stats(&conn), (2, 6));
+}
+
 // The statistics export reuses csv_row/csv_cell, but this asserts the
 // guarantee directly against the stats formatter: a semicolon or a quote
 // in a prompt name must not shift or break the row it sits in.

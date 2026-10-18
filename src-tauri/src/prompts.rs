@@ -596,7 +596,7 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
     let mut count = 0u32;
     let mut bytes = 0u64;
     for dir in [default_dir.clone(), custom_dir].into_iter().collect::<std::collections::HashSet<_>>() {
-        let (c, b) = discarded_stale_in(&dir.join("verworfen"), age);
+        let (c, b) = discarded_stale_in(&dir.join(DISCARD_SUBDIR), age);
         count += c;
         bytes += b;
     }
