@@ -5,7 +5,8 @@ import { $, debounced, flag, gateOpen, invoke, optFlag, prompts, settings, t, va
 import { editPrompt } from "./editor.js";
 import { switchToView } from "./views.js";
 import { varPreview } from "./floatShared.js";
-import { EXPERT_DEFS, EXPERT_LABEL_KEYS, jumpToExpertSetting, openSettingsDirectoryEntry, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit } from "./expertMenu.js";
+import { EXPERT_DEFS, EXPERT_LABEL_KEYS, jumpToExpertSetting } from "./expertMenu.js";
+import { openSettingsDirectoryEntry, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit } from "./settingsSearch.js";
 import { EXPERT_TABS, flagLabelKey, groupFlags, SETTINGS_AREA_LABEL } from "./expertConfig.js";
 import { assignHelpCollapsed, assignHelpQuery, helpCategories, helpNorm, helpSectionLabel, renderHelp } from "./helpView.js";
 

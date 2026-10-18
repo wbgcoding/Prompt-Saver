@@ -1,6 +1,7 @@
 // Backup dialog: storage and retention panels, restore and selective restore.
 import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
-import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, openVideoCleanup, rowResetBtn, withTip } from "./expertMenu.js";
+import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, rowResetBtn, withTip } from "./expertMenu.js";
+import { openVideoCleanup } from "./recordingTools.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
 import { fmtBytes, fmtUnit } from "./floatShared.js";
 import { restoreClipInbox } from "./journal.js";
