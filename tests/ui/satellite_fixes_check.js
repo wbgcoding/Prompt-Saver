@@ -631,6 +631,17 @@ section(() => {
   check(/waveColors\[0\] = waveColors\[1\] = null/.test(src), "a theme change drops the cached waveform colours");
 });
 
+section(() => {
+  const src = read("videoOverlays.js");
+  const m = src.match(/endMs: (Math\.min\(VE\.dur, startMs .*\)),/);
+  check(!!m, "the camera overlay end expression exists");
+  if (!m) return;
+  const end = (startMs, durationMs) => vm.runInNewContext(m[1], { Math, VE: { dur: 10000 }, startMs, durationMs });
+  check(end(2000, 0) === 10000, "a probe without a duration runs to the end of the clip, not zero length");
+  check(end(2000, 3000) === 5000, "a known duration still ends after start plus duration");
+  check(end(2000, 30000) === 10000, "the overlay never runs past the clip end");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

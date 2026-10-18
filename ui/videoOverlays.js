@@ -117,7 +117,7 @@ export async function addAlignedCameraOverlay(path, gen) {
   const rect = snapRect({ x: VE.w - w - margin, y: VE.h - h - margin, w, h });
   const op = {
     tool: "overlay", id: newId(), kind: "video",
-    startMs, endMs: Math.min(VE.dur, startMs + durationMs || VE.dur),
+    startMs, endMs: Math.min(VE.dur, startMs + (durationMs || VE.dur)),
     path, rect, opacity: VE.ovImageOpacityDefault ?? 100,
     volume: 0, loop: false,
     hasAudio: !!probe.has_audio, videoDurationMs: durationMs,
