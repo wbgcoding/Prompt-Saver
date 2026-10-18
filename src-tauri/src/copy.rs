@@ -334,6 +334,10 @@ pub(crate) fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
     rotation_forget(&mut store.settings, std::slice::from_ref(&id));
     save_settings(&app, &store.settings);
+    // The pointer moved back to entry 1: tell every window's "next: n/total" badge.
+    if let Some(p) = store.prompts.iter().find(|p| p.id == id).map(rotation_core) {
+        emit_rotation_changed(&app, &p, &store.settings);
+    }
 }
 
 // The placeholder round's entry point. The frontend resolves every entry's placeholders
