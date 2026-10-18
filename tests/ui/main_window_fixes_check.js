@@ -626,7 +626,7 @@ section(() => {
   const sel = extractBlock(src, "export function selectRow(").replace("export ", "");
   const el = () => {
     const cl = new Set();
-    return { value: "", dataset: {}, children: [], classList: { toggle: (c, on) => (on ? cl.add(c) : cl.delete(c)), remove: (c) => cl.delete(c), add: (c) => cl.add(c), has: (c) => cl.has(c) }, appendChild(c) { this.children.push(c); }, append() {}, addEventListener(ev, fn) { (this.h = this.h || {})[ev] = fn; }, focus() {} };
+    return { value: "", dataset: {}, children: [], classList: { toggle: (c, on) => (on ? cl.add(c) : cl.delete(c)), remove: (c) => cl.delete(c), add: (c) => cl.add(c), has: (c) => cl.has(c) }, appendChild(c) { this.children.push(c); }, append() {}, setAttribute() {}, addEventListener(ev, fn) { (this.h = this.h || {})[ev] = fn; }, focus() {} };
   };
   const made = [];
   const settings = { ui_values: { retentionDays: 7 } };
@@ -1011,6 +1011,13 @@ section(() => {
   const sb = run(fn + "; var out = [suggestedSearchName('a'.repeat(39) + String.fromCodePoint(0x1F600) + 'b'.repeat(10)), suggestedSearchName('short')];", {});
   check(sb.out[0] === 'a'.repeat(39) + String.fromCodePoint(0x1F600) + "…", "an emoji at the boundary stays whole");
   check(sb.out[1] === "short", "a short query is unchanged");
+});
+
+// 52. Expert value controls are named by their row label.
+section(() => {
+  const src = read("expertMenu.js");
+  const n = (src.match(/\.setAttribute\("aria-label", span\.textContent\)/g) || []).length;
+  check(n === 5, "the input, slider, both select rows and the custom number are named (" + n + ")");
 });
 
 let guard;

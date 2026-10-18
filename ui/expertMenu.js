@@ -598,6 +598,7 @@ export function valueRow(key) {
     input.type = "text";
     input.inputMode = "numeric";
     input.className = "modal-input expert-num";
+    input.setAttribute("aria-label", span.textContent);
     input.value = String(val(key));
     input.setAttribute("aria-invalid", "false");
     const hint = document.createElement("div");
@@ -623,6 +624,7 @@ export function valueRow(key) {
   const slider = document.createElement("input");
   slider.type = "range";
   slider.className = "value-range";
+  slider.setAttribute("aria-label", span.textContent);
   // topUnlimited adds one extra stop past the real max: a slider parked there shows the
   // "unlimited" label and stores 0, like a 0-stop's zeroLabel at the low end.
   const unlimitedStop = cfg.topUnlimited ? cfg.max + cfg.step : null;
@@ -684,6 +686,7 @@ export function selectRow(key) {
   if (resetBtn) head.appendChild(resetBtn);
   const sel = document.createElement("select");
   sel.className = "modal-input expert-select";
+  sel.setAttribute("aria-label", span.textContent);
   for (const o of cfg.options) {
     const opt = document.createElement("option");
     opt.value = String(o);
@@ -700,6 +703,7 @@ export function selectRow(key) {
   num.min = SELECT_CUSTOM_MIN;
   num.max = SELECT_CUSTOM_MAX;
   num.className = "modal-input expert-num";
+  num.setAttribute("aria-label", span.textContent);
   // The presets show their unit ("7d", "24h") on the option, but the free-entry field holds only
   // the number, so the unit sits beside it: otherwise a typed value looks unit-less and invites
   // typing the unit into it, which a number input silently discards.
@@ -778,6 +782,7 @@ export function dropdownRow(key) {
   if (resetBtn) head.appendChild(resetBtn);
   const sel = document.createElement("select");
   sel.className = "modal-input expert-select";
+  sel.setAttribute("aria-label", span.textContent);
   for (const [value, lbl, stack] of cfg.options()) {
     const o = document.createElement("option");
     o.value = value;
