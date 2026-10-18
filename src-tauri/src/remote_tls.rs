@@ -146,29 +146,7 @@ fn now_secs() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
-// Calendar date (year, month, day) of a day count since 1970-01-01.
-fn civil_from_days(z: i64) -> (i32, u8, u8) {
-    let z = z + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u8;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8;
-    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
-    (y as i32, m, d)
-}
-
-// Day count since 1970-01-01 of a calendar date.
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y.rem_euclid(400);
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
+use crate::backups::{civil_from_days, days_from_civil};
 
 type Ymd = (i32, u8, u8);
 
