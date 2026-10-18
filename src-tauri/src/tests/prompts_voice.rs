@@ -960,8 +960,12 @@ fn tour_is_not_marked_seen_for_a_blank_store() {
 
 // ---- Colour-picker history ----
 
+// PICK_HISTORY is one process-wide list: the tests that fill and clear it take turns.
+static PICK_HISTORY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn record_pick_keeps_five_newest_and_skips_a_repeat() {
+    let _serial = PICK_HISTORY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
     for i in 1..=6u8 {
         record_pick([i, 0, 0], PICK_HISTORY_DEFAULT);
@@ -979,6 +983,7 @@ fn record_pick_keeps_five_newest_and_skips_a_repeat() {
 
 #[test]
 fn pick_history_persists_across_a_reload_and_respects_a_lowered_cap() {
+    let _serial = PICK_HISTORY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let mut s = Settings::default();
     record_pick([1, 0, 0], pick_history_max(&s));
