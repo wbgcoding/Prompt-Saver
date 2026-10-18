@@ -563,11 +563,12 @@ fn handle_render_format() {
 // before the owner window (or the whole process) goes away. Unlike RENDERFORMAT
 // we must open the clipboard ourselves, and this never counts as a paste.
 fn handle_render_all(hwnd: isize) {
-    let text = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.text.clone());
-    let Some(text) = text else { return };
+    let session = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| (s.text.clone(), s.secret));
+    let Some((text, secret)) = session else { return };
+    let live = !secret || vault_is_live();
     unsafe {
         if OpenClipboard(hwnd) != 0 {
-            set_unicode_text(&text);
+            set_unicode_text(deliverable_text(secret, live, &text));
             CloseClipboard();
         }
     }
