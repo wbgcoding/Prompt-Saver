@@ -28,6 +28,7 @@ mod timer;
 mod robustness;
 mod placeholders;
 mod review_fixes;
+mod media_fixes;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;
@@ -73,3 +74,5 @@ pub(super) use robustness::*;
 pub(super) use placeholders::*;
 #[allow(unused_imports)]
 pub(super) use review_fixes::*;
+#[allow(unused_imports)]
+pub(super) use media_fixes::*;

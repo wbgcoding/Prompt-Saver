@@ -366,6 +366,22 @@ pub(crate) fn write_private_text(text: &str) -> bool {
     false
 }
 
+// What a confidential session may hand out as real clipboard data: its text only while the
+// vault is still unlocked, nothing once it timed out.
+pub(crate) fn deliverable_text(secret: bool, vault_live: bool, text: &str) -> &str {
+    if secret && !vault_live { "" } else { text }
+}
+
+// True while the vault key for confidential prompts is still held.
+fn vault_is_live() -> bool {
+    let app = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    app.as_ref().is_some_and(|app| {
+        let state = app.state::<Db>();
+        let store = lock(&state);
+        super::secret_session_key(super::secret_timeout_min(&store.settings)).is_some()
+    })
+}
+
 // Drives the tile badge's is-auto class.
 #[derive(serde::Serialize, Clone)]
 struct RotationAuto {
@@ -586,7 +602,11 @@ fn handle_app_end() {
             OWN_EMPTY.store(true, Ordering::Release);
             EmptyClipboard();
             OWN_EMPTY.store(false, Ordering::Release);
-            set_unicode_text(&session.text);
+            let live = !session.secret || vault_is_live();
+            set_unicode_text(deliverable_text(session.secret, live, &session.text));
+            if session.secret {
+                set_private_markers();
+            }
             CloseClipboard();
         }
     }
