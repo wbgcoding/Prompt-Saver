@@ -1145,6 +1145,17 @@ section(() => {
   check(read("floating.js").includes("seek: t.mediaSeek, volume: t.mediaVolume"), "the pill passes both labels");
 });
 
+// 67. The recent search list is announced as a combobox listbox.
+section(() => {
+  const src = read("windowChrome.js");
+  const fn = extractBlock(src, "export function wireSearchSuggest(");
+  check(/input\.setAttribute\("role", "combobox"\)/.test(fn) && /pop\.setAttribute\("role", "listbox"\)/.test(fn), "the field is a combobox and the list a listbox");
+  check(fn.includes('row.setAttribute("role", "option")') && fn.includes("row.id ="), "each row is an option with an id");
+  check(extractBlock(fn, "const hide = () =>").includes('input.setAttribute("aria-expanded", "false")'), "hide collapses the combobox");
+  check(extractBlock(fn, "const setActive = (i) =>").includes('input.setAttribute("aria-activedescendant", rows[activeIdx].id)'), "the arrow keys move aria-activedescendant");
+  check(fn.includes('input.setAttribute("aria-expanded", "true")'), "show expands the combobox");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
