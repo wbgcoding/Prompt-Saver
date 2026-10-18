@@ -340,6 +340,16 @@ pub fn read_camera_sidecar(path: String) -> Option<CamSidecar> {
 const CAMERA_WIN_LABEL: &str = "camera";
 const PERMISSION_READY_EVENT: &str = "camera-permission-ready";
 
+// True once the permission handler is attached to the open camera window. The one-shot event
+// can fire before the page has registered its listener, so the page also asks for this flag
+// after registering and never has to guess with a timer.
+static CAM_PERMISSION_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+pub fn camera_permission_ready() -> bool {
+    CAM_PERMISSION_READY.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 #[tauri::command]
 pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(), String> {
     let enabled = lock(&db).settings.ui_flags.get("cameraRecord") == Some(&true);
@@ -368,6 +378,8 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
     crate::set_capture_exclusion(&win, excluded);
+    // A new window starts unanswered, whatever the previous one reached.
+    CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
     install_permission_handler(&app, &win)?;
     // Alt+F4, the taskbar close or an app quit skip camera.js's close-button handler
     // (discardRecording) and would leave a half-written file and an active session. This is the
@@ -471,6 +483,7 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
             Ok(())
         }));
         if unsafe { core.add_PermissionRequested(&handler, &mut token) }.is_ok() {
+            CAM_PERMISSION_READY.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = app_ready.emit_to(CAMERA_WIN_LABEL, PERMISSION_READY_EVENT, ());
         }
     })
@@ -479,6 +492,7 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
 
 #[cfg(not(windows))]
 fn install_permission_handler(_app: &AppHandle, _win: &tauri::WebviewWindow) -> Result<(), String> {
+    CAM_PERMISSION_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }
 

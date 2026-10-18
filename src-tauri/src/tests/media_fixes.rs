@@ -269,3 +269,13 @@ fn a_hung_powershell_query_is_killed_at_its_deadline() {
     quick.args(["-NoProfile", "-NonInteractive", "-Command", "Write-Output ok"]).creation_flags(0x0800_0000);
     assert_eq!(ocr::run_with_deadline(quick, std::time::Duration::from_secs(60)).map(|s| s.trim().to_string()), Ok("ok".to_string()));
 }
+
+#[test]
+fn the_camera_page_asks_for_the_permission_state_and_has_no_timer_fallback() {
+    let js = include_str!("../../../ui/camera.js");
+    assert!(js.contains("invoke(\"camera_permission_ready\")"), "the page must query the flag after listening");
+    assert!(!js.contains("}, 1500)"), "no timer may count the permission as given");
+    let lib = include_str!("../lib.rs");
+    assert!(lib.contains("camera::camera_permission_ready"));
+    camera::camera_permission_ready();
+}
