@@ -343,9 +343,12 @@ async function copyMember(id) {
 
 // ---- state + settings ----
 
+let loadSeq = 0;
 async function loadState() {
+  // Replies can arrive out of order; only the newest request may replace the state.
+  const seq = ++loadSeq;
   const data = await invoke("float_folder_state", { id: folderId }).catch(() => null);
-  if (!data) return;
+  if (!data || seq !== loadSeq) return;
   state = data;
   renderIcon();
   // The stored scale arrives here, not through applyPrefs, and both run in

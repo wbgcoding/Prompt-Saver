@@ -286,6 +286,23 @@ section(() => {
   check(el.changes === 1, "a pointerdown followed by its click picks only once");
 });
 
+section(() => {
+  const src = read("folder.js");
+  const replies = [];
+  const sb = { folderId: "f", state: null, invoke: () => new Promise((r) => replies.push(r)), renderIcon() {}, markSelectedSize() {}, menuEl: {}, open: "closed", reflow: async () => {} };
+  vm.createContext(sb);
+  vm.runInContext("var loadSeq = 0;\n" + extractBlock(src, "async function loadState(") + "\nthis.loadState = loadState;", sb);
+  later(async () => {
+    const first = sb.loadState();
+    const second = sb.loadState();
+    replies[1]({ scale: 1, members: ["new"] });
+    await second;
+    replies[0]({ scale: 1, members: ["old"] });
+    await first;
+    check(sb.state && sb.state.members[0] === "new", "an older state reply that lands last does not replace the newer one");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
