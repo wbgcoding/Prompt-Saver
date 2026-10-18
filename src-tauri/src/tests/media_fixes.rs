@@ -500,3 +500,16 @@ fn a_failed_camera_sidecar_write_is_reported() {
     assert!(crate::camera::finalize_session(&session(&root), 5, Some(7)).is_ok());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_failed_key_sidecar_write_is_an_error_without_the_path() {
+    let root = std::env::temp_dir().join(format!("ps-keyside-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let out = root.join("missing").join("rec-1.mp4");
+    let err = crate::keylog::try_write_sidecar(&out, &Default::default()).unwrap_err();
+    assert!(err.starts_with("write failed"), "{err}");
+    assert!(!err.contains("missing"), "the reason must not carry the path: {err}");
+    std::fs::create_dir_all(root.join("ok")).unwrap();
+    assert!(crate::keylog::try_write_sidecar(&root.join("ok").join("rec-1.mp4"), &Default::default()).is_ok());
+    let _ = std::fs::remove_dir_all(&root);
+}
