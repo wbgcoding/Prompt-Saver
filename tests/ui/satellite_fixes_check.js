@@ -407,6 +407,32 @@ section(() => {
   check(/searchEl\.setAttribute\("aria-label"/.test(src), "the search field gets an accessible name");
 });
 
+section(() => {
+  const src = read("folder.js");
+  const mkEl = () => {
+    const e = { attrs: {}, children: [], dataset: {}, style: {}, className: "", textContent: "" };
+    e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.querySelectorAll = () => [];
+    return e;
+  };
+  const gridEl = mkEl();
+  const sb = {
+    gridEl, TILE: 72, GAP: 8, PAD: 10, state: { scale: 1, members: [{ id: "m1", name: "Greeting", variants: [1, 2] }] },
+    TXT: { copied: "Copied" }, rotateBadgeOn: true, rotateInfo: new Map(), px: (n) => n + "px",
+    rotateBadgeLabel: () => "2/5", primeMemberRotate() {}, paintFace() {}, fitText() {},
+    gridSize: () => ({ cols: 1 }), document: { createElement: mkEl },
+  };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock(src, "function renderGrid(") + "; this.renderGrid = renderGrid;", sb);
+  sb.renderGrid();
+  const tile = gridEl.children[0];
+  const badge = tile.children.find((c) => c.className === "rotate-badge");
+  const ok = tile.children.find((c) => c.className === "member-ok");
+  check(tile.attrs["aria-label"] === "Greeting", "the member tile is named by the prompt only");
+  check(badge && badge.attrs["aria-hidden"] === "true" && ok && ok.attrs["aria-hidden"] === "true", "the rotate badge and the copied hint stay out of the accessible name");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
