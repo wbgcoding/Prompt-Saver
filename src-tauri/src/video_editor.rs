@@ -967,7 +967,9 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     })
     .await;
     let _ = EDITOR_EXPORT_GEN.compare_exchange(my_gen, 0, Ordering::SeqCst, Ordering::SeqCst);
-    let result = result.map_err(|e| e.to_string())?;
+    // A panicked export task is an error result like any other, so the row below still leaves
+    // "running" and the generation still leaves the cancel set.
+    let result = result.unwrap_or_else(|e| Err(e.to_string()));
     match &result {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);

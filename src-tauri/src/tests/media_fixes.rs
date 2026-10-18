@@ -351,3 +351,14 @@ fn a_failed_wait_removes_the_staged_export() {
     let err_arm = after.split("let stderr_text").next().unwrap();
     assert!(err_arm.contains("forget_staged();") && err_arm.contains("fs::remove_file(&staged)"));
 }
+
+// Structural fix, no red unit test: a panic inside the export task cannot be provoked here.
+#[test]
+fn a_failed_export_task_still_closes_its_job_row() {
+    let src = include_str!("../video_editor.rs");
+    let body = src.split("pub(crate) async fn export_video(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(body.contains("result.unwrap_or_else(|e| Err(e.to_string()))"));
+    assert!(!body.contains("result.map_err(|e| e.to_string())?"));
+}
