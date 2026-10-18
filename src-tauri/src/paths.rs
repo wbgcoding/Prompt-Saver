@@ -337,3 +337,58 @@ pub(crate) fn title_case(w: &str) -> String {
         None => String::new(),
     }
 }
+
+// A path that reaches another machine: UNC (`\\host\share`, `//host/share`, `\\?\UNC\...`)
+// or a drive letter that maps to a remote share. Opening one makes Windows send the user's
+// credentials to that host, so nothing the user did not pick on this PC may name one. This
+// is the one gate for that rule; every place that opens a stored or imported path asks it.
+// A verbatim (`\\?\`) or NT (`\??\`) path counts as local only when the rest is a local
+// drive letter or a volume GUID: GLOBALROOT and device names reach a host as well.
+pub(crate) fn is_network_path(raw: &str) -> bool {
+    let t = raw.trim();
+    let b = t.as_bytes();
+    let sep = |c: u8| c == b'\\' || c == b'/';
+    let rest = if t.get(..4) == Some(r"\??\") || (b.len() >= 4 && sep(b[0]) && sep(b[1]) && b[2] == b'?' && sep(b[3])) {
+        Some(&t[4..])
+    } else {
+        None
+    };
+    if let Some(rest) = rest {
+        let rb = rest.as_bytes();
+        if rb.len() >= 2 && rb[0].is_ascii_alphabetic() && rb[1] == b':' {
+            return drive_is_remote(rest);
+        }
+        return !is_volume_guid_path(rest);
+    }
+    // Any two leading separators, mixed kinds included, reach a host.
+    if b.len() >= 2 && sep(b[0]) && sep(b[1]) {
+        return true;
+    }
+    drive_is_remote(t)
+}
+
+// `Volume{01234567-89ab-cdef-0123-456789abcdef}` followed by nothing or a separator.
+fn is_volume_guid_path(rest: &str) -> bool {
+    let b = rest.as_bytes();
+    const HEAD: &[u8] = b"volume{";
+    if b.len() < HEAD.len() + 37 || !b[..HEAD.len()].eq_ignore_ascii_case(HEAD) {
+        return false;
+    }
+    let guid = &b[HEAD.len()..HEAD.len() + 36];
+    let shaped = guid.iter().enumerate().all(|(i, c)| match i {
+        8 | 13 | 18 | 23 => *c == b'-',
+        _ => c.is_ascii_hexdigit(),
+    });
+    let tail = &b[HEAD.len() + 36..];
+    shaped && tail[0] == b'}' && (tail.len() == 1 || tail[1] == b'\\' || tail[1] == b'/')
+}
+
+fn drive_is_remote(p: &str) -> bool {
+    let b = p.as_bytes();
+    if b.len() < 2 || !b[0].is_ascii_alphabetic() || b[1] != b':' {
+        return false;
+    }
+    let root: Vec<u16> = format!("{}:\\", b[0] as char).encode_utf16().chain(std::iter::once(0)).collect();
+    const DRIVE_REMOTE: u32 = 4;
+    unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(windows::core::PCWSTR(root.as_ptr())) == DRIVE_REMOTE }
+}

@@ -258,3 +258,24 @@ fn a_wipe_counts_as_incomplete_only_while_rows_are_left() {
     wipe_data_tables(&conn);
     assert!(!data_wipe_rows_left(&conn));
 }
+
+#[test]
+fn a_verbatim_or_nt_path_is_local_only_for_a_drive_letter_or_a_volume_guid() {
+    for p in [
+        r"\\?\GLOBALROOT\Device\Mup\host\share\x.mp4",
+        r"\??\GLOBALROOT\Device\Mup\host\share\x.mp4",
+        r"\\?\globalroot\Device\LanmanRedirector\host\share",
+        r"\\?\Device\Mup\host\share",
+        r"\\?\Volume{not-a-guid}\x",
+        r"\\?\",
+    ] {
+        assert!(is_network_path(p), "{p:?} must count as a network path");
+    }
+    for p in [
+        r"\\?\C:\clips\a.png",
+        r"\??\C:\clips\a.png",
+        r"\\?\Volume{01234567-89ab-cdef-0123-456789abcdef}\clips\a.png",
+    ] {
+        assert!(!is_network_path(p), "{p:?} is local");
+    }
+}

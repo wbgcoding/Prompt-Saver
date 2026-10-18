@@ -921,43 +921,6 @@ pub(crate) fn lenient_import_note(raw: &str) -> String {
     })
 }
 
-// A path that reaches another machine: UNC (`\\host\share`, `//host/share`, `\\?\UNC\...`)
-// or a drive letter that maps to a remote share. Opening one makes Windows send the user's
-// credentials to that host, so a file from outside never gets to name one.
-pub(crate) fn is_network_path(raw: &str) -> bool {
-    let t = raw.trim();
-    let b = t.as_bytes();
-    let sep = |c: u8| c == b'\\' || c == b'/';
-    // The NT form `\??\` names the same objects as the verbatim form `\\?\`.
-    let rest = if t.get(..4) == Some(r"\??\") || (b.len() >= 4 && sep(b[0]) && sep(b[1]) && b[2] == b'?' && sep(b[3])) {
-        Some(&t[4..])
-    } else {
-        None
-    };
-    if let Some(rest) = rest {
-        let rb = rest.as_bytes();
-        if rb.len() >= 4 && rb[..3].eq_ignore_ascii_case(b"unc") && sep(rb[3]) {
-            return true;
-        }
-        return drive_is_remote(rest);
-    }
-    // Any two leading separators, mixed kinds included, reach a host.
-    if b.len() >= 2 && sep(b[0]) && sep(b[1]) {
-        return true;
-    }
-    drive_is_remote(t)
-}
-
-fn drive_is_remote(p: &str) -> bool {
-    let b = p.as_bytes();
-    if b.len() < 2 || !b[0].is_ascii_alphabetic() || b[1] != b':' {
-        return false;
-    }
-    let root: Vec<u16> = format!("{}:\\", b[0] as char).encode_utf16().chain(std::iter::once(0)).collect();
-    const DRIVE_REMOTE: u32 = 4;
-    unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(windows::core::PCWSTR(root.as_ptr())) == DRIVE_REMOTE }
-}
-
 // Clears every network path an imported row carries; the row itself stays.
 // Returns how many links were cut, so an import can tell the user.
 pub(crate) fn clear_network_paths(p: &mut Prompt) -> usize {
