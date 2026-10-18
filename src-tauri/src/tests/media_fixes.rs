@@ -279,3 +279,13 @@ fn the_camera_page_asks_for_the_permission_state_and_has_no_timer_fallback() {
     assert!(lib.contains("camera::camera_permission_ready"));
     camera::camera_permission_ready();
 }
+
+// Structural fix, no red unit test: a refused thread spawn cannot be provoked in a test.
+#[test]
+fn a_refused_audio_thread_is_a_start_error_not_a_panic() {
+    let audio = include_str!("../audio.rs");
+    assert!(audio.contains("-> std::io::Result<thread::JoinHandle<()>>"));
+    assert!(!audio.contains("expect(\"spawn rec-audio thread\")"));
+    let rec = include_str!("../recording.rs");
+    assert_eq!(rec.matches("audio_stop.clone().unwrap(),\n        ).map_err(|e| e.to_string())?").count(), 2);
+}

@@ -832,7 +832,7 @@ fn start_inner(
         let q = Arc::new(AudioQueueShared::new());
         guard.audio_threads.push(super::audio::spawn_capture(
             "system", eRender, true, String::new(), q.clone(), audio_stop.clone().unwrap(),
-        ));
+        ).map_err(|e| e.to_string())?);
         audio_queues.push(q.clone());
         system_queue = Some(q);
     }
@@ -840,7 +840,7 @@ fn start_inner(
         let q = Arc::new(AudioQueueShared::new());
         guard.audio_threads.push(super::audio::spawn_capture(
             "mic", eCapture, false, audio.mic_device_id.clone(), q.clone(), audio_stop.clone().unwrap(),
-        ));
+        ).map_err(|e| e.to_string())?);
         audio_queues.push(q.clone());
         mic_queue = Some(q);
     }
