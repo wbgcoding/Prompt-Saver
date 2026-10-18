@@ -92,6 +92,11 @@ export function openValuePop(a, items, current, pick) {
   cursor = selected ? rows.indexOf(selected) : -1;
 }
 
+// True while a value list is open, so a caller's Escape handler can leave the key to the list.
+export function isValuePopOpen() {
+  return !!onPick;
+}
+
 export function closeValuePop() {
   if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "false");
   onPick = null;

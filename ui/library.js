@@ -8,7 +8,7 @@ import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, 
 import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
 import { copyOnCooldown, peekResolveCommit, recordCopy } from "./copyFlow.js";
-import { attachSelectPicker } from "./selectpop.js";
+import { attachSelectPicker, isValuePopOpen } from "./selectpop.js";
 import { allTags, renderTagFilter, tagColor, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
 import { closeStats, openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
@@ -1113,6 +1113,7 @@ export function updateGridBatchBar() {
 // dispatcher and a selection must stay alive. A library raised over the backup,
 // statistics or duplicate dialogs is the topmost thing, so those do not count.
 export function otherOverlayOpen(selfId) {
+  if (isValuePopOpen()) return true; // an open value list takes Escape first
   const under = document.body.classList.contains("library-front") ? ["backup-modal", "stats-modal", "dupes-modal"] : [];
   return [...document.querySelectorAll(".overlay:not(.hidden)")].some((o) => o.id !== selfId && !under.includes(o.id));
 }
