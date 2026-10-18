@@ -989,5 +989,8 @@ fn maximized_main_window_is_restored_after_the_show() {
     let mf = source!("../media_files.rs");
     let reveal = &mf[mf.find("pub(crate) fn show_main_window(").unwrap()..];
     let reveal = &reveal[..reveal.find("\n}\n").unwrap()];
-    assert!(reveal.find("w.show()").unwrap() < reveal.find("w.maximize()").expect("first reveal maximizes"));
+    let shown = reveal.find("w.show()").unwrap();
+    assert!(shown < reveal.find("w.maximize()").expect("first reveal maximizes"));
+    assert!(reveal.find(".maximized)").unwrap() < shown, "the flag is read before the show resets it");
+    assert!(show.find("g.maximized").unwrap() < show.find("win.show()").unwrap(), "same in show_main");
 }

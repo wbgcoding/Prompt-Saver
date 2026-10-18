@@ -21,9 +21,11 @@ pub(crate) fn show_main(app: &AppHandle) {
             let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
         }
     }
+    // Read before the show (its own resize event reports "not maximized"), applied after it (a
+    // maximize on the hidden window is lost when it appears).
+    let maximized = geom.flatten().is_some_and(|g| g.maximized);
     let _ = win.show();
-    // After the show: a maximize on the hidden window is lost when it appears.
-    if geom.flatten().is_some_and(|g| g.maximized) && !win.is_maximized().unwrap_or(false) {
+    if maximized && !win.is_maximized().unwrap_or(false) {
         let _ = win.maximize();
     }
     let _ = win.unminimize();

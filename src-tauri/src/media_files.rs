@@ -1042,13 +1042,14 @@ pub(crate) fn show_main_window(app: AppHandle) {
     }
     if let Some(w) = app.get_webview_window("main") {
         if !w.is_visible().unwrap_or(false) {
-            let _ = w.show();
-            // Maximized when last closed: applied only now, since maximizing the hidden window
-            // during setup does not survive the show.
+            // Maximized when last closed: applied only after the show, since maximizing the hidden
+            // window during setup does not survive it. Read before the show, whose own resize
+            // event already reports the window as not maximized.
             let maximized = app
                 .try_state::<Db>()
                 .and_then(|s| try_lock_ignoring_poison(&s).map(|store| store.settings.window.is_some_and(|g| g.maximized)))
                 .unwrap_or(false);
+            let _ = w.show();
             if maximized {
                 let _ = w.maximize();
             }
