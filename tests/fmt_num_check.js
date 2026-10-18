@@ -15,7 +15,7 @@ const expect = (label, got, want) => {
 
 async function main() {
   globalThis.document = globalThis.document || { addEventListener() {}, removeEventListener() {} };
-  const { fmtNum, fmtBytes, fmtSizeCompact, fmtUnit } = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
+  const { fmtNum, fmtBytes, fmtSizeCompact, fmtUnit, fmtUnitName } = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
 
   expect("fmtBytes 600000000 de", fmtBytes(600000000, "de"), "572,2 MB");
   expect("fmtBytes 600000000 en", fmtBytes(600000000, "en"), "572.2 MB");
@@ -41,6 +41,8 @@ async function main() {
   expect("fmtUnit days in German", fmtUnit(30, "day", "de"), "30 Tg.");
   expect("fmtUnit hours in Japanese", fmtUnit(2, "hour", "ja"), "2 時間");
   expect("fmtUnit seconds with a decimal comma", fmtUnit(1.5, "second", "de", 1), "1,5 Sek.");
+  expect("fmtUnitName days in German", fmtUnitName(7, "day", "de"), "Tg.");
+  expect("fmtUnitName follows the count in Polish", fmtUnitName(1, "day", "pl") !== fmtUnitName(7, "day", "pl"), true);
   expect("fmtUnit unknown language falls back to English", fmtUnit(7, "day", "not a language"), "7 days");
 
   // Every call site passes its window's language, so no size reads in English by accident.

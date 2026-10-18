@@ -11,7 +11,7 @@ import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
 import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { ffmpegDownloadActive, fmtBytes, fmtUnit, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
+import { ffmpegDownloadActive, fmtBytes, fmtUnit, fmtUnitName, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { reloadEverything, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import { toggleShortLivedCert } from "./management.js";
@@ -558,6 +558,9 @@ export async function commitValue(key, value) {
   else syncRowReset("values", key); // reset icon must not wait for an unrelated rebuild
 }
 
+// Config unit abbreviation to the Intl unit it stands for.
+const TIME_UNITS = { d: "day", h: "hour", min: "minute" };
+
 // How a number reads on its row. The stored value never changes, only the text:
 // milliseconds show as seconds and the error log size in megabytes.
 // A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0 min".
@@ -567,7 +570,7 @@ export function formatValue(cfg, v) {
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
   // seconds keep the SI symbol, which reads the same in every language
   if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
-  const timeUnit = { d: "day", h: "hour", min: "minute" }[cfg.unit];
+  const timeUnit = TIME_UNITS[cfg.unit];
   if (timeUnit) return fmtUnit(v, timeUnit, LANG, 2);
   // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.
   return `${v}${cfg.unit && !/^[%×]$|^\//.test(cfg.unit) ? " " : ""}${cfg.unit}`;
@@ -709,7 +712,9 @@ export function selectRow(key) {
   // typing the unit into it, which a number input silently discards.
   const unit = document.createElement("span");
   unit.className = "expert-num-unit";
-  unit.textContent = cfg.unit;
+  // Written the way the presets beside it are, in the UI language, and agreeing with the count.
+  const setUnit = (n) => { unit.textContent = TIME_UNITS[cfg.unit] ? fmtUnitName(n, TIME_UNITS[cfg.unit], LANG) : cfg.unit; };
+  setUnit(cur);
   const isPreset = cfg.options.includes(cur);
   sel.value = isPreset ? String(cur) : "custom";
   num.value = cur;
@@ -722,6 +727,7 @@ export function selectRow(key) {
     const preset = cfg.options.includes(now);
     sel.value = preset ? String(now) : "custom";
     num.value = now;
+    setUnit(now);
     num.classList.toggle("hidden", preset);
     unit.classList.toggle("hidden", preset);
   };
@@ -759,6 +765,7 @@ export function selectRow(key) {
   num.addEventListener("change", () => {
     const v = Math.max(SELECT_CUSTOM_MIN, Math.min(SELECT_CUSTOM_MAX, Number(num.value) || cfg.def));
     num.value = v;
+    setUnit(v);
     persist(v).then(() => syncRowReset("selects", key));
     if (expertOnlyChanged) renderExpert();
   });

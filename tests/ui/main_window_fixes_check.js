@@ -633,7 +633,7 @@ section(() => {
   const sb = run(sel, {
     settings, EXPERT_SELECTS: { retentionDays: { label: "x", options: [1, 7, 30], def: 7, unit: "d" } },
     document: { createElement: () => { const e = el(); made.push(e); return e; } }, t: (k) => k, withTip() {}, rowResetBtn: () => null,
-    formatValue: (c, o) => String(o), attachSelectPicker() {}, SELECT_CUSTOM_MIN: 1, SELECT_CUSTOM_MAX: 999,
+    formatValue: (c, o) => String(o), TIME_UNITS: { d: "day" }, fmtUnitName: () => "d", LANG: "en", attachSelectPicker() {}, SELECT_CUSTOM_MIN: 1, SELECT_CUSTOM_MAX: 999,
     invoke: async () => { throw new Error("denied"); }, errToast() {}, syncRowReset() {}, expertOnlyChanged: false, renderExpert() {},
   });
   sb.selectRow("retentionDays");
@@ -1025,6 +1025,15 @@ section(() => {
   const src = read("expertMenu.js");
   check(src.includes("openColorPop(swatch, hexOut.textContent, setColor)"), "the popup starts at the live colour");
   check(!src.includes("openColorPop(swatch, cur, setColor)"), "no stale render-time colour is passed");
+});
+
+// 54. The custom-entry unit of a select row is localized and follows the count.
+section(() => {
+  const src = read("expertMenu.js");
+  check(src.includes("fmtUnitName(n, TIME_UNITS[cfg.unit], LANG)"), "the custom unit goes through the Intl unit name");
+  check(!src.includes("unit.textContent = cfg.unit;"), "no raw config unit is written beside the number");
+  const fn = extractBlock(src, "export function selectRow(");
+  check((fn.match(/setUnit\(/g) || []).length >= 3, "the unit refreshes on resync and on a typed value");
 });
 
 let guard;
