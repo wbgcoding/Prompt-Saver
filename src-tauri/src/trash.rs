@@ -567,7 +567,7 @@ pub(crate) fn scrub_freed_pages(conn: &Connection) -> bool {
 // holding one, so a failed read never reports a wipe as done.
 pub(crate) fn data_wipe_rows_left(c: &Connection) -> bool {
     DATA_WIPE_TABLES.iter().any(|table| {
-        c.query_row(&format!("SELECT EXISTS(SELECT 1 FROM {table})"), [], |r| r.get::<_, i64>(0)).map_or(true, |n| n != 0)
+        c.query_row(&format!("SELECT EXISTS(SELECT 1 FROM {table})"), [], |r| r.get::<_, i64>(0)).ok() != Some(0)
     })
 }
 

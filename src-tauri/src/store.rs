@@ -1692,7 +1692,7 @@ fn locked_backups(dir: &Path) -> Vec<(u64, PathBuf)> {
         };
         out.push((ts, e.path()));
     }
-    out.sort_by(|a, b| b.0.cmp(&a.0));
+    out.sort_by_key(|a| std::cmp::Reverse(a.0));
     out
 }
 
@@ -1709,7 +1709,7 @@ pub(crate) fn prune_locked_backups(dir: &Path, now: u64) {
 // rotates the older copies.
 pub(crate) fn keep_locked_backup(dir: &Path, now: u64) {
     let newest = locked_backups(dir).first().map(|(ts, _)| *ts);
-    if newest.is_none_or(|ts| now.saturating_sub(ts) >= LOCKED_BAK_SAME_INCIDENT_SECS) {
+    if newest.map_or(true, |ts| now.saturating_sub(ts) >= LOCKED_BAK_SAME_INCIDENT_SECS) {
         let _ = fs::copy(dir.join("data.db"), dir.join(format!("data.db.locked.{now}.bak")));
     }
     prune_locked_backups(dir, now);

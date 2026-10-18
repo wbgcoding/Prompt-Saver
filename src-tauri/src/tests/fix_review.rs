@@ -157,9 +157,7 @@ fn the_startup_seed_removes_a_plaintext_file_of_a_confidential_prompt_itself() {
 
 #[test]
 fn a_failed_update_switch_save_restores_the_previous_values() {
-    let mut s = Settings::default();
-    s.auto_update = false;
-    s.update_consent = UpdateConsent::No;
+    let mut s = Settings { auto_update: false, update_consent: UpdateConsent::No, ..Default::default() };
     assert_eq!(set_update_choice(&mut s, true, |_| false), Err("save-failed".to_string()));
     assert!(!s.auto_update, "the background check must not see a switch that failed to save");
     assert_eq!(s.update_consent, UpdateConsent::No);
