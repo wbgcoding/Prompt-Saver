@@ -311,6 +311,9 @@ export function renderHotkeysList() {
     .concat(flag("screenRecord") && flag("recPauseHotkey") ? [{ kind: "recPause", id: null, name: t("recPauseHotkeyLabel"), accel: settings.rec_pause_hotkey }] : []);
   const hit = (r) => !q || r.name.toLowerCase().includes(q) || prettyAccel(r.accel).toLowerCase().includes(q);
   const filtered = rows.filter(hit);
+  // Rebuilding removes the focused row input without a blur, so the capture switch would stay
+  // on and every global hotkey stay unregistered; end it here instead.
+  if (box.contains(document.activeElement)) hotkeyCapture(false);
   box.innerHTML = "";
   if (!filtered.length) {
     const empty = document.createElement("p");

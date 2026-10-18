@@ -898,6 +898,14 @@ section(() => {
   });
 });
 
+// 41. Rebuilding the hotkey list while one of its inputs has the focus ends the capture switch.
+section(() => {
+  const render = extractBlock(read("hotkeys.js"), "export function renderHotkeysList(");
+  const i = render.indexOf("box.innerHTML");
+  const guardAt = render.indexOf("hotkeyCapture(false)");
+  check(guardAt !== -1 && guardAt < i && /box\.contains\(document\.activeElement\)/.test(render), "the list ends hotkey capture before it drops a focused input");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
