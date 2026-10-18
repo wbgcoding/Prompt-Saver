@@ -107,3 +107,14 @@ fn a_network_path_is_refused_before_any_file_check() {
     assert!(!is_recording_source_location(&allowed, Path::new("//host/share/rec-1.mp4")));
     let _ = fs::remove_dir_all(&root);
 }
+
+// Structural fix (the overlay window cannot be built without a running app), so the check
+// reads the source: a failed overlay build must end the whole session, not just clear a flag.
+#[test]
+fn a_failed_overlay_build_ends_the_whole_snip_session() {
+    let src = include_str!("../snip.rs");
+    let arm = src.split("match build_snip_window(&app) {").nth(1).unwrap().split("Ok(w) => w,").nth(1).unwrap();
+    let arm = arm.split("return Err(e);").next().unwrap();
+    assert!(arm.contains("close_all_snip(&app)"));
+    assert!(!arm.contains("SNIP_ACTIVE.store(false"), "clearing one flag leaves the rest of the session behind");
+}

@@ -916,9 +916,11 @@ pub(crate) async fn begin_capture(
     let win = match build_snip_window(&app) {
         Ok(w) => w,
         Err(e) => {
-            // Build failed: clear the session so the app's windows come back.
-            SNIP_ACTIVE.store(false, Ordering::SeqCst);
-            restore_app_windows_after_snip(&app);
+            // Build failed: end the session the way every other path does, so the preview
+            // encode, the frozen desktop, the pick flag and an armed OCR mode go with it.
+            if snip_session_current(gen) {
+                close_all_snip(&app);
+            }
             return Err(e);
         }
     };
