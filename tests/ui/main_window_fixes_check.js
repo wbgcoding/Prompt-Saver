@@ -879,6 +879,25 @@ section(() => {
   check(/id="grid-live"[^>]*aria-live="polite"/.test(read("index.html")), "the live region exists in the page");
 });
 
+// 40. A refused backup setting is rolled back so the dialog shows what the backend uses.
+section(() => {
+  const save = extractBlock(read("backups.js"), "export async function saveBackupSetting(").replace("export ", "");
+  later(async () => {
+    const settings = { ui_flags: { autoBackup: true }, ui_values: { backupKeep: 5 } };
+    const errs = [];
+    let applied = 0;
+    const sb = run(save, { settings, invoke: async () => { throw new Error("readonly"); }, errToast: (e) => errs.push(e), applyFlags() { applied++; }, applyValues() { applied++; } });
+    await sb.saveBackupSetting("flag", "autoBackup", false);
+    await sb.saveBackupSetting("value", "backupKeep", 9);
+    await sb.saveBackupSetting("value", "backupGfsDays", 3);
+    check(settings.ui_flags.autoBackup === true && settings.ui_values.backupKeep === 5 && !("backupGfsDays" in settings.ui_values) && errs.length === 3 && applied === 3, "a refused backup write restores the old value and redraws");
+    const ok = { ui_flags: {}, ui_values: {} };
+    const sb2 = run(save, { settings: ok, invoke: async () => ({}), errToast() {}, applyFlags() {}, applyValues() {} });
+    await sb2.saveBackupSetting("value", "backupKeep", 7);
+    check(ok.ui_values.backupKeep === 7, "an accepted backup write stays");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
