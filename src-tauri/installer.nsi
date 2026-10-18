@@ -1232,6 +1232,9 @@ Section Uninstall
   {{#each resources_ancestors}}
   RMDir /REBOOTOK "$INSTDIR\\{{this}}"
   {{/each}}
+  ; ffmpeg lands beside the app when that folder is writable (downloaded on demand)
+  Delete "$INSTDIR\ffmpeg.exe"
+  Delete "$INSTDIR\ffprobe.exe"
   RMDir "$INSTDIR"
 
   ; Remove shortcuts if not updating

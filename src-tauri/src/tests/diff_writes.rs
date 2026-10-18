@@ -1110,3 +1110,13 @@ fn the_webview2_staging_folder_must_be_new() {
     assert!(src.contains("fs::create_dir(&dir)"));
     assert!(!src.contains("create_dir_all(&dir)"));
 }
+
+#[test]
+fn the_uninstaller_removes_the_downloaded_ffmpeg_before_the_folder() {
+    let nsi = include_str!("../../installer.nsi");
+    let rm = nsi.find("RMDir \"$INSTDIR\"\n").or_else(|| nsi.find("RMDir \"$INSTDIR\"\r\n")).expect("RMDir of the install folder");
+    for exe in ["ffmpeg.exe", "ffprobe.exe"] {
+        let del = nsi.find(&format!("Delete \"$INSTDIR\\{exe}\"")).unwrap_or_else(|| panic!("{exe} is not deleted"));
+        assert!(del < rm, "{exe} must go before the non-recursive RMDir");
+    }
+}
