@@ -1485,3 +1485,16 @@ fn old_saved_geometry_without_the_flag_loads_as_not_maximized() {
     let g: WindowGeom = serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).unwrap();
     assert!(!g.maximized);
 }
+#[test]
+fn the_quit_save_does_not_wait_behind_a_busy_store() {
+    // do_full_exit used a blocking lock on the event-loop thread; a backup holding the store
+    // froze every window. With the lock held the helper must report busy instead of waiting.
+    let m = Mutex::new(7);
+    let guard = m.lock().unwrap();
+    let mut ran = false;
+    assert!(!with_store_if_free(&m, |_| ran = true));
+    assert!(!ran);
+    drop(guard);
+    assert!(with_store_if_free(&m, |v| assert_eq!(*v, 7)));
+}
+

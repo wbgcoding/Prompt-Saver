@@ -436,15 +436,48 @@ pub(crate) static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 // The app's one real shutdown sequence: same three steps whether it runs
 // straight from CloseRequested (nothing was running) or from
 // confirm_quit_with_running_ops (the user chose to quit anyway).
+//
+// A backup or import holds the store for its whole run and has no cancel. This can run on the
+// event-loop thread, which must never wait behind it: with the store busy the save and the exit
+// move to a worker, and the windows stay responsive until the job lets go.
 pub(crate) fn do_full_exit(handle: &AppHandle) {
-    if let Some(state) = handle.try_state::<Db>() {
-        let store = state.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(state) = handle.try_state::<Db>() else {
+        finish_exit(handle);
+        return;
+    };
+    if with_store_if_free(&*state, |store| {
         save_settings(handle, &store.settings);
+    }) {
+        finish_exit(handle);
+        return;
     }
+    let app2 = handle.clone();
+    std::thread::spawn(move || {
+        if let Some(state) = app2.try_state::<Db>() {
+            let store = state.lock().unwrap_or_else(|e| e.into_inner());
+            save_settings(&app2, &store.settings);
+        }
+        finish_exit(&app2);
+    });
+}
+
+fn finish_exit(handle: &AppHandle) {
     #[cfg(windows)]
     clipwatch::stop();
     voice_shutdown(handle);
     handle.exit(0);
+}
+
+// Runs `f` on the data when the mutex is free right now; false (and `f` not run) when
+// someone else holds it.
+pub(crate) fn with_store_if_free<T>(m: &Mutex<T>, f: impl FnOnce(&T)) -> bool {
+    match try_lock_ignoring_poison(m) {
+        Some(g) => {
+            f(&g);
+            true
+        }
+        None => false,
+    }
 }
 
 // The one gate every full-quit path goes through (the main window's close button and the
