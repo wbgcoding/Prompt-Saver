@@ -13,11 +13,18 @@ TESTS = Path(__file__).resolve().parent
 REPO = TESTS.parent
 UI = REPO / "ui"
 
-MAIN_WINDOW_MODULES = json.loads((TESTS / "ui_sources.json").read_text(encoding="utf-8"))["main_window_modules"]
+_SOURCES = json.loads((TESTS / "ui_sources.json").read_text(encoding="utf-8"))
+MAIN_WINDOW_MODULES = _SOURCES["main_window_modules"]
+# The video editor window: video.js plus the modules it is split into.
+VIDEO_WINDOW_MODULES = _SOURCES["video_window_modules"]
 
 
 def main_window_files():
     return [UI / name for name in MAIN_WINDOW_MODULES]
+
+
+def video_window_source():
+    return "\n".join((UI / name).read_text(encoding="utf-8") for name in VIDEO_WINDOW_MODULES)
 
 
 def _git_show(rev, name):

@@ -1290,7 +1290,7 @@ pub(crate) const VIDEO_WIN_MIN_H: u32 = 520;
 // window.
 // overlay_path is the camera dual-open: a camera recording whose companion screen recording
 // has finished, so the editor can add it as a video overlay itself. Its alignment offset
-// lives in the camera sidecar (camera::CamSidecar::overlay_start_ms), which ui/video.js's
+// lives in the camera sidecar (camera::CamSidecar::overlay_start_ms), which ui/videoOverlays.js's
 // addAlignedCameraOverlay reads directly.
 pub(crate) struct VideoEditorPending(pub(crate) Mutex<(String, String, String)>);
 impl VideoEditorPending {

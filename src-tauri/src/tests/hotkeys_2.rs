@@ -188,6 +188,12 @@ fn every_tool_key_has_a_matching_frontend_call_site() {
     let src = [
         main_window_js().as_str(),
         include_str!("../../../ui/video.js"),
+        include_str!("../../../ui/videoGraph.js"),
+        include_str!("../../../ui/videoKeys.js"),
+        include_str!("../../../ui/videoExport.js"),
+        include_str!("../../../ui/videoLoad.js"),
+        include_str!("../../../ui/videoOverlays.js"),
+        include_str!("../../../ui/videoPreview.js"),
         include_str!("../../../ui/colorpop.js"),
     ]
     .join("\n");

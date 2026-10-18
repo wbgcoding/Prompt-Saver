@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 from i18n_files import combined_source
-from ui_sources import main_window_source
+from ui_sources import main_window_source, video_window_source
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -86,7 +86,7 @@ def dynamic_shortcut_actions():
     literal = set()
     prefixes = set()
     for js in ("main.js", "video.js"):
-        src = main_window_source() if js == "main.js" else (REPO / "ui" / js).read_text(encoding="utf-8")
+        src = main_window_source() if js == "main.js" else video_window_source()
         for m in DYNAMIC_CALL.finditer(src):
             expr = m.group("expr").strip()
             if expr.startswith('"') and expr.endswith('"'):
@@ -108,7 +108,7 @@ def open_modal_scopes():
     call in application code."""
     found = []
     for js in ("main.js", "video.js"):
-        src = main_window_source() if js == "main.js" else (REPO / "ui" / js).read_text(encoding="utf-8")
+        src = main_window_source() if js == "main.js" else video_window_source()
         for m in OPEN_MODAL_CALL.finditer(src):
             expr = m.group("expr").strip()
             for s in re.findall(r'"([^"]+)"', expr):

@@ -161,6 +161,10 @@ they were there) and `tests/ui_sources.js` (`mainWindowModules`, `mainWindowFile
 `mainWindowSource()`). The Rust tests read the same json at run time. A new module of the
 main window is appended to the json in the commit that creates it.
 
+The video editor window works the same way: `video_window_modules` lists `ui/video.js` and the
+modules split from it; tests read them through `video_window_source()` (Python) and
+`videoWindowSource()` (JS).
+
 ## Moving code
 `python tools/move_check.py [--base REV] [--max N]` proves that a staged change under `ui/`
 only moved code: every removed line must reappear as an added line (whitespace, a leading

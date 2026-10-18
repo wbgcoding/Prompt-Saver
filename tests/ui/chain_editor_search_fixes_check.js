@@ -142,7 +142,7 @@ section(() => {
 
 // video.js snapRect: every number of a snapped rect is even, also at the edge of an odd source.
 section(() => {
-  const src = read("video.js");
+  const src = require("../ui_sources.js").videoWindowSource().replace(/\r\n/g, "\n");
   const sandbox = run(
     "const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));\nconst even = (v) => Math.max(0, Math.round(v / 2) * 2);\n"
     + extractBlock(src, "function snapRect(") + "\n;globalThis.snap = snapRect;",

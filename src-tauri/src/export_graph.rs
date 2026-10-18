@@ -7,7 +7,7 @@ use super::*;
 // it and refused unless it only uses the filters the editor itself builds, reads no
 // file but the source and the media the request names, and names no text file.
 
-// Every filter ui/video.js builds, and nothing else.
+// Every filter the video editor (ui/videoGraph.js) builds, and nothing else.
 const EXPORT_GRAPH_FILTERS: [&str; 33] = [
     "fps", "split", "trim", "setpts", "concat", "movie", "amovie", "scale", "format", "colorchannelmixer", "overlay", "drawbox",
     "drawtext", "crop", "fade", "palettegen", "paletteuse", "null", "anullsrc", "atrim", "asetpts", "aresample", "aformat", "apad",

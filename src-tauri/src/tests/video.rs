@@ -504,7 +504,7 @@ fn export_video_real_ffmpeg_avi_format_carries_mpeg4_video_and_its_audio() {
 
 // ---- overlay export, one real-ffmpeg test per overlay kind ----
 //
-// ui/video.js's buildVideoChain() is the only place that turns an overlay
+// ui/videoGraph.js's buildVideoChain() is the only place that turns an overlay
 // op into a -filter_complex fragment; this backend never inspects it (see
 // the ExportRequest doc comment above). These five tests hardcode the
 // exact fragment shape buildVideoChain() emits for each overlay kind
@@ -786,7 +786,7 @@ fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif(
 
 // ---- extra video sources: overlay + section clip, one real-ffmpeg test each ----
 //
-// ui/video.js's timelinePlan()/buildVideoChain()/buildAudioChain() turn an
+// timelinePlan() in ui/video.js and buildVideoChain()/buildAudioChain() in ui/videoGraph.js turn an
 // inserted video (an overlay, or a whole section spliced into the kept
 // timeline) into `movie=`/`amovie=` source filters referencing the extra
 // file directly, normalized to the main video's own size/rate before any
@@ -796,7 +796,7 @@ fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif(
 // against a real ffmpeg run, the same pattern the five overlay-kind tests
 // above already use.
 
-// Same two-level escape ui/video.js's own ffPath() applies to a filter
+// Same two-level escape ui/videoGraph.js's own ffPath() applies to a filter
 // option's path: single-quoted, exactly one backslash before the drive
 // colon. A test fixture path is always local (never contains an
 // apostrophe), so this is the escaping alone, not the whole helper.

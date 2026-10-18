@@ -6,9 +6,14 @@ const fs = require("fs");
 const path = require("path");
 
 const ui = path.join(__dirname, "..", "ui");
-const mainWindowModules = JSON.parse(fs.readFileSync(path.join(__dirname, "ui_sources.json"), "utf8")).main_window_modules;
+const sources = JSON.parse(fs.readFileSync(path.join(__dirname, "ui_sources.json"), "utf8"));
+const mainWindowModules = sources.main_window_modules;
+// The video editor window: video.js plus the modules it is split into.
+const videoWindowModules = sources.video_window_modules;
 
 const mainWindowFiles = () => mainWindowModules.map((name) => path.join(ui, name));
 const mainWindowSource = () => mainWindowFiles().map((f) => fs.readFileSync(f, "utf8")).join("\n");
 
-module.exports = { mainWindowModules, mainWindowFiles, mainWindowSource };
+const videoWindowSource = () => videoWindowModules.map((name) => fs.readFileSync(path.join(ui, name), "utf8")).join("\n");
+
+module.exports = { mainWindowModules, mainWindowFiles, mainWindowSource, videoWindowModules, videoWindowSource };

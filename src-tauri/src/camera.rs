@@ -129,7 +129,7 @@ fn resolve_finish_companion(
 // wall-clock difference cannot stand in: a pause in the screen recording advances
 // wall-clock time but not its output timeline, overstating the offset. The returned value
 // already is the overlay's start offset (written straight into the sidecar by
-// camera_finish_recording, read back by addAlignedCameraOverlay in ui/video.js).
+// camera_finish_recording, read back by addAlignedCameraOverlay in ui/videoOverlays.js).
 #[tauri::command]
 pub fn camera_screen_elapsed_ms(rstate: State<'_, RecordingState>) -> Option<u64> {
     #[cfg(windows)]
@@ -329,7 +329,7 @@ pub fn read_sidecar(path: &Path) -> Option<CamSidecar> {
 }
 
 // The editor's counterpart to keylog's read_key_sidecar: the durable source of truth for a
-// camera take's start, read by addAlignedCameraOverlay in ui/video.js.
+// camera take's start, read by addAlignedCameraOverlay in ui/videoOverlays.js.
 #[tauri::command]
 pub fn read_camera_sidecar(path: String) -> Option<CamSidecar> {
     read_sidecar(Path::new(&path))

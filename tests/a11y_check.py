@@ -32,7 +32,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "tests"))
 import tooltip_check as tc  # noqa: E402 -- reuses its button/name regexes
-from ui_sources import main_window_source  # noqa: E402
+from ui_sources import main_window_source, video_window_source  # noqa: E402
 
 WINDOWS = ["index", "floating", "folder", "vars", "snip", "recbar", "video", "launcher", "tray"]
 # tooltip_check.py's own PAGES already cover these five with its full button
@@ -83,7 +83,7 @@ def value_findings():
     bad = []
     for win, targets in VALUE_TARGETS.items():
         for ident, jsfile in targets:
-            src = main_window_source() if jsfile == "main.js" else (REPO / "ui" / jsfile).read_text(encoding="utf-8")
+            src = main_window_source() if jsfile == "main.js" else video_window_source() if jsfile == "video.js" else (REPO / "ui" / jsfile).read_text(encoding="utf-8")
             # Either a direct setAttribute("aria-valuenow", ...) keyed to the id, or
             # (for the timeline/handles) the shared setTimeValue(el, ...) helper --
             # both patterns are accepted since a literal per-id search would miss the helper.
@@ -120,7 +120,7 @@ TRAP_CALL_RE = re.compile(r'trapTabWithin\(\s*(\w+|\$\("[\w-]+"\))')
 def focus_trap_findings():
     bad = []
     for jsfile in ("main.js", "video.js"):
-        src = main_window_source() if jsfile == "main.js" else (REPO / "ui" / jsfile).read_text(encoding="utf-8")
+        src = main_window_source() if jsfile == "main.js" else video_window_source() if jsfile == "video.js" else (REPO / "ui" / jsfile).read_text(encoding="utf-8")
         trapped = set(TRAP_CALL_RE.findall(src))
         # A container is "dialog-like" if its own declaration sets role="menu"/
         # role="dialog" (static markup) or its JS variable is built with one of

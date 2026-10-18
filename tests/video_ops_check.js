@@ -6,7 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "ui", "video.js"), "utf8").replace(/\r\n/g, "\n");
+const { videoWindowSource } = require("./ui_sources.js");
+const src = videoWindowSource().replace(/\r\n/g, "\n");
 
 function extractLine(label, exact) {
   if (!src.includes(exact)) throw new Error(`could not find ${label} in video.js: ${exact}`);
