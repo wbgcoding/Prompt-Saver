@@ -1,5 +1,13 @@
 use super::*;
 
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
 // ---- recording, media and clipboard fixes ----
 
 #[cfg(windows)]
@@ -89,7 +97,7 @@ fn media_tools_are_searched_only_in_app_owned_folders() {
     assert_eq!(media_tool_dirs(None, Some(local.clone())), vec![local]);
     assert!(media_tool_dirs(None, None).is_empty());
     // The data folder is not a parameter any more: a planted copy there cannot be found.
-    let src = include_str!("../ffmpeg.rs");
+    let src = source!("../ffmpeg.rs");
     let discovery = src.split("pub(crate) fn find_media_tool").nth(1).unwrap().split("pub(crate) fn ffmpeg_search_path").next().unwrap();
     assert!(!discovery.contains("data_dir"));
 }
@@ -112,7 +120,7 @@ fn a_network_path_is_refused_before_any_file_check() {
 // reads the source: a failed overlay build must end the whole session, not just clear a flag.
 #[test]
 fn a_failed_overlay_build_ends_the_whole_snip_session() {
-    let src = include_str!("../snip.rs");
+    let src = source!("../snip.rs");
     let arm = src.split("match build_snip_window(&app) {").nth(1).unwrap().split("Ok(w) => w,").nth(1).unwrap();
     let arm = arm.split("return Err(e);").next().unwrap();
     assert!(arm.contains("close_all_snip(&app)"));
@@ -154,7 +162,7 @@ fn only_a_silent_ffmpeg_is_declared_stalled() {
     assert!(ffmpeg_stalled(FFMPEG_STALL_SECS + 1));
     // Structural: the check must be fed by the time since the last progress tick, never by the
     // total run time, and every tick must restart that clock.
-    let src = include_str!("../ffmpeg.rs");
+    let src = source!("../ffmpeg.rs");
     assert!(src.contains("ffmpeg_stalled(last_progress.elapsed().as_secs())"));
     assert!(src.contains("last_progress = std::time::Instant::now();"));
     assert!(!src.contains("start.elapsed().as_secs() >"));
@@ -176,7 +184,7 @@ fn the_export_filter_graph_travels_in_a_swept_file() {
     assert!(!written.exists());
     let _ = fs::remove_dir_all(&root);
     // Contrast: the old inline argument is gone from the export path.
-    let src = include_str!("../video_editor.rs");
+    let src = source!("../video_editor.rs");
     assert!(!src.contains("push(\"-filter_complex\".to_string())"));
     assert!(src.contains("\"-/filter_complex\""));
 }
@@ -194,7 +202,7 @@ fn a_media_backfill_only_applies_to_the_entry_state_it_measured() {
     p.media_duration_ms = 4000;
     assert_eq!(media_backfill_target(&p), None, "a measured entry is never overwritten");
     // Structural: the write step re-asks the same question under the second lock.
-    let src = include_str!("../video_editor.rs");
+    let src = source!("../video_editor.rs");
     assert!(src.contains("media_backfill_target(p).as_deref() == Some(media_path.as_str())"));
 }
 
@@ -210,7 +218,7 @@ fn closing_the_editor_refuses_every_waiting_open_request() {
     crate::video_editor::refuse_pending_editor_requests();
     assert_eq!(waiter.join().unwrap(), crate::video_editor::EditorLoadDecision::Refused);
     assert!(crate::video_editor::VE_PENDING_REQUEST.lock().unwrap().is_none(), "a stale offer must not outlive its window");
-    let src = include_str!("../video_editor.rs");
+    let src = source!("../video_editor.rs");
     let hook = src.find("tauri::WindowEvent::Destroyed").expect("the editor window must watch its own destruction");
     assert!(src[hook..hook + 200].contains("refuse_pending_editor_requests"));
 }
@@ -219,7 +227,7 @@ fn closing_the_editor_refuses_every_waiting_open_request() {
 // test cannot fake. The pure choice (frame over client) is covered by snip_window_rect_prefers_the_frame.
 #[test]
 fn the_window_fallback_crops_the_frame_the_overlay_showed() {
-    let src = include_str!("../capture.rs");
+    let src = source!("../capture.rs");
     // The rect comes from the one window probe, which crops the visible frame the overlay showed.
     let at = src.find("pub(crate) fn probe_window(").expect("probe");
     assert!(src[at..at + 600].contains("snip_window_rect(window_frame_rect(id)"));
@@ -274,10 +282,10 @@ fn a_hung_powershell_query_is_killed_at_its_deadline() {
 
 #[test]
 fn the_camera_page_asks_for_the_permission_state_and_has_no_timer_fallback() {
-    let js = include_str!("../../../ui/camera.js");
+    let js = source!("../../../ui/camera.js");
     assert!(js.contains("invoke(\"camera_permission_ready\")"), "the page must query the flag after listening");
     assert!(!js.contains("}, 1500)"), "no timer may count the permission as given");
-    let lib = include_str!("../lib.rs");
+    let lib = source!("../lib.rs");
     assert!(lib.contains("camera::camera_permission_ready"));
     camera::camera_permission_ready();
 }
@@ -285,17 +293,17 @@ fn the_camera_page_asks_for_the_permission_state_and_has_no_timer_fallback() {
 // Structural fix, no red unit test: a refused thread spawn cannot be provoked in a test.
 #[test]
 fn a_refused_audio_thread_is_a_start_error_not_a_panic() {
-    let audio = include_str!("../audio.rs");
+    let audio = source!("../audio.rs");
     assert!(audio.contains("-> std::io::Result<thread::JoinHandle<()>>"));
     assert!(!audio.contains("expect(\"spawn rec-audio thread\")"));
-    let rec = include_str!("../recording.rs");
+    let rec = source!("../recording.rs");
     assert_eq!(rec.matches("audio_stop.clone().unwrap(),\n        ).map_err(|e| e.to_string())?").count(), 2);
 }
 
 // Structural fix, no red unit test: the encoder needs a real media session to fail on demand.
 #[test]
 fn the_feeder_stops_feeding_after_the_first_encoder_error() {
-    let rec = include_str!("../recording.rs");
+    let rec = source!("../recording.rs");
     let drain = rec.split("fn drain_pending_frames(").nth(1).unwrap().split("
 }
 ").next().unwrap();
@@ -306,11 +314,11 @@ fn the_feeder_stops_feeding_after_the_first_encoder_error() {
 // Structural fix, no red unit test: the old shape could not fail at run time, which is the finding.
 #[test]
 fn stopping_and_cancelling_a_recording_return_plain_values() {
-    let rec = include_str!("../recording.rs");
+    let rec = source!("../recording.rs");
     assert!(rec.contains("pub fn stop(session: RecSession) -> StopResult {"));
     assert!(rec.contains("pub fn cancel(session: RecSession) {"));
     assert!(rec.contains("fn finish_and_stop(mut session: RecSession) -> (u64, Option<String>) {"));
-    let cmds = include_str!("../rec_cmds.rs");
+    let cmds = source!("../rec_cmds.rs");
     assert!(!cmds.contains("recording::cancel(session)?"));
     assert!(!cmds.contains("= stopped?;"));
 }
@@ -318,7 +326,7 @@ fn stopping_and_cancelling_a_recording_return_plain_values() {
 // Structural fix, no red unit test: only comments and an attribute moved.
 #[test]
 fn the_follow_comment_and_cfg_sit_on_the_follow_function() {
-    let bar = include_str!("../rec_bar.rs");
+    let bar = source!("../rec_bar.rs");
     assert!(bar.contains("// periodic jobs.
 #[cfg(windows)]
 pub(crate) fn spawn_rec_bar_follow("));
@@ -348,7 +356,7 @@ fn the_ffmpeg_log_buffer_keeps_only_its_newest_bytes() {
 // Structural fix, no red unit test: child.wait() cannot be made to fail on a real child.
 #[test]
 fn a_failed_wait_removes_the_staged_export() {
-    let src = include_str!("../ffmpeg.rs");
+    let src = source!("../ffmpeg.rs");
     let after = src.split("let status = match child.wait() {").nth(1).unwrap();
     let err_arm = after.split("let stderr_text").next().unwrap();
     assert!(err_arm.contains("forget_staged();") && err_arm.contains("fs::remove_file(&staged)"));
@@ -357,7 +365,7 @@ fn a_failed_wait_removes_the_staged_export() {
 // Structural fix, no red unit test: a panic inside the export task cannot be provoked here.
 #[test]
 fn a_failed_export_task_still_closes_its_job_row() {
-    let src = include_str!("../video_editor.rs");
+    let src = source!("../video_editor.rs");
     let body = src.split("pub(crate) async fn export_video(").nth(1).unwrap().split("
 }
 ").next().unwrap();
@@ -369,7 +377,7 @@ fn a_failed_export_task_still_closes_its_job_row() {
 fn a_superseded_filmstrip_loop_stops_before_its_first_thumbnail() {
     // Structural fix, no red unit test: the stale check sits inside the per-thumbnail loop behind a
     // real ffprobe call, so the source contrast pins the wiring and the call below pins the signature.
-    let src = include_str!("../video_editor.rs");
+    let src = source!("../video_editor.rs");
     assert!(src.contains("is_stale: impl Fn() -> bool"));
     assert!(src.contains("FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
         }"));
@@ -399,7 +407,7 @@ fn every_folder_dialog_title_is_translated_in_every_language() {
 // Structural fix, no red unit test: counting real xcap listings needs a live desktop.
 #[test]
 fn a_window_click_lists_the_windows_once() {
-    let src = include_str!("../capture.rs");
+    let src = source!("../capture.rs");
     let body = &src[src.find("pub(crate) async fn capture_window(").unwrap()..src.find("pub(crate) struct WindowProbe").unwrap()];
     assert_eq!(body.matches("xcap::Window::all()").count(), 0, "capture_window must go through probe_window");
     let missing = crate::capture::probe_window(u32::MAX, true);
@@ -409,7 +417,7 @@ fn a_window_click_lists_the_windows_once() {
 // Structural fix, no red unit test: the cost is a 7 MB read per call, not a visible result.
 #[test]
 fn the_verified_pdfium_copy_is_remembered_after_the_first_check() {
-    let src = include_str!("../images.rs");
+    let src = source!("../images.rs");
     let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
     let lookup = body.find("PDFIUM_VERIFIED.get()").expect("lookup");
     let read = body.find("fs::read(&cached)").expect("content check");
@@ -437,7 +445,7 @@ fn saving_the_parts_does_not_hold_the_shared_list_lock() {
 // Structural fix, no red unit test: the old spelling produced the same path as the constant today.
 #[test]
 fn the_key_sidecar_is_always_named_through_the_shared_builder() {
-    let src = include_str!("../media_files.rs");
+    let src = source!("../media_files.rs");
     assert!(!src.contains("with_extension(\"keys.json\")"));
     assert_eq!(crate::media_files::sidecar_path(Path::new("a/rec.mp4"), crate::media_files::KEYS_SIDECAR_EXT), Path::new("a/rec.keys.json"));
 }
@@ -445,7 +453,7 @@ fn the_key_sidecar_is_always_named_through_the_shared_builder() {
 // Structural fix, no red unit test: a write that fails half-way cannot be provoked on demand.
 #[test]
 fn the_ocr_temp_guard_exists_before_the_png_is_written() {
-    let src = include_str!("../ocr.rs");
+    let src = source!("../ocr.rs");
     for save in ["im.save(&out)", "crop.save(&path)"] {
         let at = src.find(save).expect(save);
         let guard = src[..at].rfind("TempFileGuard(Some(").expect("guard");
@@ -457,7 +465,7 @@ fn the_ocr_temp_guard_exists_before_the_png_is_written() {
 #[cfg(windows)]
 #[test]
 fn the_ocr_data_url_is_decoded_on_the_blocking_pool() {
-    let src = include_str!("../ocr_cmds.rs");
+    let src = source!("../ocr_cmds.rs");
     let cmd = src.split("pub(crate) async fn ocr_image_data").nth(1).unwrap().split("fn decode_ocr_data_url").next().unwrap();
     let spawn = cmd.find("spawn_blocking").expect("blocking pool");
     let decode = cmd.find("decode_ocr_data_url(&data_url)").expect("decode call");
@@ -470,7 +478,7 @@ fn the_ocr_data_url_is_decoded_on_the_blocking_pool() {
 // provoked without the real engine.
 #[test]
 fn a_failed_ocr_index_worker_marks_the_job_as_error() {
-    let src = include_str!("../ocr_cmds.rs");
+    let src = source!("../ocr_cmds.rs");
     let body = src.split("pub(crate) async fn ocr_index_backfill").nth(1).unwrap().split("pub(crate) async fn ocr_capabilities(").next().unwrap();
     let at = body.find("Err(e) => {").expect("join error arm");
     let arm = &body[at..at + 200];
@@ -480,7 +488,7 @@ fn a_failed_ocr_index_worker_marks_the_job_as_error() {
 // Structural fix, no red unit test: install_permission_handler cannot be made to fail in a test.
 #[test]
 fn a_camera_window_without_its_permission_handler_is_destroyed() {
-    let src = include_str!("../camera.rs");
+    let src = source!("../camera.rs");
     let at = src.find("if let Err(e) = install_permission_handler(&app, &win) {").expect("error arm");
     let arm = &src[at..at + 120];
     assert!(arm.contains("win.destroy()"), "{arm}");
@@ -520,7 +528,7 @@ fn a_failed_key_sidecar_write_is_an_error_without_the_path() {
 // without owning the system clipboard.
 #[test]
 fn a_refused_clipboard_promise_ends_the_session() {
-    let src = include_str!("../clipwatch.rs");
+    let src = source!("../clipwatch.rs");
     assert!(src.contains("promised = SetClipboardData(CF_UNICODETEXT, 0) != 0;"));
     assert!(src.contains("end_session_with_plain_write(is_first, true);"));
     assert!(src.contains("if AddClipboardFormatListener(hwnd) == 0 {"));
@@ -536,7 +544,7 @@ fn a_reserved_device_name_with_trailing_spaces_before_the_dot_is_refused() {
 // Structural fix, no red unit test: the sweep results stay the same, only the directory reads drop.
 #[test]
 fn the_startup_sweep_reads_the_app_temp_folder_once() {
-    let src = include_str!("../snip.rs");
+    let src = source!("../snip.rs");
     let body = src.split("pub(crate) fn sweep_stale_temp_files_in").nth(1).unwrap().split("pub(crate) fn remove_own_temp_leftovers_in").next().unwrap();
     assert_eq!(body.matches("fs::read_dir(&ocr_dir)").count(), 1);
 }
@@ -567,9 +575,9 @@ fn batch_exports_with_one_target_name_never_overwrite_each_other() {
 #[test]
 fn the_media_dialogs_wait_on_a_blocking_thread() {
     for (name, src, anchors) in [
-        ("images", include_str!("../images.rs"), &["fn pick_file_path", "fn pick_media_file_path"][..]),
-        ("media_files", include_str!("../media_files.rs"), &["fn save_recording_as", "fn pick_export_folder"][..]),
-        ("snip", include_str!("../snip.rs"), &["fn save_screenshot_as", "fn pick_folder"][..]),
+        ("images", source!("../images.rs"), &["fn pick_file_path", "fn pick_media_file_path"][..]),
+        ("media_files", source!("../media_files.rs"), &["fn save_recording_as", "fn pick_export_folder"][..]),
+        ("snip", source!("../snip.rs"), &["fn save_screenshot_as", "fn pick_folder"][..]),
     ] {
         for anchor in anchors {
             let at = src.find(anchor).unwrap_or_else(|| panic!("{name}: {anchor}"));
