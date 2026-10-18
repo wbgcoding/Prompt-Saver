@@ -393,3 +393,13 @@ fn every_folder_dialog_title_is_translated_in_every_language() {
         assert_eq!(sorted.len(), purposes.len(), "{lang} reuses one title for two purposes");
     }
 }
+
+// Structural fix, no red unit test: counting real xcap listings needs a live desktop.
+#[test]
+fn a_window_click_lists_the_windows_once() {
+    let src = include_str!("../capture.rs");
+    let body = &src[src.find("pub(crate) async fn capture_window(").unwrap()..src.find("pub(crate) struct WindowProbe").unwrap()];
+    assert_eq!(body.matches("xcap::Window::all()").count(), 0, "capture_window must go through probe_window");
+    let missing = crate::capture::probe_window(u32::MAX, true);
+    assert!(missing.app_name.is_none() && missing.direct.is_none() && missing.rect.is_none());
+}
