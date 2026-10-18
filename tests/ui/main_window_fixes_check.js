@@ -385,7 +385,7 @@ section(() => {
     await sb.clearErrorLogAll();
     check(calls.join() === "clear_error_log", "confirming clears the error log");
   });
-  const em = read("expertMenu.js");
+  const em = read("recordingTools.js");
   const at = em.indexOf('invoke("delete_discarded_recording_now"');
   check(at > 0 && em.slice(at - 400, at).includes("videoDiscardedDeleteAsk"), "deleting a discarded recording asks first");
 });
