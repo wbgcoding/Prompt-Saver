@@ -1220,7 +1220,8 @@ pub(crate) fn export_video_blocking(
         }
         if !graphs.is_empty() {
             let script = write_filter_script(dst, &graphs.join(";"))?;
-            output_args.push("-filter_complex_script".to_string());
+            // "-/filter_complex <file>" reads the graph from the file; the older -filter_complex_script is gone from the pinned ffmpeg.
+            output_args.push("-/filter_complex".to_string());
             output_args.push(script.to_string_lossy().to_string());
             filter_script = Some(script);
         }
