@@ -42,6 +42,20 @@ pub(crate) fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
     auto && !variants.is_empty()
 }
 
+// Just the fields the rotation and reveal code reads (id, entries, mode, confidential flag).
+// A tile with a picture carries up to a 1024 px data URL; the per-copy paths clone this
+// instead of the whole prompt.
+pub(crate) fn rotation_core(p: &Prompt) -> Prompt {
+    Prompt {
+        id: p.id.clone(),
+        text: p.text.clone(),
+        variants: p.variants.clone(),
+        rotate_mode: p.rotate_mode.clone(),
+        secret: p.secret,
+        ..Prompt::default()
+    }
+}
+
 // "text" is entry 0 (every non-rotating consumer stays correct unchanged),
 // `variants` hold entries 1..n.
 pub(crate) fn rotation_total(p: &Prompt) -> usize {
@@ -186,7 +200,7 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
             Some(p) => {
                 let key = secret_session_key(secret_timeout_min(&store.settings));
                 let (text, variants) = reveal_secret_text(p, key)?;
-                let mut plain = p.clone();
+                let mut plain = rotation_core(p);
                 plain.text = text;
                 plain.variants = variants;
                 CopyPayload::Text(rotation_next(&plain, &store.settings).2)
@@ -206,7 +220,7 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
     if ok && is_text {
         let mut store = lock(&state);
         if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
-            let p = store.prompts[pos].clone();
+            let p = rotation_core(&store.prompts[pos]);
             rotation_advance(&p, &mut store.settings);
             // The pointer survives a restart. Collected rather than written per
             // copy: it is already correct in memory for the next copy.
@@ -248,7 +262,7 @@ pub(crate) fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek
     // does not show rather than reveal ciphertext or the wrong text.
     let key = secret_session_key(secret_timeout_min(&store.settings));
     let (text, variants) = reveal_secret_text(p, key).ok()?;
-    let mut plain = p.clone();
+    let mut plain = rotation_core(p);
     plain.text = text;
     plain.variants = variants;
     let (index, pos, text) = rotation_next(&plain, &store.settings);
@@ -278,7 +292,7 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
     let Ok((text, variants)) = reveal_secret_text(p, key) else {
         return;
     };
-    let mut plain = p.clone();
+    let mut plain = rotation_core(p);
     plain.text = text;
     plain.variants = variants;
     let (index, pos, text) = rotation_next(&plain, settings);
@@ -292,7 +306,7 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
 pub(crate) fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
     if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
-        let p = store.prompts[pos].clone();
+        let p = rotation_core(&store.prompts[pos]);
         rotation_advance(&p, &mut store.settings);
         // The hottest settings write in the app: this runs on every paste of an
         // auto-advancing prompt, so it is collected instead of hitting the disk.

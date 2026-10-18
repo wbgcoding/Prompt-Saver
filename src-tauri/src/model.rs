@@ -2,7 +2,7 @@ use super::*;
 
 // ---------- Data model ----------
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub(crate) struct Prompt {
     pub(crate) id: String,
     pub(crate) name: String,

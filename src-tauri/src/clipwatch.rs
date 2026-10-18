@@ -492,8 +492,12 @@ fn handle_render_format() {
         let mut rearm = false;
         let mut blocked = false;
         if counted {
-            match store.prompts.iter().find(|p| p.id == session.id).cloned() {
-                Some(p) if super::auto_eligible(&p, &store.settings) => {
+            // Only the rotation fields are cloned (a tile with a picture is large).
+            let eligible = store.prompts.iter().find(|p| p.id == session.id)
+                .filter(|p| super::auto_eligible(p, &store.settings))
+                .map(super::rotation_core);
+            match eligible {
+                Some(p) => {
                     // A confidential entry is stored encrypted: decrypt it first, and
                     // end the session when the vault locked meanwhile, so ciphertext
                     // never becomes the next paste.
@@ -511,7 +515,7 @@ fn handle_render_format() {
                         rearm = true;
                     }
                 }
-                _ => {} // prompt gone or turned off mid-session: end quietly
+                None => {} // prompt gone or turned off mid-session: end quietly
             }
         } else if !timed_out {
             session.uncounted_rearms += 1;
