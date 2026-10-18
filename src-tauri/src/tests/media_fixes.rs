@@ -376,3 +376,20 @@ fn a_superseded_filmstrip_loop_stops_before_its_first_thumbnail() {
     );
     assert!(r.is_err(), "the probe of a missing file fails first");
 }
+
+#[test]
+fn every_folder_dialog_title_is_translated_in_every_language() {
+    let purposes = ["screenshot", "videoExport", "recording", "sync", "data"];
+    let en: Vec<&str> = purposes.iter().map(|p| crate::snip::folder_picker_title(p, "en").unwrap()).collect();
+    for lang in crate::model::LANG_CODES {
+        let titles: Vec<&str> = purposes.iter().map(|p| crate::snip::folder_picker_title(p, lang).unwrap()).collect();
+        for (i, t) in titles.iter().enumerate() {
+            assert_ne!(*t, en[i], "{lang} still shows the English title for {}", purposes[i]);
+            assert!(!t.is_empty());
+        }
+        let mut sorted = titles.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), purposes.len(), "{lang} reuses one title for two purposes");
+    }
+}

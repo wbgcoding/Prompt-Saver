@@ -1520,19 +1520,34 @@ pub(crate) fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -
     Err("dir-not-picked".to_string())
 }
 
-// The native dialog title for each purpose pick_folder accepts, so the user sees what the
-// folder will be used for. An unknown purpose has no title on purpose: pick_folder refuses
+// The native dialog title for each purpose pick_folder accepts, in every UI language (the
+// dialog can open before any page string is loaded), so the user sees what the folder will be
+// used for. An unknown purpose has no title on purpose: pick_folder refuses
 // it before any dialog opens.
 pub(crate) fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
-    let de = lang == "de";
-    match purpose {
-        "screenshot" => Some(if de { "Screenshot-Ordner wählen" } else { "Choose the screenshot folder" }),
-        "videoExport" => Some(if de { "Exportordner für Videos wählen" } else { "Choose the video export folder" }),
-        "recording" => Some(if de { "Aufnahmeordner wählen" } else { "Choose the recording folder" }),
-        "sync" => Some(if de { "Sync-Ordner wählen" } else { "Choose the sync folder" }),
-        "data" => Some(if de { "Datenordner wählen" } else { "Choose the data folder" }),
-        _ => None,
-    }
+    // Order: screenshot, videoExport, recording, sync, data.
+    let titles: [&'static str; 5] = match lang {
+        "de" => ["Screenshot-Ordner wählen", "Exportordner für Videos wählen", "Aufnahmeordner wählen", "Sync-Ordner wählen", "Datenordner wählen"],
+        "es" => ["Elegir la carpeta de capturas de pantalla", "Elegir la carpeta de exportación de vídeo", "Elegir la carpeta de grabaciones", "Elegir la carpeta de sincronización", "Elegir la carpeta de datos"],
+        "it" => ["Scegli la cartella degli screenshot", "Scegli la cartella di esportazione dei video", "Scegli la cartella delle registrazioni", "Scegli la cartella di sincronizzazione", "Scegli la cartella dei dati"],
+        "pt" => ["Escolher a pasta das capturas de ecrã", "Escolher a pasta de exportação de vídeo", "Escolher a pasta das gravações", "Escolher a pasta de sincronização", "Escolher a pasta de dados"],
+        "pl" => ["Wybierz folder zrzutów ekranu", "Wybierz folder eksportu wideo", "Wybierz folder nagrań", "Wybierz folder synchronizacji", "Wybierz folder danych"],
+        "zh" => ["选择截图文件夹", "选择视频导出文件夹", "选择录制文件夹", "选择同步文件夹", "选择数据文件夹"],
+        "ja" => ["スクリーンショットのフォルダーを選択", "動画の書き出し先フォルダーを選択", "録画フォルダーを選択", "同期フォルダーを選択", "データフォルダーを選択"],
+        "nl" => ["Kies de map voor screenshots", "Kies de exportmap voor video's", "Kies de opnamemap", "Kies de synchronisatiemap", "Kies de gegevensmap"],
+        "tr" => ["Ekran görüntüsü klasörünü seçin", "Video dışa aktarma klasörünü seçin", "Kayıt klasörünü seçin", "Eşitleme klasörünü seçin", "Veri klasörünü seçin"],
+        "ro" => ["Alegeți folderul pentru capturi de ecran", "Alegeți folderul de export video", "Alegeți folderul pentru înregistrări", "Alegeți folderul de sincronizare", "Alegeți folderul de date"],
+        _ => ["Choose the screenshot folder", "Choose the video export folder", "Choose the recording folder", "Choose the sync folder", "Choose the data folder"],
+    };
+    let idx = match purpose {
+        "screenshot" => 0,
+        "videoExport" => 1,
+        "recording" => 2,
+        "sync" => 3,
+        "data" => 4,
+        _ => return None,
+    };
+    Some(titles[idx])
 }
 
 // Native folder picker (expert screenshot-dir and data-dir options). purpose names the
