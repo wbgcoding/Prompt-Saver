@@ -3270,10 +3270,12 @@ async function startExport(toClipboard) {
   if (total < 1) { toast(t("veNothingToExport")); return; }
   const lossless = isLosslessCopy();
   const format = exportFormat();
+  // Claimed before the first await, so a double click cannot start a second export.
+  VE.exporting = true;
   let dest = toClipboard
     ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(errMessageLogged(err, t, "video")); return null; })
     : destPath();
-  if (!dest) return;
+  if (!dest) { VE.exporting = false; return; }
   // Another recording can be opened while this export still runs; its result
   // must never touch that recording's state.
   const gen = VE.loadGen;
