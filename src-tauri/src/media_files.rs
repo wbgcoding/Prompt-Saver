@@ -815,11 +815,12 @@ pub(crate) fn local_app_dir_in(base: Option<std::ffi::OsString>) -> Option<PathB
 pub(crate) fn is_clip_export_file(temp_root: &Path, path: &Path) -> bool {
     let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if !name.starts_with(&prefix) || !path.is_file() {
+    if !name.starts_with(&prefix) || is_network_path(&path.to_string_lossy()) {
         return false;
     }
+    // The parent decides first, so a path outside the temp folder is never itself touched.
     let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
-    temp_root.canonicalize().map(|c| c == parent).unwrap_or(false)
+    temp_root.canonicalize().map(|c| c == parent).unwrap_or(false) && path.is_file()
 }
 
 // recDiscardKeepH has no expert-menu row yet (like recCanvasMode above); 0 disables the

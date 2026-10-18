@@ -876,3 +876,31 @@ fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
     let allowed = &allowed[..allowed.find("\n}\n").unwrap()];
     assert!(allowed.find("is_network_path(").is_some_and(|n| n < allowed.find("canonicalize(").unwrap()), "text check before the first canonicalize");
 }
+
+#[test]
+fn a_clip_export_path_is_judged_by_its_parent_before_the_file_is_touched() {
+    let root = std::env::temp_dir().join(format!("ps-clipexp-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let temp = root.join("tmp");
+    let other = root.join("other");
+    fs::create_dir_all(&temp).unwrap();
+    fs::create_dir_all(&other).unwrap();
+    let name = format!("{}-clipexport-1.mp4", brand::TEMP_PREFIX);
+    fs::write(temp.join(&name), b"v").unwrap();
+    fs::write(other.join(&name), b"v").unwrap();
+    assert!(is_clip_export_file(&temp, &temp.join(&name)));
+    assert!(!is_clip_export_file(&temp, &other.join(&name)), "same name in a foreign folder");
+    assert!(!is_clip_export_file(&temp, &temp.join("..").join("other").join(&name)), "a dot-dot hop");
+    assert!(!is_clip_export_file(&temp, Path::new("//host/share/x")), "network text");
+    let _ = fs::remove_dir_all(&root);
+    // The disk is asked about the parent and the network spelling is judged on text first;
+    // the file itself is only touched once the parent has matched.
+    let src = source!("../media_files.rs");
+    let at = src.find("pub(crate) fn is_clip_export_file").unwrap();
+    let body = &src[at..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let file_at = body.find(".is_file()").expect("still checks the file");
+    let parent_at = body.find("canonicalize()").expect("parent check");
+    assert!(body.find("is_network_path(").is_some_and(|n| n < parent_at), "text check first");
+    assert!(parent_at < file_at, "the parent decides before the file is touched");
+}
