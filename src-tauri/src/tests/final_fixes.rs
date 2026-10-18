@@ -64,7 +64,7 @@ fn the_apps_own_network_folders_pass_the_path_gate() {
     assert!(!attachment_path_refused(&own, &data, r"\\nas\ps\data\files\a.pdf"));
     assert!(attachment_path_refused(&own, &data, r"\\nas\ps\other\a.pdf"));
     // The recording gate refuses a foreign share on text before it asks the disk anything.
-    assert!(!is_recording_source_location(&[rec.clone()], Path::new(r"\\nas\videos\other\rec-1.mp4")));
+    assert!(!is_recording_source_location(std::slice::from_ref(&rec), Path::new(r"\\nas\videos\other\rec-1.mp4")));
 }
 
 #[test]

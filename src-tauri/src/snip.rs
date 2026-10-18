@@ -1883,7 +1883,7 @@ impl Drop for DataMoveGuard {
 fn move_data_dir_blocking(app: &AppHandle, new: PathBuf) -> Result<String, String> {
     let state = app.state::<Db>();
     fs::create_dir_all(&new).map_err(|e| e.to_string())?;
-    let current = data_dir(&app);
+    let current = data_dir(app);
     let old = current.to_string_lossy().to_string();
     if path_matches_configured_dir(&new, &current) {
         return Ok(old);
@@ -1896,16 +1896,16 @@ fn move_data_dir_blocking(app: &AppHandle, new: PathBuf) -> Result<String, Strin
             let store = lock(&state);
             // A locked store refuses prompt writes on purpose; its unreadable rows are still in the
             // file and the copy brings them along. That is not a failed flush.
-            if !store.prompts_locked && !save_prompts(&app, &store) {
+            if !store.prompts_locked && !save_prompts(app, &store) {
                 return Err("the prompts could not be saved to the folder being left".to_string());
             }
-            if !save_settings(&app, &store.settings) {
+            if !save_settings(app, &store.settings) {
                 return Err("the settings could not be saved to the folder being left".to_string());
             }
         }
         // Fold the WAL back into data.db so the single-file copy is complete
         // (recent copy_log appends can otherwise still live in data.db-wal).
-        if let Some(c) = db_conn(&app) {
+        if let Some(c) = db_conn(app) {
             checkpoint_wal(&c, 10)?;
         }
         Ok(())
@@ -1922,28 +1922,28 @@ fn move_data_dir_blocking(app: &AppHandle, new: PathBuf) -> Result<String, Strin
                 return Err("the stored prompts are unreadable and cannot be rewritten".to_string());
             }
             let changed = rebase_store_media(&mut store.prompts, &mut store.trash, &mut store.settings, &current, &new);
-            if (changed.prompts && !save_prompts(&app, store))
-                || (changed.trash && !save_trash(&app, store))
-                || (changed.settings && !save_settings(&app, &store.settings))
+            if (changed.prompts && !save_prompts(app, store))
+                || (changed.trash && !save_trash(app, store))
+                || (changed.settings && !save_settings(app, &store.settings))
             {
                 return Err("the updated paths could not be saved".to_string());
             }
         }
         // Saved editor work names its source file too. Losing it only costs the saved edits, so a
         // failure here does not keep the old folder.
-        if let Some(c) = db_conn(&app) {
+        if let Some(c) = db_conn(app) {
             if let Err(e) = rebase_edit_state(&c, &current, &new) {
                 append_crash_log(&format!("data dir move: saved editor state not updated ({e})"));
             }
         }
         Ok(())
     };
-    let adopted = move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind, &mut rebase)?;
+    let adopted = move_store_dir(&current, &new, &default_data_dir(app), &mut flush, &mut rebind, &mut rebase)?;
     if adopted {
         // The folder already held a library, and data_dir() points here: the in-memory store from
         // the folder just left would be written over it (or merge both libraries). Load what is
         // really in the new folder.
-        let fresh = load_store(&app);
+        let fresh = load_store(app);
         let mut store = lock(&state);
         end_session_if_vault_changed(&store.settings, &fresh.settings);
         *store = fresh;
