@@ -127,9 +127,21 @@ fn stats_csv_export_escapes_semicolons_and_quotes_in_names() {
 fn stats_txt_and_json_export_carry_the_same_entries_and_daily_counts() {
     let entries = vec![StatsExportEntry { name: "Mail".into(), copies: 5, last_used: 42 }];
     let daily = vec![DayCount { ts: 1700000000, count: 4 }];
-    let txt = stats_to_txt(&entries, &daily, &[]);
-    assert!(txt.contains("Mail: 5 copies, last used 42"));
-    assert!(txt.contains("1700000000: 4"));
+    let txt = stats_to_txt(&entries, &daily, &[], StatsTxtLabels::default());
+    assert!(txt.contains("Mail: 5 copies, last used 1970-01-01"));
+    assert!(txt.contains("2023-11-14: 4"));
+    let de = StatsTxtLabels {
+        prompts: "Prompts".into(),
+        daily: "Kopien pro Tag".into(),
+        copies: "{n} Kopien, zuletzt {date}".into(),
+        never: "nie".into(),
+        ..Default::default()
+    };
+    let never = vec![StatsExportEntry { name: "Neu".into(), copies: 0, last_used: 0 }];
+    let txt = stats_to_txt(&never, &daily, &[], de);
+    assert!(txt.contains("Kopien pro Tag\n=============="), "{txt}");
+    assert!(txt.contains("Neu: 0 Kopien, zuletzt nie"), "{txt}");
+    assert!(!txt.contains("1700000000"));
     let json = stats_to_json(&entries, &daily, &[]);
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["version"], 1);

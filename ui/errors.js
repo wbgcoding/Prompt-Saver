@@ -17,7 +17,7 @@ export const ERROR_MSG_KEYS = {
   "installer too large / truncated": "errUpdaterTooLarge",
   "downloaded file is not a valid installer": "errUpdaterInvalidInstaller",
   "update hash mismatch: download rejected": "errUpdaterHashMismatch",
-  "update signature invalid: download rejected": "errUpdaterHashMismatch",
+  "update signature invalid: download rejected": "errUpdaterSignature",
   "backup expands to more than 512 MB": "errBackupTooLarge",
   "store-too-large-for-backup": "errStoreTooLargeForBackup",
   "backup-schema-mismatch": "errBackupSchemaMismatch",

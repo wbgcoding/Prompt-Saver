@@ -213,20 +213,67 @@ pub(crate) fn stats_to_csv(entries: &[StatsExportEntry], daily: &[DayCount], too
     rows.join("\r\n")
 }
 
-pub(crate) fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
-    use std::fmt::Write;
-    let mut out = String::from("Prompts\n=======\n");
-    for e in entries {
-        let _ = writeln!(out, "{}: {} copies, last used {}", e.name, e.copies, e.last_used);
+// The words of the text export in the UI language. `copies` and `uses` carry `{n}` and
+// `{date}`; a missing label falls back to English.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub(crate) struct StatsTxtLabels {
+    pub(crate) prompts: String,
+    pub(crate) daily: String,
+    pub(crate) tools: String,
+    pub(crate) copies: String,
+    pub(crate) uses: String,
+    pub(crate) never: String,
+}
+
+impl StatsTxtLabels {
+    fn or_english(mut self) -> Self {
+        let fill = |s: &mut String, en: &str| {
+            if s.trim().is_empty() {
+                *s = en.to_string();
+            }
+        };
+        fill(&mut self.prompts, "Prompts");
+        fill(&mut self.daily, "Daily copies");
+        fill(&mut self.tools, "Tool usage");
+        fill(&mut self.copies, "{n} copies, last used {date}");
+        fill(&mut self.uses, "{n} uses, last used {date}");
+        fill(&mut self.never, "never");
+        self
     }
-    out.push_str("\nDaily copies\n============\n");
+}
+
+// A unix time in seconds as a calendar date (YYYY-MM-DD, readable in every language).
+pub(crate) fn stats_date(secs: u64) -> String {
+    let (y, m, d) = crate::backups::civil_from_days((secs / 86_400) as i64);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+pub(crate) fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry], labels: StatsTxtLabels) -> String {
+    use std::fmt::Write;
+    let l = labels.or_english();
+    let heading = |out: &mut String, title: &str| {
+        let _ = writeln!(out, "{title}\n{}", "=".repeat(title.chars().count().max(3)));
+    };
+    let line = |template: &str, n: u32, last: u64| {
+        let date = if last == 0 { l.never.clone() } else { stats_date(last) };
+        template.replace("{n}", &n.to_string()).replace("{date}", &date)
+    };
+    let mut out = String::new();
+    heading(&mut out, &l.prompts);
+    for e in entries {
+        let _ = writeln!(out, "{}: {}", e.name, line(&l.copies, e.copies, e.last_used));
+    }
+    out.push('\n');
+    heading(&mut out, &l.daily);
     for d in daily {
-        let _ = writeln!(out, "{}: {}", d.ts, d.count);
+        let _ = writeln!(out, "{}: {}", stats_date(d.ts), d.count);
     }
     if !tools.is_empty() {
-        out.push_str("\nTool usage\n==========\n");
+        out.push('\n');
+        heading(&mut out, &l.tools);
         for t in tools {
-            let _ = writeln!(out, "{}: {} uses, last used {}", t.name, t.copies, t.last_used);
+            let _ = writeln!(out, "{}: {}", t.name, line(&l.uses, t.copies, t.last_used));
         }
     }
     out
@@ -246,7 +293,7 @@ pub(crate) fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], to
 // Same shape as export_prompts (format select, save dialog), fed from the statistics
 // dashboard's own button so the export action sits next to the data on screen.
 #[tauri::command]
-pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String) -> Result<usize, String> {
+pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String, labels: Option<StatsTxtLabels>) -> Result<usize, String> {
     let daily = db_conn(&app).map(|c| db_daily_copies(&c, 14)).unwrap_or_default();
     let (entries, tools) = {
         let store = lock(&state);
@@ -266,7 +313,7 @@ pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: S
     let count = entries.len();
     let content = match format.as_str() {
         "csv" => stats_to_csv(&entries, &daily, &tools),
-        "txt" => stats_to_txt(&entries, &daily, &tools),
+        "txt" => stats_to_txt(&entries, &daily, &tools, labels.unwrap_or_default()),
         "json" => stats_to_json(&entries, &daily, &tools),
         _ => return Err("unsupported-export-format".to_string()),
     };

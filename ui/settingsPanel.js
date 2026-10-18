@@ -61,7 +61,11 @@ export async function runExport(format) {
 // toast: the save dialog closing is confirmation enough.
 export async function runStatsExport(format) {
   try {
-    await withDialog(() => invoke("export_stats", { format }));
+    const labels = {
+      prompts: t("statsTxtPrompts"), daily: t("statsTxtDaily"), tools: t("statsTxtTools"),
+      copies: t("statsTxtCopies"), uses: t("statsTxtUses"), never: t("statsTxtNever"),
+    };
+    await withDialog(() => invoke("export_stats", { format, labels }));
   } catch (err) {
     if (String(err) !== "canceled") toast(t("exportFailed"));
   }
