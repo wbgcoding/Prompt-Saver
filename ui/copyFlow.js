@@ -68,7 +68,7 @@ export async function peekResolveCommit(p, copyFn, opts) {
     afterResolve?.();
     if (text === null || text === false) return false;
     const ok = await copyFn(text);
-    if (ok && rotating && peek) { await invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
+    if (ok && rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     return ok;
   } finally {
     if (rotating) rotatingInFlight.delete(p.id);
