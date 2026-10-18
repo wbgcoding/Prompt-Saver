@@ -289,6 +289,21 @@ pub(crate) fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
 // The unpacked copy, once its content was compared with the compiled-in one: every later page
 // flip skips the 7 MB read and the folder sweep. It is dropped for a re-check if the file vanishes.
 static PDFIUM_VERIFIED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+// The handle the content check ran on, kept for the whole run: while it is open (sharing
+// read only) no other process can write, rename or delete the file, so the bytes compared
+// are the bytes the loader later maps.
+static PDFIUM_HOLD: std::sync::OnceLock<fs::File> = std::sync::OnceLock::new();
+
+// Opens `path` so that others may read it but not write, rename or delete it, reads it from
+// that very handle and returns the handle only when the content equals `expected`.
+pub(crate) fn open_verified_pdfium(path: &std::path::Path, expected: &[u8]) -> Option<fs::File> {
+    use std::io::Read;
+    use std::os::windows::fs::OpenOptionsExt;
+    let mut file = fs::OpenOptions::new().read(true).share_mode(1).open(path).ok()?;
+    let mut got = Vec::with_capacity(expected.len());
+    file.read_to_end(&mut got).ok()?;
+    (got == expected).then_some(file)
+}
 
 pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     let name = "pdfium.dll";
@@ -313,7 +328,8 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     // CONTENT matches the copy compiled into this exe: a length check alone would let a
     // pre-planted same-size DLL get loaded as native code. Rewritten otherwise, which also
     // repairs a truncated write from an interrupted first run.
-    if fs::read(&cached).is_ok_and(|got| got == PDFIUM_DLL) {
+    if let Some(held) = open_verified_pdfium(&cached, PDFIUM_DLL) {
+        let _ = PDFIUM_HOLD.set(held);
         let _ = PDFIUM_VERIFIED.set(cached.clone());
         return Some(cached);
     }
@@ -324,6 +340,13 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
         append_crash_log(&format!("pdfium unpack failed: {e}"));
         return None;
     }
+    // The fresh copy is checked and locked through one handle too, so it cannot be swapped
+    // between the write and the load.
+    let Some(held) = open_verified_pdfium(&cached, PDFIUM_DLL) else {
+        append_crash_log("pdfium unpack could not be verified");
+        return None;
+    };
+    let _ = PDFIUM_HOLD.set(held);
     let _ = PDFIUM_VERIFIED.set(cached.clone());
     Some(cached)
 }

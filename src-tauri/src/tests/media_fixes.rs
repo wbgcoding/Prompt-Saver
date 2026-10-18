@@ -420,7 +420,7 @@ fn the_verified_pdfium_copy_is_remembered_after_the_first_check() {
     let src = source!("../images.rs");
     let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
     let lookup = body.find("PDFIUM_VERIFIED.get()").expect("lookup");
-    let read = body.find("fs::read(&cached)").expect("content check");
+    let read = body.find("open_verified_pdfium(&cached").expect("content check");
     assert!(lookup < read, "the remembered path is consulted before the content check");
     assert_eq!(body.matches("PDFIUM_VERIFIED.set(").count(), 2);
 }
@@ -729,4 +729,29 @@ fn the_recording_source_check_refuses_every_network_spelling_by_text() {
     for p in [r"/\host\share\rec-1.mp4", r"\??\UNC\host\share\rec-1.mp4", r"\?\UNC\host\share\rec-1.mp4", r"\.\GLOBALROOT\Device\x\rec-1.mp4"] {
         assert!(!is_recording_source_location(&allowed, Path::new(p)), "{p}");
     }
+}
+
+#[test]
+fn the_verified_pdfium_copy_is_held_open_so_it_cannot_be_swapped() {
+    let dir = std::env::temp_dir().join(format!("ps-pdfhold-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pdfium-test.dll");
+    fs::write(&path, b"expected bytes").unwrap();
+    // Content that differs is refused, and the refused open keeps nothing locked.
+    assert!(open_verified_pdfium(&path, b"other bytes").is_none());
+    assert!(fs::write(&path, b"expected bytes").is_ok());
+    let held = open_verified_pdfium(&path, b"expected bytes").expect("matches");
+    assert!(fs::write(&path, b"swapped").is_err(), "no write while the handle is held");
+    assert!(fs::remove_file(&path).is_err(), "no delete while the handle is held");
+    assert!(fs::rename(&path, dir.join("moved.dll")).is_err(), "no rename while the handle is held");
+    assert_eq!(fs::read(&path).unwrap(), b"expected bytes", "readers still get the file");
+    drop(held);
+    assert!(fs::remove_file(&path).is_ok());
+    let _ = fs::remove_dir_all(&dir);
+    // The lookup keeps the handle for the whole run, and never re-reads the path to verify.
+    let src = source!("../images.rs");
+    let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
+    assert!(body.contains("PDFIUM_HOLD.set("));
+    assert!(!body.contains("fs::read(&cached)"));
 }
