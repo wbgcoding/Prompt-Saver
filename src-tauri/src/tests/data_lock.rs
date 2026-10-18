@@ -1162,6 +1162,22 @@ fn resolve_relative_file_paths_covers_trash_rows_too() {
     assert!(Path::new(&trash[0].file_path).is_absolute());
 }
 
+// A relative path that climbs out of the data folder (or enters a sub folder)
+// must not be joined onto it: the row keeps its other fields and loses the path.
+#[test]
+fn resolve_relative_file_paths_refuses_a_path_that_leaves_the_data_dir() {
+    let dir = std::env::temp_dir().join(format!("{}-test-resolve-relative-escape", brand::SLUG));
+    let mut rows = vec![
+        Prompt { file_path: "..\\..\\Windows\\win.ini".to_string(), ..test_prompt("up") },
+        Prompt { file_path: "sub/inner.txt".to_string(), ..test_prompt("sub") },
+        Prompt { file_path: "ok.txt".to_string(), ..test_prompt("bare") },
+    ];
+    resolve_relative_file_paths(&dir, &mut rows);
+    assert_eq!(rows[0].file_path, "");
+    assert_eq!(rows[1].file_path, "");
+    assert_eq!(rows[2].file_path, dir.join("ok.txt").to_string_lossy().to_string());
+}
+
 // Portable mode's data dir is the exe folder; a custom data dir is common
 // too. A real attachment the file picker placed directly inside either
 // (its absolute path's parent equals the data dir, same as the demo

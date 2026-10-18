@@ -1138,7 +1138,18 @@ pub(crate) fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
 pub(crate) fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
     for p in rows.iter_mut() {
         if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
-            p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+            // Only a bare file name is meant here (demo rows). A path with a parent or sub
+            // folder would resolve outside the data folder, so that row loses the path.
+            let mut parts = Path::new(&p.file_path).components();
+            let bare = matches!(
+                (parts.next(), parts.next()),
+                (Some(std::path::Component::Normal(_)), None)
+            );
+            if bare {
+                p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+            } else {
+                p.file_path.clear();
+            }
         }
     }
 }
