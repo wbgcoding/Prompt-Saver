@@ -396,8 +396,10 @@ fn is_inside_own_network_dir(raw: &str, own_dirs: &[PathBuf]) -> bool {
 
 // Whether a path handed in from the UI may not become (or stay) a prompt's attachment: it
 // names another machine (outside the app's own folders, `own_dirs`), or it is one of the app's
-// own store files (the database, its journal, the settings) directly inside the data folder.
-// The attachment copies live in the `files` subfolder and stay allowed. Judged on text first,
+// own store files (the database, its journal, the settings, the folder lock and their leftovers)
+// directly inside the data folder. Any other file there stays attachable: the attachment copies
+// live in the `files` subfolder, demo rows name bare files in the data folder itself and a
+// portable install keeps the user's files beside the program. Judged on text first,
 // so a refused network path is never touched; a file that does not exist is not refused here
 // (an attachment that moved must remain re-savable), and an empty path means "none".
 pub(crate) fn attachment_path_refused(own_dirs: &[PathBuf], data_dir: &Path, raw: &str) -> bool {
@@ -408,7 +410,7 @@ pub(crate) fn attachment_path_refused(own_dirs: &[PathBuf], data_dir: &Path, raw
         return true;
     }
     let (Ok(file), Ok(dir)) = (fs::canonicalize(raw), fs::canonicalize(data_dir)) else { return false };
-    file.parent() == Some(dir.as_path())
+    file.parent() == Some(dir.as_path()) && file.file_name().and_then(|n| n.to_str()).is_some_and(|n| is_app_data_file(n, false))
 }
 
 // `Volume{01234567-89ab-cdef-0123-456789abcdef}` followed by nothing or a separator.

@@ -80,6 +80,23 @@ fn every_network_gate_that_can_meet_an_own_folder_asks_the_own_dir_rule() {
 }
 
 #[test]
+fn only_the_apps_own_store_files_are_refused_inside_the_data_folder() {
+    let root = std::env::temp_dir().join(format!("ps-ownfiles-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    for name in ["data.db", "data.db-wal", "data.db-shm", "prompts.json", "settings.json", "datapath", "data.db.tmp", "backup.psb"] {
+        fs::write(root.join(name), b"x").unwrap();
+        assert!(attachment_path_refused(&[], &root, &root.join(name).to_string_lossy()), "{name} is the app's own");
+    }
+    // A bare demo file, the user's own document and a portable install's files stay attachable.
+    for name in ["demo.png", "notes.pdf", "Manual.pdf", "clip.mp4"] {
+        fs::write(root.join(name), b"x").unwrap();
+        assert!(!attachment_path_refused(&[], &root, &root.join(name).to_string_lossy()), "{name} is the user's");
+    }
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn an_update_does_not_re_vet_the_path_the_prompt_already_holds() {
     let src = source!("../prompts.rs");
     let at = src.find("pub(crate) async fn update_prompt").unwrap();

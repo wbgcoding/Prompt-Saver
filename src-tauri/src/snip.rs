@@ -1917,7 +1917,7 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
 // Whether a file name is something the app itself wrote into its data folder: the store
 // files, their atomic-write leftovers, the locked-database copies, the export journal, the
 // folder lock, the redirect pointer and vault backups. Anything else is the user's.
-fn is_app_data_file(name: &str, keep_pointer: bool) -> bool {
+pub(crate) fn is_app_data_file(name: &str, keep_pointer: bool) -> bool {
     let lower = name.to_lowercase();
     if lower == "datapath" {
         return !keep_pointer;
