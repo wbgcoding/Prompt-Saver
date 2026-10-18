@@ -491,6 +491,19 @@ section(() => {
   check(guardAt > 0 && guardAt < escBlock.indexOf("closeShortcutsModal"), "Escape returns early while the tour is topmost, before any overlay closes");
 });
 
+// 21. U1: the thumb cache prune builds the live id set once, not a scan per cached id.
+section(() => {
+  const src = extractBlock(read("core.js"), "export function pruneThumbCache(").replace("export ", "");
+  let reads = 0;
+  const list = [{ id: "a" }, { id: "b" }];
+  const prompts = new Proxy(list, { get(t, k) { if (k === "some") reads += 100; return t[k]; } });
+  const sb = run(src, { prompts });
+  const cache = new Map([["a", 1], ["b", 2], ["gone", 3]]);
+  sb.pruneThumbCache(cache);
+  check([...cache.keys()].join() === "a,b", "prune drops only ids no prompt has");
+  check(reads === 0, "prune does not scan the prompts once per cached id");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
