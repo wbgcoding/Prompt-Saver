@@ -312,7 +312,10 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
     let dialog_app = app.clone();
     let file_name = format!("{}.json", export_file_name_from(&theme.name, "theme"));
     let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&dialog_app).set_file_name(file_name).add_filter("JSON", &["json"]).save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -327,7 +330,7 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
 #[tauri::command]
 pub(crate) async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Settings, String> {
     let dialog_app = app.clone();
-    let file = tauri::async_runtime::spawn_blocking(move || file_dialog(&dialog_app).add_filter("JSON", &["json"]).pick_file())
+    let file = tauri::async_runtime::spawn_blocking(move || crate::floating::on_dialog_thread(move || file_dialog(&dialog_app).add_filter("JSON", &["json"]).pick_file()).flatten())
         .await
         .map_err(|e| e.to_string())?;
     let Some(path) = file else {

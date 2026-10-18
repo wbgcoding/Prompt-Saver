@@ -323,10 +323,13 @@ pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: S
     let dialog_app = app.clone();
     let dialog_format = format.clone();
     let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&dialog_app)
             .set_file_name(format!("usage-stats.{dialog_format}"))
             .add_filter(dialog_format.to_uppercase(), &[dialog_format.as_str()])
             .save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;

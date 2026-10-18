@@ -485,10 +485,13 @@ pub(crate) async fn export_prompts(
     let dialog_app = app.clone();
     let dialog_format = format.clone();
     let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&dialog_app)
             .set_file_name(format!("{}.{}", brand::ITEM_PLURAL, dialog_format))
             .add_filter(dialog_format.to_uppercase(), &[dialog_format.as_str()])
             .save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -871,7 +874,10 @@ pub(crate) struct ImportPreview {
 pub(crate) async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPreview, String> {
     let dialog_app = app.clone();
     let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&dialog_app).add_filter(title_case(brand::ITEM_PLURAL), &["csv", "txt", "json"]).pick_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -1196,7 +1202,7 @@ pub(crate) fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) 
 #[tauri::command]
 pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, title: String) -> Result<FolderImportPreview, String> {
     let dialog_app = app.clone();
-    let picked = tauri::async_runtime::spawn_blocking(move || file_dialog(&dialog_app).set_title(&title).pick_folder())
+    let picked = tauri::async_runtime::spawn_blocking(move || crate::floating::on_dialog_thread(move || file_dialog(&dialog_app).set_title(&title).pick_folder()).flatten())
         .await
         .map_err(|e| e.to_string())?;
     let Some(dir) = picked else {

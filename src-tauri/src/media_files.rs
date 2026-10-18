@@ -537,7 +537,10 @@ pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win:
     let dialog_app = app.clone();
     let dialog_label = win.label().to_string();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog_for(&dialog_app, &dialog_label).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -709,7 +712,7 @@ pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u
 #[tauri::command]
 pub(crate) async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
-    let result = tauri::async_runtime::spawn_blocking(move || file_dialog_for(&app, &label).pick_folder()).await.ok().flatten();
+    let result = tauri::async_runtime::spawn_blocking(move || crate::floating::on_dialog_thread(move || file_dialog_for(&app, &label).pick_folder()).flatten()).await.ok().flatten();
     let _ = win.set_focus();
     if let Some(dir) = &result {
         // remember_export_dest_dir authorizes exporting into this folder right away

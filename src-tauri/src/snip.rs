@@ -1384,11 +1384,14 @@ pub(crate) async fn save_screenshot_as(
     let dir = default_dir.filter(|d| !d.trim().is_empty());
     // The dialog is modal: it waits on a blocking thread, not on an async worker.
     let picked = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         let mut dlg = file_dialog_for(&app, &dialog_label).add_filter(ext.to_uppercase(), &[ext]).set_file_name(&name);
         if let Some(dir) = dir {
             dlg = dlg.set_directory(dir);
         }
         dlg.save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -1563,7 +1566,10 @@ pub(crate) async fn pick_folder(app: AppHandle, win: tauri::Window, state: State
     };
     let label = win.label().to_string();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog_for(&app, &label).set_title(title).pick_folder().map(|p| p.to_string_lossy().to_string())
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;

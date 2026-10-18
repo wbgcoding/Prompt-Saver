@@ -932,3 +932,38 @@ fn still_frame_at_clip_end_falls_back_to_last_frame() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// The dialog backend needs a single-threaded COM apartment. A pool thread that already joined
+// the multithreaded one (audio does) would make every dialog return "nothing picked".
+#[cfg(windows)]
+#[test]
+fn dialogs_run_on_a_thread_without_a_com_apartment() {
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED};
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    }
+    let fresh = floating::on_dialog_thread(|| unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok() });
+    assert_eq!(fresh, Some(true), "the dialog thread must be free to pick its own apartment");
+}
+
+#[test]
+fn every_native_dialog_call_runs_inside_the_dialog_thread_helper() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
+        let src = std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+        for call in [".pick_folder()", ".pick_file()", ".pick_files()", ".save_file()"] {
+            for (at, _) in src.match_indices(call) {
+                let head = &src[..at];
+                let fn_start = head.rfind("\nfn ").max(head.rfind("\nasync fn ")).max(head.rfind(" fn ")).unwrap_or(0);
+                assert!(head[fn_start..].contains("on_dialog_thread("), "{}: {call} must run inside on_dialog_thread", path.display());
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked >= 17, "the scan must actually see the dialog calls, saw {checked}");
+}

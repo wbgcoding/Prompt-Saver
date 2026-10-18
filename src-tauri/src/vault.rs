@@ -683,10 +683,13 @@ pub(crate) async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<u
     // The save dialog is modal: it waits on a blocking thread, not on an async worker.
     let dialog_app = app.clone();
     let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&dialog_app)
             .set_file_name(format!("{}-backup.psb", brand::SLUG))
             .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
             .save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -719,10 +722,13 @@ pub(crate) struct ImportSummary {
 #[tauri::command]
 pub(crate) async fn pick_backup_file(app: AppHandle) -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&app)
             .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
             .pick_file()
             .map(|p| p.display().to_string())
+        })
+        .flatten()
     })
     .await
     .ok()
@@ -769,10 +775,13 @@ pub(crate) async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -
     let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
     let dialog_app = app.clone();
     let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog(&dialog_app)
             .set_file_name(format!("{}-settings.json", brand::SLUG))
             .add_filter("JSON", &["json"])
             .save_file()
+        })
+        .flatten()
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -787,7 +796,7 @@ pub(crate) async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -
 
 #[tauri::command]
 pub(crate) async fn pick_settings_import_file(app: AppHandle) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string()))
+    tauri::async_runtime::spawn_blocking(move || crate::floating::on_dialog_thread(move || file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string())).flatten())
         .await
         .ok()
         .flatten()

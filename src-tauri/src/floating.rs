@@ -67,6 +67,15 @@ pub(crate) fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
     }
 }
 
+// Runs a native dialog call on a freshly spawned thread and waits for it. The blocking pool
+// reuses threads, and other code (audio, speech) may already have put one into the
+// multithreaded COM apartment; the dialog backend needs a single-threaded one and silently
+// returns "nothing picked" on a mismatch. A new thread has no apartment yet. None only when
+// the thread could not start or panicked.
+pub(crate) fn on_dialog_thread<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    std::thread::Builder::new().name("file-dialog".into()).spawn(f).ok()?.join().ok()
+}
+
 // Pure label choice: the requested window if open, else "main", else nobody. Kept apart
 // from the AppHandle lookup so it is unit-testable.
 pub(crate) fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Option<&str> {

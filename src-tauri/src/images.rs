@@ -210,7 +210,10 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
     let label = win.label().to_string();
     // The dialog is modal: it waits on a blocking thread, not on an async worker.
     let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog_for(&app, &label).pick_file().map(|p| p.to_string_lossy().to_string())
+        })
+        .flatten()
     })
     .await
     .ok()
@@ -226,6 +229,7 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
 pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::floating::on_dialog_thread(move || {
         file_dialog_for(&app, &label)
             .add_filter(
                 "Images and videos",
@@ -233,6 +237,8 @@ pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> 
             )
             .pick_file()
             .map(|p| p.to_string_lossy().to_string())
+        })
+        .flatten()
     })
     .await
     .ok()
