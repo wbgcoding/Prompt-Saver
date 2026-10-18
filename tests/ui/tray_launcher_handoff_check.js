@@ -91,7 +91,7 @@ function fakeEl() {
     removeEventListener() {},
     fire(t, ev) { for (const fn of h[t] || []) fn(ev || {}); },
     appendChild(c) { el.children.push(c); return c; },
-    append() {}, replaceChildren() { el.children = []; }, setAttribute() {}, focus() {}, scrollIntoView() {}, contains: () => false,
+    append() {}, replaceChildren() { el.children = []; }, setAttribute() {}, removeAttribute() {}, focus() {}, scrollIntoView() {}, contains: () => false,
     setSelectionRange(a) { el.selection = a; },
   };
   Object.defineProperty(el, "innerHTML", { get: () => "", set: () => { el.children = []; } });

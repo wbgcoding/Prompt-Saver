@@ -370,6 +370,43 @@ section(() => {
   }
 });
 
+section(() => {
+  const src = read("launcher.js");
+  const mkEl = () => {
+    const e = { attrs: {}, children: [], dataset: {}, style: { setProperty() {} }, cls: new Set() };
+    e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
+    e.removeAttribute = (k) => { delete e.attrs[k]; };
+    e.getAttribute = (k) => e.attrs[k];
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.addEventListener = () => {};
+    e.scrollIntoView = () => {};
+    e.classList = { add: (c) => e.cls.add(c), remove: (c) => e.cls.delete(c), toggle: (c, on) => (on ? e.cls.add(c) : e.cls.delete(c)) };
+    Object.defineProperty(e, "innerHTML", { get: () => "", set: () => { e.children = []; } });
+    return e;
+  };
+  const searchEl = mkEl();
+  const resultsEl = mkEl();
+  const emptyEl = mkEl();
+  const rowsData = [{ id: "a", name: "A", text: "x" }, { id: "b", name: "B", text: "y" }];
+  const sb = {
+    searchEl, resultsEl, emptyEl, active: -1, TXT: {}, PREVIEW_LEN: 80,
+    document: { createElement: mkEl },
+    defaultList: () => rowsData, matchList: () => rowsData, varPreview: (x) => x, mdPlain: (x) => x, select() {},
+  };
+  searchEl.value = "";
+  vm.createContext(sb);
+  vm.runInContext([extractBlock(src, "function renderRow("), extractBlock(src, "function render("), extractBlock(src, "function syncActiveDescendant("), extractBlock(src, "function setActive("), "this.render = render; this.setActive = setActive;"].join(String.fromCharCode(10)), sb);
+  sb.render();
+  const rows = resultsEl.children;
+  check(rows.length === 2 && rows.every((r) => r.attrs.role === "option" && r.id), "result rows are options with an id");
+  check(rows[0].attrs["aria-selected"] === "true" && searchEl.attrs["aria-activedescendant"] === rows[0].id, "the first row is selected and referenced by the search field");
+  sb.setActive(1);
+  check(rows[0].attrs["aria-selected"] === "false" && rows[1].attrs["aria-selected"] === "true" && searchEl.attrs["aria-activedescendant"] === rows[1].id, "moving the highlight updates aria-selected and aria-activedescendant");
+  const html = read("launcher.html");
+  check(/id="results"[^>]*role="listbox"/.test(html) && /id="search"[^>]*aria-controls="results"/.test(html), "the launcher markup has the listbox and its controlling field");
+  check(/searchEl\.setAttribute\("aria-label"/.test(src), "the search field gets an accessible name");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

@@ -11,8 +11,8 @@
        path the tray menu already uses, so every rule about what a copy MEANS
        (placeholders, cooldown, chains) stays in main.js, never duplicated here. -->
   <div id="card" class="launcher-card">
-    <input id="search" class="launcher-search" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
-    <div id="results" class="launcher-results"></div>
+    <input id="search" class="launcher-search" type="text" aria-controls="results" aria-autocomplete="list" maxlength="200" autocomplete="off" spellcheck="false" />
+    <div id="results" class="launcher-results" role="listbox"></div>
     <div id="empty" class="launcher-empty hidden" role="status" aria-live="polite"></div>
     <div id="keys" class="launcher-keys" aria-hidden="true"></div>
   </div>

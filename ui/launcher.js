@@ -80,6 +80,9 @@ function renderRow(p, i) {
   const row = document.createElement("div");
   row.className = "launcher-row" + (i === active ? " active" : "");
   row.dataset.id = p.id;
+  row.id = `launcher-opt-${i}`;
+  row.setAttribute("role", "option");
+  row.setAttribute("aria-selected", i === active ? "true" : "false");
   if (p.color) row.style.setProperty("--row-color", p.color);
   const name = document.createElement("span");
   name.className = "launcher-row-name";
@@ -107,14 +110,25 @@ function render() {
   emptyEl.classList.toggle("hidden", list.length > 0 || !q);
   if (!list.length && q) emptyEl.textContent = TXT?.noMatches || "";
   resultsEl.dataset.count = String(list.length);
+  syncActiveDescendant();
+}
+
+// The search field keeps the focus, so the highlighted row is announced through it.
+function syncActiveDescendant() {
+  const row = active >= 0 ? resultsEl.children[active] : null;
+  if (row) searchEl.setAttribute("aria-activedescendant", row.id);
+  else searchEl.removeAttribute("aria-activedescendant");
 }
 
 function setActive(i) {
   const rows = [...resultsEl.children];
   if (i < 0 || i >= rows.length) return;
   rows[active]?.classList.remove("active");
+  rows[active]?.setAttribute("aria-selected", "false");
   active = i;
   rows[active]?.classList.add("active");
+  rows[active]?.setAttribute("aria-selected", "true");
+  syncActiveDescendant();
   rows[active]?.scrollIntoView({ block: "nearest" });
 }
 
@@ -203,6 +217,7 @@ async function boot() {
   document.documentElement.lang = lang;
   TXT = compactTexts(lang);
   searchEl.placeholder = TXT.searchPh;
+  searchEl.setAttribute("aria-label", TXT.searchPh);
   buildKeysHint(lang);
 
   prompts = state.prompts || [];
