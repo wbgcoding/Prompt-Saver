@@ -31,6 +31,7 @@ mod review_fixes;
 mod fix_review;
 mod media_fixes;
 mod data_dir_cleanup;
+mod final_fixes;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;
