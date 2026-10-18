@@ -193,6 +193,31 @@ later(async () => {
   check(m.calls.list === 0, "nothing happens before the first preview is allowed");
 });
 
+// Floating pill: switching a playing video to an image or text is the app's pause, not the
+// user's, and a new video source forgets an older user pause.
+later(async () => {
+  const src = read("floating.js");
+  const start = src.indexOf("let appPause = false;");
+  const code = src.slice(start, src.indexOf("function pauseByApp()", start)) + extractBlock(src, "function pauseByApp(");
+  const listeners = {};
+  const videoEl = {
+    paused: false,
+    addEventListener: (n, fn) => { listeners[n] = fn; },
+    pause() { if (!this.paused) { this.paused = true; Promise.resolve().then(() => listeners.pause()); } },
+  };
+  const sb = {};
+  vm.createContext(sb);
+  sb.videoEl = videoEl;
+  vm.runInContext(code + "\nthis.pauseByApp = pauseByApp; this.state = () => userPaused;", sb);
+  sb.pauseByApp();
+  await Promise.resolve(); await Promise.resolve();
+  check(sb.state() === false, "an app pause does not count as a user pause");
+  const plain = src.slice(src.indexOf("pill.classList.remove(\"has-image\");") - 400, src.indexOf("pill.classList.remove(\"has-image\");"));
+  check(!/videoEl\.pause\(\);/.test(plain) && /pauseByApp\(\);/.test(plain), "the text pill branch pauses through the app pause");
+  check(/videoEl\.classList\.add\("hidden"\);\n\s+pauseByApp\(\);/.test(src), "the image branch pauses through the app pause");
+  check(/videoEverPlayed = false;[^\n]*\n\s+userPaused = false;/.test(src), "a new video source resets the user pause");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
