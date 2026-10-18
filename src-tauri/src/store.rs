@@ -874,18 +874,18 @@ pub(crate) fn copy_log_has_rows(conn: &Connection) -> bool {
         .unwrap_or(true)
 }
 
-// Trim the history to the cap (newest cap rows by rowid, which is insertion order) and the
-// retention window. The kept block is rowid in (MAX-cap, MAX]; age pruning only deletes
-// from the old end, so the block stays contiguous and the cap is never exceeded. Steady
-// state deletes at most one row per call.
+// Trim the history to the cap (the newest cap rows by rowid, which is insertion order) and the
+// retention window. The cutoff is found by position, so rowid gaps left by deleted entries
+// never make the history keep fewer rows than the cap. Steady state deletes at most one row
+// per call.
 pub(crate) fn db_trim_copy(conn: &Connection, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
     if cap == 0 {
         conn.execute("DELETE FROM copy_log", [])?;
         return Ok(());
     }
     conn.execute(
-        "DELETE FROM copy_log WHERE rowid <= (SELECT MAX(rowid) FROM copy_log) - ?1",
-        params![cap as i64],
+        "DELETE FROM copy_log WHERE rowid < (SELECT rowid FROM copy_log ORDER BY rowid DESC LIMIT 1 OFFSET ?1)",
+        params![cap as i64 - 1],
     )?;
     if let Some(c) = cutoff {
         conn.execute("DELETE FROM copy_log WHERE ts > 0 AND ts < ?1", params![c as i64])?;

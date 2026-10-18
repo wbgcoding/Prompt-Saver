@@ -917,3 +917,19 @@ pub(super) fn sample_prompts() -> Vec<Prompt> {
         },
     ]
 }
+
+#[test]
+fn copy_log_cap_keeps_exactly_cap_rows_after_deletions() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
+    for i in 0..5u64 {
+        db_append_copy(&conn, &CopyEntry { id: format!("p{i}"), ts: 0 }, 5, None).unwrap();
+    }
+    // Two deletions leave rowid gaps; the next appends must still keep a full cap of rows.
+    conn.execute("DELETE FROM copy_log WHERE id IN ('p1','p2')", []).unwrap();
+    for i in 5..9u64 {
+        db_append_copy(&conn, &CopyEntry { id: format!("p{i}"), ts: 0 }, 5, None).unwrap();
+    }
+    let ids: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
+    assert_eq!(ids, ["p8", "p7", "p6", "p5", "p4"]);
+}
