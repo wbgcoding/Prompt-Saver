@@ -222,3 +222,41 @@ fn a_panic_log_line_keeps_only_the_location_and_the_message_length() {
     let none = panic_log_line(None, msg);
     assert!(!none.contains("hunter2") && none.contains(&msg.chars().count().to_string()), "{none}");
 }
+
+#[test]
+fn the_wipe_repack_waits_out_a_connection_that_briefly_holds_the_write_lock() {
+    let dir = std::env::temp_dir().join(format!("{}-test-scrub-busy", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let db = dir.join("data.db");
+    let conn = Connection::open(&db).unwrap();
+    conn.query_row("PRAGMA journal_mode=WAL", [], |_| Ok(())).unwrap();
+    conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, data TEXT NOT NULL); INSERT INTO prompts VALUES ('a', 'x');").unwrap();
+    conn.execute("DELETE FROM prompts", []).unwrap();
+    conn.execute_batch("PRAGMA busy_timeout=0;").unwrap();
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let other = db.clone();
+    let holder = std::thread::spawn(move || {
+        let c2 = Connection::open(&other).unwrap();
+        c2.execute_batch("BEGIN IMMEDIATE;").unwrap();
+        locked_tx.send(()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        c2.execute_batch("COMMIT;").unwrap();
+    });
+    locked_rx.recv().unwrap();
+    assert!(scrub_freed_pages(&conn), "a short busy spell must not fail the repack");
+    holder.join().unwrap();
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_wipe_counts_as_incomplete_only_while_rows_are_left() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    assert!(!data_wipe_rows_left(&conn), "an empty store has no rows left");
+    db_add_version(&conn, "a", 1, "N", "t", &[], 5).unwrap();
+    assert!(data_wipe_rows_left(&conn), "a surviving row keeps the wipe incomplete");
+    wipe_data_tables(&conn);
+    assert!(!data_wipe_rows_left(&conn));
+}

@@ -538,12 +538,37 @@ pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
 pub(crate) const DATA_WIPE_TABLES: [&str; 7] =
     ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state", "editor_drafts"];
 
+// A repack that meets another connection mid-write answers SQLITE_BUSY at once (the wait for the
+// lock is per connection and may be short); it is tried again this often, this far apart.
+const SCRUB_TRIES: u32 = 25;
+const SCRUB_PAUSE_MS: u64 = 120;
+
 // After a wipe the deleted rows still sit in SQLite's free pages and in the write-ahead log.
 // Repacks the file, then folds the log back and truncates it, so the old bytes are overwritten.
+// A busy file is retried for a few seconds; each step is only repeated until it has worked once.
 pub(crate) fn scrub_freed_pages(conn: &Connection) -> bool {
-    let packed = conn.execute("VACUUM", []).is_ok();
-    let folded = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())).is_ok();
-    packed && folded
+    let mut packed = false;
+    let mut folded = false;
+    for attempt in 0..SCRUB_TRIES {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(SCRUB_PAUSE_MS));
+        }
+        packed = packed || conn.execute("VACUUM", []).is_ok();
+        // The first column is 1 when a reader kept the log from being truncated.
+        folded = folded || conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get::<_, i64>(0)).is_ok_and(|busy| busy == 0);
+        if packed && folded {
+            return true;
+        }
+    }
+    false
+}
+
+// True while any wiped table still holds a row; a table that cannot be counted counts as
+// holding one, so a failed read never reports a wipe as done.
+pub(crate) fn data_wipe_rows_left(c: &Connection) -> bool {
+    DATA_WIPE_TABLES.iter().any(|table| {
+        c.query_row(&format!("SELECT EXISTS(SELECT 1 FROM {table})"), [], |r| r.get::<_, i64>(0)).map_or(true, |n| n != 0)
+    })
 }
 
 // Empties every table in DATA_WIPE_TABLES; returns the ones that failed with their error.
@@ -622,13 +647,19 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
     let sweep_app = app.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || {
         sweep_orphan_files(&sweep_app, &std::collections::HashSet::new());
-        db_conn(&sweep_app).is_some_and(|c| scrub_freed_pages(&c))
+        match db_conn(&sweep_app) {
+            Some(c) => (scrub_freed_pages(&c), data_wipe_rows_left(&c)),
+            None => (false, true),
+        }
     })
     .await
-    .map(|scrubbed| {
+    .map(|(scrubbed, rows_left)| {
         if !scrubbed {
-            incomplete = true;
             append_crash_log("delete_all_data: could not repack the database");
+        }
+        // A busy repack leaves the rows deleted; only rows still in a table make the wipe incomplete.
+        if rows_left {
+            incomplete = true;
         }
     });
     rearm_hotkeys(&app); // No prompts left to keep accelerators bound
