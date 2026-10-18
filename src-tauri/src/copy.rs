@@ -642,9 +642,12 @@ pub(crate) struct CopyLogRow {
 // The insert loop behind restore_copy_history, kept apart from the command so it
 // can be exercised with a bare in-memory connection. One transaction: a row that
 // fails leaves the table exactly as it was, never a half-restored history.
+//
+// `rows` is the snapshot as recent_copies lists it, newest first. The log orders by rowid, so
+// the rows go in oldest first: the newest copy ends up with the highest rowid again.
 pub(crate) fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
     let tx = conn.unchecked_transaction()?;
-    for row in rows {
+    for row in rows.iter().rev() {
         tx.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
     }
     tx.commit()
