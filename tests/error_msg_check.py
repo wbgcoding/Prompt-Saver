@@ -41,6 +41,9 @@ ALLOW = {
     ],
     "raw reason for the crash log or the technical details row, wrapped in a mapped code": [
         "serialize failed", "write failed ({:?})", "timeout",
+        "copy {sub}/: {e}", "the new folder lies inside {sub}/, which has to be copied",
+        "the stored prompts are unreadable and cannot be rewritten",
+        "the updated paths could not be saved",
     ],
     "background save of editor state, the caller ignores the failure": [
         "db unavailable",
