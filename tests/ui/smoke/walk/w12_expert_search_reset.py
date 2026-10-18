@@ -644,7 +644,7 @@ SECTION = """\
         for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
           tb.click();
           const hit = [...document.querySelectorAll('#expert-flags .expert-group')]
-            .find((g) => (g.querySelector('.expert-group-title span') || {}).textContent === 'Troubleshooting');
+            .find((g) => (g.querySelector('.expert-group-title > span, .expert-group-title > button') || {}).textContent === 'Troubleshooting');
           if (hit) return hit;
         }
         return null;

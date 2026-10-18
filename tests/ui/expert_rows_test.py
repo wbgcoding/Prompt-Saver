@@ -104,7 +104,7 @@ FIND = """
         const holder = el.closest('.expert-sub');
         const depth = holder ? Number(holder.style.getPropertyValue('--expert-depth') || 0) : 0;
         const group = el.closest('.expert-group');
-        const title = group && group.querySelector('.expert-group-title span');
+        const title = group && group.querySelector('.expert-group-title > span, .expert-group-title > button');
         found[id] = { tab: tb.textContent.trim(), group: title ? title.textContent.trim() : '', depth: depth };
       }
     }
