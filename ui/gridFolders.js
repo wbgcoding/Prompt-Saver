@@ -268,6 +268,7 @@ export function openTileFolderPop(f, anchor) {
   const title = document.createElement("span");
   title.className = "tile-folder-pop-title";
   title.textContent = folderTitle(f);
+  tileFolderPop.setAttribute("aria-label", title.textContent);
   head.appendChild(title);
   head.appendChild(folderPopButton(ICON_EDIT, t("tileFolderRename"), () => { closeTileFolderPop(); renameTileFolder(f); }));
   head.appendChild(folderPopButton(CLOSE_ICON, t("close"), closeTileFolderPop));
@@ -450,7 +451,7 @@ export function wireGridFolders() {
   tileFolderBackdrop.className = "tile-folder-backdrop hidden";
   document.body.appendChild(tileFolderBackdrop);
   tileFolderPop.className = "ctx tile-folder-pop hidden";
-  tileFolderPop.setAttribute("role", "menu");
+  tileFolderPop.setAttribute("role", "dialog"); // buttons and a tile grid, not menu items
   document.body.appendChild(tileFolderPop);
   window.addEventListener("pointermove", (e) => {
     if (!memberDrag) return;

@@ -1064,6 +1064,15 @@ section(() => {
   check(/classList\.contains\("active"\)\) btn\.setAttribute\("aria-current", "true"\)/.test(src), "the active view tab carries aria-current");
 });
 
+// 58. The folder and tag filter popovers are named containers, not empty menus.
+section(() => {
+  const f = read("gridFolders.js");
+  check(/tileFolderPop\.setAttribute\("role", "dialog"\)/.test(f) && /tileFolderPop\.setAttribute\("aria-label", title\.textContent\)/.test(f), "the folder popover is a dialog named by the folder");
+  const g = read("gridMenus.js");
+  check(/gridTagPop\.setAttribute\("role", "group"\)/.test(g), "the tag filter popover is a group");
+  check(extractBlock(g, "export function renderGridTagPop(").includes('gridTagPop.setAttribute("aria-label", t("gridTagFilter"))'), "it is named per open, so the name follows the language");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
