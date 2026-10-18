@@ -116,7 +116,13 @@ export let kbFadeTimer = null;
 export function focusTile(id) {
   clearTimeout(kbFadeTimer);
   kbFocus = id;
-  for (const el of gridEl.querySelectorAll(".tile")) el.classList.toggle("kb-focus", el.dataset.id === id);
+  for (const el of gridEl.querySelectorAll(".tile")) {
+    el.classList.toggle("kb-focus", el.dataset.id === id);
+    if (el.dataset.id === id) el.setAttribute("aria-current", "true"); else el.removeAttribute("aria-current");
+  }
+  // The ring is visual only; the live region makes a screen reader say which tile it sits on.
+  const live = document.getElementById("grid-live");
+  if (live) live.textContent = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.getAttribute("aria-label") || "";
   for (const el of gridEl.querySelectorAll(".tile.kb-leaving")) el.classList.remove("kb-leaving");
   gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
 }
@@ -124,7 +130,9 @@ export function focusTile(id) {
 export function clearKbFocus(fade) {
   const el = kbFocus ? gridEl.querySelector(`.tile[data-id="${CSS.escape(kbFocus)}"]`) : null;
   kbFocus = null;
-  for (const tile of gridEl.querySelectorAll(".tile.kb-focus")) tile.classList.remove("kb-focus");
+  for (const tile of gridEl.querySelectorAll(".tile.kb-focus")) { tile.classList.remove("kb-focus"); tile.removeAttribute("aria-current"); }
+  const live = document.getElementById("grid-live");
+  if (live) live.textContent = "";
   if (fade && el) {
     el.classList.add("kb-leaving");
     setTimeout(() => el.classList.remove("kb-leaving"), 520);

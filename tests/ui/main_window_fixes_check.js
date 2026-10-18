@@ -870,6 +870,15 @@ section(() => {
   });
 });
 
+// 39. Grid tiles carry a role and a name, and the keyboard ring is announced.
+section(() => {
+  const build = extractBlock(read("tiles.js"), "export function buildTile(");
+  check(/setAttribute\("role", "button"\)/.test(build) && /setAttribute\("aria-label", p\.locked/.test(build), "a tile is a named button");
+  const focus = extractBlock(read("copyFlow.js"), "export function focusTile(");
+  check(/aria-current/.test(focus) && /grid-live/.test(focus), "the focus ring moves aria-current and a live region");
+  check(/id="grid-live"[^>]*aria-live="polite"/.test(read("index.html")), "the live region exists in the page");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

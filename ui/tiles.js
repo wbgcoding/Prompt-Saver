@@ -343,6 +343,9 @@ export function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
   tile.dataset.id = p.id;
+  // A tile acts as a button named after the prompt (a locked one only says that it is secret).
+  tile.setAttribute("role", "button");
+  tile.setAttribute("aria-label", p.locked ? t("editorSecretLabel") : p.name);
   if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
   // A tag filter dims what does not match instead of hiding it: the cell stays occupied, so
   // drag, reorder and grid geometry never treat it as empty.
