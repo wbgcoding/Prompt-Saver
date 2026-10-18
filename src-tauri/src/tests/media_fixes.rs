@@ -289,3 +289,14 @@ fn a_refused_audio_thread_is_a_start_error_not_a_panic() {
     let rec = include_str!("../recording.rs");
     assert_eq!(rec.matches("audio_stop.clone().unwrap(),\n        ).map_err(|e| e.to_string())?").count(), 2);
 }
+
+// Structural fix, no red unit test: the encoder needs a real media session to fail on demand.
+#[test]
+fn the_feeder_stops_feeding_after_the_first_encoder_error() {
+    let rec = include_str!("../recording.rs");
+    let drain = rec.split("fn drain_pending_frames(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(drain.contains("shared.request_stop();") && drain.contains("return;"), "the drain must leave at the first error");
+    assert!(rec.contains("!clock.is_paused() && shared.peek_encode_error().is_none()"), "hold and audio sends must stop after an error");
+}

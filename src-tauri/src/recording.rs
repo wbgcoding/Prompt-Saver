@@ -345,6 +345,7 @@ fn drain_pending_frames(
             append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
             shared.set_encode_error(e.to_string());
             shared.request_stop(); // further frames would just fail the same way
+            return;
         }
         *last_frame = Some(item.bytes);
         *last_frame_at = Some(Instant::now());
@@ -395,7 +396,8 @@ fn feeder_loop_with_audio(
         // A frame that arrived during the sleep carries an older timestamp than the hold resend
         // below would get, so it goes out first.
         drain_pending_frames(&shared, &mut encoder, &queues, &mut video_started, &mut last_frame, &mut last_frame_at, &mut last_sent);
-        if video_started && !clock.is_paused() {
+        // After the first encoder error nothing more is fed: every further send would fail the same way.
+        if video_started && !clock.is_paused() && shared.peek_encode_error().is_none() {
             if let (Some(bytes), Some(at)) = (&last_frame, last_frame_at) {
                 if at.elapsed() >= TICK {
                     let ts = strictly_increasing_ts(&mut last_sent, clock.now_ticks());
