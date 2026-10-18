@@ -982,6 +982,12 @@ section(() => {
   check(html.includes('<span class="ctx-label" data-i18n="favoriteAdd">Add to favorites</span>'), "the favorite menu label has data-i18n");
 });
 
+// 48. The confirm dialog is named and described.
+section(() => {
+  const html = read("index.html");
+  check(/id="confirm-modal"[^>]*aria-labelledby="confirm-title"[^>]*aria-describedby="confirm-msg"/.test(html), "the confirm alertdialog names its title and message");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
