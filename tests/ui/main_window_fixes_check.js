@@ -976,6 +976,12 @@ section(() => {
   check(fn.includes("renderHotkeysList()"), "committing the dictation hotkey refreshes an open list");
 });
 
+// 47. The favorite context entry carries its translation key.
+section(() => {
+  const html = read("index.html");
+  check(html.includes('<span class="ctx-label" data-i18n="favoriteAdd">Add to favorites</span>'), "the favorite menu label has data-i18n");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
