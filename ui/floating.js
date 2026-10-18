@@ -164,7 +164,9 @@ async function applySettings() {
 }
 
 function applyTexts(s) {
-  const t = compactTexts(resolveLang(s.language, LANGS));
+  const lang = resolveLang(s.language, LANGS);
+  document.documentElement.lang = lang;
+  const t = compactTexts(lang);
   copiedText = t.copied;
   document.getElementById("feedback").textContent = copiedText;
   document.getElementById("size-label").textContent = t.size;

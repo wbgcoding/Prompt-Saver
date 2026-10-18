@@ -99,6 +99,7 @@ function buildText(row, initial, placeholder) {
 
 function render(data) {
   applyFloatTheme(data.theme, data.vars);
+  document.documentElement.lang = data.lang || "en";
   const T = compactTexts(data.lang || "en");
   tooLongText = T.varsTooLong;
   titleEl.textContent = T.varsTitle;

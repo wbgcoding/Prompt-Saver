@@ -362,6 +362,14 @@ section(() => {
   check(/aria-labelledby="confirm-title"/.test(tag) && /aria-describedby="confirm-msg"/.test(tag), "the video window confirm dialog is named and described");
 });
 
+section(() => {
+  // Each satellite window sets its page language where it loads its texts (the loaders run
+  // inside promise chains at boot, so the source is the checkable surface).
+  for (const f of ["camera.js", "floating.js", "folder.js", "launcher.js", "recbar.js", "snip.js", "vars.js", "tray.js"]) {
+    check(/document\.documentElement\.lang\s*=/.test(read(f)), f + " sets the page language");
+  }
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

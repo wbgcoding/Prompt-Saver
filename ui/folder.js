@@ -366,7 +366,9 @@ async function applySettings() {
 }
 
 function applyTexts(s) {
-  TXT = compactTexts(resolveLang(s.language, LANGS));
+  const lang = resolveLang(s.language, LANGS);
+  document.documentElement.lang = lang;
+  TXT = compactTexts(lang);
   document.getElementById("size-label").textContent = TXT.size;
   parkedBadge.title = TXT.parked;
   document.getElementById("menu-rename").textContent = TXT.rename;

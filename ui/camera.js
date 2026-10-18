@@ -536,7 +536,9 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
 });
 Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default_recording_dir").catch(() => "")])
   .then(async ([s, { resolveLang }, defaultDir]) => {
-    ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+    const lang = resolveLang(s.language, LANGS);
+    document.documentElement.lang = lang;
+    ({ tx } = await fullTexts(lang));
     applyTexts();
     showFolder(s.ui_texts?.recordingDir || defaultDir || "");
     videoDeviceId = s.ui_texts?.cameraDevice || "";
@@ -570,7 +572,9 @@ function applyTexts() {
 listen("language-changed", () => {
   Promise.all([invoke("get_settings"), import("./floatShared.js")])
     .then(async ([s, { resolveLang }]) => {
-      ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+      const lang = resolveLang(s.language, LANGS);
+      document.documentElement.lang = lang;
+      ({ tx } = await fullTexts(lang));
       applyTexts();
     })
     .catch(() => {});

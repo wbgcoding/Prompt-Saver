@@ -5,7 +5,7 @@
 // from the backend; this file draws rows.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-import { hexToRgb, inkFor } from "./floatShared.js";
+import { hexToRgb, inkFor, resolveLang } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -240,6 +240,14 @@ document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target) && !handover) close();
 });
 
+// The page language follows the UI language so a screen reader picks the right voice; it
+// is not on the critical path of an open, so it never delays the reveal.
+function syncDocLang() {
+  Promise.all([invoke("get_settings"), import("./i18n.js")])
+    .then(([s, { LANGS }]) => { document.documentElement.lang = resolveLang(s.language, LANGS); })
+    .catch(() => {});
+}
+
 // The window lives on between opens (hidden), so every open starts from a clean
 // slate: the backend parks the plan, says "tray-open", and this page takes it, draws
 // it and only then asks to be shown. No plan waiting (the warm-up boot) = nothing.
@@ -254,6 +262,7 @@ async function openMenu() {
   render(plan);
   searchEl.placeholder = plan.searchPh || "";
   searchEl.hidden = !plan.searchOn;
+  syncDocLang();
   openedAt = Date.now();
   await invoke("tray_window_reveal").catch(() => {});
   if (plan.searchOn) searchEl.focus();

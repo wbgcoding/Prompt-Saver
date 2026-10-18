@@ -209,7 +209,9 @@ async function beginSession() {
 function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js"), import("./errors.js")])
     .then(async ([s, { LANGS, fullTexts }, { resolveLang }, { errMessageLogged }]) => {
-      const { tx } = await fullTexts(resolveLang(s.language, LANGS));
+      const lang = resolveLang(s.language, LANGS);
+      document.documentElement.lang = lang;
+      const { tx } = await fullTexts(lang);
       T.hint = tx("snipHint");
       T.failed = tx("snipFailed");
       T.pick = tx("pickHint");

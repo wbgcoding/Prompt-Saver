@@ -403,6 +403,7 @@ function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
     .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
       LANG = resolveLang(s.language, LANGS);
+      document.documentElement.lang = LANG;
       ({ tx } = await fullTexts(LANG));
       for (const el of document.querySelectorAll("[data-i18n-title]")) {
         const text = tx(el.getAttribute("data-i18n-title"));

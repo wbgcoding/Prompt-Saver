@@ -200,6 +200,7 @@ async function boot() {
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 
   const lang = resolveLang(state.language, LANGS);
+  document.documentElement.lang = lang;
   TXT = compactTexts(lang);
   searchEl.placeholder = TXT.searchPh;
   buildKeysHint(lang);
