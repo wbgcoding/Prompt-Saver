@@ -164,9 +164,9 @@ pub(crate) async fn get_clipboard_image() -> Option<String> {
 
 // Put a file on the clipboard, exactly like Ctrl+C in Explorer.
 #[cfg(windows)]
-pub(crate) fn set_clipboard_file(path: &str) -> bool {
+pub(crate) fn set_clipboard_file(path: &str, own_dirs: &[PathBuf]) -> bool {
     // A network spelling is refused on its text, before exists() would contact the host.
-    if is_network_path(path) || !std::path::Path::new(path).exists() {
+    if is_foreign_network_path(path, own_dirs) || !std::path::Path::new(path).exists() {
         return false;
     }
     // DROPFILES header (20 bytes) + UTF-16 path + double NUL terminator.
@@ -187,7 +187,7 @@ pub(crate) fn set_clipboard_file(path: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-pub(crate) fn set_clipboard_file(_path: &str) -> bool {
+pub(crate) fn set_clipboard_file(_path: &str, _own_dirs: &[PathBuf]) -> bool {
     false
 }
 

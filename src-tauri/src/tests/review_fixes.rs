@@ -1123,13 +1123,13 @@ fn export_source_is_allowed_only_for_own_recordings_work_copies_and_the_open_edi
     }
     let dirs = [rec_dir.clone()];
     let editor = vec![String::new(), opened.to_string_lossy().to_string()];
-    assert!(export_source_is_allowed(&dirs, &temp_root, &editor, &rec));
-    assert!(export_source_is_allowed(&dirs, &temp_root, &[], &copy), "an editor work copy");
-    assert!(export_source_is_allowed(&dirs, &temp_root, &editor, &opened), "the file the editor was handed");
-    assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, &foreign), "any other readable video");
-    assert!(!export_source_is_allowed(&dirs, &temp_root, &[], &opened), "nothing handed to the editor");
-    assert!(!export_source_is_allowed(&dirs, &temp_root, &[String::new()], &foreign));
-    assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, &elsewhere.join("gone.mp4")));
+    assert!(export_source_is_allowed(&dirs, &[], &temp_root, &editor, &rec));
+    assert!(export_source_is_allowed(&dirs, &[], &temp_root, &[], &copy), "an editor work copy");
+    assert!(export_source_is_allowed(&dirs, &[], &temp_root, &editor, &opened), "the file the editor was handed");
+    assert!(!export_source_is_allowed(&dirs, &[], &temp_root, &editor, &foreign), "any other readable video");
+    assert!(!export_source_is_allowed(&dirs, &[], &temp_root, &[], &opened), "nothing handed to the editor");
+    assert!(!export_source_is_allowed(&dirs, &[], &temp_root, &[String::new()], &foreign));
+    assert!(!export_source_is_allowed(&dirs, &[], &temp_root, &editor, &elsewhere.join("gone.mp4")));
     let _ = fs::remove_dir_all(&root);
 }
 

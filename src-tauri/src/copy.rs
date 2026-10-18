@@ -188,13 +188,14 @@ pub(crate) enum CopyPayload {
 // Async: encoding + writing a large image to the clipboard stays off the UI thread.
 #[tauri::command]
 pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
+    let own_dirs = own_storage_dirs(&app, &state);
     let payload = {
         let store = lock(&state);
         match store.prompts.iter().find(|p| p.id == id) {
             Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
             // Asked again at use: the stored path may predate the check on save.
             Some(p) if !p.file_path.is_empty() => {
-                if attachment_path_refused(&data_dir(&app), &p.file_path) {
+                if attachment_path_refused(&own_dirs, &data_dir(&app), &p.file_path) {
                     CopyPayload::Missing
                 } else {
                     CopyPayload::File(p.file_path.clone())
@@ -215,7 +216,7 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
     let is_text = matches!(&payload, CopyPayload::Text(_));
     let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
-        CopyPayload::File(path) => set_clipboard_file(&path),
+        CopyPayload::File(path) => set_clipboard_file(&path, &own_dirs),
         CopyPayload::Text(text) => put_text(&state, Some(&id), &text),
         CopyPayload::Missing => false,
     };

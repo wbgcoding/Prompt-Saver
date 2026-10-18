@@ -49,8 +49,8 @@ fn the_editor_opens_only_known_files() {
     assert_eq!(paths, vec![attached.to_string_lossy().to_string()], "empty paths are not sources");
     let dirs = [rec_dir];
     let temp_root = root.join("tmp");
-    assert!(export_source_is_allowed(&dirs, &temp_root, &paths, &attached));
-    assert!(!export_source_is_allowed(&dirs, &temp_root, &paths, &foreign), "an arbitrary readable file");
+    assert!(export_source_is_allowed(&dirs, &[], &temp_root, &paths, &attached));
+    assert!(!export_source_is_allowed(&dirs, &[], &temp_root, &paths, &foreign), "an arbitrary readable file");
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -723,7 +723,7 @@ fn a_running_parts_save_is_marked_in_flight_and_quit_waits_for_it() {
 fn the_recording_source_check_refuses_every_network_spelling_by_text() {
     let src = source!("../media_files.rs");
     let body = src.split("pub(crate) fn is_recording_source_location").nth(1).unwrap().split("\n}\n").next().unwrap();
-    assert!(body.contains("is_network_path(&raw)"), "the one shared gate decides");
+    assert!(body.contains("is_foreign_network_path(&raw"), "the one shared gate decides");
     assert!(!body.contains("starts_with(r\"\\\\\")"), "no private two-prefix check");
     let allowed = vec![std::env::temp_dir()];
     for p in [r"/\host\share\rec-1.mp4", r"\??\UNC\host\share\rec-1.mp4", r"\?\UNC\host\share\rec-1.mp4", r"\.\GLOBALROOT\Device\x\rec-1.mp4"] {
@@ -793,21 +793,21 @@ fn an_attachment_path_naming_the_store_or_a_network_share_is_refused() {
     fs::write(data.join("files").join("copy.pdf"), b"pdf").unwrap();
     fs::write(root.join("mine.txt"), b"x").unwrap();
     // The store's own files directly in the data folder never feed a copy or an editor.
-    assert!(attachment_path_refused(&data, &data.join("data.db").to_string_lossy()));
-    assert!(attachment_path_refused(&data, &data.join("data.db-wal").to_string_lossy()));
-    assert!(attachment_path_refused(&data, &data.join("settings.json").to_string_lossy()));
+    assert!(attachment_path_refused(&[], &data, &data.join("data.db").to_string_lossy()));
+    assert!(attachment_path_refused(&[], &data, &data.join("data.db-wal").to_string_lossy()));
+    assert!(attachment_path_refused(&[], &data, &data.join("settings.json").to_string_lossy()));
     // A dot-dot hop and a different spelling of the same file are the same file.
     let hop = format!("{}{}files{}..{}data.db", data.display(), std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR, std::path::MAIN_SEPARATOR);
-    assert!(attachment_path_refused(&data, &hop));
+    assert!(attachment_path_refused(&[], &data, &hop));
     // The app's own attachment copies and the user's own files stay fine.
-    assert!(!attachment_path_refused(&data, &data.join("files").join("copy.pdf").to_string_lossy()));
-    assert!(!attachment_path_refused(&data, &root.join("mine.txt").to_string_lossy()));
+    assert!(!attachment_path_refused(&[], &data, &data.join("files").join("copy.pdf").to_string_lossy()));
+    assert!(!attachment_path_refused(&[], &data, &root.join("mine.txt").to_string_lossy()));
     // A missing file is not this gate's business (a moved file must stay re-savable), and empty means none.
-    assert!(!attachment_path_refused(&data, &root.join("gone.txt").to_string_lossy()));
-    assert!(!attachment_path_refused(&data, ""));
+    assert!(!attachment_path_refused(&[], &data, &root.join("gone.txt").to_string_lossy()));
+    assert!(!attachment_path_refused(&[], &data, ""));
     // A network spelling is refused by text, before the disk is asked anything.
-    assert!(attachment_path_refused(&data, r"\\host\share\a.mp4"));
-    assert!(attachment_path_refused(&data, "//host/share/a.mp4"));
+    assert!(attachment_path_refused(&[], &data, r"\\host\share\a.mp4"));
+    assert!(attachment_path_refused(&[], &data, "//host/share/a.mp4"));
     let _ = fs::remove_dir_all(&root);
 
     // Every path that stores or uses an attachment asks the gate before touching it.
@@ -824,9 +824,9 @@ fn an_attachment_path_naming_the_store_or_a_network_share_is_refused() {
     let at = copy.find("pub(crate) async fn copy_prompt").unwrap();
     assert!(copy[at..].contains("attachment_path_refused("), "the file clipboard path asks again at use");
     let images = source!("../images.rs");
-    let at = images.find("pub(crate) fn set_clipboard_file(path: &str)").unwrap();
+    let at = images.find("pub(crate) fn set_clipboard_file(path: &str, own_dirs").unwrap();
     let head = &images[at..at + 300];
-    assert!(head.find("is_network_path(").is_some_and(|n| n < head.find(".exists()").unwrap()), "text check before exists()");
+    assert!(head.find("is_foreign_network_path(").is_some_and(|n| n < head.find(".exists()").unwrap()), "text check before exists()");
 }
 
 #[test]
@@ -846,7 +846,7 @@ fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
     }
     let dirs = [rec_dir.clone()];
     let temp_root = root.join("tmp");
-    let vet = |src: &Path, ov: Option<&str>| vet_editor_open(&dirs, &temp_root, &[], src, ov);
+    let vet = |src: &Path, ov: Option<&str>| vet_editor_open(&dirs, &[], &temp_root, &[], src, ov);
     // A network spelling, as the recording or as the overlay, is refused on its text alone.
     assert_eq!(vet(Path::new(r"\\host\share\a.mp4"), None), Err("source-not-allowed"));
     assert_eq!(vet(&rec, Some(r"\\host\share\cam.webm")), Err("source-not-allowed"));
@@ -860,7 +860,7 @@ fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
     assert_eq!(vet(&rec, Some(&elsewhere.join("gone.webm").to_string_lossy())), Ok(String::new()));
     // Attachments that name another machine are never canonicalized for the comparison.
     let editor = vec![r"\\host\share\a.mp4".to_string()];
-    assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, Path::new(r"\\host\share\a.mp4")));
+    assert!(!export_source_is_allowed(&dirs, &[], &temp_root, &editor, Path::new(r"\\host\share\a.mp4")));
     let _ = fs::remove_dir_all(&root);
 
     // The command vets before any is_file call and does the disk work on a blocking worker.
@@ -871,10 +871,10 @@ fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
     let vet_at = body.find("vet_editor_open(").expect("vets the source");
     assert!(body[..vet_at].contains("spawn_blocking"), "the vetting runs on a blocking worker");
     assert!(!body[..vet_at].contains(".is_file()"), "no disk call before the vetting");
-    assert!(body[..vet_at].contains("is_network_path("), "network spellings refused on text first");
+    assert!(body[..vet_at].contains("is_foreign_network_path("), "network spellings refused on text first");
     let allowed = &ve[ve.find("pub(crate) fn export_source_is_allowed").unwrap()..];
     let allowed = &allowed[..allowed.find("\n}\n").unwrap()];
-    assert!(allowed.find("is_network_path(").is_some_and(|n| n < allowed.find("canonicalize(").unwrap()), "text check before the first canonicalize");
+    assert!(allowed.find("is_foreign_network_path(").is_some_and(|n| n < allowed.find("canonicalize(").unwrap()), "text check before the first canonicalize");
 }
 
 #[test]

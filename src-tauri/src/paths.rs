@@ -369,17 +369,42 @@ pub(crate) fn is_network_path(raw: &str) -> bool {
     false
 }
 
+// The network gate for a path that may sit in one of the app's own folders (the data folder,
+// the recording folder): those are the user's own choice, so a path inside one passes even when
+// that folder is a UNC share, while every other network spelling stays refused. Decided on
+// text alone, so a refused path is never touched. A path that climbs with ".." is never
+// matched to a folder, and neither is a device or verbatim spelling that is not `UNC`.
+pub(crate) fn is_foreign_network_path(raw: &str, own_dirs: &[PathBuf]) -> bool {
+    is_network_path(raw) && !is_inside_own_network_dir(raw, own_dirs)
+}
+
+fn is_inside_own_network_dir(raw: &str, own_dirs: &[PathBuf]) -> bool {
+    let t = raw.trim();
+    if t.split(['\\', '/']).any(|c| c == "..") {
+        return false;
+    }
+    let low = t.replace('\\', "/").to_ascii_lowercase();
+    let verbatim = ["//?/", "/??/", "//./"].iter().any(|p| low.starts_with(p));
+    let unc = ["//?/unc/", "/??/unc/", "//./unc/"].iter().any(|p| low.starts_with(p));
+    if verbatim && !unc {
+        return false;
+    }
+    // Only a folder that is itself on a share can vouch for a share path; a local folder
+    // never exempts a name that reaches a host.
+    own_dirs.iter().any(|d| is_network_path(&d.to_string_lossy()) && path_is_inside_dir(Path::new(t), d))
+}
+
 // Whether a path handed in from the UI may not become (or stay) a prompt's attachment: it
-// names another machine, or it is one of the app's own store files (the database, its journal,
-// the settings) directly inside the data folder. The attachment copies live in the `files`
-// subfolder and stay allowed. Judged on text first, so a refused network path is never
-// touched; a file that does not exist is not refused here (an attachment that moved must
-// remain re-savable), and an empty path means "none".
-pub(crate) fn attachment_path_refused(data_dir: &Path, raw: &str) -> bool {
+// names another machine (outside the app's own folders, `own_dirs`), or it is one of the app's
+// own store files (the database, its journal, the settings) directly inside the data folder.
+// The attachment copies live in the `files` subfolder and stay allowed. Judged on text first,
+// so a refused network path is never touched; a file that does not exist is not refused here
+// (an attachment that moved must remain re-savable), and an empty path means "none".
+pub(crate) fn attachment_path_refused(own_dirs: &[PathBuf], data_dir: &Path, raw: &str) -> bool {
     if raw.trim().is_empty() {
         return false;
     }
-    if is_network_path(raw) {
+    if is_foreign_network_path(raw, own_dirs) {
         return true;
     }
     let (Ok(file), Ok(dir)) = (fs::canonicalize(raw), fs::canonicalize(data_dir)) else { return false };

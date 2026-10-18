@@ -930,9 +930,16 @@ fn open_editor_source_paths(app: &AppHandle) -> Vec<String> {
 // Whether `src` may feed an export: one of the app's own recordings, a work
 // copy the editor made of an opened file, or exactly the file the editor was
 // handed. A renderer-supplied path outside those is never read.
-pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Path, editor_sources: &[String], src: &Path) -> bool {
-    // A network spelling is judged on its text: resolving it would contact the host.
-    if is_network_path(&src.to_string_lossy()) {
+pub(crate) fn export_source_is_allowed(
+    allowed_dirs: &[PathBuf],
+    own_dirs: &[PathBuf],
+    temp_root: &Path,
+    editor_sources: &[String],
+    src: &Path,
+) -> bool {
+    // A network spelling is judged on its text: resolving it would contact the host. Only the
+    // app's own folders (`own_dirs`) may sit on a share.
+    if is_foreign_network_path(&src.to_string_lossy(), own_dirs) {
         return false;
     }
     if is_own_recording_source(allowed_dirs, src) || is_editor_work_copy_in(temp_root, src) {
@@ -941,7 +948,7 @@ pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Pat
     let Ok(canon) = fs::canonicalize(src) else { return false };
     editor_sources
         .iter()
-        .filter(|s| !s.is_empty() && !is_network_path(s))
+        .filter(|s| !s.is_empty() && !is_foreign_network_path(s, own_dirs))
         .any(|s| fs::canonicalize(s).is_ok_and(|c| c == canon))
 }
 
@@ -951,15 +958,16 @@ pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Pat
 // overlay to keep (an overlay that no longer exists is dropped, not an error).
 pub(crate) fn vet_editor_open(
     allowed_dirs: &[PathBuf],
+    own_dirs: &[PathBuf],
     temp_root: &Path,
     editor_sources: &[String],
     src: &Path,
     overlay: Option<&str>,
 ) -> Result<String, &'static str> {
-    if is_network_path(&src.to_string_lossy()) || overlay.is_some_and(is_network_path) {
+    if is_foreign_network_path(&src.to_string_lossy(), own_dirs) || overlay.is_some_and(|o| is_foreign_network_path(o, own_dirs)) {
         return Err("source-not-allowed");
     }
-    if !export_source_is_allowed(allowed_dirs, temp_root, editor_sources, src) {
+    if !export_source_is_allowed(allowed_dirs, own_dirs, temp_root, editor_sources, src) {
         return Err(if src.exists() { "source-not-allowed" } else { "recording file not found" });
     }
     if !src.is_file() {
@@ -976,7 +984,8 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     if !is_video_format(&req.format) {
         return Err("unsupported format".to_string());
     }
-    if is_network_path(&req.src_path) {
+    let own_dirs = own_storage_dirs(&app, &state);
+    if is_foreign_network_path(&req.src_path, &own_dirs) {
         return Err("source-not-allowed".to_string());
     }
     let src = PathBuf::from(&req.src_path);
@@ -985,7 +994,7 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     }
     let editor_sources = open_editor_source_paths(&app);
     let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
-    if !export_source_is_allowed(&recording_source_dirs(&app, &state), &own_temp_dir, &editor_sources, &src) {
+    if !export_source_is_allowed(&recording_source_dirs(&app, &state), &own_dirs, &own_temp_dir, &editor_sources, &src) {
         return Err("source-not-allowed".to_string());
     }
     let dst = PathBuf::from(&req.dest_path);
@@ -1477,7 +1486,8 @@ pub(crate) async fn open_video_editor(
     // opened: its own recordings, an editor work copy, or a prompt's attached file. A network
     // spelling is refused on its text and the disk work (canonicalizing every attachment) runs on
     // a blocking worker, so a slow share never stalls the async runtime or gets contacted.
-    if is_network_path(&src_path) || overlay_path.as_deref().is_some_and(is_network_path) {
+    let own_dirs = own_storage_dirs(&app, &state);
+    if is_foreign_network_path(&src_path, &own_dirs) || overlay_path.as_deref().is_some_and(|o| is_foreign_network_path(o, &own_dirs)) {
         return Err("source-not-allowed".to_string());
     }
     let attached = attached_media_paths(&lock(&state).prompts);
@@ -1486,7 +1496,7 @@ pub(crate) async fn open_video_editor(
     let (vet_src, vet_overlay) = (src_path.clone(), overlay_path.clone());
     // An overlay path that no longer exists is dropped rather than shown as a broken overlay op.
     let overlay_path = tauri::async_runtime::spawn_blocking(move || {
-        vet_editor_open(&dirs, &own_temp_dir, &attached, Path::new(&vet_src), vet_overlay.as_deref())
+        vet_editor_open(&dirs, &own_dirs, &own_temp_dir, &attached, Path::new(&vet_src), vet_overlay.as_deref())
     })
     .await
     .map_err(|e| e.to_string())?

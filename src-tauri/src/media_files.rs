@@ -768,7 +768,7 @@ pub(crate) async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_,
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
     let dest_str = dest.to_string_lossy().to_string();
-    let clip_ok = set_clipboard_file(&dest_str);
+    let clip_ok = set_clipboard_file(&dest_str, &own_storage_dirs(&app, &state));
     Ok((dest_str, clip_ok))
 }
 
@@ -797,7 +797,7 @@ pub(crate) async fn copy_file_to_clipboard(path: String) -> bool {
     if !is_clip_export_file(&own_temp_dir, p) && !is_known_export_output(p) {
         return false;
     }
-    set_clipboard_file(&path)
+    set_clipboard_file(&path, &[])
 }
 
 // The per-user, non-roaming app folder (LocalAppData, then the app name): where native
@@ -841,6 +841,14 @@ pub(crate) fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [
     [data_dir(app).join("recordings"), recording_dir(&custom)]
 }
 
+// The folders the user chose to keep the app's files in: the data folder (attachment copies,
+// capture staging) and the recording folder. A path inside one is never a foreign network
+// path, even when that folder is a share (see is_foreign_network_path).
+pub(crate) fn own_storage_dirs(app: &AppHandle, state: &State<'_, Db>) -> Vec<PathBuf> {
+    let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    vec![data_dir(app), recording_dir(&custom)]
+}
+
 // Whether `path` is a recording this app produced, in one of `allowed`'s folders, rather than
 // an arbitrary file named in a recording command's IPC argument. It is the same "rec-" stem
 // plus allowed-parent proof discard_recording_file_in requires, so convert_recording,
@@ -851,13 +859,14 @@ pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool 
 }
 
 // The location half of is_own_recording_source: the "rec-" stem and an allowed parent, decided
-// without ever asking the file system about the file itself. A network (UNC) path is refused
-// on its text alone (every spelling, through the one shared gate), so a refused caller path
-// never makes this machine contact a remote host.
+// without ever asking the file system about the file itself. A network path (any UNC spelling,
+// through the one shared gate) is refused on its text alone unless it lies inside one of the
+// allowed folders themselves, so a refused caller path never makes this machine contact a
+// remote host while a recording folder on a share keeps working.
 pub(crate) fn is_recording_source_location(allowed: &[PathBuf], path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let raw = path.to_string_lossy();
-    if !name.starts_with("rec-") || is_network_path(&raw) {
+    if !name.starts_with("rec-") || is_foreign_network_path(&raw, allowed) {
         return false;
     }
     let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };

@@ -801,8 +801,9 @@ pub(crate) async fn add_prompt(
     // A path naming another machine or the app's own store files is refused before any copy
     // or probe touches it (the editor's pickers never produce one).
     let store_dir = data_dir(&app);
+    let own_dirs = own_storage_dirs(&app, &state);
     for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
-        if attachment_path_refused(&store_dir, p) {
+        if attachment_path_refused(&own_dirs, &store_dir, p) {
             return Err("source-not-allowed".to_string());
         }
     }
@@ -1214,8 +1215,9 @@ pub(crate) async fn update_prompt(
     // A path naming another machine or the app's own store files is refused before any copy
     // or probe touches it (the editor's pickers never produce one).
     let store_dir = data_dir(&app);
+    let own_dirs = own_storage_dirs(&app, &state);
     for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
-        if attachment_path_refused(&store_dir, p) {
+        if attachment_path_refused(&own_dirs, &store_dir, p) {
             return Err("source-not-allowed".to_string());
         }
     }
