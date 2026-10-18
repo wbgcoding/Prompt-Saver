@@ -61,6 +61,8 @@ async function main() {
     setTimeout, clearTimeout, setInterval, clearInterval,
     ResizeObserver: class { observe() {} },
     document: {
+      documentElement: {},
+      documentElement: {},
       getElementById: (id) => (els[id] ||= fakeEl()),
       querySelectorAll: (sel) => (sel === "[data-i18n-title]" ? titledEls : sel === "[data-i18n]" ? warnTexts.map(([, el]) => el) : []),
       addEventListener() {},

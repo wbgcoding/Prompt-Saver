@@ -527,9 +527,13 @@ export function makeHoldOrTapToggle(onChange) {
 let activeNumPop = null;
 let activeNumPopTrigger = null;
 function closeActiveNumPop() {
-  if (activeNumPop) activeNumPop.remove();
-  activeNumPop = null;
+  // A list closed from the keyboard hands the focus back to the button that opened it.
+  const pop = activeNumPop;
+  const back = pop && pop.contains(document.activeElement) ? activeNumPopTrigger : null;
+  activeNumPop = null; // cleared first: removing a focused row fires focusout, which closes again
   activeNumPopTrigger = null;
+  if (pop) pop.remove();
+  if (back) back.focus();
 }
 document.addEventListener("pointerdown", (e) => {
   if (!activeNumPop) return;
@@ -601,10 +605,14 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   // to re-check its disabled state; see the call sites next to those writes in ui/video.js.
   el.numFieldRefresh = refreshButtons;
 
+  // Returns whether the step moved the value, so a held button can stop at the limit.
   function stepBy(dir, big) {
     const delta = (big ? (bigStep || liveStep() * 10) : liveStep()) * dir;
-    el.value = String(clampVal((Number(el.value) || 0) + delta));
+    const cur = Number(el.value) || 0;
+    const next = clampVal(cur + delta);
+    el.value = String(next);
     el.dispatchEvent(new Event("change", { bubbles: true }));
+    return next !== cur;
   }
 
   el.addEventListener(
@@ -627,12 +635,17 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
       holdInterval = null;
     };
     btn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // only the primary button steps; right and middle clicks do nothing
+      // Captured, so the release reaches this button even after it turned disabled at the limit.
+      try { btn.setPointerCapture(e.pointerId); } catch { /* no active pointer: the leave events still stop it */ }
       stepBy(dir, e.shiftKey);
       holdTimeout = setTimeout(() => {
-        holdInterval = setInterval(() => stepBy(dir, e.shiftKey), 60);
+        holdInterval = setInterval(() => {
+          if (!stepBy(dir, e.shiftKey) || btn.disabled) stop();
+        }, 60);
       }, 400);
     });
-    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, stop));
+    ["pointerup", "pointerleave", "pointercancel", "lostpointercapture"].forEach((ev) => btn.addEventListener(ev, stop));
   }
   // steppers: false leaves the minus and plus buttons out of the control (wheel and
   // arrow keys still step the input); refreshButtons then only touches detached nodes.
@@ -667,18 +680,30 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
         row.type = "button";
         row.textContent = String(p);
         if (Number(el.value) === p) row.classList.add("sel");
-        row.addEventListener("pointerdown", (e) => {
-          e.preventDefault(); // keep the input focused
+        let picked = false;
+        const pick = () => {
+          if (picked) return;
+          picked = true;
           el.value = String(clampVal(p));
           el.dispatchEvent(new Event("change", { bubbles: true }));
           closeActiveNumPop();
+        };
+        row.addEventListener("pointerdown", (e) => {
+          e.preventDefault(); // keep the input focused
+          pick();
         });
+        row.addEventListener("click", pick); // Enter and Space on a focused row
         pop.appendChild(row);
       }
+      // Tabbing out of the list closes it, like clicking elsewhere.
+      pop.addEventListener("focusout", (e) => {
+        if (!pop.contains(e.relatedTarget) && e.relatedTarget !== listBtn) closeActiveNumPop();
+      });
       document.body.appendChild(pop);
       placePopover(pop, listBtn.getBoundingClientRect());
       activeNumPop = pop;
       activeNumPopTrigger = listBtn;
+      (pop.querySelector(".sel") || pop.firstElementChild)?.focus();
     });
     wrap.appendChild(listBtn);
   }

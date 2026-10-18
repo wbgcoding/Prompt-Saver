@@ -19,7 +19,7 @@ import { secs, exportFormat, exportQuality } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
 import { centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
-import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive } from "./videoPreview.js";
+import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -67,6 +67,10 @@ export const FONT_FILES = [
   ["consola", "consola.ttf"],
   ["georgia", "georgia.ttf"],
 ];
+// Font names are proper names and stay untranslated.
+export const FONT_LABELS = {
+  segoeui: "Segoe UI", arial: "Arial", arialbd: "Arial Bold", consola: "Consolas", georgia: "Georgia",
+};
 // The live preview draws text with the browser's own font shaping (drawtext's fontfile is only
 // reachable by ffmpeg at export time), so each id gets the closest real CSS family.
 export const FONT_CSS = {
@@ -83,6 +87,8 @@ export const EXPORT_KBPS = { high: 12000, small: 4000, lossless: null };
 export const SILENT_FORMATS = new Set(["gif"]);
 export const formatHasAudio = (fmt) => !SILENT_FORMATS.has(fmt);
 export const formatExt = (fmt) => fmt;
+// A chosen destination path with only its extension swapped: the folder and file name stay.
+export const withExtension = (path, ext) => `${String(path).replace(/\.[^\\/.]+$/, "")}.${ext}`;
 // A length above which a GIF tends to balloon in size: shown as a warning, never enforced.
 export const SILENT_FORMAT_LENGTH_WARN_MS = 10000;
 // Enforced, unlike the length warning: these formats never encode above this on their long
@@ -703,6 +709,13 @@ export function layoutTrack() {
 // Tick spacing is picked so labels never collide: the smallest step from the
 // list that is at least ~70px wide at the current zoom.
 const TICK_STEPS_MS = [100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000, 1200000, 1800000, 3600000, 7200000];
+// A ruler tick label: minutes and seconds, with the milliseconds only on a fine scale. Cut at the
+// dot rather than at a fixed width, so a recording of 100 minutes or more keeps its full minutes.
+export function rulerLabel(ms, withMs) {
+  const label = fmtTime(ms);
+  return withMs ? label : label.slice(0, label.indexOf("."));
+}
+
 function renderRuler() {
   const ruler = $("ve-ruler");
   ruler.innerHTML = "";
@@ -712,7 +725,7 @@ function renderRuler() {
     const tick = document.createElement("span");
     tick.className = "ve-tick";
     tick.style.left = `${msToPx(ms)}px`;
-    tick.textContent = fmtTime(ms).slice(0, step < 1000 ? 9 : 5);
+    tick.textContent = rulerLabel(ms, step < 1000);
     ruler.appendChild(tick);
   }
 }
@@ -855,21 +868,38 @@ async function loadWave(track) {
   }
 }
 
+// Waveform colours are read once per theme, not on every redraw of a zoom or resize.
+const waveColors = [null, null];
+const WAVE_HEIGHT = 34;
+const WAVE_MAX_PX = 16384;
+
+function waveColor(track) {
+  if (!waveColors[track]) {
+    const style = getComputedStyle(document.documentElement);
+    waveColors[track] = (style.getPropertyValue(track === 0 ? "--accent" : "--muted") || "#3b82f6").trim();
+  }
+  return waveColors[track];
+}
+
 function drawWave(track) {
   const canvas = track === 0 ? $("ve-wave-sys") : $("ve-wave-mic");
   const data = VE.peaks[track];
-  const width = Math.round(trackWidth());
-  canvas.width = Math.max(1, width);
-  canvas.height = 34;
+  const width = Math.max(1, Math.round(trackWidth()));
+  // Backing store in device pixels so the waveform stays sharp on scaled displays; the CSS size
+  // stays the layout size.
+  const scale = Math.min(window.devicePixelRatio || 1, Math.max(1, WAVE_MAX_PX / width));
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(WAVE_HEIGHT * scale);
   canvas.style.width = `${width}px`;
+  canvas.style.height = `${WAVE_HEIGHT}px`;
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, width, WAVE_HEIGHT);
   if (!data || !data.values.length) return;
-  const style = getComputedStyle(document.documentElement);
-  ctx.fillStyle = (style.getPropertyValue(track === 0 ? "--accent" : "--muted") || "#3b82f6").trim();
-  const mid = canvas.height / 2;
-  for (let x = 0; x < canvas.width; x++) {
-    const value = data.values[Math.min(data.values.length - 1, Math.floor((x / canvas.width) * data.values.length))];
+  ctx.fillStyle = waveColor(track);
+  const mid = WAVE_HEIGHT / 2;
+  for (let x = 0; x < width; x++) {
+    const value = data.values[Math.min(data.values.length - 1, Math.floor((x / width) * data.values.length))];
     const h = Math.max(1, Math.abs(Number(value) || 0) * mid);
     ctx.fillRect(x, mid - h, 1, h * 2);
   }
@@ -1326,15 +1356,18 @@ $("ve-trim-set").addEventListener("click", () => {
 });
 $("ve-cut-add").addEventListener("click", () => {
   if (!VE.sel || Math.abs(VE.sel.b - VE.sel.a) < MIN_CLIP_MS) { toast(t("veNeedSelection")); return; }
-  pushOp({ tool: "cut", startMs: Math.min(VE.sel.a, VE.sel.b), endMs: Math.max(VE.sel.a, VE.sel.b) });
+  const startMs = Math.min(VE.sel.a, VE.sel.b);
+  const endMs = Math.max(VE.sel.a, VE.sel.b);
+  // Cleared before the push: pushOp redraws the timeline, and the band must not outlive the cut.
   VE.sel = null;
+  pushOp({ tool: "cut", startMs, endMs });
 });
 $("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut"));
 
 $("ve-still").addEventListener("click", async () => {
   try {
     const saved = await invoke("extract_still_frame", { path: VE.src, atMs: Math.round(VE.playhead) });
-    toast(saved ? t("veStillSaved").replace("{path}", String(saved)) : t("veStillSaved").replace("{path}", ""));
+    toast(saved ? t("veStillSaved").replace("{path}", () => String(saved)) : t("veStillNotSaved"));
   } catch (err) {
     noteFfmpeg(err);
     toast(errMessageLogged(err, t, "video"));
@@ -1568,10 +1601,9 @@ fillVideoFormatSelect($("ve-export-format"));
 for (const id of ["ve-export-format", "ve-export-quality"]) {
   attachSelectPicker($(id));
   $(id).addEventListener("change", () => {
-    // A full manual destination names its own extension, so picking a different container format
-    // makes it wrong: the format dropdown alone drops back to the auto-named file (still inside a
-    // remembered "Export to…" folder).
-    if (id === "ve-export-format") VE.destOverride = null;
+    // A full manual destination names its own extension, so a different container format makes
+    // it wrong: only that extension follows the format, the folder and name the user chose stay.
+    if (id === "ve-export-format" && VE.destOverride) VE.destOverride = withExtension(VE.destOverride, formatExt(exportFormat()));
     persistExportSettings();
     updateExportNote();
   });
@@ -1810,8 +1842,7 @@ export function resetForNewSource() {
   updateNudgeHint();
   // The live-preview nodes belong to the old source's overlays; leftovers would show a stale
   // image/text/pixelate sampled from a video that is no longer loaded.
-  $("ve-overlay-live").innerHTML = "";
-  VE.liveEls.clear();
+  clearLiveOverlays($("ve-overlay-live"));
   VE.strip = [];
   VE.stripCount = 0;
   VE.peaks = { 0: null, 1: null };
@@ -1863,7 +1894,7 @@ window.addEventListener("resize", () => {
 });
 
 // ---------------------------------------------------------------- backend events
-listen("theme-changed", (e) => { applyTheme(e.payload?.theme, e.payload?.vars); drawWave(0); if (VE.hasMic) drawWave(1); });
+listen("theme-changed", (e) => { applyTheme(e.payload?.theme, e.payload?.vars); waveColors[0] = waveColors[1] = null; drawWave(0); if (VE.hasMic) drawWave(1); });
 listen("language-changed", () => { invoke("get_settings").then((s) => loadTexts(s)).catch(() => {}); });
 listen("settings-changed", () => { invoke("get_settings").then((s) => { settings = s; applySettings(s); }).catch(() => {}); });
 // Opening a second recording reuses this window instead of stacking another one.
@@ -1879,12 +1910,17 @@ listen("video-editor-load", async (e) => {
   // discard unsaved edits: it guards the same case closeWindow() does, with its exact confirm.
   if (VE.ops.length && VE.dirty) {
     ack("asking");
+    const askedSrc = VE.src;
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
     if (!ok) { ack("refused"); return; }
-    // Thrown away on purpose: stop the autosave for the old source and forget what an
-    // earlier tick stored, or reopening that recording would offer the work back.
-    stopEditStateAutosave();
-    if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+    // A second request queued behind the first confirm: once the first was accepted the old
+    // edits are gone and another source is loaded, so there is nothing left to discard.
+    if (VE.src === askedSrc && VE.ops.length && VE.dirty) {
+      // Thrown away on purpose: stop the autosave for the old source and forget what an
+      // earlier tick stored, or reopening that recording would offer the work back.
+      stopEditStateAutosave();
+      if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+    }
   }
   loadRecording(path, originDir, overlayPath);
   ack("accepted");
@@ -1977,6 +2013,14 @@ export function applySettings(settings) {
     // an error for what is a normal startup order.
   }
   if (path) await loadRecording(path, originDir, overlayPath);
-  else $("ve-stage-msg").textContent = t("veNoRecording");
+  else {
+    // Wait for the texts (t() answers the raw key before they land) and point the label's
+    // translation hook at the new message, or the next language pass would paint "Loading"
+    // back over it.
+    await textsReady;
+    const msg = $("ve-stage-msg");
+    msg.dataset.i18n = "veNoRecording";
+    msg.textContent = t("veNoRecording");
+  }
   requestAnimationFrame(tick);
 })();

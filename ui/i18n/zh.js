@@ -523,6 +523,7 @@ export default {
     veStill: "导出帧",
     veStillTip: "导出帧：将播放头所在的帧保存为图片，与保存屏幕截图的方式相同。",
     veStillSaved: "帧已保存：{path}",
+    veStillNotSaved: "无法保存该帧。",
     veNeedSelection: "请先在时间线上选择一个范围。",
     veZoomOut: "缩小",
     veZoomIn: "放大",

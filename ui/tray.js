@@ -5,7 +5,7 @@
 // from the backend; this file draws rows.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-import { hexToRgb, inkFor } from "./floatShared.js";
+import { hexToRgb, inkFor, resolveLang } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -117,8 +117,13 @@ function actionIcon(kind) {
 
 function setActive(i) {
   rows[active]?.el.classList.remove("active");
+  rows[active]?.el.setAttribute("aria-selected", "false");
   active = i;
   rows[active]?.el.classList.add("active");
+  rows[active]?.el.setAttribute("aria-selected", "true");
+  // The search field keeps the focus, so the highlighted row is announced through it.
+  if (rows[active]) searchEl.setAttribute("aria-activedescendant", rows[active].el.id);
+  else searchEl.removeAttribute("aria-activedescendant");
   rows[active]?.el.scrollIntoView({ block: "nearest" });
 }
 
@@ -126,6 +131,9 @@ function addRow(id, label, icon, cls) {
   const row = document.createElement("div");
   row.className = "tray-menu-row" + (cls ? " " + cls : "");
   row.dataset.id = id;
+  row.id = `tray-opt-${rows.length}`;
+  row.setAttribute("role", "option");
+  row.setAttribute("aria-selected", "false");
   if (icon) row.appendChild(icon);
   const name = document.createElement("span");
   name.className = "tray-menu-row-name";
@@ -143,12 +151,15 @@ function addHeader(text) {
   if (!text) return; // the search-result section has no title, so it draws no bar
   const head = document.createElement("div");
   head.className = "tray-menu-head";
+  head.setAttribute("role", "presentation");
   head.textContent = text;
   rowsEl.appendChild(head);
 }
 
 function addSeparator() {
-  rowsEl.appendChild(document.createElement("div")).className = "tray-menu-sep";
+  const sep = rowsEl.appendChild(document.createElement("div"));
+  sep.className = "tray-menu-sep";
+  sep.setAttribute("role", "presentation");
 }
 
 // Draws the rows below the always-present search field: the recording controls, then the
@@ -225,6 +236,7 @@ document.addEventListener("keydown", (e) => {
 // in that hand-off would close the menu before anything was on screen.
 let openedAt = Date.now();
 const BLUR_GRACE_MS = 400;
+let blurTimer = 0; // the deferred close of a blur inside the grace window
 window.addEventListener("blur", () => {
   if (handover) { sendTail(); return; } // the launcher took the focus: pass on the text, then close
   if (closed) return; // hidden between opens: nothing to close
@@ -234,11 +246,22 @@ window.addEventListener("blur", () => {
   // another app in that same instant, ignoring the blur would strand this always-on-top
   // menu on screen. Close once the grace window ends, unless this window is focused again
   // by then.
-  else setTimeout(() => { if (!document.hasFocus() && !handover) close(); }, left);
+  else {
+    clearTimeout(blurTimer);
+    blurTimer = setTimeout(() => { if (!document.hasFocus() && !handover) close(); }, left);
+  }
 });
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target) && !handover) close();
 });
+
+// The page language follows the UI language so a screen reader picks the right voice; it
+// is not on the critical path of an open, so it never delays the reveal.
+function syncDocLang() {
+  Promise.all([invoke("get_settings"), import("./i18n.js")])
+    .then(([s, { LANGS }]) => { document.documentElement.lang = resolveLang(s.language, LANGS); })
+    .catch(() => {});
+}
 
 // The window lives on between opens (hidden), so every open starts from a clean
 // slate: the backend parks the plan, says "tray-open", and this page takes it, draws
@@ -247,13 +270,16 @@ async function openMenu() {
   const plan = await invoke("tray_window_plan").catch(() => null);
   if (!plan) return;
   clearTimeout(tailTimer);
+  clearTimeout(blurTimer); // a stale deferred close must not hit this fresh open
   handover = null;
   tailSent = false;
   closed = false;
   searchEl.value = "";
   render(plan);
   searchEl.placeholder = plan.searchPh || "";
+  searchEl.setAttribute("aria-label", plan.searchPh || "");
   searchEl.hidden = !plan.searchOn;
+  syncDocLang();
   openedAt = Date.now();
   await invoke("tray_window_reveal").catch(() => {});
   if (plan.searchOn) searchEl.focus();

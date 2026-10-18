@@ -517,6 +517,17 @@ listen("camera-permission-ready", () => {
   startPreviewWhenReady();
 });
 
+// A headset plugged in or out while the window is open: the microphone list follows, and the
+// preview restarts when the picked microphone vanished or the stream died with its device.
+// refreshPreview() itself does nothing during a take.
+async function onMediaDevicesChanged() {
+  if (!permissionReady || !settingsReady) return;
+  const before = audioSelect.value;
+  await populateAudioDevices();
+  if (audioSelect.value !== before || !stream || !stream.active) refreshPreview();
+}
+navigator.mediaDevices?.addEventListener?.("devicechange", onMediaDevicesChanged);
+
 import("./floattheme.js").then(({ applyFloatTheme }) => {
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
   Promise.all([invoke("current_theme"), invoke("theme_vars")])
@@ -525,7 +536,9 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
 });
 Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default_recording_dir").catch(() => "")])
   .then(async ([s, { resolveLang }, defaultDir]) => {
-    ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+    const lang = resolveLang(s.language, LANGS);
+    document.documentElement.lang = lang;
+    ({ tx } = await fullTexts(lang));
     applyTexts();
     showFolder(s.ui_texts?.recordingDir || defaultDir || "");
     videoDeviceId = s.ui_texts?.cameraDevice || "";
@@ -559,7 +572,9 @@ function applyTexts() {
 listen("language-changed", () => {
   Promise.all([invoke("get_settings"), import("./floatShared.js")])
     .then(async ([s, { resolveLang }]) => {
-      ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+      const lang = resolveLang(s.language, LANGS);
+      document.documentElement.lang = lang;
+      ({ tx } = await fullTexts(lang));
       applyTexts();
     })
     .catch(() => {});

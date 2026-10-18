@@ -3,7 +3,7 @@ import { numberField, parseFfmpegError } from "./floatShared.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { keysPickerRow } from "./videoKeys.js";
-import { $, clamp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
+import { $, clamp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
 import { renderRects, snapRect } from "./videoPreview.js";
 
 // ---------------------------------------------------------------- overlays
@@ -117,7 +117,7 @@ export async function addAlignedCameraOverlay(path, gen) {
   const rect = snapRect({ x: VE.w - w - margin, y: VE.h - h - margin, w, h });
   const op = {
     tool: "overlay", id: newId(), kind: "video",
-    startMs, endMs: Math.min(VE.dur, startMs + durationMs || VE.dur),
+    startMs, endMs: Math.min(VE.dur, startMs + (durationMs || VE.dur)),
     path, rect, opacity: VE.ovImageOpacityDefault ?? 100,
     volume: 0, loop: false,
     hasAudio: !!probe.has_audio, videoDurationMs: durationMs,
@@ -417,6 +417,11 @@ export function colorRow(current, onPick) {
 // values back over fields changed since.
 export const liveOverlay = (op) => VE.ops.find((o) => o.id === op.id) || op;
 
+// True while `op` is still in the recording that was loaded when `gen` was read. A picker or a
+// probe awaited in between can outlive the overlay (removed) or the recording (another one
+// loaded), and committing then would push the old overlay back in.
+export const overlayStillInEditor = (op, gen) => VE.loadGen === gen && VE.ops.some((o) => o.id === op.id);
+
 export function commitOverlay(op, changes) {
   pushReplacing((o) => o.id === op.id, { ...liveOverlay(op), ...changes }, { keepEditor: true });
   rememberOverlayValues(op.kind, changes);
@@ -538,8 +543,9 @@ export function renderOverlayEditor() {
     change.className = "ghost-btn ve-wide";
     change.textContent = t("pathChange");
     change.addEventListener("click", async () => {
+      const gen = VE.loadGen;
       const path = await invoke("pick_file_path").catch(() => null);
-      if (!path) return;
+      if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
       commitOverlay(op, { path });
     });
@@ -564,11 +570,13 @@ export function renderOverlayEditor() {
     change.className = "ghost-btn ve-wide";
     change.textContent = t("pathChange");
     change.addEventListener("click", async () => {
+      const gen = VE.loadGen;
       const path = await invoke("pick_file_path").catch(() => null);
-      if (!path) return;
+      if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
       try {
         const probe = await invoke("probe_extra_video_source", { path });
+        if (!overlayStillInEditor(op, gen)) return;
         commitOverlay(op, { path, hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0, missing: false });
       } catch (err) {
         const { message } = parseFfmpegError(err, t);
@@ -596,7 +604,7 @@ export function renderOverlayEditor() {
 
   if (op.kind === "text") {
     box.appendChild(fieldRow(t("veOvTextValue"), ovTrack("text", textInput(op.text, (v) => commitOverlay(op, { text: v })), (o) => o.text)));
-    box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
+    box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, FONT_LABELS[id] || id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
     box.appendChild(fieldRow(t("veOvFontSize"), ovTrack("fontPx", numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v }), [12, 16, 24, 32, 48, 64, 96]), (o) => String(o.fontPx))));
     const pos = document.createElement("div");
     pos.className = "ve-row2";

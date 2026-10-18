@@ -144,6 +144,8 @@ export async function loadRecording(path, originDir, overlayPath) {
   if (VE.originDir) toast(t("openedCopyNote"));
   $("ve-file").textContent = path.split(/[\\/]/).pop() || "";
   $("ve-file").title = path;
+  $("ve-stage-msg").dataset.i18n = "veLoading";
+  $("ve-stage-msg").textContent = t("veLoading");
   $("ve-stage-msg").classList.remove("hidden");
   // The element gets the file only after the probe and, for a recording with a mic
   // sidecar, the mux: the mux replaces the file, which Windows refuses while the element

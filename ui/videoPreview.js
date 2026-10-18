@@ -284,6 +284,16 @@ export function renderRects() {
   renderOverlayLive(vb);
 }
 
+// Drops every live-preview node. A detached <video> keeps decoding until its clip ends, so each
+// inserted video is paused and released before the layer is emptied.
+export function clearLiveOverlays(layer) {
+  for (const el of VE.liveEls.values()) {
+    if (el instanceof HTMLVideoElement) { el.pause(); el.removeAttribute("src"); el.load(); }
+  }
+  VE.liveEls.clear();
+  layer.innerHTML = "";
+}
+
 // Every overlay active at the current playhead, drawn as close to its exported look as the
 // browser manages, not just an outline. The enable check compares against op.startMs/op.endMs
 // directly (source timeline, like VE.playhead); a video overlay's own clip position needs the
@@ -294,7 +304,7 @@ export function renderRects() {
 // buildLiveOverlayEl() updates a passed-in element in place when the overlay already has one.
 export function renderOverlayLive(vb) {
   const layer = $("ve-overlay-live");
-  if (!VE.dur) { layer.innerHTML = ""; VE.liveEls.clear(); return; }
+  if (!VE.dur) { clearLiveOverlays(layer); return; }
   const box = vb || videoBox();
   const now = VE.playhead;
   const stack = overlayStack();

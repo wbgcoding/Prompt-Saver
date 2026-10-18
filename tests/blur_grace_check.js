@@ -1,5 +1,5 @@
 // Every window script with a BLUR_GRACE_MS blur handler must also re-check
-// after the grace window ends (an `else setTimeout(` branch, as tray.js has).
+// after the grace window ends (an `else` branch that calls setTimeout, as tray.js has).
 // A blur that fires while the window is still being shown is otherwise dropped
 // for good and an always-on-top window stays up after a quick click-away.
 // folder.js and floating.js close on blur without any grace on purpose and
@@ -24,7 +24,7 @@ for (const name of fs.readdirSync(uiDir).filter((f) => f.endsWith(".js")).sort()
   // The handler runs up to the next top-level statement after its closing "});".
   const end = src.indexOf("\n});", start);
   const handler = src.slice(start, end < 0 ? undefined : end + 4);
-  if (!/\belse\s+setTimeout\(/.test(handler)) {
+  if (!/\belse\s*(?:\{\s*)?(?:[\w.]+\s*=\s*)?(?:clearTimeout\([^)]*\);\s*[\w.]+\s*=\s*)?setTimeout\(/.test(handler)) {
     problems.push(`ui/${name}: the BLUR_GRACE_MS blur handler has no "else setTimeout(" re-check branch`);
   }
 }

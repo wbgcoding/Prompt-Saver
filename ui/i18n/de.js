@@ -499,6 +499,7 @@ export default {
     veStill: "Bild exportieren",
     veStillTip: "Bild exportieren: speichert das Bild an der Abspielposition wie einen Screenshot.",
     veStillSaved: "Bild gespeichert: {path}",
+    veStillNotSaved: "Das Bild konnte nicht gespeichert werden.",
     veNeedSelection: "Wähle zuerst einen Bereich auf der Zeitleiste aus.",
     veZoomOut: "Verkleinern",
     veZoomIn: "Vergrößern",

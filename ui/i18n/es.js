@@ -523,6 +523,7 @@ export default {
     veStill: "Exportar fotograma",
     veStillTip: "Exportar fotograma: guarda el fotograma del cabezal de reproducción como imagen, igual que una captura de pantalla.",
     veStillSaved: "Fotograma guardado: {path}",
+    veStillNotSaved: "No se pudo guardar el fotograma.",
     veNeedSelection: "Selecciona primero un intervalo en la línea de tiempo.",
     veZoomOut: "Alejar",
     veZoomIn: "Acercar",

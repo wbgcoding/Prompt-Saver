@@ -209,7 +209,9 @@ async function beginSession() {
 function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js"), import("./errors.js")])
     .then(async ([s, { LANGS, fullTexts }, { resolveLang }, { errMessageLogged }]) => {
-      const { tx } = await fullTexts(resolveLang(s.language, LANGS));
+      const lang = resolveLang(s.language, LANGS);
+      document.documentElement.lang = lang;
+      const { tx } = await fullTexts(lang);
       T.hint = tx("snipHint");
       T.failed = tx("snipFailed");
       T.pick = tx("pickHint");
@@ -559,8 +561,7 @@ function renderHistory() {
     // drag, mouseup would otherwise fire pickHere() for whatever the crosshair is
     // currently over (the window-level pick handlers, above).
     btn.addEventListener("mousedown", (e) => e.stopPropagation());
-    btn.addEventListener("mouseup", async (e) => {
-      e.stopPropagation();
+    const copySwatch = async () => {
       try {
         // Check the return value too: a resolved false (write rejected) must
         // not flash "copied" any more than a thrown error would.
@@ -570,7 +571,11 @@ function renderHistory() {
           setTimeout(() => btn.classList.remove("copied"), 250);
         }
       } catch { /* clipboard write failed: nothing to show inside this overlay */ }
-    });
+    };
+    btn.addEventListener("mouseup", (e) => { e.stopPropagation(); copySwatch(); });
+    // Tab-focus plus Enter or Space arrives as a click without a pointer (detail 0); a mouse
+    // click already copied on mouseup.
+    btn.addEventListener("click", (e) => { e.stopPropagation(); if (e.detail === 0) copySwatch(); });
     historyEl.appendChild(btn);
   }
 }
@@ -643,6 +648,8 @@ function onMove() {
     setRegion(x, y, w, h, 0);
     const a = toImg(x, y), b = toImg(x + w, y + h);
     sizeLabel.textContent = `${Math.round(b.x - a.x)} × ${Math.round(b.y - a.y)}`;
+    // The label normally sits above the box; with no room above it moves inside.
+    sizeLabel.classList.toggle("inside", y < 27);
     return;
   }
   const win = windowAt(e.clientX, e.clientY);
@@ -784,6 +791,8 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setZoom(pickZoom + zk);
   } else if (e.key === "Enter" || e.key === " ") {
+    // A focused history swatch takes the key itself (its click copies that swatch).
+    if (e.target && e.target.closest && e.target.closest(".pick-history-item")) return;
     e.preventDefault();
     pickHere();
   }

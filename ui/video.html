@@ -169,7 +169,7 @@
       </div>
     </div>
 
-    <!-- Side panel: three tabs plus the operation list, which stays visible under
+    <!-- Side panel: two tabs (Edit, Overlays) plus the operation list, which stays visible under
          every tab because undo/redo has to be reachable from wherever you are. -->
     <div class="ve-side">
       <div class="ve-tabs" role="tablist" data-i18n-aria="veTabsLabel">
@@ -350,7 +350,7 @@
   </div>
 
   <!-- Generic confirm dialog (ui/dialog.js): the same markup as the main window. -->
-  <div id="confirm-modal" class="overlay hidden" role="alertdialog" aria-modal="true">
+  <div id="confirm-modal" class="overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
     <div class="modal modal-narrow">
       <div class="confirm-head">
         <span id="confirm-icon" class="confirm-icon hidden" aria-hidden="true"></span>

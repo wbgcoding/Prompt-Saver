@@ -185,6 +185,8 @@ function renderGrid() {
     tile.className = "folder-member";
     tile.dataset.id = p.id;
     tile.title = p.name;
+    // Named by the prompt alone: the copy confirmation and the rotate badge are decoration here.
+    tile.setAttribute("aria-label", p.name);
     tile.style.width = px(t);
     tile.style.height = px(t);
     const face = document.createElement("span");
@@ -194,12 +196,14 @@ function renderGrid() {
     if (rotateBadgeOn && (p.variants || []).length) {
       const rb = document.createElement("span");
       rb.className = "rotate-badge";
+      rb.setAttribute("aria-hidden", "true");
       rb.textContent = rotateBadgeLabel(rotateInfo.get(p.id));
       tile.appendChild(rb);
       primeMemberRotate(p.id);
     }
     const ok = document.createElement("span");
     ok.className = "member-ok";
+    ok.setAttribute("aria-hidden", "true");
     ok.textContent = TXT.copied;
     tile.appendChild(ok);
     gridEl.appendChild(tile);
@@ -343,9 +347,12 @@ async function copyMember(id) {
 
 // ---- state + settings ----
 
+let loadSeq = 0;
 async function loadState() {
+  // Replies can arrive out of order; only the newest request may replace the state.
+  const seq = ++loadSeq;
   const data = await invoke("float_folder_state", { id: folderId }).catch(() => null);
-  if (!data) return;
+  if (!data || seq !== loadSeq) return;
   state = data;
   renderIcon();
   // The stored scale arrives here, not through applyPrefs, and both run in
@@ -363,7 +370,9 @@ async function applySettings() {
 }
 
 function applyTexts(s) {
-  TXT = compactTexts(resolveLang(s.language, LANGS));
+  const lang = resolveLang(s.language, LANGS);
+  document.documentElement.lang = lang;
+  TXT = compactTexts(lang);
   document.getElementById("size-label").textContent = TXT.size;
   parkedBadge.title = TXT.parked;
   document.getElementById("menu-rename").textContent = TXT.rename;

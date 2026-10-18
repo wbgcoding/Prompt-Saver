@@ -499,6 +499,7 @@ export default {
     veStill: "Export frame",
     veStillTip: "Export frame: saves the frame at the playhead as a picture, the same way a screenshot is saved.",
     veStillSaved: "Frame saved: {path}",
+    veStillNotSaved: "The frame could not be saved.",
     veNeedSelection: "Select a range on the timeline first.",
     veZoomOut: "Zoom out",
     veZoomIn: "Zoom in",

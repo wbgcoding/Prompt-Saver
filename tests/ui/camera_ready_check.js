@@ -57,6 +57,8 @@ async function main() {
       },
     },
     document: {
+      documentElement: {},
+      documentElement: {},
       getElementById: (id) => (els[id] ||= fakeEl()),
       querySelector: () => fakeEl(),
       createElement: () => fakeEl(),

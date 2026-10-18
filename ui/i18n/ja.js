@@ -523,6 +523,7 @@ export default {
     veStill: "フレームを書き出す",
     veStillTip: "フレームを書き出す: 再生ヘッド位置のフレームを、スクリーンショットと同じ方法で画像として保存します。",
     veStillSaved: "フレームを保存しました: {path}",
+    veStillNotSaved: "フレームを保存できませんでした。",
     veNeedSelection: "先にタイムラインで範囲を選択してください。",
     veZoomOut: "縮小",
     veZoomIn: "拡大",

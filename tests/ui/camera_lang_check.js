@@ -52,6 +52,8 @@ async function main() {
     console, navigator: { language: "en-US", mediaDevices: { enumerateDevices: async () => [], getUserMedia: async () => { throw new Error("none"); } } },
     setTimeout, clearTimeout, setInterval, clearInterval,
     document: {
+      documentElement: {},
+      documentElement: {},
       getElementById: (id) => (els[id] ||= fakeEl()),
       querySelector: () => fakeEl(),
       createElement: () => fakeEl(),

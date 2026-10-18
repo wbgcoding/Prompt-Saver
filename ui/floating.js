@@ -164,7 +164,9 @@ async function applySettings() {
 }
 
 function applyTexts(s) {
-  const t = compactTexts(resolveLang(s.language, LANGS));
+  const lang = resolveLang(s.language, LANGS);
+  document.documentElement.lang = lang;
+  const t = compactTexts(lang);
   copiedText = t.copied;
   document.getElementById("feedback").textContent = copiedText;
   document.getElementById("size-label").textContent = t.size;
@@ -407,6 +409,7 @@ function applyPrompt(p) {
       if (videoEl.getAttribute("src") !== src) {
         videoEl.src = src; // only a changed source reloads the video
         videoEverPlayed = false; // a new source must re-honour videoAutoplay
+        userPaused = false; // and an old user pause does not carry over to it
         videoEl.onloadedmetadata = () =>
           onRatio(videoEl.videoWidth / videoEl.videoHeight);
       } else if (videoEl.videoWidth) {
@@ -416,7 +419,7 @@ function applyPrompt(p) {
       ensureVideoPlaying();
     } else {
       videoEl.classList.add("hidden");
-      videoEl.pause();
+      pauseByApp(); // not a user pause: a later video source starts again
       videoEl.removeAttribute("src");
       videoEl.load(); // the attribute alone neither stops playback nor frees the file
       const src = p.image || convertFileSrc(showPath);
@@ -427,7 +430,7 @@ function applyPrompt(p) {
     }
   } else {
     videoEl.classList.add("hidden");
-    videoEl.pause();
+    pauseByApp();
     videoEl.removeAttribute("src");
     videoEl.load();
     imgEl.classList.add("hidden");

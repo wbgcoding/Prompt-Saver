@@ -48,6 +48,7 @@ async function main() {
     requestAnimationFrame: () => 0,
     cancelAnimationFrame: () => {},
     document: {
+      documentElement: {},
       getElementById: (id) => (els[id] ||= fakeEl()),
       createElement: () => fakeEl(),
       body: fakeEl(),

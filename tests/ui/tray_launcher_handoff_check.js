@@ -91,7 +91,7 @@ function fakeEl() {
     removeEventListener() {},
     fire(t, ev) { for (const fn of h[t] || []) fn(ev || {}); },
     appendChild(c) { el.children.push(c); return c; },
-    append() {}, replaceChildren() { el.children = []; }, setAttribute() {}, focus() {}, scrollIntoView() {}, contains: () => false,
+    append() {}, replaceChildren() { el.children = []; }, setAttribute() {}, removeAttribute() {}, focus() {}, scrollIntoView() {}, contains: () => false,
     setSelectionRange(a) { el.selection = a; },
   };
   Object.defineProperty(el, "innerHTML", { get: () => "", set: () => { el.children = []; } });
@@ -122,7 +122,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
     const sandbox = {
       console, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, Date: clock.Date, __i18n: i18n, __shared: shared,
       document: {
-        title: "", getElementById: (id) => (launcherEls[id] ||= fakeEl()), createElement: () => fakeEl(),
+        documentElement: {}, title: "", getElementById: (id) => (launcherEls[id] ||= fakeEl()), createElement: () => fakeEl(),
         addEventListener() {}, body: fakeEl(), hasFocus: () => os.focus === "launcher",
       },
       __TAURI__: {
@@ -153,7 +153,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
   const traySandbox = {
     console, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, Date: clock.Date,
     document: {
-      title: "", getElementById: (id) => (trayEls[id] ||= fakeEl()), createElement: () => fakeEl(),
+      documentElement: {}, title: "", getElementById: (id) => (trayEls[id] ||= fakeEl()), createElement: () => fakeEl(),
       createElementNS: () => fakeEl(), addEventListener() {}, body: fakeEl(), hasFocus: () => os.focus === "tray",
     },
     __TAURI__: {
@@ -186,7 +186,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
   const trayCode = read("tray.js")
     .replace(/^import \{ applyFloatTheme \} from "\.\/floattheme\.js";$/m, "const applyFloatTheme = () => {};")
     .replace(/^import \{ APP_NAME \} from "\.\/brand\.js";$/m, 'const APP_NAME = "App";')
-    .replace(/^import \{ hexToRgb, inkFor \} from "\.\/floatShared\.js";$/m, "const { hexToRgb, inkFor } = __shared;");
+    .replace(/^import \{ hexToRgb, inkFor, resolveLang \} from "\.\/floatShared\.js";$/m, "const { hexToRgb, inkFor, resolveLang } = __shared;");
   traySandbox.__shared = shared;
   vm.createContext(traySandbox);
   vm.runInContext(trayCode, traySandbox, { filename: "tray.js" });

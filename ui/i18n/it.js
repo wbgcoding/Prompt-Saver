@@ -523,6 +523,7 @@ export default {
     veStill: "Esporta fotogramma",
     veStillTip: "Esporta fotogramma: salva come immagine il fotogramma in corrispondenza dell'indicatore di riproduzione, come una schermata.",
     veStillSaved: "Fotogramma salvato: {path}",
+    veStillNotSaved: "Impossibile salvare il fotogramma.",
     veNeedSelection: "Seleziona prima un intervallo nella sequenza temporale.",
     veZoomOut: "Riduci zoom",
     veZoomIn: "Aumenta zoom",
