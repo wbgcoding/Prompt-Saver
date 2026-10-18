@@ -1667,6 +1667,7 @@ export default {
     tileTipRotate: "Rotation, nächster Text: {text}",
     rotateToggle: "Rotation",
     rotateAddEntry: "+ Rotationstext",
+    rotateEntryN: "Rotationstext {n}",
     rotateFromStart: "Von vorn",
     rotateNextLabel: "Nächster: {n} / {total}",
     rotateDiscardConfirm: "Rotationstexte ab dem zweiten verwerfen? Nur der erste bleibt erhalten.",

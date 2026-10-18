@@ -233,6 +233,7 @@ export function varFixedListRow() {
     const valueEl = document.createElement("input");
     valueEl.type = "text";
     valueEl.className = "modal-input var-fixed-value";
+    valueEl.setAttribute("aria-label", name);
     valueEl.value = fixed[name];
     valueEl.addEventListener("change", () => {
       const next = { ...readFixedVars() };
@@ -1072,6 +1073,7 @@ export function renderRotateEntries() {
     const ta = document.createElement("textarea");
     ta.className = "modal-input rotate-entry-input";
     ta.rows = 1;
+    ta.setAttribute("aria-label", t("rotateEntryN").replace("{n}", () => String(i + 1)));
     ta.value = entry;
     // Typing can flip an entry between blank/filled (eligibility) or add/remove
     // a placeholder (the button's hint tooltip): both must stay live, not just on open.

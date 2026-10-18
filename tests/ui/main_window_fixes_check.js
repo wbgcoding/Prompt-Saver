@@ -996,6 +996,13 @@ section(() => {
   check(/Array\.from\([^;]*\.trim\(\)\)\.slice\(0, 140\)\.join\(""\)/.test(src), "the draft preview is cut by code point");
 });
 
+// 50. Rotation entry and fixed variable inputs carry accessible names.
+section(() => {
+  const src = read("editor.js");
+  check(src.includes('ta.setAttribute("aria-label", t("rotateEntryN").replace("{n}", () => String(i + 1)))'), "a rotation text field is named by its position");
+  check(src.includes('valueEl.setAttribute("aria-label", name)'), "a fixed variable value field is named by its variable");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

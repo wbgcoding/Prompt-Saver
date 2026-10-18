@@ -1659,6 +1659,7 @@ export default {
     tileTipRotate: "轮换,下一段:{text}",
     rotateToggle: "轮换",
     rotateAddEntry: "+ 轮换文本",
+    rotateEntryN: "轮换文本 {n}",
     rotateFromStart: "从头开始",
     rotateNextLabel: "下一条:{n} / {total}",
     rotateDiscardConfirm: "要放弃第 2 段及之后的轮换文本吗?只会保留第一段。",

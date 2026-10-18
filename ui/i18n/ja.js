@@ -1659,6 +1659,7 @@ export default {
     tileTipRotate: "ローテーション、次のテキスト:{text}",
     rotateToggle: "ローテーション",
     rotateAddEntry: "+ ローテーションテキスト",
+    rotateEntryN: "ローテーションテキスト {n}",
     rotateFromStart: "最初から",
     rotateNextLabel: "次:{n} / {total}",
     rotateDiscardConfirm: "2番目以降のローテーションテキストを破棄しますか？最初のテキストだけが残ります。",

@@ -1659,6 +1659,7 @@ export default {
     tileTipRotate: "Döngü, sonraki metin: {text}",
     rotateToggle: "Döngü",
     rotateAddEntry: "+ Döngü metni",
+    rotateEntryN: "Döngü metni {n}",
     rotateFromStart: "Baştan",
     rotateNextLabel: "Sıradaki: {n} / {total}",
     rotateDiscardConfirm: "2. ve sonraki döngü metinleri silinsin mi? Yalnızca ilki tutulacak.",

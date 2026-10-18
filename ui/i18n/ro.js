@@ -1659,6 +1659,7 @@ export default {
     tileTipRotate: "Rotație, următorul text: {text}",
     rotateToggle: "Rotație",
     rotateAddEntry: "+ Text de rotație",
+    rotateEntryN: "Text de rotație {n}",
     rotateFromStart: "De la început",
     rotateNextLabel: "Următoarea: {n} / {total}",
     rotateDiscardConfirm: "Renunți la textele de rotație de la al doilea încolo? Va fi păstrat doar primul.",
