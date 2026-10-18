@@ -481,10 +481,17 @@ pub(crate) async fn export_prompts(
         };
         (content, resolved.len())
     };
-    let file = file_dialog(&app)
-        .set_file_name(format!("{}.{}", brand::ITEM_PLURAL, format))
-        .add_filter(format.to_uppercase(), &[format.as_str()])
-        .save_file();
+    // The save dialog is modal: it waits on a blocking thread, not on an async worker.
+    let dialog_app = app.clone();
+    let dialog_format = format.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&dialog_app)
+            .set_file_name(format!("{}.{}", brand::ITEM_PLURAL, dialog_format))
+            .add_filter(dialog_format.to_uppercase(), &[dialog_format.as_str()])
+            .save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     match file {
         Some(path) => {
             write_bytes_atomic(&path, content.as_bytes()).map_err(|e| e.to_string())?;
@@ -862,9 +869,12 @@ pub(crate) struct ImportPreview {
 }
 #[tauri::command]
 pub(crate) async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPreview, String> {
-    let file = file_dialog(&app)
-        .add_filter(title_case(brand::ITEM_PLURAL), &["csv", "txt", "json"])
-        .pick_file();
+    let dialog_app = app.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&dialog_app).add_filter(title_case(brand::ITEM_PLURAL), &["csv", "txt", "json"]).pick_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
@@ -1201,7 +1211,11 @@ pub(crate) fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) 
 // what gets imported is decided by which checkboxes import_folder_files receives.
 #[tauri::command]
 pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, title: String) -> Result<FolderImportPreview, String> {
-    let Some(dir) = file_dialog(&app).set_title(&title).pick_folder() else {
+    let dialog_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || file_dialog(&dialog_app).set_title(&title).pick_folder())
+        .await
+        .map_err(|e| e.to_string())?;
+    let Some(dir) = picked else {
         return Err("canceled".to_string());
     };
     let (max_depth, max_files) = {

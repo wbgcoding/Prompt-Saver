@@ -1072,3 +1072,17 @@ fn forwarded_backup_restore_runs_off_the_async_runtime() {
     let src = include_str!("../cli_callers.rs");
     assert!(fn_text(src, "run_in_process_inner").contains("spawn_blocking"), "the restore must not block the pipe handler's worker");
 }
+
+#[test]
+fn modal_file_dialogs_wait_on_a_blocking_thread() {
+    let cases: [(&str, &str, &[&str]); 3] = [
+        (include_str!("../import_export.rs"), "import_export", &["export_prompts", "preview_import", "preview_import_folder"]),
+        (include_str!("../vault.rs"), "vault", &["export_all", "pick_backup_file", "export_settings_only", "pick_settings_import_file"]),
+        (include_str!("../remote.rs"), "remote", &["remote_tls_save_cert"]),
+    ];
+    for (src, file, names) in cases {
+        for name in names {
+            assert!(fn_text(src, name).contains("spawn_blocking"), "{file}::{name} shows a modal dialog on an async worker");
+        }
+    }
+}

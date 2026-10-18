@@ -577,10 +577,16 @@ pub(crate) async fn remote_tls_save_cert(app: AppHandle, state: State<'_, Db>) -
         }
         let _ = app.emit("remote-tls-renewed", ());
     }
-    let file = crate::file_dialog(&app)
-        .set_file_name(format!("{}-remote.pem", crate::brand::SLUG))
-        .add_filter("PEM", &["pem"])
-        .save_file();
+    // The save dialog is modal: it waits on a blocking thread, not on an async worker.
+    let dialog_app = app.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        crate::file_dialog(&dialog_app)
+            .set_file_name(format!("{}-remote.pem", crate::brand::SLUG))
+            .add_filter("PEM", &["pem"])
+            .save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     match file {
         Some(path) => {
             std::fs::write(&path, ca).map_err(|e| e.to_string())?;

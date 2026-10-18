@@ -645,10 +645,16 @@ pub(crate) async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<u
     };
     // Always encrypted: fixed key by default (restorable anywhere), user password if set.
     let blob = backup_encrypt(json.as_bytes(), password.as_deref())?;
-    let file = file_dialog(&app)
-        .set_file_name(format!("{}-backup.psb", brand::SLUG))
-        .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
-        .save_file();
+    // The save dialog is modal: it waits on a blocking thread, not on an async worker.
+    let dialog_app = app.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&dialog_app)
+            .set_file_name(format!("{}-backup.psb", brand::SLUG))
+            .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
+            .save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     match file {
         Some(path) => {
             write_bytes_atomic_strict(&path, &blob).map_err(|e| e.to_string())?;
@@ -675,10 +681,15 @@ pub(crate) struct ImportSummary {
 
 #[tauri::command]
 pub(crate) async fn pick_backup_file(app: AppHandle) -> Option<String> {
-    file_dialog(&app)
-        .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
-        .pick_file()
-        .map(|p| p.display().to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&app)
+            .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
+            .pick_file()
+            .map(|p| p.display().to_string())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 // Settings-only export/import: a plain, unencrypted JSON of just the expert-menu
@@ -719,10 +730,15 @@ pub(crate) fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
 pub(crate) async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -> Result<String, String> {
     let payload = settings_only_payload(&lock(&state).settings);
     let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
-    let file = file_dialog(&app)
-        .set_file_name(format!("{}-settings.json", brand::SLUG))
-        .add_filter("JSON", &["json"])
-        .save_file();
+    let dialog_app = app.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        file_dialog(&dialog_app)
+            .set_file_name(format!("{}-settings.json", brand::SLUG))
+            .add_filter("JSON", &["json"])
+            .save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     match file {
         Some(path) => {
             write_bytes_atomic_strict(&path, json.as_bytes()).map_err(|e| e.to_string())?;
@@ -734,7 +750,10 @@ pub(crate) async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -
 
 #[tauri::command]
 pub(crate) async fn pick_settings_import_file(app: AppHandle) -> Option<String> {
-    file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string())
+    tauri::async_runtime::spawn_blocking(move || file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string()))
+        .await
+        .ok()
+        .flatten()
 }
 
 pub(crate) fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
