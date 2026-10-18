@@ -748,6 +748,11 @@ pub(crate) fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration
 // and its pill reappears at the free position it kept). Runs on load and after every
 // mutation; idempotent.
 pub(crate) fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
+    normalize_float_folders_min(folders, prompt_ids, 2);
+}
+
+// The shared body; `min_members` is 2 everywhere except after a sync batch (see md_sync).
+pub(crate) fn normalize_float_folders_min(folders: &mut Vec<FloatFolder>, prompt_ids: &[String], min_members: usize) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         folder.scale = if folder.scale.is_finite() {
@@ -763,7 +768,7 @@ pub(crate) fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids
             ok
         });
     }
-    folders.retain(|f| f.members.len() >= 2);
+    folders.retain(|f| f.members.len() >= min_members.max(1));
     folders.truncate(MAX_FLOAT_FOLDERS);
 }
 

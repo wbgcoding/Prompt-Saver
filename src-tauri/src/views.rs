@@ -763,6 +763,11 @@ pub(crate) fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> S
 // Takes `view_ids` rather than `&[View]` to spare a clone of every view's layout maps at
 // each call site.
 pub(crate) fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
+    normalize_tile_folders_min(folders, prompt_ids, view_ids, 2);
+}
+
+// The shared body; `min_members` is 2 everywhere except after a sync batch (see md_sync).
+pub(crate) fn normalize_tile_folders_min(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String], min_members: usize) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         // A hand-edited or imported cell far outside any grid (up to u32::MAX) must not reach the
@@ -778,7 +783,7 @@ pub(crate) fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: 
             ok
         });
     }
-    folders.retain(|f| f.members.len() >= 2 && view_ids.iter().any(|id| id == &f.view_id));
+    folders.retain(|f| f.members.len() >= min_members.max(1) && view_ids.iter().any(|id| id == &f.view_id));
     // One folder per cell: a later one on an occupied cell is pushed to the right,
     // which the renderer resolves to the first free cell anyway.
     let mut cells: Vec<(String, [u32; 2])> = Vec::new();

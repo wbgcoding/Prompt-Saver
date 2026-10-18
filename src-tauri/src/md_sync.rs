@@ -677,48 +677,11 @@ pub(crate) fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, n
 // count) but dissolve only at 0 members. A folder that never grows is cleaned up when a
 // non-sync path touches it.
 pub(crate) fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
-    let mut taken: Vec<String> = Vec::new();
-    for folder in folders.iter_mut() {
-        // See normalize_tile_folders: an incoming sync file's `cell:` header is
-        // exactly as untrusted as a hand-edited backup.
-        folder.cell[0] = folder.cell[0].min(GRID_MAX);
-        folder.cell[1] = folder.cell[1].min(GRID_MAX);
-        folder.members.retain(|id| {
-            let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
-            if ok {
-                taken.push(id.clone());
-            }
-            ok
-        });
-    }
-    folders.retain(|f| !f.members.is_empty() && view_ids.iter().any(|id| id == &f.view_id));
-    let mut cells: Vec<(String, [u32; 2])> = Vec::new();
-    for folder in folders.iter_mut() {
-        for _ in 0..=GRID_MAX {
-            if !cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
-                break;
-            }
-            folder.cell[0] = folder.cell[0].saturating_add(1);
-        }
-        cells.push((folder.view_id.clone(), folder.cell));
-    }
-    folders.truncate(MAX_TILE_FOLDERS);
+    crate::views::normalize_tile_folders_min(folders, prompt_ids, view_ids, 1);
 }
 
 pub(crate) fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
-    let mut taken: Vec<String> = Vec::new();
-    for folder in folders.iter_mut() {
-        folder.scale = if folder.scale.is_finite() { folder.scale.clamp(0.5, 3.0) } else { 1.0 };
-        folder.members.retain(|id| {
-            let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
-            if ok {
-                taken.push(id.clone());
-            }
-            ok
-        });
-    }
-    folders.retain(|f| !f.members.is_empty());
-    folders.truncate(MAX_FLOAT_FOLDERS);
+    crate::floating::normalize_float_folders_min(folders, prompt_ids, 1);
 }
 
 // The note's first line, which is also how this folder's own file is recognised
