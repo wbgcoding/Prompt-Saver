@@ -97,7 +97,7 @@ fn every_leading_separator_pair_and_nt_prefix_counts_as_a_network_path() {
     ] {
         assert!(is_network_path(p), "{p:?} must count as a network path");
     }
-    for p in [r"\??\C:\Users\x\a.png", "/rooted/only.png", r"\single\lead.png", "C:/Users/x/clip.mp4"] {
+    for p in [r"\??\C:\clips\a.png", "/rooted/only.png", r"\single\lead.png", "C:/clips/clip.mp4"] {
         assert!(!is_network_path(p), "{p:?} is local");
     }
 }
