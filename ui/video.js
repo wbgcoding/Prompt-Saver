@@ -1982,6 +1982,14 @@ export function applySettings(settings) {
     // an error for what is a normal startup order.
   }
   if (path) await loadRecording(path, originDir, overlayPath);
-  else $("ve-stage-msg").textContent = t("veNoRecording");
+  else {
+    // Wait for the texts (t() answers the raw key before they land) and point the label's
+    // translation hook at the new message, or the next language pass would paint "Loading"
+    // back over it.
+    await textsReady;
+    const msg = $("ve-stage-msg");
+    msg.dataset.i18n = "veNoRecording";
+    msg.textContent = t("veNoRecording");
+  }
   requestAnimationFrame(tick);
 })();

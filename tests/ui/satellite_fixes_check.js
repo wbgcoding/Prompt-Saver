@@ -81,6 +81,16 @@ section(() => {
   check(/probe_extra_video_source[^\n]*\n\s+if \(!overlayStillInEditor\(op, gen\)\) return;/.test(src), "the video handler re-checks after the probe");
 });
 
+// Video editor opened without a source: the "no recording" message waits for the texts and the
+// label's translation hook follows it, so a language pass cannot turn it back into "Loading".
+section(() => {
+  const src = read("video.js");
+  const at = src.indexOf('if (path) await loadRecording(path, originDir, overlayPath);');
+  const tail = src.slice(at, at + 700);
+  check(/await textsReady;[\s\S]*dataset\.i18n = "veNoRecording"[\s\S]*t\("veNoRecording"\)/.test(tail), "the empty-window message waits for the texts and re-points its i18n hook");
+  check(/ve-stage-msg"\)\.dataset\.i18n = "veLoading"/.test(read("videoLoad.js")), "loading a recording restores the loading label's hook");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
