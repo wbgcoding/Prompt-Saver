@@ -1213,18 +1213,28 @@ pub(crate) async fn update_prompt(
         )
     };
     // A path naming another machine or the app's own store files is refused before any copy
-    // or probe touches it (the editor's pickers never produce one).
+    // or probe touches it (the editor's pickers never produce one). A value the prompt already
+    // holds is not asked again: an unrelated edit sends the stored path back unchanged, and
+    // that must not fail because the file has since moved to a place the gate refuses.
     let store_dir = data_dir(&app);
     let own_dirs = own_storage_dirs(&app, &state);
-    for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
+    let held_fp = staged_cur.as_ref().map(|c| c.1.as_str());
+    let held_ip = staged_cur.as_ref().map(|c| c.2.as_str());
+    // Per path: true = unchanged but now refused (kept as stored, never copied or probed).
+    let mut keep_as_is = [false, false];
+    for (i, (p, held)) in [(file_path.as_deref(), held_fp), (icon_path.as_deref(), held_ip)].into_iter().enumerate() {
+        let Some(p) = p else { continue };
         if attachment_path_refused(&own_dirs, &store_dir, p) {
-            return Err("source-not-allowed".to_string());
+            if held != Some(p) {
+                return Err("source-not-allowed".to_string());
+            }
+            keep_as_is[i] = true;
         }
     }
     let mut staged_copies = StagedCopies::new();
     let files_dir = store_dir.join("files");
-    let file_path = file_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
-    let icon_path = icon_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
+    let file_path = file_path.map(|p| if store_files && !keep_as_is[0] { staged_copies.stage(&files_dir, &p) } else { p });
+    let icon_path = icon_path.map(|p| if store_files && !keep_as_is[1] { staged_copies.stage(&files_dir, &p) } else { p });
     let ffprobe = ffprobe_search_path(&app);
     let staged_image_text = staged_cur.as_ref().and_then(|(cur_img, _, _)| {
         image.as_deref().is_some_and(|v| v != cur_img).then(|| {
@@ -1238,7 +1248,9 @@ pub(crate) async fn update_prompt(
         }
         let fp_now = file_path.clone().unwrap_or_else(|| cur_fp.clone());
         let ip_now = icon_path.clone().unwrap_or_else(|| cur_ip.clone());
-        let source = if !fp_now.is_empty() { Some(fp_now) } else if !ip_now.is_empty() { Some(ip_now) } else { None };
+        // A kept refused value is never probed either (a share would be contacted).
+        let usable = |p: &String| !p.is_empty() && !attachment_path_refused(&own_dirs, &store_dir, p);
+        let source = if usable(&fp_now) { Some(fp_now) } else if usable(&ip_now) { Some(ip_now) } else { None };
         Some(match source {
             Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(&mp)),
             None => (0, 0, 0, 0),

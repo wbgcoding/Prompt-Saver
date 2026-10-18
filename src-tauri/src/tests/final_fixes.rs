@@ -73,8 +73,25 @@ fn every_network_gate_that_can_meet_an_own_folder_asks_the_own_dir_rule() {
     let video = source!("../video_editor.rs");
     let images = source!("../images.rs");
     assert!(copy.contains("attachment_path_refused(&own_dirs"));
-    assert_eq!(prompts.matches("attachment_path_refused(&own_dirs").count(), 2, "add and update");
+    assert!(prompts.matches("attachment_path_refused(&own_dirs").count() >= 2, "add and update");
     assert!(video.contains("is_foreign_network_path(&req.src_path, &own_dirs)"));
     assert!(video.contains("is_foreign_network_path(&src_path, &own_dirs)"));
     assert!(images.contains("is_foreign_network_path(path, own_dirs)"));
+}
+
+#[test]
+fn an_update_does_not_re_vet_the_path_the_prompt_already_holds() {
+    let src = source!("../prompts.rs");
+    let at = src.find("pub(crate) async fn update_prompt").unwrap();
+    let body = &src[at..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let vet = body.find("attachment_path_refused(&own_dirs").expect("still vets a new value");
+    let held = body[..vet + 400].find("held != Some(p)").expect("compares with the stored value");
+    assert!(held > vet - 400 && body.contains("keep_as_is[0]") && body.contains("keep_as_is[1]"));
+    // The kept value is neither copied nor probed.
+    assert!(body.contains("store_files && !keep_as_is[0]"));
+    assert!(body.contains("!attachment_path_refused(&own_dirs, &store_dir, p)"), "probe source is vetted");
+    // A new prompt has nothing held, so it keeps the plain gate.
+    let add = &src[src.find("pub(crate) async fn add_prompt").unwrap()..at];
+    assert!(!add.contains("keep_as_is"));
 }
