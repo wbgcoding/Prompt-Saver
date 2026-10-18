@@ -19,7 +19,7 @@ import { secs, exportFormat, exportQuality } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
 import { centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
-import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive } from "./videoPreview.js";
+import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -1821,8 +1821,7 @@ export function resetForNewSource() {
   updateNudgeHint();
   // The live-preview nodes belong to the old source's overlays; leftovers would show a stale
   // image/text/pixelate sampled from a video that is no longer loaded.
-  $("ve-overlay-live").innerHTML = "";
-  VE.liveEls.clear();
+  clearLiveOverlays($("ve-overlay-live"));
   VE.strip = [];
   VE.stripCount = 0;
   VE.peaks = { 0: null, 1: null };

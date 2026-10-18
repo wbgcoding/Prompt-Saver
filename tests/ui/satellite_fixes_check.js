@@ -128,6 +128,22 @@ section(() => {
   check(add.indexOf("VE.sel = null") !== -1 && add.indexOf("VE.sel = null") < add.indexOf("pushOp("), "Add cut clears the selection before pushOp redraws the timeline");
 });
 
+// Loading another recording stops every inserted-video preview node before the layer is emptied.
+section(() => {
+  const src = read("videoPreview.js");
+  class FakeVideo { constructor() { this.paused = false; this.src = "x"; this.loads = 0; } pause() { this.paused = true; } removeAttribute() { this.src = null; } load() { this.loads++; } }
+  const vid = new FakeVideo();
+  const layer = { innerHTML: "<video>" };
+  const sb = { HTMLVideoElement: FakeVideo, VE: { liveEls: new Map([["a", vid], ["b", { tag: "img" }]]) } };
+  const fn = extractBlock(src, "export function clearLiveOverlays(").replace("export ", "");
+  vm.createContext(sb);
+  sb.clearLiveOverlays = vm.runInContext(fn + "\nclearLiveOverlays", sb);
+  sb.clearLiveOverlays(layer);
+  check(vid.paused && vid.src === null && vid.loads === 1, "an inserted video node is paused and released");
+  check(sb.VE.liveEls.size === 0 && layer.innerHTML === "", "the map and the layer are emptied");
+  check(/clearLiveOverlays\(\$\("ve-overlay-live"\)\)/.test(read("video.js")), "loading another source uses the helper");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
