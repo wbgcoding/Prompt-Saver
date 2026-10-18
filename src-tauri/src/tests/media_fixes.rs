@@ -668,3 +668,19 @@ fn start_up_moves_old_media_tools_off_the_ui_thread() {
     let at = lib.find("migrate_old_media_tools").unwrap();
     assert!(lib[..at].rfind("std::thread::spawn").is_some_and(|t| at - t < 400), "hashing two 100 MB files must not block setup");
 }
+
+#[test]
+fn every_progress_block_keeps_a_silent_looking_export_alive() {
+    // GIF palettegen prints out_time_ms=N/A until the whole input is read; the block's closing
+    // "progress=continue" line is the heartbeat that still arrives.
+    assert_eq!(progress_tick("out_time_ms=2500000"), ProgressTick::Time(2500));
+    assert_eq!(progress_tick("out_time_ms=-9223372036854775807"), ProgressTick::Time(0));
+    assert_eq!(progress_tick("out_time_ms=N/A"), ProgressTick::Alive);
+    assert_eq!(progress_tick("progress=continue"), ProgressTick::Alive);
+    assert_eq!(progress_tick("progress=end"), ProgressTick::Alive);
+    assert_eq!(progress_tick("frame=12"), ProgressTick::None);
+    assert_eq!(progress_tick(""), ProgressTick::None);
+    let src = source!("../ffmpeg.rs");
+    let run = src.split("pub(crate) fn run_ffmpeg_to_staged").nth(1).unwrap();
+    assert!(run.contains("progress_tick(&line)"), "the reader thread classifies every line");
+}

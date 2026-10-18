@@ -948,6 +948,30 @@ pub(crate) fn ffmpeg_stalled(secs_since_progress: u64) -> bool {
     secs_since_progress > FFMPEG_STALL_SECS
 }
 
+// What one line of `-progress pipe:1` says about the run. A numeric time is a position; the
+// block's own `progress=` line (and an `out_time_ms=N/A`, which a GIF palette pass prints until
+// it has read the whole input) only proves ffmpeg is still reporting, so it restarts the stall
+// clock without moving the bar.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ProgressTick {
+    Time(u32),
+    Alive,
+    None,
+}
+
+pub(crate) fn progress_tick(line: &str) -> ProgressTick {
+    if let Some(v) = line.strip_prefix("out_time_ms=") {
+        return match v.trim().parse::<i64>() {
+            Ok(us) => ProgressTick::Time((us / 1000).max(0) as u32),
+            Err(_) => ProgressTick::Alive,
+        };
+    }
+    if line.starts_with("progress=") {
+        return ProgressTick::Alive;
+    }
+    ProgressTick::None
+}
+
 // A long filter graph (one overlay term per key press, say) can pass the 32767-character
 // command-line limit, so the editor hands it to ffmpeg as a file. The file sits beside the
 // output under a `.export-<pid>-<stamp>` name and in the same journal as the staged output, so
@@ -1054,13 +1078,18 @@ pub(crate) fn run_ffmpeg_to_staged(
     let mut last_progress = std::time::Instant::now();
     let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
-        let (tx, rx) = std::sync::mpsc::channel::<u32>();
+        let (tx, rx) = std::sync::mpsc::channel::<Option<u32>>();
         std::thread::spawn(move || {
             use std::io::BufRead;
             for line in std::io::BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };
-                if let Some(us) = line.strip_prefix("out_time_ms=").and_then(|v| v.trim().parse::<i64>().ok()) {
-                    if tx.send((us / 1000).max(0) as u32).is_err() {
+                let tick = match progress_tick(&line) {
+                    ProgressTick::Time(ms) => Some(Some(ms)),
+                    ProgressTick::Alive => Some(None),
+                    ProgressTick::None => None,
+                };
+                if let Some(tick) = tick {
+                    if tx.send(tick).is_err() {
                         break;
                     }
                 }
@@ -1068,9 +1097,11 @@ pub(crate) fn run_ffmpeg_to_staged(
         });
         loop {
             match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                Ok(ms) => {
+                Ok(tick) => {
                     last_progress = std::time::Instant::now();
-                    on_progress(ms);
+                    if let Some(ms) = tick {
+                        on_progress(ms);
+                    }
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
