@@ -306,7 +306,7 @@ pub(crate) fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64
         return (0, 0);
     }
     let (c1, b1) = video_folder_stats_in(base);
-    let (c2, b2) = video_folder_stats_in(&base.join("verworfen"));
+    let (c2, b2) = video_folder_stats_in(&base.join(crate::stats::DISCARD_SUBDIR));
     (c1 + c2, b1 + b2)
 }
 
@@ -844,7 +844,7 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     if !in_allowed || !path.is_file() {
         return None;
     }
-    let trash = parent.join("verworfen");
+    let trash = parent.join(crate::stats::DISCARD_SUBDIR);
     fs::create_dir_all(&trash).ok()?;
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
@@ -912,7 +912,7 @@ pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Ve
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return Vec::new();
     }
-    let trash = std::path::Path::new(dir).join("verworfen");
+    let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
     let Ok(entries) = fs::read_dir(&trash) else { return Vec::new() };
     let mut out = Vec::new();
     for e in entries.flatten() {
@@ -937,7 +937,7 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return false;
     }
-    let trash = std::path::Path::new(dir).join("verworfen");
+    let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
     let src = trash.join(name);
     let dst = std::path::Path::new(dir).join(name);
     // Never overwrites a same-named file that appeared at the old spot since the discard:
@@ -973,7 +973,7 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return false;
     }
-    let trash = std::path::Path::new(dir).join("verworfen");
+    let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
     let path = trash.join(name);
     if !path.is_file() {
         return false;
