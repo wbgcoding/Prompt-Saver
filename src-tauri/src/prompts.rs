@@ -175,6 +175,8 @@ pub(crate) fn apply_view_batch_action(
             } else {
                 if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
                     let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
+                    // The empty layout entry created above must not linger to be saved later.
+                    settings.views = before;
                     return Err(format!("view-full:{deficit}"));
                 }
                 for id in ids {
@@ -212,6 +214,7 @@ pub(crate) fn apply_view_batch_action(
             // target has durably accepted every id.
             if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
                 let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
+                settings.views = before;
                 return Err(format!("view-full:{deficit}"));
             }
             for id in ids {

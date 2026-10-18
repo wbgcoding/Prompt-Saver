@@ -1290,3 +1290,31 @@ fn primary_first_moves_the_primary_monitor_to_the_front() {
     // An unknown primary keeps the enumeration order.
     assert_eq!(primary_first(list, "").iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["side", "main"]);
 }
+
+#[test]
+fn a_refused_batch_leaves_no_empty_layout_behind() {
+    // A 1x1 target whose only cell a folder holds: both actions answer view-full, and the
+    // layout map created for the size check must not stay in the settings.
+    for action in ["addView", "moveView"] {
+        let mut settings = Settings::default();
+        let mut from_view = test_view("home");
+        from_view.members = vec!["a".to_string()];
+        let mut to_view = test_view("work");
+        to_view.cols = 1;
+        to_view.rows = 1;
+        settings.views = vec![from_view, to_view];
+        settings.tile_folders.push(TileFolder {
+            id: "tf1".to_string(),
+            name: "Drafts".to_string(),
+            color: String::new(),
+            view_id: "work".to_string(),
+            cell: [0, 0],
+            members: vec!["z".to_string()],
+        });
+        let ids: Vec<String> = vec!["a".to_string()];
+        let result = apply_view_batch_action(&mut settings, action, &ids, "work", "home", |_s| true);
+        assert!(matches!(result, Err(ref e) if e.starts_with("view-full")), "{action}: {result:?}");
+        assert!(settings.views[1].layouts.is_empty(), "{action}: the empty layout must be rolled back");
+        assert!(settings.views[1].members.is_empty(), "{action}: no member may be added");
+    }
+}
