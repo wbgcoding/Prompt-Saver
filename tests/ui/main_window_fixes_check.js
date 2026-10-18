@@ -1044,6 +1044,17 @@ section(() => {
   check(!/applyTheme|applyTileStyle|applyBars|setLang\(/.test(fn), "no preference is re-applied after a prompts-only import");
 });
 
+// 56. The scale and update-interval selects follow the UI language.
+section(() => {
+  const src = read("settingsPanel.js");
+  const sc = extractBlock(src, "export function fillScaleSelect(").replace("export ", "");
+  check(sc.includes('style: "percent"') && !sc.includes("`${p}"), "scale options use the Intl percent style");
+  const iv = extractBlock(src, "export function fillUpdateIntervalSelect(");
+  check(iv.includes('fmtUnit(cur, "hour", LANG)') && !iv.includes("`${cur}h`"), "an off-list interval reads through fmtUnit");
+  const lc = src.slice(src.indexOf('$("lang-select").addEventListener("change"'));
+  check(/fillScaleSelect\("ui-scale", "uiScale"\)/.test(lc.slice(0, 900)), "a language switch refills the scale select");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

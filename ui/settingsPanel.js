@@ -4,7 +4,7 @@ import { confirmSecretExport, renderLibrary } from "./library.js";
 import { favViewEnabled, refreshFavViewUi, renderGrid, seedExamplesIfNeeded } from "./views.js";
 import { applyBars, applyI18n, wireClearButtons } from "./windowChrome.js";
 import { applyTheme, applyTileStyle, fillThemeSelect, loadPalette, openThemeEditor, THEME_EDITOR_ENTRY } from "./theme.js";
-import { fmtBytes } from "./floatShared.js";
+import { fmtBytes, fmtUnit } from "./floatShared.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { isHistoryTabOpen, renderJournal } from "./journal.js";
 import { attachSelectPicker } from "./selectpop.js";
@@ -587,6 +587,7 @@ export function bindSettingsPanel() {
     // Re-fill the JS-built selects, then restore their current values.
     fillSizeSelects();
     fillUpdateIntervalSelect();
+    fillScaleSelect("ui-scale", "uiScale"); // the percent style follows the language
     fillFontSelects();
     fillThemeSelect(); // the custom-theme separator is a translated label too
     $("tile-font").value = settings.tile_font || "system";
@@ -622,10 +623,12 @@ export function fillScaleSelect(id, key) {
   if (!sel) return;
   const cur = Math.round(val(key));
   sel.innerHTML = "";
+  let pct;
+  try { pct = new Intl.NumberFormat(LANG, { style: "percent" }); } catch { pct = new Intl.NumberFormat("en", { style: "percent" }); }
   for (const p of [...new Set([...SCALE_PRESETS, cur])].sort((a, b) => a - b)) {
     const o = document.createElement("option");
     o.value = String(p);
-    o.textContent = `${p} %`;
+    o.textContent = pct.format(p / 100); // the language's own percent style ("100 %", "%100")
     sel.appendChild(o);
   }
   sel.value = String(cur);
@@ -642,7 +645,7 @@ export function fillUpdateIntervalSelect() {
   const raw = Number(val("updateCheckH"));
   const cur = Number.isFinite(raw) ? Math.min(168, Math.max(1, raw)) : 24;
   const rows = UPDATE_INTERVALS.map(([h, key]) => [h, t(key)]);
-  if (!rows.some(([h]) => h === cur)) rows.push([cur, `${cur}h`]);
+  if (!rows.some(([h]) => h === cur)) rows.push([cur, fmtUnit(cur, "hour", LANG)]);
   rows.sort((a, b) => a[0] - b[0]);
   sel.innerHTML = "";
   for (const [h, label] of rows) {
