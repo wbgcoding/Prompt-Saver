@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "標準",
     optPreviewLong: "長め",
     tipAttachPreviewSize: "プレビューがテキスト添付ファイルをどこまで読み込むかです。短めは約1ページ、標準は約3ページ、長めは約12ページ。",
+    backupFailedTitle: "バックアップに失敗しました",
+    backupFailedDelete: "安全のためのバックアップを作成できませんでした（{error}）。このまま削除しますか？",
+    backupFailedReset: "安全のためのバックアップを作成できませんでした（{error}）。このままリセットしますか？",
 };

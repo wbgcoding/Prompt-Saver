@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Medie",
     optPreviewLong: "Lungă",
     tipAttachPreviewSize: "Cât dintr-un atașament text citește previzualizarea: scurtă circa o pagină, medie circa trei pagini, lungă circa douăsprezece pagini.",
+    backupFailedTitle: "Copia de rezervă a eșuat",
+    backupFailedDelete: "Copia de rezervă de siguranță nu a putut fi creată ({error}). Ștergi oricum?",
+    backupFailedReset: "Copia de rezervă de siguranță nu a putut fi creată ({error}). Resetezi oricum?",
 };

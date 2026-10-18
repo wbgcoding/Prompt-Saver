@@ -457,6 +457,31 @@ section(() => {
   check(/export function closeModal\(\) \{\n  \/\/[^\n]*\n  if \(modalSaving\) return;/.test(ed), "closeModal waits for the save in flight");
 });
 
+// 19. U25: a failed safety backup before a wipe asks before the wipe goes on.
+section(() => {
+  const sp = read("settingsPanel.js");
+  const src = extractBlock(sp, "export async function maybeBackupBeforeWipe(").replace("export ", "");
+  const make = (backupFails, answer) => {
+    const asked = [];
+    const sb = run(src, {
+      flag: () => true, val: () => 3, t: (k) => k, errText: (e) => String(e),
+      invoke: async () => { if (backupFails) throw "disk-full"; },
+      confirmDialog: async (o) => { asked.push(o); return answer; },
+    });
+    return { sb, asked };
+  };
+  later(async () => {
+    const ok = make(false, false);
+    check((await ok.sb.maybeBackupBeforeWipe("delete")) === true && ok.asked.length === 0, "a made backup lets the wipe go on without a question");
+    const no = make(true, false);
+    check((await no.sb.maybeBackupBeforeWipe("delete")) === false && no.asked.length === 1, "a failed backup, Cancel: the wipe stops");
+    check(no.asked[0] && no.asked[0].focusCancel === true && no.asked[0].message === "backupFailedDelete", "the question defaults to Cancel and names the delete");
+    const yes = make(true, true);
+    check((await yes.sb.maybeBackupBeforeWipe("reset")) === true, "a failed backup, confirmed: the reset goes on");
+  });
+  check(/if \(!\(await maybeBackupBeforeWipe\("delete"\)\)\) return;/.test(sp) && /if \(!\(await maybeBackupBeforeWipe\("reset"\)\)\) return;/.test(sp), "both wipes honour the answer");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

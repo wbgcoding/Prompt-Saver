@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Medium",
     optPreviewLong: "Long",
     tipAttachPreviewSize: "How much of a text attachment the preview reads: short about one page, medium about three pages, long about twelve pages.",
+    backupFailedTitle: "Backup failed",
+    backupFailedDelete: "The safety backup could not be created ({error}). Delete anyway?",
+    backupFailedReset: "The safety backup could not be created ({error}). Reset anyway?",
 };

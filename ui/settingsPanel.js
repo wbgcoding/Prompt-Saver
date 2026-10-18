@@ -377,7 +377,7 @@ export async function deleteData() {
   }
   clearTimeout(deleteAllTimer);
   disarmButton(btn, t("deleteData"));
-  await maybeBackupBeforeWipe("delete");
+  if (!(await maybeBackupBeforeWipe("delete"))) return;
   try {
     await invoke("delete_all_data");
   } catch (e) {
@@ -391,9 +391,22 @@ export async function deleteData() {
 
 // Expert opt (Standard-an, split so a user who only wants one of the two can
 // switch the other off). Take a safety backup before a destructive reset/delete.
+// Resolves true when the wipe may go on: no backup wanted, the backup made, or the user chose to
+// continue without one after it failed (Cancel is the default).
 export async function maybeBackupBeforeWipe(kind) {
-  if (!flag(kind === "reset" ? "backupBeforeReset" : "backupBeforeDelete")) return;
-  try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); } catch { /* best-effort */ }
+  if (!flag(kind === "reset" ? "backupBeforeReset" : "backupBeforeDelete")) return true;
+  try {
+    await invoke("create_backup", { keep: Math.round(val("backupKeep")) });
+    return true;
+  } catch (err) {
+    const message = t(kind === "reset" ? "backupFailedReset" : "backupFailedDelete").replace("{error}", () => errText(err));
+    return confirmDialog({
+      title: t("backupFailedTitle"),
+      message,
+      confirmLabel: t(kind === "reset" ? "resetSettings" : "deleteData"),
+      focusCancel: true,
+    });
+  }
 }
 
 // Reset all SETTINGS to defaults (theme, views, toggles, expert values): prompts kept.
@@ -406,7 +419,7 @@ export async function resetSettings() {
   }
   clearTimeout(resetSettingsTimer);
   disarmButton(btn, t("resetSettings"));
-  await maybeBackupBeforeWipe("reset");
+  if (!(await maybeBackupBeforeWipe("reset"))) return;
   await invoke("reset_settings");
   await reloadEverything(); // in place: a page reload repaints the whole window
 }

@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Media",
     optPreviewLong: "Larga",
     tipAttachPreviewSize: "Cuánto de un adjunto de texto lee la vista previa: corta una página, media unas tres páginas, larga unas doce páginas.",
+    backupFailedTitle: "Falló la copia de seguridad",
+    backupFailedDelete: "No se pudo crear la copia de seguridad ({error}). ¿Borrar de todos modos?",
+    backupFailedReset: "No se pudo crear la copia de seguridad ({error}). ¿Restablecer de todos modos?",
 };

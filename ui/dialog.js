@@ -63,7 +63,8 @@ let confirmCleanup = null;
 // `altLabel` adds a third choice between Cancel and confirm and resolves to the string
 // "alt": a question with two ways to go ahead (delete the old sync folder, keep it) plus
 // the way out.
-function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }, onClosed) {
+// `focusCancel` puts the initial focus on Cancel, so a stray Enter declines a destructive question.
+function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false, focusCancel = false }, onClosed) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
   const opener = document.activeElement;
@@ -175,7 +176,7 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
     // Escape comes through here, so it must map its answer exactly like Cancel
     // does: a prompt with an input field owes its caller null, never false.
     confirmCleanup = finish;
-    (input ? field : ok).focus();
+    (input ? field : (focusCancel ? cancel : ok)).focus();
     if (input && field.value) field.select();
   });
 }

@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Middel",
     optPreviewLong: "Lang",
     tipAttachPreviewSize: "Hoeveel van een tekstbijlage het voorbeeld leest: kort ongeveer één pagina, middel ongeveer drie pagina's, lang ongeveer twaalf pagina's.",
+    backupFailedTitle: "Back-up mislukt",
+    backupFailedDelete: "De veiligheidsback-up kon niet worden gemaakt ({error}). Toch verwijderen?",
+    backupFailedReset: "De veiligheidsback-up kon niet worden gemaakt ({error}). Toch resetten?",
 };

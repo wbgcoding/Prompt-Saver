@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Media",
     optPreviewLong: "Lunga",
     tipAttachPreviewSize: "Quanto di un allegato di testo legge l'anteprima: breve circa una pagina, media circa tre pagine, lunga circa dodici pagine.",
+    backupFailedTitle: "Backup non riuscito",
+    backupFailedDelete: "Non è stato possibile creare il backup di sicurezza ({error}). Eliminare comunque?",
+    backupFailedReset: "Non è stato possibile creare il backup di sicurezza ({error}). Ripristinare comunque?",
 };

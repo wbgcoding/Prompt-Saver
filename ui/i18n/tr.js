@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Orta",
     optPreviewLong: "Uzun",
     tipAttachPreviewSize: "Önizlemenin bir metin eklentisinden ne kadar okuduğu: kısa yaklaşık bir sayfa, orta yaklaşık üç sayfa, uzun yaklaşık on iki sayfa.",
+    backupFailedTitle: "Yedekleme başarısız",
+    backupFailedDelete: "Güvenlik yedeği oluşturulamadı ({error}). Yine de silinsin mi?",
+    backupFailedReset: "Güvenlik yedeği oluşturulamadı ({error}). Yine de sıfırlansın mı?",
 };

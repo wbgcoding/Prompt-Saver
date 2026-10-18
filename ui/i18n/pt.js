@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Média",
     optPreviewLong: "Longa",
     tipAttachPreviewSize: "Quanto de um anexo de texto a pré-visualização lê: curta cerca de uma página, média cerca de três páginas, longa cerca de doze páginas.",
+    backupFailedTitle: "Falha no backup",
+    backupFailedDelete: "Não foi possível criar o backup de segurança ({error}). Apagar mesmo assim?",
+    backupFailedReset: "Não foi possível criar o backup de segurança ({error}). Redefinir mesmo assim?",
 };

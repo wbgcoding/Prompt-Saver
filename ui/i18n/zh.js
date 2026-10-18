@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "中",
     optPreviewLong: "长",
     tipAttachPreviewSize: "预览读取文本附件的多少内容：短约一页，中约三页，长约十二页。",
+    backupFailedTitle: "备份失败",
+    backupFailedDelete: "无法创建安全备份（{error}）。仍要删除吗？",
+    backupFailedReset: "无法创建安全备份（{error}）。仍要重置吗？",
 };

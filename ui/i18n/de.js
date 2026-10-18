@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Mittel",
     optPreviewLong: "Lang",
     tipAttachPreviewSize: "Wie viel von einem Text-Anhang die Vorschau liest: kurz etwa eine Seite, mittel etwa drei Seiten, lang etwa zwölf Seiten.",
+    backupFailedTitle: "Sicherung fehlgeschlagen",
+    backupFailedDelete: "Die Sicherheitskopie konnte nicht erstellt werden ({error}). Trotzdem löschen?",
+    backupFailedReset: "Die Sicherheitskopie konnte nicht erstellt werden ({error}). Trotzdem zurücksetzen?",
 };

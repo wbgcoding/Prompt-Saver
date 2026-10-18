@@ -2018,4 +2018,7 @@ export default {
     optPreviewMedium: "Średni",
     optPreviewLong: "Długi",
     tipAttachPreviewSize: "Ile z załącznika tekstowego odczytuje podgląd: krótki około jednej strony, średni około trzech stron, długi około dwunastu stron.",
+    backupFailedTitle: "Kopia zapasowa nie powiodła się",
+    backupFailedDelete: "Nie udało się utworzyć kopii zapasowej ({error}). Usunąć mimo to?",
+    backupFailedReset: "Nie udało się utworzyć kopii zapasowej ({error}). Zresetować mimo to?",
 };
