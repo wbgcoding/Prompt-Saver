@@ -765,6 +765,32 @@ section(() => {
   });
 });
 
+// 34. Tile style and interface size: a refused write restores the stored values and the selects.
+section(() => {
+  const src = read("settingsPanel.js");
+  const tile = extractBlock(src, "export async function tileStyleChanged(").replace("export ", "");
+  const scale = extractBlock(src, "export const scaleChanged = ").replace("export const scaleChanged", "var scaleChanged");
+  later(async () => {
+    const font = { value: "mono" };
+    const size = { value: "20" };
+    const els = { "tile-font": font, "tile-size": size };
+    const settings = { tile_font: "system", tile_size: 14, ui_values: { uiScale: 100 } };
+    const errs = [];
+    let applied = 0;
+    const filled = [];
+    const sb = run([tile, scale].join("\n"), {
+      settings, $: (id) => els[id], normSize: (n) => n, applyTileStyle() { applied++; }, renderGrid: async () => {}, applyValues() {},
+      fillScaleSelect: (id, key) => filled.push(id + ":" + key), invoke: async () => { throw new Error("denied"); }, errToast: (e) => errs.push(e),
+    });
+    await sb.tileStyleChanged();
+    check(settings.tile_font === "system" && settings.tile_size === 14 && font.value === "system" && size.value === "14" && errs.length === 1 && applied === 2, "a refused tile style restores font, size and both selects");
+    await sb.scaleChanged("uiScale")({ target: { value: "150", id: "ui-scale" } });
+    check(settings.ui_values.uiScale === 100 && filled.join() === "ui-scale:uiScale" && errs.length === 2, "a refused scale restores the value and the select");
+    await sb.scaleChanged("iconScale")({ target: { value: "90", id: "x" } });
+    check(!("iconScale" in settings.ui_values), "a refused first scale write leaves no key behind");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

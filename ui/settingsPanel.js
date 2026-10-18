@@ -467,6 +467,44 @@ export async function setOnTop(on) {
   }
 }
 
+// Prompt-tile font + size. A refused write puts the previous style back, selects included.
+export async function tileStyleChanged() {
+  const before = { font: settings.tile_font, size: settings.tile_size };
+  settings.tile_font = $("tile-font").value;
+  settings.tile_size = Number($("tile-size").value); // 0 = auto-fit
+  applyTileStyle();
+  try {
+    await invoke("set_tile_style", { font: settings.tile_font, size: settings.tile_size });
+  } catch (err) {
+    settings.tile_font = before.font;
+    settings.tile_size = before.size;
+    $("tile-font").value = settings.tile_font || "system";
+    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
+    applyTileStyle();
+    errToast(err);
+  }
+  await renderGrid(true); // re-render so auto-fit (or fixed size) applies cleanly
+}
+
+// Interface size select: a refused write restores the stored value and the select before the rescale.
+export const scaleChanged = (key) => async (e) => {
+  const v = Number(e.target.value);
+  const before = settings.ui_values || {};
+  const had = Object.prototype.hasOwnProperty.call(before, key);
+  const previous = before[key];
+  settings.ui_values = { ...before, [key]: v };
+  try {
+    await invoke("set_ui_value", { key, value: v });
+  } catch (err) {
+    const values = { ...(settings.ui_values || {}) };
+    if (had) values[key] = previous; else delete values[key];
+    settings.ui_values = values;
+    fillScaleSelect(e.target.id, key);
+    errToast(err);
+  }
+  applyValues();
+};
+
 export function bindSettingsPanel() {
   $("gear").addEventListener("click", () => {
     settingsOpener = document.activeElement;
@@ -577,14 +615,6 @@ export function bindSettingsPanel() {
     if (isHistoryTabOpen()) renderJournal();
   });
 
-  // Prompt-tile font + size.
-  const tileStyleChanged = async () => {
-    settings.tile_font = $("tile-font").value;
-    settings.tile_size = Number($("tile-size").value); // 0 = auto-fit
-    applyTileStyle();
-    invoke("set_tile_style", { font: settings.tile_font, size: settings.tile_size }).catch(() => {});
-    await renderGrid(true); // re-render so auto-fit (or fixed size) applies cleanly
-  };
   $("tile-font").addEventListener("change", tileStyleChanged);
   $("tile-size").addEventListener("change", tileStyleChanged);
   // Every dropdown uses the same popup style (scrollbar only when needed).
@@ -599,12 +629,6 @@ export function bindSettingsPanel() {
 
   // Interface size: a percentage-preset select mirroring the expert scale.
   fillScaleSelect("ui-scale", "uiScale");
-  const scaleChanged = (key) => async (e) => {
-    const v = Number(e.target.value);
-    settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
-    await invoke("set_ui_value", { key, value: v }).catch((err) => errToast(err));
-    applyValues();
-  };
   $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
   attachSelectPicker($("ui-scale"));
 }
