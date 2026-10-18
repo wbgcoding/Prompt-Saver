@@ -840,6 +840,36 @@ section(() => {
   });
 });
 
+// 38. Placing a tile: a refused write reads the stored layout back and redraws; no undo is offered.
+section(() => {
+  const src = read("tiles.js");
+  const place = extractBlock(src, "export async function placeTile(").replace("export ", "");
+  later(async () => {
+    for (const bad of ["set_layout", "batch_prompts"]) {
+      const view = { id: "v1", members: [], layouts: {}, cols: 2, rows: 2 };
+      const other = { id: "v2", members: ["p1"], layouts: { k: { p1: [0, 0] } } };
+      const log = [];
+      const sb = run(place, {
+        gridEl: { querySelector: () => null }, activeView: () => view, optFlag: () => false, viewsContaining: () => [other],
+        layoutOf: (v) => v.layouts.k || (v.layouts.k = {}), gridKeyOf: () => "k", moveTileDom: () => true,
+        invoke: async (cmd) => { log.push(cmd); if (cmd === bad) throw new Error("denied"); return {}; },
+        errToast: () => log.push("toast"), assignSettings: () => log.push("assign"), renderGrid: async () => { log.push("grid"); },
+        folderById: () => null, saveFolder: async () => true,
+      });
+      const ok = await sb.placeTile("p1", 1, 1);
+      check(ok === false && log.includes("toast") && log.includes("assign") && log[log.length - 1] === "grid", "a refused " + bad + " is toasted, re-read and redrawn");
+    }
+    const okLog = [];
+    const sb2 = run(place, {
+      gridEl: { querySelector: () => null }, activeView: () => ({ id: "v1", members: [], layouts: {} }), optFlag: () => true, viewsContaining: () => [],
+      layoutOf: (v) => v.layouts.k || (v.layouts.k = {}), gridKeyOf: () => "k", moveTileDom: () => true,
+      invoke: async () => ({}), errToast: () => okLog.push("toast"), assignSettings: () => okLog.push("assign"), renderGrid: async () => okLog.push("grid"),
+      folderById: () => null, saveFolder: async () => true,
+    });
+    check((await sb2.placeTile("p1", 0, 0)) === true && !okLog.length, "an accepted placement stays quiet and returns true");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
