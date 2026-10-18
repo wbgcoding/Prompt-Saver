@@ -1073,6 +1073,14 @@ section(() => {
   check(extractBlock(g, "export function renderGridTagPop(").includes('gridTagPop.setAttribute("aria-label", t("gridTagFilter"))'), "it is named per open, so the name follows the language");
 });
 
+// 59. The themed select list announces its keyboard cursor through the active descendant.
+section(() => {
+  const src = read("selectpop.js");
+  check(src.includes('row.id = `select-pop-opt-${pop.children.length}`'), "every option row has an id");
+  check(extractBlock(src, "function highlight(").includes('"aria-activedescendant", rows[cursor].id'), "arrowing moves the active descendant");
+  check(extractBlock(src, "export function closeValuePop(").includes('removeAttribute("aria-activedescendant")'), "closing clears it");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
