@@ -199,10 +199,7 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
             // as the real text.
             Some(p) => {
                 let key = secret_session_key(secret_timeout_min(&store.settings));
-                let (text, variants) = reveal_secret_text(p, key)?;
-                let mut plain = rotation_core(p);
-                plain.text = text;
-                plain.variants = variants;
+                let plain = reveal_rotation(p, key)?;
                 CopyPayload::Text(rotation_next(&plain, &store.settings).2)
             }
             None => CopyPayload::Missing,
@@ -234,11 +231,17 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
 // The prompt with a confidential entry decrypted, so rotation_next() on it can never
 // hand ciphertext out. None while the vault is locked (or the key is wrong).
 pub(crate) fn revealed_prompt(p: &Prompt, key: Option<[u8; 32]>) -> Option<Prompt> {
-    let (text, variants) = reveal_secret_text(p, key).ok()?;
-    let mut plain = p.clone();
+    reveal_rotation(p, key).ok()
+}
+
+// The one decrypt-and-slim step: the rotation fields of p with the confidential entries in
+// the clear, or the vault's refusal while it is locked.
+fn reveal_rotation(p: &Prompt, key: Option<[u8; 32]>) -> Result<Prompt, String> {
+    let (text, variants) = reveal_secret_text(p, key)?;
+    let mut plain = rotation_core(p);
     plain.text = text;
     plain.variants = variants;
-    Some(plain)
+    Ok(plain)
 }
 
 // What rotation_peek() reports for a "next: n/total" badge or a copy path that needs the
@@ -261,10 +264,7 @@ pub(crate) fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek
     // A locked confidential entry has no peek at all: the "next" badge simply
     // does not show rather than reveal ciphertext or the wrong text.
     let key = secret_session_key(secret_timeout_min(&store.settings));
-    let (text, variants) = reveal_secret_text(p, key).ok()?;
-    let mut plain = rotation_core(p);
-    plain.text = text;
-    plain.variants = variants;
+    let plain = revealed_prompt(p, key)?;
     let (index, pos, text) = rotation_next(&plain, &store.settings);
     Some(RotationPeek { index, pos, total: rotation_total(&plain), text })
 }
@@ -289,12 +289,9 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
     // Same rule as rotation_peek: a locked confidential entry emits nothing
     // rather than send ciphertext through a window event.
     let key = secret_session_key(secret_timeout_min(settings));
-    let Ok((text, variants)) = reveal_secret_text(p, key) else {
+    let Some(plain) = revealed_prompt(p, key) else {
         return;
     };
-    let mut plain = rotation_core(p);
-    plain.text = text;
-    plain.variants = variants;
     let (index, pos, text) = rotation_next(&plain, settings);
     let _ = app.emit(
         "rotation-changed",
