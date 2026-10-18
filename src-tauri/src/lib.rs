@@ -339,6 +339,7 @@ pub fn run() {
                     }));
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
+            remove_old_temp_pdfium(); // pdfium copies an earlier version unpacked into the temp folder
             // Registered in the canonical dir (never the "datapath" redirect, which demo mode flips) so
             // enable_demo_mode/disable_demo_mode can tell a real second running instance from the
             // allowMultipleInstances setting (see other_instance_running).

@@ -755,3 +755,28 @@ fn the_verified_pdfium_copy_is_held_open_so_it_cannot_be_swapped() {
     assert!(body.contains("PDFIUM_HOLD.set("));
     assert!(!body.contains("fs::read(&cached)"));
 }
+
+#[test]
+fn old_pdfium_copies_in_the_shared_temp_folder_are_removed_once_at_start() {
+    let root = std::env::temp_dir().join(format!("ps-oldpdf-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let dir = root.join(brand::TEMP_DIR);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("pdfium-1.2.3.dll"), b"old").unwrap();
+    fs::write(dir.join("pdfium-1.2.4.dll"), b"old").unwrap();
+    fs::write(dir.join("pdfium-notes.txt"), b"keep").unwrap();
+    fs::write(dir.join(format!("{}-ocr-1.png", brand::TEMP_PREFIX)), b"keep").unwrap();
+    remove_old_temp_pdfium_in(&root);
+    assert!(!dir.join("pdfium-1.2.3.dll").exists());
+    assert!(!dir.join("pdfium-1.2.4.dll").exists());
+    assert!(dir.join("pdfium-notes.txt").exists(), "only the dll copies go");
+    assert!(dir.join(format!("{}-ocr-1.png", brand::TEMP_PREFIX)).exists(), "other scratch files are not this pass's business");
+    // A missing folder is not an error.
+    remove_old_temp_pdfium_in(&root.join("absent"));
+    let _ = fs::remove_dir_all(&root);
+    // The start-up setup runs the pass, and the snip sweep comment names where the copy lives now.
+    let lib = source!("../lib.rs");
+    assert!(lib.contains("remove_old_temp_pdfium()"));
+    let snip = source!("../snip.rs");
+    assert!(!snip.contains("next to the versioned pdfium cache"), "the comment no longer places the cache in TEMP");
+}

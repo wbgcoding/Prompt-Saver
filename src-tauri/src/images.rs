@@ -284,6 +284,24 @@ pub(crate) fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
     }
 }
 
+// Earlier versions unpacked pdfium into the shared temp folder's app subfolder. The copies there
+// (about 7 MB each) are orphaned once the per-user folder is used, so they are deleted at start.
+// Best-effort; only pdfium-*.dll names directly inside that subfolder are touched.
+pub(crate) fn remove_old_temp_pdfium_in(temp_root: &std::path::Path) {
+    let Ok(entries) = fs::read_dir(temp_root.join(brand::TEMP_DIR)) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("pdfium-") && name.ends_with(".dll") && entry.path().is_file() {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+pub(crate) fn remove_old_temp_pdfium() {
+    remove_old_temp_pdfium_in(&std::env::temp_dir());
+}
+
 // A DLL next to the exe wins (lets a user drop in a newer pdfium); otherwise the
 // embedded copy is written to the cache path once and reused.
 // The unpacked copy, once its content was compared with the compiled-in one: every later page

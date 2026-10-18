@@ -256,8 +256,8 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
     }
 
     // OCR leftovers (crop/page image, install-result json) live one level down in the app's
-    // TEMP_DIR subfolder, next to the versioned pdfium cache. Only ocr-* names are touched here;
-    // the pdfium dlls are swept by version in sweep_stale_pdfium_dlls.
+    // TEMP_DIR subfolder. Only ocr-* names are touched here; the versioned pdfium cache lives in
+    // the per-user app folder and is swept by version in sweep_stale_pdfium_dlls.
     let ocr_dir = dir.join(brand::TEMP_DIR);
     // Voice dictation leftovers (install/listing results, scripts, DISM logs) live in the same
     // folder.
