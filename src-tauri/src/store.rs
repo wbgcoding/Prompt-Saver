@@ -1640,6 +1640,15 @@ pub(crate) fn db_upgrade_version_rows(conn: &mut Connection) -> rusqlite::Result
     Ok(rewritten)
 }
 
+// The raw copy kept while writes were locked by an unreadable row. Gone once a launch loads clean
+// and with a data wipe, so it never outlives the situation it was kept for.
+pub(crate) fn remove_locked_backup(dir: &Path) {
+    let bak = dir.join("data.db.locked.bak");
+    if bak.exists() {
+        let _ = fs::remove_file(&bak);
+    }
+}
+
 pub(crate) fn load_store(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
@@ -1664,6 +1673,9 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
                 decrypt_fails,
                 if settings_unreadable { " (settings row included)" } else { "" }
             ));
+        } else {
+            // The lock is resolved: the raw copy would keep every row purged since, for good.
+            remove_locked_backup(&dir);
         }
         SETTINGS_LOCKED.store(settings_unreadable, Ordering::Relaxed);
         let mut settings = settings_opt.clone().unwrap_or_default();

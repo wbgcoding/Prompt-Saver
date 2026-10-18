@@ -618,6 +618,7 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
     // With the lock dropped: every picture and attachment the deleted prompts named is an orphan
     // now (the sweep re-checks the live store and keeps pending captures), and the freed
     // database pages and the log must not keep the old rows.
+    remove_locked_backup(&data_dir(&app));
     let sweep_app = app.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || {
         sweep_orphan_files(&sweep_app, &std::collections::HashSet::new());

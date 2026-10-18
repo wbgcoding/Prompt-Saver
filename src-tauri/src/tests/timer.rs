@@ -1217,3 +1217,18 @@ fn snip_overlay_preview_keeps_full_chroma_for_coloured_text() {
         snip::SNIP_PREVIEW_Q
     );
 }
+
+#[test]
+fn the_locked_database_copy_is_removed_and_nothing_else() {
+    let root = std::env::temp_dir().join(format!("{}-test-locked-bak", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    for name in ["data.db", "data.db.locked.bak"] {
+        std::fs::write(root.join(name), b"x").unwrap();
+    }
+    remove_locked_backup(&root);
+    assert!(!root.join("data.db.locked.bak").exists());
+    assert!(root.join("data.db").exists());
+    remove_locked_backup(&root); // already gone: harmless
+    let _ = std::fs::remove_dir_all(&root);
+}
