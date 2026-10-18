@@ -608,8 +608,30 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     } else {
         recording_dir(&custom)
     };
-    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    Ok(place_recording_parts(&mut parts, &allowed, &dest))
+    // A part can be many gigabytes and the move copies across drives: the list is taken out so
+    // the lock is not held for that, and the worker thread does the copying.
+    tauri::async_runtime::spawn_blocking(move || {
+        with_parts_outside_lock(&REC_RESULT_PARTS, |parts| place_recording_parts(parts, &allowed, &dest))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+// Runs `work` on the shared list's current contents without keeping the lock: the entries are
+// taken out first, and whatever `work` leaves in the list (parts that could not be moved) is
+// put back in front of anything added meanwhile.
+pub(crate) fn with_parts_outside_lock<R>(
+    shared: &Mutex<Vec<RecordingPartInfo>>,
+    work: impl FnOnce(&mut Vec<RecordingPartInfo>) -> R,
+) -> R {
+    let mut mine = std::mem::take(&mut *shared.lock().unwrap_or_else(|e| e.into_inner()));
+    let result = work(&mut mine);
+    if !mine.is_empty() {
+        let mut guard = shared.lock().unwrap_or_else(|e| e.into_inner());
+        mine.append(&mut guard);
+        *guard = mine;
+    }
+    result
 }
 
 // Discard in the result dialog: the earlier parts go to the discard folder like the last

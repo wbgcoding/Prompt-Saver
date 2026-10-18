@@ -414,3 +414,20 @@ fn the_verified_pdfium_copy_is_remembered_after_the_first_check() {
     assert!(lookup < read, "the remembered path is consulted before the content check");
     assert_eq!(body.matches("PDFIUM_VERIFIED.set(").count(), 2);
 }
+
+#[test]
+fn saving_the_parts_does_not_hold_the_shared_list_lock() {
+    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None };
+    let shared = std::sync::Mutex::new(vec![part("a"), part("b")]);
+    let seen = with_parts_outside_lock(&shared, |mine| {
+        assert!(shared.try_lock().is_ok(), "the lock is free while the parts are being moved");
+        assert_eq!(mine.len(), 2);
+        // "a" moved, "b" could not be: it must come back, ahead of a part added meanwhile.
+        mine.retain(|p| p.path == "b");
+        shared.lock().unwrap().push(part("c"));
+        7
+    });
+    assert_eq!(seen, 7);
+    let left: Vec<String> = shared.lock().unwrap().iter().map(|p| p.path.clone()).collect();
+    assert_eq!(left, vec!["b".to_string(), "c".to_string()]);
+}
