@@ -584,6 +584,40 @@ section(() => {
   check(/syncVarsUi\(modal\.root\.classList\.contains\("tall"\), rotationUiOn\(\), true\), 60\)/.test(ed), "the input handler settles for 60 ms");
 });
 
+// 25. Expert menu: a refused write puts the previous value back instead of keeping the optimistic one.
+section(() => {
+  const src = read("expertMenu.js");
+  const persist = extractBlock(src, "export async function persistUiText(").replace("export ", "");
+  const reset = extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
+  const make = (fail, settings) => {
+    const toasts = [];
+    const sb = run([persist, reset].join("\n"), {
+      settings, invoke: async () => { if (fail) throw new Error("denied"); }, errToast: (e) => toasts.push(String(e.message || e)),
+      EXPERT_BULK_NEVER: [], shipsOn: () => true, applyFlags() {}, applyValues() {}, fitAllTiles() {}, refreshTiles: async () => {},
+      renderGrid: async () => {}, renderExpert() {}, TILE_DOM_FLAGS: new Set(), EXPERT_VALUES: { gap: { def: 9 } }, EXPERT_SELECTS: {}, EXPERT_DROPDOWNS: {},
+    });
+    return { sb, toasts };
+  };
+  later(async () => {
+    const kept = { ui_texts: { ocrLang: "eng" } };
+    const a = make(true, kept);
+    const ok = await a.sb.persistUiText("ocrLang", "deu");
+    check(ok === false && kept.ui_texts.ocrLang === "eng" && a.toasts.length === 1, "a refused text write keeps the old value");
+    const fresh = { ui_texts: {} };
+    const b = make(true, fresh);
+    await b.sb.persistUiText("voiceLang", "de");
+    check(!("voiceLang" in fresh.ui_texts), "a refused first write leaves no key behind");
+    const good = { ui_texts: {} };
+    const c = make(false, good);
+    check((await c.sb.persistUiText("voiceLang", "de")) === true && good.ui_texts.voiceLang === "de", "an accepted write stays");
+    const flags = { ui_flags: { dynVars: false }, ui_values: { gap: 3 } };
+    const d = make(true, flags);
+    await d.sb.resetOneExpertValue("flags", "dynVars");
+    await d.sb.resetOneExpertValue("values", "gap");
+    check(flags.ui_flags.dynVars === false && flags.ui_values.gap === 3, "a refused reset keeps the flag and the value");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

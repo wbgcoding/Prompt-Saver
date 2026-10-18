@@ -23,6 +23,26 @@ import { EXPERT_NOTICES, noticeRow, noticeActionRow, actionRow } from "./expertN
 
 export let expertResetTimer = null;
 
+// Write one ui_texts entry optimistically and put the previous value back when the store refuses
+// it (a read-only data folder), so the dropdown, the CSS state and isRowChanged never show a
+// value that was not kept. Resolves to whether the write stuck.
+export async function persistUiText(key, value) {
+  const texts = settings.ui_texts || {};
+  const had = Object.prototype.hasOwnProperty.call(texts, key);
+  const before = texts[key];
+  settings.ui_texts = { ...texts, [key]: value };
+  try {
+    await invoke("set_ui_text", { key, value });
+    return true;
+  } catch (e) {
+    const back = { ...(settings.ui_texts || {}) };
+    if (had) back[key] = before; else delete back[key];
+    settings.ui_texts = back;
+    errToast(e);
+    return false;
+  }
+}
+
 // Build a simple string-enum dropdown backed by ui_texts (default when unset).
 // `opts` is [[value, i18nLabelKey], …]. Used by expert enum params.
 export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
@@ -33,8 +53,7 @@ export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
     options: () => opts.map(([v, lk]) => [v, t(lk)]),
     get: () => norm(settings.ui_texts?.[key] || def),
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), [key]: v };
-      try { await invoke("set_ui_text", { key, value: v }); } catch (e) { errToast(e); }
+      await persistUiText(key, v);
       applyValues();
     },
   };
@@ -86,8 +105,7 @@ export const EXPERT_DROPDOWNS = {
       return settings.ui_flags?.snipTextPlate === false ? "none" : "plate";
     },
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), snipTextBack: v };
-      try { await invoke("set_ui_text", { key: "snipTextBack", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("snipTextBack", v);
       applyValues();
     },
   },
@@ -101,8 +119,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label])],
     get: () => settings.ui_texts?.ocrLang || "auto",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), ocrLang: v };
-      try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("ocrLang", v);
     },
   },
   // Which microphone to capture for recAudioMic. Options are fetched once
@@ -115,8 +132,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["", t("langAuto")], ...micDevicesCache.map((d) => [d.id, d.name])],
     get: () => settings.ui_texts?.recMicDevice || "",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), recMicDevice: v };
-      try { await invoke("set_ui_text", { key: "recMicDevice", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("recMicDevice", v);
     },
   },
   // Which camera the camera window opens with. Options come from
@@ -130,8 +146,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["", t("langAuto")], ...cameraDevicesCache.map((d) => [d.id, d.name])],
     get: () => settings.ui_texts?.cameraDevice || "",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), cameraDevice: v };
-      try { await invoke("set_ui_text", { key: "cameraDevice", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("cameraDevice", v);
     },
   },
   cameraResolution: enumDropdown("cameraResolution", "valCameraResolution",
@@ -149,11 +164,18 @@ export const EXPERT_DROPDOWNS = {
     ],
     get: () => settings.ui_texts?.recQuality || "high",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), recQuality: v };
-      try { await invoke("set_ui_text", { key: "recQuality", value: v }); } catch (e) { errToast(e); }
+      if (!(await persistUiText("recQuality", v))) { applyValues(); return; }
       if (REC_QUALITY_BITRATE[v] != null) {
+        const before = settings.ui_values?.recBitrateKbps;
         settings.ui_values = { ...(settings.ui_values || {}), recBitrateKbps: REC_QUALITY_BITRATE[v] };
-        try { await invoke("set_ui_value", { key: "recBitrateKbps", value: REC_QUALITY_BITRATE[v] }); } catch (e) { errToast(e); }
+        try {
+          await invoke("set_ui_value", { key: "recBitrateKbps", value: REC_QUALITY_BITRATE[v] });
+        } catch (e) {
+          const back = { ...(settings.ui_values || {}) };
+          if (before === undefined) delete back.recBitrateKbps; else back.recBitrateKbps = before;
+          settings.ui_values = back;
+          errToast(e);
+        }
       }
       applyValues();
     },
@@ -180,8 +202,7 @@ export const EXPERT_DROPDOWNS = {
     options: () => [["auto", t("langAuto")], ...voiceLangsCache.map((l) => [l.tag, l.label])],
     get: () => settings.ui_texts?.voiceLang || "auto",
     set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), voiceLang: v };
-      try { await invoke("set_ui_text", { key: "voiceLang", value: v }); } catch (e) { errToast(e); }
+      await persistUiText("voiceLang", v);
     },
   },
   voiceInsert: enumDropdown("voiceInsert", "valVoiceInsert",
@@ -323,14 +344,32 @@ export async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags" && EXPERT_BULK_NEVER.includes(key)) return;
   if (kind === "flags") {
     const enabled = shipsOn(key);
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_flags || {}, key);
+    const before = settings.ui_flags?.[key];
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_flag", { key, enabled });
+    } catch (err) {
+      const back = { ...(settings.ui_flags || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_flags = back;
+      errToast(err);
+    }
     applyFlags();
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true); else fitAllTiles();
   } else if (kind === "values" || kind === "selects") {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_values || {}, key);
+    const before = settings.ui_values?.[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
-    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_value", { key, value: cfg.def });
+    } catch (err) {
+      const back = { ...(settings.ui_values || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_values = back;
+      errToast(err);
+    }
     applyValues();
     await refreshTiles(key);
   } else if (kind === "dropdowns") {
