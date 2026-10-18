@@ -93,6 +93,14 @@ fn process_identity_check_recognises_this_process_and_rejects_a_foreign_exe() {
     assert!(!child_exe, "a different executable must never count as the same one");
 }
 
+// A forward goes only to a pipe server that is a live process of this user.
+#[test]
+fn forwarding_needs_a_known_same_user_pipe_owner() {
+    assert!(forward_target_trusted(Some(std::process::id())));
+    assert!(!forward_target_trusted(None));
+    assert!(!forward_target_trusted(Some(0)));
+}
+
 #[test]
 fn terminating_a_process_waits_until_it_is_really_gone() {
     let mut child = std::process::Command::new("cmd.exe")

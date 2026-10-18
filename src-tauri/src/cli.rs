@@ -179,6 +179,11 @@ async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
             Err(_) => return None, // nobody is listening -- run standalone instead
         }
     };
+    // The argv (paths, passwords of an import) goes only to a server of this same user; any
+    // other owner of the pipe name is not the app, so the command runs standalone instead.
+    if !forward_target_trusted(named_pipe_server_pid(&client)) {
+        return None;
+    }
     let req = PipeRequest { argv: argv.to_vec(), cwd: cwd.to_string_lossy().to_string() };
     let bytes = serde_json::to_vec(&req).ok()?;
     match exchange(&mut client, &bytes, FORWARD_HANDOFF, FORWARD_RESULT_WAIT).await {
@@ -442,6 +447,12 @@ async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
 // build, is left alone.
 fn should_take_over_hung_instance(answered_in_time: bool, same_user: bool, same_exe_path: bool) -> bool {
     !answered_in_time && same_user && same_exe_path
+}
+
+// Whether the process behind the pipe may receive a forwarded command: it must run as the same
+// user. An unknown owner counts as not trusted.
+fn forward_target_trusted(server_pid: Option<u32>) -> bool {
+    server_pid.is_some_and(|pid| process_identity_check(pid).0)
 }
 
 // GetNamedPipeServerProcessId (Win32_System_Pipes) is not in this project's enabled `windows`
