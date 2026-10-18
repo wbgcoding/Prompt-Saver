@@ -76,6 +76,22 @@ check(
 // Empty chain: nothing picked yet, nothing to report.
 check("empty chain", chainVarReport([]), []);
 
+// Drift guard: the chain copies of the placeholder pattern and the reserved names must equal the
+// originals, or the overview would list a new reserved name as a missing need.
+{
+  const fs = require("fs");
+  const ui = (n) => fs.readFileSync(path.join(__dirname, "..", "ui", n), "utf8");
+  const chain = ui("chainvars.js");
+  const grab = (src, re, what) => { const m = re.exec(src); if (!m) { problems.push("drift guard cannot find " + what); return ""; } return m[1]; };
+  check("placeholder pattern equals floatShared VAR_RE",
+    grab(chain, /const CHAIN_VAR_RE = (\/.*\/[a-z]*);/, "CHAIN_VAR_RE"),
+    grab(ui("floatShared.js"), /export const VAR_RE = (\/.*\/[a-z]*);/, "VAR_RE"));
+  const list = (src, re, what) => grab(src, re, what).split(",").map((x) => x.trim().replace(/"/g, "")).filter(Boolean);
+  check("reserved names equal promptVars DYN_VARS",
+    list(chain, /const CHAIN_DYN_VARS = \[([^\]]*)\]/, "CHAIN_DYN_VARS"),
+    list(ui("promptVars.js"), /export const DYN_VARS = \[([^\]]*)\]/, "DYN_VARS"));
+}
+
 if (problems.length) {
   console.error(`chainvars_check: ${problems.length} problem(s):`);
   for (const p of problems) console.error(" - " + p);
