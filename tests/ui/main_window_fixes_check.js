@@ -1116,6 +1116,15 @@ section(() => {
   check(sb.a === "2,1,3" && sb.b === "2,1,3" && sb.c === "1,2,3", "a move reorders and an out of range move is ignored");
 });
 
+// 64. The journal refetch drops stale results and the grouped toggle rolls back.
+section(() => {
+  const src = read("journal.js");
+  const fn = extractBlock(src, "export async function loadJournal(");
+  check(fn.includes("const seq = ++journalLoadSeq;") && fn.includes("if (seq !== journalLoadSeq) return;"), "an older refetch no longer overwrites a newer one");
+  check(fn.indexOf("journalLog = log;") > fn.indexOf("if (seq !== journalLoadSeq) return;"), "the log is written only after the sequence check");
+  check(src.includes("settings.ui_flags = prevFlags; errToast(err);"), "a failed flag save restores the previous flags before the refetch");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

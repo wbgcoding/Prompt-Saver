@@ -193,10 +193,15 @@ export let journalRecentRev = false; // recently-copied sorted oldest-first
 export let journalUsedRev = false; // most-used sorted least-first
 
 // Refetch the copy log (the query changes: open, grouped toggle, after a copy).
+let journalLoadSeq = 0; // only the newest refetch may write its result
 export async function loadJournal() {
+  const seq = ++journalLoadSeq;
   const grouped = flag("historyGrouped");
-  journalLog = await invoke("recent_copies", { limit: Math.min(val("historyMax"), JOURNAL_ROWS_MAX), grouped }).catch(() => []);
-  journalInbox = await invoke("clip_inbox_list").catch(() => []);
+  const log = await invoke("recent_copies", { limit: Math.min(val("historyMax"), JOURNAL_ROWS_MAX), grouped }).catch(() => []);
+  const inbox = await invoke("clip_inbox_list").catch(() => []);
+  if (seq !== journalLoadSeq) return; // a newer refetch is in flight and will render
+  journalLog = log;
+  journalInbox = inbox;
   clipStored = journalInbox.length;
   renderJournal();
 }
@@ -405,8 +410,9 @@ export function renderJournal() {
     groupLbl.append(cb, sp);
     cb.addEventListener("change", async () => {
       const next = cb.checked;
+      const prevFlags = settings.ui_flags;
       settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
-      try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
+      try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { settings.ui_flags = prevFlags; errToast(err); } // view follows the saved value
       await loadJournal(); // grouping changes the query → refetch
     });
     extras.append(groupLbl, sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); }, ["journalNewestFirst", "journalOldestFirst"]));
