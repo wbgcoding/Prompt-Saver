@@ -822,6 +822,35 @@ pub(crate) fn ffmpeg_stalled(secs_since_progress: u64) -> bool {
     secs_since_progress > FFMPEG_STALL_SECS
 }
 
+// A long filter graph (one overlay term per key press, say) can pass the 32767-character
+// command-line limit, so the editor hands it to ffmpeg as a file. The file sits beside the
+// output under a `.export-<pid>-<stamp>` name and in the same journal as the staged output, so
+// a killed run's leftover is swept on the next start like any other export temp.
+pub(crate) fn filter_script_path(dst: &Path) -> PathBuf {
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    dst.with_file_name(format!(".export-{}-{}.ffgraph", std::process::id(), stamp))
+}
+
+pub(crate) fn write_filter_script(dst: &Path, graph: &str) -> Result<PathBuf, String> {
+    let path = filter_script_path(dst);
+    if let Some(journal) = EXPORT_JOURNAL.get() {
+        export_journal_add(journal, &path);
+    }
+    if let Err(e) = fs::write(&path, graph) {
+        remove_filter_script(&path);
+        let text = e.to_string();
+        return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
+    }
+    Ok(path)
+}
+
+pub(crate) fn remove_filter_script(path: &Path) {
+    let _ = fs::remove_file(path);
+    if let Some(journal) = EXPORT_JOURNAL.get() {
+        export_journal_remove(journal, path);
+    }
+}
+
 // Shared by convert_recording and the video editor's export (one export path): spawns ffmpeg
 // with the given output-side arguments, streams `-progress pipe:1` into `on_progress`, tails
 // stderr for the error message on failure, and stages the result under a unique temp name in

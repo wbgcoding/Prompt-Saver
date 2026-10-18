@@ -159,3 +159,24 @@ fn only_a_silent_ffmpeg_is_declared_stalled() {
     assert!(src.contains("last_progress = std::time::Instant::now();"));
     assert!(!src.contains("start.elapsed().as_secs() >"));
 }
+
+#[test]
+fn the_export_filter_graph_travels_in_a_swept_file() {
+    let dst = Path::new(r"C:\clips\talk-edit.mp4");
+    let script = filter_script_path(dst);
+    assert_eq!(script.parent(), dst.parent());
+    assert!(staged_export_pid(&script) == Some(std::process::id()), "the startup sweep must recognise the file");
+    let long = "drawbox=x=1:y=2:w=3:h=4:enable='between(t,1,2)'".repeat(2000);
+    let root = std::env::temp_dir().join(format!("ps-graph-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let written = write_filter_script(&root.join("out.mp4"), &long).unwrap();
+    assert_eq!(fs::read_to_string(&written).unwrap(), long);
+    assert!(long.len() > 32767, "this graph is longer than a command line may be");
+    remove_filter_script(&written);
+    assert!(!written.exists());
+    let _ = fs::remove_dir_all(&root);
+    // Contrast: the old inline argument is gone from the export path.
+    let src = include_str!("../video_editor.rs");
+    assert!(!src.contains("push(\"-filter_complex\".to_string())"));
+    assert!(src.contains("\"-filter_complex_script\""));
+}

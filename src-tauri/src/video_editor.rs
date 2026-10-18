@@ -1192,6 +1192,7 @@ pub(crate) fn export_video_blocking(
         output_args.push(format!("{dur:.3}"));
     }
     let plain_copy = req.lossless_copy && req.filter_chain.is_none() && req.audio_map.is_none();
+    let mut filter_script: Option<PathBuf> = None;
     if plain_copy {
         // Without an explicit -map, ffmpeg keeps only its single "best" audio stream, and a muxed-in
         // mic track (the second audio stream) would vanish on a lossless trim-only export.
@@ -1210,8 +1211,10 @@ pub(crate) fn export_video_blocking(
             }
         }
         if !graphs.is_empty() {
-            output_args.push("-filter_complex".to_string());
-            output_args.push(graphs.join(";"));
+            let script = write_filter_script(dst, &graphs.join(";"))?;
+            output_args.push("-filter_complex_script".to_string());
+            output_args.push(script.to_string_lossy().to_string());
+            filter_script = Some(script);
         }
         output_args.push("-map".to_string());
         output_args.push(if req.filter_chain.is_some() { "[vout]".to_string() } else { "0:v".to_string() });
@@ -1259,7 +1262,11 @@ pub(crate) fn export_video_blocking(
         }
     }
     let is_cancelled = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen);
-    let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress)?;
+    let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress);
+    if let Some(script) = &filter_script {
+        remove_filter_script(script);
+    }
+    let staged = staged?;
     // dest_path is the frontend's "<stem>-edit.<ext>" guess, and exporting the same source twice
     // must not replace the first result. reserve_unique_dest_path claims the final name
     // atomically, unlike unique_dest_path, so a file appearing at the winning name before the
