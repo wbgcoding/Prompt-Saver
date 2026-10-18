@@ -1066,3 +1066,9 @@ fn heavy_backup_commands_run_off_the_async_runtime() {
         assert!(fn_text(src, name).contains("spawn_blocking"), "{name} must not inflate or lock on an async worker");
     }
 }
+
+#[test]
+fn forwarded_backup_restore_runs_off_the_async_runtime() {
+    let src = include_str!("../cli_callers.rs");
+    assert!(fn_text(src, "run_in_process_inner").contains("spawn_blocking"), "the restore must not block the pipe handler's worker");
+}

@@ -216,9 +216,16 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
         if !confirmed {
             return (4, String::new(), format!("refused: {}. Pass --yes to actually do it.\n", dry_run_description(&cmd)));
         }
-        let state: tauri::State<Db> = app.state();
-        let keep = keep.unwrap_or_else(|| default_keep(&lock(&state).settings));
-        return match crate::restore_backup_core(app.clone(), state, name.clone(), keep, scope.clone()) {
+        let (worker, name_c, scope_c, keep_c) = (app.clone(), name.clone(), scope.clone(), *keep);
+        // Off the async runtime: the store-lock wait, the safety snapshot and the inflate block.
+        let outcome = tauri::async_runtime::spawn_blocking(move || {
+            let state: tauri::State<Db> = worker.state();
+            let keep = keep_c.unwrap_or_else(|| default_keep(&lock(&state).settings));
+            crate::restore_backup_core(worker.clone(), state, name_c, keep, scope_c)
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+        return match outcome {
             Ok(()) => {
                 *restart = true;
                 (0, format!("restored backup {name}\n"), String::new())
