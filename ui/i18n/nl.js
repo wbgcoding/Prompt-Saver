@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Oude map behouden",
     pathDefault: "Standaard",
     pathChange: "Wijzigen…",
-    dataDirConfirm: "Nieuwe locatie ingesteld. Herstart {app} om deze toe te passen. Gegevens in de oude map nu verwijderen?",
+    dataDirConfirm: "Nieuwe locatie ingesteld. Herstart {app} om deze toe te passen. Gegevens in de oude map nu verwijderen? Hiermee verdwijnen de database, back-ups, schermafbeeldingen en bijlagen die de app daar heeft opgeslagen.",
     dataDirCleanFailed: "De oude map kon niet worden opgeruimd.",
     snipKeepBtn: "Opslaan als knop",
     viewColor: "Kleur",

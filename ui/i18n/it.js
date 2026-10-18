@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Mantieni la vecchia cartella",
     pathDefault: "Predefinito",
     pathChange: "Cambia…",
-    dataDirConfirm: "Nuova posizione impostata. Riavvia {app} per applicarla. Eliminare ora i dati nella vecchia cartella?",
+    dataDirConfirm: "Nuova posizione impostata. Riavvia {app} per applicarla. Eliminare ora i dati della vecchia cartella? Verranno rimossi il database, i backup, gli screenshot e gli allegati salvati lì dall'app.",
     dataDirCleanFailed: "Non è stato possibile ripulire la cartella precedente.",
     snipKeepBtn: "Salva come pulsante",
     viewColor: "Colore",

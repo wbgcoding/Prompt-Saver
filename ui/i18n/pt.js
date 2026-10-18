@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Manter pasta antiga",
     pathDefault: "Padrão",
     pathChange: "Alterar…",
-    dataDirConfirm: "Novo local definido. Reinicie o {app} para aplicá-lo. Excluir agora os dados da pasta antiga?",
+    dataDirConfirm: "Novo local definido. Reinicie o {app} para aplicá-lo. Excluir agora os dados da pasta antiga? Isso remove o banco de dados, os backups, as capturas de tela e os anexos que o app guardou ali.",
     dataDirCleanFailed: "Não foi possível limpar a pasta anterior.",
     snipKeepBtn: "Salvar como botão",
     viewColor: "Cor",

@@ -817,7 +817,7 @@ export default {
     dataDirKeep: "Păstrează folderul vechi",
     pathDefault: "Implicit",
     pathChange: "Modifică…",
-    dataDirConfirm: "Locație nouă setată: reporniți {app} pentru a aplica. Ștergeți acum datele din folderul vechi?",
+    dataDirConfirm: "Locație nouă setată: reporniți {app} pentru a aplica. Ștergeți acum datele din folderul vechi? Se elimină baza de date, copiile de rezervă, capturile de ecran și atașamentele pe care aplicația le-a stocat acolo.",
     dataDirCleanFailed: "Dosarul vechi nu a putut fi curățat.",
     snipKeepBtn: "Salvează ca buton",
     viewColor: "Culoare",

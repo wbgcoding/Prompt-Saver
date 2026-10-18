@@ -894,7 +894,7 @@ export default {
     dataDirKeep: "Keep old folder",
     pathDefault: "Default",
     pathChange: "Change…",
-    dataDirConfirm: "New location set. Restart {app} to apply it. Delete the data in the old folder now?",
+    dataDirConfirm: "New location set. Restart {app} to apply it. Delete the old folder's data now? This removes the database, backups, screenshots and attachments the app stored there.",
     dataDirCleanFailed: "The old folder could not be cleaned up.",
     snipKeepBtn: "Save as button",
     flagScreenshot: "Screenshot tool",
