@@ -1081,6 +1081,13 @@ section(() => {
   check(extractBlock(src, "export function closeValuePop(").includes('removeAttribute("aria-activedescendant")'), "closing clears it");
 });
 
+// 60. The error log list shows the date only; the origin id stays in the copy.
+section(() => {
+  const src = read("management.js");
+  check(src.includes("head.textContent = new Date(entry.ts * 1000).toLocaleString(LANG);"), "the row head carries no raw origin id");
+  check(extractBlock(src, "export async function copyErrorLogAll(").includes("${e.origin}"), "the copied text keeps the origin");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
