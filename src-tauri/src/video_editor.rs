@@ -920,14 +920,41 @@ fn open_editor_source_paths(app: &AppHandle) -> Vec<String> {
 // copy the editor made of an opened file, or exactly the file the editor was
 // handed. A renderer-supplied path outside those is never read.
 pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Path, editor_sources: &[String], src: &Path) -> bool {
+    // A network spelling is judged on its text: resolving it would contact the host.
+    if is_network_path(&src.to_string_lossy()) {
+        return false;
+    }
     if is_own_recording_source(allowed_dirs, src) || is_editor_work_copy_in(temp_root, src) {
         return true;
     }
     let Ok(canon) = fs::canonicalize(src) else { return false };
     editor_sources
         .iter()
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty() && !is_network_path(s))
         .any(|s| fs::canonicalize(s).is_ok_and(|c| c == canon))
+}
+
+// Everything open_video_editor asks of the disk before it accepts a source, in one place so it
+// can run on a blocking worker: network spellings (recording or overlay) are refused on their
+// text before any file call, then the confinement check, then the file itself. Returns the
+// overlay to keep (an overlay that no longer exists is dropped, not an error).
+pub(crate) fn vet_editor_open(
+    allowed_dirs: &[PathBuf],
+    temp_root: &Path,
+    editor_sources: &[String],
+    src: &Path,
+    overlay: Option<&str>,
+) -> Result<String, &'static str> {
+    if is_network_path(&src.to_string_lossy()) || overlay.is_some_and(is_network_path) {
+        return Err("source-not-allowed");
+    }
+    if !export_source_is_allowed(allowed_dirs, temp_root, editor_sources, src) {
+        return Err(if src.exists() { "source-not-allowed" } else { "recording file not found" });
+    }
+    if !src.is_file() {
+        return Err("recording file not found");
+    }
+    Ok(overlay.filter(|p| Path::new(p).is_file()).map(str::to_string).unwrap_or_default())
 }
 
 // Progress reuses convert_recording's "recording-convert-progress" event. The taskbar and
@@ -937,6 +964,9 @@ pub(crate) fn export_source_is_allowed(allowed_dirs: &[PathBuf], temp_root: &Pat
 pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) -> Result<String, String> {
     if !is_video_format(&req.format) {
         return Err("unsupported format".to_string());
+    }
+    if is_network_path(&req.src_path) {
+        return Err("source-not-allowed".to_string());
     }
     let src = PathBuf::from(&req.src_path);
     if !src.is_file() {
@@ -1432,19 +1462,25 @@ pub(crate) async fn open_video_editor(
     origin_dir: Option<String>,
     overlay_path: Option<String>,
 ) -> Result<bool, String> {
-    if !PathBuf::from(&src_path).is_file() {
-        return Err("recording file not found".to_string());
-    }
     // Opening makes the path an allowed export source, so only files the app knows may be
-    // opened: its own recordings, an editor work copy, or a prompt's attached file.
-    let attached = attached_media_paths(&lock(&state).prompts);
-    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
-    if !export_source_is_allowed(&recording_source_dirs(&app, &state), &own_temp_dir, &attached, Path::new(&src_path)) {
+    // opened: its own recordings, an editor work copy, or a prompt's attached file. A network
+    // spelling is refused on its text and the disk work (canonicalizing every attachment) runs on
+    // a blocking worker, so a slow share never stalls the async runtime or gets contacted.
+    if is_network_path(&src_path) || overlay_path.as_deref().is_some_and(is_network_path) {
         return Err("source-not-allowed".to_string());
     }
-    let origin_dir = origin_dir.unwrap_or_default();
+    let attached = attached_media_paths(&lock(&state).prompts);
+    let dirs = recording_source_dirs(&app, &state);
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let (vet_src, vet_overlay) = (src_path.clone(), overlay_path.clone());
     // An overlay path that no longer exists is dropped rather than shown as a broken overlay op.
-    let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
+    let overlay_path = tauri::async_runtime::spawn_blocking(move || {
+        vet_editor_open(&dirs, &own_temp_dir, &attached, Path::new(&vet_src), vet_overlay.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    let origin_dir = origin_dir.unwrap_or_default();
     let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path.clone()) };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
         // The open editor may still refuse (unsaved edits kept), so the source is only offered here

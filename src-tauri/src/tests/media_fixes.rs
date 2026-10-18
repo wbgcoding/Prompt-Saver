@@ -828,3 +828,51 @@ fn an_attachment_path_naming_the_store_or_a_network_share_is_refused() {
     let head = &images[at..at + 300];
     assert!(head.find("is_network_path(").is_some_and(|n| n < head.find(".exists()").unwrap()), "text check before exists()");
 }
+
+#[test]
+fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
+    let root = std::env::temp_dir().join(format!("ps-openvet-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let rec_dir = root.join("recs");
+    let elsewhere = root.join("elsewhere");
+    for d in [&rec_dir, &elsewhere] {
+        fs::create_dir_all(d).unwrap();
+    }
+    let rec = rec_dir.join("rec-1.mp4");
+    let foreign = elsewhere.join("private.mp4");
+    let overlay = elsewhere.join("cam.webm");
+    for f in [&rec, &foreign, &overlay] {
+        fs::write(f, b"v").unwrap();
+    }
+    let dirs = [rec_dir.clone()];
+    let temp_root = root.join("tmp");
+    let vet = |src: &Path, ov: Option<&str>| vet_editor_open(&dirs, &temp_root, &[], src, ov);
+    // A network spelling, as the recording or as the overlay, is refused on its text alone.
+    assert_eq!(vet(Path::new(r"\\host\share\a.mp4"), None), Err("source-not-allowed"));
+    assert_eq!(vet(&rec, Some(r"\\host\share\cam.webm")), Err("source-not-allowed"));
+    assert_eq!(vet(&rec, Some("//host/share/cam.webm")), Err("source-not-allowed"));
+    // A file the app does not know is refused; a recording that vanished is simply not found.
+    assert_eq!(vet(&foreign, None), Err("source-not-allowed"));
+    assert_eq!(vet(&rec_dir.join("rec-gone.mp4"), None), Err("recording file not found"));
+    // An own recording passes; an overlay that no longer exists is dropped, not an error.
+    assert_eq!(vet(&rec, None), Ok(String::new()));
+    assert_eq!(vet(&rec, Some(&overlay.to_string_lossy())), Ok(overlay.to_string_lossy().to_string()));
+    assert_eq!(vet(&rec, Some(&elsewhere.join("gone.webm").to_string_lossy())), Ok(String::new()));
+    // Attachments that name another machine are never canonicalized for the comparison.
+    let editor = vec![r"\\host\share\a.mp4".to_string()];
+    assert!(!export_source_is_allowed(&dirs, &temp_root, &editor, Path::new(r"\\host\share\a.mp4")));
+    let _ = fs::remove_dir_all(&root);
+
+    // The command vets before any is_file call and does the disk work on a blocking worker.
+    let ve = source!("../video_editor.rs");
+    let at = ve.find("pub(crate) async fn open_video_editor").unwrap();
+    let body = &ve[at..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let vet_at = body.find("vet_editor_open(").expect("vets the source");
+    assert!(body[..vet_at].contains("spawn_blocking"), "the vetting runs on a blocking worker");
+    assert!(!body[..vet_at].contains(".is_file()"), "no disk call before the vetting");
+    assert!(body[..vet_at].contains("is_network_path("), "network spellings refused on text first");
+    let allowed = &ve[ve.find("pub(crate) fn export_source_is_allowed").unwrap()..];
+    let allowed = &allowed[..allowed.find("\n}\n").unwrap()];
+    assert!(allowed.find("is_network_path(").is_some_and(|n| n < allowed.find("canonicalize(").unwrap()), "text check before the first canonicalize");
+}
