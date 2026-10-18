@@ -617,7 +617,7 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             bytes += size;
             let _ = fs::remove_file(path.with_extension("mic.wav"));
             // The key-overlay sidecar goes with its video.
-            let _ = fs::remove_file(path.with_extension("keys.json"));
+            let _ = fs::remove_file(sidecar_path(&path, KEYS_SIDECAR_EXT));
             let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
         }
     }
