@@ -920,3 +920,50 @@ pub(super) fn import_with(conn: &mut Connection, store: &mut Store, want_data: b
         db_write_import(conn, st, &st.prompts, prompts, settings, false).is_ok()
     })
 }
+
+#[test]
+fn imported_rows_never_keep_a_network_path() {
+    let unc = "\\\\host.example\\share\\x.mp4".to_string();
+    let verbatim = "\\\\?\\UNC\\host.example\\share\\x.png".to_string();
+    assert!(is_network_path(&unc));
+    assert!(is_network_path("//host.example/share/x.mp4"));
+    assert!(is_network_path(&verbatim));
+    assert!(!is_network_path("C:/Users/x/clip.mp4"));
+    assert!(!is_network_path(""));
+    assert!(!is_network_path("assets/demo.png"));
+
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    let item = ImportedPrompt {
+        name: "Pack".to_string(),
+        text: "body".to_string(),
+        color: String::new(),
+        font: String::new(),
+        font_size: 0,
+        file_path: unc.clone(),
+        pdf_page: 0,
+        icon_path: "//host.example/share/i.mp4".to_string(),
+        caption: String::new(),
+        caption_size: 0,
+        show_image: false,
+        copy_image: false,
+        image: verbatim.clone(),
+        tags: Vec::new(),
+        notes: String::new(),
+        variants: Vec::new(),
+        rotate_mode: String::new(),
+        favorite: false,
+        secret: false,
+    };
+    assert_eq!(append_imported_prompts(&mut store, vec![item]), 1);
+    let p = &store.prompts[0];
+    assert!(p.file_path.is_empty() && p.icon_path.is_empty() && p.image.is_empty());
+    assert_eq!(p.name, "Pack", "the row itself stays");
+
+    let mut hostile = test_prompt("h");
+    hostile.file_path = unc;
+    hostile.icon_path = "C:/ok/local.mp4".to_string();
+    let backup = Backup { prompts: vec![hostile], settings: Settings::default() };
+    apply_import(&mut store, backup, true, false);
+    assert!(store.prompts[0].file_path.is_empty(), "a full backup is cleared too");
+    assert_eq!(store.prompts[0].icon_path, "C:/ok/local.mp4");
+}

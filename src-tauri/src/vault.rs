@@ -996,6 +996,7 @@ pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, w
             if p.id.is_empty() {
                 p.id = gen_id();
             }
+            clear_network_paths(p);
         }
         migrate_prompts(&mut store.prompts);
         store.prompts_locked = false; // a full import supersedes any decrypt lock

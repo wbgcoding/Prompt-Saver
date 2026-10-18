@@ -216,6 +216,10 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
         }
     };
     let Some(media_path) = media_path else { return Ok(None) };
+    // Never opens a network path on its own: that would send credentials to the host it names.
+    if is_network_path(&media_path) {
+        return Ok(None);
+    }
     let ffprobe = ffprobe_search_path(&app);
     let (duration_ms, width, height, size) =
         tauri::async_runtime::spawn_blocking(move || probe_media_meta(ffprobe.as_deref(), Path::new(&media_path)))
