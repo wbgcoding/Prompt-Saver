@@ -932,7 +932,7 @@ section(() => {
 // 43. The auto update switch rolls back when the write is refused.
 section(() => {
   const src = read("about.js");
-  const m = /\$\("opt-autoupdate"\)\.addEventListener\("change", (async \(e\) => \{[\s\S]*?\n  \}\));/.exec(src);
+  const m = /\$\("opt-autoupdate"\)\.addEventListener\("change", (async \(e\) => \{[\s\S]*?\n  \})\);/.exec(src);
   check(!!m, "the auto update handler is async");
   if (!m) return;
   later(async () => {
