@@ -981,11 +981,20 @@ pub(crate) fn history_cap(settings: &Settings) -> usize {
 }
 
 pub(crate) fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, variants: &[String], cap: usize) -> rusqlite::Result<()> {
+    db_insert_version(conn, prompt_id, ts, name, text, variants)?;
+    db_trim_versions(conn, prompt_id, cap)
+}
+// The insert alone: a caller that may still take the row back (an undo snapshot) trims only once
+// its write went through, so a failed attempt never evicts a real history row.
+pub(crate) fn db_insert_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, variants: &[String]) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES(?1, ?2, ?3, ?4, ?5)",
         params![prompt_id, ts as i64, enc_str(name), enc_str(text), enc_str(&encode_variants(variants))],
     )?;
-    // Keep only the newest `cap` snapshots for this prompt.
+    Ok(())
+}
+// Keep only the newest `cap` snapshots for this prompt.
+pub(crate) fn db_trim_versions(conn: &Connection, prompt_id: &str, cap: usize) -> rusqlite::Result<()> {
     conn.execute(
         "DELETE FROM prompt_versions WHERE prompt_id = ?1 AND id NOT IN
             (SELECT id FROM prompt_versions WHERE prompt_id = ?1 ORDER BY id DESC LIMIT ?2)",

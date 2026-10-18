@@ -1455,9 +1455,11 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
                 return Err("secret-locked".to_string());
             }
             // The undo snapshot of the current state must itself succeed before overwriting it, or a
-            // restore could not be undone and "nothing is ever lost" would break.
+            // restore could not be undone and "nothing is ever lost" would break. Inserted without
+            // trimming: the history is cut to its cap only once the restore has saved, so a failed
+            // one never evicts a real version.
             let snapshot_ok = db_conn(&app)
-                .map(|c| db_add_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants, cap).is_ok())
+                .map(|c| db_insert_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants).is_ok())
                 .unwrap_or(false);
             if !snapshot_ok {
                 return Err("snapshot-failed".into());
@@ -1500,12 +1502,15 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
                 if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == pid) {
                     *slot = original;
                 }
-                // The restore did not happen: take its undo snapshot back out so retries do not
-                // push real history out of the history cap.
+                // The restore did not happen: take its untrimmed undo snapshot back out, so the
+                // history is exactly as it was.
                 if let Some(c) = db_conn(&app) {
                     db_drop_latest_version(&c, &pid);
                 }
                 return Err("save-failed".into());
+            }
+            if let Some(c) = db_conn(&app) {
+                let _ = db_trim_versions(&c, &pid, cap);
             }
             Some((clone, stored))
         } else {

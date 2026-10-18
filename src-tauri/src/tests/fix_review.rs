@@ -166,3 +166,27 @@ fn a_failed_update_switch_save_restores_the_previous_values() {
     assert!(set_update_choice(&mut s, true, |_| true).is_ok());
     assert!(s.auto_update && s.update_consent == UpdateConsent::Yes);
 }
+
+fn version_count(conn: &Connection, id: &str) -> usize {
+    db_list_versions(conn, id).len()
+}
+
+#[test]
+fn an_undo_snapshot_trims_only_after_the_restore_saved() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    for i in 0..5u64 {
+        db_add_version(&conn, "p", i + 1, "N", &format!("v{i}"), &[], 5).unwrap();
+    }
+    assert_eq!(version_count(&conn, "p"), 5);
+    // A restore that fails: the snapshot goes in without trimming and comes out again.
+    db_insert_version(&conn, "p", 9, "N", "current", &[]).unwrap();
+    db_drop_latest_version(&conn, "p");
+    let texts: Vec<String> = db_list_versions(&conn, "p").into_iter().map(|v| v.text).collect();
+    assert_eq!(texts.len(), 5, "a failed restore loses no history row");
+    assert!(texts.contains(&"v0".to_string()), "the oldest real version survives the failed attempt");
+    // A restore that saved: the trim follows.
+    db_insert_version(&conn, "p", 10, "N", "current", &[]).unwrap();
+    db_trim_versions(&conn, "p", 5).unwrap();
+    assert_eq!(version_count(&conn, "p"), 5);
+}
