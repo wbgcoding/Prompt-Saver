@@ -256,7 +256,7 @@ pub(crate) fn reserved_hotkeys(settings: &Settings) -> Vec<String> {
 // The rec-stop/rec-pause accelerator to check prompt hotkeys against, or ""
 // when that control's own feature/hotkey toggle is off and the combination is
 // therefore free to reuse. Mirrors rearm_hotkeys' own gating minus
-// recording_active() -- a prompt hotkey is set long before any recording runs.
+// recording_active(): a prompt hotkey is set long before any recording runs.
 pub(crate) fn active_rec_hotkey<'a>(hk: &'a str, flag_key: &str, flags: &HashMap<String, bool>) -> &'a str {
     if flags.get("screenRecord") != Some(&false) && flags.get(flag_key) != Some(&false) {
         hk
@@ -415,8 +415,8 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
             let voice_ok = !voice_hotkey_on
                 || store.settings.voice_hotkey.trim().is_empty()
                 || parse_accel(&store.settings.voice_hotkey).is_some();
-            // Registered only while a recording is actually running -- see
-            // recording_active above -- AND their own toggle is on (both ship ON).
+            // Registered only while a recording is actually running: see
+            // recording_active above: AND their own toggle is on (both ship ON).
             let rec_stop_on = rec_active
                 && store.settings.ui_flags.get("screenRecord") != Some(&false)
                 && store.settings.ui_flags.get("recStopHotkey") != Some(&false);

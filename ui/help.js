@@ -8,7 +8,7 @@
 //
 // `id` is an optional stable key, present on the handful of articles something
 // outside this file needs to jump straight to (the first-run tour's help buttons,
-// so far) -- unlike `title`, it never changes with a rewrite and stays the same in
+// so far): unlike `title`, it never changes with a rewrite and stays the same in
 // both languages. Add one only when a new caller needs an anchor.
 
 export const HELP_CONTENT = {

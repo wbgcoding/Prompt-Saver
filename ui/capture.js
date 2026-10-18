@@ -884,7 +884,7 @@ export function bindCapture() {
     if (e.target === snipModal) closeSnipModal();
   });
 
-  // ---- OCR (text recognition, on by default -- flag "ocr") ----
+  // ---- OCR (text recognition, on by default: flag "ocr") ----
   const ocrModal = $("ocr-modal");
   const ocrSettings = () => ({
     upscaleUnderPx: 300, // crops under this size are upscaled before recognition
@@ -919,7 +919,7 @@ export function bindCapture() {
       recordToolUsage("ocr");
     } catch (err) { ocrErrToast(err); }
   });
-  // (b) standalone composer button -- small menu (Screenshot / From image file).
+  // (b) standalone composer button: small menu (Screenshot / From image file).
   $("ocr-btn").addEventListener("click", () => {
     const r = $("ocr-btn").getBoundingClientRect();
     openMiniMenu([

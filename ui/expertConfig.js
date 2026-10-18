@@ -21,7 +21,7 @@ export const FLAG_LABELS = {
   videoControls: "flagVideoControls",
   videoMuted: "flagVideoMuted",
   // Duration badge + resolution/size tooltip line in the library and copy
-  // history -- the main grid tile never reads either field.
+  // history: the main grid tile never reads either field.
   mediaMeta: "flagMediaMeta",
   mediaMetaBackfill: "flagMediaMetaBackfill",
   animations: "flagAnimations",
@@ -34,7 +34,7 @@ export const FLAG_LABELS = {
   librarySearch: "flagLibrarySearch",
   searchAutofocus: "flagSearchAutofocus",
   // A search overlay reaching across prompts, copy history, attachments,
-  // views, settings and help all at once -- separate from librarySearch,
+  // views, settings and help all at once: separate from librarySearch,
   // which only ever covers the prompt grid.
   globalSearch: "flagGlobalSearch",
   searchSuggest: "flagSearchSuggest",
@@ -86,7 +86,7 @@ export const FLAG_LABELS = {
   dupFinder: "flagDupFinder",
   // A background check after every save, naming the closest existing prompt
   // once it clears similarThreshold (the same value the duplicate finder
-  // above uses) -- never a dialog, never holds up the save itself.
+  // above uses): never a dialog, never holds up the save itself.
   similarHint: "flagSimilarHint",
   dupImportCheck: "flagDupImportCheck",
   autoBackup: "flagAutoBackup",
@@ -331,11 +331,11 @@ export const EXPERT_VALUES = {
   bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
-  // Floating pill appearance -- the text size.
+  // Floating pill appearance: the text size.
   pillFontSize: { label: "valPillFontSize", min: 14, max: 40, step: 1, def: 26, unit: "px", gate: "floating" },
   // 0 = off (never clears the parked view, only the position keeps living in
   // settings either way). Above 0, a button parked this many hours loses only
-  // its view -- the same "hide for now" mechanism -- never the saved entry.
+  // its view (the same "hide for now" mechanism) never the saved entry.
   floatParkCleanupH: { label: "valFloatParkCleanupH", min: 0, max: 168, step: 1, def: 0, unit: "h", zeroLabel: "updateNever", gate: "floating" },
   // Pill folders: how much a pill grows for the merge-target hint, and the open
   // folder popover's own tile size / gap / padding.
@@ -380,12 +380,12 @@ export const EXPERT_VALUES = {
   hoverDim: { label: "valHoverDim", min: 0, max: 90, step: 5, def: 0, unit: "%", zeroLabel: "valOff", offAtZero: true },
   // A delay before the capture (lets a menu stay open in the shot).
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
-  // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
+  // The actual saved/copied/exported JPEG quality: every save/copy path, edited
   // or not, shares this one value (see SNIP_SAVE_Q in snip.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
   // Days an editor's saved edit state is kept. 0 means forever, like trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
-  // Delay between picking a recording target and the capture actually starting -- 0 disables it.
+  // Delay between picking a recording target and the capture actually starting: 0 disables it.
   recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
   // Capture rate in frames per second, so a 60/144Hz screen can be recorded at its own rate.
   recFps: { label: "valRecFps", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "screenRecord" },
@@ -523,7 +523,7 @@ export const EXPERT_TABS = [
     // microphone rather than putting typed content into the app.
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
     { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], dropdowns: ["snipEditDefaultTool", "snipTextBack"], colors: ["snipDefaultColor"] },
-    // Opens #ocr-langs-modal -- same gate as the rest of the feature.
+    // Opens #ocr-langs-modal: same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"] },

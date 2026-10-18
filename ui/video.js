@@ -301,7 +301,7 @@ function toast(message) {
   toastTimer = setTimeout(() => el.classList.add("hidden"), VE_TOAST_MS);
 }
 
-// The "?" overview -- same modal/modal-narrow/modal-titlebar shell as
+// The "?" overview: same modal/modal-narrow/modal-titlebar shell as
 // the shared confirm dialog, filled straight from SHORTCUTS.
 function openShortcutsModal(scope) {
   const list = $("shortcuts-modal-list");
@@ -385,7 +385,7 @@ function undo() {
     restoreRemoved(cur);
     VE.redo.push(cur);
   } else if (cur._prev) {
-    // This slot was a replacement (pushReplacing) -- step it back to the
+    // This slot was a replacement (pushReplacing): step it back to the
     // value it replaced rather than removing the row outright, and keep the
     // full entry (chain intact) on the redo stack so redo can restore it.
     VE.ops[idx] = cur._prev;
@@ -403,7 +403,7 @@ function redo() {
     VE.ops = VE.ops.filter((o) => !next.removed.some((r) => r.op === o));
     VE.ops.push(next);
   } else if (next._prev) {
-    // The matching undo left this slot holding next._prev -- put the newer
+    // The matching undo left this slot holding next._prev: put the newer
     // value back in the same slot instead of appending a second row.
     VE.ops[VE.ops.length - 1] = next;
   } else {
@@ -910,7 +910,7 @@ const PREVIEW_ZOOM_MIN = 1;
 const PREVIEW_ZOOM_MAX = 8;
 
 // The video's own painted size at zoom 1, straight from the stage + source
-// aspect ratio -- kept independent of the live (already zoomed) bounding rect
+// aspect ratio: kept independent of the live (already zoomed) bounding rect
 // so panning can be clamped without having to divide that rect back down.
 function fitBoxSize() {
   const stage = $("ve-stage").getBoundingClientRect();
@@ -1945,7 +1945,7 @@ async function addAlignedCameraOverlay(path, gen) {
   try {
     probe = await invoke("probe_extra_video_source", { path });
   } catch {
-    // The recording still exists on disk -- the overlays panel's own "add a
+    // The recording still exists on disk: the overlays panel's own "add a
     // video" picker reaches it by hand if this automatic probe fails.
     return;
   }
@@ -1955,7 +1955,7 @@ async function addAlignedCameraOverlay(path, gen) {
     const sidecar = await invoke("read_camera_sidecar", { path });
     if (sidecar && sidecar.overlay_start_ms != null) startMs = sidecar.overlay_start_ms;
   } catch {
-    // No sidecar -- 0 (both at the same point) is still a sane fallback,
+    // No sidecar: 0 (both at the same point) is still a sane fallback,
     // never a missing overlay.
   }
   if (VE.loadGen !== gen) return;
@@ -2565,7 +2565,7 @@ function videoOverlayEnable(op) {
 
 // A finite repeat count rather than an unbounded loop: deterministic ffmpeg
 // behaviour, and it needs no guess at a buffer size large enough to hold the
-// whole thing. Native speed only -- a video overlay's own clock is never
+// whole thing. Native speed only: a video overlay's own clock is never
 // adjusted to match a "speed" op on the main timeline.
 function videoOverlayLoopArg(op) {
   if (!op.loop || !op.videoDurationMs) return "";
@@ -2589,7 +2589,7 @@ function atempoChain(rate) {
 const exportFormat = () => $("ve-export-format").value || "mp4";
 const exportQuality = () => $("ve-export-quality").value || "high";
 
-// The scale op is the one resolution setting of the window -- both the
+// The scale op is the one resolution setting of the window: both the
 // Edit-tab fields and the Export-tab summary read and write it directly.
 function scaleTarget() {
   const scaleOp = opOf("scale");
@@ -2848,7 +2848,7 @@ function buildVideoChain() {
   } else if (planLabels.length === 1) {
     cur = planLabels[0];
   } else {
-    // Everything trimmed away and no clip inserted -- still needs a frame to
+    // Everything trimmed away and no clip inserted: still needs a frame to
     // build the rest of the graph (scale, fades, ...) on.
     parts.push(`[0:v]fps=${fps},trim=start=0:end=0,setpts=PTS-STARTPTS[${cur}]`);
   }
@@ -2943,7 +2943,7 @@ function buildVideoChain() {
   }
 
   // A GIF balloons in file size fast at a high resolution
-  // -- cap the long side regardless of any explicit scale op above.
+  //: cap the long side regardless of any explicit scale op above.
   if (silentFormat) chain(`scale='min(iw,${MAX_SILENT_DIM})':'min(ih,${MAX_SILENT_DIM})':force_original_aspect_ratio=decrease`);
 
   if (gif) {
@@ -3094,7 +3094,7 @@ function isLosslessCopy() {
   if (exportFormat() !== "mp4") return false;
   if (exportQuality() === "lossless") return false; // an explicit re-encode was asked for
   // A source whose own streams are not already safe to copy (h264/hevc video,
-  // aac-or-silent audio -- e.g. a webm/VP9 file dragged in from elsewhere)
+  // aac-or-silent audio: e.g. a webm/VP9 file dragged in from elsewhere)
   // fails ffmpeg's "-c copy" outright instead of producing a trimmed export.
   if (VE.probe && VE.probe.stream_copy_safe === false) return false;
   if (opsOf("cut").length) return false;
@@ -3110,7 +3110,7 @@ function isLosslessCopy() {
 
 // ---------------------------------------------------------------- export
 
-// The source file's own stem, with no folder and no extension -- the base
+// The source file's own stem, with no folder and no extension: the base
 // every auto-named export starts from.
 function sourceStem() {
   const cut = VE.src.replace(/[/\\]+$/, "");
@@ -3127,7 +3127,7 @@ function exportNameStem() {
   return custom || `${sourceStem()}-edit`;
 }
 
-// Three ways to land on a destination, checked in order -- a full path
+// Three ways to land on a destination, checked in order: a full path
 // the user typed or picked via "Save as…" wins outright; otherwise a
 // remembered "Export to…" folder keeps the (auto or custom) filename but
 // moves it there; otherwise the original folder next to the source file.
@@ -3317,7 +3317,7 @@ async function startExport(toClipboard) {
         total_ms: total,
       };
       // A stream copy has no bitrate-based estimate to check against (see
-      // estimate_export_bytes) -- skipped the same way its size note above is.
+      // estimate_export_bytes): skipped the same way its size note above is.
       if (!lossless) {
         const diskWarn = await invoke("check_export_disk_space", {
           destPath: dest, format, videoKbps: request.video_kbps, losslessQuality: request.lossless_quality, durationMs: total,
@@ -4077,7 +4077,7 @@ async function refreshExtraSourceAvailability(myGen) {
 }
 
 // Called once per loadRecording(), after resetForNewSource() has already put
-// VE.ops back to empty -- so any ops this finds and applies are entirely the
+// VE.ops back to empty: so any ops this finds and applies are entirely the
 // restored ones, never mixed with anything from the source file's own probe.
 async function checkEditState(path, myGen) {
   VE.editStateSize = 0;
@@ -4152,7 +4152,7 @@ async function loadRecording(path, originDir, overlayPath) {
   VE.src = path;
   resetForNewSource();
   // When this is set, VE.src is a throwaway copy, never the file the user
-  // actually opened -- destPath() already prefers this folder for the "Save" default,
+  // actually opened: destPath() already prefers this folder for the "Save" default,
   // and this note says why the working file's own name looks unfamiliar.
   VE.originDir = originDir || "";
   if (VE.originDir) toast(t("openedCopyNote"));

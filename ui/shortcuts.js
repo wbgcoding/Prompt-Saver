@@ -111,7 +111,7 @@ function modLabel(mod, lang) {
   return mod;
 }
 
-// "Ctrl+Shift+Z" / "Strg+Z" / "V" -- the key half of the tooltip, never
+// "Ctrl+Shift+Z" / "Strg+Z" / "V": the key half of the tooltip, never
 // translated except the "Strg" abbreviation above.
 export function formatKeys(entry, lang) {
   const mods = MOD_ORDER.filter((m) => (entry.mods || []).includes(m)).map((m) => modLabel(m, lang));
@@ -153,7 +153,7 @@ export function withShortcut(el, action, t, lang) {
 // Rows for a "?" overview table, one row per distinct key combo (an action
 // with an alt binding, e.g. veRedoAlt, is folded into its primary row's
 // description rather than listed twice). `scope` is one scope name or an
-// array of them -- the main window's overview shows mainWindow + library
+// array of them: the main window's overview shows mainWindow + library
 // together, since a user there has no reason to tell those two apart.
 export function rowsForScope(scope, t, lang) {
   const scopes = Array.isArray(scope) ? scope : [scope];

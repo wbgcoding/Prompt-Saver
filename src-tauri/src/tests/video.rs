@@ -1,6 +1,6 @@
 use super::*;
 
-// ---- Video editor (242-245): real ffmpeg/ffprobe, no capture hardware needed ----
+// ---- Video editor: real ffmpeg/ffprobe, no capture hardware needed ----
 
 pub(super) fn test_ffprobe() -> Option<PathBuf> {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffprobe.exe");
@@ -64,7 +64,7 @@ fn detect_media_kind_recognizes_an_mp4_saved_with_the_wrong_extension() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-// Like make_test_mp4, but with its own (system) audio track -- needed only
+// Like make_test_mp4, but with its own (system) audio track: needed only
 // for the mux test below: muxing a mic sidecar into a video-only source
 // (make_test_mp4's lavfi testsrc has no audio at all) would still end up
 // with just one audio stream, since "0:a?" maps nothing when there is no
@@ -104,7 +104,7 @@ pub(super) fn make_test_wav(dir: &Path, name: &str, seconds: u32) -> PathBuf {
 
 #[test]
 fn pcm_s16le_to_peaks_never_overflows_on_i16_min() {
-    // i16::MIN.unsigned_abs() is 32768, one past i16::MAX -- a signed
+    // i16::MIN.unsigned_abs() is 32768, one past i16::MAX: a signed
     // running max would wrap here; the u16 running max must not.
     let bytes = i16::MIN.to_le_bytes();
     let peaks = pcm_s16le_to_peaks(&bytes, 1);
@@ -155,7 +155,7 @@ fn screenshot_format_needs_quality_is_true_only_for_jpeg() {
     }
 }
 
-// A 2x2 checkerboard -- small enough to assert on exact bytes, varied
+// A 2x2 checkerboard: small enough to assert on exact bytes, varied
 // enough (opaque and transparent, black and white) that a lossy encoder
 // could not accidentally produce the same output as a lossless one.
 pub(super) fn checkerboard_rgba() -> Vec<u8> {
@@ -185,7 +185,7 @@ fn encode_screenshot_writes_png_for_a_stored_tiff_choice() {
 
 #[test]
 fn encode_screenshot_jpeg_still_uses_the_fast_encoder_and_ignores_alpha_losslessness() {
-    // JPEG has no alpha channel and is lossy by design -- this only proves
+    // JPEG has no alpha channel and is lossy by design: this only proves
     // the dispatch still reaches encode_snip_jpeg (a valid, decodable JPEG
     // of the right size comes back), never that JPEG matches source bytes.
     let rgba = checkerboard_rgba();
@@ -220,7 +220,7 @@ fn probe_recording_real_ffmpeg_reports_duration_dimensions_and_no_mic_sidecar() 
 }
 
 // A source whose video codec is not h264/hevc (e.g. dragged in from
-// elsewhere as VP9/webm) must never be reported stream-copy-safe -- that
+// elsewhere as VP9/webm) must never be reported stream-copy-safe: that
 // flag is what gates the editor's own "-c copy" fast path, and copying a
 // VP9 stream into an mp4 container fails ffmpeg outright.
 #[test]
@@ -291,7 +291,7 @@ fn probe_media_meta_reads_a_real_videos_duration_and_dimensions() {
 }
 
 // A file that is neither a real image nor a readable video must come back as
-// zeros, never an error and never a panic -- probe_media_meta has no Result
+// zeros, never an error and never a panic: probe_media_meta has no Result
 // to bubble one through, on purpose (a caller stores "never measured" for
 // whatever field could not be read, not a whole failed attach).
 #[test]
@@ -510,14 +510,14 @@ fn export_video_real_ffmpeg_avi_format_carries_mpeg4_video_and_its_audio() {
 // exact fragment shape buildVideoChain() emits for each overlay kind
 // (verified by hand against a real ffmpeg run when 333 was investigated)
 // and prove on the actual encoded output that the overlay was really
-// burned into the pixels, not just that ffmpeg exited 0 -- a filter typo
+// burned into the pixels, not just that ffmpeg exited 0: a filter typo
 // that still parses (e.g. a wrong label) would pass a "did it error"
 // check but produce an unmodified frame.
 
 pub(super) fn sample_pixel_rgb24(ffmpeg: &Path, path: &Path, x: u32, y: u32) -> [u8; 3] {
     use std::os::windows::process::CommandExt;
     // A 1x1 crop is rejected by this ffmpeg build for a yuv420p source
-    // (chroma subsampling needs even dimensions) -- 2x2 is the smallest
+    // (chroma subsampling needs even dimensions): 2x2 is the smallest
     // window that reliably decodes, so every caller reads its top-left texel.
     let out = std::process::Command::new(ffmpeg)
         .args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
@@ -644,7 +644,7 @@ fn export_video_real_ffmpeg_text_overlay_draws_its_outline() {
              :borderw=3:bordercolor=0x111111@1.00:enable='between(t,0.000,1.000)':text='Test'[v1];[v1]null[vout]"
     ));
     // (8,2) sits just above the caption's first letter, inside the outline's
-    // 3px ring but outside the letter itself -- confirmed empirically against
+    // 3px ring but outside the letter itself: confirmed empirically against
     // this exact filter string. The plate-box test above shows the same spot
     // is a plain, non-black test-pattern texel with no overlay at all.
     assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 8, 2), [17, 17, 17],
@@ -682,7 +682,7 @@ fn export_video_real_ffmpeg_spotlight_overlay_dims_outside_the_clear_rect() {
     let dest = dir.join("out.mp4");
     // Mirrors buildVideoChain()'s "spotlight" branch: split, darken the
     // whole frame, then overlay a clear crop of the original back over the
-    // clear rect -- everything else stays dimmed.
+    // clear rect: everything else stays dimmed.
     run_overlay_export(&ffmpeg, &src, &dest,
         "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
              [v0]split[va][vb];[vb]crop=20:20:22:14[vclear];\
@@ -702,7 +702,7 @@ fn export_video_real_ffmpeg_spotlight_overlay_dims_outside_the_clear_rect() {
 
 // Proves the "Lossless" quality tier actually stays lossless (a real
 // -crf 0 re-encode) rather than silently falling back to an ordinary
-// bitrate cap -- the same request with only lossless_quality flipped and
+// bitrate cap: the same request with only lossless_quality flipped and
 // a deliberately low video_kbps must produce a dramatically larger file.
 #[test]
 fn export_video_real_ffmpeg_lossless_quality_is_far_larger_than_a_capped_bitrate_reencode() {
@@ -764,7 +764,7 @@ fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif(
         src_path: src.to_string_lossy().to_string(),
         dest_path: dest.to_string_lossy().to_string(),
         filter_chain: Some("[0:v]scale=32:32[vout]".to_string()),
-        // A gif export must never map this in -- the GIF container cannot
+        // A gif export must never map this in: the GIF container cannot
         // carry audio at all; without the is_gif guard this would make
         // ffmpeg fail with "GIF muxer does not support audio".
         audio_map: Some("[0:a]volume=1[aout]".to_string()),
@@ -790,14 +790,14 @@ fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif(
 // inserted video (an overlay, or a whole section spliced into the kept
 // timeline) into `movie=`/`amovie=` source filters referencing the extra
 // file directly, normalized to the main video's own size/rate before any
-// concat -- no second `-i` on the ffmpeg command line at all, so nothing
+// concat: no second `-i` on the ffmpeg command line at all, so nothing
 // here needs a backend change beyond the fragments themselves. These tests
 // hardcode the exact fragment shape those functions emit and prove it
 // against a real ffmpeg run, the same pattern the five overlay-kind tests
 // above already use.
 
 // Same two-level escape ui/video.js's own ffPath() applies to a filter
-// option's path -- single-quoted, exactly one backslash before the drive
+// option's path: single-quoted, exactly one backslash before the drive
 // colon. A test fixture path is always local (never contains an
 // apostrophe), so this is the escaping alone, not the whole helper.
 pub(super) fn ff_path_for_test(path: &Path) -> String {
@@ -893,7 +893,7 @@ fn export_video_real_ffmpeg_a_silent_inserted_clip_gets_silence_and_does_not_shi
     let dir = std::env::temp_dir().join(format!("ps-clip-silence-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     let main = make_test_mp4_with_audio(&ffmpeg, &dir, "main.mp4", 2, "64x48");
-    // No -c:a at all -- the inserted clip genuinely has no audio track,
+    // No -c:a at all: the inserted clip genuinely has no audio track,
     // the case buildAudioChain() must fill with anullsrc rather than
     // just skipping (or every track after it drifts out of sync).
     let extra = make_test_mp4(&ffmpeg, &dir, "extra.mp4", 1, "64x48");
@@ -938,7 +938,7 @@ fn export_video_real_ffmpeg_video_overlay_appears_only_in_its_own_time_range() {
     let dir = std::env::temp_dir().join(format!("ps-ovtest-video-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 3, "64x48");
-    // A pure green clip -- unmistakable against the base testsrc pattern's
+    // A pure green clip: unmistakable against the base testsrc pattern's
     // own colours, so a hit at (0,0) rules out every branch except "the
     // overlay drew there".
     use std::os::windows::process::CommandExt;
@@ -965,7 +965,7 @@ fn export_video_real_ffmpeg_video_overlay_appears_only_in_its_own_time_range() {
     let during = sample_pixel_rgb24_at(&ffmpeg, &dest, 1.5, 0, 0);
     let after = sample_pixel_rgb24_at(&ffmpeg, &dest, 2.8, 0, 0);
     // Pure green survives the h264 re-encode almost exactly but not
-    // pixel-perfectly -- a few units of quantization noise either way is
+    // pixel-perfectly: a few units of quantization noise either way is
     // expected, not a sign the overlay drew the wrong thing.
     let is_green = |p: [u8; 3]| p[0] < 20 && (p[1] as i16 - 128).abs() < 20 && p[2] < 20;
     assert!(is_green(during), "the overlay must be visible at t=1.5s, sampled {during:?}");
@@ -1055,7 +1055,7 @@ fn export_video_real_ffmpeg_cancel_leaves_no_destination_file() {
 }
 
 // A second export's generation must survive a first export's later
-// cancellation -- the whole point of scoping cancellation to a set of
+// cancellation: the whole point of scoping cancellation to a set of
 // generation numbers instead of a single shared slot. Also proves two
 // generations can be cancelled independently of each other, which a
 // batch export (several generations running at once) relies on.
@@ -1090,7 +1090,7 @@ fn editor_cancel_targets_the_editor_generation_not_a_later_batch_one() {
 }
 
 // cancel_all_bg_ops used to call plain cancel_export(), which only ever
-// cancels the single latest generation -- correct for the single-editor
+// cancels the single latest generation: correct for the single-editor
 // button, wrong for a batch with several generations running at once
 // (a window above one). Proves the fix: two concurrently "running" export
 // rows must BOTH end up cancelled.
@@ -1120,7 +1120,7 @@ fn cancel_all_exports_cancels_every_running_generation_not_just_the_latest() {
 
 // Three recordings selected for a batch export, run one by one through
 // run_batch_job_blocking exactly as export_recordings_batch itself does
-// per item -- all three destination files must exist.
+// per item: all three destination files must exist.
 #[test]
 fn batch_export_runs_every_job_and_produces_every_file() {
     let Some(ffmpeg) = test_ffmpeg() else { return };
@@ -1158,7 +1158,7 @@ fn batch_export_runs_every_job_and_produces_every_file() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-// One deliberately broken source must not stop the batch -- the other
+// One deliberately broken source must not stop the batch: the other
 // two jobs still run and produce their files, and the batch's own
 // ok/failed count reflects exactly the one failure.
 #[test]

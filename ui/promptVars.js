@@ -295,7 +295,7 @@ export async function promptVarsWindow(tokens) {
   const remembered = readRememberedVars();
   // Fixed values (expert: varFixed) sit between a remembered pick and the
   // text's own default. A plain text field only ever SUGGESTS one, as its
-  // placeholder -- vars.js never inserts it into the value on its own.
+  // placeholder: vars.js never inserts it into the value on its own.
   const useFixed = flag("varFixed");
   const fixedVars = useFixed ? readFixedVars() : {};
   const rows = tokens.map((token) => {

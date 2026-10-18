@@ -421,7 +421,7 @@ pub(crate) fn mp4_has_moov(path: &std::path::Path) -> bool {
     false
 }
 
-// Only mp4 gets the moov check -- the only format the recorder ever writes
+// Only mp4 gets the moov check: the only format the recorder ever writes
 // before an optional post-stop conversion. A non-mp4 file here is either
 // mid-conversion output or something else, neither of which this sweep judges.
 pub(crate) fn recording_is_broken(path: &std::path::Path) -> bool {
@@ -518,7 +518,7 @@ pub(crate) fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
 }
 
 // How long a KEPT recording (referenced or not) is allowed to age before
-// an unreferenced one becomes fair game for the sweep above -- 0 disables this
+// an unreferenced one becomes fair game for the sweep above: 0 disables this
 // leg; a new install ships 90 days.
 pub(crate) fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
     let days = app
@@ -539,7 +539,7 @@ pub(crate) fn recording_sweep_interval() -> Duration {
 
 // Shared by the periodic job and "once a recording ends": both run after
 // Db/RecordingState are managed and a window exists, so both can just
-// emit -- unlike the startup path above, which cannot.
+// emit: unlike the startup path above, which cannot.
 pub(crate) fn sweep_recordings_and_notify(app: &AppHandle) {
     let (count, bytes) = sweep_recordings_now_result(app);
     if count > 0 {
@@ -957,7 +957,7 @@ pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, e
                 media_width: 0,
                 media_height: 0,
                 media_size_bytes: 0,
-                // Onboarding examples are never OCR-indexed -- ocrIndex ships off,
+                // Onboarding examples are never OCR-indexed: ocrIndex ships off,
                 // and seeding runs before the user has ever seen the switch.
                 image_text: String::new(),
                 secret: false,

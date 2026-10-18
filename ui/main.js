@@ -82,7 +82,7 @@ function bind() {
   bindWindowChrome();
   bindLibrary();
 
-  // "gone with one click" per spec: no confirm dialog, unlike a real delete
+  // Gone with one click: no confirm dialog, unlike a real delete
   // (these are throwaway onboarding content, not the user's own data).
   $("examples-dismiss").addEventListener("click", async () => {
     try { await invoke("dismiss_example_prompts"); } catch (err) { errToast(err); return; }
@@ -162,7 +162,7 @@ function bind() {
     if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
     if (!snipEdit.classList.contains("hidden")) return;
     // tourKeydown owns Tab while the tour is the topmost thing on screen, but it
-    // bows out the moment a confirm dialog opens on top of it -- and
+    // bows out the moment a confirm dialog opens on top of it: and
     // that dialog's own trap below is never reached if this bails unconditionally
     // just because the tour is still open underneath. Only defer to the tour when
     // nothing is layered above it.
@@ -263,11 +263,11 @@ function bind() {
   // The automatic backup has no frontend call site of its own to toast
   // from: the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
-  // Same shape, the failure side -- an automatic backup that silently never ran
+  // Same shape, the failure side: an automatic backup that silently never ran
   // again would otherwise leave the user unprotected with nothing telling them.
   listen("backup-failed", () => toast(t("autoBackupFailed")));
   // A pill can unpin ITSELF (its own "Remove" action) without this window ever
-  // being told -- the tile context menu's pin/unpin label then kept reading a
+  // being told: the tile context menu's pin/unpin label then kept reading a
   // stale settings.floating and could re-open a pill the label said to remove.
   listen("floating-pin-changed", (e) => cacheFloatingState(e.payload.id, e.payload.pinned));
   // floatParkCleanupH hid a parked button's view (never its saved entry) --
@@ -276,7 +276,7 @@ function bind() {
     toast(t("floatParkCleanedUp"), { label: t("floatRecallAction"), onClick: () => EXPERT_ACTIONS["float-recall"]?.() });
   });
   // A copy recorded from a pill, the folder window or the tray never touched
-  // this window's own settings.usage/last_used mirror -- "most used"/"recently
+  // this window's own settings.usage/last_used mirror: "most used"/"recently
   // used" library sort silently froze at whatever it read at the last full
   // get_state. Only worth a re-render while the library is actually open.
   listen("usage-changed", (e) => {
@@ -291,7 +291,7 @@ function bind() {
   // and the JSON fallback failed (disk full, permissions). One toast per event:
   // a stuck disk would otherwise spam this on every edit. A failed SETTINGS
   // write gets the sticky treatment instead of the toast: it is a state, not a
-  // one-off event -- every setting changed for the rest of this session keeps
+  // one-off event: every setting changed for the rest of this session keeps
   // failing the same way and is lost on restart, so it stays visible in the
   // privacy group (like storeUnsealed) rather than something a missed toast
   // could hide.
@@ -306,20 +306,20 @@ function bind() {
   });
   // Every write path the backend gates on the data-folder lock (save_prompts,
   // save_prompts_and_trash, save_trash, write_settings_now) emits this same
-  // event on refusal -- one toast, the same wording every time, instead of
+  // event on refusal: one toast, the same wording every time, instead of
   // each action failing quietly in its own different way.
   listen("data-dir-readonly-write-blocked", (e) => {
     toast(t("dataDirReadOnlyToast").replace("{host}", () => e.payload || dataDirLockStatus.otherHost || "?"));
   });
   // The disk problem that caused the above went away and a later settings write
-  // reached it again -- the notice does not need to survive that, so it comes
+  // reached it again: the notice does not need to survive that, so it comes
   // straight back down (the dialog itself still stays told-once for the session).
   listen("settings-write-recovered", () => {
     assignSettingsWriteFailed(false);
     if (!$("settings-expert").classList.contains("hidden")) renderExpert();
   });
   // The one persistent, always-visible sign that the remote-access receiver
-  // is reachable at all -- shown for as long as it is actually running, with
+  // is reachable at all: shown for as long as it is actually running, with
   // its port and an immediate off switch, never just while the setting is on.
   function updateRemoteApiBanner(status) {
     const running = !!status?.running;
@@ -394,7 +394,7 @@ async function warnStoreUnsealed() {
   if (storeSealed || storeUnsealedTold) return false;
   storeUnsealedTold = true;
   // The manual export (export_all, the .psb file) is encrypted with its own key,
-  // never DPAPI, so it is the one way out that still works right now -- offer it
+  // never DPAPI, so it is the one way out that still works right now: offer it
   // instead of only explaining the problem.
   const choice = await confirmDialog({
     title: t("storeUnsealedTitle"),
@@ -410,7 +410,7 @@ async function warnStoreUnsealed() {
 }
 
 // Same "told once, state lives on in the privacy group" shape as
-// warnStoreUnsealed above -- a stuck disk fails the same way on every
+// warnStoreUnsealed above: a stuck disk fails the same way on every
 // following write, so a second dialog would only be in the way.
 let settingsWriteFailedTold = false;
 async function warnSettingsWriteFailed() {
@@ -527,9 +527,9 @@ async function init() {
     refreshSettingsLocked();
     refreshDataDirLock();
     // Not awaited: only a write that failed before this window was even listening
-    // (an early migration write, say) could already be true here -- everything
+    // (an early migration write, say) could already be true here: everything
     // after boot arrives live through the "persist-failed" event instead. The
-    // dialog itself is NOT opened from here -- it has to wait its turn in
+    // dialog itself is NOT opened from here: it has to wait its turn in
     // reveal()'s chain below, same as warnStoreUnsealed, or it races the
     // takeover offer for the shared confirm-modal element.
     invoke("settings_write_failed").then((v) => {
@@ -539,18 +539,18 @@ async function init() {
     invoke("default_screenshot_dir").then((d) => { assignDefaultScreenshotDir(d || ""); }).catch(() => {});
     invoke("default_sync_dir").then((d) => { assignDefaultSyncDir(d || ""); }).catch(() => {});
     invoke("default_recording_dir").then((d) => { assignDefaultRecordingDir(d || ""); }).catch(() => {});
-    // Whatever the startup sweep found (if anything) -- collected once,
+    // Whatever the startup sweep found (if anything): collected once,
     // here, since it ran before this window (or any of its listeners) existed.
     invoke("take_recording_sweep_notice").then((r) => {
       if (r && r[0] > 0) toast(t("recSweepDone").replace("{n}", String(r[0])).replace("{v}", fmtBytes(r[1], LANG)));
     }).catch(() => {});
-    // OCR language list -- fetched once, cached, "Automatic" is always
+    // OCR language list: fetched once, cached, "Automatic" is always
     // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).
     invoke("ocr_languages").then((langs) => { assignOcrLangsCache(langs || []); }).catch(() => {});
-    // Microphone list for recMicDevice -- fetched once, cached, "Automatic"
+    // Microphone list for recMicDevice: fetched once, cached, "Automatic"
     // (system default) is always prepended separately (see EXPERT_DROPDOWNS.recMicDevice above).
     invoke("list_mic_devices").then((devs) => { assignMicDevicesCache(devs || []); }).catch(() => {});
-    // Camera list for EXPERT_DROPDOWNS.cameraDevice above -- a browser API
+    // Camera list for EXPERT_DROPDOWNS.cameraDevice above: a browser API
     // call, not a Rust round trip, and safe to make from this window: listing
     // devices never opens a stream, so no camera light and no permission
     // prompt happens here.

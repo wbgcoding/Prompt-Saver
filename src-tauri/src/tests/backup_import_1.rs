@@ -23,7 +23,7 @@ pub(super) fn full_schema_db(path: &std::path::Path, tag: &str) -> Connection {
 }
 
 // A readable-but-foreign SQLite file (empty, wrong schema, a stray .db the user
-// picked) must never pass as a restorable backup -- for scope "all" it would be
+// picked) must never pass as a restorable backup: for scope "all" it would be
 // renamed straight onto the live data.db.
 #[test]
 fn stage_and_validate_backup_accepts_a_real_backup_and_rejects_a_foreign_db() {
@@ -111,7 +111,7 @@ fn backup_contents_from_reports_encryption_correctly_and_incorrectly() {
     drop(sealed_conn);
 
     // Incorrect: the rare fallback where DPAPI itself refused, so a row landed
-    // in plain text -- same case enc_str's own comment describes.
+    // in plain text: same case enc_str's own comment describes.
     let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
     FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(true));
     let _restore = SealOverrideGuard { prior_sealed };
@@ -232,7 +232,7 @@ pub(super) fn test_prompt(id: &str) -> Prompt {
 fn dup_length_could_match_uses_the_real_threshold_not_a_fixed_margin() {
     // Equal lengths: the theoretical Dice ceiling is 1.0, always possible.
     assert!(dup_length_could_match(50, 50, 0.99));
-    // A 2:1 length ratio caps Dice at 2*50/150 = 0.667 -- below a 70% floor.
+    // A 2:1 length ratio caps Dice at 2*50/150 = 0.667: below a 70% floor.
     assert!(!dup_length_could_match(50, 100, 0.70));
     // Just inside: lengths 90 and 100 cap at 2*90/190 = 0.947, above 0.90.
     assert!(dup_length_could_match(90, 100, 0.90));
@@ -249,7 +249,7 @@ fn find_similar_prompt_crosses_the_threshold_exactly_at_the_computed_score() {
     c.text = "Completely different content about something else entirely, not close at all".into();
 
     // The real score between the near-duplicate pair, computed the same way
-    // find_similar_prompt does -- so "just above" and "just below" below are
+    // find_similar_prompt does: so "just above" and "just below" below are
     // exact, not guessed.
     let score = dup_dice(&dup_trigrams(&normalize_dup(&a.text)), &dup_trigrams(&normalize_dup(&b.text)));
     assert!(score > 0.5 && score < 1.0, "fixture must be a realistic near-duplicate, got {score}");
@@ -371,7 +371,7 @@ fn dismiss_example_prompts_keeps_only_the_ones_the_user_never_touched() {
 #[test]
 fn dismiss_example_prompts_treats_a_missing_seed_as_unchanged() {
     // Pre-421 installs have example_prompt_ids but no example_prompt_seeds entry
-    // for them -- must still be eligible for removal, matching old behaviour.
+    // for them: must still be eligible for removal, matching old behaviour.
     let p = test_prompt("legacy");
     let ids = vec![p.id.clone()];
     let pristine = examples_still_pristine(&ids, &HashMap::new(), &[p]);
@@ -489,7 +489,7 @@ fn import_all_settings_scope_keeps_this_machines_own_folder_settings() {
 }
 
 // Finding 1 (security pass 348): set_ui_text is the generic string setter
-// every ordinary expert-menu row uses -- a folder-authority key must never
+// every ordinary expert-menu row uses: a folder-authority key must never
 // be reachable through it, only through its own dedicated command.
 #[test]
 fn is_protected_folder_key_covers_every_folder_setting_and_nothing_else() {

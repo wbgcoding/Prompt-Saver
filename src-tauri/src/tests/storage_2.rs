@@ -1,7 +1,7 @@
 use super::*;
 
 // The running session's own output is excluded unconditionally, not by
-// age or by moov presence -- a recording in progress has no moov either.
+// age or by moov presence: a recording in progress has no moov either.
 #[test]
 fn sweep_stale_recordings_in_never_touches_the_active_path() {
     let dir = std::env::temp_dir().join(format!("ps-test-active-sweep-{}", std::process::id()));
@@ -49,7 +49,7 @@ fn sweep_stale_recordings_in_keeps_an_abandoned_camera_take() {
 }
 
 // A broken (moov-less) mp4 past the short grace period is removed even
-// though it is nowhere near STALE_TEMP_FILE_AGE -- the whole point of 281.
+// though it is nowhere near STALE_TEMP_FILE_AGE: the whole point of 281.
 #[test]
 fn sweep_stale_recordings_in_removes_broken_past_grace_period() {
     let dir = std::env::temp_dir().join(format!("ps-test-broken-sweep-{}", std::process::id()));
@@ -131,7 +131,7 @@ fn sealed_json_distinguishes_missing_from_unreadable() {
 }
 
 // A cache written by a build before BackupPrompt existed is a sealed
-// Vec<String> -- must read back as name-only items instead of an empty list,
+// Vec<String>: must read back as name-only items instead of an empty list,
 // and the caller must be told to re-write it (once), not on every read.
 #[test]
 fn backup_names_cache_upgrades_a_legacy_string_list() {
@@ -337,7 +337,7 @@ fn secret_decrypt_with_wrong_password_fails_cleanly_without_touching_the_entry()
     let err = secret_decrypt(&ct, &wrong_key).unwrap_err();
     assert_eq!(err, "wrong-password");
     // The stored ciphertext itself is untouched by the failed attempt and
-    // still opens with the real key -- a wrong password never destroys it.
+    // still opens with the real key: a wrong password never destroys it.
     assert_eq!(secret_decrypt(&ct, &right_key).expect("decrypt"), plain);
 }
 

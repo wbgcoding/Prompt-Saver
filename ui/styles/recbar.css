@@ -36,7 +36,7 @@
   50% { opacity: 0.35; }
 }
 
-/* The dot alone is colour only -- this word carries the same "recording"
+/* The dot alone is colour only: this word carries the same "recording"
    meaning for anyone who cannot tell red from the background. */
 .rec-dot-label {
   font-size: 10px;

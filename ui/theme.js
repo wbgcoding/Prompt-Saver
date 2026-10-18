@@ -37,8 +37,8 @@ export function activeThemeVars() {
 // `vars` are the colour tokens layered on top as inline styles.
 export function applyTheme(theme, vars) {
   if (theme) document.documentElement.setAttribute("data-theme", theme);
-  // Lets a native control we do not style ourselves -- the video element's own
-  // three-dot menu -- follow dark/light instead of always drawing light.
+  // Lets a native control we do not style ourselves: the video element's own
+  // three-dot menu: follow dark/light instead of always drawing light.
   document.documentElement.style.colorScheme = themeColorScheme(theme);
   applyThemeVars(vars ?? activeThemeVars());
 }

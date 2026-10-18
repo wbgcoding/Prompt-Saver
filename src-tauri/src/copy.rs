@@ -244,7 +244,7 @@ pub(crate) struct RotationPeek {
 pub(crate) fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
     let store = lock(&state);
     let p = store.prompts.iter().find(|p| p.id == id)?;
-    // A locked confidential entry has no peek at all -- the "next" badge simply
+    // A locked confidential entry has no peek at all: the "next" badge simply
     // does not show rather than reveal ciphertext or the wrong text.
     let key = secret_session_key(secret_timeout_min(&store.settings));
     let (text, variants) = reveal_secret_text(p, key).ok()?;

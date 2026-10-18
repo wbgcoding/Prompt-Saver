@@ -49,7 +49,7 @@ fn a_paused_span_before_a_later_reader_joins_never_inflates_its_position() {
     // the moment a camera take starts, to place it on the screen
     // recording's own timeline. A screen recording paused for a while
     // before the camera joins must not push that position later than
-    // where the screen recording's own output actually is -- only the
+    // where the screen recording's own output actually is: only the
     // active segments may count, exactly like the ticks assertions
     // above, just phrased at the "another reader joins later" level this
     // bug was found at.
@@ -89,7 +89,7 @@ fn rec_feeder_queue_drops_oldest_when_full_and_counts_it() {
         shared.push(RecFrameItem { bytes: vec![], ts: i });
     }
     assert_eq!(shared.dropped.load(std::sync::atomic::Ordering::Relaxed), 2);
-    // the two oldest (ts 0, 1) were dropped -- what remains starts at ts 2.
+    // the two oldest (ts 0, 1) were dropped: what remains starts at ts 2.
     let first = shared.pop_or_stop().expect("queue should still have items");
     assert_eq!(first.ts, 2);
 }
@@ -100,7 +100,7 @@ fn rec_feeder_encode_error_latches_the_first_message_and_peek_does_not_consume()
     assert_eq!(shared.peek_encode_error(), None);
     shared.set_encode_error("disk full".to_string());
     shared.set_encode_error("a later, different failure".to_string());
-    // First failure wins -- a failing encoder tends to repeat the same
+    // First failure wins: a failing encoder tends to repeat the same
     // error on every subsequent frame, so only the first is kept.
     assert_eq!(shared.peek_encode_error(), Some("disk full".to_string()));
     // Peeking twice must return the same thing (the live status poll and
@@ -118,7 +118,7 @@ fn rec_feeder_resize_crop_is_none_before_any_call() {
 fn rec_feeder_resize_crop_latches_the_first_timestamp_and_tracks_the_largest_size() {
     let shared = RecFeederShared::new();
     // A synthetic stream: three frames past the resize point, at growing
-    // sizes and later timestamps -- only the FIRST one's timestamp may
+    // sizes and later timestamps: only the FIRST one's timestamp may
     // stick, even though every one of them re-triggers the safety net.
     shared.mark_resize_crop(1000, 800, 25_000_000); // 2.5s in (100ns ticks)
     shared.mark_resize_crop(1200, 900, 30_000_000);
@@ -188,7 +188,7 @@ fn audio_queue_drain_zero_pads_on_underrun_and_never_blocks() {
     q.push(&[1, 2, 3]);
     let out = q.drain(5);
     assert_eq!(out, vec![1, 2, 3, 0, 0]);
-    // fully drained -- a second pull is pure silence.
+    // fully drained: a second pull is pure silence.
     assert_eq!(q.drain(2), vec![0, 0]);
 }
 
@@ -255,10 +255,10 @@ fn audio_queue_lost_flag_starts_false_and_latches_true() {
 }
 
 // Real hardware, not run by a plain `cargo test --lib` (needs a live
-// display + default playback device): `cargo test --lib -- --ignored
+// display + default playback device): `cargo test --lib: --ignored
 // rec_audio_real_recording_produces_a_video_and_an_audio_track`. Proves
-// the whole path end to end -- WASAPI capture, the feeder's audio tick,
-// send_audio_buffer -- without needing a Media Foundation reader: an MP4
+// the whole path end to end: WASAPI capture, the feeder's audio tick,
+// send_audio_buffer: without needing a Media Foundation reader: an MP4
 // with N tracks has exactly N "trak" box markers, so one video + one
 // system-audio track means exactly two.
 #[test]
@@ -291,7 +291,7 @@ fn rec_audio_real_recording_produces_a_video_and_an_audio_track() {
     assert_eq!(durations.len(), 2, "expected a declared duration for each track");
 }
 
-// Same proof, mic-only: `cargo test --lib -- --ignored rec_audio_real_recording_mic_only`.
+// Same proof, mic-only: `cargo test --lib: --ignored rec_audio_real_recording_mic_only`.
 #[test]
 #[cfg(windows)]
 #[ignore]
@@ -349,8 +349,8 @@ fn rec_audio_real_recording_both_sources() {
 // The acceptance number this was written against: "drift under
 // 50ms over 10 minutes, clocked from WASAPI timestamps... measure it
 // over a real 10-minute recording, do not assume it." Runs for a real
-// ~10 real minutes -- not part of any normal or CI run.
-// `cargo test --lib -- --ignored --exact tests::rec_audio_real_10min_drift --nocapture`.
+// ~10 real minutes: not part of any normal or CI run.
+// `cargo test --lib: --ignored --exact tests::rec_audio_real_10min_drift --nocapture`.
 #[test]
 #[cfg(windows)]
 #[ignore]
@@ -387,18 +387,18 @@ fn rec_audio_real_10min_drift() {
 }
 
 // Neither source active: the plain (audio-free) feeder path is exactly
-// The original code, unchanged. Still 2 "trak" boxes though -- a
+// The original code, unchanged. Still 2 "trak" boxes though: a
 // real-hardware run of this test is what surfaced that windows-capture's
 // MediaStreamSource is built with both a video AND an audio descriptor
 // regardless of AudioSettingsBuilder::disabled (see encoder.rs's
 // VideoEncoder::new): "disabled" only makes send_audio_buffer refuse to
-// be called, which our audio-off feeder_loop never does anyway -- so the
+// be called, which our audio-off feeder_loop never does anyway: so the
 // container always declares an audio track, just an empty/silent one
 // when no audio is enabled. Harmless (players ignore an empty track) and
 // pre-existing since 191, not something to "fix" here; this test exists
 // to pin the fact down so a future change that assumes "1 track = no
 // audio enabled" does not get surprised by it again.
-// `cargo test --lib -- --ignored rec_audio_real_recording_no_audio`.
+// `cargo test --lib: --ignored rec_audio_real_recording_no_audio`.
 #[test]
 #[cfg(windows)]
 #[ignore]
@@ -424,7 +424,7 @@ fn rec_audio_real_recording_no_audio() {
     assert_eq!(track_count, 2, "expected 1 video + 1 empty audio track box, found {track_count}");
 }
 
-// Pure naming/numbering check, no capture hardware needed -- runs on
+// Pure naming/numbering check, no capture hardware needed: runs on
 // every plain `cargo test --lib`.
 #[test]
 #[cfg(windows)]
@@ -439,7 +439,7 @@ fn continuation_output_path_keeps_the_stem_and_numbers_from_two() {
         std::path::PathBuf::from(r"C:\recordings\rec-2026-09-11_120000_part5.mp4")
     );
     // A continuation of a continuation still derives from the ORIGINAL
-    // stem, never from an already-numbered one -- callers are expected to
+    // stem, never from an already-numbered one: callers are expected to
     // always pass the first part's own path in, matching how
     // finish_and_continue_recording resolves its own base_path.
     assert_eq!(
@@ -450,10 +450,10 @@ fn continuation_output_path_keeps_the_stem_and_numbers_from_two() {
 
 // Two files come out of a "finish and continue" style sequence, both
 // playable, correctly numbered, and started from the exact same settings
-// values (the same variables handed to `start` twice -- the actual
+// values (the same variables handed to `start` twice: the actual
 // command instead reads them off the finishing session itself, but the
 // effect this proves, identical settings on both calls, is the same).
-// Needs a real display: `cargo test --lib -- --ignored
+// Needs a real display: `cargo test --lib: --ignored
 // rec_continue_two_parts_are_both_playable_with_matching_settings`.
 #[test]
 #[cfg(windows)]
@@ -471,7 +471,7 @@ fn rec_continue_two_parts_are_both_playable_with_matching_settings() {
         recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
     )
     .expect("start part 1");
-    // The session retains exactly what it was built with -- this is what
+    // The session retains exactly what it was built with: this is what
     // finish_and_continue_recording reads back to reopen the next part,
     // instead of re-reading settings that may have changed since.
     assert_eq!(session1.video_kbps, video_kbps);
@@ -568,7 +568,7 @@ fn letterbox_frame_top_down_crops_a_larger_live_frame() {
 #[test]
 fn letterbox_frame_top_down_is_place_frame_in_canvas_at_the_origin() {
     // The placement helper must reproduce the existing (0, 0) case
-    // byte-for-byte -- letterbox_frame_top_down is only ever this now.
+    // byte-for-byte: letterbox_frame_top_down is only ever this now.
     let raw = vec![9u8, 8, 7, 255];
     assert_eq!(letterbox_frame_top_down(&raw, 1, 1, 4, 2, 2), place_frame_in_canvas(&raw, 1, 1, 4, 2, 2, 0, 0));
 }
@@ -589,7 +589,7 @@ fn place_frame_in_canvas_pads_at_a_positive_offset() {
 #[test]
 fn place_frame_in_canvas_clips_a_negative_offset() {
     // 2x2 live frame placed at (-1,-1): only its bottom-right pixel is
-    // still inside the canvas, landing at (0,0) -- the "display placed
+    // still inside the canvas, landing at (0,0): the "display placed
     // left of/above the first one" case.
     let px = |n: u8| [n, n, n, 255u8];
     let mut raw = Vec::new();
@@ -629,7 +629,7 @@ fn export_file_name_is_valid_accepts_a_plain_name() {
 }
 
 // A bare ".." only means "walk up a level" when it stands alone with
-// separators around it -- inside a longer name it is just two dots and
+// separators around it: inside a longer name it is just two dots and
 // must stay legal, unlike a full ".." path segment.
 #[test]
 fn export_file_name_is_valid_accepts_two_dots_inside_a_longer_name() {

@@ -105,7 +105,7 @@ pub fn hook(app: &AppHandle, hwnd: isize) {
         return;
     }
     *APP.lock().unwrap_or_else(|e| e.into_inner()) = Some(app.clone());
-    // SetWindowLongPtrW wants the callback's address as a plain isize -- that is
+    // SetWindowLongPtrW wants the callback's address as a plain isize: that is
     // the whole point of this cast, not an accident.
     #[allow(clippy::fn_to_numeric_cast)]
     let ours = wndproc as WndProc as isize;

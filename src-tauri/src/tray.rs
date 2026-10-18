@@ -375,7 +375,7 @@ pub(crate) fn apply_tray_menu(app: &AppHandle) {
     let (open_label, quit_label) = tray_labels(lang);
     let (recent_title, favs_title) = tray_section_labels(lang);
     let mut items: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
-    // While a recording runs, two extra entries at the very top -- the
+    // While a recording runs, two extra entries at the very top: the
     // tray-menu counterpart of the bar's own Stop/Pause buttons, same commands.
     if rec_entries_on {
         if let Some(phase) = recording_phase(app) {
@@ -496,7 +496,7 @@ pub(crate) struct TrayWinSection {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TrayWinPlan {
-    // 0 or 2 entries (Stop, Pause/Resume) -- no header, own separator,
+    // 0 or 2 entries (Stop, Pause/Resume): no header, own separator,
     // rendered before every other row. ui/tray.js draws them with no icon,
     // exactly like show/quit below.
     pub(crate) rec_entries: Vec<TrayWinEntry>,
@@ -590,7 +590,7 @@ pub(crate) fn tray_open_prep_from_store(store: &Store, phase: Option<RecPhase>) 
 }
 
 // Pure, so the row/header/separator arithmetic stays testable without an app
-// handle -- mirrors tray_plan's own reasoning for why it takes plain data.
+// handle: mirrors tray_plan's own reasoning for why it takes plain data.
 pub(crate) fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     // show + quit always present, with the separator between them
     let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
@@ -788,8 +788,8 @@ pub(crate) fn launcher_prefill_text(q: &str) -> String {
 }
 
 // A result picked in the quick-launcher runs the very same activation the tray
-// does (fire_tray_copy) -- placeholder dialog, cooldown, chains, everything already
-// tested for "a copy that started outside the grid" -- then the launcher itself closes.
+// does (fire_tray_copy): placeholder dialog, cooldown, chains, everything already
+// tested for "a copy that started outside the grid": then the launcher itself closes.
 #[tauri::command]
 pub(crate) fn launcher_select(app: AppHandle, id: String) -> Result<(), String> {
     fire_tray_copy(&app, &id);

@@ -75,7 +75,7 @@ fn system_and_universal_shortcuts_are_refused() {
 // The shipped default must actually register, or every fresh install would
 // silently lose its launcher hotkey the moment rearm_hotkeys() runs at startup
 // (an unparseable/blocked default gets cleared back to "", exactly like a bad
-// value a user typed in by hand -- see rearm_hotkeys' app_ok branch).
+// value a user typed in by hand: see rearm_hotkeys' app_ok branch).
 #[test]
 fn the_default_hotkey_is_not_refused() {
     assert_eq!(accel_error(&Settings::default().hotkey).err(), None);
@@ -205,7 +205,7 @@ fn the_editor_rejects_a_taken_or_unusable_accelerator() {
 }
 
 // A prompt hotkey identical to the currently-configured rec-stop/pause
-// combination is refused up front -- it used to be accepted, then silently
+// combination is refused up front: it used to be accepted, then silently
 // stop firing the moment a recording started (hotkey_plan gives those two
 // priority over every prompt).
 #[test]
@@ -220,7 +220,7 @@ fn the_editor_rejects_a_prompt_hotkey_matching_the_active_recording_hotkeys() {
         sanitize_hotkey("Ctrl+Alt+O", "", "", "ctrl+alt+s", "ctrl+alt+o", &others),
         Err(HK_TAKEN.into())
     );
-    // Feature/toggle off (caller passes "") -- the same combination is free again.
+    // Feature/toggle off (caller passes ""): the same combination is free again.
     assert_eq!(sanitize_hotkey("Ctrl+Alt+S", "", "", "", "", &others).unwrap(), "Ctrl+Alt+S");
 }
 
@@ -1075,7 +1075,7 @@ fn csv_export_feeds_import_parser_losslessly() {
     assert!(p2.tags.is_empty());
 }
 
-// An archived entry is just a prompt carrying a reserved tag -- neither
+// An archived entry is just a prompt carrying a reserved tag: neither
 // export nor backup ever filters by tag, so both already carry it through
 // unchanged. This proves that stays true rather than assuming it.
 #[test]

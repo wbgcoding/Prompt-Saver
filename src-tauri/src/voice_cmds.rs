@@ -8,7 +8,7 @@ use super::*;
 pub(crate) static VOICE_SESSION_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 // How long self_stop waits for WinRT's own Completed callback after
 // StopAsync() before giving up and reporting the end itself, so a stuck
-// callback never holds the session thread -- and the microphone -- open.
+// callback never holds the session thread (and the microphone) open.
 pub(crate) const VOICE_SELF_STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[tauri::command]

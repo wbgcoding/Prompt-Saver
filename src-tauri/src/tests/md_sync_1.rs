@@ -333,7 +333,7 @@ fn apply_md_placement_falls_back_to_the_grid_when_the_folder_name_is_rejected() 
     assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[0, 0]));
 }
 
-// A folder name is only unique WITHIN its own view -- matching by name alone
+// A folder name is only unique WITHIN its own view: matching by name alone
 // merged two same-named folders from different views into whichever the scan
 // found first.
 #[test]

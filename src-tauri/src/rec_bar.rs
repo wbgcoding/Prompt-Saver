@@ -157,7 +157,7 @@ pub(crate) fn rec_bar_heal_tick(app: &AppHandle) {
 pub(crate) static REC_BAR_TARGET: Mutex<(String, isize)> = Mutex::new((String::new(), 0));
 
 // Async on purpose: a synchronous command runs on the main thread, and building
-// a webview window from there never returns -- the window gets created, but
+// a webview window from there never returns: the window gets created, but
 // every step after build() (capture exclusion, positioning, show) is skipped,
 // leaving an invisible bar and a recording with no way to stop it.
 #[tauri::command]
@@ -181,7 +181,7 @@ pub(crate) async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -
                 .map_err(|e| e.to_string())?,
         };
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
-        // Unconditional -- not gated by the privacy screenshot-exclusion setting.
+        // Unconditional: not gated by the privacy screenshot-exclusion setting.
         // The bar must never appear in the recording no matter what.
         set_capture_exclusion(&win, true);
         *REC_BAR_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = (target_kind.clone(), id as isize);
@@ -384,7 +384,7 @@ pub(crate) fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i3
         || d(actual.3 as i64, want.3 as i64)
 }
 
-// Torn down (not just hidden) on stop, cancel and auto-stop -- see
+// Torn down (not just hidden) on stop, cancel and auto-stop: see
 // stop_recording_now and cancel_recording.
 #[cfg(windows)]
 pub(crate) fn hide_rec_outline(app: &AppHandle) {
@@ -434,7 +434,7 @@ pub(crate) struct RecordingStatus {
     // true does not guarantee a pick succeeds.
     pub(crate) target_switch_enabled: bool,
     // The mid-recording half of the low-disk warning (the before-start check is
-    // check_recording_disk_space) -- Some at most once per recording, the
+    // check_recording_disk_space): Some at most once per recording, the
     // instant free space first drops below the threshold. Never causes a stop.
     pub(crate) disk_low: Option<(u64, u64)>,
 }

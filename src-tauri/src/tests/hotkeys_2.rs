@@ -111,7 +111,7 @@ fn stats_export_entries_sorts_by_copies_and_carries_last_used() {
 }
 
 // The statistics export reuses csv_row/csv_cell, but this asserts the
-// guarantee directly against the stats formatter -- a semicolon or a quote
+// guarantee directly against the stats formatter: a semicolon or a quote
 // in a prompt name must not shift or break the row it sits in.
 #[test]
 fn stats_csv_export_escapes_semicolons_and_quotes_in_names() {
@@ -202,7 +202,7 @@ fn every_tool_key_has_a_matching_frontend_call_site() {
 }
 
 // export_prompts is a #[tauri::command] async fn (AppHandle + State<'_, Db>)
-// whose unrecognized-format arm returns before ever touching either -- but the
+// whose unrecognized-format arm returns before ever touching either: but the
 // command itself still cannot be invoked directly in a unit test without
 // Tauri's mock runtime, which this project does not depend on, and the match
 // is not factored into a function of its own. This asserts against the actual
@@ -229,7 +229,7 @@ fn export_prompts_unsupported_format_uses_a_stable_error_code() {
         body.contains(needle),
         "export_prompts' unsupported-format arm no longer returns the stable \"unsupported-export-format\" code verbatim"
     );
-    // Narrower than "no format!( anywhere in the function" -- export_prompts
+    // Narrower than "no format!( anywhere in the function": export_prompts
     // legitimately uses format!() to build the save-file name. Only the
     // error-building shape (a format! fed straight into Err(..)) is the bug.
     assert!(
@@ -264,20 +264,20 @@ fn parse_var_token_splits_name_default_and_options() {
 
 // The Abnahme case: the same priority chain the fill-in dialog offers,
 // minus the interactive last step, checked across all four sources in one
-// pass -- a remembered value beats a fixed value beats the text's own
+// pass: a remembered value beats a fixed value beats the text's own
 // default beats blank.
 #[test]
 fn resolve_static_vars_priority_is_remembered_then_fixed_then_default_then_blank() {
     let remembered: HashMap<String, String> = [("a".to_string(), "from-remembered".to_string())].into_iter().collect();
     let fixed: HashMap<String, String> =
         [("a".to_string(), "from-fixed".to_string()), ("b".to_string(), "from-fixed".to_string())].into_iter().collect();
-    // a: remembered AND fixed AND a default -- remembered wins.
+    // a: remembered AND fixed AND a default: remembered wins.
     assert_eq!(resolve_static_vars("{?a=from-default}", &remembered, &fixed), "from-remembered");
-    // b: fixed AND a default, no remembered value -- fixed wins.
+    // b: fixed AND a default, no remembered value: fixed wins.
     assert_eq!(resolve_static_vars("{?b=from-default}", &remembered, &fixed), "from-fixed");
-    // c: only a default, no remembered or fixed value -- the default wins.
+    // c: only a default, no remembered or fixed value: the default wins.
     assert_eq!(resolve_static_vars("{?c=from-default}", &remembered, &fixed), "from-default");
-    // d: nothing anywhere -- blank, never the raw placeholder.
+    // d: nothing anywhere: blank, never the raw placeholder.
     assert_eq!(resolve_static_vars("{?d}", &remembered, &fixed), "");
 }
 
@@ -317,7 +317,7 @@ fn resolved_for_export_resolves_the_text_and_every_rotating_variant() {
 
 // An exported theme file never carries the internal id, so importing it on
 // another install (or re-importing it on the same one) always creates a fresh
-// theme instead of silently colliding with -- or overwriting -- an existing one.
+// theme instead of silently colliding with (or overwriting) an existing one.
 #[test]
 fn theme_export_roundtrips_without_leaking_the_internal_id() {
     let mut vars = HashMap::new();
@@ -443,7 +443,7 @@ fn deleting_a_tag_clears_it_everywhere() {
 
 // Batch add: a prompt that already carries the tag is left exactly as-is (no
 // duplicate, no reorder), and a fresh addition takes the casing the library
-// already uses for that tag -- same rule the single-prompt editor applies.
+// already uses for that tag: same rule the single-prompt editor applies.
 #[test]
 fn batch_add_tag_skips_prompts_that_already_have_it_and_uses_known_casing() {
     let mut prompts = sample_prompts(); // p1: ["Work", "E-Mail"], p2: []
@@ -465,7 +465,7 @@ fn batch_add_tag_only_touches_the_given_ids() {
 }
 
 // Removing a tag from a prompt that never had it is not an error, just a no-op
-// for that one prompt -- mirrors the single-prompt "already has it" rule above.
+// for that one prompt: mirrors the single-prompt "already has it" rule above.
 #[test]
 fn batch_remove_tag_ignores_a_prompt_that_never_had_it() {
     let mut prompts = sample_prompts();
@@ -603,7 +603,7 @@ fn reorder_views_by_id_moves_a_view_to_a_new_position() {
 #[test]
 fn reorder_views_by_id_keeps_a_view_missing_from_order() {
     // A stale caller that only named two of three views must still get all
-    // three back -- the third keeps its old relative place instead of vanishing.
+    // three back: the third keeps its old relative place instead of vanishing.
     let views = vec![test_view("a"), test_view("b"), test_view("c")];
     let order: Vec<String> = ["c", "a"].iter().map(|s| s.to_string()).collect();
     let out = reorder_views_by_id(views, &order);
@@ -614,7 +614,7 @@ fn reorder_views_by_id_keeps_a_view_missing_from_order() {
 #[test]
 fn reorder_views_by_id_ignores_an_unknown_id_and_never_touches_members() {
     // A view's own data (its membership list here) rides along with it
-    // untouched -- reordering is a pure array shuffle, never a rebuild.
+    // untouched: reordering is a pure array shuffle, never a rebuild.
     let mut a = test_view("a");
     a.members = vec!["p1".to_string(), "p2".to_string()];
     let mut b = test_view("b");
@@ -660,7 +660,7 @@ fn place_ids_in_view_fills_free_cells_and_skips_already_placed_ids() {
 #[test]
 fn place_ids_in_view_is_all_or_nothing_when_the_view_is_full() {
     // A batch that doesn't fully fit must place NOTHING, not a partial subset
-    // -- a caller that already removed these ids from their source view relies on
+    //: a caller that already removed these ids from their source view relies on
     // this to know the move truly failed.
     let mut layout = HashMap::from([("a".to_string(), [0, 0])]);
     let before = layout.clone();
@@ -674,7 +674,7 @@ fn place_ids_in_view_is_all_or_nothing_when_the_view_is_full() {
 #[test]
 fn place_ids_in_view_counts_grid_folder_cells_as_occupied() {
     // A folder's cell lives outside `layout` (it is the folder's own `cell`
-    // field, not a layout entry) -- without passing it as extra_occupied, addView could hand a
+    // field, not a layout entry): without passing it as extra_occupied, addView could hand a
     // prompt the same cell a folder already sits on.
     let mut layout: HashMap<String, [u32; 2]> = HashMap::new();
     let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]);
@@ -685,7 +685,7 @@ fn place_ids_in_view_counts_grid_folder_cells_as_occupied() {
 
 #[test]
 fn place_ids_in_view_skips_ids_already_placed_in_a_folder() {
-    // "a" lives in a grid folder of this view -- it needs no cell of its own
+    // "a" lives in a grid folder of this view: it needs no cell of its own
     // and must not eat the view's only free one, or a full target would
     // wrongly refuse a move that has nothing left to place.
     let mut layout: HashMap<String, [u32; 2]> = HashMap::new();
@@ -699,7 +699,7 @@ fn place_ids_in_view_skips_ids_already_placed_in_a_folder() {
 #[test]
 fn place_ids_in_view_heals_a_stray_layout_entry_for_a_folder_member() {
     // Old data: "a" already sits in a folder AND still carries a leftover
-    // layout entry from before it joined -- that entry must be dropped, not
+    // layout entry from before it joined: that entry must be dropped, not
     // left behind occupying a cell the grid never shows as taken.
     let mut layout = HashMap::from([("a".to_string(), [1, 0])]);
     let folder_members = std::collections::HashSet::from(["a".to_string()]);
@@ -752,7 +752,7 @@ fn view_capacity_deficit_does_not_count_an_id_already_placed_in_a_folder() {
 #[test]
 fn strip_ids_from_view_drops_them_from_every_layout_size_and_from_members() {
     // A view resized at least once carries more than one layout entry ("2x1" from
-    // an earlier size, "3x1" the current one) -- a member dropped from the view
+    // an earlier size, "3x1" the current one): a member dropped from the view
     // must lose its cell in BOTH, not just the size it happens to sit in today.
     let mut view = test_view("v1");
     view.cols = 3;
@@ -773,7 +773,7 @@ fn strip_ids_from_view_drops_them_from_every_layout_size_and_from_members() {
 #[test]
 fn moving_between_views_places_in_the_target_and_strips_the_source() {
     // Goes through batch_prompts's actual "moveView" core (apply_view_batch_action),
-    // not place_ids_in_view/strip_ids_from_view called directly -- a regression
+    // not place_ids_in_view/strip_ids_from_view called directly: a regression
     // in the core's save handling or its folder-membership accounting now fails
     // this test too, not just its own dedicated ones. Proves "moved" means gone
     // from one view, present in the other, and durably saved.
@@ -808,7 +808,7 @@ fn moveview_action_treats_an_existing_folder_member_as_already_placed() {
     // Same folder-membership case as place_ids_in_view's own tests, run
     // through the real "moveView" core this time: a 1x1 target whose only
     // cell a folder occupies, moving in an id the folder already lists as
-    // a member -- must succeed (not view-full) and never grow a second
+    // a member: must succeed (not view-full) and never grow a second
     // layout entry for it.
     let mut settings = Settings::default();
     let mut from_view = test_view("home");
@@ -857,7 +857,7 @@ fn copying_into_a_view_never_touches_a_second_view() {
     ));
     to_view.members.push("a".to_string());
 
-    // The source view was never touched -- View has no PartialEq of its own,
+    // The source view was never touched: View has no PartialEq of its own,
     // so the two fields a copy could plausibly disturb are compared directly.
     assert_eq!(other_view.members, other_before.members);
     assert_eq!(other_view.layouts, other_before.layouts);
@@ -866,7 +866,7 @@ fn copying_into_a_view_never_touches_a_second_view() {
 
 #[test]
 fn moveview_action_rolls_back_the_move_when_save_fails() {
-    // A failed write must never leave the in-memory move standing -- the disk
+    // A failed write must never leave the in-memory move standing: the disk
     // would show the old placement after a restart while the running app kept
     // showing the new one until then, exactly the drift 477 closes.
     let mut settings = Settings::default();
@@ -1125,7 +1125,7 @@ fn resolve_float_spot_returns_home_once_the_same_screen_identity_reappears() {
 #[test]
 fn resolve_float_spot_stays_parked_for_a_different_identity_at_the_same_bounds() {
     // A second monitor with the exact dimensions and position of the one the
-    // pill used to live on, but a different name -- not the screen it left.
+    // pill used to live on, but a different name: not the screen it left.
     let screens = vec![("dell-3".to_string(), 1920, 0, 1920, 1080)];
     let pos = Pos { x: 2500, y: 100, screen: "dell-1".to_string() };
     let (_, _, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);

@@ -210,7 +210,7 @@ export function applyFlags() {
   for (const key of OPT_FLAG_KEYS) {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
-  // Not a setting -- a runtime fact from voice_support(). A Windows build
+  // Not a setting: a runtime fact from voice_support(). A Windows build
   // with no speech engine at all must hide the button regardless of the flag.
   document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);
   refreshCustomThemes(); // The feature may have just been switched on or off
@@ -310,7 +310,7 @@ export function rowResetBtn(kind, key, after) {
   return btn;
 }
 // Re-checks one row's changed-from-default state and flips its already-built
-// reset button in place -- no menu rebuild, so scroll position/focus survive.
+// reset button in place: no menu rebuild, so scroll position/focus survive.
 // A no-op if that row isn't on screen right now (row list is filtered, or a
 // renderExpert() elsewhere already replaced it), which is fine either way.
 export function syncRowReset(kind, key) {
@@ -429,7 +429,7 @@ export function flagRow(key) {
       input.checked = stayed ? enabled : !enabled;
     }
     // Turning the receiver on may have just minted its very first password
-    // (see set_ui_flag's own remoteApi branch) -- shown here, once, in a
+    // (see set_ui_flag's own remoteApi branch): shown here, once, in a
     // selectable field, and never retrievable again after this.
     if (key === "remoteApi" && enabled) {
       const shown = await invoke("remote_api_take_shown_password").catch(() => null);
@@ -467,7 +467,7 @@ export function flagRow(key) {
 // Re-fit the tile text to the new box size without touching the DOM.
 export const refreshTiles = (key) => {
   // A view tab paints its ink as an inline style, so it needs its own
-  // re-render -- no CSS var carries the ink rule.
+  // re-render: no CSS var carries the ink rule.
   if (key === "inkThreshold" || key === "inkHaloStrength") renderViews();
   return GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined);
 };
@@ -1430,7 +1430,7 @@ export function paletteRow() {
     inputs.push(c);
     grid.appendChild(c);
   }
-  // Only show it while a hue actually differs from DEFAULT_COLORS -- same rule
+  // Only show it while a hue actually differs from DEFAULT_COLORS: same rule
   // as every other row's rowResetBtn(), the palette just has no single key to diff.
   const changed = cur.some((c, i) => (HEX_RE.test(c) ? c : DEFAULT_COLORS[i + 1]) !== DEFAULT_COLORS[i + 1]);
   if (changed) {
@@ -1478,7 +1478,7 @@ export async function savePalette(colors) {
 export function colorRow(key) {
   const cfg = EXPERT_COLORS[key];
   // `def` is usually a fixed hex, but snipDefaultColor's is a function that
-  // reads the user's live custom palette -- resolve it fresh every render.
+  // reads the user's live custom palette: resolve it fresh every render.
   const defColor = typeof cfg.def === "function" ? cfg.def() : cfg.def;
   const row = document.createElement("div");
   row.className = "field value-field color-field";
@@ -1649,7 +1649,7 @@ export async function openSettingsDirectoryEntry(entry) {
 
 // Which EXPERT_TABS tab a value/select key lives in, so a caller outside the
 // expert menu (the retention overview, so far) can open the right tab
-// before flashing the row -- unlike SETTINGS_DIRECTORY above, which is only
+// before flashing the row: unlike SETTINGS_DIRECTORY above, which is only
 // for settings OUTSIDE the expert menu, this walks EXPERT_TABS itself.
 export function expertTabIndexOf(key, kind) {
   for (let i = 0; i < EXPERT_TABS.length; i++) {
@@ -1664,7 +1664,7 @@ export function expertTabIndexOf(key, kind) {
 // A click on the retention overview's "go to setting" button: close the
 // backup window, open the expert menu on the right tab (query and "only
 // changed" cleared so the row cannot be filtered out of view), then scroll
-// it into view and flash it -- same shape as openSettingsDirectoryEntry
+// it into view and flash it: same shape as openSettingsDirectoryEntry
 // above, for a setting the expert search already owns.
 export function jumpToExpertSetting(key, kind) {
   closeBackups();
@@ -1790,7 +1790,7 @@ export function noticeRow(id) {
 }
 
 // A notice stays a notice with no control inside it (smoke_test.py checks the
-// row itself carries no input/button/select of any kind) -- but the group MAY
+// row itself carries no input/button/select of any kind): but the group MAY
 // place a plain button right after it, pointing at the one setting that
 // actually addresses it. storeUnsealed is the first to use this.
 export function noticeActionRow(id) {
@@ -2094,7 +2094,7 @@ export function renderExpert() {
     }
   }
   // Hits outside the expert menu: normal settings, the toolbar, the library
-  // dialog and the backup manager. Search only -- "only changed" has no
+  // dialog and the backup manager. Search only: "only changed" has no
   // meaning for a directory entry, there is nothing here to diff.
   let foreignShown = 0;
   if (searching) {

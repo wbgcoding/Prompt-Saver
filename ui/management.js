@@ -456,7 +456,7 @@ export function renderCompareView() {
   closeBtn.addEventListener("click", closeCompareView);
   actions.appendChild(closeBtn);
 }
-// Overwrites `target` with `source`'s name/text/colour/image -- the normal
+// Overwrites `target` with `source`'s name/text/colour/image: the normal
 // update_prompt path, so it snapshots the overwritten side into its own version
 // history first (see update_prompt) instead of silently discarding it.
 export async function takeCompareSide(target, source) {
@@ -672,7 +672,7 @@ export async function openRemotePasswordDialog() {
   });
 }
 
-// One line or comma per address/range -- validated server-side (the same
+// One line or comma per address/range: validated server-side (the same
 // CIDR check the receiver itself uses) before it is ever saved.
 export async function openRemoteRangesDialog() {
   const current = settings.ui_texts?.remoteAllowedRanges || "";
@@ -853,7 +853,7 @@ export function wireManagement() {
       errToast(e);
     }
   };
-  // Reads every picture that has none yet, one at a time -- progress, the
+  // Reads every picture that has none yet, one at a time: progress, the
   // running badge and cancel all come from the shared background-jobs popover
   // (see BG_OP_CANCEL_CMD/bgOpLabel above), so this only has to start the job.
   EXPERT_ACTIONS["ocr-index-backfill"] = async () => {

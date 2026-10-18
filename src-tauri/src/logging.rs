@@ -469,7 +469,7 @@ pub(crate) fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max:
 }
 
 // Called from `errToast` for every error message shown to the user. Silently a
-// no-op while the switch is off -- the buffer is also cleared the moment it is
+// no-op while the switch is off: the buffer is also cleared the moment it is
 // switched off (see `set_ui_flag`), so "off" always means an empty list, not
 // just a paused one.
 #[tauri::command(async)]

@@ -213,7 +213,7 @@ pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
     if key == ALLOW_SCREENSHOT_KEY {
         apply_capture_exclusion_all(app, !enabled);
     }
-    // "Off" means the list is empty, not just paused -- clear whatever is
+    // "Off" means the list is empty, not just paused: clear whatever is
     // already collected the moment the switch goes off.
     if key == "errorLog" && !enabled {
         ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
@@ -460,7 +460,7 @@ pub(crate) fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String
     Ok(())
 }
 
-// Dedicated setter for the screen-recording save folder -- same shape as
+// Dedicated setter for the screen-recording save folder: same shape as
 // set_screenshot_dir above, and for the same reason.
 #[tauri::command]
 pub(crate) fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {

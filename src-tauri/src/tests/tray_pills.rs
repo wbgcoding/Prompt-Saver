@@ -377,7 +377,7 @@ fn tray_window_height_accounts_for_every_row_header_and_separator() {
     let want_one = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H + TRAY_WIN_HEAD_H + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
     assert_eq!(tray_window_logical_height(&one_section), want_one);
 
-    // Two sections must each add their own header, rows and separator -- never
+    // Two sections must each add their own header, rows and separator: never
     // shared, since the native menu (push_tray_section) never shares one either.
     let two_sections = TrayWinPlan {
         rec_entries: Vec::new(),
@@ -400,7 +400,7 @@ fn tray_window_height_accounts_for_every_row_header_and_separator() {
 #[test]
 fn tray_window_height_adds_one_row_for_search_when_on() {
     // search_on toggles ONE extra row (the filter field), on top of whatever
-    // sections/rec_entries already contribute -- proven here against the
+    // sections/rec_entries already contribute: proven here against the
     // otherwise-identical plan so a future change to the row math cannot
     // silently forget the search row.
     let base = TrayWinPlan {
@@ -422,7 +422,7 @@ fn tray_window_height_adds_one_row_for_search_when_on() {
 #[test]
 fn tray_window_capped_height_never_exceeds_the_work_area() {
     let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
-    // Max entries in both sections (the supported ceiling) -- uncapped this is
+    // Max entries in both sections (the supported ceiling): uncapped this is
     // ~742 logical px, comfortably past a 1366x768 @150% work area.
     let full = TrayWinPlan {
         rec_entries: Vec::new(),
@@ -514,7 +514,7 @@ fn tray_labels_are_cut_by_character_not_by_byte() {
 #[test]
 fn tray_label_respects_a_custom_max() {
     // A single long word has no word break to back up to, so it is cut to
-    // exactly whatever max is passed in -- not the TRAY_LABEL_MAX const.
+    // exactly whatever max is passed in: not the TRAY_LABEL_MAX const.
     let word = "x".repeat(60);
     assert_eq!(tray_label(&word, 20).chars().count(), 20);
     assert_eq!(tray_label(&word, 80).chars().count(), 60); // fits under 80, untouched

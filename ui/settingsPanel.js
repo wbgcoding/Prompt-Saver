@@ -382,7 +382,7 @@ export async function deleteData() {
     await invoke("delete_all_data");
   } catch (e) {
     // The in-memory store is already cleared either way (see reloadEverything
-    // below) -- this means some ON-DISK table could not be, so the user must
+    // below): this means some ON-DISK table could not be, so the user must
     // still be told rather than believe the wipe fully succeeded.
     errToast(e);
   }

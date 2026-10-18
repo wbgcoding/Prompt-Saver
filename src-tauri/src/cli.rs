@@ -337,10 +337,10 @@ const SECOND_LAUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_mil
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum LaunchDecision {
-    // Nothing is listening -- this launch is the primary instance.
+    // Nothing is listening: this launch is the primary instance.
     Primary,
     // The running instance answered (or this is a case left to the
-    // single-instance plugin, e.g. a deep link) -- this launch is done.
+    // single-instance plugin, e.g. a deep link): this launch is done.
     HandedOff,
     // The running instance did not answer in time and was taken over --
     // this launch continues on as the new primary instance.

@@ -325,7 +325,7 @@ continueBtn.addEventListener("click", async () => {
       return;
     }
     // "recording-too-young-to-continue" (a race with the 5-second guard) or
-    // "no active recording" -- the next poll tick re-syncs the button state.
+    // "no active recording": the next poll tick re-syncs the button state.
   } finally {
     continuing = false;
     continueSeq++;

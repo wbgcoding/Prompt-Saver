@@ -488,7 +488,7 @@ pub fn run() {
                 );
             }
 
-            // Answers a second, command-line launch of this same exe -- see cli.rs.
+            // Answers a second, command-line launch of this same exe: see cli.rs.
             cli::install_server(&handle);
 
             // A startup-only sweep would leave a crashed recording's leftover for however long the app
@@ -1130,7 +1130,7 @@ pub fn run() {
                 // Backstop for every way out of the app: whatever counter state was
                 // still being collected goes to disk before the process does.
                 flush_settings_now(app);
-                // Matches register_running_instance() in setup() above -- an
+                // Matches register_running_instance() in setup() above: an
                 // orderly exit un-registers this pid immediately; a crash or
                 // task-kill leaves it for other_instance_running() to prune
                 // opportunistically the next time anything checks.

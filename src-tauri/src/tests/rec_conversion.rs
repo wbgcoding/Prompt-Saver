@@ -10,7 +10,7 @@ fn convert_is_noop_rejects_a_plain_mp4_to_mp4_request() {
 #[test]
 fn convert_is_noop_allows_the_lossless_mp4_reencode_despite_the_same_extension() {
     // This is the one case where "same extension" must NOT short-circuit
-    // the conversion -- lossless re-encodes mp4 in place on purpose.
+    // the conversion: lossless re-encodes mp4 in place on purpose.
     assert!(!convert_is_noop(true, "mp4", true));
 }
 
@@ -24,7 +24,7 @@ fn convert_is_noop_allows_a_genuine_format_change() {
 //
 // These exercise the actual subprocess, against the local build's own
 // ffmpeg.exe (gitignored, downloaded the same way `download_ffmpeg` does
-// -- see the README's "Building from source" section). A clean checkout
+//: see the README's "Building from source" section). A clean checkout
 // without it present skips these rather than failing.
 
 pub(super) fn test_ffmpeg() -> Option<PathBuf> {
@@ -33,7 +33,7 @@ pub(super) fn test_ffmpeg() -> Option<PathBuf> {
 }
 
 // A tiny synthetic clip, generated entirely by ffmpeg's own test-pattern
-// source -- no real recording needed to exercise the conversion path.
+// source: no real recording needed to exercise the conversion path.
 pub(super) fn make_test_mp4(ffmpeg: &Path, dir: &Path, name: &str, seconds: u32, size: &str) -> PathBuf {
     use std::os::windows::process::CommandExt;
     let out = dir.join(name);
@@ -59,7 +59,7 @@ fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source
     let out = PathBuf::from(out);
     assert!(out.is_file(), "converted file missing");
     assert_eq!(out.extension().unwrap(), "webm");
-    // WebM is a Matroska/EBML container -- its files start with this fixed
+    // WebM is a Matroska/EBML container: its files start with this fixed
     // 4-byte magic regardless of codec, which is enough to prove ffmpeg
     // actually produced a real container rather than an empty/garbage file.
     let bytes = fs::read(&out).unwrap();
@@ -103,8 +103,8 @@ fn convert_recording_real_ffmpeg_cancel_leaves_the_source_untouched() {
     fs::create_dir_all(&dir).unwrap();
     // Long enough that the cancel flag is set well before ffmpeg finishes.
     let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 8, "960x720");
-    // A cancel flag local to this test -- never the process-global
-    // REC_CONVERT_CANCEL -- so flipping it can never race an unrelated
+    // A cancel flag local to this test: never the process-global
+    // REC_CONVERT_CANCEL: so flipping it can never race an unrelated
     // conversion another test happens to be running in parallel.
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_writer = Arc::clone(&cancel);
@@ -124,11 +124,11 @@ fn convert_recording_real_ffmpeg_failure_leaves_the_source_untouched() {
     let Some(ffmpeg) = test_ffmpeg() else { return };
     let dir = std::env::temp_dir().join(format!("ps-convtest-fail-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    // Not a real video -- ffmpeg exits non-zero, exercising the failure path.
+    // Not a real video: ffmpeg exits non-zero, exercising the failure path.
     // ffmpeg's mp4 demuxer reports this exact case ("no valid moov box at
     // all", whether from garbage bytes or a real truncation) as the same
     // "moov atom not found" line as a genuinely cut-short recording, so
-    // this lands on ffErrTruncated too -- confirmed empirically here
+    // this lands on ffErrTruncated too: confirmed empirically here
     // rather than assumed, which is why the dedicated truncated-file test
     // right below exists as its own separate case.
     let src = dir.join("src.mp4");
@@ -165,7 +165,7 @@ fn convert_recording_real_ffmpeg_truncated_file_shows_the_friendly_incomplete_ke
 }
 
 // Serializes every test that reads or flips the process-global REC_CROP_CANCEL
-// flag against each other -- cargo test runs tests on separate threads by
+// flag against each other: cargo test runs tests on separate threads by
 // default, and one test flipping that flag mid-run would otherwise cancel
 // whatever unrelated crop another thread happened to be running at the same
 // moment.
@@ -243,7 +243,7 @@ fn estimate_export_bytes_matches_the_plain_bitrate_formula_for_mp4() {
 
 #[test]
 fn estimate_export_bytes_lossless_quality_uses_the_higher_mp4_audio_rate() {
-    // lossless_quality on mp4 burns 320k AAC instead of 192k -- the estimate
+    // lossless_quality on mp4 burns 320k AAC instead of 192k: the estimate
     // must reflect the same jump export_video_blocking's own encoder settings make.
     let normal = estimate_export_bytes("mp4", Some(1000), false, 10_000);
     let lossless = estimate_export_bytes("mp4", Some(1000), true, 10_000);
@@ -262,7 +262,7 @@ fn estimate_export_bytes_gif_returns_a_range_not_a_number() {
 #[test]
 fn estimate_export_bytes_falls_back_to_a_sane_default_without_a_known_bitrate() {
     // A silent read (video_kbps: None) for a plain video format must not
-    // panic or report zero -- it falls back to a reasonable assumed bitrate.
+    // panic or report zero: it falls back to a reasonable assumed bitrate.
     let est = estimate_export_bytes("webm", None, false, 10_000);
     assert!(est.bytes.unwrap() > 0);
 }
@@ -271,7 +271,7 @@ fn estimate_export_bytes_falls_back_to_a_sane_default_without_a_known_bitrate() 
 
 #[test]
 fn estimate_recording_seconds_remaining_uses_bitrate_times_time() {
-    // 8000 kbps = 1,000,000 bytes/sec with no audio -- 10,000,000 bytes
+    // 8000 kbps = 1,000,000 bytes/sec with no audio: 10,000,000 bytes
     // should buy exactly 10 seconds, an exact match like the export
     // formula test above, not just "roughly right".
     assert_eq!(estimate_recording_seconds_remaining(10_000_000, 8000, false), 10);
@@ -279,7 +279,7 @@ fn estimate_recording_seconds_remaining_uses_bitrate_times_time() {
 
 #[test]
 fn estimate_recording_seconds_remaining_adds_the_audio_surcharge() {
-    // Same free space either way -- the higher combined bitrate with
+    // Same free space either way: the higher combined bitrate with
     // audio active must buy strictly fewer seconds than video alone.
     let with_audio = estimate_recording_seconds_remaining(10_000_000, 8000, true);
     let without_audio = estimate_recording_seconds_remaining(10_000_000, 8000, false);
@@ -298,7 +298,7 @@ fn estimate_recording_seconds_remaining_never_divides_by_zero() {
 fn rec_starting_guard_blocks_a_second_claim_until_dropped() {
     // start_recording's own gap: rec_can_start passes while RecordingState
     // is still empty, and the actual capture start only publishes a
-    // session once it returns from a blocking thread -- a second start
+    // session once it returns from a blocking thread: a second start
     // racing through that window used to see the same empty state and
     // pass too. REC_STARTING closes it: claimed alongside the phase
     // check, released by RecStartingGuard's Drop on every exit path.
@@ -340,7 +340,7 @@ fn rec_bar_size_state_hides_below_the_show_threshold() {
 fn rec_bar_size_state_shows_at_and_above_the_threshold_without_an_eta_yet() {
     let mb = 1024 * 1024;
     // Well past the show threshold but nowhere near three quarters of the
-    // 8000 MB ceiling -- shown, but with no ETA to a limit this far off.
+    // 8000 MB ceiling: shown, but with no ETA to a limit this far off.
     assert_eq!(rec_bar_size_state(600 * mb, 60_000, 500.0, 8000.0), (true, None));
 }
 

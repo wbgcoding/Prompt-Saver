@@ -1119,7 +1119,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   transition: none; /* follow the cursor 1:1, no elastic lag */
   transform-origin: top left;
 }
-/* Ctrl held over a view tab copies instead of moving -- the ghost is a
+/* Ctrl held over a view tab copies instead of moving: the ghost is a
    custom element, not a real OS drag, so it carries its own cue for which of
    the two is about to happen. */
 .drag-ghost.will-copy { outline: 2px dashed var(--accent); outline-offset: 2px; }
@@ -1623,7 +1623,7 @@ body:has(#snip-edit:not(.hidden)) #confirm-modal.overlay { z-index: 95; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
 .noflag-dupFinder #library-dupes { display: none; }
-/* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
+/* OCR ships on: a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,
 .noflag-ocr #snip-modal-ocr { display: none; }
@@ -1908,9 +1908,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Length readout: same weight as the hint line below it, not the prompt text. */
 .tile-tip-len { margin-top: 5px; font-size: 11px; color: var(--muted); }
 .tile-tip-hotkey { margin-top: 5px; font-size: 11px; color: var(--muted); }
-/* Last-copied/last-edited lines -- one per line, muted like the length readout. */
+/* Last-copied/last-edited lines: one per line, muted like the length readout. */
 .tile-tip-times { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: pre-line; }
-/* Resolution + file size -- same weight as the timestamps line above it,
+/* Resolution + file size: same weight as the timestamps line above it,
    library/history rows only. */
 .tile-tip-media { margin-top: 5px; font-size: 11px; color: var(--muted); }
 /* Rotating-prompt line: accent-coloured, so it reads as live state rather
@@ -1965,11 +1965,11 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* Two-line question under the preview. */
 .snip-question { margin: 0; text-align: center; line-height: 1.5; }
 .snip-question span { display: block; }
-/* #rec-modal-status while an ffmpeg conversion is running -- the whole line is
+/* #rec-modal-status while an ffmpeg conversion is running: the whole line is
    the cancel button (no separate control needed for one action). */
 .rec-status-cancellable { cursor: pointer; }
 
-/* ---- Screenshot editor -- full-bleed overlay, no centered modal box.
+/* ---- Screenshot editor: full-bleed overlay, no centered modal box.
    Sits above #snip-modal (which it replaces on the way in) and everything else;
    every color comes off the shared theme tokens so it re-skins with all 8 themes. */
 #snip-edit.overlay {
@@ -1980,7 +1980,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   flex-direction: column;
   background: var(--surface);
 }
-/* The overlay's own titlebar -- data-tauri-drag-region (set in the HTML)
+/* The overlay's own titlebar: data-tauri-drag-region (set in the HTML)
    does the actual window move, no JS involved, same as the main window's
    header. This exists at all only because the overlay covers the whole
    frameless main window while it is open, leaving nothing else to drag by. */
@@ -2445,7 +2445,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .gs-recent-row:hover .gs-recent-del,
 .gs-recent-del:focus-visible { opacity: 1; }
 .noflag-globalSearch #global-search-btn { display: none; }
-/* The header has no spare width left at the app's own minimum size -- below
+/* The header has no spare width left at the app's own minimum size: below
    this, the icon drops and Ctrl+K stays the only way in, same trade-off the
    clipboard-inbox and background-jobs icons already make when they are not
    needed. */
@@ -2631,7 +2631,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .license-row-license { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .license-row-body { padding: 8px 10px 4px; }
 .license-row-note { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
-/* Selectable and copyable on purpose -- several bundled licenses require the
+/* Selectable and copyable on purpose: several bundled licenses require the
    text to travel with the app, which means a user has to be able to copy it. */
 .license-row-text {
   margin: 0;
@@ -3334,7 +3334,7 @@ select.modal-input { padding-right: 30px; }
    minus/input/plus, plus a presets popover when the field has one. Narrow
    enough to sit inside the 240px expert/overlay column at raised UI scale
    without wrapping. */
-/* The input is first in the DOM (see numberField() in floatShared.js -- a
+/* The input is first in the DOM (see numberField() in floatShared.js: a
    <label> wrapping this control must forward a click to the input, not to
    whichever button happens to sit first) but visually sits between the two
    step buttons, so `order` puts it back there. */
@@ -3816,7 +3816,7 @@ input[type="password"]::-ms-clear { display: none; }
 .clip-row.journal-clip .clip-actions .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
 .clip-row.journal-clip .clip-actions .clip-save { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 10px; font-size: 12px; }
 
-/* OCR language pack management dialog (#ocr-langs-modal) -- rows reuse the
+/* OCR language pack management dialog (#ocr-langs-modal): rows reuse the
    .clip-row/.clip-list list chrome above, laid out as a horizontal strip: the
    name is the most prominent thing in the row, tag/version sit under it as
    secondary text, the size is its own right-aligned column, state is a chip. */
@@ -3835,7 +3835,7 @@ input[type="password"]::-ms-clear { display: none; }
 .ocr-lang-note { color: var(--muted); font-size: 11px; align-self: center; }
 .ocr-langs-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .ocr-langs-foot .modal-hint { margin: 0; }
-/* Raw PowerShell/DISM text behind an elevation-needed notice -- collapsed
+/* Raw PowerShell/DISM text behind an elevation-needed notice: collapsed
    by default so it never crowds out the actual instruction above it. */
 .lang-error-details { margin-top: 6px; }
 .lang-error-details > summary { color: var(--muted); font-size: 11px; cursor: pointer; }
@@ -4030,7 +4030,7 @@ option:checked { background-color: var(--accent); color: var(--accent-fg); }
 /* The unit next to a free-entry retention/interval field: the preset options show
    theirs on the option text ("7d"), so the number alone would look unit-less. */
 .expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
-/* Inline reason line under recQuality/recFormat -- always its own full-width row,
+/* Inline reason line under recQuality/recFormat: always its own full-width row,
    never squeezed beside the dropdown (flex-basis: 100% + the row's own flex-wrap). */
 .expert-row-hint { flex: 1 1 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
 .expert-row-hint-btn { flex: 0 0 auto; }
@@ -4241,7 +4241,7 @@ body.drag-over::after {
   font-size: 12.5px;
   flex: 0 0 auto;
 }
-/* The persistent read-only line -- same shape as examples-banner, but coloured
+/* The persistent read-only line: same shape as examples-banner, but coloured
    like the other write-safety warnings (expert-notice) since this one means
    saves are silently not happening rather than just being informational. */
 .data-dir-readonly-banner {
@@ -4257,7 +4257,7 @@ body.drag-over::after {
   font-size: 12.5px;
   flex: 0 0 auto;
 }
-/* The demo-mode marker -- an accent bar across the top, deliberately louder
+/* The demo-mode marker: an accent bar across the top, deliberately louder
    and more permanent-looking than the other banners here, since its entire
    job is to be impossible to miss while working in the sample library.
    demoMode is an OPT_FLAG_LABELS entry (default off), so applyFlags() only
@@ -4332,7 +4332,7 @@ body.drag-over::after {
   align-self: center;
   pointer-events: none;
 }
-/* Duration badge overlay: library/history only -- wraps thumbEl's own element
+/* Duration badge overlay: library/history only: wraps thumbEl's own element
    without changing its own sizing rules above. */
 .lib-thumb-wrap {
   position: relative;
@@ -4407,7 +4407,7 @@ body.drag-over::after {
 .lib-saved-search-chip.tab-dragging { opacity: 0.45; }
 /* List/tiles toggle next to the type filter. */
 .lib-view-toggle { display: inline-flex; align-items: center; gap: 6px; }
-/* Tiles: same rows, same selection and right-click behaviour -- only the layout
+/* Tiles: same rows, same selection and right-click behaviour: only the layout
    and what each one shows changes. A tile is just its picture and its name. */
 .library-list.lib-tiles-view {
   grid-template-columns: repeat(auto-fill, minmax(var(--lib-tile-size, 140px), 1fr));
@@ -4706,7 +4706,7 @@ body.drag-over::after {
 .tour-opt-label b { font-size: 13px; font-weight: 600; }
 .tour-opt-desc { font-size: 11px; color: var(--muted); font-weight: 400; line-height: 1.3; }
 .tour-opt-default { font-size: 11px; color: var(--muted); flex: 0 0 auto; white-space: nowrap; }
-/* Narrower gap than the base .switch-field's 12px -- a fourth row child (the
+/* Narrower gap than the base .switch-field's 12px: a fourth row child (the
    help button) must not steal enough width from the label to push its text
    onto an extra line, which would fight the measured-min-height mechanism. */
 .tour-opt-row { gap: 6px; }
@@ -4736,7 +4736,7 @@ body.drag-over::after {
 .tour-dot:hover { opacity: 0.8; }
 .tour-dot.active { opacity: 1; }
 .tour-nav { display: flex; gap: 8px; }
-/* A two-column dropdown row is too narrow for label-beside-field -- a short
+/* A two-column dropdown row is too narrow for label-beside-field: a short
    label (copySize) fit, a long one (tagFilterMode) wrapped and looked different
    from its neighbour. Always stack here; the full-width row above keeps label
    left of field as the standard layout requires. */
@@ -4930,7 +4930,7 @@ body.drag-over::after {
 .ctx-kbd { margin-left: auto; padding-left: 16px; color: var(--muted); font: inherit; font-size: 11px; }
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }
-/* The shared folder glyph on a "group into a folder" / ungroup entry -- same
+/* The shared folder glyph on a "group into a folder" / ungroup entry: same
    16px slot the pill folder's own menu uses for it. */
 .ctx button.has-icon { display: flex; align-items: center; gap: 8px; }
 .ctx button .menu-icon { flex: 0 0 16px; width: 16px; height: 16px; }
@@ -5389,13 +5389,13 @@ button.tag-chip:hover { border-color: var(--accent); }
 .import-preview-row.dup { opacity: 0.55; }
 .import-preview-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .import-preview-badge { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
-/* Restore/delete-forever pair on a discarded-recording row -- its own small
+/* Restore/delete-forever pair on a discarded-recording row: its own small
    group so justify-content: space-between on the row spaces name/badge/group
    apart, not the two buttons apart from each other. */
 .import-preview-actions { flex: 0 0 auto; display: flex; gap: 6px; }
 .import-preview-actions .ghost-btn { padding: 3px 8px; font-size: 12px; }
 
-/* Keyboard shortcuts overview -- one row per action, same list shape as the
+/* Keyboard shortcuts overview: one row per action, same list shape as the
    import preview above. */
 .shortcuts-list { display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow-y: auto; min-height: 0; }
 .shortcuts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 6px; border-radius: 6px; }

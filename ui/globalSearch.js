@@ -82,8 +82,8 @@ export function gsPromptHits(q) {
   }));
 }
 
-// The copy history has no text of its own to search -- each entry is just an id
-// and a timestamp -- so a hit here is "one of the recently-copied prompts whose
+// The copy history has no text of its own to search: each entry is just an id
+// and a timestamp: so a hit here is "one of the recently-copied prompts whose
 // name/body/tags/notes match", scored through the very same pass as the prompt
 // group above. One entry per prompt (a prompt copied five times shows once).
 export function gsHistoryHits(q) {
@@ -196,7 +196,7 @@ export const GS_GROUPS = [
 ];
 
 // `groupKey` (e.g. "prompts", "settings") stamps a stable, language-independent
-// marker on the row -- tests/ui/smoke_test.py finds a specific source group by
+// marker on the row: tests/ui/smoke_test.py finds a specific source group by
 // this attribute instead of the translated heading text.
 export function gsGroupHead(headerKey, groupKey, clearAll) {
   const head = document.createElement("div");
@@ -293,7 +293,7 @@ export function gsClearRecent() {
   $("gs-input").focus();
 }
 
-// Remembers a query for the "recent searches" list shown at rest -- capped at
+// Remembers a query for the "recent searches" list shown at rest: capped at
 // searchListMax (8 unless changed), newest first, deduped case-insensitively.
 export function gsRemember(term) {
   term = term.trim();
@@ -309,7 +309,7 @@ export function gsSetActive(i) {
   gsFlatRows[i]?.el.scrollIntoView({ block: "nearest" });
 }
 
-// Picking a result closes the overlay BEFORE running its action -- every action
+// Picking a result closes the overlay BEFORE running its action: every action
 // (copy, switch view, open a dialog) wants the overlay itself out of the way
 // first, same order the launcher uses for its own select().
 export function gsActivate(hit) {

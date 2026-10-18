@@ -58,13 +58,13 @@ function voiceCommandIndex(lang) {
 
 function voiceEmitWord(word, capNext, outSoFar) {
   // No space right after our own newline/tab, or after an opening bracket we
-  // just inserted -- "(" should hug the word that follows it.
+  // just inserted: "(" should hug the word that follows it.
   const needsSpace = outSoFar.length > 0 && !/[\n\t(]$/.test(outSoFar);
   const w = capNext ? word.charAt(0).toUpperCase() + word.slice(1) : word;
   return (needsSpace ? " " : "") + w;
 }
 
-// zh/ja carry no spaces between words at all -- splitting on whitespace would
+// zh/ja carry no spaces between words at all: splitting on whitespace would
 // hand the whole sentence back as one unmatched token, so command phrases are
 // never recognized. Scanned by raw character position instead. Capitalization
 // does not apply to either script, so autoCaps is simply not consulted here.

@@ -55,7 +55,7 @@ export async function tourSetFlagLive(key, enabled) {
   applyFlags();
 }
 
-// Live-write for a TOUR_SETUP row -- these are real settings fields (autostart,
+// Live-write for a TOUR_SETUP row: these are real settings fields (autostart,
 // auto_update), each with its own invoke command, not ui_flags.
 export async function tourSetSettingLive(cmd, field, enabled) {
   try { await invoke(cmd, { enabled }); settings[field] = enabled; } catch (err) { errToast(err); }

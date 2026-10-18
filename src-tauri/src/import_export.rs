@@ -389,7 +389,7 @@ pub(crate) fn parse_json_data(content: &str) -> Result<ImportData, String> {
         .map_err(|_| "the file is not valid JSON".to_string())?;
     let mut data = ImportData::default();
     for item in items {
-        // Mirrors parse_csv_data's `row[0].trim().is_empty()` skip -- an
+        // Mirrors parse_csv_data's `row[0].trim().is_empty()` skip: an
         // entry with neither a name nor any text is not a real prompt.
         if item.name.trim().is_empty() && item.text.trim().is_empty() {
             continue;
@@ -954,7 +954,7 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
             caption_size: clamp_caption_size(item.caption_size),
             font: item.font,
             font_size: clamp_font_size(item.font_size),
-            // Only ever true for a JSON import -- CSV/TXT never carry it.
+            // Only ever true for a JSON import: CSV/TXT never carry it.
             favorite: item.favorite,
             tags,
             // A note from a foreign file must not abort the import either.
@@ -1229,7 +1229,7 @@ pub(crate) fn folder_rel_path_is_safe(rel: &str) -> bool {
 // One note file of an imported folder as a prompt; placeholders in the old spelling are
 // upgraded like on every other inbound path.
 pub(crate) fn folder_file_item(name: String, tags: Vec<String>, content: &str) -> ImportedPrompt {
-    // The rotation split runs FIRST, on the whole file -- the note is only
+    // The rotation split runs FIRST, on the whole file: the note is only
     // ever pulled off entry 0 (the plain text), never off a later variant,
     // so a short line right after the separator is never mistaken for it.
     let (raw_text, variants) = split_variants(content);

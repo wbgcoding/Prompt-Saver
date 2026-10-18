@@ -241,7 +241,7 @@ pub(crate) fn capture_is_blank(img: &image::RgbaImage) -> bool {
     }
 }
 
-// Crop the frozen capture (physical pixels) and finalize -- as a saved screenshot,
+// Crop the frozen capture (physical pixels) and finalize: as a saved screenshot,
 // or run it through OCR instead when the mode was armed via set_snip_mode.
 // One parameter per capture option the snip toolbar can set at once.
 #[allow(clippy::too_many_arguments)]

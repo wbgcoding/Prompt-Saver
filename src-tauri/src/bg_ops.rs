@@ -406,7 +406,7 @@ pub(crate) fn cancel_all_bg_ops() {
     cancel_ocr_index_backfill();
 }
 
-// Opens `path` itself if it is a folder, otherwise its parent -- shared by
+// Opens `path` itself if it is a folder, otherwise its parent: shared by
 // every "open folder" button whose path was computed by this app itself
 // (a job's own recorded target, a storage-breakdown row's own location),
 // never one typed or picked by the user directly.
@@ -433,7 +433,7 @@ pub(crate) fn open_bg_op_folder(path: String) -> Result<(), String> {
 // prompt, so later quit attempts during shutdown pass without asking again. Never reset.
 pub(crate) static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 
-// The app's one real shutdown sequence -- same three steps whether it runs
+// The app's one real shutdown sequence: same three steps whether it runs
 // straight from CloseRequested (nothing was running) or from
 // confirm_quit_with_running_ops (the user chose to quit anyway).
 pub(crate) fn do_full_exit(handle: &AppHandle) {
@@ -470,7 +470,7 @@ pub(crate) fn quit_blockers(jobs: usize, recording: bool) -> usize {
 
 // Called only after the main window's own dialog asked "N jobs are still
 // running, cancel them and quit?" and the user said yes. Cancels every
-// cancelable job (backup/import have no cancel of their own -- see
+// cancelable job (backup/import have no cancel of their own: see
 // cancel_all_bg_ops) and then quits for real.
 #[tauri::command]
 pub(crate) async fn confirm_quit_with_running_ops(app: AppHandle) {

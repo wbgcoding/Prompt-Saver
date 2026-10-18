@@ -1538,7 +1538,7 @@ export function initSnipEditor() {
     if (!SE.spaceDown && SE.tool !== "hand") snipEditWrap.classList.remove("panning");
   }
 
-  // ---- zoom: pure CSS scaling of the native-resolution canvas -- no redraw needed ----
+  // ---- zoom: pure CSS scaling of the native-resolution canvas: no redraw needed ----
   function snipEditSetZoom(z) {
     SE.zoom = snipEditClamp(z, 0.05, snipZoomMax);
     const sw = SE.w * snipEditScale(), sh = SE.h * snipEditScale();
@@ -2012,7 +2012,7 @@ export function initSnipEditor() {
   document.addEventListener("pointerup", () => snipOriginalToggle.release());
   document.addEventListener("pointercancel", () => snipOriginalToggle.release());
 
-  // ---- resize (scale the image itself, not the view -- see snipEditApplyScale) ----
+  // ---- resize (scale the image itself, not the view: see snipEditApplyScale) ----
   const snipScalePop = document.createElement("div");
   snipScalePop.className = "snip-scale-pop hidden";
   document.body.appendChild(snipScalePop);

@@ -105,7 +105,7 @@ let i18nLoaded = false;
 let revealTimer = 0;
 // The overlay window is reused across snips, so a reply from a superseded
 // session (snip_background / snip_windows / pick_tile) must never land after a
-// newer session has already reset state -- same shape as folder.js's `seq` token.
+// newer session has already reset state: same shape as folder.js's `seq` token.
 let sessionSeq = 0;
 
 function resetSession() {
@@ -679,7 +679,7 @@ window.addEventListener("mouseup", async (e) => {
     busy = true;
     try {
       // A click (no real drag): a window under it records that window, empty
-      // desktop/taskbar records that whole monitor -- same semantics as the
+      // desktop/taskbar records that whole monitor: same semantics as the
       // screenshot overlay's own click-vs-drag rule.
       if (w < MIN_REGION || h < MIN_REGION) {
         const win = windowAt(s.x, s.y);
@@ -756,7 +756,7 @@ window.addEventListener("mouseup", async (e) => {
   } catch (err) {
     if (tok !== sessionSeq) return;
     busy = false;
-    // A bare "something failed" is exactly wrong for this one cause -- no
+    // A bare "something failed" is exactly wrong for this one cause: no
     // OCR language installed at all. The overlay itself has no reach into the
     // main window's #ocr-langs-modal, so this stays a specific, honest message
     // rather than a generic retry hint; the overlay stays open either way.

@@ -107,7 +107,7 @@ fn terminating_a_process_waits_until_it_is_really_gone() {
 }
 
 // A directory under the system temp folder, unique per test, removed on
-// drop -- the CLI's own store lives in a real folder (portable/APPDATA
+// drop: the CLI's own store lives in a real folder (portable/APPDATA
 // resolution is bypassed entirely by pointing db_conn_at/do_backup_at at
 // it directly), so nothing here ever touches the real Prompt Saver data.
 struct TempDir(PathBuf);
@@ -779,7 +779,7 @@ fn backup_create_then_list_finds_the_new_snapshot() {
 #[test]
 fn backup_restore_is_refused_without_yes_at_the_launch_dispatch_level() {
     // The refusal for backup restore happens before either caller (live or
-    // standalone) touches a single file -- checked directly on the parsed
+    // standalone) touches a single file: checked directly on the parsed
     // command here, since exec() itself is never reached for this one.
     let cmd = match parse(&args(&["backup", "restore", "2024-01-01_00-00-00"])).unwrap() {
         Parsed::Run(c) => c,
@@ -791,8 +791,8 @@ fn backup_restore_is_refused_without_yes_at_the_launch_dispatch_level() {
 
 // ---- standalone round trip: a real store on disk, via run_standalone ----
 
-// Exercises exactly what run_standalone() does around exec() -- load,
-// run, persist by writing straight to the database -- against an explicit
+// Exercises exactly what run_standalone() does around exec(): load,
+// run, persist by writing straight to the database: against an explicit
 // temp directory instead of run_standalone() itself, which resolves its
 // folder from APPDATA/portable detection. Those touch process-global state
 // (env vars, the exe's own folder) that a parallel test run must not poke,
@@ -817,7 +817,7 @@ fn standalone_roundtrip(dir: &Path, items: &[&str]) -> (i32, String) {
     let outcome = exec(&mut store, dir, &cmd, Path::new("."));
     if outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings {
         let mut conn = db_conn_at(dir).expect("open store");
-        // store.written, not a fresh map -- see the matching comment in
+        // store.written, not a fresh map: see the matching comment in
         // run_standalone(). A fresh map here silently turned every delete
         // into a no-op on disk, caught by
         // standalone_delete_then_restore_round_trips_through_the_trash_table.
@@ -1118,7 +1118,7 @@ fn manifest_fixture_path() -> PathBuf {
 // A command added to MANIFEST_ENTRIES without regenerating
 // docs/automation-manifest.json (and, downstream, docs/automation.md)
 // makes this fail immediately, inside the ordinary `cargo test --lib`
-// run -- nobody has to remember to run the doc check separately.
+// run: nobody has to remember to run the doc check separately.
 #[test]
 fn automation_manifest_json_matches_the_generated_source() {
     let expected = serde_json::to_value(command_manifest()).unwrap();
@@ -1133,7 +1133,7 @@ fn automation_manifest_json_matches_the_generated_source() {
 }
 
 // Not run by the ordinary suite (`cargo test --lib` skips `#[ignore]`d
-// tests) -- this is the "kleines Werkzeug" half that writes the fixture;
+// tests): this is the "kleines Werkzeug" half that writes the fixture;
 // `tests/gen_automation_doc.py` is the half that turns it into markdown.
 #[test]
 #[ignore]

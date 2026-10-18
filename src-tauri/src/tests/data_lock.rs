@@ -16,7 +16,7 @@ pub(super) fn ddlock_test_dir(name: &str) -> PathBuf {
 pub(super) static DDLOCK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 // Saves/restores the two globals the way settings_locked_command_reports_the_flag
-// does for SETTINGS_LOCKED -- these tests are the only ones in the suite that
+// does for SETTINGS_LOCKED: these tests are the only ones in the suite that
 // touch them, but the same courtesy avoids surprising a future one.
 pub(super) struct DdlockGuard {
     _serial: std::sync::MutexGuard<'static, ()>,
@@ -80,7 +80,7 @@ fn acquire_data_dir_lock_never_treats_its_own_hostname_as_foreign() {
     let _g = DdlockGuard::capture();
     let dir = ddlock_test_dir("own-host");
     // Same host, different (long-gone) pid and a timestamp that would count as
-    // stale too -- neither should matter: a crash-and-restart on THIS machine
+    // stale too: neither should matter: a crash-and-restart on THIS machine
     // is not the two-machine case this guards against, and single-instance
     // already rules out a second live process here.
     write_data_dir_lock(
@@ -161,7 +161,7 @@ fn sync_folder_hint_recognises_known_cloud_folders_and_rejects_plain_ones() {
     drop(guard);
 }
 
-// Minimal set/restore-on-drop wrapper -- std::env::set_var is unsafe to call
+// Minimal set/restore-on-drop wrapper: std::env::set_var is unsafe to call
 // concurrently with a read elsewhere in the same process, but nothing else
 // in this suite reads OneDrive/OneDriveConsumer/OneDriveCommercial, and the
 // restore on Drop keeps a panic from leaking the override into later tests.
@@ -751,7 +751,7 @@ fn demo_store_contains_every_sample_kind() {
 
 // Finding 1 (HIGH, adversarial audit): disable_demo_mode flushes pending
 // demo settings into the demo dir, under the store lock, BEFORE it flips
-// the "datapath" redirect back to the real one -- otherwise app.restart()'s
+// the "datapath" redirect back to the real one: otherwise app.restart()'s
 // own RunEvent::Exit flush (or the 250ms settings_flush_tick) can resolve
 // data_dir() AFTER the flip and overwrite the real data.db with demo
 // settings. This proves the write-then-flip half directly: a settings
@@ -822,7 +822,7 @@ fn __sleep_helper_for_instance_test() {
 }
 
 // other_instance_running must tell a real second live process apart from
-// the allowMultipleInstances setting -- see its own comment for why the
+// the allowMultipleInstances setting: see its own comment for why the
 // flag was not trustworthy evidence. Uses this test binary's own pid
 // (always alive) as the "other" instance and a definitely-dead one (a
 // huge pid unlikely to exist, plus this process's own pid is excluded so
@@ -840,7 +840,7 @@ fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
         "a process must never count itself as a second instance"
     );
 
-    // A pid a genuinely different copy of THIS exe holds right now -- a
+    // A pid a genuinely different copy of THIS exe holds right now: a
     // third review finding requires instance_pid_is_this_exe to confirm
     // the pid's image path, not merely that some process holds it, so
     // the "other" instance here must actually be this same test binary
@@ -877,7 +877,7 @@ fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
 // A pid reused by an unrelated process (Windows reuses freed pids; the
 // window between a crash/task-kill and its stale entry getting pruned
 // can span a whole later session) must not read as "still our instance"
-// forever -- a third review finding. cmd.exe here stands in for that
+// forever: a third review finding. cmd.exe here stands in for that
 // unrelated process: it is definitely alive, and definitely not a copy
 // of this exe, so instance_pid_is_this_exe must refuse it even though
 // pid_is_alive alone would accept it. The entry must NOT be pruned for
@@ -933,7 +933,7 @@ fn same_exe_path_refuses_a_different_file() {
 
 // Finding 2 (HIGH, portable mode): build_demo_store must never delete a
 // pre-existing folder at the demo subfolder's path unless it carries the
-// marker this function itself writes -- portable installs put the demo
+// marker this function itself writes: portable installs put the demo
 // subfolder beside the exe, where a user could already have an unrelated
 // folder there (named "demo" under the old, generic subfolder name; the
 // marker check protects the new app-specific name just as well against
@@ -971,7 +971,7 @@ fn build_demo_store_rebuilds_its_own_marked_folder() {
 
 // Finding 3 (N3, second review): a locked file elsewhere in the folder
 // (data.db held open by something else) must never cost the marker its
-// life -- the old order (remove_dir_all the whole folder, including the
+// life: the old order (remove_dir_all the whole folder, including the
 // marker, THEN fail on the locked file) could leave a folder that still
 // exists but no longer carries proof this app made it, refusing every
 // later enable forever.
@@ -983,8 +983,8 @@ fn build_demo_store_keeps_its_marker_when_a_file_is_locked() {
     let _ = std::fs::remove_dir_all(&dir);
     build_demo_store(&dir, None, "de").unwrap();
 
-    // share_mode(0) denies every other handle -- including this same
-    // process's own attempt to remove or reopen it -- any access at all.
+    // share_mode(0) denies every other handle: including this same
+    // process's own attempt to remove or reopen it: any access at all.
     let locked = std::fs::OpenOptions::new().read(true).share_mode(0).open(dir.join("data.db")).unwrap();
 
     // The rebuild's own data.db step will fail while this handle is open;
@@ -1005,7 +1005,7 @@ fn build_demo_store_keeps_its_marker_when_a_file_is_locked() {
 // Finding 3 (MEDIUM): entering demo mode a second time without an exit in
 // between (a crash mid-session, or a relaunch that never reached
 // exit_demo_mode) must never overwrite an already-recorded backup with the
-// demo path itself -- once that happens there is nothing left to restore
+// demo path itself: once that happens there is nothing left to restore
 // the real custom redirect from.
 #[test]
 fn demo_pointer_backup_survives_a_second_enable_without_an_exit() {
@@ -1068,7 +1068,7 @@ fn exit_demo_mode_leaves_an_unrelated_redirect_alone_when_the_backup_is_missing(
 }
 
 // Finding 5 (LOW): the sample attachment row must never store an absolute
-// path -- an installed build's data dir sits under
+// path: an installed build's data dir sits under
 // %APPDATA%\<Windows account name>, and demo mode's whole point is to be
 // shown to other people (screenshots, exports).
 #[test]
@@ -1093,7 +1093,7 @@ fn demo_attachment_path_is_relative_not_absolute() {
 
 // The other half of finding 5 (second review): load_store() resolves the
 // demo attachment's relative file_path to a real absolute path in memory
-// so the UI can actually use it -- but the very next unrelated save must
+// so the UI can actually use it: but the very next unrelated save must
 // never bake that absolute path back into the database. strip_data_dir_prefix
 // is what save_prompts (and save_trash/save_prompts_and_trash) run every
 // prompt through first for exactly this reason: a full round trip
@@ -1138,7 +1138,7 @@ fn strip_data_dir_prefix_reverses_load_stores_own_resolution() {
 }
 
 // A real (non-demo) attachment's absolute path, whose parent is NOT the
-// data dir, must never be touched by strip_data_dir_prefix -- it is
+// data dir, must never be touched by strip_data_dir_prefix: it is
 // already exactly what the file picker produced.
 #[test]
 fn strip_data_dir_prefix_leaves_an_unrelated_absolute_path_alone() {
@@ -1149,7 +1149,7 @@ fn strip_data_dir_prefix_leaves_an_unrelated_absolute_path_alone() {
 }
 
 // A trashed demo attachment must resolve to an absolute path exactly like
-// a live one -- a third review finding: load_store used to only run this
+// a live one: a third review finding: load_store used to only run this
 // loop over `prompts`, so a demo attachment deleted during the session
 // restored from trash with the bare, unresolvable filename db_load_trash
 // handed back, instead of a path under the live data dir.
@@ -1166,13 +1166,13 @@ fn resolve_relative_file_paths_covers_trash_rows_too() {
 // too. A real attachment the file picker placed directly inside either
 // (its absolute path's parent equals the data dir, same as the demo
 // sample row's) must never be stripped down to a bare filename outside
-// demo mode -- it would resolve against the wrong folder after any later
+// demo mode: it would resolve against the wrong folder after any later
 // data-dir move or portable/installed takeover (a third review finding:
 // the fix was gating on dir shape alone, so it fired for every user, not
 // only in demo). Named literally `DEMO_SUBFOLDER` on purpose (a fourth
 // review finding): the first attempt at this fix compared the folder's
 // NAME to `DEMO_SUBFOLDER`, which still misfired for a real data dir
-// that happens to be named that -- only `is_demo` (the caller's own
+// that happens to be named that: only `is_demo` (the caller's own
 // exact-path comparison against `default_data_dir(app).join(DEMO_
 // SUBFOLDER)`) may gate this, never the shape of `dir` alone.
 #[test]
@@ -1227,7 +1227,7 @@ fn a_half_copied_takeover_reports_what_already_landed() {
 
     // With the store left as it was: the empty prompt list plus its (equally
     // empty) row map used to delete every adopted row on the next save. Now
-    // write_rows itself refuses -- it has no record of ever having seen these
+    // write_rows itself refuses: it has no record of ever having seen these
     // rows, so it leaves them alone.
     {
         let mut conn = Connection::open(dst.join("data.db")).unwrap();

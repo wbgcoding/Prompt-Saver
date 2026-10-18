@@ -573,7 +573,7 @@ mod tests {
 
     #[test]
     fn a_bare_origin_with_no_path_at_all_still_counts_as_the_camera_page() {
-        // WebView2 documents Uri as the requesting ORIGIN -- some runtime
+        // WebView2 documents Uri as the requesting ORIGIN: some runtime
         // versions hand back just that, no path, for a top-level document.
         assert!(permission_uri_is_camera_page("https://tauri.localhost"));
         assert!(permission_uri_is_camera_page("https://tauri.localhost/"));
@@ -605,8 +605,8 @@ mod tests {
 
     #[test]
     fn a_camera_only_take_never_reads_the_screen_sidecar_path() {
-        // The two sidecar kinds -- .cam.json here, .keys.json for the key
-        // overlay -- must never collide on the same extension, or moving one
+        // The two sidecar kinds: .cam.json here, .keys.json for the key
+        // overlay: must never collide on the same extension, or moving one
         // recording's sidecar would silently clobber the other's.
         let cam = sidecar_path(Path::new("C:/data/recordings/rec-1.webm"), CAM_SIDECAR_EXT);
         let keys = cam.with_extension("");
@@ -623,7 +623,7 @@ mod tests {
 
     #[test]
     fn a_camera_only_take_omits_the_overlay_offset_entirely() {
-        // No companion at all -- the field must not even appear, so an older
+        // No companion at all: the field must not even appear, so an older
         // reader (or a human eyeballing the file) sees a plain, congruent
         // camera-only take rather than a spurious zero offset.
         let sidecar = CamSidecar { start_ms: 12345, overlay_start_ms: None };

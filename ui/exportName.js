@@ -6,7 +6,7 @@
 export const EXPORT_NAME_BAD_CHARS = /[\\/:*?"<>|\x00-\x1f]/;
 
 // Windows reserved device names, matched case-insensitively against the part
-// of the stem before its first dot -- "CON.take2" is just as reserved as
+// of the stem before its first dot: "CON.take2" is just as reserved as
 // "CON" itself.
 export const EXPORT_RESERVED_STEMS = new Set([
   "CON", "PRN", "AUX", "NUL",

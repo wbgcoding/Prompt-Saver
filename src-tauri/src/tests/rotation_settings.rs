@@ -137,7 +137,7 @@ fn a_capped_read_decides_from_the_bytes_it_actually_read() {
 
     // Exactly at the limit is still a valid file, and the caller gets all of it.
     assert_eq!(read_file_capped(&p, 64).unwrap().len(), 64);
-    // One byte of headroom less and it is refused -- the extra byte the reader
+    // One byte of headroom less and it is refused: the extra byte the reader
     // takes is what proves the file is over, without a second look at the disk.
     assert!(read_file_capped(&p, 63).is_err());
     assert_eq!(read_text_capped(&p, 64).unwrap().len(), 64);
@@ -306,7 +306,7 @@ fn auto_session_order_matches_rotation_next() {
 }
 
 // The CF_HTML header's own numbers must point exactly at the fragment the
-// header promises, byte for byte -- a reader that trusts the header over
+// header promises, byte for byte: a reader that trusts the header over
 // scanning for markers (most do) gets the wrong slice otherwise.
 #[test]
 fn cf_html_header_offsets_point_at_the_real_fragment_bytes() {
@@ -327,7 +327,7 @@ fn cf_html_header_offsets_point_at_the_real_fragment_bytes() {
 }
 
 // A fragment with multi-byte UTF-8 characters must not shift the offsets by
-// character count -- they are byte positions, and a wrong count here would
+// character count: they are byte positions, and a wrong count here would
 // slice a multi-byte character in half.
 #[test]
 fn cf_html_offsets_are_byte_positions_not_char_counts() {
@@ -345,13 +345,13 @@ fn cf_html_offsets_are_byte_positions_not_char_counts() {
     assert!(std::str::from_utf8(payload.as_bytes()).is_ok(), "the whole payload must stay valid UTF-8");
 }
 
-// Real clipboard access is a single shared OS resource -- serialised so this
+// Real clipboard access is a single shared OS resource: serialised so this
 // never races another test that also opens it.
 #[cfg(windows)]
 pub(super) static CLIPBOARD_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 // put_formatted's plain-text track must be exactly the Markdown source it was
-// given, never the rendered HTML or a re-encoded copy of it -- an app that
+// given, never the rendered HTML or a re-encoded copy of it: an app that
 // only reads plain text must see precisely what a normal copy would give it.
 #[cfg(windows)]
 #[test]

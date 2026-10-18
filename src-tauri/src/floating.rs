@@ -815,7 +815,7 @@ pub(crate) fn mark_parked(app: &AppHandle, id: &str, parked: bool) {
     }
 }
 
-// Whether a pill/folder is parked right now -- floating.js/folder.js ask this
+// Whether a pill/folder is parked right now: floating.js/folder.js ask this
 // once on boot to decide whether to show the marker.
 #[tauri::command]
 pub(crate) fn is_float_parked(app: AppHandle, id: String) -> bool {

@@ -54,7 +54,7 @@ fn ffmpeg_error_too_large_from_an_allocation_failure() {
 fn ffmpeg_error_timeout_key_has_no_matching_ffmpeg_text() {
     // Unlike every other key above, a timeout is this app's own wall-clock
     // decision (see FFMPEG_MAX_RUN_SECS), never something ffmpeg's own log
-    // says -- so its coverage is the key itself, not a classify() case.
+    // says: so its coverage is the key itself, not a classify() case.
     assert_eq!(FfmpegErrorKey::Timeout.as_str(), "ffErrTimeout");
 }
 
@@ -83,7 +83,7 @@ fn ffmpeg_error_tail_lines_keeps_only_the_last_n() {
     assert_eq!(tail.lines().last().unwrap(), "line 25");
 }
 
-// A user-triggered cancel is not classified at all -- run_ffmpeg_to_staged
+// A user-triggered cancel is not classified at all: run_ffmpeg_to_staged
 // returns the plain "cancelled" sentinel before ever reaching
 // classify_ffmpeg_error, and it is real ffmpeg output that would otherwise
 // often exist alongside it (a killed process usually still wrote a log).
@@ -149,10 +149,10 @@ fn taskbar_aggregate_ignores_a_done_job_kept_around_for_the_popover() {
     assert_eq!(aggregate_taskbar_state(&ops), ("normal", Some(55)));
 }
 
-// ---- background operations: the shared registry behind 386 and 397 ----
+// ---- background operations: the shared registry behind the progress popover ----
 
 // Serializes every test below that reads or writes the process-global
-// bg_ops() registry against each other -- cargo test runs tests on
+// bg_ops() registry against each other: cargo test runs tests on
 // separate threads by default, and bg_ops_running_count() in particular
 // counts every entry in the map regardless of which test put it there, so
 // two of these tests racing would inflate each other's counts.
@@ -182,7 +182,7 @@ fn record_bg_op_reports_running_then_done_and_keeps_the_done_entry_briefly() {
 }
 
 // A batch export gives each file its own registry key while sharing the
-// "export" kind -- proves the fix directly, since keying by kind alone
+// "export" kind: proves the fix directly, since keying by kind alone
 // would have both calls share the single key "export" and the second
 // would overwrite the first instead of the list showing two rows.
 #[test]
@@ -248,7 +248,7 @@ pub(super) fn ffmpeg_test_zip() -> Vec<u8> {
 #[test]
 fn ffmpeg_wrong_hash_is_rejected() {
     let zip_bytes = ffmpeg_test_zip();
-    // Any hash that is not this blob's real SHA-256 must be rejected -- the
+    // Any hash that is not this blob's real SHA-256 must be rejected: the
     // "point the pinned constant at a wrong hash" proof the spec asks for.
     let wrong_hash = "0".repeat(64);
     let err = verify_ffmpeg_zip_against(&zip_bytes, &wrong_hash).unwrap_err();
@@ -351,7 +351,7 @@ fn dialog_parent_is_none_when_neither_window_is_open() {
 #[test]
 fn ffmpeg_search_path_never_touches_path_or_a_system_directory() {
     // Discovery only ever looks beside the exe, in the app's own data folder,
-    // and in PATH -- confirming the constants/logic never reference a system
+    // and in PATH: confirming the constants/logic never reference a system
     // directory or attempt to modify PATH is a static-shape check, not a
     // runtime one (there is no writable AppHandle in this pure unit test).
     assert_eq!(FFMPEG_ZIP_ENTRY, "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe");

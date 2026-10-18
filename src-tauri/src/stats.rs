@@ -135,7 +135,7 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
         .take(top_n)
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
         .collect();
-    // An archived-and-unused prompt is not flagged here too -- the user
+    // An archived-and-unused prompt is not flagged here too: the user
     // already set it aside on purpose, so it does not need a second nudge.
     let archive_tag_key = store.settings.ui_texts.get("archiveTag").map(|s| tag_key(s));
     let mut never_used: Vec<StatBar> = store
@@ -568,11 +568,11 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
     Ok(fresh)
 }
 
-// Cached across calls -- reopening the statistics/backups window should not
+// Cached across calls: reopening the statistics/backups window should not
 // re-walk every folder every time; the "measure again" button passes force=true.
 pub(crate) static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(None);
 
-// Opens a storage-breakdown row's own folder -- the path travels from
+// Opens a storage-breakdown row's own folder: the path travels from
 // storage_breakdown's own computation, never from anything the user typed.
 #[tauri::command(async)]
 pub(crate) fn open_storage_folder(path: String) -> Result<(), String> {

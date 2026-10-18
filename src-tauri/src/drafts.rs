@@ -129,7 +129,7 @@ pub(crate) async fn load_edit_state(app: AppHandle, kind: String, target: String
     }
     Ok(Some(ops))
 }
-// A minimal sniff, not a full parse of every op inside -- this table's whole point
+// A minimal sniff, not a full parse of every op inside: this table's whole point
 // is staying opaque to the individual op shapes JS invents, it only ever needs to
 // know "can any of this be understood at all".
 pub(crate) fn edit_state_ops_version(ops: &str) -> Option<i64> {
@@ -335,7 +335,7 @@ pub(crate) fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usiz
                 .unwrap_or(0);
             if has_table > 0 {
                 // None here means "could not confirm the rows are actually gone"
-                // (the delete or the repack failed) -- inspected stays false,
+                // (the delete or the repack failed): inspected stays false,
                 // counted as a failure below.
                 if let Some(n) = scrub_clip_inbox(&conn) {
                     inspected = true;
@@ -353,7 +353,7 @@ pub(crate) fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usiz
                 purged += 1;
             } else {
                 // Scrubbed in the decompressed copy, but it never made it back
-                // into the actual backup file -- the original rows are untouched.
+                // into the actual backup file: the original rows are untouched.
                 failed += 1;
             }
         }

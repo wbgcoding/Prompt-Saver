@@ -311,7 +311,7 @@ export function bindAbout() {
         body.appendChild(pre);
       } else if (!entry.note) {
         // Public-domain style entries with neither a note nor a license text
-        // still get something visible on expand -- never a blank panel.
+        // still get something visible on expand: never a blank panel.
         const p = document.createElement("p");
         p.className = "license-row-note";
         p.textContent = entry.license;

@@ -20,7 +20,7 @@ fn slim_prompt_carries_no_image_bytes() {
     assert!(json.contains("\"has_image\":true"));
 }
 
-// image_text is a search index, never shown -- proven the same way the
+// image_text is a search index, never shown: proven the same way the
 // picture bytes above are: the frontend's own state payload must not
 // carry it at all, not even the field name.
 #[test]
@@ -166,7 +166,7 @@ fn takeover_decision_no_answer_records_nothing_and_asks_again() {
 
     let mut ui_texts: HashMap<String, String> = HashMap::new();
     // Mirrors what takeover_apply does when the dialog closes with the
-    // "do not ask again" box left unticked -- remember == false either way.
+    // "do not ask again" box left unticked: remember == false either way.
     takeover_record_decision(&mut ui_texts, &src, false, false);
 
     assert!(ui_texts.is_empty(), "an unremembered answer must leave no trace at all");
@@ -209,7 +209,7 @@ fn a_new_image_replaces_the_stored_one() {
     assert_eq!(p.image, "data:image/png;base64,QQ==");
 }
 
-// Pure text-logic tests for ocr_join_lines -- no Windows API involved, so
+// Pure text-logic tests for ocr_join_lines: no Windows API involved, so
 // these run on any platform via plain `cargo test --lib`.
 #[test]
 fn ocr_join_lines_joins_a_wrapped_sentence() {
@@ -256,7 +256,7 @@ fn ocr_assemble_text_trims_surrounding_whitespace_from_real_text() {
 }
 
 // A hyphen is not sentence-ending punctuation, so a hyphen-wrapped word is
-// space-joined the same as any other mid-sentence wrap -- there is no special
+// space-joined the same as any other mid-sentence wrap: there is no special
 // dehyphenation: one rule, no script-specific cases.
 #[test]
 fn ocr_join_lines_hyphenated_wrap_gets_a_plain_space_join() {
@@ -276,7 +276,7 @@ fn ocr_join_lines_right_to_left_script_is_not_reordered() {
 pub(super) const OCR_PREFIX: &str = "Language.OCR~~~";
 pub(super) const SPEECH_PREFIX: &str = "Language.Speech~~~";
 
-// Capability-name allowlist -- the gate everything in
+// Capability-name allowlist: the gate everything in
 // ocr_install_language relies on. Valid, realistic tags pass; anything
 // malformed or injection-flavored is rejected outright.
 #[test]
@@ -291,7 +291,7 @@ fn ocr_capability_name_accepts_realistic_tags() {
     }
 }
 
-// The whole point of this fix -- a real speech capability name (the
+// The whole point of this fix: a real speech capability name (the
 // exact shape voice_install_language actually gets called with) used to be
 // rejected outright because the check hardcoded the OCR prefix regardless
 // of kind, so no speech language pack could ever be installed.
@@ -359,7 +359,7 @@ fn ocr_tag_from_capability_name_extracts_the_tag() {
     assert_eq!(ocr_tag_from_capability_name(OCR_PREFIX, "not-a-capability-name"), None);
 }
 
-// The same extraction under the speech prefix -- this used to always
+// The same extraction under the speech prefix: this used to always
 // return None for a real speech name (empty tag -> every speech install's
 // result/script file collided under the same "-voice-install-.json" path).
 #[test]
@@ -416,7 +416,7 @@ fn ocr_parse_capabilities_json_handles_an_array() {
 }
 
 // An already-installed capability commonly has no DownloadSize/InstallSize
-// at all -- that must become None, never Some(0) or a panic.
+// at all: that must become None, never Some(0) or a panic.
 #[test]
 fn ocr_parse_capabilities_json_missing_size_becomes_none() {
     let json = r#"{
@@ -434,7 +434,7 @@ fn ocr_parse_capabilities_json_missing_size_becomes_none() {
 
 // Real capture from a VM: `State` comes back as a bare integer, `Version` as
 // JSON null, and DownloadSize/InstallSize as a literal 0 rather than absent
-// -- none of which the original hand-authored fixtures above (a wrong guess
+//: none of which the original hand-authored fixtures above (a wrong guess
 // at the real shape, not tested against actual PowerShell output) exercised.
 // A second-opinion review + a real VM capture both caught this; the
 // automated suite passed the whole time regardless. State 4 = Installed
@@ -468,7 +468,7 @@ fn ocr_parse_capabilities_json_unknown_numeric_state_is_not_present() {
 }
 
 // Parsed under the speech prefix, a real speech capability entry gets
-// its tag too -- this used to come out empty for every single row (the
+// its tag too: this used to come out empty for every single row (the
 // shared parser hardcoded the OCR prefix), which is why "manage languages"
 // showed a blank/garbage label for every speech language even before an
 // install was ever attempted.
@@ -479,7 +479,7 @@ fn ocr_parse_capabilities_json_extracts_the_tag_for_speech_entries() {
     assert_eq!(caps[0].tag, "de-DE");
 }
 
-// "Updatable?" decision -- table-driven per the spec's five cases.
+// "Updatable?" decision: table-driven per the spec's five cases.
 #[test]
 fn ocr_lang_needs_update_table() {
     let installed = |v: &str| Some(OcrCapSnapshot { version: v.to_string(), installed: true });
@@ -600,7 +600,7 @@ fn voice_hresult_table_maps_every_measured_code() {
 #[cfg(windows)]
 #[test]
 fn voice_stop_reason_table() {
-    // Windows' own AutoStopSilenceTimeout -- always "silence", regardless of
+    // Windows' own AutoStopSilenceTimeout: always "silence", regardless of
     // what (if anything) we had requested.
     assert_eq!(voice::stop_reason(7, None), "silence");
     assert_eq!(voice::stop_reason(7, Some("max")), "silence");
@@ -640,7 +640,7 @@ fn voice_should_stop_hard_cap_always_wins() {
 #[test]
 fn voice_clamp_durations_enforces_the_real_1_to_60_min_range() {
     // The UI slider only goes to 60 min/60 sec, but the backend is the
-    // real limit -- a value above the slider's own max must still be cut down.
+    // real limit: a value above the slider's own max must still be cut down.
     assert_eq!(voice::clamp_durations(3600, 60), (3600, 60)); // exactly at the new ceiling
     assert_eq!(voice::clamp_durations(7200, 999), (3600, 60)); // above it -> clamped
     assert_eq!(voice::clamp_durations(0, 0), (60, 0)); // below the floor -> min 60s/1min
@@ -724,7 +724,7 @@ fn an_elevated_result_is_only_believed_while_a_request_is_in_flight() {
 
 // DISM writing its unconditional startup log to %WINDIR%\Logs\DISM
 // (unwritable without admin rights) was the actual cause of "jetzt
-// prüfen" failing on a standard account -- redirected into our own
+// prüfen" failing on a standard account: redirected into our own
 // always-writable temp folder instead, single-quoted like every other
 // embedded path in this file.
 #[cfg(windows)]
@@ -740,7 +740,7 @@ fn dism_log_args_redirects_into_our_own_writable_temp_dir() {
 
 // 177 part 3: whatever the real failure was (log path, a flat "needs
 // elevation", anything else), the frontend always gets the SAME stable
-// code -- with the original text still attached, not silently dropped.
+// code: with the original text still attached, not silently dropped.
 #[cfg(windows)]
 #[test]
 fn caps_elevation_error_keeps_the_stable_code_and_the_raw_text() {
@@ -802,7 +802,7 @@ fn data_url_within_limit_rejects_one_byte_over_and_accepts_exactly_at() {
 
 #[test]
 fn cap_ocr_text_cuts_by_character_not_by_byte() {
-    // "café" is 4 chars but 5 bytes in UTF-8 -- a byte-based cut would
+    // "café" is 4 chars but 5 bytes in UTF-8: a byte-based cut would
     // split the "é" and produce invalid UTF-8 (or panic).
     assert_eq!(cap_ocr_text("café", 4), "café");
     assert_eq!(cap_ocr_text("café", 3), "caf");

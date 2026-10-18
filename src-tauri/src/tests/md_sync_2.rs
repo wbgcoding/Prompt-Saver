@@ -414,7 +414,7 @@ fn install_update_rejects_a_release_older_than_the_installed_version() {
 #[test]
 fn asset_scope_denies_every_store_file() {
     // A narrow glob match good enough for this fixed pattern shape: "**/name",
-    // "**/prefix*" and "**/dir/**" -- not a general glob engine.
+    // "**/prefix*" and "**/dir/**": not a general glob engine.
     fn wild(pat: &str, name: &str) -> bool {
         match pat.split_once('*') {
             None => pat == name,
@@ -556,7 +556,7 @@ fn copy_dir_all_copies_nested_files() {
 }
 
 // With multiViewPrompt off (default), a synced placement must strip the
-// prompt from every OTHER view -- otherwise re-syncing an unrelated content
+// prompt from every OTHER view: otherwise re-syncing an unrelated content
 // change duplicates it across every view it was ever placed in on any machine.
 #[test]
 fn sync_place_in_view_strips_other_views_unless_multi_view_is_on() {
@@ -604,8 +604,8 @@ pub(super) fn backdate(path: &std::path::Path, age: Duration) {
 }
 
 // A snip preview or an update stage dir surviving a crash/abnormal exit is
-// never cleaned by anything else -- must be swept at the next startup. But
-// NOT a fresh one -- "Allow multiple instances" lets a second launch run this
+// never cleaned by anything else: must be swept at the next startup. But
+// NOT a fresh one: "Allow multiple instances" lets a second launch run this
 // same sweep while a concurrently open instance still has its own snip preview
 // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
 pub(super) fn staging_test_dir(tag: &str) -> PathBuf {
@@ -1091,7 +1091,7 @@ fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
 }
 
 // The clip-export sweep has its own configurable age, separate from
-// STALE_TEMP_FILE_AGE -- must only touch its own prefix, and must respect
+// STALE_TEMP_FILE_AGE: must only touch its own prefix, and must respect
 // whatever age it is called with rather than the fixed constant above.
 #[test]
 fn sweep_clip_export_temp_respects_its_own_configurable_age() {
@@ -1121,7 +1121,7 @@ fn sweep_clip_export_temp_respects_its_own_configurable_age() {
 }
 
 // The overview row's amount readout counts every clip-export file
-// regardless of age -- unlike the sweep above, a fresh file still counts.
+// regardless of age: unlike the sweep above, a fresh file still counts.
 #[test]
 fn clip_export_temp_stats_counts_every_clip_export_file_regardless_of_age() {
     let root = sweep_test_root("clipstats");
@@ -1154,7 +1154,7 @@ fn clip_export_path_impl_lands_in_temp_dir_with_a_safe_extension() {
     assert!(path.ends_with(".mp4"));
     assert!(path.contains("clipexport"));
     // A hostile/garbage extension (path separators, empty) must never leak
-    // into the filename -- falls back to mp4 instead.
+    // into the filename: falls back to mp4 instead.
     let fallback = clip_export_path_impl("../evil").unwrap();
     assert!(fallback.ends_with(".mp4"), "an unsafe extension must fall back to mp4");
     let empty = clip_export_path_impl("").unwrap();
@@ -1163,7 +1163,7 @@ fn clip_export_path_impl_lands_in_temp_dir_with_a_safe_extension() {
 
 #[test]
 fn clip_export_ttl_is_one_hour() {
-    // Never zero -- a sweep with a zero age would delete a file the instant
+    // Never zero: a sweep with a zero age would delete a file the instant
     // it is written, mid-export.
     assert_eq!(clip_export_ttl(), Duration::from_secs(3600));
 }
@@ -1185,7 +1185,7 @@ fn video_folder_stats_counts_only_known_video_extensions() {
 
 // Finding 3 (security pass 348): the extension check alone let this count
 // and clean up any matching file in a shared folder, not only the app's own
-// recordings -- the same "rec-" naming proof discard already requires.
+// recordings: the same "rec-" naming proof discard already requires.
 #[test]
 fn video_folder_stats_ignores_a_video_file_without_the_rec_prefix() {
     let dir = std::env::temp_dir().join(format!("ps-video-folder-noprefix-{}", std::process::id()));

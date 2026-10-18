@@ -63,14 +63,14 @@ fn store_sealed_reports_what_a_write_actually_did() {
 }
 
 // Serializes every test that reads or mutates the process-global sealing state
-// (STORE_SEALED, SEAL_NOTIFY) against each other -- cargo test runs tests on
+// (STORE_SEALED, SEAL_NOTIFY) against each other: cargo test runs tests on
 // separate threads by default, and these are the only globals any test
 // deliberately flips. FORCE_PLAINTEXT_FALLBACK is thread-local (see enc_str)
 // precisely so it needs no lock to stay isolated from unrelated tests.
 pub(super) static SEAL_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 // A row written through the real store writer must never carry its plaintext
-// content on disk -- proves the writer path, not just enc_str in isolation
+// content on disk: proves the writer path, not just enc_str in isolation
 // (already covered by the plain round-trip test above it).
 #[test]
 fn a_sealed_write_never_puts_the_plaintext_marker_on_disk() {
@@ -91,9 +91,9 @@ fn a_sealed_write_never_puts_the_plaintext_marker_on_disk() {
 }
 
 // The fallback must flip the flag and notify exactly once, even when a
-// single save floods many rows through it -- not once per row.
-// Restores the process-global sealing state on drop -- including on a panic
-// partway through the test -- so one failed assertion here can never leave
+// single save floods many rows through it: not once per row.
+// Restores the process-global sealing state on drop: including on a panic
+// partway through the test: so one failed assertion here can never leave
 // state stuck for every other test that runs after it. FORCE_PLAINTEXT_FALLBACK
 // is thread-local, but cargo test pools and reuses OS threads across tests, so
 // a later test landing on this same thread would still inherit a stale `true`
@@ -115,7 +115,7 @@ fn a_flood_of_unsealed_writes_flips_the_flag_and_notifies_exactly_once() {
     // Install the counter BEFORE either flag flips. Flipping FORCE first left a
     // window where an unrelated, unguarded test's own enc_str call could catch
     // this test's one true-to-false transition while SEAL_NOTIFY was still the
-    // previous (cleared) value -- the flag still ended up unsealed, but nothing
+    // previous (cleared) value: the flag still ended up unsealed, but nothing
     // was there to count it, so the assertion below saw zero calls.
     let calls = Arc::new(AtomicU64::new(0));
     let counter = calls.clone();
@@ -140,7 +140,7 @@ fn a_flood_of_unsealed_writes_flips_the_flag_and_notifies_exactly_once() {
 // comment: an old plaintext row is not retroactively sealed just because a
 // later write succeeded, so un-warning the user here would be misleading).
 // enc_str re-checks DPAPI on every single call with no persisted "give up"
-// state, so the row-level promise needs no new machinery -- only a test that
+// state, so the row-level promise needs no new machinery: only a test that
 // FORCE_PLAINTEXT_FALLBACK really is a per-call toggle and not a latch.
 #[test]
 fn a_write_after_a_forced_failure_is_sealed_again_once_dpapi_is_available() {
@@ -161,7 +161,7 @@ fn a_write_after_a_forced_failure_is_sealed_again_once_dpapi_is_available() {
     assert!(resealed.starts_with(ENC_PREFIX), "a write with DPAPI available again must come out sealed");
 }
 
-// A cargo test run must never touch the real error.log -- dozens of call
+// A cargo test run must never touch the real error.log: dozens of call
 // sites fire during entirely unrelated tests, not just the ones that test
 // logging directly, so this has to hold for the redirect mechanism itself.
 #[test]
@@ -232,7 +232,7 @@ fn test_runs_use_a_temp_folder_of_their_own() {
 
 // A data folder outside the profile (a custom location the user picked, or any
 // other drive-rooted path this run never resolved to a known folder) is never
-// a folder the named placeholders recognise -- the structural catch-all must
+// a folder the named placeholders recognise: the structural catch-all must
 // still keep it out of the log, down to just the file name.
 #[test]
 fn append_crash_log_scrubs_a_path_outside_any_known_folder() {
@@ -322,7 +322,7 @@ fn append_crash_log_scrubs_a_folder_name_with_a_space_in_it() {
     );
 }
 
-// record_error_log/ERROR_LOG is a shared static -- serialise against other
+// record_error_log/ERROR_LOG is a shared static: serialise against other
 // tests touching it, same reasoning as SEAL_TEST_LOCK above.
 pub(super) static ERROR_LOG_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -401,7 +401,7 @@ fn scrub_error_log_text_shortens_a_path_to_its_file_name() {
 #[test]
 fn scrub_error_log_text_never_writes_a_long_text_whole() {
     // Stands in for prompt content that ended up interpolated into a
-    // message -- no call site does this today, but the scrub must hold even
+    // message: no call site does this today, but the scrub must hold even
     // if one someday does.
     let long_text = "a".repeat(400);
     let clean = scrub_error_log_text(&long_text);
@@ -410,7 +410,7 @@ fn scrub_error_log_text_never_writes_a_long_text_whole() {
 }
 
 // A log grown past the cap must keep its newest lines and lose only the
-// oldest -- deleting the whole file (the old behaviour) would throw away the
+// oldest: deleting the whole file (the old behaviour) would throw away the
 // real failure a user just hit along with everything before it. Runs against
 // its own private file, never the shared redirected crash log, so nothing
 // else appending concurrently can move this test's goalposts.
@@ -446,7 +446,7 @@ fn rotate_log_file_keeps_the_newest_lines_and_drops_only_the_oldest() {
     let _ = fs::remove_file(&path);
 }
 
-// A file already under the cap must be left completely alone -- rotation is
+// A file already under the cap must be left completely alone: rotation is
 // only for a log that actually outgrew its budget.
 #[test]
 fn rotate_log_file_leaves_a_file_under_the_cap_untouched() {
@@ -466,7 +466,7 @@ fn rotate_log_file_leaves_a_file_under_the_cap_untouched() {
 // crash log's own lock first (standing in for a truncation already in
 // progress), a channel confirms the appending thread has started only once
 // it is actually about to block on that same lock, and only then does this
-// thread finish the truncation and let go -- so the append is genuinely
+// thread finish the truncation and let go: so the append is genuinely
 // serialised after it, never racing it.
 #[test]
 fn a_concurrent_append_during_truncation_is_never_lost() {
@@ -525,8 +525,8 @@ fn rotate_log_file_leaves_no_side_file_behind() {
     let _ = fs::remove_file(&path);
 }
 
-// A line carrying a Windows user-profile path -- exactly what an unremapped
-// panic location from a dependency crate bakes in -- keeps its other content;
+// A line carrying a Windows user-profile path: exactly what an unremapped
+// panic location from a dependency crate bakes in: keeps its other content;
 // only the path on it is replaced, the line as a whole is never deleted.
 #[test]
 fn strip_user_path_lines_replaces_the_path_but_keeps_the_line() {
@@ -549,7 +549,7 @@ fn strip_user_path_lines_replaces_the_path_but_keeps_the_line() {
     let _ = fs::remove_file(&path);
 }
 
-// A file with nothing to remove must not be rewritten at all -- the healthy,
+// A file with nothing to remove must not be rewritten at all: the healthy,
 // common case should cost one read and nothing else.
 #[test]
 fn strip_user_path_lines_leaves_a_clean_file_untouched() {
@@ -615,7 +615,7 @@ fn a_store_past_the_restore_ceiling_refuses_to_back_up() {
 
 // The test above only proves the pure ceiling function itself; it never proves
 // do_backup's real production path (vacuum_and_check_size) actually runs VACUUM
-// INTO the destination it then measures. MAX_INFLATED is 512 MB -- deliberately
+// INTO the destination it then measures. MAX_INFLATED is 512 MB: deliberately
 // far past any real store, and deliberately too large to manufacture in a fast
 // unit test, so the reject path itself stays unexercised here; this proves the
 // wiring on the path that IS practical to run for real: a normal-sized source
@@ -961,7 +961,7 @@ fn write_rows_preserves_a_row_unknown_to_this_process() {
 }
 
 // A genuinely fresh install (no settings row at all yet) must never be flagged
-// as unreadable -- only a row that IS there but cannot be read back correctly.
+// as unreadable: only a row that IS there but cannot be read back correctly.
 #[test]
 fn db_load_does_not_flag_a_settings_row_that_was_never_written() {
     let conn = row_test_db();
@@ -1004,7 +1004,7 @@ fn db_load_does_not_flag_a_readable_settings_row() {
 }
 
 // The command the window polls at startup must report exactly what the flag
-// holds -- this is the read side of the same lock write_settings_outcome checks
+// holds: this is the read side of the same lock write_settings_outcome checks
 // before ever touching disk (untestable here directly: it needs a real
 // AppHandle, which no unit test in this file constructs).
 #[test]
@@ -1018,7 +1018,7 @@ fn settings_locked_command_reports_the_flag() {
     SETTINGS_LOCKED.store(before, Ordering::Relaxed);
 }
 
-// Same shape as settings_locked_command_reports_the_flag above -- the actual
+// Same shape as settings_locked_command_reports_the_flag above: the actual
 // flip lives in write_settings_outcome, which needs a real AppHandle no unit test
 // here constructs, so this proves the read side: whatever the flag holds is
 // exactly what the window's startup poll gets back, in both directions.

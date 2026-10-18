@@ -257,7 +257,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .menu button:hover { background: var(--menu-line); }
 .menu .danger { color: var(--danger); }
-/* The shared folder glyph on the ungroup entry -- same 16px slot the main
+/* The shared folder glyph on the ungroup entry: same 16px slot the main
    window's context menus use for it. */
 .menu button.has-icon { display: flex; align-items: center; gap: 8px; }
 .menu button .menu-icon { flex: 0 0 16px; width: 16px; height: 16px; }

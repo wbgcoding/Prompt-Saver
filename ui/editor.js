@@ -212,7 +212,7 @@ export function insertHelperVar() {
 export function varFixedListRow() {
   const wrap = document.createElement("div");
   wrap.className = "field var-fixed-field";
-  // The switch above only carries the on/off label -- this list is its own
+  // The switch above only carries the on/off label: this list is its own
   // widget, so it gets its own small heading rather than relying on that.
   const heading = document.createElement("div");
   heading.className = "var-fixed-heading";
@@ -350,7 +350,7 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
     rotateMode,
     rotateAuto: !!rotateAuto,
     // Confidential-entry state. Toggling it is its own immediate backend action
-    // (set_prompt_secret), never part of the regular save -- see
+    // (set_prompt_secret), never part of the regular save: see
     // onModalSecretToggle, which is the only place that changes this in memory.
     secret: !!secret,
     locked: !!locked,
@@ -484,7 +484,7 @@ export async function onModalSecretToggle() {
   updateSecretToggleUi(modalState.mode, next, modalState.copyImage, modalState.filePath);
   await renderGrid();
   if (next) {
-    // The field now holds ciphertext at rest -- closing avoids the editor
+    // The field now holds ciphertext at rest: closing avoids the editor
     // resaving the plain text it still shows over that.
     closeModal();
   } else {
@@ -814,7 +814,7 @@ export async function loadHistory(id) {
     full.className = "hist-full hidden";
     // Building this (word-diffing every entry) is expensive at long prompts /
     // many rotation entries; each row starts collapsed, so defer it to first expand
-    // and cache the result -- most rows are never opened at all.
+    // and cache the result: most rows are never opened at all.
     let fullBuilt = false;
     const buildFull = () => {
       if (fullBuilt) return;
@@ -977,7 +977,7 @@ export function syncModalImageUi(mode) {
   fileHint.classList.toggle("hidden", !filePath);
   fileHint.textContent = t(optFlag("storeFiles") ? "fileHintStored" : "fileHint");
   // The two only actually need telling apart when both a stored preview and a
-  // real attachment exist side by side -- otherwise there is nothing to confuse.
+  // real attachment exist side by side: otherwise there is nothing to confuse.
   const previewAttachHint = $("modal-preview-attach-hint");
   previewAttachHint.classList.toggle("hidden", !(hasPreview && filePath));
   const fileIconEl = $("modal-file-icon");
@@ -1252,7 +1252,7 @@ export async function confirmDiscardIfDirty() {
 }
 
 // Same guard as the X button/backdrop/Escape, for an action (drag-drop) that can
-// fire with no editor open at all -- confirmDiscardIfDirty relies on modalState
+// fire with no editor open at all: confirmDiscardIfDirty relies on modalState
 // being set, so it is only asked when the modal is actually visible.
 export function confirmDiscardOrProceed(run) {
   if (modal.root.classList.contains("hidden")) {

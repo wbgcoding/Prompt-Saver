@@ -28,12 +28,12 @@ function chainVarName(token) {
 }
 
 // A reserved name is written with an @ in front ("@date") and listed in
-// CHAIN_DYN_SET -- it fills itself in, no earlier step required.
+// CHAIN_DYN_SET: it fills itself in, no earlier step required.
 function chainIsReserved(name) {
   return name.startsWith("@") && CHAIN_DYN_SET.has(name.slice(1));
 }
 // The bare reserved name behind the @ ("@date" -> "date"), for display and
-// for the `fills` list -- callers already know it is reserved when they use this.
+// for the `fills` list: callers already know it is reserved when they use this.
 const chainDynName = (name) => name.slice(1);
 
 // The distinct placeholder names a step's own text carries, in first-seen order.
@@ -49,7 +49,7 @@ function chainStepNames(text) {
 // The one pure check the overview strip renders: for each step (its raw prompt
 // text, in pick order), which placeholder names it needs, which it fills by
 // itself (a reserved name), and which of its needs nothing earlier in the
-// chain answers -- a name only counts as answered by a STRICTLY earlier step,
+// chain answers: a name only counts as answered by a STRICTLY earlier step,
 // never by one that comes later.
 function chainVarReport(steps) {
   const seenEarlier = new Set();

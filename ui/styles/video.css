@@ -76,7 +76,7 @@ body.video-body {
   overflow: hidden;
 }
 .ve-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
-/* Cursor feedback for the preview pan gesture -- grab while zoomed in and
+/* Cursor feedback for the preview pan gesture: grab while zoomed in and
    idle, grabbing while an actual drag is in progress. At zoom 1 a left-drag on
    empty stage space is a no-op (see the pointerdown guard in video.js), so the
    default cursor stays put instead of promising a drag that would do nothing. */
@@ -369,7 +369,7 @@ body.video-body {
 }
 /* The export target is an editable field, same look as .ve-path above but an <input>. */
 .ve-export-dest-input { width: 100%; font-size: 11.5px; color: var(--muted); }
-/* The plain-filename field sits above the full-path one -- the
+/* The plain-filename field sits above the full-path one: the
    extension label next to it never gets its own input, so it cannot be
    typed into or mistaken for an editable part of the name. */
 .ve-export-name-row { display: flex; align-items: center; gap: 6px; }

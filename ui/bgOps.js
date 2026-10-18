@@ -111,7 +111,7 @@ export async function refreshBgOps() {
     const key = `${op.id || op.kind}:${op.started_at_ms}`;
     if (bgOpsToasted.has(key)) continue;
     bgOpsToasted.add(key);
-    // First call after load just learns the current state -- a job finished
+    // First call after load just learns the current state: a job finished
     // before this window ever asked about it does not need a toast for it.
     if (bgOpsFirstRun || op.state !== "done") continue;
     const action = op.target
@@ -137,8 +137,8 @@ export function wireBgOps() {
     bgOpsPop.classList.remove("hidden");
     placePopover(bgOpsPop, $("bg-ops-btn").getBoundingClientRect());
   });
-  // push_bg_op (Rust) broadcasts this on every state change -- running tick,
-  // done, error -- regardless of which window (if any) started the job, so this
+  // push_bg_op (Rust) broadcasts this on every state change: running tick,
+  // done, error: regardless of which window (if any) started the job, so this
   // popover stays live without a separate poll timer.
   listen("bg-ops-changed", refreshBgOps);
   // Some Windows builds keep a window out of screenshots after the switch is turned

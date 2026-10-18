@@ -114,7 +114,7 @@ fn bitmap_from_path(path: &Path) -> Result<SoftwareBitmap, String> {
 }
 
 // Deletes its file on drop, on every path (success, recognition failure, or
-// an early return) -- guarantees the temp PNG never survives the call.
+// an early return): guarantees the temp PNG never survives the call.
 struct TempFileGuard(Option<PathBuf>);
 impl Drop for TempFileGuard {
     fn drop(&mut self) {
@@ -155,7 +155,7 @@ fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(P
 }
 
 // join_lines picks between the paragraph-joined text (ocr_join_lines) and
-// the raw one-line-per-recognized-line text -- the ocrJoinLines expert setting.
+// the raw one-line-per-recognized-line text: the ocrJoinLines expert setting.
 fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
     ensure_winrt();
     let engine = resolve_engine(lang, auto_pick_lang)?;
@@ -254,7 +254,7 @@ struct CapCache {
     fetched_at: std::time::Instant,
     caps: Vec<OcrCap>,
 }
-// One cache per kind -- installing/refreshing OCR packages must never
+// One cache per kind: installing/refreshing OCR packages must never
 // invalidate a freshly-fetched voice list or vice versa.
 fn cap_cache(kind: CapKind) -> &'static Mutex<Option<CapCache>> {
     static OCR: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();

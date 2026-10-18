@@ -56,7 +56,7 @@ fn scan_import_folder_leaves_out_a_folder_past_the_depth_limit_entirely() {
     fs::create_dir_all(&deep).unwrap();
     fs::write(dir.join("a").join("shallow.txt"), b"shallow").unwrap();
     fs::write(deep.join("deep.txt"), b"deep").unwrap();
-    // depth 2 = the base folder plus one level of subfolders -- "a" is
+    // depth 2 = the base folder plus one level of subfolders: "a" is
     // included, "a/b" is already past the limit and never descended into.
     let (items, _) = scan_import_folder(&dir, 2, 500);
     assert_eq!(items.len(), 1);
@@ -224,7 +224,7 @@ fn scan_dir_stats_on_a_missing_folder_is_empty_not_denied() {
 
 // A permission failure is real Windows ACL behaviour this environment cannot
 // reliably reproduce (needs elevation, and would leave a folder locked out
-// for later tests) -- the read is injected instead, so the "must be
+// for later tests): the read is injected instead, so the "must be
 // reported, not concealed" contract is checked directly against the
 // function's own logic.
 #[test]
@@ -260,7 +260,7 @@ fn discard_recording_file_in_moves_into_verworfen_instead_of_deleting() {
     fs::write(&src, b"video").unwrap();
     let moved = discard_recording_file_in(std::slice::from_ref(&dir), &src).expect("must move, not fail");
     // discard_recording_file_in canonicalizes the parent internally (the \\?\
-    // extended-length form on Windows) -- canonicalize the expected side too
+    // extended-length form on Windows): canonicalize the expected side too
     // rather than comparing a canonical path against a plain one.
     let want = dir.join("verworfen").join("rec-2026-01-01-00-00-00.mp4").canonicalize().unwrap();
     assert_eq!(moved, want);
@@ -499,7 +499,7 @@ fn reserve_unique_dest_path_never_replaces_a_file_that_wins_the_race() {
     fs::create_dir_all(&dir).unwrap();
     // Stands in for another export (or another app) claiming the first
     // candidate name in the gap a plain exists() check
-    // could not see -- reserve_unique_dest_path must fail that name
+    // could not see: reserve_unique_dest_path must fail that name
     // outright and move on rather than overwrite it later.
     let rival = dir.join("clip-edit.mp4");
     fs::write(&rival, b"a different export wrote this first").unwrap();
@@ -864,7 +864,7 @@ fn discarded_recording_commands_refuse_a_dir_that_is_not_the_configured_recordin
 
 // Reusing a zoomed-in filmstrip's cache for a zoomed-out request served
 // thumbnails spaced for the WRONG count, silently covering only part of the
-// clip -- count must be part of the cache key, same as path and mtime.
+// clip: count must be part of the cache key, same as path and mtime.
 #[test]
 fn filmstrip_cache_dir_keys_on_requested_count_too() {
     let dir = std::env::temp_dir();
@@ -878,7 +878,7 @@ fn filmstrip_cache_dir_keys_on_requested_count_too() {
 }
 
 // filmstrip_cache_dir's own comment used to claim an existing sweep
-// already covered this folder -- it never actually recursed into it, so a
+// already covered this folder: it never actually recursed into it, so a
 // cache entry for a since-deleted/renamed/re-encoded recording sat forever.
 #[test]
 fn sweep_stale_temp_files_also_reclaims_stale_filmstrip_cache_dirs() {
@@ -947,7 +947,7 @@ fn sweep_stale_recordings_in_retention_age_only_removes_unreferenced_files_past_
     fs::write(&old_referenced, b"video").unwrap();
     fs::write(&young_unreferenced, b"video").unwrap();
     // Both ages stay well under STALE_TEMP_FILE_AGE (one hour), and the
-    // broken-file sweep is off below -- none of these three plain (not a
+    // broken-file sweep is off below: none of these three plain (not a
     // real mp4) files can be swept for any reason other than retention,
     // which is exactly what this test means to isolate.
     backdate(&old_unreferenced, Duration::from_secs(45 * 60));
@@ -976,7 +976,7 @@ fn sweep_stale_recordings_in_retention_age_only_removes_unreferenced_files_past_
 }
 
 // The box parser against a valid file, a truncated (crash) one, and a
-// non-mp4 -- exactly the three cases that matter for detection.
+// non-mp4: exactly the three cases that matter for detection.
 #[test]
 fn mp4_has_moov_detects_present_and_missing_atom() {
     let dir = std::env::temp_dir().join(format!("ps-test-moov-{}", std::process::id()));
@@ -1008,7 +1008,7 @@ fn mp4_has_moov_detects_present_and_missing_atom() {
     assert!(!mp4_has_moov(&garbage_path), "non-box-shaped bytes must not be mistaken for a moov box");
 
     // The header claims a large moov box, but the file ends right
-    // after the header itself -- a crash mid-write, not a healthy file.
+    // after the header itself: a crash mid-write, not a healthy file.
     let mut cut_short = Vec::new();
     cut_short.extend_from_slice(&16u32.to_be_bytes());
     cut_short.extend_from_slice(b"ftyp");
@@ -1132,7 +1132,7 @@ fn keys_sidecar_video_path_only_matches_the_keys_json_suffix() {
 }
 
 // A key-overlay sidecar must never be swept away while its own recording
-// is still referenced -- the same rule sweep_stale_recordings_in already
+// is still referenced: the same rule sweep_stale_recordings_in already
 // gives the mic sidecar, tested below.
 #[test]
 fn sweep_stale_recordings_in_keeps_keys_sidecar_of_a_referenced_recording() {
@@ -1185,7 +1185,7 @@ fn sweep_stale_recordings_in_keeps_mic_sidecar_of_a_referenced_recording() {
 
 // A recording open in the video editor (or the mic sidecar of any
 // protected recording, muxed in or not) must survive the sweep exactly
-// like the actively-recording session's own output already did -- none of
+// like the actively-recording session's own output already did: none of
 // these four carry a db reference and all are well past every threshold.
 #[test]
 fn sweep_stale_recordings_in_never_touches_editor_source_or_any_mic_sidecar() {

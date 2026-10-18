@@ -120,7 +120,7 @@ async function populateAudioDevices() {
       opts.push(opt);
     }
   } catch {
-    // No device enumeration permission yet -- the "no microphone" option
+    // No device enumeration permission yet: the "no microphone" option
     // alone still lets the camera be used silently.
   }
   if (gen !== audioListGen) return; // a newer call rebuilds the list

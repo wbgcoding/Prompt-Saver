@@ -401,7 +401,7 @@ pub(crate) fn clip_export_ttl() -> Duration {
     Duration::from_secs(CLIP_EXPORT_TTL_SECS)
 }
 
-// How often the clip-export sweep re-checks -- finer than STALE_TEMP_SWEEP_SECS.
+// How often the clip-export sweep re-checks: finer than STALE_TEMP_SWEEP_SECS.
 pub(crate) const CLIP_EXPORT_SWEEP_SECS: u64 = 5 * 60;
 
 pub(crate) fn remove_snip_preview() {
@@ -1378,7 +1378,7 @@ pub(crate) fn screenshot_format_mime(format: &str) -> &'static str {
 }
 
 // Mime for a format the `image` crate itself sniffed from a file's content
-// when opening it for editing -- distinct from screenshot_format_mime above,
+// when opening it for editing: distinct from screenshot_format_mime above,
 // which maps the SETTING's chosen output format, not a guessed input one.
 pub(crate) fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
     match fmt {
@@ -1546,7 +1546,7 @@ pub(crate) fn screenshot_dir(custom: &str) -> PathBuf {
 }
 
 // Save already-encoded screenshot bytes into the given folder as "<stem>.<ext>".
-// "" on failure. Never re-encodes -- the caller decides the format up front.
+// "" on failure. Never re-encodes: the caller decides the format up front.
 pub(crate) fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
     use std::io::Write;
     let _ = fs::create_dir_all(dir);
@@ -1612,7 +1612,7 @@ pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, 
 
 // Save the screenshot anywhere via a native "Save as" dialog. Returns the chosen
 // path, or None if the user cancelled. `format` is this one save's own choice
-// (the save dialog's own format picker) -- None falls back to the setting.
+// (the save dialog's own format picker): None falls back to the setting.
 #[tauri::command]
 pub(crate) async fn save_screenshot_as(
     app: AppHandle,
@@ -1744,7 +1744,7 @@ pub(crate) fn picker_grant_key(path: &Path) -> PathBuf {
 }
 
 // A dialog result is proof the user picked this folder just now for `purpose`
-// -- recorded so the matching setter call that follows can spend it.
+//: recorded so the matching setter call that follows can spend it.
 pub(crate) fn grant_picked_dir(path: &Path, purpose: &str) {
     let key = picker_grant_key(path);
     let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());

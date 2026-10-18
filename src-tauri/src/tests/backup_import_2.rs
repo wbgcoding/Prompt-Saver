@@ -737,7 +737,7 @@ fn restore_copy_history_reinserts_every_snapshotted_row() {
         CopyLogRow { ts: 20, id: "b".into() },
     ];
     db_restore_copy_log(&conn, &rows).unwrap();
-    // db_recent_copies orders by rowid DESC -- the later insert (b) comes first,
+    // db_recent_copies orders by rowid DESC: the later insert (b) comes first,
     // same order the journal would have shown it in before the clear.
     let restored: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
     assert_eq!(restored, ["b", "a"]);
@@ -750,9 +750,9 @@ fn restore_clip_inbox_keeps_the_newest_within_the_cap() {
         "CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
     )
     .unwrap();
-    // Five snapshotted rows, oldest first -- the order restore_clip_inbox
+    // Five snapshotted rows, oldest first: the order restore_clip_inbox
     // feeds them in after the frontend reverses clip_inbox_list's own
-    // newest-first listing -- capped at 3 like a real clipInboxMax setting.
+    // newest-first listing: capped at 3 like a real clipInboxMax setting.
     for i in 0..5u64 {
         db_add_clip(&conn, i, &format!("t{i}"), 3).unwrap();
     }

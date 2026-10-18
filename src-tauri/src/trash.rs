@@ -757,13 +757,13 @@ pub(crate) struct TakeoverOffer {
     pub(crate) path: String,
     pub(crate) size: u64,
     // None when the database could not be opened (e.g. the other copy of the
-    // app still has it open) -- the dialog falls back to naming it unknown
+    // app still has it open): the dialog falls back to naming it unknown
     // rather than blocking the offer on a count that is not essential to it.
     pub(crate) prompts: Option<usize>,
 }
 
 // Size and prompt count of a store folder, read without staging or copying it
-// -- unlike a backup, a live store is a plain uncompressed data.db, so a
+//: unlike a backup, a live store is a plain uncompressed data.db, so a
 // direct read-only COUNT(*) is enough and never touches restore's read rail.
 pub(crate) fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
     let size = STORE_FILES.iter().filter_map(|f| fs::metadata(src.join(f)).ok()).map(|m| m.len()).sum();
@@ -784,7 +784,7 @@ pub(crate) fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: 
 // Portable run, own store still empty (or seeded-examples-only), an installed store
 // present elsewhere → the UI offers to adopt it, naming its size and prompt count
 // so the question is answerable without opening the app twice. Nothing here
-// copies or moves anything -- see takeover_apply for that, after an answer.
+// copies or moves anything: see takeover_apply for that, after an answer.
 #[tauri::command]
 pub(crate) fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<TakeoverOffer> {
     if !is_portable() {

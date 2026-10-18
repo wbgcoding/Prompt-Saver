@@ -115,7 +115,7 @@ fn authenticode_check(path: &std::path::Path) -> (bool, Option<String>) {
             }
         }
     }
-    // WTD_STATEACTION_CLOSE releases WinVerifyTrust's own per-call state -- required
+    // WTD_STATEACTION_CLOSE releases WinVerifyTrust's own per-call state: required
     // after a WTD_STATEACTION_VERIFY call regardless of the verify result.
     data.dwStateAction = WTD_STATEACTION_CLOSE;
     unsafe {

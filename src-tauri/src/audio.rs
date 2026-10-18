@@ -24,7 +24,7 @@ const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: windows::core::GUID =
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 use windows::core::HRESULT;
 
-// AUDCLNT_E_DEVICE_INVALIDATED, from mmreg/audioclient.h -- not exposed as
+// AUDCLNT_E_DEVICE_INVALIDATED, from mmreg/audioclient.h: not exposed as
 // a named constant by the windows crate's Win32_Media_Audio feature.
 const AUDCLNT_E_DEVICE_INVALIDATED: HRESULT = HRESULT(0x88890004u32 as i32);
 

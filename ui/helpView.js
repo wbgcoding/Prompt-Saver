@@ -222,7 +222,7 @@ export function renderHelp() {
     }
     if (cat.sketches && cat.sketches.length) {
       // Sketches only ship English/German labels, matching help.js's own EN/DE
-      // scope -- every other language falls back to the English drawing.
+      // scope: every other language falls back to the English drawing.
       const sketchLang = LANG === "de" ? "de" : "en";
       for (const id of cat.sketches) {
         const draw = HELP_SKETCHES[id];

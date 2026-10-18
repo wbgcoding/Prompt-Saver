@@ -650,7 +650,7 @@ pub(crate) async fn pick_backup_file(app: AppHandle) -> Option<String> {
 }
 
 // Settings-only export/import: a plain, unencrypted JSON of just the expert-menu
-// state -- never prompts, never hotkey bindings, the same "settings vs data"
+// state: never prompts, never hotkey bindings, the same "settings vs data"
 // split the app's own prompt-library export already draws. Deliberately a
 // separate, smaller pair of commands rather than export_all/import_all's
 // "settings" scope, which carries the WHOLE Settings struct (window
@@ -708,7 +708,7 @@ pub(crate) async fn pick_settings_import_file(app: AppHandle) -> Option<String> 
 pub(crate) fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
     let text = std::str::from_utf8(raw).map_err(|_| "bad-file".to_string())?;
     // A wholly empty or non-object file (no ui_flags/ui_values/ui_texts key at
-    // all) is rejected too -- this ONLY accepts a file this same export produced,
+    // all) is rejected too: this ONLY accepts a file this same export produced,
     // never an unrelated JSON document that would otherwise silently parse into
     // three empty maps and "successfully" change nothing.
     let value: serde_json::Value = serde_json::from_str(text).map_err(|_| "bad-file".to_string())?;
@@ -721,7 +721,7 @@ pub(crate) fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, Stri
 }
 
 // Counts how many of the file's own rows would actually change against the
-// live store, without writing anything -- what the import preview shows before
+// live store, without writing anything: what the import preview shows before
 // the user confirms.
 pub(crate) fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (usize, usize) {
     let mut changed = 0;
@@ -951,7 +951,7 @@ pub(crate) async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, 
     Ok(changed)
 }
 
-// Pure scope-branching core of import_all -- split out so it is unit-testable
+// Pure scope-branching core of import_all: split out so it is unit-testable
 // without an AppHandle/State (the async command below owns the save/rollback/
 // AppHandle-dependent side of the contract). Returns (prompt count, dropped
 // hotkeys, whether the backup's own backup-password was dropped in favour of
@@ -972,7 +972,7 @@ pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, w
         // `written` alone, so a reused id with different content is still
         // rewritten correctly. But write_rows ALSO only deletes a row that has
         // disappeared from the new set when THIS process already knew about it
-        // (present in `written`) -- clearing the map here would silently make
+        // (present in `written`): clearing the map here would silently make
         // every pre-import prompt un-deletable, since a wholesale replacement
         // with a smaller set would leave every old row orphaned on disk, back
         // after the next restart. The prompts this process already loaded are
@@ -1023,7 +1023,7 @@ pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, w
     let reserved: Vec<&str> = reserved.iter().map(String::as_str).collect();
     let dropped = drop_colliding_hotkeys(&app_hotkey, &reserved, &mut store.prompts);
     // Folders index into prompts, so only re-normalize when prompts actually
-    // changed -- a settings-only import must not touch the current grid.
+    // changed: a settings-only import must not touch the current grid.
     if want_data {
         store.normalize_folders();
     }
@@ -1156,7 +1156,7 @@ pub(crate) async fn import_all(
     state: State<'_, Db>,
     path: String,
     password: Option<String>,
-    // "all" (default) | "data" | "settings" -- same three values and the same
+    // "all" (default) | "data" | "settings": same three values and the same
     // restore_selective-style "only touch/roll back what that scope owns" contract
     // as restore_backup, just applied to a file import instead of a stored snapshot.
     scope: String,
