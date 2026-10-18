@@ -142,6 +142,20 @@ export async function openVideoCleanup(dir) {
 const BATCH_KBPS_HIGH = 12000;
 const BATCH_KBPS_SMALL = 4000;
 
+// Output file names of a batch: the source name with the new extension, plus a " (2)", " (3)"
+// suffix on every later file that would land on a name already taken in the same batch
+// ("rec.mp4" and "rec.mkv" both exported to mp4). Compared case-insensitively like the disk.
+export function batchDestNames(names, format) {
+  const taken = new Set();
+  return names.map((name) => {
+    const stem = name.replace(/\.[^.]+$/, "");
+    let candidate = `${stem}.${format}`;
+    for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = `${stem} (${n}).${format}`;
+    taken.add(candidate.toLowerCase());
+    return candidate;
+  });
+}
+
 // One small dialog for exporting several finished recordings at once: format, quality,
 // destination. The full video editor's export panel makes no sense for a batch of unrelated
 // files, so this never opens it.
@@ -195,9 +209,10 @@ export async function runBatchExportRecordings(dir, names) {
     const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), cancelLabel: t("cancel") });
     if (!proceed) return;
   }
+  const destNames = batchDestNames(names, format);
   const items = names.map((name, i) => ({
     src_path: `${dir}\\${name}`,
-    dest_path: `${destDir}\\${name.replace(/\.[^.]+$/, "")}.${format}`,
+    dest_path: `${destDir}\\${destNames[i]}`,
     total_ms: durationsMs[i] || 0,
   }));
   const outcome = await invoke("export_recordings_batch", { items, format, losslessQuality, videoKbps }).catch((e) => { errToast(e); return null; });
