@@ -107,7 +107,7 @@ startup instead of hard-coding a copy of the table.
 ```json
 {
   "app": "Prompt Saver",
-  "version": "2.7.0",
+  "version": "3.1.0",
   "commands": [ { "name": "list", "usage": "...", "description": "...", "mutating": false }, ... ],
   "exit_codes": { "0": "ok", "1": "bad invocation", "2": "not found", "3": "store locked or unavailable", "4": "refused" }
 }

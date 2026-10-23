@@ -603,7 +603,7 @@ fn restore_selective_skips_a_table_missing_from_an_older_backup() {
     let _ = std::fs::remove_file(&staged);
 }
 
-// Every release before 2.7.0 wrote prompt_versions without its `variants`
+// Every release before 3.1.0 wrote prompt_versions without its `variants`
 // column. Restoring only the data out of such a backup used to fail on the
 // column count alone and roll the whole thing back (prompts, trash and all),
 // leaving the user with a backup they could not get their prompts out of.

@@ -4,7 +4,7 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
 
-## 2.7.0 (unreleased)
+## 3.1.0 (unreleased)
 
 Twenty-four new features: tags, custom themes, folders for
 floating buttons, self-filling and choice placeholders, a markdown preview with
@@ -1312,7 +1312,7 @@ the video editor and the introduction tour ship on).
   really landed before reporting the problem.
 - **Restoring only the prompts from a backup made with version 2.6.3 or older
   failed completely**, including the prompts that would have come back fine,
-  because such a backup's version history predates a column added in 2.7.0.
+  because such a backup's version history predates a column added in 3.1.0.
   Those backups restore again, with the missing detail left empty. Restoring
   a whole backup was never affected.
 - Copying with the automatic rotation running leaked a small amount of memory

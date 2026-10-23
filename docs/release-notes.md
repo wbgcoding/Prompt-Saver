@@ -1,4 +1,4 @@
-## Prompt Saver 2.7.0
+## Prompt Saver 3.1.0
 
 Twenty-five new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
@@ -17,7 +17,7 @@ the video editor and the introduction tour ship on).
 
 | File | Use it when |
 |---|---|
-| `Prompt.Saver_2.7.0_x64-setup.exe` | Installer: choose **all users** or **current user only**; upgrades replace the previous version automatically, your data is kept |
+| `Prompt.Saver_3.1.0_x64-setup.exe` | Installer: choose **all users** or **current user only**; upgrades replace the previous version automatically, your data is kept |
 | `prompt-saver.exe` | Portable standalone version: one file, no installation, keeps its data next to itself |
 
 Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current Windows 10). If it is missing, the app offers the official Microsoft installer on first start.

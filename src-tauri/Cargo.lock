@@ -3670,7 +3670,7 @@ dependencies = [
 
 [[package]]
 name = "prompt-saver"
-version = "2.7.0"
+version = "3.1.0"
 dependencies = [
  "aes-gcm",
  "arboard",

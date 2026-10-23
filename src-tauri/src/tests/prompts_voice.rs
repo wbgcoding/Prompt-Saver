@@ -881,7 +881,7 @@ fn import_file_hash_changes_with_the_file_content() {
 #[test]
 fn a_theme_that_no_longer_ships_falls_back_to_system() {
     let mut s = Settings::default();
-    // Themes dropped in 2.7.0: an installation set to one of them must still
+    // Themes dropped in 3.1.0: an installation set to one of them must still
     // start with a full set of colour tokens.
     for gone in ["gradient", "sunset", "forest", "midnight", "retro", "lavender", "candy", "coffee"] {
         assert_eq!(theme_base_of(&s, gone), "system", "{gone} should fall back");
