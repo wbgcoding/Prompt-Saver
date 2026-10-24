@@ -651,7 +651,7 @@ export default {
     veAviNote: "Älterer Container für Programme, die nichts anderes lesen. Große Dateien, auf einem aktuellen System kein Vorteil.",
     veNoAudioNote: "Dieses Format hat keinen Ton. Die Tonspuren bleiben in der Aufnahme erhalten.",
     veLengthWarn: "{n} Sekunden werden in diesem Format schnell groß. Kürze das Video oder wähle eine kleinere Größe.",
-    veCopyNote: "Wird ohne Neukodierung kopiert: sofort und verlustfrei.",
+    veCopyNote: "Wird ohne Neukodierung kopiert: sofort und verlustfrei. Der Schnitt beginnt am nächsten Schlüsselbild vor deinem Startpunkt.",
     veOutLength: "Fertige Länge {d}.",
     veSizeAbout: "Etwa {size}.",
     veSizeRange: "Etwa {low}-{high}.",

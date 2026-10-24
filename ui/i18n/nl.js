@@ -675,7 +675,7 @@ export default {
     veAviNote: "Oudere container voor programma's die niets anders ondersteunen. Grote bestanden, geen voordeel op een modern systeem.",
     veNoAudioNote: "Dit formaat heeft geen geluid. De audiosporen blijven bewaard in de opname.",
     veLengthWarn: "{n} seconden in dit formaat worden snel groot. Kort de video in of kies een kleiner formaat.",
-    veCopyNote: "Gekopieerd zonder opnieuw te coderen: direct en zonder kwaliteitsverlies.",
+    veCopyNote: "Gekopieerd zonder opnieuw te coderen: direct en zonder kwaliteitsverlies. De knip begint bij het dichtstbijzijnde keyframe vóór je startpunt.",
     veOutLength: "Uiteindelijke lengte {d}.",
     veSizeAbout: "Ongeveer {size}.",
     veSizeRange: "Ongeveer {low}-{high}.",

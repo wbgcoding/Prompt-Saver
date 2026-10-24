@@ -675,7 +675,7 @@ export default {
     veAviNote: "Container datato per programmi che non leggono altro. File pesanti, nessun vantaggio su un sistema attuale.",
     veNoAudioNote: "Questo formato non ha audio. Le tracce audio restano nella registrazione.",
     veLengthWarn: "{n} secondi in questo formato diventano subito pesanti. Taglia il video o scegli una dimensione minore.",
-    veCopyNote: "Copiato senza ricodifica: immediato e senza perdita.",
+    veCopyNote: "Copiato senza ricodifica: immediato e senza perdita. Il taglio inizia dal fotogramma chiave più vicino prima del punto di inizio.",
     veOutLength: "Durata finale {d}.",
     veSizeAbout: "Circa {size}.",
     veSizeRange: "Circa {low}-{high}.",

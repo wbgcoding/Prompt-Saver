@@ -859,6 +859,33 @@ const pending = [];
   }
 }
 
+// The export looks like the preview: the soft frame is a halo OUTSIDE the main border (the
+// preview draws a glow), the two overlay selects refresh in place, the copy note names the
+// keyframe start, and the narrow-window stage and the tab radii follow the design.
+{
+  const sb = makeSandbox({
+    exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true,
+    SILENT_FORMATS: new Set(["gif"]), MAX_SILENT_DIM: 1280, afterOpsChanged: () => {},
+  });
+  sb.VE = baseState([]);
+  Object.assign(sb.VE, { floor: 0, undoMax: 50, redo: [], w: 1920, h: 1080, fps: 30 });
+  vm.runInContext("pushOp", sb)({ tool: "overlay", id: "S", kind: "frame", startMs: 0, endMs: 10000, rect: { x: 100, y: 80, w: 400, h: 300 }, color: "#ff0000", opacity: 100, thickness: 4, style: "soft" });
+  const g = vm.runInContext("buildVideoChain()", sb) || "";
+  const boxes = (g.match(/drawbox=[^,;\[\]]*/g) || []);
+  expect("a soft frame draws the border and one outer box", boxes.length === 2, boxes.join(" | "));
+  expect("the soft halo starts outside the frame by three borders", /drawbox=x=88:y=68:w=424:h=324:color=0xff0000@0\.4\d*:t=12/.test(g), g);
+  expect("the soft halo does not paint over the picture inside the border", /drawbox=x=88:y=68:w=424:h=324:[^,;]*:t=12/.test(g), g);
+  const overlays = fs.readFileSync(path.join(__dirname, "..", "ui", "videoOverlays.js"), "utf8").replace(/\r\n/g, "\n");
+  expect("the text background select refreshes in place", /ovTrack\("back", selectInput\(/.test(overlays));
+  expect("the keys preset select refreshes in place", /ovTrack\("preset", selectInput\(/.test(overlays));
+  expect("no unused preview zoom limit is left", !/PREVIEW_ZOOM_MAX/.test(src));
+  const css = fs.readFileSync(path.join(__dirname, "..", "ui", "styles", "video.css"), "utf8").replace(/\r\n/g, "\n");
+  expect("the sticky preview is capped on short windows", /--ve-stage-h: min\(40vh, 260px\)/.test(css) && !/\b40vh;|40vh\)/.test(css.split("@media (max-width: 900px)")[1].split("}")[0] + css.split("@media (max-width: 900px)")[1].split("}")[1]));
+  expect("the tabs and the toast use the design radius", !/border-radius: 8px/.test(css.slice(css.indexOf(".ve-tab {"), css.indexOf(".ve-tab:hover"))) && !/border-radius: 8px/.test(css.slice(css.indexOf(".ve-toast {"), css.indexOf(".ve-toast {") + 300)));
+  const en = fs.readFileSync(path.join(__dirname, "..", "ui", "i18n", "en.js"), "utf8");
+  expect("the copy note names the keyframe start", /veCopyNote: "[^"]*nearest keyframe before your start point\."/.test(en));
+}
+
 // Removing an operation is an undo step: undo brings it back with every
 // field in its old slot, redo removes it again, earlier edits stay as they were.
 {

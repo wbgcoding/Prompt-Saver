@@ -675,7 +675,7 @@ export default {
     veAviNote: "Contêiner antigo para programas que não leem outra coisa. Arquivos grandes, sem vantagens num sistema atual.",
     veNoAudioNote: "Este formato não tem som. As faixas de áudio permanecem na gravação.",
     veLengthWarn: "{n} segundos neste formato ficam grandes rapidamente. Considere cortar ou escolher um tamanho menor.",
-    veCopyNote: "Copiado sem recodificação: instantâneo e sem perdas.",
+    veCopyNote: "Copiado sem recodificação: instantâneo e sem perdas. O corte começa no quadro-chave mais próximo antes do ponto inicial.",
     veOutLength: "Duração final {d}.",
     veSizeAbout: "Aproximadamente {size}.",
     veSizeRange: "Aproximadamente {low}-{high}.",

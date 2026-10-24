@@ -675,7 +675,7 @@ export default {
     veAviNote: "Yalnızca bu formatı okuyabilen eski programlar içindir. Dosya boyutu büyüktür, güncel bir sistemde avantaj sağlamaz.",
     veNoAudioNote: "Bu format ses içermez. Ses parçaları kayıtta korunur.",
     veLengthWarn: "Bu formatta {n} saniye hızla çok büyük boyuta ulaşır. Videoyu kırpmayı veya daha küçük bir boyut seçmeyi düşünün.",
-    veCopyNote: "Yeniden kodlanmadan kopyalandı: anında ve kayıpsız.",
+    veCopyNote: "Yeniden kodlanmadan kopyalandı: anında ve kayıpsız. Kesim, başlangıç noktanızdan önceki en yakın anahtar kareden başlar.",
     veOutLength: "Son uzunluk {d}.",
     veSizeAbout: "Yaklaşık {size}.",
     veSizeRange: "Yaklaşık {low}-{high}.",

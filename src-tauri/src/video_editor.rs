@@ -649,9 +649,11 @@ pub(crate) fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, 
 //   filter_chain: ends with [vout] if present, else the source video is mapped unfiltered.
 //   audio_map:    ends with [aout] if present, else the source audio (if any) is mapped
 //                 unfiltered. Never sent for gif, which carries no audio.
-// trim_start_ms is an input-side "-ss" (keyframe-snapped for lossless_copy) and trim_end_ms
-// an output-side "-t <duration>", both applied before any filter graph, so a plain trim with
-// lossless_copy never touches a filter graph or re-encodes the picture.
+// trim_start_ms is an input-side "-ss" and trim_end_ms an output-side "-t <duration>", both
+// applied before any filter graph, so a plain trim with lossless_copy never touches a filter
+// graph or re-encodes the picture. With a stream copy the start is not moved to a keyframe by
+// this code: ffmpeg begins at the nearest keyframe before it and the mp4 edit list hides the
+// lead-in, which is why the copy note tells the user where the cut really starts.
 // With lossless_copy the picture is always copied; copy_audio says what happens to the sound
 // (see copy_plan).
 #[derive(serde::Deserialize)]

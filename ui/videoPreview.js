@@ -42,7 +42,6 @@ const toSource = (clientX, clientY) => {
 // rectangles stay placed and draggable at any zoom/pan. 1 = fit-to-stage and the floor:
 // shrinking further would only add letterboxing.
 const PREVIEW_ZOOM_MIN = 1;
-const PREVIEW_ZOOM_MAX = 8;
 
 // The video's own painted size at zoom 1, straight from the stage + source
 // aspect ratio: kept independent of the live (already zoomed) bounding rect

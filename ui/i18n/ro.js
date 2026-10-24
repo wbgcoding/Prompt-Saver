@@ -675,7 +675,7 @@ export default {
     veAviNote: "Container mai vechi pentru programe care nu citesc altceva. Fișiere mari, niciun avantaj pe un sistem actual.",
     veNoAudioNote: "Acest format nu conține sunet. Piesele audio se păstrează în înregistrare.",
     veLengthWarn: "{n} secunde în acest format devin rapid mari. Ia în considerare scurtarea videoclipului sau o dimensiune mai mică.",
-    veCopyNote: "Copiat fără recodificare: instantaneu și fără pierderi.",
+    veCopyNote: "Copiat fără recodificare: instantaneu și fără pierderi. Tăietura începe la cel mai apropiat cadru cheie dinaintea punctului de start.",
     veOutLength: "Durată finală {d}.",
     veSizeAbout: "Aproximativ {size}.",
     veSizeRange: "Aproximativ {low}-{high}.",

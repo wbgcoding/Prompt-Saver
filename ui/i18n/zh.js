@@ -675,7 +675,7 @@ export default {
     veAviNote: "较旧的封装格式，适用于无法读取其他格式的程序。文件体积大，在现代系统上无优势。",
     veNoAudioNote: "此格式不包含声音。音频轨道仍会保留在录制内容中。",
     veLengthWarn: "此格式下 {n} 秒的文件会迅速变大。建议裁剪或选择更小的尺寸。",
-    veCopyNote: "未重新编码，已即时无损复制。",
+    veCopyNote: "未重新编码，已即时无损复制。剪辑从起点之前最近的关键帧开始。",
     veOutLength: "最终时长 {d}。",
     veSizeAbout: "约 {size}。",
     veSizeRange: "约 {low}-{high}。",

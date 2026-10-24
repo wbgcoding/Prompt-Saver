@@ -641,9 +641,9 @@ export function renderOverlayEditor() {
     // A full rebuild instead of keepEditor: a swatch click never holds typing focus, and the
     // selected-swatch highlight only comes from a fresh render.
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
-    box.appendChild(fieldRow(t("veOvTextBack"), selectInput(
+    box.appendChild(fieldRow(t("veOvTextBack"), ovTrack("back", selectInput(
       [["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
-      op.back, (v) => { commitOverlay(op, { back: v }); renderOverlayEditor(); })));
+      op.back, (v) => { commitOverlay(op, { back: v }); renderOverlayEditor(); }), (o) => o.back)));
     if (op.back === "outline") {
       box.appendChild(fieldRow(t("veOvTextOutline"), ovTrack("outlinePx", numberInput(op.outlinePx ?? 3, 1, 12, 1, (v) => commitOverlay(op, { outlinePx: v }), [1, 2, 3, 4, 6, 8]), (o) => String(o.outlinePx))));
     }
@@ -664,10 +664,10 @@ export function renderOverlayEditor() {
       note.textContent = t("veOvKeysNoData");
       box.appendChild(note);
     }
-    box.appendChild(fieldRow(t("veOvKeysPreset"), selectInput(
+    box.appendChild(fieldRow(t("veOvKeysPreset"), ovTrack("preset", selectInput(
       [["pressed", t("veOvKeysPressed")], ["half", t("veOvKeysHalf")], ["full", t("veOvKeysFull")],
         ["game", t("veOvKeysGame")], ["custom", t("veOvKeysCustom")]],
-      op.preset, (v) => { commitOverlay(op, { preset: v }); renderOverlayEditor(); })));
+      op.preset, (v) => { commitOverlay(op, { preset: v }); renderOverlayEditor(); }), (o) => o.preset)));
     if (op.preset === "custom") box.appendChild(fieldRow(t("veOvKeysPick"), keysPickerRow(op)));
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
     box.appendChild(fieldRow(t("veOvActiveColor"), colorRow(op.activeColor, (hex) => { commitOverlay(op, { activeColor: hex }); renderOverlayEditor(); })));

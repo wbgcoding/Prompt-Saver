@@ -214,7 +214,9 @@ export function buildVideoChain() {
         const gap = op.thickness * 2;
         chain(`drawbox=x=${op.rect.x + gap}:y=${op.rect.y + gap}:w=${Math.max(2, op.rect.w - 2 * gap)}:h=${Math.max(2, op.rect.h - 2 * gap)}:color=${color}:t=${op.thickness}:${enable}`);
       } else if (op.style === "soft") {
-        chain(`drawbox=x=${op.rect.x}:y=${op.rect.y}:w=${op.rect.w}:h=${op.rect.h}:color=${hexToFf(op.color, (op.opacity || 100) * 0.4)}:t=${op.thickness * 3}:${enable}`);
+        // The preview shows a glow around the frame, so the softer box sits outside it.
+        const halo = op.thickness * 3;
+        chain(`drawbox=x=${op.rect.x - halo}:y=${op.rect.y - halo}:w=${op.rect.w + 2 * halo}:h=${op.rect.h + 2 * halo}:color=${hexToFf(op.color, (op.opacity || 100) * 0.4)}:t=${halo}:${enable}`);
       }
     } else if (op.kind === "text") {
       const font = FONT_FILES.find(([id]) => id === op.font) || FONT_FILES[0];

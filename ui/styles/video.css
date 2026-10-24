@@ -336,7 +336,7 @@ body.video-body {
   flex: 1 1 0;
   padding: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px 6px 0 0;
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -444,7 +444,7 @@ button.ve-op-label:focus-visible { outline: 2px solid var(--accent); outline-off
   transform: translateX(-50%);
   max-width: 80vw;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
@@ -454,13 +454,13 @@ button.ve-op-label:focus-visible { outline: 2px solid var(--accent); outline-off
 }
 
 /* Narrow window: the side panel drops under the preview. The preview keeps
-   40 % of the height and stays on top while the controls scroll under it; the
+   40 % of the height (at most 260px, so a short window keeps room for the controls) and stays on top while the controls scroll under it; the
    side panel is exactly as tall as the room below the preview, so scrolled to
    the end it shows whole, with its own panel scroll and the undo/redo row. */
 @media (max-width: 900px) {
-  .ve-main { flex-direction: column; overflow-y: auto; container-type: size; scroll-padding-top: 40vh; }
+  .ve-main { --ve-stage-h: min(40vh, 260px); flex-direction: column; overflow-y: auto; container-type: size; scroll-padding-top: var(--ve-stage-h); }
   .ve-left { display: contents; }
   .ve-left > * { flex: 0 0 auto; }
-  .ve-stage { position: sticky; top: 0; z-index: 3; flex: 0 0 40vh; height: 40vh; min-height: 0; }
-  .ve-side { flex: 0 0 auto; height: calc(100cqh - 40vh); max-height: none; max-width: none; overflow: hidden; border-left: none; border-top: 1px solid var(--border); }
+  .ve-stage { position: sticky; top: 0; z-index: 3; flex: 0 0 var(--ve-stage-h); height: var(--ve-stage-h); min-height: 0; }
+  .ve-side { flex: 0 0 auto; height: calc(100cqh - var(--ve-stage-h)); max-height: none; max-width: none; overflow: hidden; border-left: none; border-top: 1px solid var(--border); }
 }
