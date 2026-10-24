@@ -93,4 +93,40 @@ SECTION = """\
       checkDialog('the copy history');
       document.getElementById('library-close').click(); await step();
     }
+    // The toast auto-hide pauses while the window is dragged by its header (the native move
+    // loop swallows pointerup, so only the move events end the drag) and while the pointer
+    // rests on the toast, then resumes with at least 3 s left.
+    {
+      const coreT = await import('./core.js');
+      const toastEl = document.getElementById('toast');
+      const shown = () => toastEl.classList.contains('show');
+      const header = document.querySelector('.header');
+      const moved = async (n) => { for (let i = 0; i < n; i++) { for (const cb of (window.__MOVED_CBS__ || [])) cb({ payload: { x: i, y: 0 } }); await sleep(100); } };
+      coreT.toast('drag toast', null, '', null, 800);
+      header.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(1200);
+      if (!shown()) out.errors.push('977: the toast hid while the header was held down');
+      await moved(5);
+      await sleep(200);
+      if (!shown()) out.errors.push('977: the toast hid while the window was still moving');
+      await sleep(1900);
+      if (!shown()) out.errors.push('977: the toast hid before the 3 s resume minimum passed after the drag');
+      await sleep(1700);
+      if (shown()) out.errors.push('977: the toast stayed after the drag ended and the remaining time ran out');
+      coreT.toast('hover toast', { label: 'Undo', onClick() {} }, '', null, 800);
+      toastEl.dispatchEvent(new PointerEvent('pointerenter'));
+      await sleep(1200);
+      if (!shown()) out.errors.push('977: the toast hid while the pointer rested on it');
+      toastEl.dispatchEvent(new PointerEvent('pointerleave'));
+      await sleep(2000);
+      if (!shown()) out.errors.push('977: the toast hid before the 3 s resume minimum passed after the pointer left');
+      await sleep(1400);
+      if (shown()) out.errors.push('977: the toast stayed after the pointer left and the remaining time ran out');
+      coreT.toast('release toast', null, '', null, 800);
+      header.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(1100);
+      document.dispatchEvent(new PointerEvent('pointerup'));
+      await sleep(3600);
+      if (shown()) out.errors.push('977: the toast stayed after the header was released');
+    }
 """

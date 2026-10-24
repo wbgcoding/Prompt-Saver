@@ -303,10 +303,91 @@ export const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 // (an Undo whose restore fails) must cancel it, or it hides the new one.
 let toastHideTimer = null;
 export function hideToast() {
+  clearTimeout(toastTimer);
+  resetToastPause();
   toastEl.classList.remove("show");
   clearTimeout(toastHideTimer);
   toastHideTimer = setTimeout(() => toastEl.classList.add("hidden"), 200);
 }
+
+// Auto-hide that can be paused. The toast keeps a deadline; while the pointer rests on it or
+// the window is being dragged by its header, the clock stops and the remaining time is kept.
+// The native move loop of a window drag swallows the matching pointerup, so a drag ends when
+// the window stops reporting moves (TOAST_MOVE_SETTLE_MS after the last one), with pointerup
+// and focus as extra triggers. Resuming never leaves less than TOAST_RESUME_MIN_MS, and a
+// pause never lasts longer than TOAST_PAUSE_CAP_MS.
+export const TOAST_RESUME_MIN_MS = 3000;
+export const TOAST_PAUSE_CAP_MS = 30000;
+export const TOAST_MOVE_SETTLE_MS = 400;
+let toastDeadline = 0;
+let toastRemaining = 0;
+let toastPausedAt = 0;
+let toastCapTimer = null;
+let toastSettleTimer = null;
+let toastHovered = false;
+let toastDragging = false;
+
+function armToastTimer(ms) {
+  clearTimeout(toastTimer);
+  toastDeadline = Date.now() + ms;
+  toastTimer = setTimeout(hideToast, ms);
+}
+
+function pauseToast() {
+  if (toastPausedAt || !toastEl.classList.contains("show")) return;
+  clearTimeout(toastTimer);
+  toastPausedAt = Date.now();
+  toastRemaining = Math.max(0, toastDeadline - toastPausedAt);
+  clearTimeout(toastCapTimer);
+  toastCapTimer = setTimeout(() => {
+    toastHovered = false;
+    toastDragging = false;
+    resumeToast();
+  }, TOAST_PAUSE_CAP_MS);
+}
+
+function resumeToast() {
+  if (!toastPausedAt || toastHovered || toastDragging) return;
+  toastPausedAt = 0;
+  clearTimeout(toastCapTimer);
+  armToastTimer(Math.max(toastRemaining, TOAST_RESUME_MIN_MS));
+}
+
+function resetToastPause() {
+  toastPausedAt = 0;
+  toastRemaining = 0;
+  toastHovered = false;
+  toastDragging = false;
+  clearTimeout(toastCapTimer);
+  clearTimeout(toastSettleTimer);
+}
+
+function endToastDrag() {
+  clearTimeout(toastSettleTimer);
+  if (!toastDragging) return;
+  toastDragging = false;
+  resumeToast();
+}
+
+toastEl.addEventListener("pointerenter", () => { toastHovered = true; pauseToast(); });
+toastEl.addEventListener("pointerleave", () => { toastHovered = false; resumeToast(); });
+document.addEventListener("pointerdown", (e) => {
+  const reg = e.target instanceof Element ? e.target.closest("[data-tauri-drag-region]") : null;
+  if (!reg || reg.getAttribute("data-tauri-drag-region") === "false") return;
+  toastDragging = true;
+  pauseToast();
+}, true);
+document.addEventListener("pointerup", endToastDrag, true);
+document.addEventListener("pointercancel", endToastDrag, true);
+window.addEventListener("focus", endToastDrag);
+try {
+  getCurrentWindow().onMoved(() => {
+    toastDragging = true;
+    pauseToast();
+    clearTimeout(toastSettleTimer);
+    toastSettleTimer = setTimeout(endToastDrag, TOAST_MOVE_SETTLE_MS);
+  }).catch(() => {});
+} catch (_) { /* no window API (a probe page): pointerup/focus still end a drag */ }
 
 // Default toast icon (checkmark badge). Static, developer-controlled SVG.
 export const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
@@ -414,10 +495,12 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   toastEl.classList.remove("hidden");
   void toastEl.offsetWidth;
   toastEl.classList.add("show");
-  clearTimeout(toastTimer);
+  resetToastPause();
   // A toast carrying an action button or chips needs longer to read and click than a plain
   // message: the plain duration plus a fixed bonus (12000ms in all).
-  toastTimer = setTimeout(hideToast, duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
+  armToastTimer(duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
+  // Shown under a resting pointer: no enter event will come, so start paused.
+  if (toastEl.matches(":hover")) { toastHovered = true; pauseToast(); }
 }
 
 // Logs the error and returns the text the user is shown for it. A string with no translation

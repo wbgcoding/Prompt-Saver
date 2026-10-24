@@ -1569,7 +1569,9 @@ const noopWindow = {
   },
   listen: async () => () => {}, onCloseRequested: async () => () => {},
   onFocusChanged: async () => () => {}, onResized: async () => () => {},
-  onMoved: async () => () => {}, onScaleChanged: async () => () => {},
+  // A page can fire the registered move callbacks through window.__MOVED_CBS__.
+  onMoved: async (cb) => { (window.__MOVED_CBS__ = window.__MOVED_CBS__ || []).push(cb); return () => {}; },
+  onScaleChanged: async () => () => {},
   onThemeChanged: async () => () => {}, setAlwaysOnTop: async () => {},
   setSize: async () => {}, setPosition: async () => {},
   outerPosition: async () => ({ x: 0, y: 0 }),
