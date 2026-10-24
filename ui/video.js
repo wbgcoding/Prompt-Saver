@@ -15,7 +15,7 @@ import { LANGS, fullTexts, loadLang } from "./i18n.js";
 import { createColorPop } from "./colorpop.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
-import { secs, exportFormat, exportQuality } from "./videoGraph.js";
+import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
 import { centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
@@ -539,7 +539,7 @@ function renderOps() {
     del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
     del.title = t("veOpRemove");
     del.setAttribute("aria-label", `${t("veOpRemove")}: ${opLabel(op)}`);
-    del.addEventListener("click", () => removeOps((o) => o === op));
+    del.addEventListener("click", () => (op.tool === "crop" ? changeCrop(() => removeOps((o) => o === op)) : removeOps((o) => o === op)));
     row.appendChild(del);
     if (op.tool === "overlay") {
       row.classList.add("ve-op-clickable");
@@ -1211,12 +1211,14 @@ function renderScalePresets() {
 // enlarge would make every preset "keep original"). Only a preset equal to the source height
 // needs no op. A percent value applies as typed.
 function scaleForHeightPreset(h) {
-  if (!VE.w || !VE.h || h === VE.h) return null;
-  return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
+  const eff = effectiveSize();
+  if (!eff.w || !eff.h || h === eff.h) return null;
+  return { w: even(Math.round((eff.w * h) / eff.h)), h: even(h) };
 }
 function scaleForPercent(pct) {
-  if (!VE.w || !VE.h) return null;
-  return { w: even(Math.round((VE.w * pct) / 100)), h: even(Math.round((VE.h * pct) / 100)) };
+  const eff = effectiveSize();
+  if (!eff.w || !eff.h) return null;
+  return { w: even(Math.round((eff.w * pct) / 100)), h: even(Math.round((eff.h * pct) / 100)) };
 }
 
 // Returns the preset key matching the current scale op exactly ("" for no
@@ -1251,33 +1253,34 @@ export function applyScalePresetKey(key) {
 
 function updateScaleCurrent() {
   const scale = opOf("scale");
-  if (!isUncommitted($("ve-scale-w"))) { $("ve-scale-w").value = scale ? scale.w : VE.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
-  if (!isUncommitted($("ve-scale-h"))) { $("ve-scale-h").value = scale ? scale.h : VE.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
+  const eff = effectiveSize();
+  if (!isUncommitted($("ve-scale-w"))) { $("ve-scale-w").value = scale ? scale.w : eff.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
+  if (!isUncommitted($("ve-scale-h"))) { $("ve-scale-h").value = scale ? scale.h : eff.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
   if (!isUncommitted($("ve-scale-pct"))) {
-    const pct = scale && VE.w ? Math.round((scale.w / VE.w) * 100) : 100;
+    const pct = scale && eff.w ? Math.round((scale.w / eff.w) * 100) : 100;
     $("ve-scale-pct").value = pct;
     $("ve-scale-pct").numFieldRefresh?.();
   }
 
   const line = $("ve-scale-current");
-  if (!VE.w || !VE.h) {
+  if (!eff.w || !eff.h) {
     line.textContent = "";
   } else if (!scale) {
-    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", () => VE.w).replace("{sh}", () => VE.h);
+    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", () => eff.w).replace("{sh}", () => eff.h);
   } else {
     const kbps = videoKbps();
     const durS = totalOutMs() / 1000;
     let text = kbps != null && durS > 0
       ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS), LANG))
       : t("veScaleCurrentNoSize");
-    text = text.replace("{sw}", () => VE.w).replace("{sh}", () => VE.h).replace("{tw}", () => scale.w).replace("{th}", () => scale.h);
-    if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
+    text = text.replace("{sw}", () => eff.w).replace("{sh}", () => eff.h).replace("{tw}", () => scale.w).replace("{th}", () => scale.h);
+    if (scale.w > eff.w || scale.h > eff.h) text += " " + t("veScaleUpscaleNote");
     line.textContent = text;
   }
 
   const key = currentScalePresetKey();
   // Only a selected height preset that is taller than the source gets the hint.
-  $("ve-scale-uphint").classList.toggle("hidden", !(scale && key !== null && SCALE_HEIGHT_PRESETS.includes(Number(key)) && scale.h > VE.h));
+  $("ve-scale-uphint").classList.toggle("hidden", !(scale && key !== null && SCALE_HEIGHT_PRESETS.includes(Number(key)) && scale.h > eff.h));
   for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
@@ -1444,12 +1447,29 @@ numberField({
   decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", wheelEnabled: numFieldWheelOn,
 });
 
+// Every crop edit goes through here: the scale op was worked out from the crop it was set
+// against, so it is worked out again for the new crop. A scale that matches a preset keeps
+// that preset; a free size with the ratio lock keeps its height and takes the new aspect; a
+// free size without the lock is a deliberate distortion and stays. Each is its own undo step.
+export function changeCrop(change) {
+  const scale = opOf("scale");
+  const key = scale ? currentScalePresetKey() : "";
+  const before = effectiveSize();
+  change();
+  if (!scale || !opOf("scale")) return;
+  const now = effectiveSize();
+  if (before.w === now.w && before.h === now.h) return;
+  if (key) applyScalePresetKey(key);
+  else if (key === null && $("ve-scale-lock").checked && now.h) setScaleOp((scale.h * now.w) / now.h, scale.h);
+}
+export const pushCrop = (rect) => changeCrop(() => pushReplacing((o) => o.tool === "crop", { tool: "crop", rect }));
+
 $("ve-crop-on").addEventListener("change", () => {
-  if ($("ve-crop-on").checked) pushReplacing((o) => o.tool === "crop", { tool: "crop", rect: centeredRect(0.8) });
-  else removeOps((o) => o.tool === "crop");
+  if ($("ve-crop-on").checked) pushCrop(centeredRect(0.8));
+  else changeCrop(() => removeOps((o) => o.tool === "crop"));
 });
 $("ve-crop-reset").addEventListener("click", () => {
-  pushReplacing((o) => o.tool === "crop", { tool: "crop", rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }) });
+  pushCrop(snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }));
 });
 for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
   $(id).addEventListener("change", () => {
@@ -1459,7 +1479,7 @@ for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
       w: Number($("ve-crop-w").value) || VE.w,
       h: Number($("ve-crop-h").value) || VE.h,
     });
-    pushReplacing((o) => o.tool === "crop", { tool: "crop", rect });
+    pushCrop(rect);
   });
 }
 
@@ -1498,21 +1518,25 @@ function setScaleOp(w, h) {
   if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
   const cw = even(clamp(Math.round(w), 16, 7680));
   const ch = even(clamp(Math.round(h), 16, 7680));
-  // Back at the source size is no scaling at all, so the entry goes away.
-  if (VE.w && VE.h && cw === even(VE.w) && ch === even(VE.h)) { removeOps((o) => o.tool === "scale"); return; }
+  // Back at the size the crop leaves (the source size without a crop) is no scaling at all,
+  // so the entry goes away.
+  const eff = effectiveSize();
+  if (eff.w && eff.h && cw === even(eff.w) && ch === even(eff.h)) { removeOps((o) => o.tool === "scale"); return; }
   pushReplacing((o) => o.tool === "scale", { tool: "scale", w: cw, h: ch });
 }
 
 $("ve-scale-w").addEventListener("change", () => {
-  const w = Number($("ve-scale-w").value) || VE.w;
-  const h = $("ve-scale-lock").checked && VE.w && VE.h ? Math.round((w * VE.h) / VE.w) : (opOf("scale") || { h: VE.h }).h;
+  const eff = effectiveSize();
+  const w = Number($("ve-scale-w").value) || eff.w;
+  const h = $("ve-scale-lock").checked && eff.w && eff.h ? Math.round((w * eff.h) / eff.w) : (opOf("scale") || { h: eff.h }).h;
   setScaleOp(w, h);
   persistExportSettings();
   updateExportNote();
 });
 $("ve-scale-h").addEventListener("change", () => {
-  const h = Number($("ve-scale-h").value) || VE.h;
-  const w = $("ve-scale-lock").checked && VE.w && VE.h ? Math.round((h * VE.w) / VE.h) : (opOf("scale") || { w: VE.w }).w;
+  const eff = effectiveSize();
+  const h = Number($("ve-scale-h").value) || eff.h;
+  const w = $("ve-scale-lock").checked && eff.w && eff.h ? Math.round((h * eff.w) / eff.h) : (opOf("scale") || { w: eff.w }).w;
   setScaleOp(w, h);
   persistExportSettings();
   updateExportNote();
@@ -1523,12 +1547,13 @@ $("ve-scale-pct").addEventListener("change", () => {
   if (target) { setScaleOp(target.w, target.h); persistExportSettings(); updateExportNote(); }
 });
 $("ve-scale-lock").addEventListener("change", () => {
-  if (!$("ve-scale-lock").checked || !VE.w || !VE.h) return;
+  const eff = effectiveSize();
+  if (!$("ve-scale-lock").checked || !eff.w || !eff.h) return;
   const scale = opOf("scale");
   if (!scale) return;
-  // Re-locking snaps the current values back onto the source aspect ratio
+  // Re-locking snaps the current values back onto the aspect ratio of the cropped picture
   // immediately, keyed off the width so both fields agree afterward.
-  setScaleOp(scale.w, Math.round((scale.w * VE.h) / VE.w));
+  setScaleOp(scale.w, Math.round((scale.w * eff.h) / eff.w));
   persistExportSettings();
 });
 $("ve-export-scale-edit").addEventListener("click", () => showPanel("ve-panel-edit"));
@@ -1644,7 +1669,7 @@ function applyPreset(format, quality, downscale) {
   $("ve-export-quality").value = quality;
   // These presets are about a smaller file: they only ever shrink, so a
   // source already at or below their height keeps its own size.
-  const shrink = downscale && VE.h && Number(downscale) < VE.h ? downscale : "";
+  const shrink = downscale && effectiveSize().h && Number(downscale) < effectiveSize().h ? downscale : "";
   applyScalePresetKey(shrink);
   persistExportSettings();
   updateExportNote();

@@ -86,6 +86,14 @@ function atempoChain(rate) {
 export const exportFormat = () => $("ve-export-format").value || "mp4";
 export const exportQuality = () => $("ve-export-quality").value || "high";
 
+// The size the picture has after the crop and before the scale: the crop rectangle when a
+// crop exists, else the source. Scale presets, the percent field, the ratio lock, the size
+// line and the bitrate estimate all read it, so they follow the crop.
+export function effectiveSize() {
+  const crop = opOf("crop");
+  return crop ? { w: crop.rect.w, h: crop.rect.h } : { w: VE.w, h: VE.h };
+}
+
 // The scale op is the one resolution setting of the window: both the
 // Edit-tab fields and the Export-tab summary read and write it directly.
 export function scaleTarget() {

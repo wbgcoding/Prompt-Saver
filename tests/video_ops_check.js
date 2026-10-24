@@ -76,6 +76,11 @@ function makeSandbox(extra) {
       extractLine("even", "const even = (v) => Math.max(0, Math.round(v / 2) * 2);"),
       extractLine("scaleHeights", "const SCALE_HEIGHT_PRESETS = [2160, 1440, 1080, 720, 480, 360];"),
       extractLine("scalePercents", "const SCALE_PERCENT_PRESETS = [50, 25];"),
+      extractBlock("effectiveSize", "function effectiveSize() {"),
+      extractBlock("currentScalePresetKey", "function currentScalePresetKey() {"),
+      extractBlock("changeCrop", "function changeCrop(change) {"),
+      extractLine("pushCrop", "const pushCrop = (rect) => changeCrop(() => pushReplacing((o) => o.tool === \"crop\", { tool: \"crop\", rect }));"),
+      extractBlock("videoKbps", "function videoKbps() {"),
       extractBlock("scaleForHeightPreset", "function scaleForHeightPreset(h) {"),
       extractBlock("scaleForPercent", "function scaleForPercent(pct) {"),
       extractBlock("applyScalePresetKey", "function applyScalePresetKey(key) {"),
@@ -529,6 +534,47 @@ async function exportIdleCheck() {
   run("setScaleOp")(640, 360);
   run("setScaleOp")(1280, 720);
   expect("typing the source size removes the scale entry", scaleOp() === null);
+}
+
+// Scale presets, the percent field and the size estimate work on the picture the crop leaves,
+// not on the source: a 1920x1080 source cropped to 1280x800 and set to 720p is 1152x720 (the
+// source aspect would have given a stretched 1280x720). A new crop works the scale out again.
+{
+  const sb = makeSandbox({
+    afterOpsChanged() {}, exportQuality: () => "high", EXPORT_KBPS: { high: 12000, small: 4000, lossless: null },
+    $: (id) => ({ checked: id === "ve-scale-lock" ? sb.lock : false }), lock: true,
+  });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50, w: 1920, h: 1080 });
+  const run = (code) => vm.runInContext(code, sb);
+  const scaleOp = () => sb.VE.ops.find((o) => o.tool === "scale") || null;
+  const size = (o) => (o ? `${o.w}x${o.h}` : "none");
+  run("pushCrop")({ x: 320, y: 140, w: 1280, h: 800 });
+  run("applyScalePresetKey('720')");
+  expect("720p on a 1280x800 crop is 1152x720", size(scaleOp()) === "1152x720", size(scaleOp()));
+  expect("the effective size is the crop rectangle", JSON.stringify(run("effectiveSize()")) === JSON.stringify({ w: 1280, h: 800 }));
+  expect("the size estimate is worked out from crop then scale", run("videoKbps()") === Math.round(12000 * Math.sqrt((1152 * 720) / (1920 * 1080))), String(run("videoKbps()")));
+  // The crop changes: a preset follows it, so the same 720p is worked out for the new rectangle.
+  run("pushCrop")({ x: 0, y: 0, w: 1600, h: 900 });
+  expect("a 720p preset is re-applied to the new crop", size(scaleOp()) === "1280x720", size(scaleOp()));
+  run("pushCrop")({ x: 0, y: 0, w: 1001, h: 801 });
+  expect("scale dimensions stay even", scaleOp() && scaleOp().w % 2 === 0 && scaleOp().h % 2 === 0, size(scaleOp()));
+  // A crop that already is 720 high needs no scale, so the entry goes away.
+  run("pushCrop")({ x: 0, y: 0, w: 1440, h: 720 });
+  expect("a preset equal to the new crop height drops the entry", scaleOp() === null, size(scaleOp()));
+  run("pushCrop")({ x: 0, y: 0, w: 1600, h: 900 });
+  run("applyScalePresetKey('720')");
+  // A free size with the ratio lock keeps its height and takes the aspect of the new crop.
+  run("setScaleOp")(1000, 562);
+  run("pushCrop")({ x: 0, y: 0, w: 1000, h: 1000 });
+  expect("a locked free size takes the new aspect", size(scaleOp()) === "562x562", size(scaleOp()));
+  // A crop without any scale adds none, and the estimate follows the crop alone.
+  run("removeOps((o) => o.tool === 'scale')");
+  run("pushCrop")({ x: 0, y: 0, w: 960, h: 540 });
+  expect("a crop without a scale op adds none", scaleOp() === null);
+  expect("the estimate follows a crop alone", run("videoKbps()") === 6000, String(run("videoKbps()")));
+  // The preset equal to the cropped height needs no op, like the source height before.
+  run("applyScalePresetKey('540')");
+  expect("a preset equal to the crop height adds no entry", scaleOp() === null);
 }
 
 // A refresh rewrites every field except one the user is typing in right now.

@@ -2,7 +2,7 @@
 // preview.
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
-import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushReplacing, RECT_MIN_PX, t, VE, videoEl } from "./video.js";
+import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
 const $ = (id) => document.getElementById(id);
@@ -607,7 +607,7 @@ function endRectDrag() {
     // A click-release with no movement (or one that snaps back to where it started) is not an
     // edit and must not push an undo step or wipe the redo stack.
     if (rectsEqual(rect, drag.orig)) { op.rect = rect; renderRects(); return; }
-    pushReplacing((o) => o.tool === "crop", { tool: "crop", rect });
+    pushCrop(rect);
   } else {
     if (rectsEqual(raw, drag.orig)) { op.rect = raw; renderRects(); return; }
     pushReplacing((o) => o.id === op.id, { ...op, rect: raw }, { keepEditor: true });

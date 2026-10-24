@@ -3,7 +3,7 @@ import { makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtByt
 import { errMessageLogged } from "./errors.js";
 import { exportNameIsValid } from "./exportName.js";
 import { confirmDialog } from "./dialog.js";
-import { exportFormat, exportQuality, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, isLosslessCopy } from "./videoGraph.js";
+import { exportFormat, exportQuality, effectiveSize, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, isLosslessCopy } from "./videoGraph.js";
 import { $, clamp, ETA_MIN_PCT, ETA_MIN_SECS, EXPORT_KBPS, fmtTime, formatExt, invoke, keptSegments, LANG, showExportErrorDetails, SILENT_FORMAT_LENGTH_WARN_MS, SILENT_FORMATS, t, toast, totalOutMs, updateAudioLabels, VE } from "./video.js";
 
 // ---------------------------------------------------------------- export
@@ -311,10 +311,13 @@ export async function startExport(toClipboard) {
 export function videoKbps() {
   const base = EXPORT_KBPS[exportQuality()];
   if (base == null) return null;
-  const target = scaleTarget();
-  if (!target || !VE.h || target.h >= VE.h) return base;
+  if (!VE.w || !VE.h) return base;
+  // The output size is the crop, then the scale; the bitrate follows the linear size.
+  const out = scaleTarget() || effectiveSize();
+  const ratio = Math.sqrt((out.w * out.h) / (VE.w * VE.h));
+  if (!(ratio < 1)) return base;
   // Fewer pixels need fewer bits; the floor keeps a 480p clip from going muddy.
-  return Math.max(800, Math.round(base * (target.h / VE.h)));
+  return Math.max(800, Math.round(base * ratio));
 }
 
 // ---------------------------------------------------------------- ffmpeg presence
