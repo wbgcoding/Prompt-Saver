@@ -3,7 +3,7 @@
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
 import { keysPreviewModel } from "./videoKeys.js";
-import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, t, VE, videoEl } from "./video.js";
+import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, selectOverlay, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
 const $ = (id) => document.getElementById(id);
@@ -108,6 +108,54 @@ $("ve-stage").addEventListener("wheel", (e) => {
   applyPreviewTransform();
 }, { passive: false });
 
+// Clicking the picture picks the overlay under the pointer: the one drawn on top among those
+// showing at the playhead. The pointer is in source pixels and `tol` is the slack, also in
+// source pixels, that makes a thin frame border or a short text line easy to hit. A frame is
+// hollow, so only its border band counts; a text overlay has no stored size, so its box is
+// estimated from the font size and the longest line.
+export function overlayAt(point, tol) {
+  const now = VE.playhead;
+  const stack = overlayStack();
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const op = stack[i];
+    if (now < op.startMs || now > op.endMs) continue;
+    let box = null;
+    if (op.kind === "text") {
+      const lines = String(op.text || "").split("\n");
+      const longest = Math.max(1, ...lines.map((l) => l.length));
+      const pad = op.back === "plate" ? Math.max(4, Math.round(op.fontPx / 4)) : 0;
+      box = { x: op.x, y: op.y, w: longest * op.fontPx * 0.6 + pad * 2, h: lines.length * op.fontPx * 1.25 + pad * 2 };
+    } else if (op.rect) {
+      box = op.rect;
+    }
+    if (!box) continue;
+    const inside = point.x >= box.x - tol && point.x <= box.x + box.w + tol && point.y >= box.y - tol && point.y <= box.y + box.h + tol;
+    if (!inside) continue;
+    if (op.kind === "frame") {
+      const band = (op.thickness || 4) + tol;
+      const deep = point.x > box.x + band && point.x < box.x + box.w - band && point.y > box.y + band && point.y < box.y + box.h - band;
+      if (deep) continue;
+    }
+    return op;
+  }
+  return null;
+}
+
+// Selects the overlay under the pointer the way a list row does (the playhead stays) and starts
+// a move from there. False when no overlay is showing at that spot.
+function grabOverlayAt(e) {
+  const hit = overlayAt(toSource(e.clientX, e.clientY), HIT_SLACK_PX / videoBox().scale);
+  if (!hit) return false;
+  if (VE.selOv !== hit.id) selectOverlay(hit.id);
+  e.preventDefault();
+  beginRectDrag(VE.ops.find((o) => o.id === hit.id), null, e);
+  return true;
+}
+
+// A press on the empty picture only deselects on release, and only when the pointer did not
+// travel, so a pan or a stray drag keeps the selection.
+let emptyPress = null;
+
 // Pan: middle-click always (as in the screenshot editor), plain left-drag only once zoomed in,
 // so at zoom 1 an empty-stage drag arms no useless grab cursor. Space is Play/Pause in this
 // window, so it is not a pan modifier. A click on a crop/overlay rectangle is left to
@@ -119,6 +167,11 @@ $("ve-stage").addEventListener("pointerdown", (e) => {
   if (VE.drag) return;
   if (e.target.closest(".ve-rect")) return;
   if (e.target.closest("#ve-preview-zoom")) return; // the zoom pill/reset button sits inside the stage
+  emptyPress = null;
+  if (e.button === 0) {
+    if (grabOverlayAt(e)) return;
+    emptyPress = { x: e.clientX, y: e.clientY };
+  }
   if (VE.previewZoom <= 1) return; // nothing to pan at 1:1, whichever button
   e.preventDefault();
   $("ve-stage").setPointerCapture(e.pointerId);
@@ -135,8 +188,13 @@ function endPreviewPan() {
   if (VE.drag && VE.drag.kind === "pan") VE.drag = null;
   $("ve-stage").classList.remove("ve-panning");
 }
-$("ve-stage").addEventListener("pointerup", endPreviewPan);
-$("ve-stage").addEventListener("pointercancel", endPreviewPan);
+$("ve-stage").addEventListener("pointerup", (e) => {
+  const press = emptyPress;
+  emptyPress = null;
+  endPreviewPan();
+  if (press && VE.selOv && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) selectOverlay(null);
+});
+$("ve-stage").addEventListener("pointercancel", () => { emptyPress = null; endPreviewPan(); });
 $("ve-preview-zoom-reset").addEventListener("click", resetPreviewZoom);
 $("ve-preview-zoom-in").addEventListener("click", () => setPreviewZoom(VE.previewZoom * VE.zoomStepFactor));
 $("ve-preview-zoom-out").addEventListener("click", () => setPreviewZoom(VE.previewZoom / VE.zoomStepFactor));
@@ -190,6 +248,7 @@ export function snapRect(rect) {
 }
 
 const HANDLES = ["nw", "n", "ne", "w", "e", "sw", "s", "se"];
+const HIT_SLACK_PX = 6; // on-screen slack when clicking an overlay in the preview
 
 function rectFor(op) {
   if (op.tool === "crop") return op.rect;
@@ -538,16 +597,11 @@ function resizeRect(orig, handle, point, keepRatio) {
   return next;
 }
 
-$("ve-rects").addEventListener("pointerdown", (e) => {
-  const rectEl = e.target.closest(".ve-rect");
-  if (!rectEl) return;
-  const id = rectEl.dataset.op;
-  const op = id === "crop" ? opOf("crop") : VE.ops.find((o) => o.id === id);
+// Starts moving (no handle) or resizing (a handle name) a crop box or an overlay.
+function beginRectDrag(op, handle, e) {
   if (!op) return;
-  e.preventDefault();
   $("ve-rects").setPointerCapture(e.pointerId);
   const point = toSource(e.clientX, e.clientY);
-  const handle = e.target.dataset.handle || null;
   VE.drag = {
     kind: "rect",
     op,
@@ -557,6 +611,19 @@ $("ve-rects").addEventListener("pointerdown", (e) => {
     live: op.rect ? { ...op.rect } : null,
     livePoint: op.rect ? null : { x: op.x, y: op.y },
   };
+}
+
+$("ve-rects").addEventListener("pointerdown", (e) => {
+  const rectEl = e.target.closest(".ve-rect");
+  if (!rectEl) return;
+  const id = rectEl.dataset.op;
+  const op = id === "crop" ? opOf("crop") : VE.ops.find((o) => o.id === id);
+  if (!op) return;
+  const handle = e.target.dataset.handle || null;
+  // The crop box spans most of the picture: an overlay showing inside it wins over moving the box.
+  if (op.tool === "crop" && !handle && grabOverlayAt(e)) return;
+  e.preventDefault();
+  beginRectDrag(op, handle, e);
 });
 
 $("ve-rects").addEventListener("pointermove", (e) => {

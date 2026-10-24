@@ -703,7 +703,7 @@ async function exportIdleCheck() {
     renderRects: () => {}, updateNudgeHint: () => {}, changeCrop: (fn) => { log.push("crop"); fn(); }, removeOps: () => log.push("remove"),
   };
   vm.createContext(osb);
-  vm.runInContext([extractBlock("deleteOp", "function deleteOp(op) {"), extractBlock("selectOp", "function selectOp(op) {")].join("\n"), osb);
+  vm.runInContext([extractBlock("deleteOp", "function deleteOp(op) {"), extractBlock("selectOp", "function selectOp(op) {"), extractBlock("selectOverlay", "function selectOverlay(id) {")].join("\n"), osb);
   osb.__ov = { tool: "overlay", id: "o9", startMs: 700 };
   vm.runInContext("selectOp(__ov)", osb);
   expect("selecting an overlay row opens it and seeks to its start", osb.VE.selOv === "o9" && log.join() === "ve-panel-overlays,seek700", log.join());
@@ -884,6 +884,69 @@ const pending = [];
   expect("the tabs and the toast use the design radius", !/border-radius: 8px/.test(css.slice(css.indexOf(".ve-tab {"), css.indexOf(".ve-tab:hover"))) && !/border-radius: 8px/.test(css.slice(css.indexOf(".ve-toast {"), css.indexOf(".ve-toast {") + 300)));
   const en = fs.readFileSync(path.join(__dirname, "..", "ui", "i18n", "en.js"), "utf8");
   expect("the copy note names the keyframe start", /veCopyNote: "[^"]*nearest keyframe before your start point\."/.test(en));
+}
+
+// Clicking the preview picks the overlay under the pointer: the top-most one showing at the
+// playhead, a hollow frame only on its border, a text overlay on its estimated box.
+{
+  const mkOps = () => [
+    { tool: "overlay", id: "A", kind: "pixelate", startMs: 0, endMs: 10000, rect: { x: 100, y: 100, w: 400, h: 300 } },
+    { tool: "overlay", id: "B", kind: "spotlight", startMs: 0, endMs: 10000, rect: { x: 200, y: 150, w: 400, h: 300 } },
+    { tool: "overlay", id: "F", kind: "frame", startMs: 2000, endMs: 4000, rect: { x: 700, y: 100, w: 400, h: 300 }, thickness: 6 },
+    { tool: "overlay", id: "T", kind: "text", startMs: 0, endMs: 10000, x: 800, y: 600, fontPx: 40, text: "Hello", back: "none" },
+    { tool: "crop", rect: { x: 0, y: 0, w: 1920, h: 1080 } },
+  ];
+  const sb = {
+    VE: { playhead: 1000, ops: mkOps(), selOv: null },
+    opsOf: (tool) => sb.VE.ops.filter((o) => o.tool === tool),
+  };
+  vm.createContext(sb);
+  vm.runInContext(["const overlayStack = () => opsOf('overlay').sort((a, b) => (a.z || 0) - (b.z || 0));", extractBlock("overlayAt", "function overlayAt(point, tol) {")].join("\n"), sb);
+  const at = (x, y, tol = 6) => { sb.__p = { x, y }; const r = vm.runInContext("overlayAt(__p, " + tol + ")", sb); return r ? r.id : null; };
+  expect("where two overlays overlap, the one on top is picked", at(300, 200) === "B", String(at(300, 200)));
+  expect("outside the upper one the lower one is picked", at(150, 120) === "A", String(at(150, 120)));
+  expect("an empty spot picks nothing, the crop box is no overlay", at(1500, 900) === null);
+  expect("a text overlay is picked on its estimated box", at(850, 620) === "T" && at(900, 700) === null);
+  expect("a frame that is not showing yet is not picked", at(702, 250) === null);
+  sb.VE.playhead = 3000;
+  expect("a showing frame is picked on its border", at(702, 250) === "F", String(at(702, 250)));
+  expect("the hollow middle of a frame picks nothing", at(900, 250) === null, String(at(900, 250)));
+  sb.VE.playhead = 4001;
+  expect("after the end time the frame is gone again", at(702, 250) === null);
+  sb.VE.playhead = 1000;
+  expect("the slack makes a point just outside a rectangle hit", at(96, 250) === "A" && at(90, 250, 6) === null);
+  // The stacking order follows z, like the export.
+  sb.VE.ops = mkOps();
+  sb.VE.ops.find((o) => o.id === "A").z = 5;
+  expect("a higher z wins over a later list position", at(300, 200) === "A", String(at(300, 200)));
+}
+
+// Selecting by click and by list row share one function; the click does not move the playhead,
+// and a click on empty picture deselects only when the pointer did not travel.
+{
+  const calls = [];
+  const sb = {
+    VE: { selOv: null }, showPanel: (id) => calls.push("panel:" + id), renderOverlayList: () => calls.push("list"),
+    renderOverlayEditor: () => calls.push("editor"), renderRects: () => calls.push("rects"), updateNudgeHint: () => calls.push("hint"),
+  };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock("selectOverlay", "export function selectOverlay(id) {".replace("export ", "")), sb);
+  vm.runInContext('selectOverlay("X")', sb);
+  expect("selecting opens the overlays panel and refreshes list, editor, rects and hint", sb.VE.selOv === "X" && calls.join() === "panel:ve-panel-overlays,list,editor,rects,hint", calls.join());
+  calls.length = 0;
+  vm.runInContext("selectOverlay(null)", sb);
+  expect("deselecting keeps the panel and clears the selection", sb.VE.selOv === null && !calls.some((c) => c.startsWith("panel:")) && calls.includes("rects"), calls.join());
+  const sel = extractBlock("selectOp", "function selectOp(op) {");
+  expect("the list row uses the shared selection and still seeks", /selectOverlay\(op\.id\)/.test(sel) && /seek\(op\.startMs\)/.test(sel));
+  const stage = src.slice(src.indexOf('$("ve-stage").addEventListener("pointerdown"'), src.indexOf('$("ve-stage").addEventListener("pointermove"'));
+  expect("a press on a crop or overlay box or on the zoom pill is not taken by the stage", stage.indexOf('closest(".ve-rect")') < stage.indexOf("grabOverlayAt") && stage.indexOf('closest("#ve-preview-zoom")') < stage.indexOf("grabOverlayAt"));
+  expect("an active drag or pan still blocks the stage handler first", stage.indexOf("if (VE.drag) return;") < stage.indexOf("grabOverlayAt"));
+  expect("only the primary button picks an overlay", /e\.button === 0\) \{\s*if \(grabOverlayAt\(e\)\) return;/.test(stage));
+  expect("panning at zoom above 1 stays reachable after an empty press", stage.indexOf("grabOverlayAt") < stage.indexOf("VE.previewZoom <= 1") && stage.includes('kind: "pan"'));
+  const rel = src.slice(src.indexOf('$("ve-stage").addEventListener("pointerup"'), src.indexOf('$("ve-stage").addEventListener("pointercancel"'));
+  expect("an empty click deselects only without travel", /Math\.hypot\([^)]*\) < 4\) selectOverlay\(null\)/.test(rel) && /press && VE\.selOv/.test(rel));
+  const rects = src.slice(src.indexOf('$("ve-rects").addEventListener("pointerdown"'), src.indexOf('$("ve-rects").addEventListener("pointermove"'));
+  expect("an overlay inside the crop box wins over moving the box, handles stay with the box", /op\.tool === "crop" && !handle && grabOverlayAt\(e\)/.test(rects));
 }
 
 // Removing an operation is an undo step: undo brings it back with every

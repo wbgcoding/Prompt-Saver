@@ -526,12 +526,16 @@ function deleteOp(op) {
 // Selecting an op row: an overlay is selected and its editor opened, every op with a start
 // time also moves the playhead there.
 function selectOp(op) {
-  if (op.tool === "overlay") {
-    VE.selOv = op.id;
-    showPanel("ve-panel-overlays");
-    renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint();
-  }
+  if (op.tool === "overlay") selectOverlay(op.id);
   if (Number.isFinite(op.startMs)) seek(op.startMs);
+}
+
+// Makes an overlay the edited one and opens its editor; null leaves the selection. Used by the
+// list rows and by clicks on the picture.
+export function selectOverlay(id) {
+  VE.selOv = id;
+  if (id) showPanel("ve-panel-overlays");
+  renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint();
 }
 
 function renderOps() {
