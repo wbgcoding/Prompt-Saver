@@ -46,6 +46,7 @@ vm.runInContext(
     extractLine("clamp", "const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));"),
     extractLine("opOf", "const opOf = (tool) => VE.ops.filter((o) => o.tool === tool).pop() || null;"),
     extractLine("opsOf", "const opsOf = (tool) => VE.ops.filter((o) => o.tool === tool);"),
+    extractBlock("trimBounds", "function trimBounds() {"),
     extractBlock("keptSegments", "function keptSegments() {"),
     extractBlock("speedRate", "const speedRate = () => {") + ";",
     extractBlock("timelinePlan", "function timelinePlan() {"),
