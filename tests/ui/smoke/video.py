@@ -39,7 +39,9 @@ VIDEO_DE_PROBE = """
       const tools = document.querySelector('.ve-tools');
       const groups = [...tools.querySelectorAll('.ve-tool-group')];
       if (groups.length !== 3) errs.push('934: expected 3 tool groups, found ' + groups.length);
-      if (window.innerWidth >= 880 && tools.getBoundingClientRect().height > 46) {
+      // Side by side the tool row only has the width left of the side panel and may wrap
+      // between its groups (checked below); in the stacked layout it has the full width.
+      if (window.innerWidth >= 880 && window.innerWidth <= 900 && tools.getBoundingClientRect().height > 46) {
         errs.push('934: the tool row wraps onto a second line (' + tools.getBoundingClientRect().height.toFixed(0) + 'px)');
       }
       for (const g of groups) {
@@ -65,7 +67,14 @@ VIDEO_DE_PROBE = """
       if (a.width > 160) errs.push('936: the clip start field is ' + a.width.toFixed(0) + 'px wide');
       if (Math.abs(a.top - b.top) > 2) errs.push('936: the clip start and end fields are not on one line');
     }
-    if (window.innerWidth > 880) errs.push('the German boot did not get its exact window size: ' + window.innerWidth);
+    // 994-de: no page or main-area scroll at the side-by-side minimum in German either.
+    if (window.innerWidth > 900) {
+      const doc = document.documentElement;
+      const main = document.querySelector('.ve-main');
+      if (doc.scrollHeight !== window.innerHeight) errs.push('994: the German page scrolls (' + doc.scrollHeight + ' vs ' + window.innerHeight + ')');
+      if (main.scrollHeight !== main.clientHeight) errs.push('994: the German main area scrolls (' + main.scrollHeight + ' vs ' + main.clientHeight + ')');
+    }
+    if (window.innerWidth > 920) errs.push('the German boot did not get its exact window size: ' + window.innerWidth);
     // 940: once the theme colour transitions are settled, the editor shows its
     // real theme at the narrow size (no faded surface): the body takes the theme
     // background and an inactive tab keeps a readable text contrast. A headless
@@ -286,6 +295,18 @@ VIDEO_PROBE = """
         if (!hitTestable(undo)) errs.push('933: undo is not reachable when the narrow layout is scrolled to the end');
         main.scrollTop = 0;
         await sleep(30);
+      }
+    }
+
+    // 994: at the side-by-side minimum (920x600) neither the page nor the main area scrolls.
+    if (window.innerWidth > 900 && window.innerWidth <= 940) {
+      const doc = document.documentElement;
+      if (doc.scrollHeight !== window.innerHeight) {
+        errs.push('994: the page scrolls at ' + window.innerWidth + 'x' + window.innerHeight + ' (' + doc.scrollHeight + 'px content)');
+      }
+      const main = document.querySelector('.ve-main');
+      if (main.scrollHeight !== main.clientHeight) {
+        errs.push('994: the main area scrolls at ' + window.innerWidth + 'x' + window.innerHeight + ' (' + main.scrollHeight + ' vs ' + main.clientHeight + ')');
       }
     }
 
@@ -2030,22 +2051,24 @@ window.requestAnimationFrame = (fn) => {
 
 def run(browser, tmp):
     failed = 0
-    # The video editor keeps its own window config (1100x720 default, 760x520
+    # The video editor keeps its own window config (1100x720 default, 920x600
     # minimum -- both well above the ~500px floor the generic loop above never
     # has to think about) rather than the single fixed size every other
-    # secondary window uses, so it gets its own two-size run instead of a slot
-    # in that tuple list: the file is injected once, then run twice with a
-    # different --window-size, same as the sealed/unsealed index.html pair below.
+    # secondary window uses, so it gets its own multi-size run instead of a slot
+    # in that tuple list: the file is injected once, then run at each
+    # --window-size, same as the sealed/unsealed index.html pair below.
     video_side = tmp / "ui" / "video.html"
     video_side.write_text(
         video_side.read_text(encoding="utf-8")
         .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
         .replace("</body>", VIDEO_PROBE + "</body>"),
         encoding="utf-8")
-    for w, h in ((1100, 720), (880, 600), (760, 520)):
+    # 760x520 is below the window minimum on purpose: it is the one stacked-layout run, standing
+    # for a scaled UI where the same CSS width is reached in a bigger window.
+    for w, h in ((1100, 720), (920, 600), (760, 520)):
         # Same "headless Chrome eats part of the requested window" offset
         # the main sweep already compensates for (see WRAPPER above) --
-        # without it "760x520" never actually delivers that innerWidth/
+        # without it the requested size never actually delivers that innerWidth/
         # innerHeight to the page, and the min-size run silently tests a
         # bigger window than the one this feature ships with.
         proc = run_chrome(browser, tmp / ('profile-video-%dx%d' % (w, h)), f"{w + 30},{h + 140}", 30000, video_side.as_uri(), 180)
@@ -2058,7 +2081,7 @@ def run(browser, tmp):
         if not errs:
             print("   ok")
 
-    # The same page in German at the two narrow sizes (label length decides the wrapping).
+    # The same page in German at the minimum size (label length decides the wrapping).
     video_de = tmp / "ui" / "video-de.html"
     video_de.write_text(
         (REPO / "ui" / "video.html").read_text(encoding="utf-8")
@@ -2067,7 +2090,7 @@ def run(browser, tmp):
                  '<script src="tauri_stub.js"></script>\n<script', 1)
         .replace("</body>", VIDEO_DE_PROBE + "</body>"),
         encoding="utf-8")
-    for w, h in ((880, 600), (760, 520)):
+    for w, h in ((920, 600),):
         # 16 and 95 px are what headless Chrome keeps for its own frame, so the page sees exactly w x h.
         proc = run_chrome(browser, tmp / ('profile-video-de-%dx%d' % (w, h)), f"{w + 16},{h + 95}", 30000, video_de.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)

@@ -1432,8 +1432,8 @@ pub(crate) fn place_staged_export(staged: &Path, dst: &Path) -> Result<String, S
 pub(crate) const VIDEO_WIN_LABEL: &str = "video-editor";
 pub(crate) const VIDEO_WIN_W: u32 = 1100;
 pub(crate) const VIDEO_WIN_H: u32 = 720;
-pub(crate) const VIDEO_WIN_MIN_W: u32 = 760;
-pub(crate) const VIDEO_WIN_MIN_H: u32 = 520;
+pub(crate) const VIDEO_WIN_MIN_W: u32 = 920;
+pub(crate) const VIDEO_WIN_MIN_H: u32 = 600;
 
 // Holds the recording path the single editor window should show, the origin folder to
 // suggest on save when that path is a working copy of a file opened from elsewhere (empty
