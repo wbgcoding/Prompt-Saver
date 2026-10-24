@@ -14,7 +14,6 @@ use windows::Globalization::Language;
 use windows::Graphics::Imaging::{BitmapDecoder, SoftwareBitmap};
 use windows::Media::Ocr::OcrEngine;
 use windows::Storage::{FileAccessMode, StorageFile};
-use windows::Win32::Foundation::HWND;
 use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
@@ -99,18 +98,18 @@ fn bitmap_from_path(path: &Path) -> Result<SoftwareBitmap, String> {
     let hpath = HSTRING::from(super::winrt_file_path(path.to_string_lossy().as_ref()));
     let file = StorageFile::GetFileFromPathAsync(&hpath)
         .map_err(|e| e.to_string())?
-        .get()
+        .join()
         .map_err(|e| e.to_string())?;
     let stream = file
         .OpenAsync(FileAccessMode::Read)
         .map_err(|e| e.to_string())?
-        .get()
+        .join()
         .map_err(|e| e.to_string())?;
     let decoder = BitmapDecoder::CreateAsync(&stream)
         .map_err(|e| e.to_string())?
-        .get()
+        .join()
         .map_err(|e| e.to_string())?;
-    decoder.GetSoftwareBitmapAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())
+    decoder.GetSoftwareBitmapAsync().map_err(|e| e.to_string())?.join().map_err(|e| e.to_string())
 }
 
 // Deletes its file on drop, on every path (success, recognition failure, or
@@ -164,7 +163,7 @@ fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, a
     let max_dim = OcrEngine::MaxImageDimension().map_err(|e| e.to_string())?;
     let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim, upscale_below_px)?;
     let bitmap = bitmap_from_path(&sized_path)?;
-    let result = engine.RecognizeAsync(&bitmap).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
+    let result = engine.RecognizeAsync(&bitmap).map_err(|e| e.to_string())?.join().map_err(|e| e.to_string())?;
     let win_lines = result.Lines().map_err(|e| e.to_string())?;
     let size = win_lines.Size().map_err(|e| e.to_string())?;
     let mut lines = Vec::with_capacity(size as usize);
@@ -518,7 +517,7 @@ fn run_elevated_script(script: &str) -> Result<(), String> {
     let params = elevated_params(script)?;
     let code = unsafe {
         ShellExecuteW(
-            HWND::default(),
+            None,
             &HSTRING::from("runas"),
             &HSTRING::from("powershell.exe"),
             &HSTRING::from(params),

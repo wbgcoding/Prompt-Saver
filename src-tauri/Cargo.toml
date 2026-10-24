@@ -74,7 +74,7 @@ clipboard-win = "=5.4.3"
 # OCR: Windows' own built-in text recognizer, fully offline. Version
 # pinned exactly -- a newer release may need a newer compiler than this project's
 # rust-version = "1.99".
-windows = { version = "=0.58.0", features = [
+windows = { version = "=0.62.2", features = [
   "Media_Ocr", "Graphics_Imaging", "Storage", "Storage_Streams",
   # 125: voice dictation (Windows.Media.SpeechRecognition), same crate as OCR.
   "Media_SpeechRecognition",
@@ -92,9 +92,7 @@ windows = { version = "=0.58.0", features = [
   # declined" (GetTokenInformation/TokenElevationType) for the OCR/voice
   # language-pack elevation path above.
   "Win32_Security",
-  # 191: local-time recording filenames (GetLocalTime) -- kept on the pinned
-  # 0.58 windows crate rather than pulled from windows-capture's own 0.62, so
-  # this one call does not cross the version boundary noted below.
+  # Local-time recording filenames (GetLocalTime).
   "Win32_System_SystemInformation",
   # WASAPI loopback (system audio) + microphone capture for recordings.
   "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_Media_KernelStreaming",
@@ -116,24 +114,16 @@ windows = { version = "=0.58.0", features = [
   # window or the secure desktop swallowing it) cannot leave a modifier
   # stuck "held" forever.
   "Win32_UI_Input_KeyboardAndMouse",
-  # Lets keylog implement IUIAutomationFocusChangedEventHandler (the
-  # #[implement] macro) so a focus change invalidates the password check
-  # immediately instead of relying on a per-HWND cache.
-  "implement",
 ] }
 # The #[implement] macro's generated code names the `windows_core` crate
 # directly, so it has to be a real, nameable dependency of this crate under
-# that exact name, pinned to the same 0.58 release as `windows` above so both
-# agree on one ABI. webview2-com below needs a newer windows-core release for
-# its own types; that one is pulled in under a different local name (see
-# `webview2-windows-core`) so this crate name keeps meaning 0.58 everywhere.
-windows-core = "=0.58.0"
+# that exact name, pinned to the same release as `windows` above. One release
+# serves windows-capture, webview2-com and tauri as well, so every crate in the
+# build agrees on one ABI.
+windows-core = "=0.62.2"
 # Screen recording: Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.
-# Pulls its own newer `windows` crate release transitively (0.62 alongside the
-# 0.58 pinned above) -- confirmed to build side by side, and its API surface
-# never crosses into our OCR/voice code, so the two versions never need to
-# interoperate.
+# Uses the same `windows` release as pinned above.
 windows-capture = "=2.0.1"
 # The exact webview2-com release wry/tauri already resolve internally
 # (checked against Cargo.lock), so ICoreWebView2Controller/ICoreWebView2 here
@@ -142,14 +132,6 @@ windows-capture = "=2.0.1"
 # warning. Used only to answer the camera window's getUserMedia permission
 # prompt in Rust; WebView2 blocks the request forever otherwise.
 webview2-com = "=0.39.1"
-# Pinned to the exact release webview2-com itself resolves (checked against
-# Cargo.lock) -- needed directly, not just transitively, to read the
-# permission request's own PWSTR uri and to cast its args to the v3
-# interface for SetSavesInProfile. Renamed locally to
-# `webview2_windows_core`: the plain `windows-core` name above is already
-# taken by the 0.58 release the #[implement] macro needs, and the two
-# releases cannot share one crate name in the same build.
-webview2-windows-core = { package = "windows-core", version = "=0.62.2" }
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.

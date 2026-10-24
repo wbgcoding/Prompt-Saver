@@ -443,7 +443,7 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
         COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DENY,
     };
     use webview2_com::PermissionRequestedEventHandler;
-    use webview2_windows_core::Interface as _;
+    use windows_core::Interface as _;
     let app_ready = app.clone();
     let app_check = app.clone();
     win.with_webview(move |webview| {
@@ -468,7 +468,7 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
                     .map(|db| lock(&db).settings.ui_flags.get("cameraRecord") == Some(&true))
                     .unwrap_or(false);
                 if enabled {
-                    let mut uri_ptr = webview2_windows_core::PWSTR::null();
+                    let mut uri_ptr = windows_core::PWSTR::null();
                     let uri = if unsafe { args.Uri(&mut uri_ptr) }.is_ok() { webview2_com::take_pwstr(uri_ptr) } else { String::new() };
                     permission_uri_is_camera_page(&uri)
                 } else {

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
-use windows::core::HSTRING;
+use windows::core::{Ref, HSTRING};
 use windows::Foundation::TypedEventHandler;
 use windows::Globalization::Language;
 use windows::Media::SpeechRecognition::{
@@ -195,7 +195,7 @@ fn run_session(
     let constraint = SpeechRecognitionTopicConstraint::Create(SpeechRecognitionScenario::Dictation, &HSTRING::from("dictation"))
         .map_err(|e| error_key(&e))?;
     recognizer.Constraints().and_then(|c| c.Append(&constraint)).map_err(|e| error_key(&e))?;
-    recognizer.CompileConstraintsAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
+    recognizer.CompileConstraintsAsync().and_then(|a| a.join()).map_err(|e| error_key(&e))?;
     let session = recognizer.ContinuousRecognitionSession().map_err(|e| error_key(&e))?;
 
     // Windows' AutoStopSilenceTimeout is a redundant backstop; the app's own idle watchdog below
@@ -217,8 +217,8 @@ fn run_session(
         // recording would start with partial results never reaching the window.
         recognizer
             .HypothesisGenerated(&TypedEventHandler::new(
-                move |_sender: &Option<SpeechRecognizer>, args: &Option<SpeechRecognitionHypothesisGeneratedEventArgs>| {
-                    if let Some(args) = args {
+                move |_sender: Ref<SpeechRecognizer>, args: Ref<SpeechRecognitionHypothesisGeneratedEventArgs>| {
+                    if let Some(args) = args.as_ref() {
                         if let Ok(h) = args.Hypothesis() {
                             if let Ok(text) = h.Text() {
                                 *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
@@ -238,9 +238,9 @@ fn run_session(
     // never deliver text.
     session
         .ResultGenerated(&TypedEventHandler::new(
-            move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionResultGeneratedEventArgs>| {
+            move |_sender: Ref<SpeechContinuousRecognitionSession>, args: Ref<SpeechContinuousRecognitionResultGeneratedEventArgs>| {
                 *last_r.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-                if let Some(args) = args {
+                if let Some(args) = args.as_ref() {
                     if let Ok(result) = args.Result() {
                         if let Ok(text) = result.Text() {
                             let text = text.to_string();
@@ -263,7 +263,7 @@ fn run_session(
     // without telling the window, and the microphone icon would never clear.
     session
         .Completed(&TypedEventHandler::new(
-            move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionCompletedEventArgs>| {
+            move |_sender: Ref<SpeechContinuousRecognitionSession>, args: Ref<SpeechContinuousRecognitionCompletedEventArgs>| {
                 // Fires once per session; the swap makes a repeated call a no-op instead of a duplicate event.
                 if ended_c.swap(true, Ordering::SeqCst) {
                     return Ok(());
@@ -280,7 +280,7 @@ fn run_session(
         ))
         .map_err(|e| error_key(&e))?;
 
-    session.StartAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
+    session.StartAsync().and_then(|a| a.join()).map_err(|e| error_key(&e))?;
 
     // A stop the thread itself decided on (hard cap / idle watchdog): fires StopAsync, then
     // waits for Completed to flip `ended`, like an external stop.

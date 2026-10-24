@@ -718,7 +718,7 @@ struct FocusHandler {
 }
 
 impl IUIAutomationFocusChangedEventHandler_Impl for FocusHandler_Impl {
-    fn HandleFocusChangedEvent(&self, _sender: Option<&IUIAutomationElement>) -> windows::core::Result<()> {
+    fn HandleFocusChangedEvent(&self, _sender: windows::core::Ref<IUIAutomationElement>) -> windows::core::Result<()> {
         // Record the arrival first: the blind window keys off it, not off when CurrentIsPassword
         // finishes (up to UIA_TIMEOUT_MS). `_sender` is ignored on purpose; re-deriving through
         // GetForegroundWindow/GetGUIThreadInfo is one source of truth and also covers the

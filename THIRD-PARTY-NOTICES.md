@@ -243,15 +243,15 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | weezl | 0.1.12 | MIT OR Apache-2.0 |
 | winapi-util | 0.1.11 | Unlicense OR MIT |
 | window-vibrancy | 0.8.1 | Apache-2.0 OR MIT |
-| windows | 0.58.0, 0.62.2 | MIT OR Apache-2.0 |
+| windows | 0.62.2 | MIT OR Apache-2.0 |
 | windows-capture | 2.0.1 | MIT |
 | windows-collections | 0.3.2 | MIT OR Apache-2.0 |
-| windows-core | 0.58.0, 0.62.2 | MIT OR Apache-2.0 |
+| windows-core | 0.62.2 | MIT OR Apache-2.0 |
 | windows-future | 0.3.2 | MIT OR Apache-2.0 |
 | windows-link | 0.2.1 | MIT OR Apache-2.0 |
 | windows-numerics | 0.3.1 | MIT OR Apache-2.0 |
-| windows-result | 0.2.0, 0.4.1 | MIT OR Apache-2.0 |
-| windows-strings | 0.1.0, 0.5.1 | MIT OR Apache-2.0 |
+| windows-result | 0.4.1 | MIT OR Apache-2.0 |
+| windows-strings | 0.5.1 | MIT OR Apache-2.0 |
 | windows-sys | 0.59.0, 0.61.2 | MIT OR Apache-2.0 |
 | windows-targets | 0.52.6 | MIT OR Apache-2.0 |
 | windows-threading | 0.2.1 | MIT OR Apache-2.0 |

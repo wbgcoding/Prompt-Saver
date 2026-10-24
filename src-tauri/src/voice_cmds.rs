@@ -175,12 +175,11 @@ pub(crate) fn open_privacy_mic() -> Result<(), String> {
     #[cfg(windows)]
     {
         use windows::core::{HSTRING, PCWSTR};
-        use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::Shell::ShellExecuteW;
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
         let code = unsafe {
             ShellExecuteW(
-                HWND::default(),
+                None,
                 &HSTRING::from("open"),
                 &HSTRING::from("ms-settings:privacy-microphone"),
                 PCWSTR::null(),
