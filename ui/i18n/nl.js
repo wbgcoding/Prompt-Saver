@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "De bibliotheek bevat elke prompt die je ooit hebt opgeslagen.",
     tourStep4Line2: "Zoeken vindt alles, zelfs met typefouten: tags bundelen verwante prompts.",
     tourStep4Line3: "De kopieergeschiedenis toont wat je laatst gebruikte, klaar om opnieuw te kopiëren.",
-    tipFirstRunTour: "Toont de introductietour in vier stappen automatisch bij de eerste keer opstarten. Uitschakelen voorkomt alleen het automatisch openen; het Help-menu kan de tour nog steeds openen.",
+    tipFirstRunTour: "Toont de introductietour in vier stappen automatisch bij de eerste keer opstarten. Uitschakelen voorkomt alleen het automatisch openen; via het expertmenu kan de tour nog steeds opnieuw worden getoond.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Beide editors",
     valRecCanvasMode: "Opnamegebied",

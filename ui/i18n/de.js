@@ -1750,7 +1750,7 @@ export default {
     tourStep4Line1: "Die Bibliothek enthält jeden je gespeicherten Prompt.",
     tourStep4Line2: "Die Suche findet alles, auch bei Tippfehlern. Tags bündeln Zusammengehöriges.",
     tourStep4Line3: "Der Kopierverlauf zeigt, was zuletzt gebraucht wurde, bereit zum erneuten Kopieren.",
-    tipFirstRunTour: "Zeigt die vierstufige Einführungstour automatisch beim ersten Start. Aus stoppt nur das automatische Öffnen; über die Hilfe lässt sie sich weiterhin öffnen.",
+    tipFirstRunTour: "Zeigt die vierstufige Einführungstour automatisch beim ersten Start. Aus stoppt nur das automatische Öffnen; über das Expertenmenü lässt sie sich weiterhin erneut zeigen.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Beide Editoren",
     valRecCanvasMode: "Aufnahmefläche",

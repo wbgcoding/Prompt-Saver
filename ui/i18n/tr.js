@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "Kitaplık, kaydettiğiniz tüm istemleri saklar.",
     tourStep4Line2: "Arama, yazım hataları olsa da her şeyi bulur: etiketler ilgili istemleri toplar.",
     tourStep4Line3: "Kopyalama geçmişi son kullandıklarınızı yeniden kopyalamaya hazır gösterir.",
-    tipFirstRunTour: "İlk çalıştırmada dört adımlı tanıtım turunu otomatik olarak gösterir. Kapalı olması yalnızca otomatik açılmayı durdurur; Yardım menüsü turu yine de açabilir.",
+    tipFirstRunTour: "İlk çalıştırmada dört adımlı tanıtım turunu otomatik olarak gösterir. Kapalı olması yalnızca otomatik açılmayı durdurur; uzman menüsü turu yine de yeniden gösterebilir.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Her iki düzenleyici",
     valRecCanvasMode: "Kayıt alanı",

@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "ライブラリには、これまで保存したすべてのプロンプトがあります。",
     tourStep4Line2: "誤字があっても検索可能です。タグで関連するプロンプトをまとめられます。",
     tourStep4Line3: "コピー履歴には最近使った項目が表示され、もう一度コピーできます。",
-    tipFirstRunTour: "初回起動時に4ステップの紹介ツアーを自動的に表示します。オフにすると自動表示が停止するだけです。ヘルプメニューからはいつでも開くことができます。",
+    tipFirstRunTour: "初回起動時に4ステップの紹介ツアーを自動的に表示します。オフにすると自動表示が停止するだけです。エキスパートメニューからはいつでももう一度表示できます。",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "両方のエディター",
     valRecCanvasMode: "録画領域",

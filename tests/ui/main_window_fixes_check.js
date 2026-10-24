@@ -1238,6 +1238,16 @@ function showFor(ms) { clearTimeout(toastTimer); resetToastPause(); toastEl.clas
   check(!shown(), "the hard cap resumes a hovered toast");
 });
 
+// 70. The introduction tour can be shown again from the expert menu with the automatic open off,
+// as the firstRunTour tip and the help say: its action carries no gate.
+section(() => {
+  const cfg = read("expertConfig.js");
+  const at = cfg.indexOf('id: "tour-open"');
+  check(at > 0, "the expert menu keeps the tour-open action");
+  const entry = cfg.slice(at, cfg.indexOf("}", at));
+  check(!/gate *:/.test(entry), "the tour-open action is not gated on the automatic-open switch");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

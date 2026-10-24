@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "Biblioteka zawiera wszystkie zapisane przez ciebie prompty.",
     tourStep4Line2: "Wyszukiwanie znajdzie wszystko, nawet z literówkami. Tagi łączą prompty.",
     tourStep4Line3: "Historia kopiowania pokazuje ostatnio używane prompty, gotowe do ponownego użycia.",
-    tipFirstRunTour: "Automatycznie pokazuje czterokrokowy przewodnik wprowadzający przy pierwszym uruchomieniu. Wyłączenie zapobiega tylko automatycznemu otwieraniu; nadal można go otworzyć z menu Pomoc.",
+    tipFirstRunTour: "Automatycznie pokazuje czterokrokowy przewodnik wprowadzający przy pierwszym uruchomieniu. Wyłączenie zapobiega tylko automatycznemu otwieraniu; menu eksperta nadal może pokazać go ponownie.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Oba edytory",
     valRecCanvasMode: "Obszar nagrywania",

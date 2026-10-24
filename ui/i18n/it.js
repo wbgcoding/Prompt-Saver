@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "La libreria contiene tutti i prompt che hai salvato.",
     tourStep4Line2: "La ricerca trova tutto, anche con errori. I tag raggruppano i prompt correlati.",
     tourStep4Line3: "La cronologia mostra cosa hai usato di recente, pronto da copiare di nuovo.",
-    tipFirstRunTour: "Mostra automaticamente il tour introduttivo in quattro passaggi al primo avvio. Disattivandolo si impedisce solo l'apertura automatica; è ancora possibile aprirlo dal menu Aiuto.",
+    tipFirstRunTour: "Mostra automaticamente il tour introduttivo in quattro passaggi al primo avvio. Disattivandolo si impedisce solo l'apertura automatica; il menu esperto può comunque mostrarlo di nuovo.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Entrambi gli editor",
     valRecCanvasMode: "Area di registrazione",

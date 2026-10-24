@@ -547,7 +547,7 @@ export const EXPERT_TABS = [
     { title: "expGroupToolbar", flags: [{ key: "barToggleBoth", gate: "barToggles" }, "showLibrary"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "taskbarProgress", "firstRunTour"], paths: ["dataDir"],
-      actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }, { id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
+      actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }, { id: "tour-open", label: "tourOpenAction" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // Switches and caps for finding a fault, not for everyday use: folded until opened.

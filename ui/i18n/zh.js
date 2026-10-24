@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "提示词库中保存着你曾保存的所有提示词。",
     tourStep4Line2: "搜索可找出任何内容，即使有错别字也行。标签可归类相关提示词。",
     tourStep4Line3: "复制历史显示你最近使用的内容，随时可再次复制。",
-    tipFirstRunTour: "在首次运行时自动显示包含四个步骤的入门导览。关闭此选项只会停止自动打开，仍然可以通过帮助菜单打开它。",
+    tipFirstRunTour: "在首次运行时自动显示包含四个步骤的入门导览。关闭此选项只会停止自动打开，仍然可以通过专家菜单再次显示。",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "两个编辑器",
     valRecCanvasMode: "录制区域",

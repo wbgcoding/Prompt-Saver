@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "La biblioteca guarda todos los prompts que has guardado.",
     tourStep4Line2: "La búsqueda encuentra todo, incluso con errores. Las etiquetas agrupan prompts.",
     tourStep4Line3: "El historial de copias muestra lo último que usaste para copiarlo de nuevo.",
-    tipFirstRunTour: "Muestra el tour de introducción de cuatro pasos automáticamente en el primer inicio. Desactivarlo solo detiene la apertura automática; el menú de Ayuda aún puede abrirlo.",
+    tipFirstRunTour: "Muestra el tour de introducción de cuatro pasos automáticamente en el primer inicio. Desactivarlo solo detiene la apertura automática; el menú experto aún puede mostrarlo de nuevo.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Ambos editores",
     valRecCanvasMode: "Área de grabación",

@@ -1742,7 +1742,7 @@ export default {
     tourStep4Line1: "Biblioteca păstrează toate prompturile salvate vreodată.",
     tourStep4Line2: "Căutarea găsește orice, chiar și cu greșeli: etichetele grupează prompturi similare.",
     tourStep4Line3: "Istoricul copierii arată ce ai folosit recent, gata de copiat din nou.",
-    tipFirstRunTour: "Afișează automat turul de introducere în patru pași la prima rulare. Opțiunea Dezactivat oprește doar deschiderea automată; meniul Ajutor îl poate încă deschide.",
+    tipFirstRunTour: "Afișează automat turul de introducere în patru pași la prima rulare. Opțiunea Dezactivat oprește doar deschiderea automată; meniul expert îl poate afișa din nou.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Ambele editoare",
     valRecCanvasMode: "Zonă de înregistrare",

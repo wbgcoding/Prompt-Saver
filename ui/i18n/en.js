@@ -1750,7 +1750,7 @@ export default {
     tourStep4Line1: "The library holds every prompt you have ever saved.",
     tourStep4Line2: "Search finds anything, even through typos. Tags bundle related prompts.",
     tourStep4Line3: "Copy history shows what you used last, ready to copy again.",
-    tipFirstRunTour: "Shows the four-step introduction tour automatically on first run. Off only stops the automatic open; the Help menu can still open it.",
+    tipFirstRunTour: "Shows the four-step introduction tour automatically on first run. Off only stops the automatic open; the expert menu can still show it again.",
     // --- recording limits, expert-menu editor settings, settings export/import ---
     expGroupEditors: "Both editors",
     valRecCanvasMode: "Recording area",

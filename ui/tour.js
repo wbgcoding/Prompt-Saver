@@ -10,7 +10,7 @@ import { saveUiState } from "./backups.js";
 // no setting. Opened two ways:
 //  - Automatically once, right after the example prompts are seeded on a genuinely
 //    fresh install (maybeOpenFirstRunTour, called from init()'s reveal()).
-//  - Manually via the expert menu's gated "tour-open" action (EXPERT_ACTIONS).
+//  - Manually via the expert menu's "tour-open" action, which stays available when the automatic open is off (EXPERT_ACTIONS).
 // Finish and Skip both only mark the tour as seen.
 
 export function bindTour() {
