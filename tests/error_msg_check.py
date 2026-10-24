@@ -57,10 +57,6 @@ ALLOW = {
         "a folder already exists at the demo data path and was not created by demo mode; refusing to touch it",
         "could not prepare the demo store",
     ],
-    "stub for a non-Windows build, the app ships for Windows only": [
-        "ocr is only available on Windows", "recording is only available on Windows",
-        "voice is only available on Windows",
-    ],
 }
 
 # Which Rust constructs produce an error string: Err("..".to_string()), Err(format!(".."..)),
