@@ -524,11 +524,27 @@ pub(crate) const LANG_CODES: [&str; 10] = [
     "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro",
 ];
 
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetUserDefaultLocaleName(name: *mut u16, len: i32) -> i32;
+}
+
+// The Windows user locale as a BCP-47 tag such as "de-DE"; empty when it cannot be read.
+pub(crate) fn system_locale() -> String {
+    // LOCALE_NAME_MAX_LENGTH is 85 units including the terminating nul.
+    let mut buf = [0u16; 85];
+    let n = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+    if n <= 1 {
+        return String::new();
+    }
+    String::from_utf16_lossy(&buf[..(n as usize - 1)])
+}
+
 pub(crate) fn resolve_lang(pref: &str) -> &'static str {
     let raw = if pref != "auto" {
         pref.to_string()
     } else {
-        sys_locale::get_locale().unwrap_or_default()
+        system_locale()
     };
     let low = raw.to_lowercase();
     LANG_CODES

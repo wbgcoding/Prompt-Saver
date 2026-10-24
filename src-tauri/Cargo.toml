@@ -34,7 +34,6 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 arboard = "=3.7.0"
 rfd = "=0.17.2"
-sys-locale = "=0.3.2"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
@@ -75,10 +74,10 @@ clipboard-win = "=5.4.3"
 # pinned exactly -- a newer release may need a newer compiler than this project's
 # rust-version = "1.99".
 windows = { version = "=0.62.2", features = [
-  "Media_Ocr", "Graphics_Imaging", "Storage", "Storage_Streams",
+  "Media_Ocr", "Graphics_Imaging", "Storage",
   # 125: voice dictation (Windows.Media.SpeechRecognition), same crate as OCR.
   "Media_SpeechRecognition",
-  "Globalization", "Foundation_Collections", "Win32_System_WinRT",
+  "Globalization", "Win32_System_WinRT",
   # 122: elevated install launch (ShellExecuteW) for OCR language packs.
   "Win32_UI_Shell", "Win32_Foundation", "Win32_UI_WindowsAndMessaging",
   # Authenticode check (WinVerifyTrust) on the downloaded WebView2 bootstrapper
@@ -95,7 +94,7 @@ windows = { version = "=0.62.2", features = [
   # Local-time recording filenames (GetLocalTime).
   "Win32_System_SystemInformation",
   # WASAPI loopback (system audio) + microphone capture for recordings.
-  "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_Media_KernelStreaming",
+  "Win32_Media_Audio",
   "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant",
   # Job object so a quit never leaves an ffmpeg child running on its own.
   "Win32_System_JobObjects",

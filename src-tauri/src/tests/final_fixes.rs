@@ -246,3 +246,11 @@ fn a_voice_key_counts_as_taken_only_while_its_switches_are_on() {
     // The voice slot never collides with itself.
     assert!(!slot_key_taken(&settings, &[], HotkeySlot::Voice, sc));
 }
+
+#[test]
+fn the_system_locale_is_a_non_empty_language_tag() {
+    let tag = crate::model::system_locale();
+    assert!(!tag.is_empty(), "no locale name came back");
+    assert!(tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "odd locale tag: {tag}");
+    assert!(tag.chars().next().is_some_and(|c| c.is_ascii_alphabetic()));
+}

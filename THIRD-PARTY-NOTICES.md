@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-272 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
+271 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 
 | Name | Version | License |
 |---|---|---|
@@ -197,7 +197,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 |
 | string_cache | 0.9.0 | MIT OR Apache-2.0 |
 | subtle | 2.6.1 | BSD-3-Clause |
-| sys-locale | 0.3.2 | MIT OR Apache-2.0 |
 | tao | 0.37.2 | Apache-2.0 |
 | tauri | 2.12.5 | Apache-2.0 OR MIT |
 | tauri-plugin-global-shortcut | 2.4.1 | Apache-2.0 OR MIT |
