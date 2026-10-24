@@ -44,14 +44,14 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Introduction tour",
-      whatItIs: "A five-step walkthrough of the basics, shown once automatically right after the example tiles are created.",
+      whatItIs: "A four-step walkthrough of the basics, shown once automatically right after the example tiles are created.",
       howTo: [
         "First launch: opens on its own, right after the example prompts are seeded.",
         "Later: reopen it from the settings dialog, or the expert menu's \"Show the introduction again\" action.",
         "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time; Escape shows an Undo notice that reopens the tour.",
       ],
       whatHappens:
-        "The last step offers to switch on the screenshot editor, color picker, or text recognition right there, showing each one's shipped default. Nothing is written until the tour is actually finished, and only the switches actually changed. A first-launch data-folder or WebView2 prompt always takes priority; the tour just waits for its turn.",
+        "The tour changes no setting; Finish and Skip only mark it as seen. A first-launch data-folder or WebView2 prompt always takes priority; the tour just waits for its turn.",
       settings: ["Open automatically on first launch: Expert menu → System & data → System"],
     },
     {

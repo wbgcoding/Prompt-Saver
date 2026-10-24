@@ -28,12 +28,9 @@ back to its default and keeps the tiles; Delete removes all data and asks first.
 
 ### Introduction tour
 
-A five-step walkthrough shown once on first launch, right after the sample tiles
-appear. The last step offers to switch on the screenshot editor, color picker,
-OCR or voice dictation right there. Nothing is written until the tour actually
-finishes. Escape or "Skip" closes it at once; after Escape an Undo notice reopens it.
-Reopen it anytime from the expert menu; reopened this way, a switch on that
-last step takes effect immediately instead of waiting for a Finish click.
+A four-step walkthrough shown once on first launch, right after the sample tiles
+appear. It changes no setting. Escape or "Skip" closes it at once; after Escape an
+Undo notice reopens it. Reopen it anytime from the expert menu.
 
 ### The grid
 
@@ -1021,12 +1018,10 @@ Screenshots-Ordner (Abschnitt „Aufnehmen“). Jede Änderung gilt sofort, ohne
 Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln;
 Löschen entfernt alle Daten und fragt vorher nach.
 
-**Einführungstour**: fünf Schritte beim ersten Start, direkt nach den
-Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
-OCR oder Spracheingabe gleich einzuschalten; geschrieben wird erst, wenn die
-Tour tatsächlich beendet ist. Escape oder „Überspringen" schließt sofort; nach
-Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit erneut aufrufbar über das Expertenmenü: dort
-wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
+**Einführungstour**: vier Schritte beim ersten Start, direkt nach den
+Beispielkacheln; sie ändert keine Einstellung. Escape oder „Überspringen" schließt
+sofort; nach Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit
+erneut aufrufbar über das Expertenmenü.
 
 **Das Raster**: freie Platzierung, standardmäßig bis 20×20 Zellen (im
 Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel

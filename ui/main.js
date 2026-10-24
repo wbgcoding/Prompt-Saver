@@ -421,7 +421,7 @@ async function maybeOpenFirstRunTour(sealWarned) {
   if (sealWarned) return; // retried next launch: tourSeen was never written
   if (settings.ui_flags?.tourSeen) return;
   if (!flag("firstRunTour")) return;
-  await openTour({ firstRun: true });
+  await openTour();
 }
 
 // The update check never goes online before the user said yes. Asked once per

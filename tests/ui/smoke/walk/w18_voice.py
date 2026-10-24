@@ -175,10 +175,10 @@ SECTION = """\
         const isRawKey = (s) => /^(flag|val|tip|exp|stat|backup|help|tour)[A-Z][A-Za-z0-9]+$/.test((s || '').trim());
         const body = document.getElementById('tour-body');
         const heights = [];
-        for (let step = 0; step < 5; step++) {
+        for (let step = 0; step < 4; step++) {
           const title = document.getElementById('tour-title').textContent.trim();
           if (!title || isRawKey(title)) out.errors.push('Tour step ' + step + ': heading missing or raw key (' + title + ')');
-          if (step < 4) {
+          {
             const art = body.querySelector('.tour-art svg');
             if (!art) {
               out.errors.push('Tour step ' + step + ': no drawing');
@@ -199,50 +199,14 @@ SECTION = """\
               out.errors.push('Tour step ' + step + ': missing text line or raw key (' + JSON.stringify(lines) + ')');
             }
             if (lines.length > 3) out.errors.push('Tour step ' + step + ': more than three text lines');
-          } else {
-            const rows = [...document.querySelectorAll('.tour-opt-row')];
-            if (rows.length !== 5) out.errors.push('Tour step 5: expected 5 feature rows, found ' + rows.length);
-            for (const row of rows) {
-              const cb = row.querySelector('input.switch');
-              const note = row.querySelector('.tour-opt-default').textContent.trim();
-              if (isRawKey(note)) out.errors.push('Tour step 5: default-note renders a raw key (' + note + ')');
-              const desc = row.querySelector('.tour-opt-desc').textContent.trim();
-              if (!desc || isRawKey(desc)) out.errors.push('Tour step 5: option description missing or raw key');
-              // 390: every feature row carries its own help button, with a real
-              // (translated) accessible name -- the button's own click behaviour
-              // (close the tour, open help at the row's article) is covered by
-              // inspection rather than a second live open/close cycle in this
-              // probe, same reasoning as the Skip button below.
-              const helpBtn = row.querySelector('.tour-help-btn');
-              if (!helpBtn) {
-                out.errors.push('Tour step 5: feature row has no help button');
-              } else {
-                const aria = (helpBtn.getAttribute('aria-label') || '').trim();
-                if (!aria || isRawKey(aria)) out.errors.push('Tour step 5: help button has no real accessible name');
-              }
-            }
-            const boxes = rows.map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(boxes) !== JSON.stringify([true, true, true, true, true])) {
-              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected all-true (shipsOn defaults)');
-            }
-            // Flip every switch, then Restore defaults should bring them all back.
-            for (const row of rows) {
-              const cb = row.querySelector('input.switch');
-              cb.checked = !cb.checked;
-              cb.dispatchEvent(new Event('change'));
-            }
-            await sleep(50);
-            document.querySelector('.tour-restore-btn').click();
-            await sleep(50);
-            const restored = [...document.querySelectorAll('.tour-opt-row')].map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(restored) !== JSON.stringify([true, true, true, true, true])) {
-              out.errors.push('Tour step 5: Restore defaults left switches at ' + JSON.stringify(restored));
-            }
+          }
+          if (document.querySelector('.tour-opt-row, .tour-setup-row, .tour-restore-btn')) {
+            out.errors.push('Tour step ' + step + ': a settings row is still rendered');
           }
           void body.offsetHeight; // force layout before measuring, no stale reflow
           heights.push(body.getBoundingClientRect().height);
           layoutScan('Tour step ' + step);
-          if (step < 4) document.getElementById('tour-next').click();
+          if (step < 3) document.getElementById('tour-next').click();
           await sleep(150);
         }
         // The measured min-height's job is to stop a SHORT step from looking tiny
@@ -254,7 +218,7 @@ SECTION = """\
         const spread = Math.max(...heights) - Math.min(...heights);
         if (spread > 20) out.errors.push('Tour content area height varies by ' + spread + 'px across steps (measured min-height not holding): ' + JSON.stringify(heights));
         const dots = [...document.querySelectorAll('.tour-dot')];
-        if (dots.length !== 5) out.errors.push('Tour: expected 5 step dots, found ' + dots.length);
+        if (dots.length !== 4) out.errors.push('Tour: expected 4 step dots, found ' + dots.length);
         // Back should be visible and clickable everywhere but step 0.
         if (document.getElementById('tour-back').classList.contains('hidden')) {
           out.errors.push('Tour: Back is hidden on the last step');
@@ -267,7 +231,7 @@ SECTION = """\
         // Dot navigation must support a direct jump (not just sequential Next/Back),
         // and the last step's button swaps to a distinct, translated Finish label
         // instead of reusing Next.
-        dots[4].click();
+        dots[3].click();
         await sleep(80);
         if (document.getElementById('tour-back').classList.contains('hidden')) {
           out.errors.push('Tour: Back is hidden after jumping straight to the last step via its dot');

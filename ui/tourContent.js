@@ -59,23 +59,12 @@ export const TOUR_SVG_LIBRARY = `<svg viewBox="0 0 100 100" width="110" height="
   <line x1="56" y1="58" x2="66" y2="58" stroke="var(--accent)" stroke-width="1.6" opacity="0.6"/>
 </svg>`;
 
-// The steps drawing + text (step 5, the settings table, is handled separately below).
+// The steps: drawing + text.
 export const TOUR_STEPS = [
   { titleKey: "tourStep1Title", lineKeys: ["tourStep1Line1", "tourStep1Line2", "tourStep1Line3"], svg: TOUR_SVG_WELCOME },
   { titleKey: "tourStep2Title", lineKeys: ["tourStep2Line1", "tourStep2Line2", "tourStep2Line3"], svg: TOUR_SVG_USAGE },
   { titleKey: "tourStep3Title", lineKeys: ["tourStep3Line1", "tourStep3Line2", "tourStep3Line3"], svg: TOUR_SVG_TILES },
   { titleKey: "tourStep4Title", lineKeys: ["tourStep4Line1", "tourStep4Line2", "tourStep4Line3"], svg: TOUR_SVG_LIBRARY },
 ];
-export const TOUR_STEP_COUNT = TOUR_STEPS.length + 1; // + the settings step
+export const TOUR_STEP_COUNT = TOUR_STEPS.length;
 export const TOUR_LAST_STEP = TOUR_STEP_COUNT - 1;
-
-// Step 5's table: a data structure, not markup, so a later feature is one new
-// row. Each row names the flag it switches, the text describing it, and the
-// help article it points at (ui/help.js, matched by `id`).
-export const TOUR_FEATURES = [
-  { flagKey: "screenshot", labelKey: "flagScreenshot", textKey: "tourOptScreenshot", helpAnchor: "screenshotEditor" },
-  { flagKey: "ocr", labelKey: "flagOcr", textKey: "tourOptOcr", helpAnchor: "ocr" },
-  { flagKey: "screenRecord", labelKey: "flagScreenRecord", textKey: "tourOptRecord", helpAnchor: "screenRecording" },
-  { flagKey: "voice", labelKey: "flagVoice", textKey: "tourOptVoice", helpAnchor: "voiceDictation" },
-  { flagKey: "colorPicker", labelKey: "flagColorPicker", textKey: "tourOptPicker", helpAnchor: "colorPicker" },
-];
