@@ -1094,7 +1094,10 @@ section(() => {
   check(/id="gs-results"[^>]*role="listbox"/.test(html), "the result container is a listbox");
   check(/id="gs-input"[^>]*aria-controls="gs-results"/.test(html), "the field controls the list");
   check(/aria-labelledby="global-search-title"/.test(html), "the dialog is named by its title");
-  check((src.match(/setAttribute\("role", "option"\)/g) || []).length === 2, "both row kinds are options");
+  // Hit rows are built here; recent-search rows come from the shared row builder.
+  check((src.match(/setAttribute\("role", "option"\)/g) || []).length === 1, "hit rows are options");
+  check(/recentRow\(term, \{\s*id: `gs-opt-\$\{\+\+gsRowSeq\}`/.test(src), "recent rows get an id from the same counter");
+  check(extractBlock(read("recentSearches.js"), "export function recentRow(").includes('row.setAttribute("role", "option")'), "recent rows are options");
   check(extractBlock(src, "export function gsSetActive(").includes('"aria-activedescendant"'), "the cursor row is the active descendant");
 });
 
@@ -1149,7 +1152,8 @@ section(() => {
   const src = read("windowChrome.js");
   const fn = extractBlock(src, "export function wireSearchSuggest(");
   check(/input\.setAttribute\("role", "combobox"\)/.test(fn) && /pop\.setAttribute\("role", "listbox"\)/.test(fn), "the field is a combobox and the list a listbox");
-  check(fn.includes('row.setAttribute("role", "option")') && fn.includes("row.id ="), "each row is an option with an id");
+  const rowFn = extractBlock(read("recentSearches.js"), "export function recentRow(");
+  check(rowFn.includes('row.setAttribute("role", "option")') && rowFn.includes("row.id = opts.id") && /recentRow\(term, \{\s*id: `\$\{popId\}-opt-/.test(fn), "each row is an option with an id");
   check(extractBlock(fn, "const hide = () =>").includes('input.setAttribute("aria-expanded", "false")'), "hide collapses the combobox");
   check(extractBlock(fn, "const setActive = (i) =>").includes('input.setAttribute("aria-activedescendant", rows[activeIdx].id)'), "the arrow keys move aria-activedescendant");
   check(fn.includes('input.setAttribute("aria-expanded", "true")'), "show expands the combobox");

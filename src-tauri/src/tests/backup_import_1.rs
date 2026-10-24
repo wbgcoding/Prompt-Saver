@@ -555,7 +555,7 @@ fn the_generic_text_setter_refuses_every_row_with_a_dedicated_writer() {
     for k in ["remoteAllowedRanges", "remotePasswordHash", "backupPw", "secretVaultSalt", "secretVaultVerify", "remoteTlsKey", "screenshotDir", "syncDir"] {
         assert!(is_generic_text_write_denied(k), "{k} must not be writable generically");
     }
-    for k in ["copyFont", "palette", "librarySort", "globalSearchRecent"] {
+    for k in ["copyFont", "palette", "librarySort", "recentSearches", "globalSearchRecent"] {
         assert!(!is_generic_text_write_denied(k), "{k} stays reachable");
     }
 }
