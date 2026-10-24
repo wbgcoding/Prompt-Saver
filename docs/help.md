@@ -819,7 +819,7 @@ never touches the network for it, while a portable build offers a one-time
 download only when a video feature actually needs it and only with your
 explicit consent, never automatically, never in the background. Two more
 things on that same short list are not update-related at all: opening the
-app's GitHub page from the logo or the version label hands the address to
+app's GitHub page from the About window or the version label hands the address to
 your default browser, and installing a text-recognition or dictation
 language pack (see below) has Windows itself fetch that pack online.
 
@@ -1570,7 +1570,7 @@ Installation abgebrochen statt eine ungeprüfte Datei auszuführen. Für
 Videoexport/-umwandlung wird ffmpeg gebraucht (siehe oben); eine installierte
 Version bringt es bereits mit, eine portable bietet nur bei Bedarf und nur
 mit Zustimmung einen einmaligen Download an. Zwei weitere Dinge auf dieser
-kurzen Liste haben mit Updates nichts zu tun: Ein Klick auf das Logo oder die
+kurzen Liste haben mit Updates nichts zu tun: Ein Klick im Fenster „Über“ oder auf die
 Versionsanzeige öffnet die GitHub-Seite des Projekts im Standardbrowser, und
 die Installation eines Sprachpakets für Texterkennung oder Diktat (siehe
 unten) lässt Windows selbst dieses Paket herunterladen.

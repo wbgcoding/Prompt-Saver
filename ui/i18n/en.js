@@ -1540,7 +1540,6 @@ export default {
     tipAutoPaste: "Double-click a prompt to copy AND paste it into your last app. Expert menu: paste delay, double-click speed, and 'press Enter after paste'.",
     tipTooltips: "Show hover tooltips. Expert menu: show delay.",
     tipScreenshotFolder: "Always keep screenshots as files in the Screenshots folder. Expert menu: preview size and a custom save folder.",
-    openRepo: "Open the project on GitHub",
     tipClipWatcher: "Collects text you copy elsewhere in an inbox, ready to become a prompt.",
     tipClipSkipSecrets: "A best-effort guess, nothing more: text that looks like a password (one line, no spaces, a mix of letters/digits/symbols) is never added to the inbox. When in doubt this always skips the copy rather than risk keeping a real password.",
     flagBackupGfs: "Keep daily, weekly, monthly and yearly backups",

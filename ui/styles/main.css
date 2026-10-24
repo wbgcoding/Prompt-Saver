@@ -205,8 +205,7 @@ body.win-maximized { border-radius: 0; }
 /* A basis wide enough for the logo plus a readable tab strip: that is what decides
    when the header goes two-line. */
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 210px; }
-.logo { display: block; border-radius: 7px; flex: 0 0 auto; cursor: pointer; }
-.logo:hover { filter: brightness(1.12); }
+.logo { display: block; border-radius: 7px; flex: 0 0 auto; }
 /* line-height = logo height -> text sits vertically centered next to it. The high
    shrink factor makes the name give up its width long before the tab strip beside
    it does, so on a narrow window the tabs stay clickable and the name truncates. */

@@ -1532,7 +1532,6 @@ export default {
     tipAutoPaste: "Dubbelklik op een prompt om deze te kopiëren EN te plakken in je laatste app. Expertmenu: plakvertraging, dubbelkliksnelheid en 'druk op Enter na plakken'.",
     tipTooltips: "Toont tooltips bij aanwijzen. Expertmenu: weergavevertraging.",
     tipScreenshotFolder: "Bewaar screenshots altijd als bestanden in de map Screenshots. Expertmenu: voorbeeldgrootte en een aangepaste opslagmap.",
-    openRepo: "Open het project op GitHub",
     tipClipWatcher: "Verzamelt tekst die je elders kopieert in een postvak, klaar om een prompt te worden.",
     tipClipSkipSecrets: "Slechts een gok, meer niet: tekst die op een wachtwoord lijkt (één regel, geen spaties, een mix van letters/cijfers/tekens) komt nooit in het postvak terecht. Bij twijfel wordt de kopie altijd overgeslagen in plaats van een echt wachtwoord te riskeren.",
     flagBackupGfs: "Dagelijkse, wekelijkse, maandelijkse en jaarlijkse back-ups bewaren",

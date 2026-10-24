@@ -275,6 +275,18 @@ SECTION = """\
       document.body.classList.add('flag-quickGrid');
       if (sepInfo().length !== 2) out.errors.push('701: expected two header dividers with the grid size fields, got ' + sepInfo().length);
       if (!hadQuick) document.body.classList.remove('flag-quickGrid');
+      // 972: the logo is plain branding; clicking it opens nothing.
+      {
+        const logo972 = document.getElementById('app-logo');
+        const before972 = (window.__SMOKE_CALLS__ || []).filter((c) => c === 'open_repo').length;
+        if (logo972) logo972.click();
+        await sleep(100);
+        const after972 = (window.__SMOKE_CALLS__ || []).filter((c) => c === 'open_repo').length;
+        if (!logo972) out.errors.push('972: the logo is missing');
+        else if (after972 !== before972) out.errors.push('972: clicking the logo still opens the project page');
+        if (logo972 && getComputedStyle(logo972).cursor === 'pointer') out.errors.push('972: the logo still shows a pointer cursor');
+        if (logo972 && logo972.hasAttribute('title')) out.errors.push('972: the logo still has a tooltip');
+      }
       // Hide top bar: right-click on the gear, then the menu row.
       const tbMenu = document.querySelector('.toolbar-menu');
       document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));

@@ -1532,7 +1532,6 @@ export default {
     tipAutoPaste: "Haz doble clic en un prompt para copiarlo Y pegarlo en tu última aplicación. Menú experto: retraso al pegar, velocidad de doble clic y «Pulsar Intro tras pegar automáticamente».",
     tipTooltips: "Mostrar tooltips al pasar el ratón. Menú experto: retraso al mostrar.",
     tipScreenshotFolder: "Mantener siempre las capturas de pantalla como archivos en la carpeta de Capturas de pantalla. Menú experto: tamaño de vista previa y carpeta de guardado personalizada.",
-    openRepo: "Abrir el proyecto en GitHub",
     tipClipWatcher: "Recoge el texto que copias en cualquier sitio en una bandeja, lista para convertirse en prompt.",
     tipClipSkipSecrets: "Solo una suposición, nada más: el texto que parece una contraseña (una línea, sin espacios, mezcla de letras/números/símbolos) nunca se añade a la bandeja. En caso de duda, siempre se omite la copia antes que arriesgar una contraseña real.",
     flagBackupGfs: "Conservar copias diarias, semanales, mensuales y anuales",

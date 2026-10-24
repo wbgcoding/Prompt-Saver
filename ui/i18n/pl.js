@@ -1532,7 +1532,6 @@ export default {
     tipAutoPaste: "Kliknij dwukrotnie prompt, aby go skopiować I wkleić do ostatniej aplikacji. Menu eksperta: opóźnienie wklejania, prędkość dwukrotnego kliknięcia i 'wciśnij Enter po wklejeniu'.",
     tipTooltips: "Pokazuje podpowiedzi po najechaniu kursorem. Menu eksperta: opóźnienie wyświetlania.",
     tipScreenshotFolder: "Zawsze zachowuj zrzuty ekranu jako pliki w folderze Zrzuty ekranu. Menu eksperta: rozmiar podglądu i niestandardowy folder zapisu.",
-    openRepo: "Otwórz projekt na GitHub",
     tipClipWatcher: "Zbiera tekst kopiowany gdzie indziej do skrzynki, gotowy, by stać się promptem.",
     tipClipSkipSecrets: "Tylko przypuszczenie, nic więcej: tekst wyglądający jak hasło (jedna linia, bez spacji, mieszanka liter/cyfr/znaków) nigdy nie trafia do skrzynki. W razie wątpliwości kopia jest zawsze pomijana, zamiast ryzykować zachowanie prawdziwego hasła.",
     flagBackupGfs: "Zachowuj kopie dzienne, tygodniowe, miesięczne i roczne",

@@ -4,9 +4,6 @@ import { fillUpdateIntervalSelect } from "./settingsPanel.js";
 import { attachSelectPicker } from "./selectpop.js";
 
 export function bindAbout() {
-  // Clicking the app logo opens the project's GitHub page (drag still moves the window).
-  $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
-
   // About dialog: version + project page link.
   const aboutEl = $("about-modal");
   const closeAbout = () => aboutEl.classList.add("hidden");
