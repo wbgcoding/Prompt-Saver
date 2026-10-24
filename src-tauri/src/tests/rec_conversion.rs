@@ -585,3 +585,25 @@ fn free_space_bytes_accepts_an_existing_file() {
     let _ = std::fs::remove_file(&file);
     assert!(result.expect("free space for a file path") > 0);
 }
+
+// ---- Recording end: the main window comes forward with the result ----
+
+#[test]
+fn every_recording_captured_emit_is_preceded_by_the_main_window_reveal() {
+    let src = include_str!("../rec_cmds.rs");
+    let lines: Vec<&str> = src.lines().collect();
+    let mut emits = 0;
+    for (i, line) in lines.iter().enumerate() {
+        let t = line.trim_start();
+        if t.starts_with("//") || !t.contains("emit(\"recording-captured\"") {
+            continue;
+        }
+        emits += 1;
+        assert!(
+            lines[i - 1].trim_start().starts_with("reveal_main_for_result("),
+            "the emit on line {} has no reveal_main_for_result call right before it",
+            i + 1
+        );
+    }
+    assert_eq!(emits, 2, "expected the stop path and the failed-continue path");
+}

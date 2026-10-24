@@ -104,10 +104,11 @@ pub(crate) fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
         .collect()
 }
 
-// Bring a snip's result (editor, result dialog, OCR text) to the main window. The restore
-// pass does not show a main window that was hidden before the snip, so these paths show it
+// Bring a finished result (snip editor, OCR text, recording result) to the main window. The
+// restore pass does not show a main window that was hidden before the snip, and a recording
+// ends while the main window may be minimised or in the tray, so these paths show it
 // themselves.
-pub(crate) fn reveal_main_for_snip_result(app: &AppHandle) {
+pub(crate) fn reveal_main_for_result(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
         let _ = win.unminimize();

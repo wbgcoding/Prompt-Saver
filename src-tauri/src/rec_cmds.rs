@@ -612,6 +612,7 @@ pub(crate) async fn finish_and_continue_recording(
                     parts,
                 };
                 *REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner()) = payload.parts.clone();
+                reveal_main_for_result(&app2);
                 let _ = app2.emit("recording-captured", payload);
                 ContinueOutcome::StoppedInstead(format!("recording-continue-failed-stopped:{start_err}"))
             }
@@ -780,6 +781,7 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     sweep_recordings_and_notify(app);
     // Mirrors the screenshot flow's "snip-captured": the recording bar is its own window, so
     // the main window learns of the result through this event.
+    reveal_main_for_result(app);
     let _ = app.emit("recording-captured", payload.clone());
     Ok(payload)
 }

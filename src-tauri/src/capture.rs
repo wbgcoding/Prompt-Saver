@@ -99,7 +99,7 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
     }
 
     close_all_snip(app);
-    reveal_main_for_snip_result(app);
+    reveal_main_for_result(app);
     app.state::<SnipState>()
         .0
         .lock()
@@ -147,7 +147,7 @@ pub(crate) async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, Snip
             return Err("cancelled".to_string());
         }
         close_all_snip(app);
-        reveal_main_for_snip_result(app);
+        reveal_main_for_result(app);
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
         let _ = app.emit("ocr-captured", result);
         Ok(())
