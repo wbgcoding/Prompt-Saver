@@ -386,10 +386,6 @@ pub(crate) async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     {
         tauri::async_runtime::spawn_blocking(ocr::languages).await.map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        Err("ocr is only available on Windows".to_string())
-    }
 }
 
 // upscale_under_px, join_lines, lang and auto_pick_lang are sent by the frontend on every
@@ -403,11 +399,6 @@ pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: b
         tauri::async_runtime::spawn_blocking(move || ocr::recognize_file(&validated, upscale_under_px, join_lines, &lang, auto_pick_lang))
             .await
             .map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (validated, upscale_under_px, join_lines, lang, auto_pick_lang);
-        Err("ocr is only available on Windows".to_string())
     }
 }
 
@@ -436,11 +427,6 @@ pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join
         })
         .await
         .map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (data_url, upscale_under_px, join_lines, lang, auto_pick_lang);
-        Err("ocr is only available on Windows".to_string())
     }
 }
 
@@ -474,8 +460,6 @@ pub(crate) fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
     let Some(img) = decode_image_mem_oriented(&bytes) else { return String::new() };
     #[cfg(windows)]
     let text = ocr::recognize_crop(img.to_rgba8(), 480, true, "auto", true).map(|r| r.text).unwrap_or_default();
-    #[cfg(not(windows))]
-    let text = { let _ = img; String::new() };
     cap_ocr_text(&text, max_chars)
 }
 
@@ -726,11 +710,6 @@ pub(crate) async fn ocr_capabilities(force: bool) -> Result<Vec<OcrCap>, String>
             .await
             .map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (force, cache_hours);
-        Err("ocr is only available on Windows".to_string())
-    }
 }
 
 // Some machines refuse the read-only capability listing to a normal user (ocr_capabilities
@@ -751,10 +730,6 @@ pub(crate) async fn ocr_capabilities_elevate() -> Result<(), String> {
         // every other async command.
         tauri::async_runtime::spawn_blocking(|| ocr::elevate_capabilities(ocr::CapKind::Ocr)).await.map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        Err("ocr is only available on Windows".to_string())
-    }
 }
 
 // None while the elevated listing is still running (or never started), Some(list) once it
@@ -766,10 +741,6 @@ pub(crate) async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrC
     #[cfg(windows)]
     {
         tauri::async_runtime::spawn_blocking(|| ocr::elevated_capabilities_result(ocr::CapKind::Ocr)).await.map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        Ok(None)
     }
 }
 
@@ -793,10 +764,6 @@ pub(crate) async fn ocr_install_language(name: String) -> Result<(), String> {
         // spawn_blocking: same UAC-wait reasoning as ocr_capabilities_elevate.
         tauri::async_runtime::spawn_blocking(move || ocr::install_language(ocr::CapKind::Ocr, &name)).await.map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        Err("ocr is only available on Windows".to_string())
-    }
 }
 
 // Read (and, on a terminal result, clear) the result file the elevated installer writes for
@@ -812,10 +779,6 @@ pub(crate) fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
     {
         ocr::install_result(ocr::CapKind::Ocr, &name)
     }
-    #[cfg(not(windows))]
-    {
-        None
-    }
 }
 
 // The "Cancel" on the background update notice defers the next automatic notice by
@@ -825,8 +788,6 @@ pub(crate) fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
 pub(crate) fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
     lang_snooze(&app, &state, ocr::CapKind::Ocr);
-    #[cfg(not(windows))]
-    let _ = (app, state);
 }
 
 // Speech (voice dictation) language packs: thin wrappers around the same
@@ -842,11 +803,6 @@ pub(crate) async fn speech_capabilities(force: bool) -> Result<Vec<OcrCap>, Stri
             .await
             .map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (force, cache_hours);
-        Err("voice is only available on Windows".to_string())
-    }
 }
 
 // async: same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
@@ -857,10 +813,6 @@ pub(crate) async fn speech_capabilities_elevate() -> Result<(), String> {
         // spawn_blocking: same UAC-wait reasoning as ocr_capabilities_elevate.
         tauri::async_runtime::spawn_blocking(|| ocr::elevate_capabilities(ocr::CapKind::Speech)).await.map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        Err("voice is only available on Windows".to_string())
-    }
 }
 
 #[tauri::command]
@@ -868,10 +820,6 @@ pub(crate) async fn speech_capabilities_elevated_result() -> Result<Option<Vec<O
     #[cfg(windows)]
     {
         tauri::async_runtime::spawn_blocking(|| ocr::elevated_capabilities_result(ocr::CapKind::Speech)).await.map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        Ok(None)
     }
 }
 
@@ -889,10 +837,6 @@ pub(crate) async fn speech_install_language(name: String) -> Result<(), String> 
         // spawn_blocking: same UAC-wait reasoning as ocr_capabilities_elevate.
         tauri::async_runtime::spawn_blocking(move || ocr::install_language(ocr::CapKind::Speech, &name)).await.map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        Err("voice is only available on Windows".to_string())
-    }
 }
 
 #[tauri::command]
@@ -904,18 +848,12 @@ pub(crate) fn speech_install_result(name: String) -> Option<OcrInstallResult> {
     {
         ocr::install_result(ocr::CapKind::Speech, &name)
     }
-    #[cfg(not(windows))]
-    {
-        None
-    }
 }
 
 #[tauri::command(async)]
 pub(crate) fn voice_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
     lang_snooze(&app, &state, ocr::CapKind::Speech);
-    #[cfg(not(windows))]
-    let _ = (app, state);
 }
 
 // Shared by ocr_lang_snooze/voice_lang_snooze: defer the next automatic notice by the kind's

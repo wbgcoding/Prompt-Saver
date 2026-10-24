@@ -197,11 +197,6 @@ pub(crate) async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -
         }
         Ok(())
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (app, target_kind, id);
-        Err("recording is only available on Windows".to_string())
-    }
 }
 
 // The bar's own content decides its size: recbar.js measures its real content box after
@@ -221,10 +216,6 @@ pub(crate) fn fit_rec_bar(app: AppHandle, width: f64, height: f64) {
                 position_rec_bar(&win, &target_kind, id);
             }
         }
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (app, width, height);
     }
 }
 
@@ -533,15 +524,6 @@ pub(crate) async fn recording_status(
     status.target_switch_enabled = target_switch_on && target_switch_on_session;
     Ok(Some(status))
 }
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) async fn recording_status(
-    rstate: State<'_, RecordingState>,
-    db: State<'_, Db>,
-) -> Result<Option<RecordingStatus>, String> {
-    let _ = (rstate, db);
-    Ok(None)
-}
 
 #[derive(serde::Serialize)]
 pub(crate) struct MicDeviceInfo {
@@ -556,9 +538,4 @@ pub(crate) struct MicDeviceInfo {
 #[tauri::command]
 pub(crate) fn list_mic_devices() -> Vec<MicDeviceInfo> {
     audio::list_mic_devices().into_iter().map(|d| MicDeviceInfo { id: d.id, name: d.name }).collect()
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) fn list_mic_devices() -> Vec<MicDeviceInfo> {
-    Vec::new()
 }

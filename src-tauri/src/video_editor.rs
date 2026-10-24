@@ -113,8 +113,6 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
     let stream_copy_safe = matches!(video_codec, "h264" | "hevc") && !non_aac_audio;
     #[cfg(windows)]
     let has_keys_sidecar = sidecar_path(src, KEYS_SIDECAR_EXT).is_file();
-    #[cfg(not(windows))]
-    let has_keys_sidecar = false;
     Ok(RecordingProbe {
         duration_ms,
         width,
@@ -156,12 +154,6 @@ pub(crate) async fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar>
         .await
         .ok()
         .flatten()
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) async fn read_key_sidecar(path: String) -> Option<()> {
-    let _ = path;
-    None
 }
 
 // Duration, width, height and size for a media attachment (file_path or icon_path),

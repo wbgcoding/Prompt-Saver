@@ -1430,8 +1430,6 @@ pub(crate) fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) 
     }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
 
 // The window's current display affinity as the system reports it (0 = none,
 // 0x11 = excluded from capture), or None when it cannot be read.
@@ -1447,10 +1445,6 @@ pub(crate) fn display_affinity(win: &tauri::WebviewWindow) -> Option<u32> {
     if ok != 0 { Some(aff) } else { None }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn display_affinity(_win: &tauri::WebviewWindow) -> Option<u32> {
-    None
-}
 
 // The recording bar and the region outline stay out of every capture whatever
 // the privacy setting says: a recording must never contain its own controls.

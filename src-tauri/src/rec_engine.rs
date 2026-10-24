@@ -881,8 +881,6 @@ impl RecFeederShared {
 
 #[cfg(windows)]
 pub(crate) struct RecordingState(pub(crate) Mutex<Option<recording::RecSession>>);
-#[cfg(not(windows))]
-pub(crate) struct RecordingState(pub(crate) Mutex<Option<()>>);
 
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct RecordingStoppedPayload {

@@ -170,11 +170,6 @@ pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool 
     }
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
 }
-#[cfg(not(windows))]
-pub(crate) fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
-    note_own_copy(text);
-    arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
-}
 
 // The most-called command (every tile/pill/hotkey copy), so it clones only the one field
 // the chosen branch needs, not the whole Prompt (an image prompt's base64 blob included).
@@ -371,12 +366,6 @@ pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String,
     drop(store);
     #[cfg(windows)]
     clipwatch::arm(&id, &text, resolved, p.secret);
-    #[cfg(not(windows))]
-    {
-        let _ = resolved;
-        note_own_copy(&text);
-        let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(text));
-    }
     true
 }
 
@@ -387,8 +376,6 @@ pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String,
 pub(crate) fn rotation_end_auto(id: String) {
     #[cfg(windows)]
     clipwatch::end_if(&id);
-    #[cfg(not(windows))]
-    let _ = id;
 }
 
 // Put arbitrary text on the clipboard: used after filling placeholders, chains, drag-out,
@@ -445,10 +432,6 @@ pub(crate) fn put_formatted(text: &str, html: &str) -> bool {
     let payload = build_cf_html(html);
     clipboard_win::raw::set_without_clear(html_fmt.code(), payload.as_bytes()).is_ok()
 }
-#[cfg(not(windows))]
-pub(crate) fn put_formatted(_text: &str, _html: &str) -> bool {
-    false
-}
 
 #[tauri::command]
 pub(crate) async fn copy_formatted(text: String, html: String) -> Result<bool, String> {
@@ -466,8 +449,6 @@ pub(crate) async fn clipboard_text() -> String {
     // render must not be counted as a paste that advances the rotation.
     #[cfg(windows)]
     let text = clipwatch::read_text_self();
-    #[cfg(not(windows))]
-    let text = arboard::Clipboard::new().and_then(|mut c| c.get_text()).unwrap_or_default();
     text
 }
 

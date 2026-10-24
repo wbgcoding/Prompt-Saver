@@ -82,10 +82,6 @@ fn local_time_parts() -> (i32, u32, u32, u32, u32, u32) {
     let st = unsafe { GetLocalTime() };
     (st.wYear as i32, st.wMonth as u32, st.wDay as u32, st.wHour as u32, st.wMinute as u32, st.wSecond as u32)
 }
-#[cfg(not(windows))]
-fn local_time_parts() -> (i32, u32, u32, u32, u32, u32) {
-    (1970, 1, 1, 0, 0, 0)
-}
 
 // Claims a filename atomically (create_new never truncates an existing file) and tries the
 // next suffixed name on a collision instead of overwriting a same-second take.
@@ -137,11 +133,6 @@ pub fn camera_screen_elapsed_ms(rstate: State<'_, RecordingState>) -> Option<u64
         let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
         guard.as_ref().map(|s| crate::recording::elapsed_ms(s).max(0) as u64)
     }
-    #[cfg(not(windows))]
-    {
-        let _ = &rstate;
-        None
-    }
 }
 
 // Starts a new camera take: picks the file name and remembers whether a screen recording
@@ -167,11 +158,6 @@ pub async fn camera_begin_recording(
         {
             let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
             guard.as_ref().map(|s| s.output_path.clone())
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = &rstate;
-            None
         }
     };
     // Checked and filled under one lock, so a second begin can never replace a live session
@@ -254,11 +240,6 @@ pub fn camera_finish_recording(
         #[cfg(windows)]
         {
             rstate.0.lock().unwrap_or_else(|e| e.into_inner()).is_some()
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = &rstate;
-            false
         }
     };
     let companion_path = resolve_finish_companion(session.companion_path, screen_still_active, |p| p.is_file());
@@ -497,11 +478,6 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
     .map_err(|e| e.to_string())
 }
 
-#[cfg(not(windows))]
-fn install_permission_handler(_app: &AppHandle, _win: &tauri::WebviewWindow) -> Result<(), String> {
-    CAM_PERMISSION_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {

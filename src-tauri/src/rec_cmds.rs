@@ -88,12 +88,6 @@ pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Optio
     };
     recording_disk_warning(drive_label(&dir), free, warn_mb, video_kbps, audio_active)
 }
-#[cfg(not(windows))]
-#[tauri::command(async)]
-pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
-    let _ = (app, db);
-    None
-}
 
 #[derive(serde::Serialize)]
 pub(crate) struct ExportDiskWarning {
@@ -125,12 +119,6 @@ pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_k
     let needed_with_margin = needed + needed / 5;
     export_disk_warning(drive_label(dest), free, needed_with_margin)
 }
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> Option<ExportDiskWarning> {
-    let _ = (dest_path, format, video_kbps, lossless_quality, duration_ms);
-    None
-}
 
 // The batch-export dialog's version of the check above: the same per-file estimate summed
 // over every selected recording, because a batch's real risk is running out of space partway
@@ -149,12 +137,6 @@ pub(crate) fn check_export_disk_space_batch(dest_dir: String, format: String, vi
         .sum();
     let needed_with_margin = needed + needed / 5;
     export_disk_warning(drive_label(dest), free, needed_with_margin)
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, durations_ms: Vec<u64>) -> Option<ExportDiskWarning> {
-    let _ = (dest_dir, format, video_kbps, lossless_quality, durations_ms);
-    None
 }
 
 // The target half of what start_recording resolves from the picker. A separate function
@@ -322,23 +304,6 @@ pub(crate) async fn start_recording(
     apply_tray_menu(&app);
     Ok(())
 }
-#[cfg(not(windows))]
-#[allow(clippy::too_many_arguments)]
-#[tauri::command]
-pub(crate) async fn start_recording(
-    app: AppHandle,
-    rstate: State<'_, RecordingState>,
-    db: State<'_, Db>,
-    target_kind: String,
-    target_id: i64,
-    region_x: i32,
-    region_y: i32,
-    region_w: u32,
-    region_h: u32,
-) -> Result<(), String> {
-    let _ = (app, rstate, db, target_kind, target_id, region_x, region_y, region_w, region_h);
-    Err("recording is only available on Windows".to_string())
-}
 
 // One target switch at a time: the first-frame wait runs without the recording lock, so a
 // second pick (or the same one twice) would start another capture whose commit could land
@@ -428,12 +393,6 @@ pub(crate) async fn switch_recording_target(
         }
     }
     result
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) async fn switch_recording_target(app: AppHandle, rstate: State<'_, RecordingState>, target_kind: String, target_id: i64) -> Result<(), String> {
-    let _ = (app, rstate, target_kind, target_id);
-    Err("recording is only available on Windows".to_string())
 }
 
 #[cfg(windows)]
@@ -639,12 +598,6 @@ pub(crate) async fn finish_and_continue_recording(
         }
     }
 }
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) async fn finish_and_continue_recording(app: AppHandle, rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Result<RecordingContinuedPayload, String> {
-    let _ = (app, rstate, db);
-    Err("recording is only available on Windows".to_string())
-}
 
 #[cfg(windows)]
 #[tauri::command]
@@ -660,12 +613,6 @@ pub(crate) fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>)
     apply_tray_menu(&app); // the tray's Pause row switches to Resume
     Ok(())
 }
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let _ = (app, rstate);
-    Err("recording is only available on Windows".to_string())
-}
 
 #[cfg(windows)]
 #[tauri::command]
@@ -680,12 +627,6 @@ pub(crate) fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>
     }
     apply_tray_menu(&app); // the tray's Resume row switches back to Pause
     Ok(())
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let _ = (app, rstate);
-    Err("recording is only available on Windows".to_string())
 }
 
 // Mid-recording mute for either source, from the rec bar's audio buttons. `source` is
@@ -707,12 +648,6 @@ pub(crate) fn set_audio_muted(rstate: State<'_, RecordingState>, source: String,
         }
         None => Err(format!("{source} audio is not active this recording")),
     }
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) fn set_audio_muted(rstate: State<'_, RecordingState>, source: String, muted: bool) -> Result<(), String> {
-    let _ = (rstate, source, muted);
-    Err("recording is only available on Windows".to_string())
 }
 
 // Shared by the Stop command and the auto-stop path (the rec-bar's follow thread, when the
@@ -807,12 +742,6 @@ pub(crate) async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingSt
         .await
         .map_err(|e| e.to_string())?
 }
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
-    let _ = (app, rstate);
-    Err("recording is only available on Windows".to_string())
-}
 
 #[cfg(windows)]
 #[tauri::command]
@@ -861,10 +790,4 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
     // lives in the rec-bar window), like stop's "recording-captured".
     let _ = app.emit("recording-cancelled", ());
     Ok(())
-}
-#[cfg(not(windows))]
-#[tauri::command]
-pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let _ = (app, rstate);
-    Err("recording is only available on Windows".to_string())
 }

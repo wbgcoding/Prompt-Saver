@@ -732,10 +732,6 @@ pub(crate) fn set_pending_recording(path: Option<String>) {
 pub(crate) fn active_recording_path(app: &AppHandle) -> Option<PathBuf> {
     app.try_state::<RecordingState>()?.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.output_path.clone())
 }
-#[cfg(not(windows))]
-pub(crate) fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
-    None
-}
 
 // A trashed prompt owns its files until purged: leaving trash out of this scan would let an
 // unrelated cleanup sweep away a file a trashed prompt needs to be restorable.

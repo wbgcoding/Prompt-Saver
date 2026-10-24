@@ -1066,7 +1066,7 @@ fn portable_update_points_at_the_release_page_of_the_offered_version() {
 fn recording_status_stats_the_file_after_the_session_lock_is_released() {
     let src = include_str!("../rec_bar.rs").replace("\r\n", "\n");
     let start = src.find("pub(crate) async fn recording_status(").unwrap();
-    let body = &src[start..src[start..].find("#[cfg(not(windows))]").map(|i| start + i).unwrap()];
+    let body = &src[start..src[start..].find("\n}\n").map(|i| start + i).unwrap()];
     let lock_at = body.find("rstate.0.lock()").unwrap();
     let scope_end = body.find("\n    };\n    let bytes").expect("the lock lives in its own block");
     let stat_at = body.find("metadata(&output_path)").expect("stats a copied path");

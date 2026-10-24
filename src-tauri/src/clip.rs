@@ -12,11 +12,6 @@ pub(crate) async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<()
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms.clamp(10, 1000))).await;
         tauri::async_runtime::spawn_blocking(move || autopaste::finish_paste(hwnd, enter)).await.map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (delay_ms, enter);
-        Err("unsupported".into())
-    }
 }
 
 // Timings of the auto-advance clipboard session. They are fixed constants for now; a future
@@ -132,8 +127,6 @@ pub(crate) fn looks_like_password(text: &str, min_len: usize) -> bool {
 pub(crate) fn note_own_copy(text: &str) {
     clipwatch::note_own(text);
 }
-#[cfg(not(windows))]
-pub(crate) fn note_own_copy(_text: &str) {}
 
 // List / dismiss / clear the clipboard inbox.
 #[tauri::command]

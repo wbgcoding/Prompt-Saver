@@ -304,10 +304,6 @@ pub(crate) fn instance_pid_is_this_exe(pid: u32) -> bool {
         same_exe_path(&exe, &image)
     }
 }
-#[cfg(not(windows))]
-pub(crate) fn instance_pid_is_this_exe(_pid: u32) -> bool {
-    true // conservative off Windows: never treat a registered entry as a reused pid
-}
 
 // True when some other process currently has this install's canonical data dir registered.
 // A marker is pruned only when its pid is actually dead (a crash, or a task-killed process

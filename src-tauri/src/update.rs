@@ -252,8 +252,6 @@ pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
     if !enabled && (key == "rotatingPrompts" || key == "rotateAuto") {
         clipwatch::end_any();
     }
-    #[cfg(not(windows))]
-    let _ = app;
 }
 
 // Toggle an expert feature flag. Err only where switching it ON has a hard precondition

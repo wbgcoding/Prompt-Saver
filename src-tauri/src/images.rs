@@ -186,10 +186,6 @@ pub(crate) fn set_clipboard_file(path: &str, own_dirs: &[PathBuf]) -> bool {
     clipboard_win::raw::empty().is_ok() && clipboard_win::raw::set(CF_HDROP, &data).is_ok()
 }
 
-#[cfg(not(windows))]
-pub(crate) fn set_clipboard_file(_path: &str, _own_dirs: &[PathBuf]) -> bool {
-    false
-}
 
 // First file currently on the clipboard (copied in Explorer), if any.
 #[tauri::command]
@@ -201,8 +197,6 @@ pub(crate) async fn get_clipboard_file_path() -> Option<String> {
             .into_iter()
             .next()
     }
-    #[cfg(not(windows))]
-    None
 }
 
 #[tauri::command]

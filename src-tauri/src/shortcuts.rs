@@ -295,10 +295,6 @@ pub(crate) fn recording_active(app: &AppHandle) -> bool {
 pub(crate) fn recording_phase(app: &AppHandle) -> Option<RecPhase> {
     app.try_state::<RecordingState>()?.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.phase)
 }
-#[cfg(not(windows))]
-pub(crate) fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
-    None
-}
 
 // Whether the last rearm_hotkeys() actually registered the stop/pause combination, read by
 // recording_status() so the bar can warn instead of the user believing in a binding that
@@ -561,8 +557,6 @@ pub(crate) fn trigger_rec_stop_hotkey(app: &AppHandle) {
         }
     });
 }
-#[cfg(not(windows))]
-pub(crate) fn trigger_rec_stop_hotkey(_app: &AppHandle) {}
 
 // The one place that pauses/resumes a session: the recbar buttons, the global hotkey and
 // the tray item all end up here, so the key-overlay capture (keylog::pause/resume) is
@@ -605,8 +599,6 @@ pub(crate) fn trigger_rec_pause_hotkey(app: &AppHandle) {
         apply_tray_menu(app); // keep the tray's Pause/Resume label in sync
     }
 }
-#[cfg(not(windows))]
-pub(crate) fn trigger_rec_pause_hotkey(_app: &AppHandle) {}
 
 // While a hotkey field is capturing, every global hotkey has to be off. Windows
 // delivers a registered combination to the owning process instead of the focused

@@ -32,10 +32,6 @@ pub(crate) fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), Stri
     }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn apply_autostart(_enabled: bool, _minimized: bool) -> Result<(), String> {
-    Err("autostart is only supported on Windows".to_string())
-}
 
 #[tauri::command(async)]
 pub(crate) fn set_minimize_on_close(app: AppHandle, state: State<Db>, enabled: bool) {
@@ -72,10 +68,6 @@ pub(crate) fn autostart_command() -> Result<Option<String>, String> {
     }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn autostart_command() -> Result<Option<String>, String> {
-    Ok(None)
-}
 
 #[cfg(windows)]
 pub(crate) fn autostart_restore(prior: Option<String>) -> Result<(), String> {
@@ -94,10 +86,6 @@ pub(crate) fn autostart_restore(prior: Option<String>) -> Result<(), String> {
     }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn autostart_restore(_prior: Option<String>) -> Result<(), String> {
-    Ok(())
-}
 
 // One stored setting and one piece of Windows state that must agree. The setting is saved
 // first, the Windows side changed only once that landed. If either step fails, whichever side
@@ -272,8 +260,6 @@ pub(crate) fn remove_legacy_protocol_key() {
     }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn remove_legacy_protocol_key() {}
 
 #[tauri::command(async)]
 pub(crate) fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool, String> {

@@ -22,10 +22,6 @@ pub(crate) async fn voice_support() -> VoiceSupport {
             needs_online: false,
         })
     }
-    #[cfg(not(windows))]
-    {
-        VoiceSupport { supported: false, engine: "none", langs: Vec::new(), needs_online: false }
-    }
 }
 
 #[tauri::command]
@@ -33,10 +29,6 @@ pub(crate) async fn voice_languages() -> Result<Vec<VoiceLang>, String> {
     #[cfg(windows)]
     {
         tauri::async_runtime::spawn_blocking(voice::languages).await.map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        Err("voice is only available on Windows".to_string())
     }
 }
 
@@ -120,12 +112,6 @@ pub(crate) async fn voice_start(
         vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(VoiceStartResult { id, lang: resolved_lang })
     }
-    #[cfg(not(windows))]
-    {
-        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
-        let _ = (app, state, lang, auto_stop_sec, max_sec, interim, token);
-        Err("voice is only available on Windows".to_string())
-    }
 }
 
 // Whether voice_stop should signal the session thread: never for a session that already ended
@@ -161,11 +147,6 @@ pub(crate) async fn voice_enable_online_speech(app: AppHandle, state: State<'_, 
         save_settings(&app, &store.settings);
         Ok(())
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (app, state);
-        Err("voice is only available on Windows".to_string())
-    }
 }
 
 // Opens Windows' microphone privacy page, offered from the voice-denied dialog: the app cannot
@@ -190,8 +171,6 @@ pub(crate) fn open_privacy_mic() -> Result<(), String> {
         if (code.0 as isize) <= 32 { return Err("open-failed".to_string()); }
         Ok(())
     }
-    #[cfg(not(windows))]
-    Err("voice is only available on Windows".to_string())
 }
 
 // Cancels whatever session is running without waiting for it to finish; called on window

@@ -983,10 +983,6 @@ pub(crate) fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
     crate::win_windows::frame_rect(id)
 }
 
-#[cfg(not(windows))]
-pub(crate) fn window_frame_rect(_id: u32) -> Option<(i32, i32, i32, i32)> {
-    None
-}
 
 // Visible top-level windows overlapping the virtual desktop, topmost first, in
 // stitched-image physical pixels: for hover highlight + single-window capture.
@@ -1026,8 +1022,6 @@ pub(crate) fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWin
             height: wh as u32,
         });
     }
-    #[cfg(not(windows))]
-    let _ = (ox, oy, ow, oh);
     out
 }
 
@@ -1215,10 +1209,6 @@ pub(crate) fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(
     }
     let (left, top, ..) = monitor_bounds(hmon).ok_or_else(|| "could not read monitor bounds".to_string())?;
     Ok((hmon as i64, x - left, y - top))
-}
-#[cfg(not(windows))]
-pub(crate) fn resolve_region_monitor(x: i32, y: i32, _w: u32, _h: u32) -> Result<(i64, i32, i32), String> {
-    Ok((0, x, y))
 }
 
 // Arms (or disarms) OCR mode for the next capture_region call, right before the frontend

@@ -312,8 +312,6 @@ fn apply_taskbar_on_main(hwnd: isize, state: &str, value: Option<u8>) -> bool {
     })
 }
 
-#[cfg(not(windows))]
-pub(crate) fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
 
 // `op` names the reporting feature ("export", "convert", "ffmpeg-download", "backup",
 // "import"); `state` is "running" (with a 0-100 `value`), "indeterminate", "error", or

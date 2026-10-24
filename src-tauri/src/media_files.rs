@@ -106,8 +106,6 @@ pub(crate) fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
         let _ = fs::copy(&src_sidecar, sidecar_path(dest, KEYS_SIDECAR_EXT));
     }
 }
-#[cfg(not(windows))]
-pub(crate) fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
 
 // A dual-audio recording the editor has not muxed yet keeps its microphone track in
 // "<name>.mic.wav" beside the video. The working copy needs it too, or the export drops the

@@ -92,10 +92,6 @@ pub(crate) fn pid_is_alive(pid: u32) -> bool {
         }
     }
 }
-#[cfg(not(windows))]
-pub(crate) fn pid_is_alive(_pid: u32) -> bool {
-    true // conservative off Windows: never treat a lock as stale
-}
 
 pub(crate) fn sync_lock_is_stale(lock_path: &Path) -> bool {
     let Ok(meta) = fs::metadata(lock_path) else { return true }; // gone already

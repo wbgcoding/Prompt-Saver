@@ -11,8 +11,6 @@ pub(crate) fn local_stamp() -> String {
     unsafe { GetLocalTime(&mut st) };
     format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", st.year, st.month, st.day, st.hour, st.min, st.sec)
 }
-#[cfg(not(windows))]
-pub(crate) fn local_stamp() -> String { now_secs().to_string() }
 
 // App label for a window shot: drop ".exe" + any path, strip characters illegal in
 // a filename, trim. Empty if nothing usable.
@@ -151,11 +149,6 @@ pub(crate) async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, Snip
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
         let _ = app.emit("ocr-captured", result);
         Ok(())
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (crop, upscale, join, lang, auto_pick, gen, state, app);
-        Err("ocr is only available on Windows".to_string())
     }
 }
 
@@ -373,10 +366,6 @@ pub(crate) async fn capture_window(
         {
             window_is_protected(id)
         }
-        #[cfg(not(windows))]
-        {
-            false
-        }
     };
     // 1. Direct PrintWindow: best for normal windows (own content, no overlays).
     // Skipped for elevated windows: PrintWindow is unreliable there and can pass
@@ -459,18 +448,6 @@ pub(crate) async fn capture_window(
             }
         }
     }
-    #[cfg(not(windows))]
-    {
-        let img = origin
-            .and_then(|(ox, oy)| crop_frozen(&state, mon_idx, wx - ox, wy - oy, ww as u32, wh as u32))
-            .filter(|im| !capture_is_blank(im));
-        match img {
-            Some(im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await }
-            }
-            None => Err("blocked".to_string()),
-        }
-    }
 }
 
 // What capture_window needs to know about the clicked window, read from a single listing.
@@ -493,11 +470,6 @@ pub(crate) fn probe_window(id: u32, try_direct: bool) -> WindowProbe {
         let direct = if try_direct { win_windows::capture_window(id).filter(|im| !capture_looks_bad(im)) } else { None };
         let rect = snip_window_rect(window_frame_rect(id), w.client);
         WindowProbe { app_name: Some(win_windows::app_name(id).unwrap_or_default()), direct, rect: Some(rect) }
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (id, try_direct);
-        WindowProbe { app_name: None, direct: None, rect: None }
     }
 }
 
