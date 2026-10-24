@@ -217,7 +217,7 @@ pub(crate) fn run_update_check(app: AppHandle) {
 
 // The live effects of a flag switch that do not depend on the store lock: the window
 // capture exclusion, the collected error list and a running auto-advance session. Shared by
-// the settings window and the command line / receiver, so a `settings set` takes effect
+// the settings window and the command line, so a `settings set` takes effect
 // without a restart there too.
 pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
     // Capture exclusion applies live to every open window; never hold the store lock across
@@ -247,9 +247,8 @@ pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
 
 // Toggle an expert feature flag. Err only where switching it ON has a hard precondition
 // that failed (e.g. the safety backup prompt-sync takes before its first write); the flag
-// is then left OFF so the UI and the store never disagree. Runs off the main thread:
-// switching the receiver on or wider waits for its port to bind, and the activation backup
-// takes as long as the library is large.
+// is then left OFF so the UI and the store never disagree. Runs off the main thread: the
+// activation backup takes as long as the library is large.
 #[tauri::command(async)]
 pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
     let is_clip = key == "clipWatcher";
@@ -257,32 +256,6 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
     let is_folders = key == "folders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
-    // The receiver's own switch is durable-or-reversible (see remote.rs), so it
-    // never takes the generic save-and-ignore path below.
-    if key == "remoteApi" {
-        let result = remote::set_remote_api_flag(&app, &state, enabled);
-        notify_float_settings(&app);
-        return result;
-    }
-    // The certificate lifetime switch changes the certificate with it, in one
-    // write: only its own command may set it.
-    if key == remote_tls::SHORT_LIVED_KEY {
-        return Err("remote-tls-short-lived-has-own-command".to_string());
-    }
-    // Widening or narrowing the receiver's reach restarts it with the matching
-    // protocol and is saved first, like its own switch.
-    if key == "remoteNetworkFilter" {
-        let result = remote::set_network_flag(&app, &state, enabled);
-        notify_float_settings(&app);
-        return result;
-    }
-    // The address scheme is a registry entry as well as a flag: changed together,
-    // and an error leaves both as they were.
-    if key == "urlScheme" {
-        let result = set_url_scheme_flag(&app, &state, enabled);
-        notify_float_settings(&app);
-        return result;
-    }
     // Turning this on while demo mode is active is what enable_demo_mode/disable_demo_mode's
     // real-instance check exists to prevent: a second process started once this is allowed
     // would resolve the redirect per write like the first, so once either flips it, the other's
@@ -381,20 +354,10 @@ pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value:
     // A stored interval outside what the setting offers would show as one thing and
     // run as another.
     let value = checked_ui_value(&key, value)?;
-    let restart_port_from = {
+    {
         let mut store = lock(&state);
-        let old = store.settings.ui_values.get(&key).copied();
-        if key == "remotePort" {
-            let restart = remote::commit_port_value(&mut store.settings, value, remote::probe_port, |s| save_settings(&app, s))?;
-            restart.then_some(old)
-        } else {
-            store.settings.ui_values.insert(key.clone(), value);
-            save_settings(&app, &store.settings);
-            None
-        }
-    };
-    if let Some(old) = restart_port_from {
-        remote::apply_port_change(&app, &state, old)?;
+        store.settings.ui_values.insert(key.clone(), value);
+        save_settings(&app, &store.settings);
     }
     if is_tray {
         rebuild_tray(&app); // dragging a slider must not rebuild on every step
@@ -424,9 +387,9 @@ pub(crate) fn is_protected_folder_key(key: &str) -> bool {
     PROTECTED_FOLDER_KEYS.contains(&key)
 }
 
-// Text rows with their own validated writer (folders, receiver secrets and
-// ranges, sealed backup password, vault salt and verifier): the generic string
-// setter never writes them.
+// Text rows with their own validated writer (folders, sealed backup password, vault salt
+// and verifier) or none at all (leftover receiver rows): the generic string setter never
+// writes them.
 pub(crate) fn is_generic_text_write_denied(key: &str) -> bool {
     is_machine_text_key(key) || is_vault_key(key)
 }
@@ -487,7 +450,7 @@ pub(crate) fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -
 }
 
 // Clears the expert flags, values and texts. The texts that are keys rather than
-// preferences stay: the backup password, the receiver's certificate values and
+// preferences stay: the backup password and
 // the vault's salt and verifier (the confidential prompts are sealed with it).
 pub(crate) fn reset_expert_settings(settings: &mut Settings) {
     settings.ui_flags.clear();
@@ -499,9 +462,8 @@ pub(crate) fn reset_expert_settings(settings: &mut Settings) {
 // Clear all expert overrides back to the shipped defaults.
 #[tauri::command(async)]
 pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
-    let effects = {
+    {
         let mut store = lock(&state);
-        let old = store.settings.clone();
         let ocr_was_on = ocr_index_flag_on(&store);
         reset_expert_settings(&mut store.settings);
         save_settings(&app, &store.settings);
@@ -509,9 +471,7 @@ pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
         if ocr_was_on && clear_ocr_index_text(&mut store) {
             write_ocr_wipe(&app, &store, "expert reset");
         }
-        remote::reset_side_effects(&old, &store.settings)
-    };
-    remote::run_reset_side_effects(&app, &effects);
+    }
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
     // means the exclusion is on: re-assert it on every window so it is immediate.

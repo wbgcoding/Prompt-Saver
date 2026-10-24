@@ -571,36 +571,60 @@ fn strip_denied_import_keys_removes_every_folder_setting_and_nothing_else() {
     assert_eq!(incoming.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"), "an ordinary setting must survive untouched");
 }
 
+const OLD_REMOTE_SECRETS: [&str; 4] = ["remotePasswordHash", "remoteTlsKey", "remoteTlsCert", "remoteTlsCa"];
+
 #[test]
-fn settings_only_payload_omits_the_receiver_certificate_values() {
+fn settings_only_payload_omits_every_leftover_receiver_secret() {
     let mut s = Settings::default();
-    for k in remote_tls::REMOTE_TLS_KEYS {
+    for k in OLD_REMOTE_SECRETS {
         s.ui_texts.insert(k.to_string(), "value".into());
     }
     s.ui_texts.insert("copyFont".into(), "Consolas".into());
     let payload = settings_only_payload(&s);
-    for k in remote_tls::REMOTE_TLS_KEYS {
-        assert!(!payload.ui_texts.contains_key(k));
+    for k in OLD_REMOTE_SECRETS {
+        assert!(!payload.ui_texts.contains_key(k), "{k} must not be exported");
     }
     assert_eq!(payload.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"));
-    assert!(!serde_json::to_string(&payload).unwrap().contains("remoteTls"));
+    let json = serde_json::to_string(&payload).unwrap();
+    assert!(!json.contains("remoteTls") && !json.contains("remotePassword"));
     let mut incoming = payload;
-    incoming.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "planted".into());
+    incoming.ui_texts.insert("remoteTlsKey".into(), "planted".into());
     strip_denied_import_keys(&mut incoming);
-    assert!(!incoming.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+    assert!(!incoming.ui_texts.contains_key("remoteTlsKey"));
 }
 
 #[test]
-fn a_full_import_keeps_this_machines_receiver_certificate() {
+fn strip_remote_secrets_removes_exactly_the_four_secret_rows() {
+    let mut texts = std::collections::HashMap::new();
+    for k in OLD_REMOTE_SECRETS {
+        texts.insert(k.to_string(), "value".to_string());
+    }
+    texts.insert("copyFont".into(), "Consolas".into());
+    texts.insert(BACKUP_PW_KEY.into(), "sealed".into());
+    strip_remote_secrets(&mut texts);
+    let mut left: Vec<&str> = texts.keys().map(String::as_str).collect();
+    left.sort_unstable();
+    let mut want = vec!["copyFont", BACKUP_PW_KEY];
+    want.sort_unstable();
+    assert_eq!(left, want, "only the leftover receiver secrets go; every other row stays");
+    for k in OLD_REMOTE_SECRETS {
+        assert!(is_remote_secret_key(k));
+    }
+    assert!(!is_remote_secret_key("remotePort") && !is_remote_secret_key("copyFont"));
+}
+
+#[test]
+fn a_full_import_never_brings_in_a_foreign_receiver_secret() {
     let mut store = Store { prompts: vec![], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
-    store.settings.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "mine".into());
     let mut foreign = Settings::default();
-    foreign.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "theirs".into());
-    foreign.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "theirs-key".into());
+    for k in OLD_REMOTE_SECRETS {
+        foreign.ui_texts.insert(k.to_string(), "theirs".into());
+    }
     let backup = Backup { prompts: vec![], settings: foreign };
     apply_import(&mut store, backup, false, true);
-    assert_eq!(store.settings.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("mine"));
-    assert!(!store.settings.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+    for k in OLD_REMOTE_SECRETS {
+        assert!(!store.settings.ui_texts.contains_key(k), "{k} must not arrive from a file");
+    }
 }
 
 // A hostile file plants every key that could open a listener, register
@@ -618,7 +642,7 @@ pub(super) fn hostile_settings() -> Settings {
     for k in ["remotePasswordHash", "remoteAllowedRanges", BACKUP_PW_KEY, "screenshotDir"] {
         s.ui_texts.insert(k.into(), "planted".into());
     }
-    for k in remote_tls::REMOTE_TLS_KEYS {
+    for k in ["remoteTlsKey", "remoteTlsCert", "remoteTlsCa"] {
         s.ui_texts.insert(k.to_string(), "planted".into());
     }
     s.ui_texts.insert("copyFont".into(), "Consolas".into());

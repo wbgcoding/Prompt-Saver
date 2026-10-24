@@ -2,13 +2,28 @@ use super::*;
 
 // ---------- Settings commands ----------
 
-// The copy of the settings a window may hold: the receiver's private key stays
-// in the backend.
+// Secret text rows an earlier version kept for its remote receiver: the password hash and
+// the TLS key, certificate and CA. The rows are purged when settings load, but a copy that
+// leaves the backend (a window, an export, a backup) is stripped again so none of them can
+// reach a file or a window even if a stale one slipped in.
+pub(crate) const REMOTE_PASSWORD_KEY: &str = "remotePasswordHash";
+const REMOTE_SECRET_KEYS: [&str; 4] = [REMOTE_PASSWORD_KEY, "remoteTlsKey", "remoteTlsCert", "remoteTlsCa"];
+
+pub(crate) fn is_remote_secret_key(key: &str) -> bool {
+    REMOTE_SECRET_KEYS.contains(&key)
+}
+
+pub(crate) fn strip_remote_secrets(texts: &mut std::collections::HashMap<String, String>) {
+    for k in REMOTE_SECRET_KEYS {
+        texts.remove(k);
+    }
+}
+
+// The copy of the settings a window may hold: no leftover receiver secret and no sealed
+// backup password.
 pub(crate) fn webview_settings(settings: &Settings) -> Settings {
     let mut copy = settings.clone();
-    remote_tls::strip_private_key(&mut copy);
-    // The password hash is checked inside the backend only; its dialog has its own command.
-    copy.ui_texts.remove(remote::REMOTE_PASSWORD_KEY);
+    strip_remote_secrets(&mut copy.ui_texts);
     // The sealed backup password is read in the backend only; the window asks
     // has_backup_password whether one is set.
     copy.ui_texts.remove(BACKUP_PW_KEY);

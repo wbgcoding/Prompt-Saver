@@ -670,7 +670,7 @@ pub(crate) async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<u
         // an export is also the moment the store on disk should agree with it.
         flush_settings(&app, &store.settings);
         let mut backup_settings = store.settings.clone();
-        remote_tls::strip_tls_keys(&mut backup_settings.ui_texts);
+        strip_remote_secrets(&mut backup_settings.ui_texts);
         let backup = Backup {
             prompts: store.prompts.clone(),
             settings: backup_settings,
@@ -878,7 +878,7 @@ pub(crate) fn is_import_denied_value(key: &str) -> bool {
 // allowed ranges and certificate, the sealed backup password and the folder
 // authority keys (see PROTECTED_FOLDER_KEYS).
 pub(crate) fn is_machine_text_key(key: &str) -> bool {
-    remote::is_remote_secret_key(key) || key.starts_with("remote") || is_protected_folder_key(key) || key == BACKUP_PW_KEY
+    is_remote_secret_key(key) || key.starts_with("remote") || is_protected_folder_key(key) || key == BACKUP_PW_KEY
 }
 
 // The confidential-prompt vault's salt and verifier. Not secrets, but the

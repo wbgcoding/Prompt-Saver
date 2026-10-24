@@ -155,18 +155,10 @@ pub(super) fn print_version() {
 
 // ---------- Already-running caller ----------
 
-pub(crate) async fn run_in_process(app: &AppHandle, argv: Vec<String>, cwd: PathBuf) -> (i32, String, String) {
-    let (code, stdout, stderr, restart) = run_in_process_deferred(app, argv, cwd).await;
-    if restart {
-        app.restart();
-    }
-    (code, stdout, stderr)
-}
-
-// Same as run_in_process, but a restore does not relaunch the app itself: the last element
-// says a relaunch is due and the caller does it once its answer is written. A relaunch inside
-// the call drops the connection before any answer goes out, which a script reads as a failed
-// restore.
+// Runs a forwarded command on the live store. A restore does not relaunch the app itself: the
+// last element says a relaunch is due and the caller does it once its answer is written. A
+// relaunch inside the call drops the connection before any answer goes out, which a script
+// reads as a failed restore.
 pub(crate) async fn run_in_process_deferred(app: &AppHandle, argv: Vec<String>, cwd: PathBuf) -> (i32, String, String, bool) {
     let mut restart = false;
     let (code, stdout, stderr) = run_in_process_inner(app, argv, cwd, &mut restart).await;
@@ -333,101 +325,4 @@ pub(super) fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Pat
     // as already written.
     store.forget_written_rows();
     Outcome::err(3, "the store refused the write (locked or unavailable)\n")
-}
-
-// ---------- Remote-caller path confinement ----------
-//
-// A command line launch resolves `export`/`import` against the caller's own working directory
-// because a trusted local user types it. The remote receiver and a promptsaver:// link have
-// no such trusted caller, so the same two commands are confined to the data folder there.
-// It is parsed here, in the module that owns `Cmd`/`parse`, rather than duplicating the
-// grammar elsewhere.
-pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), String> {
-    let cmd = match parse(argv) {
-        Ok(Parsed::Run(cmd)) => cmd,
-        // A bad or --help invocation is reported by the real dispatch right after this call.
-        _ => return Ok(()),
-    };
-    let raw = match &cmd {
-        Cmd::Export { path, .. } | Cmd::Import { path, .. } => path.clone(),
-        _ => return Ok(()),
-    };
-    let resolved = resolve_path_arg(base_dir, &raw);
-    // Export's target usually does not exist yet, so its parent directory is confined instead,
-    // as a shell resolves a not-yet-created path. An import's source must already exist, so this
-    // covers it too.
-    let check_dir = if resolved.exists() {
-        resolved.clone()
-    } else {
-        match resolved.parent() {
-            Some(p) => p.to_path_buf(),
-            None => return Err("refused: the path escapes the data folder".to_string()),
-        }
-    };
-    let canon_target = check_dir
-        .canonicalize()
-        .map_err(|_| "refused: the path does not resolve inside the data folder".to_string())?;
-    let canon_base = base_dir
-        .canonicalize()
-        .map_err(|_| "the data folder could not be resolved".to_string())?;
-    if !canon_target.starts_with(&canon_base) {
-        return Err("refused: the path escapes the data folder".to_string());
-    }
-    // The data folder also holds the live store and the snapshots, which an export would
-    // overwrite with JSON and no safety copy: only the folder's other files are valid targets.
-    if matches!(cmd, Cmd::Export { .. }) {
-        let target = if resolved.exists() {
-            canon_target
-        } else {
-            // Compared the way Windows will open it, not as typed.
-            match resolved.file_name().map(normalized_file_name) {
-                Some(name) if !name.is_empty() => canon_target.join(name),
-                _ => return Err("refused: the path has no file name".to_string()),
-            }
-        };
-        if is_store_path(&target, &canon_base) {
-            return Err("refused: that path belongs to the stored data".to_string());
-        }
-        if is_program_file_name(&target) {
-            return Err("refused: that path belongs to the program files".to_string());
-        }
-    }
-    Ok(())
-}
-
-// The name Windows resolves a typed file name to: everything from the first ':' is a stream
-// of the base file, and trailing dots and spaces are dropped when the file is created.
-fn normalized_file_name(name: &std::ffi::OsStr) -> String {
-    let name = name.to_string_lossy();
-    let base = name.split(':').next().unwrap_or("");
-    base.trim_end_matches(['.', ' ']).to_string()
-}
-
-// True for a name an export must never replace: in a portable install the data folder is the
-// program folder, and JSON written over an executable, a library, the uninstaller or the
-// data-folder redirect file would break the next launch.
-fn is_program_file_name(target: &Path) -> bool {
-    let name = target.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
-    let ext = target.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-    name == "datapath" || name == "uninstall.exe" || matches!(ext.as_str(), "exe" | "dll" | "com" | "scr" | "msi" | "bat" | "cmd")
-}
-
-// True for a path that is part of the stored data inside the data folder: the database with
-// its write-ahead files, the legacy json files, the folder lock, and anything under the
-// snapshots and attachment folders. Both arguments are canonical; names compare
-// case-insensitively (Windows).
-pub(super) fn is_store_path(target: &Path, base: &Path) -> bool {
-    let Ok(rel) = target.strip_prefix(base) else {
-        return false;
-    };
-    let mut parts = rel.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase());
-    let Some(first) = parts.next() else {
-        return true; // the folder itself
-    };
-    if parts.next().is_some() {
-        return matches!(first.as_str(), "backups" | "files");
-    }
-    matches!(first.as_str(), "backups" | "files" | "data.db-wal" | "data.db-shm")
-        || crate::STORE_FILES.iter().any(|f| f.eq_ignore_ascii_case(&first))
-        || first.eq_ignore_ascii_case(crate::DATA_DIR_LOCK_FILE)
 }

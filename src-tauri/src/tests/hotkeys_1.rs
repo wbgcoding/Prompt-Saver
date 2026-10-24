@@ -851,6 +851,30 @@ fn removed_flags_are_dropped() {
 }
 
 #[test]
+fn stored_rows_of_the_removed_receiver_are_gone_after_load() {
+    // A settings blob an earlier version wrote, secrets included.
+    let json = r#"{
+        "ui_flags": {"remoteApi": true, "remoteNetworkFilter": true, "remoteTlsShortLived": true,
+                     "urlScheme": true, "urlSchemeOpenAllowed": true, "urlSchemeCopyAllowed": true, "copyFlash": false},
+        "ui_values": {"remotePort": 4444.0, "remoteRateLimit": 30.0, "tileGap": 7.0},
+        "ui_texts": {"remoteAllowedRanges": "10.0.0.0/8", "remotePasswordHash": "hash", "remoteTlsKey": "key",
+                     "remoteTlsCert": "cert", "remoteTlsCa": "ca", "copyFont": "Consolas"}
+    }"#;
+    let mut s: Settings = serde_json::from_str(json).unwrap();
+    assert!(s.has_removed_ui_values(), "the store re-saves a blob that still holds them");
+    s.migrate();
+    assert!(!s.has_removed_ui_values());
+    let left = serde_json::to_string(&s).unwrap();
+    for k in ["remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
+              "remoteAllowedRanges", "remotePasswordHash", "remoteTlsKey", "remoteTlsCert", "remoteTlsCa", "hash", "cert"] {
+        assert!(!left.contains(&format!("\"{k}\"")), "{k} survived the load");
+    }
+    assert_eq!(s.ui_values.get("tileGap"), Some(&7.0));
+    assert_eq!(s.ui_flags.get("copyFlash"), Some(&false));
+    assert_eq!(s.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"));
+}
+
+#[test]
 fn fav_view_merges_into_star() {
     let run = |view: Option<bool>, star: Option<bool>| {
         let mut s = Settings::default();

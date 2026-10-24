@@ -1,9 +1,7 @@
 // Application backend (Tauri v2). Local SQLite storage, clipboard, import/export, multiple
 // views, frameless floating quick-copy windows. No network by default: the only outbound
 // calls are the switchable update check and, only when WebView2 itself is missing, its
-// consented runtime download. The one inbound exception is the local remote-access receiver
-// (remote.rs), off by default, password-protected, loopback-only unless its own separate
-// switch is on.
+// consented runtime download. Nothing listens for inbound network connections.
 
 // clippy::pedantic and clippy::nursery are not enabled: they raise ~1000 warnings that are
 // mostly style noise here (Win32 FFI and image code make `as` casts intentional and
@@ -17,8 +15,6 @@ pub mod brand;
 mod camera;
 mod demo_text;
 mod cli;
-mod remote;
-mod remote_tls;
 
 use image::imageops::FilterType;
 use rusqlite::{params, Connection, Transaction};
@@ -249,17 +245,14 @@ pub fn run() {
     if let Some(code) = cli::dispatch_from_launch_args() {
         std::process::exit(code);
     }
-    // A plain second launch (double-click, autostart, the tray shortcut) or a promptsaver:// link
-    // settles here instead of trusting the single-instance plugin below, which forwards and exits
-    // unconditionally and cannot tell "the running instance brought up a window" from "the
+    // A plain second launch (double-click, autostart, the tray shortcut) settles here instead of
+    // trusting the single-instance plugin below, which forwards and exits unconditionally and
+    // cannot tell "the running instance brought up a window" from "the
     // running instance is hung and never will". This pings the pipe cli.rs answers CLI commands
     // on, with its own short timeout, and only falls through to the plugin's mutex-based
-    // detection (or, with nothing listening, into this process's own setup) for a live instance
-    // to forward the link to. A link's ping never raises a window and its HandedOff turns back
-    // into Primary, so it cannot end this launch here on its own.
+    // detection (or, with nothing listening, into this process's own setup).
     if !early_allow_multiple_instances() {
-        let argv: Vec<String> = std::env::args().skip(1).collect();
-        if let cli::LaunchDecision::HandedOff = cli::resolve_second_launch(&argv) {
+        if let cli::LaunchDecision::HandedOff = cli::resolve_second_launch() {
             std::process::exit(0);
         }
     }
@@ -288,18 +281,8 @@ pub fn run() {
     // AppHandle to consult the setting, so early_allow_multiple_instances() peeks the DB directly.
     // A second launch, when the plugin is attached, closes itself and focuses the first instance.
     if !early_allow_multiple_instances() {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            // A promptsaver:// link relaunching this running instance takes the same route as a second
-            // command-line launch, instead of stealing the window's focus for a link meant to copy
-            // quietly in the background.
-            let scheme_url = remote::find_scheme_arg(&args).map(str::to_string);
-            let is_copy_link = scheme_url.as_deref().is_some_and(remote::is_copy_link);
-            if let Some(url) = &scheme_url {
-                remote::handle_launch_url(app, url);
-            }
-            if !is_copy_link {
-                show_main(app);
-            }
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main(app);
         }));
     }
     builder
@@ -393,7 +376,6 @@ pub fn run() {
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
-            let url_scheme_on = remote::url_scheme_enabled(&store.settings);
             let backup_start_delay_s = store
                 .settings
                 .ui_values
@@ -418,19 +400,6 @@ pub fn run() {
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
             app.manage(camera::CameraState(Mutex::new(None))); // live camera-recording session
-            app.manage(remote::RemoteApiState::new());
-            app.manage(remote::PendingLaunchUrl(Default::default()));
-            // Same "never starts without a password" rule start() enforces on every caller; harmless to
-            // call unconditionally at every boot.
-            let _ = remote::start(handle.clone());
-            // A promptsaver:// link that started this process (the app was not running) waits in
-            // PendingLaunchUrl until the main window's script asks for it; see run_pending_launch_url.
-            let launch_args: Vec<String> = std::env::args().skip(1).collect();
-            if let Some(url) = remote::find_scheme_arg(&launch_args).map(str::to_string) {
-                if let Ok(mut g) = handle.state::<remote::PendingLaunchUrl>().0.lock() {
-                    *g = Some(url);
-                }
-            }
 
             // Auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -691,10 +660,11 @@ pub fn run() {
             tray.build(app)?;
             apply_tray_menu(&handle); // Adds the quick-copy sections if they are on
 
-            // Refresh the autostart and address-scheme registrations (also follows the exe when it
-            // moved). Nothing is removed here and another copy's entry is never touched.
+            // Refresh the autostart registration (also follows the exe when it moved) and drop the
+            // address-scheme entry an earlier version registered. Another copy's entry is never touched.
             let demo = data_dir_is_demo(&handle, &data_dir(&handle));
-            reconcile_windows_state(autostart, start_min, url_scheme_on, demo);
+            reconcile_windows_state(autostart, start_min, demo);
+            remove_legacy_protocol_key();
             // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
             cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
             // A read-only instance never writes into the folder another machine owns.
@@ -977,16 +947,6 @@ pub fn run() {
             update::set_video_export_dir,
             update::set_recording_dir,
             update::reset_expert,
-            remote::remote_api_take_shown_password,
-            remote::remote_api_regenerate_password,
-            remote::remote_api_status,
-            remote::remote_api_stop_now,
-            remote::set_remote_allowed_ranges,
-            remote::remote_tls_fingerprint,
-            remote::remote_tls_save_cert,
-            remote::remote_tls_renew,
-            remote::remote_tls_set_short_lived,
-            remote::run_pending_launch_url,
             update::skip_version,
             update::whats_new_check,
             update::whats_new_current,

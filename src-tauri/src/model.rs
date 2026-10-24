@@ -805,6 +805,8 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
         "videoEditUndoMax",
         "savedSearchMax",
         "attachPreviewKb",
+        "remotePort",
+        "remoteRateLimit",
     ]
 }
 
@@ -861,12 +863,28 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
         "helpSketches",
         "historyDiff",
         "veOvRemember",
+        "remoteApi",
+        "remoteNetworkFilter",
+        "remoteTlsShortLived",
+        "urlScheme",
+        "urlSchemeOpenAllowed",
+        "urlSchemeCopyAllowed",
     ]
 }
 
 // Expert dropdown choices (stored as text) that no longer exist; dropped like removed values.
 pub(crate) fn removed_ui_text_keys() -> &'static [&'static str] {
-    &["snipScaleFilter", "fuzzyMaxTypos"]
+    &[
+        "snipScaleFilter",
+        "fuzzyMaxTypos",
+        // The old remote receiver's rows: its password hash and TLS key, certificate and CA
+        // must not survive on disk once the feature is gone.
+        "remoteAllowedRanges",
+        "remotePasswordHash",
+        "remoteTlsKey",
+        "remoteTlsCert",
+        "remoteTlsCa",
+    ]
 }
 
 // Holds every numeric expert value to the range its slider enforces (the table is generated

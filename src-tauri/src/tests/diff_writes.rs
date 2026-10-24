@@ -343,8 +343,8 @@ fn record_error_log_keeps_the_cap_and_drops_the_oldest() {
 fn sanitize_error_log_origin_keeps_the_known_set_and_falls_back_to_other() {
     assert_eq!(sanitize_error_log_origin("settings"), "settings");
     assert_eq!(sanitize_error_log_origin("main"), "main");
-    assert_eq!(sanitize_error_log_origin("remoteApi"), "remoteApi");
-    assert_eq!(sanitize_error_log_origin("urlScheme"), "urlScheme", "link handler lines keep their own origin");
+    assert_eq!(sanitize_error_log_origin("remoteApi"), "other", "the parked receiver has no origin of its own");
+    assert_eq!(sanitize_error_log_origin("urlScheme"), "other");
     assert_eq!(sanitize_error_log_origin("video"), "video", "the video editor reports under its own name");
     assert_eq!(sanitize_error_log_origin("snip"), "snip", "the screenshot overlay reports under its own name");
     // Ids whose dialogs left the markup are no longer allow-listed.
@@ -865,6 +865,66 @@ fn switching_off_leaves_another_copys_entry_alone() {
     assert!(!skip_registry_removal(true, OtherExe), "switching on is never skipped");
 }
 
+#[test]
+fn the_full_backup_file_is_written_from_a_copy_without_leftover_receiver_secrets() {
+    let src = include_str!("../vault.rs");
+    let body = fn_text(src, "export_all");
+    let strip = body.find("strip_remote_secrets(&mut backup_settings.ui_texts)").expect("export_all must strip the leftover receiver secrets");
+    let write = body.find("Backup {").expect("export_all builds the backup value");
+    assert!(strip < write, "the secrets must be stripped before the backup value is built");
+    assert!(body.contains("settings: backup_settings"), "the backup must carry the stripped copy, not the live settings");
+}
+
+#[test]
+fn the_old_address_scheme_entry_counts_as_ours_only_when_it_starts_this_exe() {
+    let here = r"C:\Apps\Prompt Saver\prompt-saver.exe";
+    assert!(legacy_protocol_points_at_us(Some(r#""C:\Apps\Prompt Saver\prompt-saver.exe" "%1""#), here));
+    assert!(legacy_protocol_points_at_us(Some(r#""c:/apps/prompt saver/PROMPT-SAVER.EXE" "%1""#), here), "case and slash style do not matter");
+    assert!(legacy_protocol_points_at_us(Some(r#"  "C:\Apps\Prompt Saver\prompt-saver.exe" "%1""#), here));
+    // Another program, another copy, a lookalike folder or file name: never ours.
+    assert!(!legacy_protocol_points_at_us(Some(r#""D:\Other\Tool\tool.exe" "%1""#), here));
+    assert!(!legacy_protocol_points_at_us(Some(r#""D:\Apps\Prompt Saver\prompt-saver.exe" "%1""#), here));
+    assert!(!legacy_protocol_points_at_us(Some(r#""C:\Apps\Prompt Saver\prompt-saver.exe.bak" "%1""#), here));
+    assert!(!legacy_protocol_points_at_us(Some(r#""C:\Apps\Prompt Saver\prompt-saver-old.exe" "%1""#), here));
+    // The exe path appearing only as an argument does not make it the program.
+    assert!(!legacy_protocol_points_at_us(Some(r#""D:\Other\tool.exe" "C:\Apps\Prompt Saver\prompt-saver.exe""#), here));
+    // An unquoted path with spaces is cut at the first space and so is not ours either.
+    assert!(!legacy_protocol_points_at_us(Some(r"C:\Apps\Prompt Saver\prompt-saver.exe %1"), here));
+    // Nothing readable is never ours.
+    assert!(!legacy_protocol_points_at_us(None, here));
+    assert!(!legacy_protocol_points_at_us(Some(""), here));
+    assert!(!legacy_protocol_points_at_us(Some("   "), here));
+    assert!(!legacy_protocol_points_at_us(Some(r#""" "%1""#), here));
+}
+
+#[test]
+fn the_old_address_scheme_cleanup_deletes_only_an_entry_that_starts_this_exe() {
+    use std::cell::Cell;
+    let here = r"C:\Apps\Prompt Saver\prompt-saver.exe";
+    let run = |command: Result<Option<String>, String>, delete: Result<(), String>| {
+        let deleted = Cell::new(false);
+        let out = remove_legacy_protocol_with(
+            here,
+            || command,
+            || {
+                deleted.set(true);
+                delete
+            },
+        );
+        (out, deleted.get())
+    };
+    let ours = Ok(Some(r#""C:\Apps\Prompt Saver\prompt-saver.exe" "%1""#.to_string()));
+    assert_eq!(run(ours.clone(), Ok(())), (Ok(true), true));
+    // A foreign owner, a missing key and an empty command are left alone.
+    assert_eq!(run(Ok(Some(r#""D:\Other\tool.exe" "%1""#.to_string())), Ok(())), (Ok(false), false));
+    assert_eq!(run(Ok(None), Ok(())), (Ok(false), false));
+    assert_eq!(run(Ok(Some(String::new())), Ok(())), (Ok(false), false));
+    // A key that cannot be read is never deleted on a guess.
+    assert_eq!(run(Err("access denied".into()), Ok(())), (Err("access denied".to_string()), false));
+    // A failed delete is reported, not hidden.
+    assert_eq!(run(ours, Err("busy".into())), (Err("busy".to_string()), true));
+}
+
 pub(super) fn fake_snapshot(root: &std::path::Path, name: &str) {
     let f = root.join(name);
     std::fs::create_dir_all(&f).unwrap();
@@ -1075,10 +1135,9 @@ fn forwarded_backup_restore_runs_off_the_async_runtime() {
 
 #[test]
 fn modal_file_dialogs_wait_on_a_blocking_thread() {
-    let cases: [(&str, &str, &[&str]); 3] = [
+    let cases: [(&str, &str, &[&str]); 2] = [
         (include_str!("../import_export.rs"), "import_export", &["export_prompts", "preview_import", "preview_import_folder"]),
         (include_str!("../vault.rs"), "vault", &["export_all", "pick_backup_file", "export_settings_only", "pick_settings_import_file"]),
-        (include_str!("../remote.rs"), "remote", &["remote_tls_save_cert"]),
     ];
     for (src, file, names) in cases {
         for name in names {
@@ -1142,13 +1201,6 @@ fn every_crate_version_is_pinned_exactly() {
         }
     }
     assert!(loose.is_empty(), "crates must be pinned with =x.y.z: {loose:?}");
-}
-
-#[test]
-fn both_launch_routes_find_the_link_through_one_helper() {
-    let lib = include_str!("../lib.rs");
-    assert!(!lib.contains("starts_with(\"promptsaver://\")"), "the scheme match must live in remote::find_scheme_arg only");
-    assert_eq!(lib.matches("remote::find_scheme_arg(").count(), 2);
 }
 
 #[test]

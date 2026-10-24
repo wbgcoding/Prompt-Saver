@@ -6,7 +6,7 @@
 //
 // Layout: `parse()` turns argv into a `Cmd`; `exec()` is the pure core that runs a `Cmd`
 // against a `Store` in memory (shared by the standalone path and the running instance, so
-// they cannot drift apart); `run_standalone()` and `run_in_process()` are the two thin
+// they cannot drift apart); `run_standalone()` and `run_in_process_deferred()` are the two thin
 // callers that load and persist the store around it; the pipe framing and the launch-side
 // dispatcher sit at the top.
 
@@ -34,12 +34,6 @@ const SUBCOMMANDS: &[&str] = &[
     "list", "get", "copy", "add", "edit", "delete", "restore", "tag", "view", "search", "export",
     "import", "backup", "settings", "version", "describe",
 ];
-
-// The only caller-supplied word that may reach the log: a known subcommand, else a fixed
-// placeholder. The first argument comes from a remote client and can hold any text.
-pub(crate) fn logged_command_name(first_arg: &str) -> &'static str {
-    SUBCOMMANDS.iter().find(|c| **c == first_arg).copied().unwrap_or("unknown command")
-}
 
 fn looks_like_cli(argv: &[String]) -> bool {
     match argv.first().map(String::as_str) {
@@ -289,11 +283,7 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
     let Ok(req_bytes) = read_frame(&mut pipe, MAX_FRAME_BYTES).await else { return };
     let Ok(req) = serde_json::from_slice::<PipeRequest>(&req_bytes) else { return };
     if req.argv == [SHOW_PING.to_string()] {
-        respond_to_show_ping(&mut pipe, &app, true).await;
-        return;
-    }
-    if req.argv == [ALIVE_PING.to_string()] {
-        respond_to_show_ping(&mut pipe, &app, false).await;
+        respond_to_show_ping(&mut pipe, &app).await;
         return;
     }
     let (code, stdout, stderr, restart) = run_in_process_deferred(&app, req.argv, PathBuf::from(req.cwd)).await;
@@ -311,21 +301,14 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
 // when the main thread is wedged; see the tray-window comment above). It is sent before
 // show_main does its work, because raising a window or rebuilding a missing one can outlast
 // the launch side's patience, and a slow window is not a hung process. Reaching the closure
-// is the liveness proof. A promptsaver:// link pings with `raise` false: it should copy or
-// open quietly, never pull a window to the front.
-async fn respond_to_show_ping(
-    pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer,
-    app: &AppHandle,
-    raise: bool,
-) {
+// is the liveness proof.
+async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer, app: &AppHandle) {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let app2 = app.clone();
     if app
         .run_on_main_thread(move || {
             let _ = tx.send(());
-            if raise {
-                show_main(&app2);
-            }
+            show_main(&app2);
         })
         .is_ok()
     {
@@ -340,22 +323,16 @@ async fn respond_to_show_ping(
 // ---------- Second-launch handshake (a plain GUI start, not a CLI command) ----------
 //
 // A second launch that is not a CLI command pings the same pipe instead of trusting the
-// single-instance plugin's unconditional forward-and-exit. `argv` is the launch's raw
-// arguments (already known not to be a CLI command). A promptsaver:// link runs the same
-// handshake with a ping that never raises a window; the answer still has to reach the
-// single-instance plugin (a live instance) or this process's own setup (a takeover, or
-// nobody running), and never ends the launch here.
+// single-instance plugin's unconditional forward-and-exit.
 
-const SHOW_PING: &str = "\0show-ping\0"; // never a valid subcommand, path or link
-const ALIVE_PING: &str = "\0alive-ping\0"; // liveness only, never raises a window
+const SHOW_PING: &str = "\0show-ping\0"; // never a valid subcommand or path
 const SECOND_LAUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum LaunchDecision {
     // Nothing is listening: this launch is the primary instance.
     Primary,
-    // The running instance answered (or this is a case left to the
-    // single-instance plugin, e.g. a deep link): this launch is done.
+    // The running instance answered: this launch is done.
     HandedOff,
     // The running instance did not answer in time and was taken over --
     // this launch continues on as the new primary instance.
@@ -367,30 +344,14 @@ fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
 }
 
-// A link must reach the single-instance plugin (a live instance) or this process's own setup
-// (a takeover, or nobody running); it never ends here.
-fn link_decision(handshake: LaunchDecision) -> LaunchDecision {
-    match handshake {
-        LaunchDecision::HandedOff => LaunchDecision::Primary,
-        other => other,
-    }
-}
-
-pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
-    // A link never ends this launch silently: HandedOff (the running instance is alive) turns
-    // back into Primary, so the caller falls through to the single-instance plugin, which
-    // forwards the link and exits this process, or to this process's first-launch setup.
-    if argv.iter().any(|a| a.starts_with("promptsaver://")) {
-        let Ok(rt) = runtime() else { return LaunchDecision::Primary };
-        return link_decision(rt.block_on(resolve_second_launch_async(ALIVE_PING)));
-    }
+pub(crate) fn resolve_second_launch() -> LaunchDecision {
     let Ok(rt) = runtime() else {
         return LaunchDecision::HandedOff; // could not even try -- behave as before
     };
-    rt.block_on(resolve_second_launch_async(SHOW_PING))
+    rt.block_on(resolve_second_launch_async())
 }
 
-async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
+async fn resolve_second_launch_async() -> LaunchDecision {
     use tokio::net::windows::named_pipe::ClientOptions;
     let name = pipe_name();
     // Only two outcomes end this launch: a clear answer (hand off) or a proven hang that was
@@ -413,7 +374,7 @@ async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
     // The pid is read off the still-connected handle, before anything can end the server and let
     // Windows hand the number to someone else.
     let server_pid = named_pipe_server_pid(&client);
-    let req = PipeRequest { argv: vec![ping.to_string()], cwd: String::new() };
+    let req = PipeRequest { argv: vec![SHOW_PING.to_string()], cwd: String::new() };
     let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::Primary };
     // Its own full budget: time spent waiting for a busy pipe must not shrink the window the
     // running instance gets to prove it is alive.
@@ -592,8 +553,6 @@ fn usage_err(msg: impl Into<String>) -> String {
 
 // A prompt/view identifier: permissive enough for every id this or an older build minted
 // (see gen_id), narrow enough to reject a stray path, a flag or control characters.
-// pub(crate): also the id check for a promptsaver:// link and the remote receiver, so all
-// three entry points reject malformed ids the same way.
 pub(crate) fn valid_id(s: &str) -> bool {
     !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
@@ -639,7 +598,7 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> PathBuf {
 
 // A tiny cursor over the remaining args, shared by every subcommand's parser. It owns its
 // items: taking a flag out replaces the list instead of leaking a copy, which matters now
-// that the app parses a command for every pipe and receiver request without exiting.
+// that the app parses a command for every pipe request without exiting.
 struct Args {
     items: Vec<String>,
     pos: usize,
@@ -1654,10 +1613,10 @@ fn map_restore_err_code(e: &str) -> i32 {
 // ---------- Settings ----------
 
 fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
-    // The receiver's certificate values belong to this machine and never travel over the command
-    // line, least of all the remote one. The vault salt and verifier and the sealed backup
-    // password would give anyone with the receiver password what an offline guess needs.
-    if crate::remote::is_remote_secret_key(key) || crate::is_vault_key(key) || key == crate::BACKUP_PW_KEY {
+    // Leftover receiver secrets from an earlier version, the vault salt and verifier and the
+    // sealed backup password never travel over the command line: they would give anyone who
+    // reads them what an offline guess needs.
+    if crate::is_remote_secret_key(key) || crate::is_vault_key(key) || key == crate::BACKUP_PW_KEY {
         return Outcome::err(2, format!("no setting named \"{key}\"\n"));
     }
     let s = &store.settings;
@@ -1690,12 +1649,12 @@ fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
 }
 
 fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
-    if crate::remote::is_remote_secret_key(key) {
+    if crate::is_remote_secret_key(key) {
         return Outcome::err(1, format!("{key} is managed by the app and cannot be set\n"));
     }
-    // Folder authority, the vault keys, the backup password, the import-denied switches and
-    // every receiver setting have dedicated writers and are refused for an import too; this
-    // generic setter is reachable from the remote receiver and must not bypass them.
+    // Folder authority, the vault keys, the backup password and the import-denied switches
+    // have dedicated writers and are refused for an import too; this generic setter must not
+    // bypass them.
     if crate::is_protected_folder_key(key)
         || crate::is_vault_key(key)
         || key == crate::BACKUP_PW_KEY
@@ -1813,7 +1772,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("backup", Some("restore")) => "prompt-saver backup restore <name> [--scope all|data|settings] [--keep N] --yes\n\nReplace the store with a backup. Always takes a safety snapshot first.".to_string(),
         ("settings", None) => "prompt-saver settings get <key> [--json]\nprompt-saver settings set <key> <value> --yes".to_string(),
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
-        ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the remote access switches and values, the link and clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
+        ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }

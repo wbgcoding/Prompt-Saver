@@ -464,18 +464,13 @@ pub(super) fn clamped_values(entries: &[(&str, f64)]) -> HashMap<String, f64> {
 fn a_stored_number_outside_its_slider_range_is_clamped_on_load() {
     let v = clamped_values(&[
         ("importFolderMax", 1e18),
-        ("remoteRateLimit", 0.0),
-        ("remotePort", -5.0),
         ("uiScale", 5000.0),
         ("historyMax", 5e9),
     ]);
     assert_eq!(v["importFolderMax"], 2000.0);
-    assert_eq!(v["remoteRateLimit"], 0.0, "the unlimited sentinel stays");
-    assert_eq!(v["remotePort"], 1024.0);
     assert_eq!(v["uiScale"], 300.0);
     assert_eq!(v["historyMax"], 1_000_000.0, "a stops entry is held to its last stop");
-    let v = clamped_values(&[("remoteRateLimit", 1e9), ("hoverLift", 7.0)]);
-    assert_eq!(v["remoteRateLimit"], 300.0);
+    let v = clamped_values(&[("hoverLift", 7.0)]);
     assert_eq!(v["hoverLift"], 7.0, "an in-range value is untouched");
 }
 
@@ -494,14 +489,12 @@ fn a_settings_import_clamps_the_numbers_it_brings() {
         ui_flags: HashMap::new(),
         ui_values: HashMap::from([
             ("importFolderMax".to_string(), 1e18),
-            ("remoteRateLimit".to_string(), 0.0),
             ("hoverLift".to_string(), f64::NAN),
         ]),
         ui_texts: HashMap::new(),
     };
     merge_settings_only(&mut live, file, |_| true).unwrap();
     assert_eq!(live.ui_values["importFolderMax"], 2000.0);
-    assert_eq!(live.ui_values["remoteRateLimit"], 0.0);
     assert!(!live.ui_values.contains_key("hoverLift"));
 }
 

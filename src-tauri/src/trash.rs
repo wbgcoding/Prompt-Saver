@@ -57,8 +57,8 @@ pub(crate) fn seat_restored_in_active_view(settings: &mut Settings, id: &str) {
 
 // Moves a trashed prompt back onto the active view and persists it. On a failed
 // write the store is put back exactly as it was: the rollback copy is the FULL
-// settings (never the window copy, which lacks the receiver's password hash and
-// TLS key), so a failed restore cannot strip them from the live store.
+// settings (never the window copy, which lacks the sealed backup password), so a failed restore
+// cannot strip it from the live store.
 pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnce(&Store) -> bool) -> Result<(), String> {
     let Some(pos) = store.trash.iter().position(|p| p.id == id) else {
         return Err("not-found".into());
@@ -731,7 +731,7 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
 
 // The settings a reset leaves behind: every default, plus the values that are keys rather
 // than preferences. The backup password (dropping it would make every protected backup
-// unreadable), the receiver's certificate (it belongs to this machine), and the vault's
+// unreadable) and the vault's
 // salt and verifier (what the confidential prompts the reset keeps are sealed with).
 pub(crate) fn settings_after_reset(old: &Settings) -> Settings {
     let mut fresh = Settings::default();
@@ -750,9 +750,6 @@ pub(crate) fn settings_after_reset(old: &Settings) -> Settings {
     }
     if let Some(pw) = old.ui_texts.get(BACKUP_PW_KEY) {
         fresh.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw.clone());
-    }
-    for (k, v) in remote_tls::tls_values(old) {
-        fresh.ui_texts.insert(k, v);
     }
     carry_vault_keys(old, &mut fresh);
     fresh
@@ -805,18 +802,18 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
     let reset = {
         let mut store = lock(&state);
         match reset_settings_core(&mut store, |st| save_settings(&app, &st.settings)) {
-            Ok((old, ocr_was_on)) => {
+            Ok((_old, ocr_was_on)) => {
                 // Defaults switch the picture-text index off: erase its text as well.
                 if ocr_was_on && clear_ocr_index_text(&mut store) {
                     write_ocr_wipe(&app, &store, "reset");
                 }
-                Ok(remote::reset_side_effects(&old, &store.settings))
+                Ok(())
             }
             Err(e) => Err(e),
         }
     };
-    let effects = match reset {
-        Ok(effects) => effects,
+    match reset {
+        Ok(()) => {}
         Err(e) => {
             // The settings rolled back, so the windows closed above belong back; the store
             // lock is released here, as the window calls require.
@@ -828,7 +825,6 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
     if !autostart_removal_skipped() {
         let _ = apply_autostart(false, false);
     }
-    remote::run_reset_side_effects(&app, &effects);
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);
     // The key overlay defaults off too: end a running capture.

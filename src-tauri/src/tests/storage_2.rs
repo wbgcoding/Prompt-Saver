@@ -731,12 +731,12 @@ fn a_failed_trash_restore_keeps_the_receiver_secrets_in_the_live_settings() {
     p.id = "t1".into();
     p.trashed_at = 5;
     store.trash.push(p);
-    store.settings.ui_texts.insert("remotePasswordHash".into(), "hash".into());
-    store.settings.ui_texts.insert("remoteTlsKey".into(), "sealed".into());
+    store.settings.ui_texts.insert(BACKUP_PW_KEY.into(), "hash".into());
+    store.settings.ui_texts.insert(SECRET_SALT_KEY.into(), "sealed".into());
     let r = restore_trashed_core(&mut store, "t1", |_| false);
     assert_eq!(r, Err("save-failed".to_string()));
-    assert_eq!(store.settings.ui_texts.get("remotePasswordHash").map(String::as_str), Some("hash"));
-    assert_eq!(store.settings.ui_texts.get("remoteTlsKey").map(String::as_str), Some("sealed"));
+    assert_eq!(store.settings.ui_texts.get(BACKUP_PW_KEY).map(String::as_str), Some("hash"));
+    assert_eq!(store.settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("sealed"));
     assert_eq!(store.trash.len(), 1);
     assert_eq!(store.trash[0].trashed_at, 5);
     assert!(store.prompts.is_empty());
@@ -832,16 +832,11 @@ fn reset_expert_keeps_the_keys_and_drops_the_preferences() {
     s.ui_texts.insert(SECRET_SALT_KEY.to_string(), "salt".into());
     s.ui_texts.insert(SECRET_VERIFY_KEY.to_string(), "verify".into());
     s.ui_texts.insert(BACKUP_PW_KEY.to_string(), "sealed".into());
-    s.ui_texts.insert("remoteTlsKey".to_string(), "tls".into());
     s.ui_texts.insert("copyFont".to_string(), "mono".into());
     s.ui_flags.insert("clipWatcher".to_string(), true);
-    s.ui_flags.insert("remoteTlsShortLived".to_string(), true);
-    s.ui_texts.insert("remoteTlsCert".to_string(), "cert".into());
     s.ui_values.insert("trayRecentN".to_string(), 9.0);
     reset_expert_settings(&mut s);
-    assert!(!s.ui_flags.contains_key("remoteTlsShortLived"), "the switch goes back to off");
-    assert_eq!(s.ui_texts.get("remoteTlsCert").map(String::as_str), Some("cert"), "without rotating the certificate");
-    for (k, v) in [(SECRET_SALT_KEY, "salt"), (SECRET_VERIFY_KEY, "verify"), (BACKUP_PW_KEY, "sealed"), ("remoteTlsKey", "tls")] {
+    for (k, v) in [(SECRET_SALT_KEY, "salt"), (SECRET_VERIFY_KEY, "verify"), (BACKUP_PW_KEY, "sealed")] {
         assert_eq!(s.ui_texts.get(k).map(String::as_str), Some(v), "{k} must survive");
     }
     assert!(!s.ui_texts.contains_key("copyFont"));

@@ -441,22 +441,19 @@ fn a_settings_export_carries_no_password_hash_or_sealed_backup_password() {
 }
 
 #[test]
-fn a_window_copy_of_the_settings_has_no_private_key() {
+fn a_window_copy_of_the_settings_has_no_leftover_receiver_secret() {
     let mut s = Settings::default();
-    s.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "sealed".into());
-    s.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "ca".into());
-    s.ui_texts.insert(remote::REMOTE_PASSWORD_KEY.into(), "hash".into());
-    s.ui_texts.insert("remoteAllowedRanges".into(), "10.0.0.0/8".into());
+    for k in ["remoteTlsKey", "remoteTlsCert", "remoteTlsCa", REMOTE_PASSWORD_KEY] {
+        s.ui_texts.insert(k.into(), "secret".into());
+    }
     s.ui_texts.insert(BACKUP_PW_KEY.into(), "sealed".into());
+    s.ui_texts.insert("copyFont".into(), "Consolas".into());
     let copy = webview_settings(&s);
-    assert!(!copy.ui_texts.contains_key(remote::REMOTE_PASSWORD_KEY));
-    assert!(!copy.ui_texts.contains_key(BACKUP_PW_KEY));
+    for k in ["remoteTlsKey", "remoteTlsCert", "remoteTlsCa", REMOTE_PASSWORD_KEY, BACKUP_PW_KEY] {
+        assert!(!copy.ui_texts.contains_key(k), "{k} must stay in the backend");
+    }
+    assert!(copy.ui_texts.contains_key("copyFont"), "ordinary rows still reach the window");
     assert!(s.ui_texts.contains_key(BACKUP_PW_KEY), "the stored settings keep it");
-    assert!(copy.ui_texts.contains_key("remoteAllowedRanges"));
-    assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
-    assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_CA), "the certificates stay in the backend too");
-    assert!(s.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
-    assert!(s.ui_texts.contains_key(remote_tls::REMOTE_TLS_CA));
 }
 
 // A full "data" import must actually delete the prompts it replaces ON DISK,

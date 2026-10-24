@@ -46,3 +46,6 @@ test-data/
 
 # scratch space for the working session (never committed)
 .tmp/
+
+# Parked features, kept locally only
+parked/

@@ -28,8 +28,7 @@ tauri-plugin-global-shortcut = "=2.3.2"
 # request to the already-running instance and its answer back; "rt" is the
 # small standalone runtime that launch waits on it with, since nothing has
 # started Tauri's own runtime yet at that point. "sync" (Notify) and "macros"
-# (select!) drive the local remote-access receiver's own accept loop and its
-# clean shutdown.
+# (select!) drive the folder sync's wake-up and its loop.
 tokio = { version = "=1.53.1", features = ["time", "net", "rt", "sync", "macros"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
@@ -38,12 +37,6 @@ rfd = "=0.15.4"
 sys-locale = "=0.3.2"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "=2.12.1", default-features = false, features = ["tls"] }
-# HTTPS for the remote-access receiver when the network switch is on: rustls with
-# the ring provider only (ureq already brings rustls and ring, so no second
-# crypto backend), plus a certificate generator for the receiver's own identity.
-# Both pinned exactly.
-tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
-rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
 sha2 = "=0.10.9"
 # Ed25519 check of signed updates; already in the tree through rustls.

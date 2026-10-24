@@ -56,23 +56,6 @@ fn a_different_user_is_never_taken_over_even_at_the_same_path() {
     assert!(!should_take_over_hung_instance(false, false, true));
 }
 
-// ---- a link's own handshake never ends the launch by itself ----
-
-#[test]
-fn a_live_instance_falls_through_to_the_plugin_instead_of_ending_the_link() {
-    assert_eq!(link_decision(LaunchDecision::HandedOff), LaunchDecision::Primary);
-}
-
-#[test]
-fn no_running_instance_stays_primary() {
-    assert_eq!(link_decision(LaunchDecision::Primary), LaunchDecision::Primary);
-}
-
-#[test]
-fn a_taken_over_hang_stays_a_takeover() {
-    assert_eq!(link_decision(LaunchDecision::TookOver), LaunchDecision::TookOver);
-}
-
 // The Win32 half of the same decision, against real processes: without
 // this, a failing token or image-name query would silently turn every
 // takeover into a no-op while the pure tests above stayed green.
@@ -562,7 +545,7 @@ fn settings_get_reports_not_found_for_an_unknown_key() {
 }
 
 #[test]
-fn the_receiver_secrets_can_neither_be_read_nor_written_here() {
+fn leftover_receiver_secrets_can_neither_be_read_nor_written_here() {
     let mut store = fixture_store();
     let dir = std::env::temp_dir();
     for key in ["remoteTlsKey", "remoteTlsCert", "remoteTlsCa", "remotePasswordHash"] {
@@ -1017,139 +1000,6 @@ fn forwarded_request_reports_a_dropped_connection() {
         assert!(matches!(out, Forwarded::Closed));
         srv.await.unwrap();
     });
-}
-
-#[test]
-fn a_remote_first_argument_reaches_the_log_only_as_a_known_command() {
-    assert_eq!(logged_command_name("export"), "export");
-    assert_eq!(logged_command_name("my secret prompt text"), "unknown command");
-    assert_eq!(logged_command_name(&"x".repeat(1_000_000)), "unknown command");
-    assert_eq!(logged_command_name(""), "unknown command");
-}
-
-// ---- remote-caller path confinement ----
-
-#[test]
-fn export_inside_the_data_folder_is_allowed() {
-    let dir = TempDir::new("confine-ok");
-    let argv = args(&["export", "out.json", "--yes"]);
-    assert!(confine_path_arg(&argv, dir.path()).is_ok());
-}
-
-#[test]
-fn export_escaping_the_data_folder_via_dotdot_is_refused() {
-    let dir = TempDir::new("confine-escape");
-    std::fs::create_dir_all(dir.path().join("sub")).unwrap();
-    let argv = args(&["export", "../outside.json", "--yes"]);
-    let inner = dir.path().join("sub");
-    assert!(confine_path_arg(&argv, &inner).is_err());
-}
-
-#[test]
-fn export_with_an_absolute_path_outside_the_data_folder_is_refused() {
-    let dir = TempDir::new("confine-abs");
-    let outside = TempDir::new("confine-abs-outside");
-    let abs = outside.path().join("out.json");
-    let argv = args(&["export", abs.to_str().unwrap(), "--yes"]);
-    assert!(confine_path_arg(&argv, dir.path()).is_err());
-}
-
-#[test]
-fn export_cannot_overwrite_the_store_or_its_snapshots() {
-    let dir = TempDir::new("confine-store");
-    std::fs::write(dir.path().join("data.db"), "db").unwrap();
-    std::fs::create_dir_all(dir.path().join("backups").join("2026-01-01_10-00-00")).unwrap();
-    for target in [
-        "data.db",
-        "DATA.DB",
-        "data.db-wal",
-        "data.db-shm",
-        "prompts.json",
-        "settings.json",
-        "datadir.lock.json",
-        "backups/2026-01-01_10-00-00/data.db.gz",
-        "backups/new.json",
-        "files/pic.png",
-    ] {
-        let argv = args(&["export", target, "--yes"]);
-        assert!(confine_path_arg(&argv, dir.path()).is_err(), "{target} must be refused as an export target");
-    }
-    // A non-store name stays fine, also in a subfolder of its own.
-    std::fs::create_dir_all(dir.path().join("out")).unwrap();
-    for target in ["export.json", "out/data.json", "mydata.db"] {
-        let argv = args(&["export", target, "--yes"]);
-        assert!(confine_path_arg(&argv, dir.path()).is_ok(), "{target} must stay allowed");
-    }
-}
-
-#[test]
-fn export_cannot_overwrite_program_files_beside_the_store() {
-    let dir = TempDir::new("confine-program");
-    std::fs::write(dir.path().join("uninstall.exe"), "x").unwrap();
-    for target in ["uninstall.exe", "Uninstall.EXE", "datapath", "ffmpeg.exe", "tool.dll", "new.exe"] {
-        let argv = args(&["export", target, "--yes"]);
-        assert!(confine_path_arg(&argv, dir.path()).is_err(), "{target} must be refused as an export target");
-    }
-    let argv = args(&["export", "datapath.json", "--yes"]);
-    assert!(confine_path_arg(&argv, dir.path()).is_ok());
-}
-
-#[test]
-fn export_names_are_checked_the_way_windows_will_read_them() {
-    let dir = TempDir::new("confine-spelling");
-    // None of these exist yet; Windows drops trailing dots and spaces and treats ":x" as a
-    // stream of the base name, so each one lands on a program or store file.
-    for target in [
-        "uninstall.exe.",
-        "uninstall.exe...",
-        "uninstall.exe ",
-        "uninstall.exe:x",
-        "datapath.",
-        "ffmpeg.exe.",
-        "data.db-wal.",
-        "data.db-wal:s",
-        "DATA.DB.",
-    ] {
-        let argv = args(&["export", target, "--yes"]);
-        assert!(confine_path_arg(&argv, dir.path()).is_err(), "{target} must be refused as an export target");
-    }
-    let argv = args(&["export", "report.json.", "--yes"]);
-    assert!(confine_path_arg(&argv, dir.path()).is_ok(), "an ordinary name with a stray dot stays allowed");
-}
-
-#[test]
-fn a_program_file_refusal_has_its_own_message() {
-    let dir = TempDir::new("confine-program-msg");
-    let program = confine_path_arg(&args(&["export", "uninstall.exe", "--yes"]), dir.path()).unwrap_err();
-    let store = confine_path_arg(&args(&["export", "data.db", "--yes"]), dir.path()).unwrap_err();
-    assert_ne!(program, store, "a program file is not stored data");
-    assert!(program.contains("program"), "{program}");
-}
-
-#[test]
-fn import_from_inside_the_data_folder_is_allowed() {
-    let dir = TempDir::new("confine-import-ok");
-    let file = dir.path().join("in.json");
-    std::fs::write(&file, "[]").unwrap();
-    let argv = args(&["import", "in.json", "--yes"]);
-    assert!(confine_path_arg(&argv, dir.path()).is_ok());
-}
-
-#[test]
-fn import_escaping_the_data_folder_is_refused() {
-    let dir = TempDir::new("confine-import-escape");
-    let outside = TempDir::new("confine-import-outside");
-    let file = outside.path().join("in.json");
-    std::fs::write(&file, "[]").unwrap();
-    let argv = args(&["import", file.to_str().unwrap(), "--yes"]);
-    assert!(confine_path_arg(&argv, dir.path()).is_err());
-}
-
-#[test]
-fn a_non_path_command_is_never_confined() {
-    let dir = TempDir::new("confine-noop");
-    assert!(confine_path_arg(&args(&["list"]), dir.path()).is_ok());
-    assert!(confine_path_arg(&args(&["get", "p1"]), dir.path()).is_ok());
 }
 
 // ---- `describe` / docs/automation-manifest.json ----

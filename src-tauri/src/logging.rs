@@ -391,9 +391,7 @@ pub(crate) fn scrub_user_paths_from_crash_log() {
 // ---------- Recent messages ----------
 // A ring buffer of the errors shown to the user, so one that flashed by in a toast can be
 // found afterwards. Filled from `errToast` on the frontend (where every failed command and
-// background event ends up), never from the crash log, or a line would show twice. The
-// remote-access receiver and promptsaver:// links (remote.rs) also record every access
-// here, so a silent read or write from outside this window leaves a visible trace.
+// background event ends up), never from the crash log, or a line would show twice.
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct ErrorLogEntry {
     pub(crate) ts: u64,
@@ -437,9 +435,8 @@ pub(crate) fn scrub_error_log_text(s: &str) -> String {
 }
 
 // Every value `origin` may carry: every overlay/modal id `currentErrorOrigin()` (core.js)
-// can read off the open dialog, the two non-modal screens it falls back to, and the two
-// backend-only origins (`remoteApi`, the remote-access receiver; `test`, used by this
-// file's tests). `log_error` is an IPC command, so its `origin` is as untrusted as any
+// can read off the open dialog, the two non-modal screens it falls back to, and the
+// backend-only origin (`test`, used by this file's tests). `log_error` is an IPC command, so its `origin` is as untrusted as any
 // caller string; an allow-list with a fixed "other" fallback keeps it from becoming a
 // free-text field, as `scrub_error_log_text` does for `text`/`raw`.
 pub(crate) const ERROR_LOG_ORIGINS: [&str; 34] = [
@@ -456,8 +453,6 @@ pub(crate) fn sanitize_error_log_origin(origin: &str) -> &'static str {
         return known;
     }
     match origin {
-        "remoteApi" => "remoteApi",
-        "urlScheme" => "urlScheme",
         "test" => "test",
         _ => "other",
     }

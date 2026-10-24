@@ -965,7 +965,7 @@ fn every_native_dialog_call_runs_inside_the_dialog_thread_helper() {
             }
         }
     }
-    assert!(checked >= 17, "the scan must actually see the dialog calls, saw {checked}");
+    assert!(checked >= 16, "the scan must actually see the dialog calls, saw {checked}");
 }
 
 // A window closed maximized came back at its normal size: the start set the normal bounds on the

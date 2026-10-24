@@ -20,8 +20,7 @@ ALLOW = {
         "ocr-no-language", "ocr-index-busy", "voice-no-language", "voice-busy", "voice-online-required",
         "recording-too-young-to-continue", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
-        "view-full:{deficit}", "{RESTART_FAILED_PREFIX}{e}",
-        "not a valid address or range: {part}", "invalid-exe",
+        "view-full:{deficit}", "invalid-exe",
     ],
     "an export graph only this app's own UI builds; a refusal shows the generic export failure": [
         "export graph not allowed: {why}", "export graph not allowed: media file type",
@@ -53,11 +52,6 @@ ALLOW = {
         "text longer than {MAX_TEXT_LEN} characters",
         "path is empty, contains a NUL byte, or is too long",
         "could not open the restored store", "could not write the restored store",
-        "refused: the path escapes the data folder",
-        "refused: that path belongs to the stored data",
-        "refused: the path has no file name",
-        "refused: the path does not resolve inside the data folder",
-        "the data folder could not be resolved",
     ],
     "demo mode switch, only reachable from the command line": [
         "a folder already exists at the demo data path and was not created by demo mode; refusing to touch it",
@@ -65,7 +59,7 @@ ALLOW = {
     ],
     "stub for a non-Windows build, the app ships for Windows only": [
         "ocr is only available on Windows", "recording is only available on Windows",
-        "voice is only available on Windows", "the address scheme is only supported on Windows",
+        "voice is only available on Windows",
     ],
 }
 

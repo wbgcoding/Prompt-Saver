@@ -434,17 +434,6 @@ fn dir_is_writable_probes_with_a_real_file() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-// Switching the network filter off must never leave it on after a failed restart:
-// the receiver would come back bound beyond loopback right after the user closed it.
-#[test]
-fn a_failed_narrowing_restart_does_not_restore_the_wide_flag() {
-    assert_eq!(remote::flag_after_failed_restart(false, Some(true)), Some(false));
-    assert_eq!(remote::flag_after_failed_restart(false, None), Some(false));
-    // A failed widening still goes back to what it was.
-    assert_eq!(remote::flag_after_failed_restart(true, Some(false)), Some(false));
-    assert_eq!(remote::flag_after_failed_restart(true, None), None);
-}
-
 // The WebView2 bootstrapper gate runs only a Microsoft-signed file: a valid
 // signature from anybody else must not pass.
 #[test]
@@ -661,24 +650,6 @@ fn a_converted_recordings_sidecars_stay_referenced_through_the_sweep() {
     assert_eq!(count, 0, "the sidecars of a kept converted recording must survive");
     assert!(mic.exists() && keys.exists());
     let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn a_request_is_judged_by_the_password_and_ranges_in_force_when_it_arrives() {
-    let mut settings = Settings::default();
-    settings.ui_flags.insert("remoteNetworkFilter".into(), true);
-    settings.ui_texts.insert("remoteAllowedRanges".into(), "192.168.1.0/24".into());
-    settings.ui_texts.insert("remotePasswordHash".into(), "old-hash".into());
-    let peer: std::net::IpAddr = "192.168.1.20".parse().unwrap();
-    assert_eq!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), peer), Some(Some("old-hash".to_string())));
-    // The password was regenerated while the connection was open.
-    settings.ui_texts.insert("remotePasswordHash".into(), "new-hash".into());
-    assert_eq!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), peer), Some(Some("new-hash".to_string())));
-    // The ranges were narrowed past this peer.
-    settings.ui_texts.insert("remoteAllowedRanges".into(), "192.168.2.0/24".into());
-    assert_eq!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), peer), None);
-    // Loopback stays allowed whatever the ranges say.
-    assert!(remote::live_access(&remote::ReceiverAccess::from_settings(&settings), "127.0.0.1".parse().unwrap()).is_some());
 }
 
 #[test]

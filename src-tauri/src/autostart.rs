@@ -186,15 +186,6 @@ pub(crate) fn start_minimized_rewrites_entry(autostart_on: bool, owner: Registry
     autostart_on && owner != RegistryOwner::OtherExe
 }
 
-// A reset turns the address scheme off like the switch does, so it leaves
-// another copy's registration alone too.
-pub(crate) fn url_scheme_removal_skipped() -> bool {
-    match remote::url_scheme_command() {
-        Ok(cmd) => skip_registry_removal(false, current_registry_owner(cmd.as_deref())),
-        Err(_) => false,
-    }
-}
-
 // A reset turns autostart off like the switch does, so it leaves another copy's
 // Run entry alone too.
 pub(crate) fn autostart_removal_skipped() -> bool {
@@ -211,9 +202,8 @@ pub(crate) fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
     }
 }
 
-// Start-up: refresh autostart and the address scheme registrations that the
-// stored settings ask for.
-pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: bool, demo: bool) {
+// Start-up: refresh the autostart registration that the stored settings ask for.
+pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, demo: bool) {
     match autostart_command() {
         Ok(cmd) => {
             if boot_reconcile_writes(autostart_on, demo, current_registry_owner(cmd.as_deref())) {
@@ -224,17 +214,66 @@ pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_s
         }
         Err(e) => append_crash_log(&format!("autostart reconcile could not read the entry: {e}")),
     }
-    match remote::url_scheme_command() {
-        Ok(cmd) => {
-            if boot_reconcile_writes(url_scheme_on, demo, current_registry_owner(cmd.as_deref())) {
-                if let Err(e) = remote::apply_url_scheme_registration(true) {
-                    append_crash_log(&format!("address scheme reconcile failed: {e}"));
-                }
-            }
+}
+
+// ---------- Leftover address-scheme registration ----------
+//
+// An earlier version registered a per-user URL scheme named `promptsaver`. The feature is
+// gone, so start-up takes the registration out again, but only when its open command starts
+// this very exe: another program (or another copy of this one) may own the scheme now, and
+// that entry is none of our business.
+const LEGACY_PROTOCOL_KEY: &str = "Software\\Classes\\promptsaver";
+
+// True when a registered open command starts `this_exe`. A missing, empty or unreadable
+// command is never ours.
+pub(crate) fn legacy_protocol_points_at_us(command: Option<&str>, this_exe: &str) -> bool {
+    command.and_then(command_program).is_some_and(|program| same_program_path(&program, this_exe))
+}
+
+// The cleanup with its two registry touches passed in, so every branch is provable without
+// the registry. Returns whether the key was removed.
+pub(crate) fn remove_legacy_protocol_with(
+    this_exe: &str,
+    read_command: impl FnOnce() -> Result<Option<String>, String>,
+    delete_key: impl FnOnce() -> Result<(), String>,
+) -> Result<bool, String> {
+    let command = read_command()?;
+    if !legacy_protocol_points_at_us(command.as_deref(), this_exe) {
+        return Ok(false);
+    }
+    delete_key()?;
+    Ok(true)
+}
+
+#[cfg(windows)]
+pub(crate) fn remove_legacy_protocol_key() {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    use winreg::RegKey;
+    let Ok(exe) = std::env::current_exe() else { return };
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let read_command = || {
+        match hkcu.open_subkey_with_flags(format!("{LEGACY_PROTOCOL_KEY}\\shell\\open\\command"), KEY_READ) {
+            Ok(key) => match key.get_value::<String, _>("") {
+                Ok(v) => Ok(Some(v)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(e.to_string()),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.to_string()),
         }
-        Err(e) => append_crash_log(&format!("address scheme reconcile could not read the entry: {e}")),
+    };
+    let delete_key = || match hkcu.delete_subkey_all(LEGACY_PROTOCOL_KEY) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = remove_legacy_protocol_with(&exe.display().to_string(), read_command, delete_key) {
+        append_crash_log(&format!("old address scheme entry could not be removed: {e}"));
     }
 }
+
+#[cfg(not(windows))]
+pub(crate) fn remove_legacy_protocol_key() {}
 
 #[tauri::command(async)]
 pub(crate) fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool, String> {
@@ -286,30 +325,4 @@ pub(crate) fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: boo
         |prior_os| if rewrite { autostart_restore(prior_os) } else { Ok(()) },
     )?;
     Ok(enabled)
-}
-
-// The address scheme switch: stored flag and registration change together, like
-// autostart. A failed registry change leaves the flag as it was and reports it.
-pub(crate) fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
-    let mut store = lock(state);
-    let prior = store.settings.ui_flags.get("urlScheme").copied();
-    let prior_os = remote::url_scheme_command()?;
-    let skip = skip_registry_removal(enabled, current_registry_owner(prior_os.as_deref()));
-    two_state_change(
-        &mut *store,
-        prior_os,
-        |st| {
-            st.settings.ui_flags.insert("urlScheme".to_string(), enabled);
-            save_settings(app, &st.settings)
-        },
-        |st, persist| {
-            match prior {
-                Some(v) => st.settings.ui_flags.insert("urlScheme".to_string(), v),
-                None => st.settings.ui_flags.remove("urlScheme"),
-            };
-            !persist || save_settings(app, &st.settings)
-        },
-        || if skip { Ok(()) } else { remote::apply_url_scheme_registration(enabled) },
-        remote::url_scheme_restore,
-    )
 }
