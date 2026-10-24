@@ -233,14 +233,11 @@ the introduction tour ship on; the screenshot editor is always on).
   clipboard, or pasted directly) round it out. Missing a language pack opens
   the same language dialog OCR uses (opened by "Manage dictation languages"), shared install and elevation
   flow included.
-- **Introduction tour** (expert menu, on by default): a five-step walkthrough
+- **Introduction tour** (expert menu, on by default): a four-step walkthrough
   on first launch, opened right after the example prompts are seeded so step
   two already has a tile to point at: what the app is and that everything
   stays offline, how to save and use a tile, organizing tiles and views,
-  the library and search, then a table of the three optional features
-  (screenshot, color picker, OCR) with the shipped default shown next to
-  each and a one-click reset back to it; nothing is written until you
-  finish, and only the switches you actually changed. Step-by-step dots,
+  then the library and search. It changes no setting. Step-by-step dots,
   ←/→ and Enter to navigate, Esc or "Skip" to leave any time; either asks to
   confirm first. Reopen it later from the settings dialog or the expert menu;
   a data-folder or WebView2 prompt on first launch always wins, and the tour
@@ -518,8 +515,10 @@ the introduction tour ship on; the screenshot editor is always on).
   reorder the chain right there. Switchable off on its own in the expert
   menu.
 - **Third-party licenses in the About window.** A new section lists every
-  bundled open-source component (name, version, license), generated at build
-  time from the real dependency list so it can never fall out of date; each
+  open-source component that ships in the app (one row per name, with every
+  version in use), generated at build time from the real dependency list so it
+  can never fall out of date; the FFmpeg license text ships beside the
+  installer, with links to its source. Each
   entry expands to its full license text, searchable once the list passes
   twenty entries. The same generated list replaces the hand-maintained
   content of THIRD-PARTY-NOTICES.md.
@@ -952,6 +951,16 @@ the introduction tour ship on; the screenshot editor is always on).
   time it still starts with the hand.
 - **Screenshot editor: undo and zoom moved to the bottom bar.** The toolbar
   stays one line and the picture gets more room.
+- **The main window comes to the front when a recording ends** and shows the
+  result, whose bottom row has a **Video editor** button.
+- **The video editor's Export is its own tab.** It has Back and Stop export
+  buttons, and Escape on it returns to the Edit tab first. Escape closes one
+  layer at a time instead of everything at once.
+- **Overlays can be selected by clicking the preview.** A click on an overlay
+  in the picture selects it, as clicking its timeline row does.
+- **The video editor works with keyboard and screen reader.** Controls, the
+  timeline, the marks and the mute buttons have names and can be reached and
+  operated by keys, including Shift+Home and Shift+End.
 
 ### Fixed
 
@@ -1711,6 +1720,17 @@ the introduction tour ship on; the screenshot editor is always on).
   white text on the default accent was below the 4.5:1 minimum in the dark,
   neon, cyberpunk and ocean themes; the button now uses the same slightly
   darker accent as the main window's buttons.
+- **The video editor's size follows the crop.** The scale fields no longer
+  distort a cropped video and the size estimate matches the result.
+- **Copying a trimmed recording keeps the microphone voice.** A trim-only
+  export mixes both sound tracks and copies the video untouched.
+- **The export matches the preview.** The soft frame halo, the narrow-window
+  preview and several small trim, mark, still-frame and save faults are fixed.
+- **The screenshot editor no longer jumps** when you change the pen size.
+- **The undo message stays while the window is dragged** instead of vanishing
+  under the pointer.
+- **The interface language follows the Windows display language** on first
+  start, not the regional format.
 
 ### Security
 
@@ -2222,6 +2242,11 @@ the introduction tour ship on; the screenshot editor is always on).
 - **The header logo is plain branding.** It no longer opens the project page; the About window keeps that link.
 - **The settings window is one compact list.** Small headings instead of divider lines, the switches in two columns and tighter controls make it about a third shorter; the Expert menu button moved into the System line.
 - **The introduction tour is four pages.** The last page with the feature switches is gone; the tour changes no setting and every feature keeps its default. The window is only as tall as the drawing pages.
+- **Screen capture uses no third-party package.** Window detection, window
+  capture and the app name in file names run on the app's own Windows code.
+- **Dependencies updated.** A newer toolchain and the ureq 3 network library;
+  one version of the Windows API crate throughout.
+- **The credits list only what ships,** one row per name with all its versions.
 
 ## 2.6.3 (2026-07-26)
 
