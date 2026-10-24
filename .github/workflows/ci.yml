@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # 165: pinned to a commit, not a movable tag -- the tag owner cannot
+      # Pinned to a commit, not a movable tag: the tag owner cannot
       # silently swap out what runs here (supply-chain hardening).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
