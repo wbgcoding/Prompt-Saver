@@ -6,9 +6,9 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `snipedit`, `snipdraw`, `sniptext`, or another
+`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `sniptext`, or another
 page such as `video.html`.
-A group (`@settings`, `@library`, `@tiles`, `@snip`) shoots its surfaces.
+A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
 """
 import argparse
@@ -93,6 +93,7 @@ ACTS = {
     "tagpop3": "$('grid-tag-btn').click(); await sleep(300);",
     "tagpop12": "$('grid-tag-btn').click(); await sleep(300);",
     "tagpop_on": "$('grid-tag-btn').click(); await sleep(300); document.querySelector('.grid-tag-pop .tag-filter').click(); await sleep(300);",
+    "recresult": "window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' }); await sleep(900);",
     "snipedit": SNIP_OPEN,
     "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);",
     "sniptext": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
@@ -106,6 +107,7 @@ GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "help", "help_capture", "stats", "backup"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
+    "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "sniptext"],
 }
 

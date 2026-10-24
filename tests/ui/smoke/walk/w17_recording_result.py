@@ -138,12 +138,12 @@ SECTION = """\
       window.__FIRE__('recording-captured', { path: 'C:/fake/raw3.mp4' });
       await sleep(30);
       window.__SMOKE_CALLS__ = [];
-      // 674: the dialog shows Discard, More, Save, Attach; the rarer actions sit in
+      // 674: the dialog shows Discard, More, Video editor, Save, Attach; the rarer actions sit in
       // the menu behind More, which opens, closes on Escape without closing the dialog,
       // and closes itself when an item is picked.
       {
         const actionIds = [...document.querySelectorAll('#rec-modal .modal-actions button')].map((b) => b.id).join(',');
-        if (actionIds !== 'rec-modal-discard,rec-modal-more,rec-modal-save,rec-modal-yes') out.errors.push('674: the recording dialog actions are ' + actionIds);
+        if (actionIds !== 'rec-modal-discard,rec-modal-more,rec-modal-edit,rec-modal-save,rec-modal-yes') out.errors.push('674: the recording dialog actions are ' + actionIds);
         const morePop = document.getElementById('rec-modal-more-pop');
         const moreBtn = document.getElementById('rec-modal-more');
         if (!morePop.classList.contains('hidden')) out.errors.push('674: the More menu is open before it was asked for');
@@ -151,7 +151,7 @@ SECTION = """\
         await sleep(60);
         if (morePop.classList.contains('hidden') || moreBtn.getAttribute('aria-expanded') !== 'true') out.errors.push('674: More did not open its menu');
         const itemIds = [...morePop.querySelectorAll('button:not(.hidden)')].map((b) => b.id).join(',');
-        if (itemIds !== 'rec-modal-edit,rec-modal-saveas,rec-modal-copy,rec-modal-folder-change') out.errors.push('674: the More menu holds ' + itemIds);
+        if (itemIds !== 'rec-modal-saveas,rec-modal-copy,rec-modal-folder-change') out.errors.push('674: the More menu holds ' + itemIds);
         const pr = morePop.getBoundingClientRect();
         if (pr.left < 0 || pr.top < 0 || pr.right > window.innerWidth + 1 || pr.bottom > window.innerHeight + 1) out.errors.push('674: the More menu leaves the window');
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
