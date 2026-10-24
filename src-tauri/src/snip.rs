@@ -1366,14 +1366,24 @@ pub(crate) async fn save_screenshot_as(
     }
 }
 
+// Our own screenshot file names: Screenshot-* in one of the five formats, or the legacy
+// <brand>-*.png an older version wrote.
+pub(crate) fn is_own_screenshot_name(name: &str, ext: &str) -> bool {
+    let legacy = !brand::LEGACY_SCREENSHOT_PREFIX.is_empty()
+        && name.starts_with(brand::LEGACY_SCREENSHOT_PREFIX)
+        && name.ends_with(".png");
+    (name.starts_with("Screenshot-") && matches!(ext, "jpg" | "png" | "webp" | "bmp" | "tiff")) || legacy
+}
+
 // Delete a previously auto-saved screenshot (result dialog: folder-saving turned off). Only
-// removes our own Screenshot-* files in one of the five screenshot formats.
+// removes our own Screenshot-* files in one of the five screenshot formats, or the legacy
+// <brand>-*.png an older version wrote.
 #[tauri::command]
 pub(crate) async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bool, String> {
     let p = std::path::Path::new(&path);
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let ours = name.starts_with("Screenshot-") && matches!(ext, "jpg" | "png" | "webp" | "bmp" | "tiff");
+    let ours = is_own_screenshot_name(name, ext);
     if !ours || !p.is_file() {
         return Ok(false);
     }

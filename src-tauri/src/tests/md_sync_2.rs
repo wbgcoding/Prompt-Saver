@@ -350,6 +350,7 @@ fn brand_values_are_pinned() {
     assert_eq!(brand::REPO, "wbgcoding/Prompt-Saver");
     assert_eq!(brand::LEGACY_DATA_FOLDER, "com.bgcoding.promptsaver");
     assert_eq!(brand::LEGACY_AUTOSTART_KEY, "");
+    assert_eq!(brand::LEGACY_SCREENSHOT_PREFIX, "PromptSaver-");
     assert_eq!(env!("CARGO_PKG_NAME"), "prompt-saver");
     let conf = include_str!("../../tauri.conf.json");
     assert!(conf.contains("\"productName\": \"Prompt Saver\""));

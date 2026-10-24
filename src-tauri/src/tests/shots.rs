@@ -188,3 +188,17 @@ fn a_destroyed_main_window_ends_the_process() {
     assert!(watchdog_deadline_reached(UNIX_EPOCH + Duration::from_secs(100), deadline), "must fire right at the deadline");
     assert!(watchdog_deadline_reached(UNIX_EPOCH + Duration::from_secs(200), deadline), "must fire well past the deadline too");
 }
+
+#[test]
+fn the_screenshot_delete_recognises_current_and_legacy_names() {
+    use crate::snip::is_own_screenshot_name as own;
+    for ext in ["jpg", "png", "webp", "bmp", "tiff"] {
+        assert!(own(&format!("Screenshot-2026-01-01.{ext}"), ext));
+    }
+    assert!(!own("Screenshot-2026-01-01.gif", "gif"));
+    assert!(!own("holiday.png", "png"));
+    // A shot an older version saved keeps being recognised, but only as a png.
+    let legacy = format!("{}2024-05-05.png", crate::brand::LEGACY_SCREENSHOT_PREFIX);
+    assert!(own(&legacy, "png"));
+    assert!(!own(&format!("{}2024-05-05.jpg", crate::brand::LEGACY_SCREENSHOT_PREFIX), "jpg"));
+}
