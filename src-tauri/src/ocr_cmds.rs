@@ -402,7 +402,7 @@ pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: b
     }
 }
 
-// Entry point for "Recognize text" in #snip-modal, which runs on the capture already shown
+// Entry point for "Recognize text" in the screenshot editor, which runs on the capture already shown
 // there; at that point it exists only as a data URL (it may not be saved yet). Same shape as
 // copy_image_data for the screenshot editor.
 #[tauri::command]

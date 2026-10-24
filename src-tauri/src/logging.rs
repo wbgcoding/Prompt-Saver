@@ -439,11 +439,11 @@ pub(crate) fn scrub_error_log_text(s: &str) -> String {
 // backend-only origin (`test`, used by this file's tests). `log_error` is an IPC command, so its `origin` is as untrusted as any
 // caller string; an allow-list with a fixed "other" fallback keeps it from becoming a
 // free-text field, as `scrub_error_log_text` does for `text`/`raw`.
-pub(crate) const ERROR_LOG_ORIGINS: [&str; 34] = [
+pub(crate) const ERROR_LOG_ORIGINS: [&str; 33] = [
     "about-modal", "backup-modal", "batch-export-modal", "compare-modal", "confirm-modal",
     "dupes-modal", "error-log-modal", "global-search", "help", "import-folder-modal",
     "import-preview-modal", "library", "lightbox", "modal", "ocr-langs-modal", "ocr-modal",
-    "rec-modal", "settings", "shortcuts-modal", "snip-edit", "snip-modal", "stats-modal", "tag-modal",
+    "rec-modal", "settings", "shortcuts-modal", "snip-edit", "stats-modal", "tag-modal",
     "theme-modal", "tour-modal", "trash-modal", "update-modal", "ve-overlay-live",
     "video-cleanup-modal", "view-modal", "settings-expert", "main", "video", "snip",
 ];

@@ -149,7 +149,7 @@ pub(crate) fn is_editor_work_copy_in(temp_root: &Path, path: &Path) -> bool {
 
 // Right-click "Open a file in the editor" (screenshot/record buttons, library attachments)
 // lands here. The original is never touched: an image is read into a data URL for the same
-// #snip-modal flow a fresh capture uses, and a video is copied once into its own throwaway
+// screenshot editor a fresh capture uses, and a video is copied once into its own throwaway
 // working folder (swept by sweep_stale_temp_files), which open_video_editor is pointed at.
 #[tauri::command]
 pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<OpenEditResult, String> {

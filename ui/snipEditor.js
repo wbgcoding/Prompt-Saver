@@ -1595,7 +1595,7 @@ export function initSnipEditor() {
   const SNIP_EDIT_OVER_DIALOGS = ["ocr-modal", "ocr-langs-modal", "modal"];
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
-    // A question raised over the editor (discard, replace) owns every key.
+    // A question raised over the editor (replace) owns every key.
     if (!$("confirm-modal").classList.contains("hidden")) return;
     // The text recognition dialogs (and the new-button dialog they lead to) open over the editor
     // and own the keys while they are up.
