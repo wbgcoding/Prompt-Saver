@@ -9,7 +9,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 [![Latest release](https://img.shields.io/github/v/release/wbgcoding/Prompt-Saver?label=download&color=3b82f6)](../../releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/wbgcoding/Prompt-Saver/total?color=10b981)](../../releases)
 ![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4)
-![Installer size](https://img.shields.io/badge/installer-~8%20MB-8b5cf6)
+![Installer size](https://img.shields.io/badge/installer-~39%20MB-8b5cf6)
 
 ![Prompt Saver](docs/screenshot.png)
 
@@ -121,7 +121,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **What's new** | A small notice after an update lists what changed since the version you last saw, from a list shipped with the app; reopen the current version's list anytime from the About dialog |
 | **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data, and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check (which you can switch off), the "What's new" refresh you start yourself and, only when needed, a one-time download you explicitly approve: the Microsoft WebView2 runtime if it is missing, or ffmpeg for video export. A single prompt can also be marked confidential, encrypting its text with its own vault password; forgetting that password means those entries are lost for good |
 | **Command line** | `prompt-saver.exe <command> ...` for scripts: list, get, copy, add, edit, delete, restore, tags, views, search, export, import, backups, one setting. Talks to an already running copy over its own channel, or runs alone with no window otherwise. `--yes` guards every change, `--json` switches the output. Full list: `prompt-saver.exe --help` |
-| **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
+| **Small** | ~39 MB installer including FFmpeg, ~30 MB portable exe (Rust / Tauri), using the Windows WebView2 runtime |
 
 ## Download
 
