@@ -1144,10 +1144,6 @@ pub fn cancel(session: RecSession) {
     }
 }
 
-pub fn list_mic_devices() -> Vec<super::audio::MicDevice> {
-    super::audio::list_mic_devices()
-}
-
 pub fn new_output_path(recordings_dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(recordings_dir).map_err(|e| e.to_string())?;
     let st = unsafe { GetLocalTime() };

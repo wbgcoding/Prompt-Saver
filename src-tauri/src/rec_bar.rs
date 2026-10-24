@@ -555,7 +555,7 @@ pub(crate) struct MicDeviceInfo {
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) fn list_mic_devices() -> Vec<MicDeviceInfo> {
-    recording::list_mic_devices().into_iter().map(|d| MicDeviceInfo { id: d.id, name: d.name }).collect()
+    audio::list_mic_devices().into_iter().map(|d| MicDeviceInfo { id: d.id, name: d.name }).collect()
 }
 #[cfg(not(windows))]
 #[tauri::command]
