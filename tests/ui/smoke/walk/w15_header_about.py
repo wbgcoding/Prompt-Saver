@@ -380,7 +380,7 @@ SECTION = """\
       };
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
-      const bothRow = await expertRow426('folds both bars');
+      const bothRow = await expertRow426('restores both bars');
       if (!bothRow) {
         out.errors.push('426: the double-click-folds-both option is missing from the expert menu');
       } else {
@@ -401,7 +401,7 @@ SECTION = """\
         await click('show-top');
         document.getElementById('settings').classList.remove('hidden');
         await click('expert-open');
-        const backRow = await expertRow426('folds both bars');
+        const backRow = await expertRow426('restores both bars');
         if (backRow) { backRow.querySelector('input.switch').click(); await sleep(200); }
         const firstTab426 = document.querySelector('#expert-tabs-bar .expert-tab');
         if (firstTab426) { firstTab426.click(); await sleep(200); }
