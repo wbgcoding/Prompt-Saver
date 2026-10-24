@@ -313,13 +313,19 @@ export function bindAbout() {
         note.textContent = entry.note;
         body.appendChild(note);
       }
-      const text = entry.licenseId ? data.licenseTexts[entry.licenseId] : null;
-      if (text) {
+      // A grouped row can carry several licenses; show each distinct text once.
+      const ids = Array.isArray(entry.licenseIds) ? entry.licenseIds : entry.licenseId ? [entry.licenseId] : [];
+      let shownText = false;
+      for (const id of ids) {
+        const text = data.licenseTexts[id];
+        if (!text) continue;
         const pre = document.createElement("pre");
         pre.className = "license-row-text";
         pre.textContent = text;
         body.appendChild(pre);
-      } else if (!entry.note) {
+        shownText = true;
+      }
+      if (!shownText && !entry.note) {
         // Public-domain style entries with neither a note nor a license text
         // still get something visible on expand: never a blank panel.
         const p = document.createElement("p");

@@ -67,12 +67,94 @@ struct CargoPackage {
     version: String,
     license: Option<String>,
     license_file: Option<String>,
+    targets: Vec<CargoTarget>,
+}
+
+#[derive(Deserialize)]
+struct CargoTarget {
+    kind: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct CargoDepKind {
+    // null = a normal dependency, otherwise "dev" or "build".
+    kind: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CargoNodeDep {
+    pkg: String,
+    dep_kinds: Vec<CargoDepKind>,
+}
+
+#[derive(Deserialize)]
+struct CargoNode {
+    id: String,
+    deps: Vec<CargoNodeDep>,
+}
+
+#[derive(Deserialize)]
+struct CargoResolve {
+    root: Option<String>,
+    nodes: Vec<CargoNode>,
 }
 
 #[derive(Deserialize)]
 struct CargoMetadata {
     packages: Vec<CargoPackage>,
-    workspace_members: Vec<String>,
+    resolve: CargoResolve,
+}
+
+// The platform the shipped binary is built for: the notice list covers exactly what is linked
+// into it, not what other platforms or the build itself would need.
+const NOTICE_TARGET: &str = "x86_64-pc-windows-msvc";
+
+// Ids of the packages that end up in the binary: reachable from the root package through normal
+// dependencies only. Build and dev dependencies and proc-macro crates run at compile time and
+// are not shipped, so neither they nor anything only they pull in is walked.
+fn shipped_package_ids(metadata: &CargoMetadata) -> std::collections::BTreeSet<String> {
+    let by_id: std::collections::HashMap<&str, &CargoNode> =
+        metadata.resolve.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+    let packages: std::collections::HashMap<&str, &CargoPackage> =
+        metadata.packages.iter().map(|p| (p.id.as_str(), p)).collect();
+    let root = metadata
+        .resolve
+        .root
+        .as_deref()
+        .expect("cargo metadata reported no root package for the third-party license list");
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut stack: Vec<&str> = vec![root];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id.to_string()) {
+            continue;
+        }
+        let Some(node) = by_id.get(id) else { continue };
+        for dep in &node.deps {
+            if !dep.dep_kinds.iter().any(|k| k.kind.is_none()) {
+                continue;
+            }
+            let is_proc_macro = packages
+                .get(dep.pkg.as_str())
+                .map(|p| p.targets.iter().any(|t| t.kind.iter().any(|k| k == "proc-macro")))
+                .unwrap_or(false);
+            if !is_proc_macro {
+                stack.push(dep.pkg.as_str());
+            }
+        }
+    }
+    seen.remove(root);
+    seen
+}
+
+// Orders dotted versions numerically part by part ("1.9.0" before "1.10.0"); a part that is not
+// a number (a pre-release tag) compares as text after the numbers.
+fn version_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let parts = |v: &str| -> Vec<(u64, String)> {
+        v.split(['.', '-', '+'])
+            .map(|p| (p.parse::<u64>().unwrap_or(u64::MAX), p.to_string()))
+            .collect()
+    };
+    parts(a).cmp(&parts(b))
 }
 
 #[derive(Deserialize, Clone)]
@@ -87,10 +169,59 @@ struct ManualEntry {
 
 struct Entry {
     name: String,
+    // All shipped versions of the name, ascending, joined by ", ".
     version: String,
+    // The distinct licenses of those versions, joined by " / ".
     license: String,
-    license_key: Option<String>,
+    // One text key per distinct license that has a shipped text, in the same order.
+    license_keys: Vec<String>,
     note: Option<String>,
+}
+
+// One row per crate name: every shipped version and every distinct license of it.
+// Input tuples are (name, version, license, license text key).
+fn group_by_name(mut found: Vec<(String, String, String, Option<String>)>) -> Vec<Entry> {
+    found.sort_by(|a, b| {
+        a.0.to_lowercase().cmp(&b.0.to_lowercase()).then(a.0.cmp(&b.0)).then(version_order(&a.1, &b.1))
+    });
+    let mut out: Vec<Entry> = Vec::new();
+    let mut current: Option<Entry> = None;
+    let mut versions: Vec<String> = Vec::new();
+    let mut licenses: Vec<String> = Vec::new();
+    for (name, version, license, key) in found {
+        if current.as_ref().map(|e| e.name != name).unwrap_or(false) {
+            let mut done = current.take().unwrap();
+            done.version = versions.join(", ");
+            done.license = licenses.join(" / ");
+            versions.clear();
+            licenses.clear();
+            out.push(done);
+        }
+        let entry = current.get_or_insert_with(|| Entry {
+            name: name.clone(),
+            version: String::new(),
+            license: String::new(),
+            license_keys: Vec::new(),
+            note: None,
+        });
+        if !versions.contains(&version) {
+            versions.push(version);
+        }
+        if !licenses.contains(&license) {
+            licenses.push(license);
+        }
+        if let Some(k) = key {
+            if !entry.license_keys.contains(&k) {
+                entry.license_keys.push(k);
+            }
+        }
+    }
+    if let Some(mut done) = current {
+        done.version = versions.join(", ");
+        done.license = licenses.join(" / ");
+        out.push(done);
+    }
+    out
 }
 
 // Preferred order when a crate offers several licenses as an "A OR B" choice: pick
@@ -155,7 +286,7 @@ fn generate_third_party_notices() {
     let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
 
     let output = Command::new(&cargo)
-        .args(["metadata", "--format-version", "1", "--manifest-path"])
+        .args(["metadata", "--format-version", "1", "--filter-platform", NOTICE_TARGET, "--manifest-path"])
         .arg(format!("{manifest_dir}/Cargo.toml"))
         .output()
         .expect("failed to run `cargo metadata` while generating the third-party license list");
@@ -171,12 +302,10 @@ fn generate_third_party_notices() {
     });
 
     let mut used_keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    let mut entries: Vec<Entry> = Vec::new();
-
+    let shipped = shipped_package_ids(&metadata);
+    let mut found: Vec<(String, String, String, Option<String>)> = Vec::new();
     for pkg in &metadata.packages {
-        // This crate itself (and any other workspace member) has nothing to
-        // attribute to a third party.
-        if metadata.workspace_members.iter().any(|m| m == &pkg.id) {
+        if !shipped.contains(&pkg.id) {
             continue;
         }
         let license = match &pkg.license {
@@ -186,8 +315,7 @@ fn generate_third_party_notices() {
                     "see the crate's own LICENSE file".to_string()
                 } else {
                     panic!(
-                        "crate `{} {}` has no `license` field and no `license_file`; add an \
-                         override for it in third-party-manual.json before shipping",
+                        "crate `{} {}` has no `license` field and no `license_file`; add an                          override for it in third-party-manual.json before shipping",
                         pkg.name, pkg.version
                     );
                 }
@@ -197,16 +325,9 @@ fn generate_third_party_notices() {
         if let Some(k) = &key {
             used_keys.insert(k.clone());
         }
-        entries.push(Entry {
-            name: pkg.name.clone(),
-            version: pkg.version.clone(),
-            license,
-            license_key: key,
-            note: None,
-        });
+        found.push((pkg.name.clone(), pkg.version.clone(), license, key));
     }
-
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.version.cmp(&b.version)));
+    let mut entries: Vec<Entry> = group_by_name(found);
 
     if entries.is_empty() {
         panic!("third-party license generator resolved zero crates; refusing to ship an empty list");
@@ -226,7 +347,7 @@ fn generate_third_party_notices() {
             name: m.name.clone(),
             version: m.version.clone(),
             license: m.license.clone(),
-            license_key: m.license_key.clone(),
+            license_keys: m.license_key.clone().into_iter().collect(),
             note: Some(m.note.clone()),
         });
     }
@@ -252,7 +373,8 @@ fn generate_third_party_notices() {
             "name": e.name,
             "version": e.version,
             "license": e.license,
-            "licenseId": e.license_key,
+            "licenseId": e.license_keys.first(),
+            "licenseIds": e.license_keys,
             "note": e.note,
         }));
     }
@@ -282,7 +404,8 @@ fn write_notices_markdown(manifest_dir: &str, entries: &[Entry]) {
          The same list is shown in the app itself, in About > Third-party licenses.\n\n",
     );
     md.push_str(&format!(
-        "{} components are listed below, sorted by name.\n\n",
+        "{} components are listed below, one row per name, sorted by name; a name that ships in \
+         several versions lists them all.\n\n",
         entries.len()
     ));
     md.push_str("| Name | Version | License |\n|---|---|---|\n");
