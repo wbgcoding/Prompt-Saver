@@ -3,7 +3,7 @@ import { makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtByt
 import { errMessageLogged } from "./errors.js";
 import { exportNameIsValid } from "./exportName.js";
 import { confirmDialog } from "./dialog.js";
-import { exportFormat, exportQuality, effectiveSize, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, isLosslessCopy } from "./videoGraph.js";
+import { exportFormat, exportQuality, effectiveSize, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, buildCopyMixChain, copyAudioMode, isLosslessCopy } from "./videoGraph.js";
 import { $, clamp, ETA_MIN_PCT, ETA_MIN_SECS, EXPORT_KBPS, fmtTime, formatExt, invoke, keptSegments, LANG, showExportErrorDetails, SILENT_FORMAT_LENGTH_WARN_MS, SILENT_FORMATS, t, toast, totalOutMs, updateAudioLabels, VE } from "./video.js";
 
 // ---------------------------------------------------------------- export
@@ -166,7 +166,8 @@ export async function startExport(toClipboard) {
   // The backend takes whole milliseconds; a tempo such as 1.3x makes the output length fractional.
   const total = Math.round(totalOutMs());
   if (total < 1) { toast(t("veNothingToExport")); return; }
-  const lossless = isLosslessCopy();
+  const copyMode = copyAudioMode();
+  const lossless = copyMode !== null;
   const format = exportFormat();
   // Claimed before the first await, so a double click cannot start a second export.
   VE.exporting = true;
@@ -200,7 +201,10 @@ export async function startExport(toClipboard) {
         src_path: src,
         dest_path: dest,
         filter_chain: lossless ? null : buildVideoChain(),
-        audio_map: lossless ? null : buildAudioChain(),
+        audio_map: lossless ? (copyMode === "mix" ? buildCopyMixChain() : null) : buildAudioChain(),
+        // What a stream copy does with the audio tracks: "all" copies every stream, "first" keeps
+        // the first (mic muted), "mix" mixes both into one stream.
+        copy_audio: copyMode || "all",
         media_paths: lossless ? [] : exportMediaPaths(),
         lossless_copy: lossless,
         // Distinct from lossless_copy: the "Lossless" quality tier forces a real re-encode (see

@@ -53,7 +53,9 @@ function makeSandbox(extra) {
       extractBlock("videoOverlayWindowOutMs", "function videoOverlayWindowOutMs(op) {"),
       extractBlock("videoOverlayEnable", "function videoOverlayEnable(op) {"),
       extractBlock("videoOverlayLoopArg", "function videoOverlayLoopArg(op) {"),
+      extractBlock("copyAudioMode", "function copyAudioMode() {"),
       extractBlock("isLosslessCopy", "function isLosslessCopy() {"),
+      extractBlock("buildCopyMixChain", "function buildCopyMixChain() {"),
       extractBlock("silentGapLabel", "function silentGapLabel(entry, label, parts) {"),
       extractBlock("silentSpanLabel", "function silentSpanLabel(ms, label, parts) {"),
       extractBlock("clipAudioLabel", "function clipAudioLabel(entry, label, parts) {"),
@@ -138,7 +140,21 @@ function baseState(ops) {
   sb.VE = { ...baseState([]), hasSys: true, hasMic: false, audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } } };
   expect("isLosslessCopy ignores the mic state without a mic track", vm.runInContext("isLosslessCopy()", sb) === true);
   sb.VE = { ...baseState([]), hasSys: true, hasMic: true, audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } } };
-  expect("isLosslessCopy is false when an existing mic track is muted", vm.runInContext("isLosslessCopy()", sb) === false);
+  expect("a muted mic no longer rules the stream copy out", vm.runInContext("isLosslessCopy()", sb) === true);
+  expect("a muted mic keeps only the first audio stream", vm.runInContext("copyAudioMode()", sb) === "first", String(vm.runInContext("copyAudioMode()", sb)));
+  // A recording with both tracks audible: the picture is copied, the sound is mixed into one stream.
+  const mode = (hasSys, hasMic, sys, mic) => {
+    sb.VE = { ...baseState([]), hasSys, hasMic, audio: { sys, mic } };
+    return vm.runInContext("copyAudioMode()", sb);
+  };
+  const on = { mute: false, vol: 100 };
+  expect("sys and mic both plain give a mixed copy", mode(true, true, on, on) === "mix", String(mode(true, true, on, on)));
+  expect("a single sys track is copied as it is", mode(true, false, on, { mute: true, vol: 100 }) === "all");
+  expect("a muted sys track needs a real re-encode", mode(true, true, { mute: true, vol: 100 }, on) === null);
+  expect("a changed mic volume needs a real re-encode", mode(true, true, on, { mute: false, vol: 80 }) === null);
+  expect("a changed sys volume without a mic needs a real re-encode", mode(true, false, { mute: false, vol: 80 }, on) === null);
+  expect("a mic-only recording is copied as it is", mode(false, true, on, on) === "all", String(mode(false, true, on, on)));
+  expect("the mix graph joins both tracks without gain loss", vm.runInContext("buildCopyMixChain()", sb) === "[0:a:0][0:a:1]amix=inputs=2:normalize=0[aout]");
   sb.VE = { ...baseState([]), hasSys: false, hasMic: false, audio: { sys: { mute: true, vol: 50 }, mic: { mute: true, vol: 100 } } };
   expect("isLosslessCopy ignores the state of absent tracks", vm.runInContext("isLosslessCopy()", sb) === true);
 }
@@ -370,7 +386,7 @@ async function exportLoadRaceCheck() {
     VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", dirty: false, editStateKeepOn: true, loadGen: 1, lastExport: "" },
     $: el, t: (k) => k, toast: () => {},
     invoke: (cmd, args) => { calls.push([cmd, args]); return cmd === "export_video" ? held : Promise.resolve(null); },
-    totalOutMs: () => 5000, isLosslessCopy: () => true, exportFormat: () => "mp4", exportQuality: () => "high",
+    totalOutMs: () => 5000, copyAudioMode: () => "all", buildCopyMixChain: () => "mix", exportFormat: () => "mp4", exportQuality: () => "high",
     formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
     exportEta: { reset() {} }, setProgress: () => {},
     buildVideoChain: () => null, buildAudioChain: () => null, exportMediaPaths: () => [], keptSegments: () => [{ a: 0, b: 5000 }],
@@ -418,7 +434,7 @@ async function exportIdleCheck() {
     const sb = {
       VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4" },
       $: el, t: (k) => k, toast: () => {}, invoke: invokeStub,
-      totalOutMs: () => 5000, isLosslessCopy: () => lossless, exportFormat: () => "mp4", exportQuality: () => "high",
+      totalOutMs: () => 5000, copyAudioMode: () => (lossless ? "all" : null), buildCopyMixChain: () => "mix", exportFormat: () => "mp4", exportQuality: () => "high",
       formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
       exportEta: { reset() {} }, setProgress: () => el("ve-export-progress-row").classList.remove("hidden"),
       buildVideoChain: () => null, buildAudioChain: () => null, exportMediaPaths: () => [], keptSegments: () => [{ a: 0, b: 5000 }],
