@@ -884,6 +884,8 @@ const pending = [];
   expect("the tabs and the toast use the design radius", !/border-radius: 8px/.test(css.slice(css.indexOf(".ve-tab {"), css.indexOf(".ve-tab:hover"))) && !/border-radius: 8px/.test(css.slice(css.indexOf(".ve-toast {"), css.indexOf(".ve-toast {") + 300)));
   const en = fs.readFileSync(path.join(__dirname, "..", "ui", "i18n", "en.js"), "utf8");
   expect("the copy note names the keyframe start", /veCopyNote: "[^"]*nearest keyframe before your start point\."/.test(en));
+  const exportSrc = fs.readFileSync(path.join(__dirname, "..", "ui", "videoExport.js"), "utf8");
+  expect("the mixed-sound copy has its own note", /copyMode === "mix" \? "veCopyMixNote" : "veCopyNote"/.test(exportSrc) && /veCopyMixNote: "[^"]*mixed into one\./.test(en));
 }
 
 // Clicking the preview picks the overlay under the pointer: the top-most one showing at the

@@ -57,7 +57,8 @@ function buildExportNoteBase(format) {
     notes.push(t("veNoAudioNote"));
     if (totalOutMs() > SILENT_FORMAT_LENGTH_WARN_MS) notes.push(t("veLengthWarn").replace("{n}", String(Math.round(totalOutMs() / 1000))));
   }
-  if (isLosslessCopy()) notes.push(t("veCopyNote"));
+  const copyMode = copyAudioMode();
+  if (copyMode) notes.push(t(copyMode === "mix" ? "veCopyMixNote" : "veCopyNote"));
   notes.push(t("veOutLength").replace("{d}", fmtTime(totalOutMs())));
   return notes;
 }

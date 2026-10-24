@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "此格式不包含声音。音频轨道仍会保留在录制内容中。",
     veLengthWarn: "此格式下 {n} 秒的文件会迅速变大。建议裁剪或选择更小的尺寸。",
     veCopyNote: "未重新编码，已即时无损复制。剪辑从起点之前最近的关键帧开始。",
+    veCopyMixNote: "画面未重新编码直接复制，两条音轨混合为一条。剪辑从起点之前最近的关键帧开始。",
     veOutLength: "最终时长 {d}。",
     veSizeAbout: "约 {size}。",
     veSizeRange: "约 {low}-{high}。",

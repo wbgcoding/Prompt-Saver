@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "Dit formaat heeft geen geluid. De audiosporen blijven bewaard in de opname.",
     veLengthWarn: "{n} seconden in dit formaat worden snel groot. Kort de video in of kies een kleiner formaat.",
     veCopyNote: "Gekopieerd zonder opnieuw te coderen: direct en zonder kwaliteitsverlies. De knip begint bij het dichtstbijzijnde keyframe vóór je startpunt.",
+    veCopyMixNote: "Beeld gekopieerd zonder opnieuw te coderen, beide geluidssporen worden tot één gemengd. De knip begint bij het dichtstbijzijnde keyframe vóór je startpunt.",
     veOutLength: "Uiteindelijke lengte {d}.",
     veSizeAbout: "Ongeveer {size}.",
     veSizeRange: "Ongeveer {low}-{high}.",

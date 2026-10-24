@@ -653,6 +653,7 @@ export default {
     veNoAudioNote: "Dieses Format hat keinen Ton. Die Tonspuren bleiben in der Aufnahme erhalten.",
     veLengthWarn: "{n} Sekunden werden in diesem Format schnell groß. Kürze das Video oder wähle eine kleinere Größe.",
     veCopyNote: "Wird ohne Neukodierung kopiert: sofort und verlustfrei. Der Schnitt beginnt am nächsten Schlüsselbild vor deinem Startpunkt.",
+    veCopyMixNote: "Das Bild wird ohne Neukodierung kopiert, beide Tonspuren werden zu einer gemischt. Der Schnitt beginnt am nächsten Schlüsselbild vor deinem Startpunkt.",
     veOutLength: "Fertige Länge {d}.",
     veSizeAbout: "Etwa {size}.",
     veSizeRange: "Etwa {low}-{high}.",

@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "Questo formato non ha audio. Le tracce audio restano nella registrazione.",
     veLengthWarn: "{n} secondi in questo formato diventano subito pesanti. Taglia il video o scegli una dimensione minore.",
     veCopyNote: "Copiato senza ricodifica: immediato e senza perdita. Il taglio inizia dal fotogramma chiave più vicino prima del punto di inizio.",
+    veCopyMixNote: "Immagine copiata senza ricodifica, le due tracce audio vengono unite in una. Il taglio inizia dal fotogramma chiave più vicino prima del punto di inizio.",
     veOutLength: "Durata finale {d}.",
     veSizeAbout: "Circa {size}.",
     veSizeRange: "Circa {low}-{high}.",

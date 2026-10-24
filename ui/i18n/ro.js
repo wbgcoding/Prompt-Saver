@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "Acest format nu conține sunet. Piesele audio se păstrează în înregistrare.",
     veLengthWarn: "{n} secunde în acest format devin rapid mari. Ia în considerare scurtarea videoclipului sau o dimensiune mai mică.",
     veCopyNote: "Copiat fără recodificare: instantaneu și fără pierderi. Tăietura începe la cel mai apropiat cadru cheie dinaintea punctului de start.",
+    veCopyMixNote: "Imaginea este copiată fără recodificare, cele două piste audio sunt mixate într-una singură. Tăietura începe la cel mai apropiat cadru cheie dinaintea punctului de start.",
     veOutLength: "Durată finală {d}.",
     veSizeAbout: "Aproximativ {size}.",
     veSizeRange: "Aproximativ {low}-{high}.",

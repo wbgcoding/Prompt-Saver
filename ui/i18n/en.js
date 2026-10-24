@@ -653,6 +653,7 @@ export default {
     veNoAudioNote: "This format carries no sound. The audio tracks stay in the recording.",
     veLengthWarn: "{n} seconds in this format gets big quickly. Consider trimming or a smaller size.",
     veCopyNote: "Copied without re-encoding: instant and lossless. The cut starts at the nearest keyframe before your start point.",
+    veCopyMixNote: "Picture copied without re-encoding, both sound tracks mixed into one. The cut starts at the nearest keyframe before your start point.",
     veOutLength: "Finished length {d}.",
     veSizeAbout: "About {size}.",
     veSizeRange: "About {low}-{high}.",

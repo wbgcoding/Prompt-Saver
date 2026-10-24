@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "Este formato no incluye sonido. Las pistas de audio se conservan en la grabación.",
     veLengthWarn: "{n} segundos en este formato aumentan de tamaño rápidamente. Considera recortarlo o elegir un tamaño menor.",
     veCopyNote: "Copiado sin recodificar: instantáneo y sin pérdida. El corte empieza en el fotograma clave más cercano anterior a tu punto de inicio.",
+    veCopyMixNote: "Imagen copiada sin recodificar, las dos pistas de sonido se mezclan en una. El corte empieza en el fotograma clave más cercano anterior a tu punto de inicio.",
     veOutLength: "Duración final {d}.",
     veSizeAbout: "Aproximadamente {size}.",
     veSizeRange: "Aproximadamente {low}-{high}.",

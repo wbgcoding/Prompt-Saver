@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "Bu format ses içermez. Ses parçaları kayıtta korunur.",
     veLengthWarn: "Bu formatta {n} saniye hızla çok büyük boyuta ulaşır. Videoyu kırpmayı veya daha küçük bir boyut seçmeyi düşünün.",
     veCopyNote: "Yeniden kodlanmadan kopyalandı: anında ve kayıpsız. Kesim, başlangıç noktanızdan önceki en yakın anahtar kareden başlar.",
+    veCopyMixNote: "Görüntü yeniden kodlanmadan kopyalanır, iki ses izi tek izde birleştirilir. Kesim, başlangıç noktanızdan önceki en yakın anahtar kareden başlar.",
     veOutLength: "Son uzunluk {d}.",
     veSizeAbout: "Yaklaşık {size}.",
     veSizeRange: "Yaklaşık {low}-{high}.",

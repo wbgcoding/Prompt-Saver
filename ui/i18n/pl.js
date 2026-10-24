@@ -676,6 +676,7 @@ export default {
     veNoAudioNote: "Ten format nie zawiera dźwięku. Ścieżki audio pozostają w nagraniu.",
     veLengthWarn: "Plik o długości {n} sekund w tym formacie szybko staje się duży. Rozważ przycięcie lub mniejszy rozmiar.",
     veCopyNote: "Skopiowano bez ponownego kodowania: natychmiastowo i bezstratnie. Cięcie zaczyna się od najbliższej klatki kluczowej przed punktem początkowym.",
+    veCopyMixNote: "Obraz skopiowany bez ponownego kodowania, obie ścieżki dźwiękowe zmiksowane w jedną. Cięcie zaczyna się od najbliższej klatki kluczowej przed punktem początkowym.",
     veOutLength: "Długość końcowa {d}.",
     veSizeAbout: "Około {size}.",
     veSizeRange: "Około {low}-{high}.",
