@@ -57,7 +57,7 @@ EXPECTED = [
     ("flag", "mediaMetaBackfill", "expTabSystem", "expGroupDiagnostics", 0),
     ("value", "bgDoneKeepMin", "expTabSystem", "expGroupDiagnostics", 0),
     ("action", "error-log-open", "expTabSystem", "expGroupData", 1),
-    ("color", "snipDefaultColor", "expTabCapture", "expGroupSnipEditor", 1),
+    ("color", "snipDefaultColor", "expTabCapture", "expGroupSnipEditor", 0),
     ("flag", "recOutline", "expTabCapture", "expGroupRecWhile", 0),
     ("color", "recOutlineColor", "expTabCapture", "expGroupRecWhile", 1),
     ("value", "cameraFramerate", "expTabCapture", "expGroupCamera", 1),
