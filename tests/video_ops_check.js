@@ -457,6 +457,62 @@ async function exportIdleCheck() {
   }
 }
 
+// Escape peels off one layer: a field being typed in (value restored, focus released), then the
+// selected overlay, then the marked range, and only then the window.
+{
+  const log = [];
+  const sb = {
+    VE: { selOv: "o1", sel: { a: 1, b: 2 } },
+    document: { activeElement: null },
+    renderOverlayList: () => log.push("list"), renderOverlayEditor: () => log.push("editor"), renderRects: () => log.push("rects"),
+    renderRegions: () => log.push("regions"), updateNudgeHint: () => log.push("hint"), closeWindow: () => log.push("close"),
+    Event: class { constructor(type) { this.type = type; } },
+  };
+  vm.createContext(sb);
+  vm.runInContext(
+    [
+      extractLine("NON_TEXT_INPUT", 'const NON_TEXT_INPUT = new Set(["checkbox", "radio", "range", "button", "submit", "color", "file"]);'),
+      extractLine("isTextField", 'const isTextField = (el) => !!el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !NON_TEXT_INPUT.has(el.type)));'),
+      "let fieldFocus = null;",
+      extractBlock("handleEscape", "function handleEscape() {"),
+    ].join("\n"),
+    sb,
+    { filename: "video.js (extracted)" }
+  );
+  const run = (code) => vm.runInContext(code, sb);
+  const field = (value, type) => {
+    const f = { tagName: "INPUT", type: type || "text", value, events: [], blurred: false };
+    f.dispatchEvent = (ev) => f.events.push(ev.type);
+    f.blur = () => { f.blurred = true; sb.document.activeElement = null; };
+    return f;
+  };
+  const focusOn = (f, valueOnFocus) => {
+    sb.__f = f;
+    sb.document.activeElement = f;
+    run(`fieldFocus = { el: __f, value: ${JSON.stringify(valueOnFocus)} }`);
+  };
+  // A typed-over field gets its old value back; overlay, range and window stay.
+  const f = field("typed");
+  focusOn(f, "name");
+  expect("Escape in a field reports the field layer", run("handleEscape()") === "field");
+  expect("Escape in a field restores the value it had on focus", f.value === "name", f.value);
+  expect("Escape in a field announces the restore", f.events.join() === "input,change", f.events.join());
+  expect("Escape in a field releases the focus", f.blurred === true);
+  expect("Escape in a field keeps overlay, range and window", sb.VE.selOv === "o1" && sb.VE.sel !== null && !log.includes("close"));
+  // An untouched field is only blurred.
+  const g = field("same");
+  focusOn(g, "same");
+  run("handleEscape()");
+  expect("Escape in an untouched field fires no events", g.events.length === 0 && g.blurred);
+  // A checkbox is no text field: it falls through to the layers below.
+  sb.document.activeElement = { tagName: "INPUT", type: "checkbox" };
+  expect("Escape on a checkbox takes the overlay layer", run("handleEscape()") === "overlay" && sb.VE.selOv === null);
+  sb.document.activeElement = null;
+  expect("Escape then clears the marked range", run("handleEscape()") === "selection" && sb.VE.sel === null);
+  expect("the window is still open", !log.includes("close"));
+  expect("Escape with nothing left closes the window", run("handleEscape()") === "close" && log.includes("close"));
+}
+
 // Removing an operation is an undo step: undo brings it back with every
 // field in its old slot, redo removes it again, earlier edits stay as they were.
 {

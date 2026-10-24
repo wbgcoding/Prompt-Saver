@@ -1745,6 +1745,35 @@ async function closeWindow() {
 
 const TYPING = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
+// Escape in a field gives back what the field held when it got focus (or when it last committed),
+// so a half-typed file name or time is abandoned instead of taking the whole editor with it.
+const NON_TEXT_INPUT = new Set(["checkbox", "radio", "range", "button", "submit", "color", "file"]);
+const isTextField = (el) => !!el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !NON_TEXT_INPUT.has(el.type)));
+let fieldFocus = null;
+document.addEventListener("focusin", (e) => { fieldFocus = isTextField(e.target) ? { el: e.target, value: e.target.value } : null; });
+document.addEventListener("change", (e) => { if (fieldFocus && fieldFocus.el === e.target) fieldFocus.value = e.target.value; }, true);
+
+// Escape peels off one layer at a time: the field being typed in, the selected overlay, the marked
+// range, and only when nothing is left the window. Returns the layer it took.
+function handleEscape() {
+  const el = document.activeElement;
+  if (isTextField(el)) {
+    if (fieldFocus && fieldFocus.el === el && el.value !== fieldFocus.value) {
+      el.value = fieldFocus.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    el.blur();
+    return "field";
+  }
+  // A selected overlay only gives up the arrow keys, never the window: closing here would throw
+  // away every edit just because something is selected.
+  if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return "overlay"; }
+  if (VE.sel) { VE.sel = null; renderRegions(); renderOverlayEditor(); return "selection"; }
+  closeWindow();
+  return "close";
+}
+
 document.addEventListener("keydown", (e) => {
   if (!$("confirm-modal").classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); dismissConfirm(); }
@@ -1772,10 +1801,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     e.preventDefault();
     if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
-    // A selected overlay only gives up the arrow keys, never the window: closing here would throw
-    // away every edit just because something is selected.
-    if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return; }
-    closeWindow();
+    handleEscape();
     return;
   }
   if (typing) return;
