@@ -30,6 +30,8 @@ mod placeholders;
 mod review_fixes;
 mod fix_review;
 mod media_fixes;
+#[cfg(windows)]
+mod win_windows;
 mod data_dir_cleanup;
 mod final_fixes;
 
@@ -83,3 +85,6 @@ pub(super) use fix_review::*;
 pub(super) use media_fixes::*;
 #[allow(unused_imports)]
 pub(super) use data_dir_cleanup::*;
+#[cfg(windows)]
+#[allow(unused_imports)]
+pub(super) use win_windows::*;

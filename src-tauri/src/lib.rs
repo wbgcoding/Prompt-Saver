@@ -131,6 +131,9 @@ use drafts::*;
 mod folders;
 use folders::*;
 
+#[cfg(windows)]
+mod win_windows;
+
 mod snip;
 use snip::*;
 

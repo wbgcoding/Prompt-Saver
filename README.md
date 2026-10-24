@@ -226,7 +226,7 @@ point the app's data folder at it, or copy the file next to the portable exe.
 
 ## Tech stack
 
-[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screenshots), `windows-capture` (screen recording), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg/ffprobe download extraction).
+[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `windows-capture` (screen recording), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg/ffprobe download extraction).
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 

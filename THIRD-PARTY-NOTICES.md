@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-664 components are listed below, sorted by name.
+607 components are listed below, sorted by name.
 
 | Name | Version | License |
 |---|---|---|
@@ -12,18 +12,13 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | aes-gcm | 0.10.3 | Apache-2.0 OR MIT |
 | ahash | 0.8.12 | MIT OR Apache-2.0 |
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
-| aligned | 0.4.3 | MIT OR Apache-2.0 |
-| aligned-vec | 0.6.4 | MIT |
 | alloc-no-stdlib | 2.0.4 | BSD-3-Clause |
 | alloc-stdlib | 0.2.4 | BSD-3-Clause |
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 |
 | arbitrary | 1.4.2 | MIT OR Apache-2.0 |
 | arboard | 3.6.1 | MIT OR Apache-2.0 |
-| arg_enum_proc_macro | 0.3.4 | MIT |
 | argon2 | 0.5.3 | MIT OR Apache-2.0 |
-| arrayvec | 0.7.8 | MIT OR Apache-2.0 |
-| as-slice | 0.2.1 | MIT OR Apache-2.0 |
 | ashpd | 0.11.1 | MIT |
 | async-broadcast | 0.7.2 | MIT OR Apache-2.0 |
 | async-channel | 2.5.0 | Apache-2.0 OR MIT |
@@ -41,18 +36,13 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | atk-sys | 0.18.2 | MIT |
 | atomic-waker | 1.1.2 | Apache-2.0 OR MIT |
 | autocfg | 1.5.1 | Apache-2.0 OR MIT |
-| av-scenechange | 0.14.1 | MIT |
-| av1-grain | 0.2.5 | BSD-2-Clause |
-| avif-serialize | 0.8.9 | BSD-3-Clause |
 | base64 | 0.21.7 | MIT OR Apache-2.0 |
 | base64 | 0.22.1 | MIT OR Apache-2.0 |
 | base64ct | 1.8.3 | Apache-2.0 OR MIT |
 | bit-set | 0.8.0 | Apache-2.0 OR MIT |
 | bit-vec | 0.8.0 | Apache-2.0 OR MIT |
-| bit_field | 0.10.3 | Apache-2.0/MIT |
 | bitflags | 1.3.2 | MIT/Apache-2.0 |
 | bitflags | 2.13.1 | MIT OR Apache-2.0 |
-| bitstream-io | 4.10.0 | MIT/Apache-2.0 |
 | blake2 | 0.10.6 | MIT OR Apache-2.0 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
 | block2 | 0.6.2 | MIT |
@@ -60,7 +50,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | brotli | 8.0.4 | BSD-3-Clause AND MIT |
 | brotli-decompressor | 5.0.3 | BSD-3-Clause/MIT |
 | bs58 | 0.5.1 | MIT/Apache-2.0 |
-| built | 0.8.1 | MIT |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | bytemuck | 1.25.2 | Zlib OR Apache-2.0 OR MIT |
 | byteorder | 1.5.0 | Unlicense OR MIT |
@@ -88,7 +77,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | cookie | 0.18.2 | MIT OR Apache-2.0 |
 | core-foundation | 0.10.1 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
-| core-graphics | 0.24.0 | MIT OR Apache-2.0 |
 | core-graphics | 0.25.0 | MIT OR Apache-2.0 |
 | core-graphics-types | 0.2.0 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
@@ -138,15 +126,12 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | endi | 1.1.1 | MIT |
 | enumflags2 | 0.7.12 | MIT OR Apache-2.0 |
 | enumflags2_derive | 0.7.12 | MIT OR Apache-2.0 |
-| equator | 0.4.2 | MIT |
-| equator-macro | 0.4.2 | MIT |
 | equivalent | 1.0.2 | Apache-2.0 OR MIT |
 | erased-serde | 0.4.10 | MIT OR Apache-2.0 |
 | errno | 0.3.14 | MIT OR Apache-2.0 |
 | error-code | 3.4.0 | BSL-1.0 |
 | event-listener | 5.4.2 | Apache-2.0 OR MIT |
 | event-listener-strategy | 0.5.4 | Apache-2.0 OR MIT |
-| exr | 1.74.2 | BSD-3-Clause |
 | fallible-iterator | 0.3.0 | MIT/Apache-2.0 |
 | fallible-streaming-iterator | 0.1.9 | MIT/Apache-2.0 |
 | fastrand | 2.5.0 | Apache-2.0 OR MIT |
@@ -227,14 +212,11 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT |
 | image | 0.25.10 | MIT OR Apache-2.0 |
 | image-webp | 0.2.4 | MIT OR Apache-2.0 |
-| imgref | 1.12.3 | CC0-1.0 OR Apache-2.0 |
 | indexmap | 1.9.3 | Apache-2.0 OR MIT |
 | indexmap | 2.14.1 | Apache-2.0 OR MIT |
 | infer | 0.19.0 | MIT |
 | inout | 0.1.4 | MIT OR Apache-2.0 |
-| interpolate_name | 0.2.4 | MIT |
 | ipnet | 2.12.1 | MIT OR Apache-2.0 |
-| itertools | 0.14.0 | MIT OR Apache-2.0 |
 | itertools | 0.15.0 | MIT OR Apache-2.0 |
 | itoa | 1.0.18 | MIT OR Apache-2.0 |
 | javascriptcore-rs | 1.1.2 | MIT |
@@ -248,32 +230,26 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | jni-sys | 0.3.1 | MIT OR Apache-2.0 |
 | jni-sys | 0.4.1 | MIT OR Apache-2.0 |
 | jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 |
-| jobserver | 0.1.35 | MIT OR Apache-2.0 |
 | jpeg-encoder | 0.6.1 | (MIT OR Apache-2.0) AND IJG |
 | js-sys | 0.3.104 | MIT OR Apache-2.0 |
 | json-patch | 3.0.1 | MIT/Apache-2.0 |
 | jsonptr | 0.6.3 | MIT OR Apache-2.0 |
 | keyboard-types | 0.7.0 | MIT OR Apache-2.0 |
-| lebe | 0.5.3 | BSD-3-Clause |
 | libappindicator | 0.9.0 | Apache-2.0 OR MIT |
 | libappindicator-sys | 0.9.0 | Apache-2.0 OR MIT |
 | libc | 0.2.189 | MIT OR Apache-2.0 |
 | libdbus-sys | 0.2.7 | Apache-2.0/MIT |
-| libfuzzer-sys | 0.4.13 | (MIT OR Apache-2.0) AND NCSA |
 | libloading | 0.7.4 | ISC |
 | libloading | 0.8.9 | ISC |
 | libloading | 0.9.0 | ISC |
-| libm | 0.2.16 | MIT |
 | libredox | 0.1.21 | MIT |
 | libsqlite3-sys | 0.30.1 | MIT |
 | linux-raw-sys | 0.12.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | litemap | 0.8.3 | Unicode-3.0 |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 |
 | log | 0.4.34 | MIT OR Apache-2.0 |
-| loop9 | 0.1.5 | MIT |
 | markup5ever | 0.38.0 | MIT OR Apache-2.0 |
 | maybe-owned | 0.3.4 | MIT OR Apache-2.0 |
-| maybe-rayon | 0.1.1 | MIT |
 | memchr | 2.8.3 | Unlicense OR MIT |
 | memoffset | 0.9.1 | MIT |
 | mime | 0.3.17 | MIT OR Apache-2.0 |
@@ -285,16 +261,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | ndk | 0.9.0 | MIT OR Apache-2.0 |
 | ndk-sys | 0.6.0+11769913 | MIT OR Apache-2.0 |
 | new_debug_unreachable | 1.0.6 | MIT |
-| no_std_io2 | 0.9.4 | Apache-2.0 OR MIT |
-| nom | 8.0.0 | MIT |
-| noop_proc_macro | 0.3.0 | MIT |
-| ntapi | 0.4.3 | Apache-2.0 OR MIT |
-| num-bigint | 0.4.8 | MIT OR Apache-2.0 |
-| num-complex | 0.4.6 | MIT OR Apache-2.0 |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 |
-| num-derive | 0.4.2 | MIT OR Apache-2.0 |
-| num-integer | 0.1.47 | MIT OR Apache-2.0 |
-| num-rational | 0.4.2 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
 | num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 |
 | num_enum_derive | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 |
@@ -325,8 +292,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | password-hash | 0.5.0 | MIT OR Apache-2.0 |
-| paste | 1.0.15 | MIT OR Apache-2.0 |
-| pastey | 0.1.1 | MIT OR Apache-2.0 |
 | pdfium-render | 0.8.37 | MIT OR Apache-2.0 |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
 | phf | 0.13.1 | MIT |
@@ -356,12 +321,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | proc-macro-error | 1.0.4 | MIT OR Apache-2.0 |
 | proc-macro-error-attr | 1.0.4 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
-| profiling | 1.0.18 | MIT OR Apache-2.0 |
-| profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 |
-| pulp | 0.22.3 | MIT |
-| pulp-wasm-simd-flag | 0.1.1 | MIT |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 |
-| qoi | 0.4.1 | MIT/Apache-2.0 |
 | quick-error | 2.0.1 | MIT/Apache-2.0 |
 | quick-xml | 0.41.0 | MIT |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
@@ -373,13 +333,9 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | rand_chacha | 0.9.0 | MIT OR Apache-2.0 |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 |
 | rand_core | 0.9.5 | MIT OR Apache-2.0 |
-| rav1e | 0.8.1 | BSD-2-Clause |
-| ravif | 0.13.0 | BSD-3-Clause |
-| raw-cpuid | 11.6.0 | MIT |
 | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib |
 | rayon | 1.12.0 | MIT OR Apache-2.0 |
 | rayon-core | 1.13.0 | MIT OR Apache-2.0 |
-| reborrow | 0.5.5 | MIT |
 | redox_syscall | 0.5.18 | MIT |
 | redox_users | 0.5.2 | MIT |
 | ref-cast | 1.0.27 | MIT OR Apache-2.0 |
@@ -389,7 +345,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 |
 | reqwest | 0.13.4 | MIT OR Apache-2.0 |
 | rfd | 0.15.4 | MIT |
-| rgb | 0.8.53 | MIT |
 | ring | 0.17.14 | Apache-2.0 AND ISC |
 | rusqlite | 0.32.1 | MIT |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT |
@@ -426,7 +381,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
 | simd-adler32 | 0.3.10 | MIT |
-| simd_helpers | 0.1.0 | MIT |
 | siphasher | 1.0.3 | MIT/Apache-2.0 |
 | slab | 0.4.12 | MIT |
 | smallvec | 1.15.2 | MIT OR Apache-2.0 |
@@ -446,7 +400,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | sync_wrapper | 1.0.2 | Apache-2.0 |
 | synstructure | 0.13.2 | MIT |
 | sys-locale | 0.3.2 | MIT OR Apache-2.0 |
-| sysinfo | 0.32.1 | MIT |
 | system-deps | 6.2.2 | MIT OR Apache-2.0 |
 | tao | 0.35.3 | Apache-2.0 |
 | tao-macros | 0.1.4 | MIT OR Apache-2.0 |
@@ -517,7 +470,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | utf16string | 0.2.0 | MIT OR Apache-2.0 |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT |
 | uuid | 1.26.0 | Apache-2.0 OR MIT |
-| v_frame | 0.3.9 | BSD-2-Clause |
 | vcpkg | 0.2.15 | MIT/Apache-2.0 |
 | vecmath | 1.0.0 | MIT |
 | version-compare | 0.2.1 | MIT |
@@ -554,30 +506,25 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | winapi-util | 0.1.11 | Unlicense OR MIT |
 | winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 |
 | window-vibrancy | 0.6.0 | Apache-2.0 OR MIT |
-| windows | 0.57.0 | MIT OR Apache-2.0 |
 | windows | 0.58.0 | MIT OR Apache-2.0 |
 | windows | 0.61.3 | MIT OR Apache-2.0 |
 | windows | 0.62.2 | MIT OR Apache-2.0 |
 | windows-capture | 2.0.1 | MIT |
 | windows-collections | 0.2.0 | MIT OR Apache-2.0 |
 | windows-collections | 0.3.2 | MIT OR Apache-2.0 |
-| windows-core | 0.57.0 | MIT OR Apache-2.0 |
 | windows-core | 0.58.0 | MIT OR Apache-2.0 |
 | windows-core | 0.61.2 | MIT OR Apache-2.0 |
 | windows-core | 0.62.2 | MIT OR Apache-2.0 |
 | windows-future | 0.2.1 | MIT OR Apache-2.0 |
 | windows-future | 0.3.2 | MIT OR Apache-2.0 |
-| windows-implement | 0.57.0 | MIT OR Apache-2.0 |
 | windows-implement | 0.58.0 | MIT OR Apache-2.0 |
 | windows-implement | 0.60.2 | MIT OR Apache-2.0 |
-| windows-interface | 0.57.0 | MIT OR Apache-2.0 |
 | windows-interface | 0.58.0 | MIT OR Apache-2.0 |
 | windows-interface | 0.59.3 | MIT OR Apache-2.0 |
 | windows-link | 0.1.3 | MIT OR Apache-2.0 |
 | windows-link | 0.2.1 | MIT OR Apache-2.0 |
 | windows-numerics | 0.2.0 | MIT OR Apache-2.0 |
 | windows-numerics | 0.3.1 | MIT OR Apache-2.0 |
-| windows-result | 0.1.2 | MIT OR Apache-2.0 |
 | windows-result | 0.2.0 | MIT OR Apache-2.0 |
 | windows-result | 0.3.4 | MIT OR Apache-2.0 |
 | windows-result | 0.4.1 | MIT OR Apache-2.0 |
@@ -639,10 +586,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | x11-dl | 2.21.0 | MIT |
 | x11rb | 0.13.2 | MIT OR Apache-2.0 |
 | x11rb-protocol | 0.13.2 | MIT OR Apache-2.0 |
-| xcap | 0.0.14 | Apache-2.0 |
-| xcb | 1.7.1 | MIT |
 | xkeysym | 0.2.1 | MIT OR Apache-2.0 OR Zlib |
-| y4m | 0.8.0 | MIT |
 | yoke | 0.8.3 | Unicode-3.0 |
 | yoke-derive | 0.8.2 | Unicode-3.0 |
 | zbus | 5.19.0 | MIT |
@@ -662,7 +606,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | zmij | 1.0.23 | MIT |
 | zopfli | 0.8.3 | Apache-2.0 |
 | zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |
-| zune-inflate | 0.2.54 | MIT OR Apache-2.0 OR Zlib |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib |
 | zvariant | 5.15.0 | MIT |
 | zvariant_derive | 5.15.0 | MIT |

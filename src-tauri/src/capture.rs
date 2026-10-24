@@ -381,7 +381,7 @@ pub(crate) async fn capture_window(
     // 1. Direct PrintWindow: best for normal windows (own content, no overlays).
     // Skipped for elevated windows: PrintWindow is unreliable there and can pass
     // the quality check with a wrong image, so route them to the robust paths.
-    // One enumeration serves the app name, the direct grab and the rect (each xcap listing opens
+    // One enumeration serves the app name, the direct grab and the rect (each window listing opens
     // every top-level window's process), off the async worker.
     let probe = tauri::async_runtime::spawn_blocking(move || probe_window(id, !protected))
         .await
@@ -484,12 +484,21 @@ pub(crate) struct WindowProbe {
 // its own PrintWindow image from that one match. A window that closed in between is simply
 // absent from all three, never half-present.
 pub(crate) fn probe_window(id: u32, try_direct: bool) -> WindowProbe {
-    let Some(w) = xcap::Window::all().ok().and_then(|ws| ws.into_iter().find(|w| w.id() == id)) else {
-        return WindowProbe { app_name: None, direct: None, rect: None };
-    };
-    let direct = if try_direct { w.capture_image().ok().filter(|im| !capture_looks_bad(im)) } else { None };
-    let rect = snip_window_rect(window_frame_rect(id), (w.x(), w.y(), w.width() as i32, w.height() as i32));
-    WindowProbe { app_name: Some(w.app_name().to_string()), direct, rect: Some(rect) }
+    #[cfg(windows)]
+    {
+        use crate::win_windows;
+        let Some(w) = win_windows::list_windows().into_iter().find(|w| w.id == id) else {
+            return WindowProbe { app_name: None, direct: None, rect: None };
+        };
+        let direct = if try_direct { win_windows::capture_window(id).filter(|im| !capture_looks_bad(im)) } else { None };
+        let rect = snip_window_rect(window_frame_rect(id), w.client);
+        WindowProbe { app_name: Some(win_windows::app_name(id).unwrap_or_default()), direct, rect: Some(rect) }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (id, try_direct);
+        WindowProbe { app_name: None, direct: None, rect: None }
+    }
 }
 
 // Passes `res` through, calling `show` first when it is an error.

@@ -562,36 +562,23 @@ pub(crate) fn capture_desktop() -> Option<(image::RgbaImage, i32, i32)> {
     Some((img, vx, vy))
 }
 
-// Freeze the whole desktop into one image (global physical px). Fast GDI path on
-// Windows; per-monitor xcap stitch as a fallback (and on other platforms).
+// Freeze the whole desktop into one image (global physical px). One GDI grab of the virtual
+// desktop; per-monitor grabs stitched together as a fallback.
 pub(crate) fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
     #[cfg(windows)]
-    if let Some(res) = capture_desktop() {
-        return Ok(res);
-    }
-    let mut caps = Vec::new();
     {
-        let monitors = xcap::Monitor::all().map_err(|e| e.to_string())?;
-        for m in &monitors {
-            if let Ok(image) = m.capture_image() {
-                caps.push((image, m.x(), m.y(), m.width(), m.height()));
-            }
+        if let Some(res) = capture_desktop() {
+            return Ok(res);
+        }
+        let caps: Vec<(image::RgbaImage, i32, i32)> = crate::win_windows::monitor_rects()
+            .into_iter()
+            .filter_map(|(x, y, w, h)| capture_screen_rect(x, y, w, h).map(|img| (img, x, y)))
+            .collect();
+        if let Some(res) = crate::win_windows::stitch_captures(caps) {
+            return Ok(res);
         }
     }
-    if caps.is_empty() {
-        return Err("capture failed".to_string());
-    }
-    let min_x = caps.iter().map(|c| c.1).min().unwrap_or(0);
-    let min_y = caps.iter().map(|c| c.2).min().unwrap_or(0);
-    let max_x = caps.iter().map(|c| c.1 + c.3 as i32).max().unwrap_or(0);
-    let max_y = caps.iter().map(|c| c.2 + c.4 as i32).max().unwrap_or(0);
-    let total_w = (max_x - min_x).max(1) as u32;
-    let total_h = (max_y - min_y).max(1) as u32;
-    let mut canvas = image::RgbaImage::new(total_w, total_h);
-    for (image, x, y, _, _) in &caps {
-        image::imageops::replace(&mut canvas, image, stitch_offset(*x, min_x), stitch_offset(*y, min_y));
-    }
-    Ok((canvas, min_x, min_y))
+    Err("capture failed".to_string())
 }
 
 // A monitor's global physical origin to where its capture starts in the stitched image. The
@@ -983,7 +970,7 @@ pub(crate) fn snip_should_begin() -> bool {
 }
 
 // Rect (x, y, width, height) the overlay hit-tests and highlights for a window:
-// its visible frame when known, else the client rect xcap reports.
+// its visible frame when known, else the client rect.
 pub(crate) fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
     frame.unwrap_or(client)
 }
@@ -992,25 +979,7 @@ pub(crate) fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32
 // bounds: no invisible resize border, but title bar and borders included).
 #[cfg(windows)]
 pub(crate) fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
-    #[repr(C)]
-    #[derive(Default)]
-    struct Rect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
-    #[link(name = "dwmapi")]
-    extern "system" {
-        fn DwmGetWindowAttribute(hwnd: isize, attr: u32, out: *mut Rect, size: u32) -> i32;
-    }
-    const DWMWA_EXTENDED_FRAME_BOUNDS: u32 = 9;
-    let mut r = Rect::default();
-    let hr = unsafe { DwmGetWindowAttribute(id as i32 as isize, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r, std::mem::size_of::<Rect>() as u32) };
-    if hr != 0 || r.right <= r.left || r.bottom <= r.top {
-        return None;
-    }
-    Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
+    crate::win_windows::frame_rect(id)
 }
 
 #[cfg(not(windows))]
@@ -1032,31 +1001,32 @@ pub(crate) fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWin
         }
     };
     let mut out = Vec::new();
-    if let Ok(windows) = xcap::Window::all() {
-        for w in windows {
-            if w.is_minimized() || w.title().is_empty() {
-                continue;
-            }
-            // The hit-test rect is the window's visible frame (title bar and borders
-            // included); xcap's own x/y/width/height is only the client area.
-            let (gx, gy, ww, wh) = snip_window_rect(window_frame_rect(w.id()), (w.x(), w.y(), w.width() as i32, w.height() as i32));
-            if ww <= 0 || wh <= 0 {
-                continue;
-            }
-            // Keep only windows overlapping the virtual desktop.
-            if gx >= ox + ow || gy >= oy + oh || gx + ww <= ox || gy + wh <= oy {
-                continue;
-            }
-            // Local to the stitched image.
-            out.push(SnipWindow {
-                id: w.id(),
-                x: gx - ox,
-                y: gy - oy,
-                width: ww as u32,
-                height: wh as u32,
-            });
+    #[cfg(windows)]
+    for w in crate::win_windows::list_windows() {
+        if !crate::win_windows::offered_to_overlay(&w) {
+            continue;
         }
+        // The hit-test rect is the window's visible frame (title bar and borders
+        // included); the listed rect is only the client area.
+        let (gx, gy, ww, wh) = snip_window_rect(window_frame_rect(w.id), w.client);
+        if ww <= 0 || wh <= 0 {
+            continue;
+        }
+        // Keep only windows overlapping the virtual desktop.
+        if gx >= ox + ow || gy >= oy + oh || gx + ww <= ox || gy + wh <= oy {
+            continue;
+        }
+        // Local to the stitched image.
+        out.push(SnipWindow {
+            id: w.id,
+            x: gx - ox,
+            y: gy - oy,
+            width: ww as u32,
+            height: wh as u32,
+        });
     }
+    #[cfg(not(windows))]
+    let _ = (ox, oy, ow, oh);
     out
 }
 
