@@ -1682,12 +1682,14 @@ $("ve-preset-gif").addEventListener("click", () => applyPreset("gif", "small", "
 
 $("ve-export-start").addEventListener("click", () => startExport(false));
 $("ve-export-clip").addEventListener("click", () => startExport(true));
-// Always visible, like the screenshot editor's Cancel: it stops a running export,
-// and with nothing running it closes the window (asking first when edits are unsaved).
-$("ve-export-cancel").addEventListener("click", () => {
-  if (VE.exporting) invoke("cancel_export").catch(() => {});
-  else closeWindow();
-});
+// Stops a running export; with nothing running it only leads back to the Edit tab, so a click
+// meant as "never mind" cannot close the editor.
+function exportStopOrBack() {
+  if (VE.exporting) { invoke("cancel_export").catch(() => {}); return; }
+  showPanel("ve-panel-edit");
+  $("ve-tab-edit").focus();
+}
+$("ve-export-cancel").addEventListener("click", exportStopOrBack);
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
   const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : errMessageLogged(err, t, "video")); return null; });

@@ -92,10 +92,20 @@ async function refreshExportSizeNote(format) {
   $("ve-export-note").textContent = notes.join(" ");
 }
 
+// The button beside Export: "Stop export" while a run is going, otherwise "Back" to the Edit tab.
+// The i18n key moves with the text so a later language pass keeps the right label.
+export function syncExportButton() {
+  const key = VE.exporting ? "veStopExport" : "veBack";
+  const button = $("ve-export-cancel");
+  button.dataset.i18n = key;
+  button.textContent = t(key);
+}
+
 // The one place that decides whether Export/Copy-to-clipboard may be clicked: an invalid or
 // empty file name joins the "still exporting"/"ffmpeg missing" reasons, so no call site has to
 // know about the others.
 export function applyExportGate() {
+  syncExportButton();
   const valid = exportNameIsValid($("ve-export-name").value);
   $("ve-export-name").classList.toggle("invalid", !valid);
   $("ve-export-name-hint").classList.toggle("hidden", valid);
@@ -183,6 +193,7 @@ export async function startExport(toClipboard) {
   const stillHere = () => VE.loadGen === gen;
   VE.exporting = true;
   exportRun = { gen, total };
+  syncExportButton();
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
   $("ve-export-saveas").classList.add("hidden");

@@ -1273,20 +1273,21 @@ VIDEO_PROBE = """
       }
     }
 
-    // 935: Export opens from the title bar button; no tab is selected then,
-    // the start button has the focus, and the Edit tab leads back.
+    // Export opens from the title bar button and from its own tab; the Export tab is the selected
+    // one then, the start button has the focus, and the Edit tab leads back.
     document.getElementById('ve-export-open').click();
     await sleep(80);
     if (document.getElementById('ve-panel-export').classList.contains('hidden')) {
       errs.push('the export button did not reveal the export panel');
     }
-    if ([...document.querySelectorAll('.ve-tab')].some((t) => t.getAttribute('aria-selected') !== 'false')) {
-      errs.push('935: a tab stayed selected while the export panel is shown');
+    if (document.getElementById('ve-tab-export').getAttribute('aria-selected') !== 'true'
+        || [...document.querySelectorAll('.ve-tab')].filter((t) => t.getAttribute('aria-selected') === 'true').length !== 1) {
+      errs.push('987: the Export tab is not the one selected tab while the export panel is shown');
     }
     if (document.activeElement.id !== 've-export-start') {
       errs.push('935: the export start button did not take the focus: ' + document.activeElement.id);
     }
-    if (document.querySelector('.ve-tab[data-panel="ve-panel-export"]')) errs.push('935: the Export tab still exists');
+    if (!document.querySelector('.ve-tab[data-panel="ve-panel-export"]')) errs.push('987: the Export tab is missing');
     {
       const tabEdit = document.getElementById('ve-tab-edit');
       tabEdit.click();

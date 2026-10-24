@@ -169,12 +169,13 @@
       </div>
     </div>
 
-    <!-- Side panel: two tabs (Edit, Overlays) plus the operation list, which stays visible under
+    <!-- Side panel: three tabs (Edit, Overlays, Export) plus the operation list, which stays visible under
          every tab because undo/redo has to be reachable from wherever you are. -->
     <div class="ve-side">
       <div class="ve-tabs" role="tablist" data-i18n-aria="veTabsLabel">
         <button id="ve-tab-edit" class="ve-tab active" type="button" role="tab" aria-selected="true" data-panel="ve-panel-edit" data-i18n="veTabEdit">Edit</button>
         <button id="ve-tab-overlays" class="ve-tab" type="button" role="tab" aria-selected="false" data-panel="ve-panel-overlays" data-i18n="veTabOverlays">Overlays</button>
+        <button id="ve-tab-export" class="ve-tab" type="button" role="tab" aria-selected="false" data-panel="ve-panel-export" data-i18n="veTabExport">Export</button>
       </div>
 
       <div class="ve-panels">
@@ -326,7 +327,7 @@
             <button id="ve-export-error-copy" class="ghost-btn" type="button" data-i18n="copy">Copy</button>
           </details>
           <div class="export-row">
-            <button id="ve-export-cancel" class="ghost-btn" type="button" data-i18n="cancel">Cancel</button>
+            <button id="ve-export-cancel" class="ghost-btn" type="button" data-i18n="veBack">Back</button>
             <button id="ve-export-saveas" class="ghost-btn hidden" type="button" data-i18n="screenshotSaveAs" data-i18n-title="veExportMoveToTip">Save as…</button>
             <button id="ve-export-clip" class="ghost-btn" type="button" data-i18n="copy" data-i18n-title="veExportClipTip">Copy</button>
             <button id="ve-export-start" class="primary-btn" type="button" data-i18n="veExportStart">Export</button>

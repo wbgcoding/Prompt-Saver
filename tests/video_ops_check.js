@@ -391,7 +391,7 @@ async function exportLoadRaceCheck() {
     exportEta: { reset() {} }, setProgress: () => {},
     buildVideoChain: () => null, buildAudioChain: () => null, exportMediaPaths: () => [], keptSegments: () => [{ a: 0, b: 5000 }],
     videoKbps: () => 1000, fmtBytes: String, LANG: "en", confirmDialog: async () => false, noteFfmpeg: () => {},
-    parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
+    parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {}, syncExportButton: () => {},
   };
   vm.createContext(sb);
   vm.runInContext(
@@ -439,7 +439,7 @@ async function exportIdleCheck() {
       exportEta: { reset() {} }, setProgress: () => el("ve-export-progress-row").classList.remove("hidden"),
       buildVideoChain: () => null, buildAudioChain: () => null, exportMediaPaths: () => [], keptSegments: () => [{ a: 0, b: 5000 }],
       videoKbps: () => 1000, fmtBytes: String, LANG: "en", confirmDialog: async () => false, noteFfmpeg: () => {},
-      parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
+      parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {}, syncExportButton: () => {},
     };
     vm.createContext(sb);
     vm.runInContext(
@@ -611,6 +611,59 @@ async function exportIdleCheck() {
     expect("a degenerate trim falls back to the whole recording", pushed[3].startMs === 0 && pushed[3].endMs === 10000);
 
   }
+}
+
+// The export tab and the button beside Export: three tabs switch the panels, "Back" leads to the
+// Edit tab while nothing runs and never closes the editor, "Stop export" cancels a running export.
+{
+  const mk = (id, extra) => {
+    const el = { id, hidden: false, cls: new Set(), attrs: {}, dataset: {}, textContent: "", focused: false, ...extra };
+    el.classList = { toggle: (name, on) => { if (on) el.cls.add(name); else el.cls.delete(name); }, contains: (name) => el.cls.has(name) };
+    el.setAttribute = (k, v) => { el.attrs[k] = v; };
+    el.focus = () => { el.focused = true; };
+    return el;
+  };
+  const panels = ["ve-panel-edit", "ve-panel-overlays", "ve-panel-export"].map((id) => mk(id));
+  const tabs = [["ve-tab-edit", "ve-panel-edit"], ["ve-tab-overlays", "ve-panel-overlays"], ["ve-tab-export", "ve-panel-export"]].map(([id, panel]) => mk(id, { dataset: { panel } }));
+  const byId = Object.fromEntries([...panels, ...tabs].map((x) => [x.id, x]));
+  byId["ve-export-cancel"] = mk("ve-export-cancel");
+  const calls = [];
+  const sb = {
+    VE: { exporting: false },
+    document: { querySelectorAll: (sel) => (sel === ".ve-panel" ? panels : sel === ".ve-tab" ? tabs : []) },
+    $: (id) => byId[id], t: (k) => `<${k}>`,
+    invoke: (cmd) => { calls.push(cmd); return Promise.resolve(); },
+    closeWindow: () => calls.push("closeWindow"),
+  };
+  vm.createContext(sb);
+  vm.runInContext([
+    extractBlock("showPanel", "function showPanel(id) {"),
+    extractBlock("syncExportButton", "function syncExportButton() {"),
+    extractBlock("exportStopOrBack", "function exportStopOrBack() {"),
+  ].join("\n"), sb);
+  const run = (code) => vm.runInContext(code, sb);
+  const shown = () => panels.filter((p) => !p.cls.has("hidden")).map((p) => p.id).join();
+  run('showPanel("ve-panel-export")');
+  expect("the Export tab shows the export panel only", shown() === "ve-panel-export", shown());
+  expect("the Export tab is the selected one", byId["ve-tab-export"].attrs["aria-selected"] === "true" && byId["ve-tab-edit"].attrs["aria-selected"] === "false");
+  expect("the html has the third tab wired to the export panel", /id="ve-tab-export"[^>]*data-panel="ve-panel-export"[^>]*data-i18n="veTabExport"/.test(fs.readFileSync(path.join(__dirname, "..", "ui", "video.html"), "utf8")));
+  // Idle: the button says Back and leads to the Edit tab.
+  run("syncExportButton()");
+  expect("idle, the button reads Back", byId["ve-export-cancel"].textContent === "<veBack>" && byId["ve-export-cancel"].dataset.i18n === "veBack");
+  run("exportStopOrBack()");
+  expect("Back returns to the Edit tab", shown() === "ve-panel-edit", shown());
+  expect("Back moves the focus to the Edit tab", byId["ve-tab-edit"].focused === true);
+  expect("Back never closes the editor or cancels anything", calls.length === 0, calls.join());
+  // Running: the button reads Stop export and cancels.
+  sb.VE.exporting = true;
+  run("syncExportButton()");
+  expect("while exporting, the button reads Stop export", byId["ve-export-cancel"].textContent === "<veStopExport>" && byId["ve-export-cancel"].dataset.i18n === "veStopExport");
+  run('showPanel("ve-panel-export")');
+  run("exportStopOrBack()");
+  expect("Stop export cancels the running export and stays on the panel", calls.join() === "cancel_export" && shown() === "ve-panel-export", calls.join());
+  sb.VE.exporting = false;
+  run("syncExportButton()");
+  expect("the label goes back to Back once the export ended", byId["ve-export-cancel"].textContent === "<veBack>");
 }
 
 // Removing an operation is an undo step: undo brings it back with every
