@@ -150,6 +150,17 @@ export function syncEdgeFade(bar) {
   else delete bar.dataset.fade;
 }
 
+// Scrolls a tab strip sideways (never the dialog) until the active tab is fully on screen,
+// clear of the fade at either edge.
+export function showActiveTab(bar) {
+  const act = bar.querySelector(".expert-tab.active");
+  if (!act) return;
+  const a = act.getBoundingClientRect(), b = bar.getBoundingClientRect();
+  const FADE = 32;
+  if (a.left < b.left + FADE) bar.scrollLeft -= b.left + FADE - a.left;
+  else if (a.right > b.right - FADE) bar.scrollLeft += a.right - (b.right - FADE);
+}
+
 // A status line that carries a live value ("Version 1.6.0", a port, a host) is remembered as
 // key + token + value, so applyI18n can redraw it after a language switch.
 export function setStatusText(el, key, token, value) {

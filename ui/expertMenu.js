@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignPrompts, assignSettings, COLORS, debounced, DEFAULT_COLORS, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignPrompts, assignSettings, COLORS, debounced, DEFAULT_COLORS, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, showActiveTab, syncEdgeFade, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SELECT_CUSTOM_MAX, SELECT_CUSTOM_MIN, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -1600,17 +1600,6 @@ export function emitExpertRows(list, parent, actionById, depth) {
     parent.appendChild(build(list[i]));
     if (list[i].kids.length) emitExpertRows(list[i].kids, parent, actionById, depth + 1);
   }
-}
-
-// Scrolls the strip sideways (never the dialog) until the active tab is fully on screen,
-// clear of the fade at either edge.
-function showActiveTab(bar) {
-  const act = bar.querySelector(".expert-tab.active");
-  if (!act) return;
-  const a = act.getBoundingClientRect(), b = bar.getBoundingClientRect();
-  const FADE = 32;
-  if (a.left < b.left + FADE) bar.scrollLeft -= b.left + FADE - a.left;
-  else if (a.right > b.right - FADE) bar.scrollLeft += a.right - (b.right - FADE);
 }
 
 // The tab bar is rebuilt on every render; one observer follows the current bar.
