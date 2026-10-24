@@ -278,11 +278,11 @@ the introduction tour ship on; the screenshot editor is always on).
   the expert menu alongside a manual clean-up action.
 - **Video editor**: opens from a recording's own result dialog or from any
   video prompt's right-click menu, in its own window with a live preview and
-  no processing until you export. Trim and cut (a lossless fast path applies
-  when nothing else changes), crop, change speed, fade in/out, resize (width/
+  no processing until you export. Trim and cut (when nothing else changes, the picture is copied without
+  re-encoding and the cut starts at the nearest earlier keyframe; a recording with
+  both sound tracks on gets them mixed into one AAC track), crop, change speed, fade in/out, resize (width/
   height/percent fields, an aspect-ratio lock, and presets from 4K down to
-  25%; a preset never enlarges past the source, but the percent field and
-  free typing can), and overlay images, freeze-frames, text, pixelation or a
+  25%; a preset larger than the source enlarges it and says so), and overlay images, freeze-frames, text, pixelation or a
   focus area anywhere on a zoomable filmstrip-and-waveform timeline. The preview itself zooms with the
   scroll wheel (up to 8×) and pans by dragging (the middle mouse button
   always, the left button once zoomed in), for placing a small overlay

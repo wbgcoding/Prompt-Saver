@@ -510,8 +510,8 @@ expert menu.
 On by default, reachable from a recording's own result dialog (More, then
 Video editor) or from any video prompt's right-click menu ("Edit video"). It
 opens the clip in its own window with a live preview and no processing until
-you actually export: trim and cut (frame-exact, keeps the original quality
-when nothing else changes), crop, change speed, fade in/out, resize (typed
+you actually export: trim and cut (the original quality is kept when
+nothing else changes; the start then snaps to the nearest earlier keyframe), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
 4K down to 25%; a preset larger than the source enlarges the video and says
 so, one equal to the source height keeps the original), and overlay images,
@@ -520,8 +520,8 @@ keyboard-layout presets plus a free selection of keys, filled from a
 recording's own key data if it captured any) anywhere on the timeline. A
 filmstrip and waveform give you a zoomable overview to navigate by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
 dragging (the middle mouse button always, the left button once zoomed in)
-for placing a small overlay precisely on a large recording. Exporting
-re-encodes once, with a few ready-made presets (unchanged
+for placing a small overlay precisely on a large recording. Any edit beyond a plain
+trim re-encodes once, with a few ready-made presets (unchanged
 quality, a smaller size for chat, or an animated GIF) that remember your last
 choice. The format choice offers MP4, WebM, GIF and AVI, each with a short
 note on what it's good for; GIF carries no sound at all (the source audio
