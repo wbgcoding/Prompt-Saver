@@ -90,12 +90,12 @@ export const EXPERT_DROPDOWNS = {
   // Which tool the screenshot editor opens with.
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["last", "optSnipToolLast"], ["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
-     ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "last", "snipEditor"),
+     ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "last", "screenshot"),
   // What the text tool draws behind its letters. A stored boolean from the former snipTextPlate
   // flag converts once on read (below).
   snipTextBack: {
     label: "valSnipTextBack",
-    gate: "snipEditor",
+    gate: "screenshot",
     def: "white",
     options: () => [["none", t("optSnipTextBackNone")], ["white", t("optSnipTextBackWhite")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
     get: () => {
@@ -1082,7 +1082,7 @@ export const EXPERT_COLORS = {
   // `def` is a function here because the screenshot editor's fallback (COLORS[1]) tracks the
   // user's custom palette; a fixed hex would stop following a recoloured palette. colorRow()
   // below resolves a function `def` before use.
-  snipDefaultColor: { label: "valSnipDefaultColor", def: () => COLORS[1] || "#ef4444", gate: "snipEditor" },
+  snipDefaultColor: { label: "valSnipDefaultColor", def: () => COLORS[1] || "#ef4444", gate: "screenshot" },
 };
 
 // (folder path -> {count, bytes}) for the recordingDir video-folder readout, so switching the

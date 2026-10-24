@@ -63,7 +63,7 @@ export function openCtx(id, x, y) {
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
   ctxEl.querySelector('[data-act="editVideo"]').classList.toggle("hidden", !(flag("videoEditor") && cp?.file_path && mediaKind(cp.file_path) === "video"));
-  ctxEl.querySelector('[data-act="editImage"]').classList.toggle("hidden", !(flag("screenshot") && flag("snipEditor") && cp?.file_path && ["image", "gif"].includes(mediaKind(cp.file_path))));
+  ctxEl.querySelector('[data-act="editImage"]').classList.toggle("hidden", !(flag("screenshot") && cp?.file_path && ["image", "gif"].includes(mediaKind(cp.file_path))));
   const rotateMenuEligible = !!cp && (cp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
   rmenuBtn.classList.toggle("hidden", !rotateMenuEligible);
   if (rotateMenuEligible) {

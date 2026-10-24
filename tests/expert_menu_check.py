@@ -81,10 +81,9 @@ DEPENDENCIES = {
     "snipDelayMs": "screenshot",
     "snipSaveQuality": "screenshot",
     # 117/118: screenshot editor
-    "snipEditor": "screenshot",
-    "snipEditSnap": "snipEditor",
-    "snipTextBack": "snipEditor",
-    "snipEditDefaultTool": "snipEditor",
+    "snipEditSnap": "screenshot",
+    "snipTextBack": "screenshot",
+    "snipEditDefaultTool": "screenshot",
     # 121: OCR -- "ocr" itself stands alone (no parent flag; its group placement
     # right after the screenshot block is list order, not a gating relationship).
     "ocrAutoCopy": "ocr",
@@ -140,7 +139,7 @@ DEPENDENCIES = {
     "recOutline": "screenRecord",
     "recOutlineColor": "recOutline",
     "chainSeparator": "chainPrompts",
-    "snipDefaultColor": "snipEditor",
+    "snipDefaultColor": "screenshot",
     "dupImportCheck": "dupFinder",
     "similarThreshold": "similarHint",
     "clipMinChars": "clipWatcher",

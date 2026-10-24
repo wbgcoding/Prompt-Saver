@@ -4,7 +4,7 @@ import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { $, closeColorPop, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, withShortcut } from "./core.js";
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
-import { confirmDialog } from "./dialog.js";
+import { normScreenshotFormat } from "./expertConfig.js";
 import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
 import { buildSwatches } from "./editor.js";
@@ -15,7 +15,7 @@ const snipWheelOn = () => settings.ui_flags?.numFieldWheel !== false;
 
 export function initSnipEditor() {
   // ==== screenshot editor ====
-  // Opens right after a capture, before #snip-modal. Pure frontend: it takes a data URL and
+  // Opens right after a capture and carries its actions in the bottom bar. Pure frontend: it takes a data URL and
   // hands back an edited one. Every knob reads live from the expert menu.
   // Starting sizes of a tool nobody has used yet; afterwards each tool starts at its last used
   // size (ui_texts "snipToolSizes", see snipRememberSize).
@@ -165,7 +165,7 @@ export function initSnipEditor() {
     ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
     cropRect: null, lastNudged: null, eyedropArm: null, textEdit: null, selOp: null,
-    onApply: null, onCancel: null,
+    onClose: null, onCancel: null, actions: null,
   };
 
   const {
@@ -1592,10 +1592,14 @@ export function initSnipEditor() {
     return tgt.tagName === "INPUT" && !["checkbox", "radio", "range", "button", "color"].includes(tgt.type);
   }
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
+  const SNIP_EDIT_OVER_DIALOGS = ["ocr-modal", "ocr-langs-modal", "modal"];
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
     // A question raised over the editor (discard, replace) owns every key.
     if (!$("confirm-modal").classList.contains("hidden")) return;
+    // The text recognition dialogs (and the new-button dialog they lead to) open over the editor
+    // and own the keys while they are up.
+    if (SNIP_EDIT_OVER_DIALOGS.some((id) => !$(id).classList.contains("hidden"))) return;
     // The shortcuts overview is a sibling overlay outside snipEdit's DOM subtree, so it needs
     // its own check before the editor's Tab trap and tool shortcuts.
     if (!$("shortcuts-modal").classList.contains("hidden")) {
@@ -1623,7 +1627,7 @@ export function initSnipEditor() {
       // A selected or just-drawn shape gives up only the arrow keys, never the whole editor;
       // closing on Escape here would throw away every edit just because something is selected.
       if (SE.lastNudged) { snipEditDeselectShape(); return; }
-      snipEditRequestCancel();
+      snipEditApply();
       return;
     }
     if (document.activeElement === snipEditTextInput) return; // input owns its own keys
@@ -1631,12 +1635,12 @@ export function initSnipEditor() {
     // typed there must not switch tools, and arrows must move its caret.
     if (snipEditFieldOwnsKeys(e.target)) return;
     // A button reached by keyboard owns Enter and Space: pressing it must not apply the
-    // editor or start a pan. After a mouse click the focus stays on it, and Enter still applies.
+    // editor or start a pan. After a mouse click the focus stays on it, and Enter still closes.
     const onKeyboardButton = ["BUTTON", "A", "SUMMARY"].includes(e.target?.tagName) && e.target.matches(":focus-visible");
     if (onKeyboardButton && (e.key === "Enter" || e.key === " ")) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      // The untouched full-image box is no crop, so Enter then applies the editor.
+      // The untouched full-image box is no crop, so Enter then closes the editor.
       if (SE.tool === "crop" && SE.cropRect && !snipEditCropIsFull(SE.cropRect)) { snipEditCropCommit(); return; }
       snipEditApply();
       return;
@@ -1670,7 +1674,10 @@ export function initSnipEditor() {
   document.addEventListener("keyup", snipEditKeyup);
 
   // ---- open / cancel / apply / export ----
-  function snipEditOpen(dataUrl, { onApply, onCancel }) {
+  // onClose(editedDataUrl | null): the editor closed (Close, Esc, Enter, X); null = nothing was
+  // edited. actions: { save, saveAs, keep, ocr, retry } called with the current edited image;
+  // `retry` is absent for an opened file, which hides "New screenshot".
+  function snipEditOpen(dataUrl, { onClose, onCancel, actions }) {
     const img = new Image();
     // A capture that fails to decode (truncated data URL, broken picked file) takes the same
     // path as a user cancel, so nothing is left half-open.
@@ -1696,8 +1703,11 @@ export function initSnipEditor() {
       snipOriginalToggle.reset();
       SE.drag = null;
       closeSnipEditContext();
-      SE.onApply = onApply;
+      SE.onClose = onClose;
       SE.onCancel = onCancel;
+      SE.actions = actions || {};
+      $("snip-edit-retry").classList.toggle("hidden", !SE.actions.retry);
+      $("snip-edit-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
       SE.active = true;
       snipEditWrap.style.cursor = ""; // clear a cursor left inline by the previous session
 
@@ -1757,26 +1767,6 @@ export function initSnipEditor() {
     snipEditClose();
     cb?.();
   }
-  // Escape, Cancel and X: edits are only thrown away after a yes, unless the expert
-  // switch for the discard question is off.
-  let snipCancelAsking = false;
-  async function snipEditRequestCancel() {
-    if (snipCancelAsking) return;
-    if (SE.ops.length === 0 || !flag("confirmDiscard")) { snipEditCancel(); return; }
-    snipCancelAsking = true;
-    let ok = false;
-    try {
-      ok = await confirmDialog({
-        title: t("discardTitle"),
-        message: t("discardMsg"),
-        confirmLabel: t("discardConfirm"),
-        cancelLabel: t("keepEditing"),
-      });
-    } finally {
-      snipCancelAsking = false;
-    }
-    if (ok && SE.active) snipEditCancel();
-  }
   // Applies the crop (if any) only now; everything else stays undoable until export. The output
   // is never larger than the source (no upscaling) and is built in one synchronous pass.
   function snipEditExportDataUrl() {
@@ -1808,19 +1798,39 @@ export function initSnipEditor() {
     // edited screenshot takes no lossy detour.
     return out.toDataURL("image/png");
   }
-  function snipEditApply() {
+  // Close (button, X, Esc, Enter): nothing is thrown away. The edited image goes to onClose, or null
+  // when nothing was edited, and `after` (keep, with the image either way) runs once the editor is
+  // gone.
+  function snipEditApply(after) {
     snipEditFinishTextIfOpen();
-    const dataUrl = snipEditExportDataUrl();
-    const cb = SE.onApply;
+    if (SE.tool === "crop") snipEditCropCommit();
+    const edited = SE.ops.length > 0;
+    const dataUrl = edited || after ? snipEditExportDataUrl() : null;
+    const cb = SE.onClose;
     snipEditClose();
-    cb?.(dataUrl);
+    cb?.(edited ? dataUrl : null);
+    after?.(dataUrl);
   }
-  $("snip-edit-cancel").addEventListener("click", snipEditRequestCancel);
-  $("snip-edit-close").addEventListener("click", snipEditRequestCancel);
+  // A bar action that hands the current edited image to the opener without closing the editor.
+  function snipEditAction(name, ...extra) {
+    const fn = SE.actions?.[name];
+    if (!fn) return;
+    snipEditFinishTextIfOpen();
+    fn(snipEditExportDataUrl(), ...extra);
+  }
+  $("snip-edit-close").addEventListener("click", () => snipEditApply());
   $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
   $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
   $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
-  $("snip-edit-apply").addEventListener("click", snipEditApply);
+  $("snip-edit-apply").addEventListener("click", () => snipEditApply());
+  $("snip-edit-save").addEventListener("click", () => snipEditAction("save"));
+  $("snip-edit-keep").addEventListener("click", () => {
+    const keep = SE.actions?.keep;
+    snipEditApply((url) => keep?.(url));
+  });
+  $("snip-edit-ocr").addEventListener("click", () => snipEditAction("ocr"));
+  $("snip-edit-retry").addEventListener("click", () => SE.actions?.retry?.());
+  attachSelectPicker($("snip-edit-saveas-format"));
   $("snip-edit-copy").addEventListener("click", async () => {
     const dataUrl = snipEditExportDataUrl();
     try {
@@ -1967,13 +1977,7 @@ export function initSnipEditor() {
     if (snipScalePop.contains(e.target) || e.target.closest("#snip-edit-scale")) return;
     closeSnipScalePop();
   });
-  $("snip-edit-saveas").addEventListener("click", async () => {
-    const dataUrl = snipEditExportDataUrl();
-    try {
-      const path = await invoke("save_screenshot_as", { dataUrl });
-      if (path) toast(t("snipEditSavedTo").replace("{path}", () => path));
-    } catch (e) { errToast(e); }
-  });
+  $("snip-edit-saveas").addEventListener("click", () => snipEditAction("saveAs", $("snip-edit-saveas-format").value || undefined));
   // South-east resize handle. Moving the window needs no JS (data-tauri-drag-region), but
   // resizing has no HTML-attribute equivalent, so this calls the window API directly.
   $("snip-edit-resize-grip").addEventListener("pointerdown", (e) => {

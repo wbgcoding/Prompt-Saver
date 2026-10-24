@@ -42,6 +42,7 @@ function sandbox() {
     scalePopOpen: false, snipScalePopIsOpen() { return sb.scalePopOpen; }, closeSnipScalePop() { sb.scalePopOpen = false; sb.scaleClosed = true; },
     numPopEsc: false, numPopClosedByEscape: () => sb.numPopEsc,
     colorPop: { classList: { contains: () => true } }, closeColorPop() {},
+    SNIP_EDIT_OVER_DIALOGS: ["ocr-modal", "ocr-langs-modal", "modal"],
     applied: false, snipEditApply() { sb.applied = true; }, pressed: 0,
     NUM_FIELD_BIG_STEP: 10, snipOriginalToggle: { press() { sb.pressed++; } }, snipEditWrap: { style: {}, classList: { add() {} } },
   };
@@ -107,6 +108,18 @@ function sandbox() {
   sb.scalePopOpen = true;
   sb.snipEditKeydown({ key: "Escape", target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, repeat: false });
   check("Escape closes the resize popover", sb.scaleClosed, true);
+}
+// Escape on the canvas is Close (applies and closes); while a text recognition or other dialog
+// sits over the editor, the editor ignores the key so the dialog gets it.
+{
+  const sb = sandbox();
+  const esc = { key: "Escape", target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, repeat: false };
+  sb.$ = (id) => ({ classList: { contains: () => id !== "ocr-modal" } });
+  sb.snipEditKeydown(esc);
+  check("Escape with a dialog over the editor: the editor does nothing", sb.applied, false);
+  sb.$ = () => ({ classList: { contains: () => true } });
+  sb.snipEditKeydown(esc);
+  check("Escape on the canvas closes the editor", sb.applied, true);
 }
 // Keys typed in a field never switch tools; the same key on the canvas does.
 {

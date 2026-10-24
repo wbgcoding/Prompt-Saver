@@ -72,7 +72,7 @@ STAYS = ["flag:chainPrompts", "value:gridMax", "value:searchListMax", "flag:allo
 
 # The parent switches the rows above hang off.
 GATES = ["chainQuickStart", "multiView", "screenRecord", "recSweepBroken", "videoEditor",
-         "ocrIndex", "floating", "promptVars", "dynVars", "varFixed", "errorLog", "screenshot", "snipEditor",
+         "ocrIndex", "floating", "promptVars", "dynVars", "varFixed", "errorLog", "screenshot",
          "globalSearch", "recOutline", "cameraRecord"]
 
 FIND = """

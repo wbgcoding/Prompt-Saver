@@ -279,6 +279,22 @@ fn load_prune_drops_a_removed_value_and_keeps_a_live_one() {
     assert!(!s.has_removed_ui_values());
 }
 
+// The screenshot editor switch is gone (the editor always opens after a capture): a stored value of
+// either polarity is dropped on load.
+#[test]
+fn the_removed_screenshot_editor_switch_is_dropped_on_load() {
+    for stored in [true, false] {
+        let mut s = Settings::default();
+        s.ui_flags.insert("snipEditor".into(), stored);
+        s.ui_flags.insert("screenshot".into(), false);
+        assert!(s.has_removed_ui_values());
+        s.migrate();
+        assert!(!s.ui_flags.contains_key("snipEditor"));
+        assert_eq!(s.ui_flags.get("screenshot"), Some(&false));
+        assert!(!s.has_removed_ui_values());
+    }
+}
+
 #[test]
 fn a_failed_repack_makes_the_inbox_scrub_a_failure() {
     let conn = Connection::open_in_memory().unwrap();

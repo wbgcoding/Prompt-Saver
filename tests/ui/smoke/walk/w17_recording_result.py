@@ -1,6 +1,6 @@
 SECTION = """\
-    // 241: the recording result dialog (#rec-modal) -- mirrors #snip-modal's own
-    // probes above, plus the conversion step that only the recording flow has.
+    // 241: the recording result dialog (#rec-modal) -- mirrors the screenshot
+    // editor's own probes above, plus the conversion step that only the recording flow has.
     {
       const langSel3 = document.getElementById('lang-select');
       langSel3.value = 'en';
@@ -271,7 +271,7 @@ SECTION = """\
     // real expert-menu checkbox and exercise the menu plus the result dialog.
     {
       const ocrBtn = document.getElementById('ocr-btn');
-      const snipModalOcrBtn = document.getElementById('snip-modal-ocr');
+      const snipModalOcrBtn = document.getElementById('snip-edit-ocr');
       const hiddenNow = (el) => !el || getComputedStyle(el).display === 'none';
       if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
         out.errors.push('OCR entry points are hidden while the ocr flag is on');

@@ -607,7 +607,7 @@ None of it touches the export.
 
 ### Text recognition (OCR)
 
-On by default. A button on the composer and in the screenshot dialog pulls the
+On by default. A button on the composer and in the screenshot editor pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
 own text recognizer; nothing is uploaded or sent anywhere. The composer button
 opens a small menu: from an image file, or from a screenshot you take right now.
@@ -1413,7 +1413,7 @@ bleibt dabei bestehen, weil ein Sprung an eine herausgeschnittene Stelle nur
 verwirren würde. Der Export bleibt davon unberührt.
 
 **Texterkennung (OCR)**: standardmäßig an; liest per Button in der Leiste und
-im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
+im Screenshot-Editor Text aus einem Screenshot oder einer Bilddatei, komplett
 offline über die eigene Texterkennung von Windows. Der Button in der Leiste öffnet
 ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt

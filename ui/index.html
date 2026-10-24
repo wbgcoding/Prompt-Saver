@@ -1294,46 +1294,7 @@
     </div>
   </div>
 
-  <!-- Screenshot taken: offer to keep it as a button -->
-  <div id="snip-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="snip-modal-title">
-    <div class="modal snip-modal-box">
-      <div class="modal-head">
-        <h2 id="snip-modal-title" class="modal-title" data-i18n="snipSaveTitle">Screenshot</h2>
-        <button id="snip-modal-close" class="icon-btn" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-          </svg>
-        </button>
-      </div>
-      <img id="snip-preview" class="snip-preview" alt="" />
-      <p class="snip-question">
-        <span data-i18n="snipSaveCopied">Screenshot copied to clipboard.</span>
-        <span data-i18n="snipSaveKeep">Keep it as a button?</span>
-      </p>
-      <div class="modal-actions">
-        <button id="snip-modal-retry" class="ghost-btn" data-i18n="snipRetry">New screenshot</button>
-        <!-- Folder toggle sits at the bottom, immediately left of "Save as…". -->
-        <label class="snip-folder-inline" data-i18n-title="tipScreenshotFolder">
-          <span data-i18n="screenshotToFolder">Always save screenshots</span>
-          <input id="snip-save-folder" type="checkbox" class="switch" />
-        </label>
-        <!-- OCR -- runs on the capture already shown above; on by default,
-             hidden while the OCR switch (flagOcr) is off. -->
-        <button id="snip-modal-ocr" class="ghost-btn" data-i18n="snipModalOcr" data-i18n-title="snipModalOcr"></button>
-        <!-- Per-save format override; defaults to the expert-menu screenshotFormat setting. -->
-        <select id="snip-modal-saveas-format" class="batch-view-select" data-i18n-aria="valScreenshotFormat">
-          <option value="png" data-i18n="optScreenshotFormatPng">PNG</option>
-          <option value="jpeg" data-i18n="optScreenshotFormatJpeg">JPEG</option>
-          <option value="webp" data-i18n="optScreenshotFormatWebp">WebP</option>
-          <option value="bmp" data-i18n="optScreenshotFormatBmp">BMP</option>
-        </select>
-        <button id="snip-modal-saveas" class="ghost-btn" data-i18n="screenshotSaveAs">Save as…</button>
-        <button id="snip-modal-yes" class="primary-btn" data-i18n="snipKeepBtn">Save as button</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Recording result -- mirrors #snip-modal: preview, then attach as a new
+  <!-- Recording result: preview, then attach as a new
        tile / save as / discard. Between "Stop" and this dialog the clip may
        still be re-encoding (recFormat/recQuality != the raw capture), shown
        as a status line in place of the (not yet playable) preview. -->
@@ -1423,9 +1384,9 @@
     </div>
   </div>
 
-  <!-- Screenshot editor -- opens right after a capture, before
-       #snip-modal, when flagSnipEditor is on. Full-bleed overlay (no centered
-       modal box): toolbar on top, canvas below, actions bottom-right. -->
+  <!-- Screenshot editor -- opens right after a capture or for an opened image
+       file. Full-bleed overlay (no centered modal box): toolbar on top, canvas
+       below, actions bottom-right. -->
   <div id="snip-edit" class="overlay snip-edit hidden" role="dialog" aria-modal="true" data-i18n-aria="snipEditTitle">
     <!-- The overlay covers the whole frameless main window, so this is the
          only titlebar it has -- data-tauri-drag-region alone moves the window,
@@ -1483,10 +1444,21 @@
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
         </button>
       </div>
-      <button id="snip-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel" data-i18n-title="snipEditCancelTip" data-shortcut="snipCancel"></button>
-      <button id="snip-edit-saveas" class="ghost-btn" type="button" data-i18n="screenshotSaveAs" data-i18n-title="snipEditSaveAsTip"></button>
       <button id="snip-edit-copy" class="ghost-btn" type="button" data-i18n="copy" data-i18n-title="snipEditCopyTip"></button>
-      <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="snipEditDone" data-i18n-title="snipEditApplyTip" data-shortcut="snipApply"></button>
+      <button id="snip-edit-save" class="ghost-btn" type="button" data-i18n="snipEditSave" data-i18n-title="snipEditSaveTip"></button>
+      <!-- Per-save format override; defaults to the expert-menu screenshotFormat setting. -->
+      <select id="snip-edit-saveas-format" class="batch-view-select" data-i18n-aria="valScreenshotFormat">
+        <option value="png" data-i18n="optScreenshotFormatPng">PNG</option>
+        <option value="jpeg" data-i18n="optScreenshotFormatJpeg">JPEG</option>
+        <option value="webp" data-i18n="optScreenshotFormatWebp">WebP</option>
+        <option value="bmp" data-i18n="optScreenshotFormatBmp">BMP</option>
+      </select>
+      <button id="snip-edit-saveas" class="ghost-btn" type="button" data-i18n="screenshotSaveAs" data-i18n-title="snipEditSaveAsTip"></button>
+      <button id="snip-edit-keep" class="ghost-btn" type="button" data-i18n="snipKeepBtn"></button>
+      <!-- OCR runs on the image as edited so far; hidden while the OCR switch (flagOcr) is off. -->
+      <button id="snip-edit-ocr" class="ghost-btn" type="button" data-i18n="snipModalOcr" data-i18n-title="snipModalOcr"></button>
+      <button id="snip-edit-retry" class="ghost-btn" type="button" data-i18n="snipRetry"></button>
+      <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="close" data-i18n-title="snipEditCloseTip" data-shortcut="snipCancel"></button>
     </div>
     <!-- SouthEast-only, same as the app needs elsewhere -- a full 8-handle
          resize rig is native-window territory the main window itself doesn't

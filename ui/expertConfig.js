@@ -6,7 +6,6 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 export const FLAG_LABELS = {
   fileAttach: "flagFileAttach",
   screenshot: "flagScreenshot",
-  snipEditor: "flagSnipEditor",
   snipEditSnap: "flagSnipEditSnap",
   multiView: "flagMultiView",
   floating: "flagFloating",
@@ -508,7 +507,7 @@ export const EXPERT_TABS = [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
-    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], dropdowns: ["snipEditDefaultTool", "snipTextBack"], colors: ["snipDefaultColor"] },
+    { title: "expGroupSnipEditor", flags: [{ key: "snipEditSnap", gate: "screenshot" }], dropdowns: ["snipEditDefaultTool", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal: same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },

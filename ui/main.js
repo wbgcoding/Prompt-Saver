@@ -74,7 +74,7 @@ wireTheme();
 function bind() {
   bindEditor();
   bindCopyFlow();
-  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, closeSnipModal, snipEdit } = bindCapture();
+  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
   bindDictation();
   bindSettingsPanel();
   bindExpertMenu();
@@ -151,6 +151,11 @@ function bind() {
     return true;
   }
 
+  // The screenshot editor owns Tab and Escape while it is open, except when the text recognition
+  // dialogs (or the new-button dialog behind them) are up over it.
+  const editorOwnsKeys = () => !snipEdit.classList.contains("hidden")
+    && !["ocr-modal", "ocr-langs-modal", "modal"].some((id) => !$(id).classList.contains("hidden"));
+
   // Keeps Tab from leaking past whichever overlay is currently topmost,
   // into the (visually dimmed) page behind it. Mirrors the Escape dispatcher's
   // own "what's on top wins" cascade below one for one, reusing the same
@@ -160,7 +165,7 @@ function bind() {
   // tourKeydown) and are skipped here to avoid trapping twice.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
-    if (!snipEdit.classList.contains("hidden")) return;
+    if (editorOwnsKeys()) return;
     // tourKeydown owns Tab while the tour is the topmost thing on screen, but it
     // bows out the moment a confirm dialog opens on top of it: and
     // that dialog's own trap below is never reached if this bails unconditionally
@@ -192,7 +197,6 @@ function bind() {
     for (const id of STACKED_DIALOGS) if (!$(id).classList.contains("hidden")) { trapTabWithin($(id), e); return; }
     if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
     if (!$("about-modal").classList.contains("hidden")) { trapTabWithin($("about-modal"), e); return; }
-    if (!$("snip-modal").classList.contains("hidden")) { trapTabWithin($("snip-modal"), e); return; }
     if (!$("rec-modal").classList.contains("hidden")) { trapTabWithin($("rec-modal"), e); return; }
     if (!viewModal.root.classList.contains("hidden")) { trapTabWithin(viewModal.root, e); return; }
     if (!modal.root.classList.contains("hidden")) { trapTabWithin(modal.root, e); return; }
@@ -207,7 +211,7 @@ function bind() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
+    if (editorOwnsKeys()) return; // the editor owns Escape while open
     // tourKeydown owns Escape while the tour is the topmost thing, same bow-out as the Tab trap above.
     if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
     if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
@@ -233,7 +237,6 @@ function bind() {
     else if (closeStackedDialog()) { /* the dialog closed itself */ }
     else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
     else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
-    else if (!$("snip-modal").classList.contains("hidden")) closeSnipModal();
     else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });

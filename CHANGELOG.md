@@ -16,8 +16,8 @@ prompts with rotation, a screenshot editor, offline text recognition (OCR), offl
 voice dictation, screen recording, a video editor, and a first-run
 introduction tour.
 Everything new is an expert-menu switch, most of it off until you turn it on
-(text recognition, voice dictation, the screenshot editor, screen recording,
-the video editor and the introduction tour ship on).
+(text recognition, voice dictation, screen recording, the video editor and
+the introduction tour ship on; the screenshot editor is always on).
 
 ### Added
 
@@ -180,7 +180,7 @@ the video editor and the introduction tour ship on).
   and position, dialog max height, the library search delay, the copy-history
   window width, the tag-filter popover's column count and sort order, how long
   a confirm button stays armed, and the background update-check interval.
-- **A screenshot editor** (on by default): every capture opens for editing before
+- **A screenshot editor** (always on): every capture opens for editing before
   it reaches a tile, the clipboard or a folder. Thirteen tools: crop, pen, marker,
   highlighter-style multiply blend, line, arrow, rectangle, ellipse, text, a
   self-numbering step marker for annotating instructions, pixelation, a
@@ -195,13 +195,14 @@ the video editor and the introduction tour ship on).
   height or percent fields, presets for 25/50/200% and "fit 1920 wide") as an
   undoable step of its own, with a halving-step downscale for readable text and
   an expert setting to pick sharp/nearest-neighbour resampling for pixel art.
-  Cancel leaves the original capture untouched; Apply re-copies
-  the edited image and re-saves it to the screenshot
-  folder if that setting is on.
+  A bottom bar offers Copy, Save, Save as, Save as button, Recognize text, New
+  screenshot and Close. Close (also Esc and Enter) keeps the result: it
+  re-copies the edited image and re-saves it to the screenshot folder if that
+  setting is on; an untouched shot stays exactly as captured.
 - **Text recognition (OCR)** (expert menu, on by default): pull editable text
   out of a screenshot or an image file, fully offline through Windows' own
   recognizer. A composer button opens a small menu to pick an image file or grab
-  a new screenshot; the screenshot dialog also gets a "Recognize text" button that
+  a new screenshot; the screenshot editor also gets a "Recognize text" button that
   works on the capture you already have. The result opens in an editable dialog
   with the detected language and character count, ready to copy or create as a
   new prompt. Small on-screen text is enlarged before recognition so it reads
@@ -588,6 +589,13 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **The screenshot editor replaces the dialog that followed it.** What the old
+  result dialog offered now sits in the editor's bottom bar: Copy, Save (into the
+  screenshot folder), Save as with a format choice, Save as button, Recognize
+  text and New screenshot, then Close on the right. Close, the X in the corner,
+  Esc and Enter all keep the edited result, so there is no separate Cancel and
+  no second window after a capture. The expert switch that turned the editor
+  off is gone; its settings now depend on the screenshot feature.
 - **The screenshot editor's text box is narrow and black on white.** The box
   now wraps the letters you type instead of stretching across the picture, shows
   black text on white, and the text lands exactly where you typed it. Text

@@ -224,7 +224,6 @@ SNIP_REPLACE_PROBE = """
         await until(() => argsOf('delete_screenshot_file').length > 0, 40);
         const del = argsOf('delete_screenshot_file').map((c) => c[1].path);
         if (del.join() !== 'C:/shots/clean.png') errs.push('856: after Keep editing Apply cleaned up ' + JSON.stringify(del) + ' instead of the open shot');
-        for (const id of ['snip-modal-close', 'snip-modal-close-x']) { const b = $(id); if (b) b.click(); }
         await sleep(200);
         // Replace: the old session ends, the new shot opens with a fresh history.
         window.__FIRE__('snip-captured', { data_url: shot(200, 120), path: 'C:/shots/third.png', name: 'third.png' });
@@ -238,9 +237,9 @@ SNIP_REPLACE_PROBE = """
         if (!undo.disabled) errs.push('856: the replaced editor kept the old history');
         window.__SMOKE_ARGS__.length = 0;
         $('snip-edit-apply').click();
-        await until(() => argsOf('delete_screenshot_file').length > 0, 40);
+        await sleep(300);
         const del2 = argsOf('delete_screenshot_file').map((c) => c[1].path);
-        if (del2.join() !== 'C:/shots/fourth.png') errs.push('856: after Replace Apply cleaned up ' + JSON.stringify(del2) + ' instead of the new shot');
+        if (del2.length) errs.push('856: closing an untouched replacement shot deleted ' + JSON.stringify(del2) + ', the saved capture must stay');
       }
     }
 """
@@ -374,14 +373,11 @@ SNIP_HOLD_PROBE = """
         let redos = 0;
         while (!redo.disabled && redos < 80) { redo.click(); redos++; await sleep(20); }
         if (redos !== 50) errs.push('859: redo walked ' + redos + ' resizes, wanted 50');
-        $('snip-edit-cancel').click();
-        await sleep(100);
-        // The session holds edits: Cancel asks before throwing them away, and the question
-        // is drawn above the editor.
-        if (!visible($('confirm-modal')) || !visible(edit)) errs.push('859: Cancel with edits did not ask before closing');
-        else if (Number(getComputedStyle($('confirm-modal')).zIndex) <= Number(getComputedStyle(edit).zIndex)) errs.push('859: the discard question sits behind the editor');
-        $('confirm-ok').click();
-        await sleep(200);
+        // The session holds edits: the header X is Close, it keeps the result and asks nothing.
+        $('snip-edit-close').click();
+        await sleep(300);
+        if (visible($('confirm-modal'))) errs.push('859: closing the editor with edits asked a question');
+        if (visible(edit)) errs.push('859: the header close did not close the editor');
         const after = window.__snipEditHeld();
         if (after.ops || after.redo || after.img || after.raw || after.resizes) errs.push('859: closing the editor left the session alive: ' + JSON.stringify(after));
         // Strokes drawn after a resize push it below the undo floor: its earlier image goes too.
@@ -402,9 +398,8 @@ SNIP_HOLD_PROBE = """
         }
         const behind = window.__snipEditHeld().resizes;
         if (behind !== 0) errs.push('859: a resize behind the undo limit still holds its earlier image: ' + behind);
-        $('snip-edit-cancel').click();
-        await sleep(100);
-        $('confirm-ok').click();
+        $('snip-edit-close').click();
+        await sleep(200);
       }
     }
 """

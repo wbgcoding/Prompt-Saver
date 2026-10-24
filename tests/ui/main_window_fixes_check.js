@@ -33,9 +33,8 @@ section(() => {
   const escAt = main.indexOf('if (e.key !== "Escape")');
   const tabBlock = main.slice(tabAt, escAt);
   const escBlock = main.slice(escAt, main.indexOf('listen("theme-changed"'));
-  for (const needle of ['$("global-search")', '$("theme-modal")', "bgOpsPop", "STACKED_DIALOGS", "closeSnipModal"]) {
-    if (needle === "closeSnipModal") check(escBlock.includes(needle), `Escape dispatcher misses ${needle}`);
-    else if (needle === "STACKED_DIALOGS") {
+  for (const needle of ['$("global-search")', '$("theme-modal")', "bgOpsPop", "STACKED_DIALOGS"]) {
+    if (needle === "STACKED_DIALOGS") {
       check(tabBlock.includes(needle), "Tab dispatcher misses the stacked dialogs");
       check(escBlock.includes("closeStackedDialog"), "Escape dispatcher misses the stacked dialogs");
     } else {
@@ -733,7 +732,7 @@ section(() => {
     const ref = /aria-labelledby="([^"]+)"/.exec(m[0]);
     return ref ? !ids.has(ref[1]) : !/data-i18n-aria=|aria-label=/.test(m[0]);
   }).map((m) => m[1]);
-  check(dialogs.length >= 28 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
+  check(dialogs.length >= 27 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
 });
 
 // 33. Settings switches: a refused write puts the switch and the stored value back; a refused settings reset still reloads.

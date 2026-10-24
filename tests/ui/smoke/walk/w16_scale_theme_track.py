@@ -149,16 +149,16 @@ SECTION = """\
             out.errors.push('928-de: ' + vid + ' tooltip "' + vtip + '" lacks name or key');
           }
         }
-        // 929-de: the finish button is called Done (Fertig in German) and a click
+        // 929-de: the finish button is called Close (Schließen in German) and a click
         // on Copy answers with a short notice.
         {
           const doneBtn = document.getElementById('snip-edit-apply');
           const isDe = document.documentElement.lang === 'de';
           const doneTxt = (doneBtn.textContent || '').trim();
-          if (isDe && doneTxt !== 'Fertig') {
-            out.errors.push('929-de: finish button reads "' + doneTxt + '", expected "Fertig"');
+          if (isDe && doneTxt !== 'Schließen') {
+            out.errors.push('929-de: finish button reads "' + doneTxt + '", expected "Schließen"');
           }
-          if (/^(Apply|Übernehmen)$/.test(doneTxt)) {
+          if (/^(Apply|Übernehmen|Done|Fertig)$/.test(doneTxt)) {
             out.errors.push('929-de: finish button still reads "' + doneTxt + '"');
           }
           const toastBox = document.getElementById('toast');
@@ -407,8 +407,8 @@ SECTION = """\
             }
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -452,8 +452,8 @@ SECTION = """\
         await reopen();
         document.querySelector('#snip-edit-tools button[data-tool="rect"]').click();
         await sleep(60);
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(500);
@@ -465,8 +465,8 @@ SECTION = """\
         if (pressedTool() !== 'rect') {
           out.errors.push('931-de: the editor reopened with ' + pressedTool() + ', expected rect');
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -475,8 +475,8 @@ SECTION = """\
         if (pressedTool() !== 'pen') {
           out.errors.push('931-de: a fixed default tool pen opened with ' + pressedTool());
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -485,8 +485,8 @@ SECTION = """\
         if (pressedTool() !== 'rect') {
           out.errors.push('931-de: back on Last used the editor opened with ' + pressedTool() + ', expected rect');
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -554,8 +554,8 @@ SECTION = """\
             document.createElement = origCreateElement;
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -623,8 +623,8 @@ SECTION = """\
             }
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -655,8 +655,8 @@ SECTION = """\
           out.errors.push('394: the text background dropdown is missing from the expert menu');
         } else {
           const values = [...sel.options].map((o) => o.value);
-          if (values.join(',') !== 'none,plate,outline') {
-            out.errors.push('394: the text background dropdown does not offer exactly none/plate/outline, got ' + values.join(','));
+          if (values.join(',') !== 'none,white,plate,outline') {
+            out.errors.push('394: the text background dropdown does not offer exactly none/white/plate/outline, got ' + values.join(','));
           }
           if (sel.value !== 'none') {
             out.errors.push('394: a stored snipTextPlate:false did not migrate to "none", got "' + sel.value + '"');
@@ -684,8 +684,8 @@ SECTION = """\
             out.errors.push('394: the per-shape text background select was not found');
           } else {
             const values2 = [...shapeSel.options].map((o) => o.value);
-            if (values2.join(',') !== 'none,plate,outline') {
-              out.errors.push('394: the per-shape text background select does not offer exactly none/plate/outline, got ' + values2.join(','));
+            if (values2.join(',') !== 'none,white,plate,outline') {
+              out.errors.push('394: the per-shape text background select does not offer exactly none/white/plate/outline, got ' + values2.join(','));
             }
             shapeSel.value = 'none';
             shapeSel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -705,8 +705,8 @@ SECTION = """\
             }
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -783,8 +783,8 @@ SECTION = """\
             }
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -986,8 +986,8 @@ SECTION = """\
             if (undoBtn398.disabled !== undoWasDisabled398) out.errors.push('398: the show-original round trip changed the operation list (undo availability changed)');
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -1072,8 +1072,8 @@ SECTION = """\
           if (hasInk470(340, 95)) out.errors.push('470: dragging a line endpoint left ink behind near its old position (350,100)');
           if (!hasInk470(380, 134)) out.errors.push('470: dragging a line endpoint to (390,140) put no line near there');
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -1236,8 +1236,8 @@ SECTION = """\
         }
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await sleep(30);
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
@@ -1300,8 +1300,8 @@ SECTION = """\
             out.errors.push('507: snip-edit-context scrolls horizontally with the pixelate tool at ' + innerWidth + 'px, theme ' + theme);
           }
         }
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(100);
@@ -1323,8 +1323,8 @@ SECTION = """\
           out.errors.push('screenshot editor in ' + lang + ': expected 12 tool buttons, found ' + toolBtns2.length);
         }
         layoutScan('screenshot editor in ' + lang);
-        document.getElementById('snip-edit-cancel').click();
-        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        document.getElementById('snip-edit-close').click();
+        // Close keeps the result and asks nothing; a stray question is still answered so the next probe starts clean.
         await sleep(40);
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(100);

@@ -1316,6 +1316,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* The screenshot editor is a full-window overlay at 90; a question raised while it is
    open (discard, replace) has to be drawn above it. */
 body:has(#snip-edit:not(.hidden)) #confirm-modal.overlay { z-index: 95; }
+/* The editor's "Recognize text" answers in the OCR dialogs (and their "new button"
+   follow-up) over the still-open editor. */
+body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).overlay { z-index: 94; }
 .modal {
   width: min(520px, 92vw);
   max-height: var(--modal-max-vh, 88vh);
@@ -1614,7 +1617,7 @@ body:has(#snip-edit:not(.hidden)) #confirm-modal.overlay { z-index: 95; }
 /* OCR ships on: a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,
-.noflag-ocr #snip-modal-ocr { display: none; }
+.noflag-ocr #snip-edit-ocr { display: none; }
 /* Voice ships on too, same noflag-<key> pattern; a Windows build with no
    speech engine at all hides the button regardless of the flag's own value. */
 .noflag-voice #voice-btn,
@@ -1929,11 +1932,11 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .noflag-tileShadow .tile:hover { box-shadow: none !important; }
 .noflag-tilePressScale .tile:active:not(.media-hover) { --tile-press: 1; }
 .noflag-copyFlash .tile.copied { border-color: var(--border); background: var(--surface); }
-/* Screenshot keep-as-button popup: scales with the main window so the
-   preview is as large as possible while keeping a comfortable margin. */
+/* Recording result dialog: scales with the main window so the preview is as
+   large as possible while keeping a comfortable margin. */
 .snip-modal-box { width: min(1200px, 94vw); }
-/* Retry + folder toggle + OCR + format picker + save-as + keep can exceed one
-   row on narrow windows; wrap instead of overflowing the modal. */
+/* Several buttons can exceed one row on narrow windows; wrap instead of
+   overflowing the modal. */
 .snip-modal-box .modal-actions { flex-wrap: wrap; row-gap: 10px; }
 .snip-preview {
   display: block;
@@ -1947,8 +1950,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   border: 1px solid var(--border);
   object-fit: contain;
 }
-/* Screenshot-folder toggle, inline at the left of the "Save as…" button. */
-.snip-folder-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg); }
 /* Two-line question under the preview. */
 .snip-question { margin: 0; text-align: center; line-height: 1.5; }
 .snip-question span { display: block; }
@@ -1957,7 +1958,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .rec-status-cancellable { cursor: pointer; }
 
 /* ---- Screenshot editor: full-bleed overlay, no centered modal box.
-   Sits above #snip-modal (which it replaces on the way in) and everything else;
+   Sits above everything else;
    every color comes off the shared theme tokens so it re-skins with all 8 themes. */
 #snip-edit.overlay {
   z-index: 90;
@@ -2874,7 +2875,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .lightbox-close:hover { color: #fff; background: rgba(0, 0, 0, 0.72); }
 /* Click-to-zoom affordance on previews. */
 .modal-media-stage .modal-preview-img,
-#snip-preview,
 .lib-thumb { cursor: zoom-in; }
 /* Two fields side by side, one under the other once they no longer fit. */
 .two-col { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -3140,8 +3140,7 @@ select.modal-input { padding-right: 30px; }
 /* Type metrics matched to .md-preview: the two are one field that swaps. */
 .modal-text { resize: vertical; min-height: 110px; max-height: 280px; font-size: 13px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.modal-actions #modal-delete,
-.modal-actions #snip-modal-retry { margin-right: auto; }
+.modal-actions #modal-delete { margin-right: auto; }
 /* Five buttons is one more than the row comfortably fits at the app's
    narrowest supported width -- Discard peels off to the left like the other
    destructive/secondary actions above, and the row wraps rather than

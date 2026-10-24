@@ -6,12 +6,9 @@ import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
-import { normScreenshotFormat } from "./expertConfig.js";
 import { initSnipEditor } from "./snipEditor.js";
-import { openLightbox } from "./windowChrome.js";
 import { ocrErrToast, openOcrLangsModal } from "./dictation.js";
 import { openMiniMenu } from "./views.js";
-import { attachSelectPicker } from "./selectpop.js";
 
 // ---- Colour-pick history popover (right-click on #picker-btn) ----
 export const pickHistoryPop = document.createElement("div");
@@ -217,7 +214,7 @@ export function bindCapture() {
     tick();
   });
 
-  // ---- Recording result: mirrors the #snip-modal flow, plus an optional conversion step
+  // ---- Recording result: copy, save, keep as a button, plus an optional conversion step
   // (recFormat/recQuality other than the raw mp4 capture). "recording-captured" is emitted by
   // stop_recording (and the auto-stop path when the recorded window closes); the rec-bar is its
   // own window, so this is how the main window learns a file is ready.
@@ -692,9 +689,7 @@ export function bindCapture() {
   // the chain button or Ctrl+V pressed inside this window.
   const { snipEditOpen, snipEdit, snipEditState, snipEditCancel } = initSnipEditor();
 
-  const snipModal = $("snip-modal");
-  let pendingSnip = null;
-  let pendingSnipPath = ""; // disk path if this shot was auto-saved to the folder
+  let pendingSnipPath = ""; // disk path if this shot was saved to the folder
   // Bumped by every new capture: an async save finishing after a newer shot arrived must not
   // touch that shot's state or files.
   let snipCaptureGen = 0;
@@ -702,18 +697,67 @@ export function bindCapture() {
   // Set only for a file opened for editing from outside the app: the folder "Save as..."
   // defaults into, since the original is never touched. Empty for an ordinary capture.
   let pendingSnipOriginDir = "";
-  const closeSnipModal = () => {
-    snipModal.classList.add("hidden");
-    pendingSnip = null;
-    pendingSnipPath = "";
-    pendingSnipName = "";
-    pendingSnipOriginDir = "";
+  // Writes the edited shot into the screenshot folder and drops the unedited file the capture
+  // saved: the edited copy goes first, so a failed save (unwritable folder, full disk, too large)
+  // never leaves neither on disk. Returns false when the save failed or a newer capture took over.
+  async function saveSnipToFolder(dataUrl) {
+    const oldPath = pendingSnipPath;
+    const gen = snipCaptureGen;
+    const saved = (await invoke("save_screenshot_now", { dataUrl }).catch(() => "")) || "";
+    if (saved) {
+      // The same timestamp name overwrites the old file in place; then the old path is the new one
+      // and must stay.
+      if (oldPath && oldPath !== saved) await invoke("delete_screenshot_file", { path: oldPath }).catch(() => {});
+      if (gen === snipCaptureGen) pendingSnipPath = saved;
+      return saved;
+    }
+    if (gen === snipCaptureGen) toast(t("snipSaveFailed"));
+    return "";
+  }
+  // The actions of the editor's bottom bar. Each gets the image as edited so far.
+  const snipEditActions = {
+    save: async (dataUrl) => {
+      const saved = await saveSnipToFolder(dataUrl);
+      if (saved) toast(t("snipEditSavedTo").replace("{path}", () => saved));
+    },
+    saveAs: async (dataUrl, format) => {
+      try {
+        const path = await invoke("save_screenshot_as", {
+          dataUrl,
+          format,
+          defaultDir: pendingSnipOriginDir || undefined,
+          defaultName: pendingSnipOriginDir ? pendingSnipName : undefined,
+        });
+        if (path) toast(t("snipEditSavedTo").replace("{path}", () => path));
+      } catch (err) { errToast(err); }
+    },
+    // The screenshot becomes a button that copies the image on click. The editor has closed by now.
+    keep: (dataUrl) => {
+      openModal({
+        mode: "image-create",
+        title: t("imageModalTitle"),
+        name: pendingSnipName || t("snipTitle"),
+        image: dataUrl,
+        showImage: true,
+        copyImage: true,
+      });
+    },
+    // Runs on the image as edited so far; the editor stays open under the result dialog.
+    ocr: async (dataUrl) => {
+      try {
+        showOcrResult(await invoke("ocr_image_data", { dataUrl, ...ocrSettings() }));
+        recordToolUsage("ocr");
+      } catch (err) { ocrErrToast(err); }
+    },
+    // A new capture arrives through "snip-captured", which asks before it replaces an editor that
+    // holds edits; cancelling the capture leaves this editor as it is.
+    retry: () => { invoke("open_snip").catch((err) => errToast(err)); },
   };
   listen("snip-captured", async (e) => {
     const shot = e.payload?.data_url || "";
     // A shot arriving over an open editor must not wipe the open session's state before the user
     // agrees: ask first when it holds edits, then run that session's own cancel.
-    if (shot && flag("snipEditor") && snipEditState().active) {
+    if (shot && snipEditState().active) {
       if (snipEditState().dirty) {
         const ok = await confirmDialog({
           title: t("snipReplaceTitle"),
@@ -726,163 +770,47 @@ export function bindCapture() {
       }
       if (snipEditState().active) snipEditCancel();
     }
-    pendingSnip = shot;
-    if (!pendingSnip) return;
+    if (!shot) return;
     snipCaptureGen++;
     recordToolUsage("screenshot");
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
     pendingSnipOriginDir = "";
-    if (!flag("snipEditor")) {
-      // Editor off: the unedited shot goes straight into the result dialog.
-      $("snip-preview").src = pendingSnip;
-      $("snip-modal-retry").classList.remove("hidden"); // a fresh capture can be retaken
-      $("snip-save-folder").checked = optFlag("screenshotSave");
-      $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
-      snipModal.classList.remove("hidden");
-      return;
-    }
-    // The editor sits between the capture and the result dialog.
-    snipEditOpen(pendingSnip, {
-      onApply: async (editedDataUrl) => {
-        pendingSnip = editedDataUrl;
-        // finalize_capture already put the unedited image on the clipboard (and optionally on disk);
-        // redo both side effects on the edited result.
+    snipEditOpen(shot, {
+      // finalize_capture already put the unedited image on the clipboard (and optionally on disk).
+      // Closing an edited shot redoes both side effects on the edited result; an untouched one
+      // leaves them as they are.
+      onClose: async (editedDataUrl) => {
+        if (!editedDataUrl) return;
         invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
-        let saveFailed = false;
-        if (optFlag("screenshotSave")) {
-          // Save the edited copy first and only then remove the unedited file, so a failed save
-          // (unwritable folder, full disk, too large) never leaves neither on disk.
-          const oldPath = pendingSnipPath;
-          const gen = snipCaptureGen;
-          const saved = (await invoke("save_screenshot_now", { dataUrl: editedDataUrl }).catch(() => "")) || "";
-          if (saved) {
-            // The same timestamp name overwrites the old file in place; then the old path is the new one
-            // and must stay.
-            if (oldPath && oldPath !== saved) await invoke("delete_screenshot_file", { path: oldPath }).catch(() => {});
-            // A newer capture arrived while saving: it owns the state and the dialog now.
-            if (gen !== snipCaptureGen) return;
-            pendingSnipPath = saved;
-          } else {
-            if (gen !== snipCaptureGen) return;
-            // The unedited file stays where it is; the dialog's shot is simply not saved.
-            pendingSnipPath = "";
-            saveFailed = true;
-            toast(t("snipSaveFailed"));
-          }
-        }
-        $("snip-preview").src = pendingSnip;
-        $("snip-save-folder").checked = optFlag("screenshotSave") && !saveFailed;
-        $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
-        $("snip-modal-retry").classList.remove("hidden");
-        snipModal.classList.remove("hidden");
+        if (optFlag("screenshotSave")) await saveSnipToFolder(editedDataUrl);
       },
-      // Cancel behaves like closing the result dialog: the unedited shot already on the clipboard
-      // or in the folder stays as is.
       onCancel: () => {
-        pendingSnip = null;
         pendingSnipPath = "";
         pendingSnipName = "";
       },
+      actions: snipEditActions,
     });
   });
   // An existing image opened from the composer buttons' right-click menu or the library. Uses
-  // the same editor and result dialog as a capture, but the source file is a copy: no
-  // clipboard write, no auto-save, and "Save as..." defaults to the origin file's folder and
-  // name.
+  // the same editor as a capture, but the source file is a copy: no auto-save, "Save as..." starts
+  // in the origin file's folder under its name, and there is no "New screenshot".
   function openImageFileInEditor(res) {
+    snipCaptureGen++;
+    pendingSnipPath = "";
+    pendingSnipName = res.name || "";
+    pendingSnipOriginDir = res.origin_dir || "";
+    const { retry, ...fileActions } = snipEditActions;
     snipEditOpen(res.data_url, {
-      onApply: (editedDataUrl) => {
-        pendingSnip = editedDataUrl;
-        pendingSnipPath = "";
-        pendingSnipName = res.name || "";
-        pendingSnipOriginDir = res.origin_dir || "";
+      onClose: (editedDataUrl) => {
+        if (!editedDataUrl) return;
+        invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
         toast(t("openedCopyNote"));
-        $("snip-preview").src = pendingSnip;
-        $("snip-save-folder").checked = false;
-        $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
-        $("snip-modal-retry").classList.add("hidden"); // "retry" means recapture -- meaningless for an opened file
-        snipModal.classList.remove("hidden");
       },
       onCancel: () => {},
+      actions: fileActions,
     });
   }
-  // Folder toggle on the result dialog = the same setting as in the main settings. On: save
-  // this shot now; off: delete the saved copy.
-  $("snip-save-folder").addEventListener("change", async (ev) => {
-    const on = ev.target.checked;
-    settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: on };
-    invoke("set_ui_flag", { key: "screenshotSave", enabled: on }).catch((err) => errToast(err));
-    const optBox = $("opt-screenshot-folder");
-    if (optBox) optBox.checked = on;
-    if (on) {
-      if (!pendingSnipPath && pendingSnip) {
-        const gen = snipCaptureGen;
-        const savedNow = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
-        if (gen !== snipCaptureGen) return; // a newer capture owns the state now
-        if (!ev.target.checked) {
-          // Switched off while the save ran: the off branch found no saved copy to remove, so this one
-          // must.
-          if (savedNow) {
-            const removed = await invoke("delete_screenshot_file", { path: savedNow }).catch(() => false);
-            if (!removed && gen === snipCaptureGen) pendingSnipPath = savedNow;
-          }
-          return;
-        }
-        pendingSnipPath = savedNow;
-        if (!pendingSnipPath) {
-          // Nothing reached the disk: say so and put the switch back off, setting included.
-          toast(t("snipSaveFailed"));
-          ev.target.checked = false;
-          settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: false };
-          invoke("set_ui_flag", { key: "screenshotSave", enabled: false }).catch((err) => errToast(err));
-          if (optBox) optBox.checked = false;
-        }
-      }
-    } else if (pendingSnipPath) {
-      // The command answers false (it does not reject) when the file could not be removed: the
-      // path is still the saved copy, and turning the switch back on must not write a second one.
-      const removed = await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => false);
-      if (removed) pendingSnipPath = "";
-    }
-  });
-  $("snip-modal-saveas").addEventListener("click", async () => {
-    if (!pendingSnip) return;
-    const format = $("snip-modal-saveas-format").value || undefined;
-    await invoke("save_screenshot_as", {
-      dataUrl: pendingSnip,
-      format,
-      defaultDir: pendingSnipOriginDir || undefined,
-      defaultName: pendingSnipOriginDir ? pendingSnipName : undefined,
-    }).catch((err) => errToast(err));
-  });
-  $("snip-modal-yes").addEventListener("click", () => {
-    const image = pendingSnip;
-    const name = pendingSnipName || t("snipTitle");
-    closeSnipModal();
-    if (!image) return;
-    // The screenshot becomes a button that copies the image on click.
-    openModal({
-      mode: "image-create",
-      title: t("imageModalTitle"),
-      name,
-      image,
-      showImage: true,
-      copyImage: true,
-    });
-  });
-  // Discard this shot and start a new one; hidden for a file opened from elsewhere, where a
-  // fresh capture makes no sense.
-  $("snip-modal-retry").addEventListener("click", () => {
-    if (pendingSnipOriginDir) { closeSnipModal(); return; }
-    closeSnipModal();
-    invoke("open_snip").catch((err) => errToast(err));
-  });
-  $("snip-modal-close").addEventListener("click", closeSnipModal);
-  $("snip-preview").addEventListener("click", () => { const s = $("snip-preview").src; if (s) openLightbox(s, false); });
-  snipModal.addEventListener("pointerdown", (e) => {
-    if (e.target === snipModal) closeSnipModal();
-  });
 
   // ---- OCR (text recognition, on by default: flag "ocr") ----
   const ocrModal = $("ocr-modal");
@@ -893,7 +821,7 @@ export function bindCapture() {
     autoPickLang: true,
   });
   const closeOcrModal = () => ocrModal.classList.add("hidden");
-  // Shared by all entry points (snip-modal, composer screenshot, composer file) and the
+  // Shared by all entry points (screenshot editor, composer screenshot, composer file) and the
   // ocr-captured event: one place decides "empty -> toast only" and "auto-copy -> copy now +
   // footer note".
   function showOcrResult(result) {
@@ -909,16 +837,6 @@ export function bindCapture() {
     $("ocr-autocopy-note").classList.toggle("hidden", !autoCopy);
     ocrModal.classList.remove("hidden");
   }
-  // (a) "Recognize text" in #snip-modal runs on the capture shown there. pendingSnip holds a
-  // data URL at this point (possibly not on disk yet, see the folder-toggle handler), hence
-  // ocr_image_data.
-  $("snip-modal-ocr").addEventListener("click", async () => {
-    if (!pendingSnip) return;
-    try {
-      showOcrResult(await invoke("ocr_image_data", { dataUrl: pendingSnip, ...ocrSettings() }));
-      recordToolUsage("ocr");
-    } catch (err) { ocrErrToast(err); }
-  });
   // (b) standalone composer button: small menu (Screenshot / From image file).
   $("ocr-btn").addEventListener("click", () => {
     const r = $("ocr-btn").getBoundingClientRect();
@@ -995,8 +913,7 @@ export function bindCapture() {
     if (e.target === ocrModal) closeOcrModal();
   });
 
-  attachSelectPicker($("snip-modal-saveas-format"));
-  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, closeSnipModal, snipEdit };
+  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit };
 }
 
 export function wireCapture() {
