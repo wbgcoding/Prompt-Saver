@@ -64,7 +64,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 
 - **Signed updates**: the updater installs only an installer signed by the publisher and rejects anything else, even if the download page was tampered with.
 - **Confidential prompts stay out of Win+V**: copying one keeps it out of the Windows clipboard history and the cloud clipboard.
-- **Each window only does its own job**: a side window such as the floating buttons can no longer delete data, move the data folder or read the remote access password.
+- **Each window only does its own job**: a side window such as the floating buttons can no longer delete data or move the data folder.
 - **Moving the data folder takes attachments and recordings along** and offers to clean up the old folder, naming what gets deleted.
 - **Grid folders**: drop one tile onto another and both move into a folder in that cell; drag one out and it goes back to the layout.
 - **Restore data and settings separately**: restoring a backup, or importing a `.psb`/`.json` backup file, now offers two checkboxes instead of an all-or-nothing swap: bring back your prompts without touching your current setup, or the other way around.

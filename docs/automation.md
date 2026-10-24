@@ -6,20 +6,16 @@ Rust source, guess at a JSON shape, or ask a person what a command does.
 
 ## What this is, and what it is not
 
-Prompt Saver has two ways in for a program: the command line
-(`prompt-saver <command> ...`) and the local remote-access receiver, a small
-HTTP endpoint the same running instance can expose on demand. Both run the
-exact same command set through the exact same code path
-(`cli::run_in_process` / `cli::run_standalone`) -- there is no separate
-"automation API" with its own rules to learn, and no command exists on one
-surface but not the other.
+Prompt Saver has one way in for a program: the command line
+(`prompt-saver <command> ...`). It runs the same command set whether a
+window is open or not -- there is no separate "automation API" with its own
+rules to learn.
 
 What it is not: a general-purpose scripting language, a way to reach another
 machine on the internet, or a way to skip the confirmation a destructive
 command normally needs. Every command that changes something still needs
-`--yes` (command line) or its equivalent `argv` entry (remote receiver) --
-nothing here is auto-confirmed just because a program is asking instead of a
-person.
+`--yes` -- nothing here is auto-confirmed just because a program is asking
+instead of a person.
 
 ## Invocation
 
@@ -43,58 +39,6 @@ be running in the app, so check before running it again.
 
 Add `--json` to any command that supports it for machine-readable output
 instead of the plain tab-separated lines a person would read.
-
-**Remote receiver**, from another process on the same machine (or, once its
-own separate network switch is turned on, another machine on the allowed
-network): a single `POST /api` with the command's `argv` as a JSON array,
-authenticated by a header. See "Limits" below for what the receiver adds on
-top of the plain command line.
-
-```
-POST /api
-Content-Type: application/json
-X-Promptsaver-Password: <password>
-
-{"argv": ["list", "--json"]}
-```
-
-Response: `{"code": <exit code>, "stdout": "...", "stderr": "..."}`, always
-HTTP 200 for a request the receiver accepted and ran (the exit code, not the
-HTTP status, is the command's real result). A request the receiver refuses
-before running anything -- wrong password, rate limit, disallowed address --
-gets a non-200 HTTP status and a `{"error": "..."}` body instead; see
-"Errors" below.
-
-**From another device (network switch on).** With the network switch on, the
-receiver speaks HTTPS only, for this computer and every other device alike. A
-plain `http://` request is dropped during the handshake, before a single
-request byte, and so before the password, is read. The receiver uses its own
-certificate: on the computer, open **Certificate...** in the remote access
-group of the expert menu and save the certificate, then copy that file to the
-other device. Windows 10 and 11 ship `curl.exe`:
-
-```
-curl.exe --ssl-no-revoke --cacert <saved certificate> -H "X-Promptsaver-Password: <password>" -H "Content-Type: application/json" --data-binary "@request.json" https://<computer name>:<port>/api
-```
-
-where `request.json` holds `{"argv": ["list", "--json"]}`. The certificate
-names this computer by its host name (and `<host name>.local`); on a network
-without name resolution, keep the name and give its address with `--resolve`:
-
-```
-curl.exe --ssl-no-revoke --cacert <saved certificate> --resolve <computer name>:<port>:<ip address> -H "X-Promptsaver-Password: <password>" --data-binary "@request.json" https://<computer name>:<port>/api
-```
-
-`--ssl-no-revoke` is needed because the Windows `curl.exe` (Schannel) asks the
-certificate's issuer whether it was revoked, and a certificate made by the
-app has no revocation list to ask; without the option curl stops with
-"the revocation status is unknown". The certificate itself is still fully
-checked against the saved file (a wrong file ends in "untrusted root"), and
-there is no setting that switches that check off; a script should never do so
-either. Renewing the certificate in
-the same dialog replaces it at once: every device that trusted the old one has
-to be given the new file. Without the network switch the receiver stays plain
-HTTP on `127.0.0.1`, where the traffic never leaves the machine.
 
 ## Discovering the command set
 
@@ -184,9 +128,7 @@ success shape; an error never mixes JSON and plain text, see "Errors"):
 
 An error is always printed to stderr as plain text, never JSON, even when
 `--json` was passed -- a script should read the exit code first and only
-parse stdout as JSON once it is 0. The remote receiver folds the exit code,
-stdout and stderr into one JSON object instead (see "Invocation" above), so
-a caller there gets the same information without a second stream to read.
+parse stdout as JSON once it is 0.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -196,69 +138,19 @@ a caller there gets the same information without a second stream to read.
 | 3 | store locked or unavailable (another machine holds the data folder, or a row failed to decrypt), or a command handed to the running instance gave no result: it did not accept the request within 5 seconds, or returned nothing within 10 minutes (the command may still be running) |
 | 4 | refused (a mutating command run without `--yes`, or a value that fails validation) |
 
-The remote receiver additionally answers with a non-200 HTTP status and a
-`{"error": "<reason>"}` body for a request it refuses before it ever reaches
-a command: `401` (missing/wrong password, or no password configured yet),
-`403` (address not allowed, ten-failure lockout, or a browser-shaped
-request -- see "Limits"), `404` (any path but `/api`), `405` (any method but
-`POST`), `413`/`431` (body or header too large), `429` (rate limit).
-
-## The `promptsaver://` link scheme
-
-A `promptsaver://open/<id>` or `promptsaver://copy/<id>` link, once the
-person has turned the scheme on, runs through the exact same command
-implementation as the command line and the receiver -- `open` brings the
-entry to the front in the real window (a click-equivalent, it never reads or
-returns the prompt's content itself), `copy` puts its text on the clipboard.
-No other verb, no query string, no extra path segment: anything else is not
-a link this app recognizes and is silently ignored. The id must pass the
-same check the command line's own `<id>` argument does (ASCII letters,
-digits, `_`/`-`, at most 128 characters) or the link is rejected before
-anything runs. Each of `open` and `copy` asks for a one-time native Yes/No
-confirmation the first time that machine ever sees one; the answer is
-remembered after that and never asked again.
-
-```
-promptsaver://open/p_ab12cd
-promptsaver://copy/p_ab12cd
-```
-
 ## Limits
 
-- Both the receiver and the link scheme are **off by default**. Turning the
-  receiver on requires a password to already be on record; the app
-  generates and shows one, once, the first time the receiver is switched on.
-- The receiver binds `127.0.0.1` (plain HTTP) only unless a separate network
-  switch is also turned on. Then it binds every interface, speaks HTTPS only,
-  and accepts only the address ranges the person has explicitly listed --
-  everything else is refused before a single byte of the request is read.
-- The password is never logged, never placed in a URL, and compared in
-  constant time; ten wrong attempts from one address lock that address out
-  for ten minutes.
-- A request carrying a browser-added `Origin` or `Referer` header is refused
-  outright, and no `Access-Control-*` header is ever sent -- a web page
-  cannot use the receiver even if it tries.
-- The default rate limit is 60 requests/minute per address (configurable);
-  the request body is capped at 1 MB, the request line and headers together
-  at 16 KB, and `argv` at 64 entries.
-- `export`/`import` run through the receiver or a link are confined to the
-  data folder -- a path that resolves outside it is refused with exit 4,
-  unlike the plain command line, which trusts the caller's own working
-  directory the way a shell prompt normally would.
-- Every access is logged by command name and outcome only (never the full
-  `argv`, which can carry prompt text for `add`/`edit`, never the password,
-  never a full path).
 - `add`, `edit`, `delete`, `restore`, `tag add`, `tag remove`, `view add`,
   `view remove`, `import`, `backup restore` and `settings set` all need
-  `--yes` in `argv`; without it the command is refused (exit 4) and the
-  response says what it would have done, so a script that forgot the flag
+  `--yes`; without it the command is refused (exit 4) and the output says
+  what it would have done, so a script that forgot the flag
   still learns what it almost triggered.
 
 ## Examples
 
 Every example below uses placeholder ids/paths -- `p_demo01` is never a real
 prompt id from any live database, and `C:\path\to\...` is never a path on a
-real machine. None uses a real password.
+real machine.
 
 ### 1. Add an entry
 
@@ -307,6 +199,4 @@ prompt-saver backup create --keep 10 --json
 ## See also
 
 `README.md` has a one-paragraph pointer to this file; `docs/help.md`'s
-expert section links here from inside the app. `docs/INVARIANTS.md` covers
-the receiver's and the link scheme's own invariants in more depth (search it
-for "461").
+expert section links here from inside the app.

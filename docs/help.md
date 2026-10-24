@@ -949,55 +949,6 @@ another to compare the two. It never holds up the save and never asks
 anything, so ignoring it costs nothing. Both share one threshold in the expert
 menu.
 
-### Remote access & links
-
-Two switches in the expert menu, both off by default, that give the app a
-second and third way to be reached, next to the window and the command line.
-
-`promptsaver://open/<id>` brings the window to that entry, and
-`promptsaver://copy/<id>` copies it, exactly like the copy button would. A
-link can never delete or change anything, and an id that does not exist just
-does nothing. The first open and the first copy each ask for confirmation
-once; after that, links work without asking again. Registering the link type
-with Windows needs no separate installer step and no admin rights.
-
-The remote access receiver exposes the same commands as the command line to
-another program on this computer, or, once the network switch is turned on
-too, to the address ranges you list there. It refuses to start without a
-password, which is generated the moment you turn it on and shown exactly
-once: copy it somewhere safe, because the app only ever keeps it in a form
-it cannot read back. A wrong password ten times in a row locks that caller
-out for ten minutes. Every request needs the password, is capped in size,
-counted against a per minute limit, and logged (command and outcome, never
-the password or the full request) in the same log the app already keeps for
-its own errors. A locked entry stays locked here too, the same as everywhere
-else in the app. While the receiver is running, a banner stays on screen
-with its port number and its own off button.
-
-With the network switch on, the connection is encrypted (HTTPS) with a
-certificate the app makes for itself, and a plain `http://` request gets no
-answer at all. The **Certificate...** button next to the address ranges shows
-the certificate's fingerprint, saves the certificate so another device can
-trust it (for example `curl.exe --ssl-no-revoke --cacert <file>
-https://<computer name>:<port>/api`), and creates a new one; a new certificate replaces the old
-one at once, so every device has to be set up again. The certificate also
-names this computer's addresses as they were when it was made: after the
-network address changes, New certificate refreshes it. Without the network
-switch the receiver only listens on this computer and stays plain HTTP.
-
-The certificate is valid for 10 years, or for 825 days with "Short certificate
-for Apple devices", which iPhone, iPad and Mac require; devices then need the
-new certificate about every two years. Switching asks first and then makes a
-new certificate. An expired certificate is renewed when the receiver starts,
-with a message.
-
-For a script or another program driving either of these two, `prompt-saver
-describe` prints the full command list as JSON, and
-[docs/automation.md](automation.md) has the complete reference: every
-command's arguments and JSON response shape, the error codes, the link
-scheme, and worked examples, so nothing needs to be worked out by trial and
-error.
-
 ### Command line
 
 `prompt-saver.exe <command> ...` runs the app as a command line tool instead
@@ -1018,6 +969,11 @@ onto the clipboard, `backup create`, which only ever adds a new snapshot, and
 Exit codes: 0 success, 1 bad invocation, 2 not
 found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
 value that failed validation). Full command list: `prompt-saver.exe --help`.
+
+For a script or another program, `prompt-saver describe` prints the full
+command list as JSON, and [docs/automation.md](automation.md) has the complete
+reference: every command's arguments and JSON response shape, the error codes
+and worked examples, so nothing needs to be worked out by trial and error.
 
 ### Demo mode
 
@@ -1726,47 +1682,6 @@ seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Fernzugriff & Links**: zwei Schalter im Expertenmenü, beide
-standardmäßig aus. `promptsaver://open/<id>` holt eine Kachel ins geöffnete
-Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Button.
-Ein Link kann nie etwas löschen oder ändern, eine unbekannte id tut einfach
-nichts, und das erste Öffnen sowie das erste Kopieren fragen je einmal nach
-Bestätigung. Der zweite Schalter startet eine lokale Schnittstelle, die
-dieselben Befehle wie die Kommandozeile für ein anderes Programm auf diesem
-Rechner öffnet, und, nur wenn ein dritter Schalter das ausdrücklich erlaubt,
-auch für die dort eingetragenen Adressbereiche. Sie startet nie ohne
-Passwort: eines wird beim Einschalten erzeugt und einmalig angezeigt, danach
-lässt es sich nicht mehr auslesen. Zehn falsche Versuche sperren den Aufrufer
-zehn Minuten. Jede Anfrage braucht das Passwort, ist in ihrer Größe begrenzt,
-zählt gegen ein Limit pro Minute und wird protokolliert, ohne das Passwort
-oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
-Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
-eigenem Ausschalter. Ist der Netzwerk-Schalter an, ist die Verbindung
-verschlüsselt (HTTPS), mit einem Zertifikat, das die App selbst erzeugt; eine
-unverschlüsselte `http://`-Anfrage bekommt gar keine Antwort. Der Button
-
-**Zertifikat...** neben den Adressbereichen zeigt den Fingerabdruck des
-Zertifikats, speichert es, damit ein anderes Gerät ihm vertrauen kann (zum
-Beispiel `curl.exe --ssl-no-revoke --cacert <Datei>
-https://<Computername>:<Port>/api`) und
-erzeugt ein neues; ein neues Zertifikat ersetzt das alte sofort, jedes Gerät
-muss also neu eingerichtet werden. Das Zertifikat nennt außerdem die
-Adressen dieses Rechners, wie sie bei seiner Erzeugung waren: ändert sich die
-Netzwerkadresse, frischt "Neues Zertifikat" es auf. Ohne den Netzwerk-Schalter lauscht die
-Schnittstelle nur auf diesem Rechner und bleibt einfaches HTTP.
-
-Das Zertifikat gilt 10 Jahre, mit „Kurzes Zertifikat für Apple-Geräte“ 825 Tage, was
-iPhone, iPad und Mac verlangen; Geräte brauchen dann etwa alle zwei Jahre das neue
-Zertifikat. Das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.
-Ein abgelaufenes Zertifikat wird beim Start des Empfängers erneuert, mit einer Meldung.
-
-Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
-`prompt-saver describe` die vollständige Befehlsliste als JSON aus, und
-[docs/automation.md](automation.md) (englisch, wie der Rest des Verzeichnisses)
-ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
-seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
-Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
-
 **Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
 Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
 kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
@@ -1786,6 +1701,13 @@ neuen Schnappschuss hinzufügt, und `export`, das `--yes` nur zum
 Erfolg, 1 falscher Aufruf, 2 nicht gefunden, 3 Bestand gesperrt oder nicht
 erreichbar, 4 abgelehnt (fehlendes `--yes`, oder ein Wert, der die Prüfung
 nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
+
+Für ein Skript oder ein anderes Programm gibt `prompt-saver describe` die
+vollständige Befehlsliste als JSON aus, und
+[docs/automation.md](automation.md) (englisch, wie der Rest des Verzeichnisses)
+ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
+seiner JSON-Antwort, die Fehlercodes und durchgerechnete Beispiele, nichts
+davon muss durch Ausprobieren herausgefunden werden.
 
 **Vorführung**: Ein Schalter im Expertenmenü (Tab System, Gruppe Fehlersuche) schaltet das
 ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst

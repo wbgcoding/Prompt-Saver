@@ -21,12 +21,6 @@ the video editor and the introduction tour ship on).
 
 ### Added
 
-- **A short-lived certificate for Apple devices.** A new expert switch in the
-  remote access group makes the receiver's certificate valid for 825 days
-  instead of ten years, which iPhone, iPad and Mac require. Switching asks
-  first and creates a new certificate, so devices have to trust it again. A
-  stored certificate that has run out is now replaced when the receiver
-  starts.
 - **Eight more expert settings for things that were fixed values.** A switch
   and a colour for the frame around a region recording (it still never appears
   in the video), a choice of what goes between two chained prompts (blank line,
@@ -44,24 +38,10 @@ the video editor and the introduction tour ship on).
   process ever touches it at a time. Every command takes `--help`, `--json`
   switches its output to machine readable form, and any command that changes
   something is refused without `--yes`. Full list: `prompt-saver.exe --help`.
-- **Remote access and promptsaver:// links.** Two switches, both off by
-  default. A `promptsaver://open/<id>` link brings the window to that
-  prompt, and `promptsaver://copy/<id>` copies it; a link can never delete
-  or change anything, an unknown id does nothing, and the first open and the
-  first copy each ask for confirmation once. The remote access receiver
-  exposes the same commands as the command line to another program on this
-  computer, loopback only unless a separate network switch opens it to
-  address ranges you configure. It refuses to start without a password,
-  generated and shown once when you turn it on; ten wrong attempts lock out
-  the caller for ten minutes. Every request is capped in size, rate limited,
-  logged without the password, and a locked prompt stays locked here too. A
-  banner stays on screen with the port number and its own off switch while
-  the receiver runs.
 - **Automation reference.** `docs/automation.md` documents the command line
-  and the remote access receiver for a script or another program: every
-  command's arguments and JSON response shape, the error codes, the link
-  scheme, and worked examples. `prompt-saver.exe describe` prints the same
-  command list as JSON.
+  for a script or another program: every command's arguments and JSON response
+  shape, the error codes, and worked examples. `prompt-saver.exe describe`
+  prints the same command list as JSON.
 - **Tags**: label prompts with free-form, colored tags. The editor gets a chip
   row with type-ahead over existing tags and a per-chip color popover; the
   library gets a filter row above the results (multi-select, switchable between
@@ -1072,9 +1052,8 @@ the video editor and the introduction tour ship on).
 - **Removing a view from the command line** dissolves its grid folders, so their
   prompts are not stuck in a folder nobody can reach.
 - **Small fixes.** A recording hotkey that is switched off no longer counts as
-  taken, a failed batch export item no longer stops the rest, the counter
-  placeholder only counts up when the copy really happens, and the remote
-  receiver shows as stopped when it could not open its port.
+  taken, a failed batch export item no longer stops the rest, and the counter
+  placeholder only counts up when the copy really happens.
 
 - **A deleted prompt stays deleted.** After a settings reset or a move of the
   data folder, a prompt deleted next could come back after a restart, and
@@ -1089,7 +1068,7 @@ the video editor and the introduction tour ship on).
   encrypt it twice. Auto rotation no longer pastes encrypted text, and a
   confidential entry is locked again on time when the lock timeout runs out,
   also when you shorten the timeout.
-- **The command line and remote access refuse confidential entries for copy**
+- **The command line refuses confidential entries for copy**
   and can no longer export over the database or a backup.
 - **Recording pauses no longer count against the maximum length**, and a
   recording no longer stops when you close the window it was switched away
@@ -1163,7 +1142,7 @@ the video editor and the introduction tour ship on).
   behind; copies older than an hour are now removed at start in the data folder
   and the markdown sync folder.
 - **A setting can no longer be set to "not a number".** `settings set` on the
-  command line and over remote access refuses NaN and infinite values, which
+  command line refuses NaN and infinite values, which
   would have made the whole settings file unreadable on the next start, and a
   number set that way or in the app is held to the range the setting offers.
 - **The clipboard inbox skips huge texts.** A copied text of more than 200,000
@@ -1210,22 +1189,16 @@ the video editor and the introduction tour ship on).
 - **Uninstalling an all-users install leaves no entry behind.** The app no
   longer stays listed under installed apps, and its Start menu shortcut is
   removed, after uninstalling an install made for all users.
-- **Full expert reset keeps the vault, the backup password and the
-  certificate.** It used to wipe the vault's key data, which left every
-  confidential entry unreadable for good, and the backup password. It now also
-  stops a running remote receiver and removes the promptsaver:// link
-  registration when the reset turns them off, and so does the settings reset.
+- **Full expert reset keeps the vault and the backup password.** It used to
+  wipe the vault's key data, which left every confidential entry unreadable
+  for good, and the backup password.
 - **Importing a backup that brings another vault locks the vault.** The old
   unlocked session no longer seals new confidential entries against a key that
   does not match the imported vault.
-- **A failed restore from the trash no longer drops the remote access password
-  or certificate key** from the running settings.
 - **A command that was refused no longer changes the running app.** A delete,
-  add or setting change sent through the command line or remote access while
+  add or setting change sent through the command line while
   the data folder is read-only or locked is now turned away before it touches
   anything, and a write that fails is undone in memory too.
-- **Changing the remote access port while it runs takes effect at once.**
-  If the new port cannot be used, the old one comes back.
 - **Markdown folder sync no longer loses or damages data.** A file with the id
   of a confidential entry can no longer overwrite it, a file whose prompt sits
   in the trash no longer comes back as a second prompt, and the cleanup of
@@ -1244,9 +1217,9 @@ the video editor and the introduction tour ship on).
   Confidential entries of a backup open with the backup's own vault password,
   and a backup without a vault keeps yours. If confidential entries in the
   trash can no longer be opened because of that, the import says so.
-- **An old snapshot no longer brings back old remote access settings.**
-  Restoring a local snapshot keeps this computer's remote access switches,
-  password, allowed addresses, update choices and clipboard watcher.
+- **An old snapshot no longer brings back old machine settings.**
+  Restoring a local snapshot keeps this computer's update choices and
+  clipboard watcher.
 - **A leftover emergency copy can no longer overwrite what you just saved.**
   Once a save reaches the database, the old fallback file of an earlier failed
   save is removed.
@@ -1645,9 +1618,6 @@ the video editor and the introduction tour ship on).
   complete the same prompt, so a one-off decline now offers "try again"; only
   a computer whose policy blocks the prompt outright shows the "blocked"
   message with no retry button.
-- **A promptsaver:// link ended without doing anything.** Since a recent
-  startup change, every link exited the process before it could reach the
-  window that was supposed to open or copy it.
 - **The app no longer freezes during a recording while a backup runs.**
 - **The compare view could open behind the duplicate finder, the raised
   library or the edit dialog's similar-prompt hint**, and Escape closed
@@ -1696,9 +1666,8 @@ the video editor and the introduction tour ship on).
   the grid selection. A folder's members behave like the tiles they stand for:
   a fast second click pastes, a click in chain mode adds the prompt to the
   chain, a missing file is flagged, and the prompt's own font, size and text
-  colour are used. The remote access rate limit keeps showing Unlimited after a
-  redraw, the video folder numbers and the sync readout follow the current
-  folder and open, and a running language install stays busy when its dialog is
+  colour are used. The video folder numbers and the sync readout follow the
+  current folder and open, and a running language install stays busy when its dialog is
   reopened. A refused hotkey no longer leaves the field capturing the wrong
   combination, saving a new prompt without text keeps the dialog and what was
   typed, a dictation result arriving late replaces its live partial, a failed
@@ -1739,8 +1708,8 @@ the video editor and the introduction tour ship on).
   never opens them. Drive letters, including mapped network drives, and a data
   or recording folder on a network share keep working.
 - **Each window can only use its own functions.** A side window such as the
-  floating buttons or the video editor can no longer delete all data, move the
-  data folder or read the remote access password.
+  floating buttons or the video editor can no longer delete all data or move
+  the data folder.
 - **Plain text of a confidential prompt does not stay in the sync folder** when
   the prompt was made confidential while syncing was off.
 - **Confidential rotating prompts stay out of the clipboard history** also when
@@ -1752,10 +1721,9 @@ the video editor and the introduction tour ship on).
   folder, which can be shared with other machines.
 - **The crash log keeps no text from your prompts**, only where the error
   happened.
-- **Remote access and the command line refuse more unsafe targets:** an export
-  can no longer replace program files beside a portable app, the command name
-  is logged only when it is a real command, and the number of open connections
-  is capped.
+- **The command line refuses more unsafe targets:** an export
+  can no longer replace program files beside a portable app, and the command
+  name is logged only when it is a real command.
 - **"Delete all data" also removes attachments and screenshots** the deleted
   prompts used, and clears the deleted rows from the database file.
 - **Updates are signed.** Every installer ships with a signature made by the
@@ -1780,10 +1748,8 @@ the video editor and the introduction tour ship on).
   name in the statistics or their export, and it is never offered as "similar
   to" another prompt.
 - **Tighter checks on outside input.** A folder import only reads files inside
-  the chosen folder, a clipboard entry from another program is size-checked
-  before it is read, a `promptsaver://copy` link to a prompt that does not exist
-  no longer asks for permission, and the TLS library of the remote receiver is
-  updated to a fixed version.
+  the chosen folder, and a clipboard entry from another program is size-checked
+  before it is read.
 
 - **The update check now asks for permission on first launch; nothing goes
   online before you answer.** Installs that already had the update check on or
@@ -1794,32 +1760,14 @@ the video editor and the introduction tour ship on).
   consent, the data folder lock and the clipboard secret skipping.
 
 - **`settings set` can no longer change access settings.** The command line
-  and remote access refuse folder locations, the vault keys, the backup
-  password, every remote access setting and the clipboard watcher and link
-  switches; they stay changeable in the app only.
+  refuses folder locations, the vault keys, the backup password and the
+  clipboard watcher switches; they stay changeable in the app only.
 
-- **A settings or backup file can no longer switch on remote access or other
-  machine features.** Importing settings from a file, or restoring a backup
-  file, leaves the remote access switches, password, allowed addresses and
-  port, the promptsaver:// links, the autostart entry, the certificate, the
-  backup password and the folder locations exactly as this computer has
-  them. The import preview says how many entries were skipped, and a settings
-  export no longer contains the remote access password hash.
-- **Remote access from other devices now runs over HTTPS with the app's own
-  certificate.** With the network switch on, the receiver accepts only
-  encrypted connections, so the password is no longer readable on the
-  network. The new **Certificate...** button shows the certificate's
-  fingerprint, saves it for other devices and creates a new one. Turning the
-  network switch on or off now takes effect at once, without switching remote
-  access off and on again.
-- **Remote access settings are saved before they take effect.** Switching it
-  on, a new password or wider address ranges are undone when the write fails,
-  and switching it off always stops the receiver. A restart can no longer
-  bring back a receiver you turned off, or one that wants a password you were
-  never shown.
-- **Stopping and restarting the receiver is reliable.** Each run has its own
-  shutdown, so a stop can no longer end the next start, and a restart waits
-  for the old listener to release the port.
+- **A settings or backup file can no longer switch on machine features.**
+  Importing settings from a file, or restoring a backup file, leaves the
+  autostart entry, the backup password and the folder locations exactly as
+  this computer has them. The import preview says how many entries were
+  skipped.
 - **The WebView2 runtime download is now checked for Microsoft's signature**
   before it is run. It is the one file the app may have to fetch before its
   own window exists, and until now only the connection vouched for it.
@@ -1916,10 +1864,9 @@ the video editor and the introduction tour ship on).
   also names the update download itself, the GitHub link from the logo or
   version label, and the Windows language-pack install.
 - **"All on", the profiles and the resets in the expert menu no longer flip the
-  switches that have their own confirmation.** Remote access, its network
-  switch, the URL scheme and the Markdown sync are skipped by "All on", and
-  demo mode is never written by a profile or a reset, so a running demo session
-  also survives "Reset expert menu".
+  switches that have their own confirmation.** The Markdown sync is skipped by
+  "All on", and demo mode is never written by a profile or a reset, so a running
+  demo session also survives "Reset expert menu".
 - **Editor drafts are stored encrypted, and a confidential prompt is never
   drafted.** The automatic draft of the open editor is sealed for your Windows
   account like the prompts themselves, so a revealed confidential prompt no
