@@ -13,7 +13,6 @@
   "repo": "wbgcoding/Prompt-Saver",
   "legacyDataFolder": "com.bgcoding.promptsaver",
   "legacyAutostartKey": "",
-  "legacyScreenshotPrefix": "PromptSaver-",
   "icon": "brands/icons/prompt-saver.svg",
   "installerIcon": "brands/icons/prompt-saver-installer.svg"
 }

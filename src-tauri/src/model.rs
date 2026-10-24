@@ -353,13 +353,6 @@ pub(crate) struct Settings {
     // Grid folders. Kept while the feature is off: members show as their own tiles again.
     #[serde(default)]
     pub(crate) tile_folders: Vec<TileFolder>,
-    // Legacy single-grid fields (pre-views): read for migration, never written back.
-    #[serde(default = "default_cols", rename = "cols", skip_serializing)]
-    pub(crate) legacy_cols: u32,
-    #[serde(default = "default_rows", rename = "rows", skip_serializing)]
-    pub(crate) legacy_rows: u32,
-    #[serde(default, rename = "layout", skip_serializing)]
-    pub(crate) legacy_layout: HashMap<String, [u32; 2]>,
 }
 
 pub(crate) fn default_theme() -> String {
@@ -456,9 +449,6 @@ impl Default for Settings {
             active_view: String::new(),
             views: Vec::new(),
             tile_folders: Vec::new(),
-            legacy_cols: default_cols(),
-            legacy_rows: default_rows(),
-            legacy_layout: HashMap::new(),
         }
     }
 }
@@ -1174,24 +1164,14 @@ impl Settings {
             }
         }
         if self.views.is_empty() {
-            let mut layouts = HashMap::new();
-            if !self.legacy_layout.is_empty() {
-                layouts.insert(
-                    grid_key(self.legacy_cols, self.legacy_rows),
-                    self.legacy_layout.clone(),
-                );
-            }
-            let members = layouts.get(&grid_key(self.legacy_cols, self.legacy_rows))
-                .map(|l| l.keys().cloned().collect())
-                .unwrap_or_default();
             self.views.push(View {
                 id: gen_id(),
                 name: home_name(resolve_lang(&self.language)).to_string(),
-                cols: self.legacy_cols,
-                rows: self.legacy_rows,
-                layouts,
+                cols: default_cols(),
+                rows: default_rows(),
+                layouts: HashMap::new(),
                 color: String::new(),
-                members,
+                members: Vec::new(),
             });
         }
         // Every view arrives through here, including from an imported backup, so this is where the

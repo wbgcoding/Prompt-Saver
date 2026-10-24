@@ -66,7 +66,6 @@ const RULES = {
   repo: { re: /^[A-Za-z0-9._-]{1,40}\/[A-Za-z0-9._-]{1,40}$/, req: true },
   legacyDataFolder: { re: /^([A-Za-z0-9._-]{1,40})?$/, req: false },
   legacyAutostartKey: { re: /^([A-Za-z0-9._-]{1,40})?$/, req: false },
-  legacyScreenshotPrefix: { re: /^([A-Za-z0-9._-]{1,40})?$/, req: false },
   icon: { asset: true, req: true },
   installerIcon: { asset: true, req: true },
   // Feature switches this brand ships the other way round than the app does, e.g.
@@ -247,8 +246,6 @@ pub const REPO: &str = ${rs(b.repo)};
 pub const LEGACY_DATA_FOLDER: &str = ${rs(b.legacyDataFolder)};
 /// Autostart value name an earlier version registered.
 pub const LEGACY_AUTOSTART_KEY: &str = ${rs(b.legacyAutostartKey)};
-/// File-name prefix of screenshots an earlier version saved.
-pub const LEGACY_SCREENSHOT_PREFIX: &str = ${rs(b.legacyScreenshotPrefix)};
 
 // What this brand calls the thing it stores. The backend only needs it for the few
 // English messages it hands back to the UI; every translated string is handled by
@@ -445,7 +442,6 @@ function stampPinTest(root, b) {
     `${ind}assert_eq!(brand::REPO, ${rs(b.repo)});\n` +
     `${ind}assert_eq!(brand::LEGACY_DATA_FOLDER, ${rs(b.legacyDataFolder)});\n` +
     `${ind}assert_eq!(brand::LEGACY_AUTOSTART_KEY, ${rs(b.legacyAutostartKey)});\n` +
-    `${ind}assert_eq!(brand::LEGACY_SCREENSHOT_PREFIX, ${rs(b.legacyScreenshotPrefix)});\n` +
     `${ind}assert_eq!(env!("CARGO_PKG_NAME"), ${rs(b.slug)});\n` +
     `${ind}let conf = include_str!("../tauri.conf.json");\n` +
     `${ind}assert!(conf.contains(${rs(`"productName": ${rs(b.displayName)}`)}));\n` +
