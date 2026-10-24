@@ -98,14 +98,14 @@
              first track, so these sliders steer the export; the preview follows
              the system track alone. -->
         <div class="ve-audio-group">
-          <button id="ve-mute-sys" class="icon-btn" type="button" data-i18n-title="veMuteSystem" data-i18n-aria="veMuteSystem">
+          <button id="ve-mute-sys" class="icon-btn" type="button" aria-pressed="false" data-i18n-title="veMuteSystem" data-i18n-aria="veMuteSystem">
             <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3Zm13.5 2a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12Z"/><path class="ve-mute-slash" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 4l16 16"/></svg>
           </button>
           <label class="ve-audio-label" for="ve-vol-sys" data-i18n="veAudioSys">System</label>
           <input id="ve-vol-sys" class="ve-vol" type="range" min="0" max="200" step="5" value="100" data-i18n-title="veVolumeSystem" data-i18n-aria="veVolumeSystem" />
         </div>
         <div class="ve-audio-group">
-          <button id="ve-mute-mic" class="icon-btn" type="button" data-i18n-title="veMuteMic" data-i18n-aria="veMuteMic">
+          <button id="ve-mute-mic" class="icon-btn" type="button" aria-pressed="true" data-i18n-title="veMuteMic" data-i18n-aria="veMuteMic">
             <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2Z"/><path class="ve-mute-slash" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 4l16 16"/></svg>
           </button>
           <label class="ve-audio-label" for="ve-vol-mic" data-i18n="veAudioMic">Mic</label>
@@ -129,8 +129,8 @@
             <div id="ve-cuts" class="ve-cuts"></div>
             <div id="ve-ovbars" class="ve-ovbars"></div>
             <div id="ve-sel" class="ve-sel hidden"></div>
-            <div id="ve-trim-a" class="ve-handle ve-handle-a" tabindex="0" role="button" data-i18n-title="veTrimStart" data-i18n-aria="veTrimStart"></div>
-            <div id="ve-trim-b" class="ve-handle ve-handle-b" tabindex="0" role="button" data-i18n-title="veTrimEnd" data-i18n-aria="veTrimEnd"></div>
+            <div id="ve-trim-a" class="ve-handle ve-handle-a" tabindex="0" role="slider" data-i18n-title="veTrimStart" data-i18n-aria="veTrimStart"></div>
+            <div id="ve-trim-b" class="ve-handle ve-handle-b" tabindex="0" role="slider" data-i18n-title="veTrimEnd" data-i18n-aria="veTrimEnd"></div>
             <div id="ve-playhead" class="ve-playhead" aria-hidden="true"></div>
           </div>
         </div>
@@ -180,7 +180,7 @@
 
       <div class="ve-panels">
         <!-- ---- Edit ---- -->
-        <section id="ve-panel-edit" class="ve-panel" role="tabpanel">
+        <section id="ve-panel-edit" class="ve-panel" role="tabpanel" aria-labelledby="ve-tab-edit">
           <h3 class="ve-h" data-i18n="veTrimGroup">Trim and cut</h3>
           <div class="ve-trim-row">
             <label class="field">
@@ -207,7 +207,6 @@
               <label class="field"><span data-i18n="veCropW">Width</span><input id="ve-crop-w" class="modal-input" type="number" min="2" step="2" /></label>
               <label class="field"><span data-i18n="veCropH">Height</span><input id="ve-crop-h" class="modal-input" type="number" min="2" step="2" /></label>
             </div>
-            <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers, since video encoders require it.</p>
             <button id="ve-crop-reset" class="ghost-btn ve-wide" type="button" data-i18n="veCropReset">Reset to full frame</button>
           </div>
 
@@ -253,7 +252,7 @@
         </section>
 
         <!-- ---- Overlays ---- -->
-        <section id="ve-panel-overlays" class="ve-panel hidden" role="tabpanel">
+        <section id="ve-panel-overlays" class="ve-panel hidden" role="tabpanel" aria-labelledby="ve-tab-overlays">
           <h3 class="ve-h" data-i18n="veOvAdd">Add an overlay</h3>
           <div class="ve-ov-add">
             <button id="ve-ov-add-image" class="ghost-btn" type="button" data-i18n="veOvImage" data-i18n-title="veOvImageTip">Image</button>
@@ -261,8 +260,8 @@
             <button id="ve-ov-add-text" class="ghost-btn" type="button" data-i18n="veOvText" data-i18n-title="veOvTextTip">Text</button>
             <button id="ve-ov-add-pixelate" class="ghost-btn" type="button" data-i18n="veOvPixelate" data-i18n-title="veOvRectTip">Pixelate</button>
             <button id="ve-ov-add-spotlight" class="ghost-btn" type="button" data-i18n="veOvSpotlight" data-i18n-title="veOvRectTip">Focus area</button>
-            <button id="ve-ov-add-keys" class="ghost-btn" type="button" data-i18n="veOvKeys" data-i18n-title="veOvRectTip">Keys</button>
-            <button id="ve-add-video" class="ghost-btn" type="button" data-i18n="veAddVideo">Add a video</button>
+            <button id="ve-ov-add-keys" class="ghost-btn" type="button" data-i18n="veOvKeys" data-i18n-title="veKeysAddTip">Keys</button>
+            <button id="ve-add-video" class="ghost-btn" type="button" data-i18n="veAddVideo" data-i18n-title="veAddVideoTip">Add a video</button>
           </div>
           <div id="ve-ov-list" class="ve-ov-list"></div>
           <p id="ve-ov-empty" class="modal-hint" data-i18n="veOvEmpty">No overlays yet.</p>
@@ -271,7 +270,7 @@
         </section>
 
         <!-- ---- Export ---- -->
-        <section id="ve-panel-export" class="ve-panel hidden" role="tabpanel">
+        <section id="ve-panel-export" class="ve-panel hidden" role="tabpanel" aria-labelledby="ve-tab-export">
           <h3 class="ve-h" data-i18n="vePresets">Presets</h3>
           <div class="export-row">
             <button id="ve-preset-same" class="ghost-btn" type="button" data-i18n="vePresetSame" data-i18n-title="vePresetSameTip">Unchanged</button>
@@ -303,13 +302,13 @@
           <p id="ve-export-note" class="modal-hint"></p>
 
           <h3 class="ve-h" data-i18n="veExportTarget">Target file</h3>
-          <label class="field">
-            <span data-i18n="veExportName">File name</span>
+          <div class="field ve-name-field">
+            <label for="ve-export-name" data-i18n="veExportName">File name</label>
             <div class="ve-export-name-row">
               <input id="ve-export-name" class="modal-input" type="text" />
               <span id="ve-export-ext" class="ve-muted"></span>
             </div>
-          </label>
+          </div>
           <p id="ve-export-name-hint" class="modal-hint hidden" data-i18n="veExportNameInvalid">Use a name without \ / : * ? " &lt; &gt; |.</p>
           <input id="ve-export-dest" class="modal-input ve-export-dest-input" type="text" data-i18n-title="veExportDestTip" />
           <div class="export-row">
@@ -362,7 +361,7 @@
       <div id="confirm-input-row" class="confirm-input-row hidden">
         <input id="confirm-input" class="modal-input" type="password" autocomplete="off" list="confirm-input-datalist" />
         <datalist id="confirm-input-datalist"></datalist>
-        <button id="confirm-input-eye" class="icon-btn pw-eye" type="button" tabindex="-1"></button>
+        <button id="confirm-input-eye" class="icon-btn pw-eye" type="button" tabindex="-1" data-i18n-aria="showPassword"></button>
       </div>
       <!-- Optional checkboxes (e.g. restore data / restore settings) -->
       <div id="confirm-checkbox-row" class="confirm-checkbox-row hidden"></div>
@@ -381,7 +380,7 @@
     <div class="modal modal-narrow">
       <div class="modal-titlebar">
         <h2 class="modal-title" data-i18n="shortcutsTitle">Keyboard shortcuts</h2>
-        <button id="shortcuts-modal-close" class="icon-btn modal-x" data-i18n-aria="close">
+        <button id="shortcuts-modal-close" class="icon-btn modal-x" type="button" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
           </svg>

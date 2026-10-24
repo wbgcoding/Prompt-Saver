@@ -45,7 +45,6 @@ LINK_RE = re.compile(r'href="styles/([\w.-]+\.css)"')
 VALUE_TARGETS = {
     # window -> [(element id, JS file that must set its aria-valuenow)]
     "video": [
-        ("ve-timeline", "video.js"),
         ("ve-trim-a", "video.js"),
         ("ve-trim-b", "video.js"),
         ("ve-vol-sys", "video.js"),

@@ -497,7 +497,7 @@ function opLabel(op) {
     case "cut": return `${t("veOpCut")} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     case "crop": return `${t("veOpCrop")} ${op.rect.w}×${op.rect.h}`;
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
-    case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ms`;
+    case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ${t("veUnitMs")}`;
     case "scale": return `${t("veOpScale")} ${op.w}×${op.h}`;
     case "overlay": return `${t("veOpOverlay")}: ${t(overlayLabelKey(op.kind))}`;
     default: return op.tool;
@@ -512,6 +512,22 @@ export const overlayLabelKey = (kind) => ({
 
 export function extraClipCount() {
   return VE.ops.filter((o) => o.tool === "clip" || (o.tool === "overlay" && o.kind === "video")).length;
+}
+
+function deleteOp(op) {
+  if (op.tool === "crop") changeCrop(() => removeOps((o) => o === op));
+  else removeOps((o) => o === op);
+}
+
+// Selecting an op row: an overlay is selected and its editor opened, every op with a start
+// time also moves the playhead there.
+function selectOp(op) {
+  if (op.tool === "overlay") {
+    VE.selOv = op.id;
+    showPanel("ve-panel-overlays");
+    renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint();
+  }
+  if (Number.isFinite(op.startMs)) seek(op.startMs);
 }
 
 function renderOps() {
@@ -530,9 +546,18 @@ function renderOps() {
   shown.forEach((op) => {
     const row = document.createElement("div");
     row.className = "ve-op-row";
-    const label = document.createElement("span");
+    // A button, so Tab reaches every row: Enter or a click selects the op (an overlay opens its
+    // editor) and moves the playhead to where it starts, Delete removes it.
+    const label = document.createElement("button");
+    label.type = "button";
     label.className = "ve-op-label";
     label.textContent = opLabel(op);
+    label.addEventListener("click", () => selectOp(op));
+    label.addEventListener("keydown", (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      e.preventDefault();
+      deleteOp(op);
+    });
     row.appendChild(label);
     const del = document.createElement("button");
     del.type = "button";
@@ -540,12 +565,8 @@ function renderOps() {
     del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
     del.title = t("veOpRemove");
     del.setAttribute("aria-label", `${t("veOpRemove")}: ${opLabel(op)}`);
-    del.addEventListener("click", () => (op.tool === "crop" ? changeCrop(() => removeOps((o) => o === op)) : removeOps((o) => o === op)));
+    del.addEventListener("click", () => deleteOp(op));
     row.appendChild(del);
-    if (op.tool === "overlay") {
-      row.classList.add("ve-op-clickable");
-      label.addEventListener("click", () => { VE.selOv = op.id; showPanel("ve-panel-overlays"); renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint(); });
-    }
     list.appendChild(row);
   });
 }
@@ -800,12 +821,12 @@ export function renderRegions() {
   document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
 }
 
-// Shared by the timeline itself and its two trim handles: a screen reader gets
-// the plain time it would otherwise have to infer from a bare pixel position.
+// The two trim handles are sliders: a screen reader gets the plain time it would otherwise have
+// to infer from a bare pixel position. The values are milliseconds, so a short clip still moves.
 function setTimeValue(el, ms, durMs) {
   el.setAttribute("aria-valuemin", "0");
-  el.setAttribute("aria-valuemax", String(Math.round(durMs / 1000)));
-  el.setAttribute("aria-valuenow", String(Math.round(ms / 1000)));
+  el.setAttribute("aria-valuemax", String(Math.round(durMs)));
+  el.setAttribute("aria-valuenow", String(Math.round(ms)));
   el.setAttribute("aria-valuetext", t("a11yTimeOfTotal").replace("{time}", fmtTime(ms)).replace("{total}", fmtTime(durMs)));
 }
 
@@ -813,7 +834,6 @@ function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
   $("ve-frame").textContent = t("veFrameNo").replace("{n}", String(frameOf(VE.playhead) + 1));
-  setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 
 // ---------------------------------------------------------------- filmstrip + waveform
@@ -1570,6 +1590,12 @@ $("ve-add-video").addEventListener("click", (e) => {
   startAddVideo(r.left, r.bottom);
 });
 
+// A mute button names what a click will do: Mute while the track plays, Unmute once it is muted.
+function muteKey(id, key, kind) {
+  if (!id.startsWith("ve-mute-") || !VE.audio[kind].mute) return key;
+  return key === "veMuteMic" ? "veUnmuteMic" : "veUnmuteSystem";
+}
+
 // A recording without a microphone track leaves those controls off and says why, instead of
 // offering a slider that could change nothing. An export format that drops audio (gif) does
 // the same to both tracks' controls, on top of any per-track reason.
@@ -1578,14 +1604,14 @@ export function updateAudioLabels() {
   for (const [id, key] of [["ve-mute-mic", "veMuteMic"], ["ve-vol-mic", "veVolumeMic"]]) {
     const el = $(id);
     el.disabled = !VE.hasMic || silent;
-    const label = silent ? t("veNoAudioNote") : VE.hasMic ? t(key) : t("veNoMicTrack");
+    const label = silent ? t("veNoAudioNote") : VE.hasMic ? t(muteKey(id, key, "mic")) : t("veNoMicTrack");
     el.title = label;
     el.setAttribute("aria-label", label);
   }
   for (const [id, key] of [["ve-mute-sys", "veMuteSystem"], ["ve-vol-sys", "veVolumeSystem"]]) {
     const el = $(id);
     el.disabled = !VE.hasSys || silent;
-    const label = silent ? t("veNoAudioNote") : VE.hasSys ? t(key) : t("veNoAudioTrack");
+    const label = silent ? t("veNoAudioNote") : VE.hasSys ? t(muteKey(id, key, "sys")) : t("veNoAudioTrack");
     el.title = label;
     el.setAttribute("aria-label", label);
   }
@@ -1597,9 +1623,15 @@ function updateVolumeValueText(volId) {
   $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", () => $(volId).value));
 }
 
+function syncMuteButton(kind, id) {
+  $(id).classList.toggle("ve-muted-btn", VE.audio[kind].mute);
+  $(id).setAttribute("aria-pressed", VE.audio[kind].mute ? "true" : "false");
+}
+
 function syncAudioButtons() {
-  $("ve-mute-sys").classList.toggle("ve-muted-btn", VE.audio.sys.mute);
-  $("ve-mute-mic").classList.toggle("ve-muted-btn", VE.audio.mic.mute);
+  syncMuteButton("sys", "ve-mute-sys");
+  syncMuteButton("mic", "ve-mute-mic");
+  updateAudioLabels();
   $("ve-vol-sys").value = VE.audio.sys.vol;
   $("ve-vol-mic").value = VE.audio.mic.vol;
   updateVolumeValueText("ve-vol-sys");
@@ -1609,7 +1641,8 @@ function syncAudioButtons() {
 function audioControl(kind, muteId, volId) {
   $(muteId).addEventListener("click", () => {
     VE.audio[kind].mute = !VE.audio[kind].mute;
-    $(muteId).classList.toggle("ve-muted-btn", VE.audio[kind].mute);
+    syncMuteButton(kind, muteId);
+    updateAudioLabels();
     applyPreviewSpeed();
     updateExportNote();
   });

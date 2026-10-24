@@ -666,6 +666,63 @@ async function exportIdleCheck() {
   expect("the label goes back to Back once the export ended", byId["ve-export-cancel"].textContent === "<veBack>");
 }
 
+// Keyboard and screen reader: trim handles are millisecond sliders, mute buttons say what a click
+// does and report their state, op rows are buttons that select and seek, Delete removes the op.
+{
+  const html = fs.readFileSync(path.join(__dirname, "..", "ui", "video.html"), "utf8");
+  const tag = (id) => (html.match(new RegExp(`<[^>]*id="${id}"[^>]*>`)) || [""])[0];
+  for (const id of ["ve-trim-a", "ve-trim-b"]) expect(`${id} is a slider`, /role="slider"/.test(tag(id)), tag(id));
+  expect("the timeline group carries no value attributes", !/aria-value/.test(tag("ve-timeline")) && !/aria-valuenow/.test(fs.readFileSync(path.join(__dirname, "..", "ui", "video.js"), "utf8").replace(/\r\n/g, "\n").split("function renderPlayhead")[1].split("\n}\n")[0]));
+  expect("the mute buttons start with aria-pressed", /aria-pressed=/.test(tag("ve-mute-sys")) && /aria-pressed=/.test(tag("ve-mute-mic")));
+  expect("the export name label points at its field", /<label for="ve-export-name"/.test(html));
+  expect("the shortcuts close button is a plain button", /<button[^>]*id="shortcuts-modal-close"[^>]*type="button"|<button[^>]*type="button"[^>]*id="shortcuts-modal-close"/.test(html));
+
+  const attrs = {};
+  const sb = { t: (k) => `<${k}>`, fmtTime: (ms) => `${ms}ms`, VE: { audio: { sys: { mute: false }, mic: { mute: true } } } };
+  vm.createContext(sb);
+  vm.runInContext([
+    extractBlock("setTimeValue", "function setTimeValue(el, ms, durMs) {"),
+    extractBlock("muteKey", "function muteKey(id, key, kind) {"),
+  ].join("\n"), sb);
+  sb.__el = { setAttribute: (k, v) => { attrs[k] = v; } };
+  vm.runInContext("setTimeValue(__el, 1500, 4000)", sb);
+  expect("a trim handle reports milliseconds", attrs["aria-valuenow"] === "1500" && attrs["aria-valuemax"] === "4000" && attrs["aria-valuemin"] === "0", JSON.stringify(attrs));
+  expect("a trim handle reads out the time", /veA11y|a11yTimeOfTotal/.test(attrs["aria-valuetext"]), attrs["aria-valuetext"]);
+  const mk = (id, key, kind) => vm.runInContext(`muteKey(${JSON.stringify(id)}, ${JSON.stringify(key)}, ${JSON.stringify(kind)})`, sb);
+  expect("an unmuted system track offers Mute", mk("ve-mute-sys", "veMuteSystem", "sys") === "veMuteSystem");
+  expect("a muted mic track offers Unmute", mk("ve-mute-mic", "veMuteMic", "mic") === "veUnmuteMic");
+  sb.VE.audio.sys.mute = true;
+  expect("a muted system track offers Unmute", mk("ve-mute-sys", "veMuteSystem", "sys") === "veUnmuteSystem");
+  expect("a volume slider keeps its name when muted", mk("ve-vol-mic", "veVolumeMic", "mic") === "veVolumeMic");
+
+  // Op rows: the label is a button; click selects (overlay) and seeks; Delete removes.
+  const log = [];
+  const osb = {
+    VE: { selOv: null }, seek: (ms) => log.push(`seek${ms}`), showPanel: (id) => log.push(id), renderOverlayList: () => {}, renderOverlayEditor: () => {},
+    renderRects: () => {}, updateNudgeHint: () => {}, changeCrop: (fn) => { log.push("crop"); fn(); }, removeOps: () => log.push("remove"),
+  };
+  vm.createContext(osb);
+  vm.runInContext([extractBlock("deleteOp", "function deleteOp(op) {"), extractBlock("selectOp", "function selectOp(op) {")].join("\n"), osb);
+  osb.__ov = { tool: "overlay", id: "o9", startMs: 700 };
+  vm.runInContext("selectOp(__ov)", osb);
+  expect("selecting an overlay row opens it and seeks to its start", osb.VE.selOv === "o9" && log.join() === "ve-panel-overlays,seek700", log.join());
+  log.length = 0;
+  osb.__tr = { tool: "trim", startMs: 0 };
+  vm.runInContext("selectOp(__tr)", osb);
+  expect("a plain row only seeks", log.join() === "seek0" && osb.VE.selOv === "o9", log.join());
+  log.length = 0;
+  osb.__sp = { tool: "speed" };
+  vm.runInContext("selectOp(__sp)", osb);
+  expect("a row without a start time does not seek", log.length === 0, log.join());
+  osb.__cr = { tool: "crop" };
+  vm.runInContext("deleteOp(__cr)", osb);
+  vm.runInContext("deleteOp(__tr)", osb);
+  expect("deleting a crop goes through the crop change", log.join() === "crop,remove,remove", log.join());
+  const src = fs.readFileSync(path.join(__dirname, "..", "ui", "video.js"), "utf8").replace(/\r\n/g, "\n");
+  expect("the op row label is a button handling Delete", /label = document\.createElement\("button"\)[\s\S]{0,400}"Delete"/.test(src));
+  expect("the fade label takes its unit from the translation", /\$\{t\("veUnitMs"\)\}/.test(src) && !/op\.outMs\} ms`/.test(src));
+}
+
 // Removing an operation is an undo step: undo brings it back with every
 // field in its old slot, redo removes it again, earlier edits stay as they were.
 {
