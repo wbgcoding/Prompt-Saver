@@ -2199,7 +2199,7 @@ the video editor and the introduction tour ship on).
 - **The library no longer filters by tile colour.** Colours are for looks only; the type, favorite and tag filters stay.
 - **Placeholders have one short spelling.** {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. Prompts, history, trash and imports with the old {#{…}#} spelling are converted automatically.
 - Attachment preview size is a choice of short, medium or long instead of a slider.
-- The reset button of the expert menu sits at the end of the list.
+- **The expert menu reset sits in its own "Reset" group** at the end of the System tab: one full-width button with a line saying your prompts stay, found by the expert search.
 - **The tag filter popup fits its chips.** A few tags no longer leave an empty column.
 - **Hiding the input bar** moved into the toolbar right-click menu, under hiding the top bar; the small button next to Save is gone.
 - **The header logo is plain branding.** It no longer opens the project page; the About window keeps that link.

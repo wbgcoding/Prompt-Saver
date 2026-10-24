@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "Volume video predefinito",
     valBubbleMs: "Durata del fumetto «Copiato!»",
     expertReset: "Ripristina tutto",
+    expGroupReset: "Ripristina",
+    expertResetHint: "Riporta tutte le opzioni esperto ai valori predefiniti. I tuoi prompt restano.",
     expertResetDone: "Impostazioni esperto ripristinate",
     snipSaveCopied: "Screenshot copiato negli appunti.",
     snipSaveKeep: "Salvarlo come pulsante?",

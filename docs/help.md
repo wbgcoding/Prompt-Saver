@@ -83,7 +83,8 @@ still there the next time the app starts, it asks once whether to restore it.
 Every optional feature lives behind an on/off switch, with its own parameters
 right underneath once it's on. The search box scans every tab at once; a feature
 that ships switched off carries a small dot badge. Reset works at three levels:
-one value's own undo icon, a whole group's reset, or everything at once.
+one value's own undo icon, a whole group's reset, or everything at once with
+the "Reset" button at the end of the System tab (your prompts stay).
 
 ### Keyboard-only use
 
@@ -1057,7 +1058,8 @@ einmal gefragt, ob er wiederhergestellt werden soll.
 **Das Expertenmenü**: jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
 Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
-ein Wert, eine ganze Gruppe, oder alles auf einmal.
+ein Wert, eine ganze Gruppe, oder alles auf einmal mit der Schaltfläche
+"Zurücksetzen" am Ende des Tabs System (deine Prompts bleiben erhalten).
 
 **Tastaturbedienung**: Pfeiltasten bewegen einen Fokusring über das Raster
 (an), Enter oder Leertaste kopiert die fokussierte Kachel.

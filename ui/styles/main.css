@@ -2494,8 +2494,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* Padding, not a taller swatch, closes the gap to a dropdown row's own height
    (its select control carries that height on its own). */
 .color-field .value-head { padding-block: 6px; }
-.expert-end { grid-column: 1 / -1; display: flex; justify-content: flex-end; padding: 12px 0 4px; }
-.expert-end .expert-reset { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
 
 /* Expert menu tabs (the menu grew large; tabs keep it tidy). */
 .expert-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
@@ -3267,6 +3265,9 @@ select.modal-input { padding-right: 30px; }
 }
 /* Expert-menu action buttons (open Statistics / Backups / Duplicates). */
 .expert-action { width: 100%; margin-top: 4px; }
+/* The reset button keeps the neutral-until-armed look of .danger-btn. */
+.expert-action-block { display: flex; flex-direction: column; gap: 4px; }
+.expert-action-block > .hint { margin: 0; }
 /* A sub-row's own left margin (.expert-sub, depth-based indent) shrinks a
    width:100% action button's box by the same amount -- otherwise its right
    edge overflows the panel by exactly that margin (the hotkey-set buttons are

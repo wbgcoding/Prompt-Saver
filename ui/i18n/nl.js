@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "Standaard videovolume",
     valBubbleMs: "Duur van de \"Gekopieerd!\"-ballon",
     expertReset: "Alles terugzetten",
+    expGroupReset: "Herstellen",
+    expertResetHint: "Zet alle expertopties terug naar hun standaardwaarden. Je prompts blijven behouden.",
     expertResetDone: "Expertinstellingen teruggezet",
     snipSaveCopied: "Schermafbeelding gekopieerd naar klembord.",
     snipSaveKeep: "Opslaan als knop?",

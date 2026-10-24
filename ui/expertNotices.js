@@ -78,12 +78,20 @@ export function actionRow(a) {
   if (a.type === "hotkey") return hotkeyRow(a.hotkeyKey, a.label);
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "ghost-btn expert-action";
+  btn.className = "ghost-btn expert-action" + (a.danger ? " danger-btn expert-action-danger" : "");
   btn.dataset.action = a.id;
   btn.textContent = t(a.label);
   if (a.tip) btn.title = t(a.tip);
   // Passing the button itself lets a long-running action (ffmpeg-download) show progress in its
   // own label and repurpose a second click as cancel; other handlers ignore the extra argument.
   btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.(btn));
-  return btn;
+  if (!a.hint) return btn;
+  // A button with an explaining line under it travels as one row.
+  const block = document.createElement("div");
+  block.className = "expert-action-block";
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = t(a.hint);
+  block.append(btn, hint);
+  return block;
 }

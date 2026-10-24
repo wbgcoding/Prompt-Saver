@@ -875,6 +875,8 @@ export default {
     valHistoryMax: "Einträge im Kopierverlauf",
     flagHistoryTimestamps: "Zeitstempel im Kopierverlauf speichern",
     expertReset: "Expertenmenü zurücksetzen",
+    expGroupReset: "Zurücksetzen",
+    expertResetHint: "Setzt alle Expertenoptionen auf ihre Standardwerte zurück. Deine Prompts bleiben erhalten.",
     expertResetDone: "Experteneinstellungen zurückgesetzt",
     flagFileAttach: "Dateianhänge",
     flagMultiView: "Mehrere Ansichten",

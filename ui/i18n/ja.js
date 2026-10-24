@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "既定の動画音量",
     valBubbleMs: "「コピーしました！」吹き出しの表示時間",
     expertReset: "エキスパートメニューをリセット",
+    expGroupReset: "リセット",
+    expertResetHint: "すべてのエキスパート設定を初期値に戻します。プロンプトはそのまま残ります。",
     expertResetDone: "エキスパート設定をリセットしました",
     snipSaveCopied: "スクリーンショットをクリップボードにコピーしました。",
     snipSaveKeep: "ボタンとして保存しますか？",

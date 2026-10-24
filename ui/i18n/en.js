@@ -875,6 +875,8 @@ export default {
     valHistoryMax: "Copy history entries",
     flagHistoryTimestamps: "Store copy timestamps",
     expertReset: "Reset expert menu",
+    expGroupReset: "Reset",
+    expertResetHint: "Sets every expert option back to its default. Your prompts stay.",
     expertResetDone: "Expert settings reset",
     flagFileAttach: "File attachments",
     flagMultiView: "Multiple views",

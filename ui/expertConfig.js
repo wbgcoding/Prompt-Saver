@@ -554,6 +554,8 @@ export const EXPERT_TABS = [
     // Switches and caps for finding a fault, not for everyday use: folded until opened.
     { title: "expGroupDiagnostics", flags: ["allowMultipleInstances", "dataDirLock", "demoMode", "mediaMetaBackfill", { key: "recSweepBroken", gate: "screenRecord" }], values: ["errorLogKeepKb", "bgDoneKeepMin"],
       actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }] },
+    // Last on purpose: one red button that puts every expert option back to its default.
+    { title: "expGroupReset", actions: [{ id: "expert-reset", label: "expertReset", hint: "expertResetHint", danger: true }] },
   ] },
 ];
 

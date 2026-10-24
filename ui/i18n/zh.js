@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "默认视频音量",
     valBubbleMs: "“已复制！”气泡时长",
     expertReset: "重置专家菜单",
+    expGroupReset: "重置",
+    expertResetHint: "将所有专家选项恢复为默认值。你的提示词会保留。",
     expertResetDone: "已重置专家设置",
     snipSaveCopied: "截图已复制到剪贴板。",
     snipSaveKeep: "保存为按钮？",

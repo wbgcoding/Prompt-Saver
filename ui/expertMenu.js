@@ -1615,14 +1615,10 @@ function showActiveTab(bar) {
 
 // The tab bar is rebuilt on every render; one observer follows the current bar.
 let tabBarObserver = null;
-// The reset button's wrapper lives in the page once; every render re-appends this same
-// node (clearing the list detaches it), so the click listener and the armed state stay.
-let expertEndEl = null;
 
 export function renderExpert() {
   seedDiagnosticsCollapsed();
   const box = $("expert-flags");
-  expertEndEl ??= $("expert-end");
   const tabBar = $("expert-tabs-bar");
   const keepScroll = box.scrollTop; // survive live re-renders (e.g. a toggled gate)
   const keepTabScroll = tabBar.querySelector(".expert-tabs")?.scrollLeft || 0;
@@ -1821,7 +1817,6 @@ export function renderExpert() {
     empty.textContent = t(!searching && expertOnlyChanged ? "expertNothingChanged" : searching ? "expertSearchNoHits" : "libraryNoResults");
     box.appendChild(empty);
   }
-  box.appendChild(expertEndEl);
   box.scrollTop = keepScroll;
 }
 
@@ -1956,8 +1951,7 @@ export function bindExpertMenu() {
     renderExpert();
   });
   // Two-step confirm: first click arms it red, second within 3s resets.
-  $("expert-reset").addEventListener("click", (e) => {
-    const btn = e.currentTarget;
+  EXPERT_ACTIONS["expert-reset"] = (btn) => {
     if (!armButton(btn, t("expertResetConfirm"))) {
       clearTimeout(expertResetTimer);
       expertResetTimer = setTimeout(() => disarmButton(btn, t("expertReset")), DISARM_MS);
@@ -1966,7 +1960,7 @@ export function bindExpertMenu() {
     clearTimeout(expertResetTimer);
     disarmButton(btn, t("expertReset"));
     onResetExpert();
-  });
+  };
 
   $("banner-more").addEventListener("click", () => { bannerFront += 1; syncBannerStack(); });
 

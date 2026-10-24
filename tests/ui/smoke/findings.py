@@ -242,7 +242,7 @@ def run(browser, tmp):
     if (rowReset && !rowReset.classList.contains('hidden')) errs.push('564-2: the demo switch offers a per-row reset');
     // reset all: the backend wipes the flag, so the marker is written back
     window.__SMOKE_ARGS__.length = 0;
-    const rb = document.getElementById('expert-reset');
+    const rb = document.querySelector('#expert-flags [data-action="expert-reset"]');
     rb.click(); await sleep(150);
     rb.click(); await sleep(500);
     const seq = (window.__SMOKE_ARGS__ || []).filter(([c, a]) => c === 'reset_expert' || (c === 'set_ui_flag' && a.key === 'demoMode'));

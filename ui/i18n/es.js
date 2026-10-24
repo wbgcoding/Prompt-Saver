@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "Volumen de vídeo predeterminado",
     valBubbleMs: "Duración de la burbuja «¡Copiado!»",
     expertReset: "Restablecer menú experto",
+    expGroupReset: "Restablecer",
+    expertResetHint: "Devuelve todas las opciones de experto a sus valores predeterminados. Tus prompts se conservan.",
     expertResetDone: "Ajustes de experto restablecidos",
     snipSaveCopied: "Captura copiada al portapapeles.",
     snipSaveKeep: "¿Guardarla como botón?",

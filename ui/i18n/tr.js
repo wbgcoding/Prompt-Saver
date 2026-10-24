@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "Varsayılan video ses düzeyi",
     valBubbleMs: "\"Kopyalandı!\" balonu süresi",
     expertReset: "Tümünü sıfırla",
+    expGroupReset: "Sıfırla",
+    expertResetHint: "Tüm uzman seçeneklerini varsayılan değerlerine döndürür. İstemlerin korunur.",
     expertResetDone: "Uzman ayarları sıfırlandı",
     snipSaveCopied: "Ekran görüntüsü panoya kopyalandı.",
     snipSaveKeep: "Düğme olarak kaydedilsin mi?",

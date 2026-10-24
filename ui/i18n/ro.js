@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "Volum video implicit",
     valBubbleMs: "Durata bulei „Copiat!”",
     expertReset: "Resetează tot",
+    expGroupReset: "Resetare",
+    expertResetHint: "Readuce toate opțiunile pentru experți la valorile implicite. Prompturile tale rămân.",
     expertResetDone: "Setări expert resetate",
     snipSaveCopied: "Captură copiată în clipboard.",
     snipSaveKeep: "Salvezi ca buton?",

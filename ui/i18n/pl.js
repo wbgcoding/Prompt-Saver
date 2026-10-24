@@ -815,6 +815,8 @@ export default {
     valVideoVolume: "Domyślna głośność wideo",
     valBubbleMs: "Czas trwania dymka „Skopiowano!”",
     expertReset: "Przywróć domyślne",
+    expGroupReset: "Resetuj",
+    expertResetHint: "Przywraca wszystkie opcje eksperta do wartości domyślnych. Twoje prompty zostają.",
     expertResetDone: "Zresetowano ustawienia eksperta",
     snipSaveCopied: "Zrzut skopiowany do schowka.",
     snipSaveKeep: "Zapisać jako przycisk?",
