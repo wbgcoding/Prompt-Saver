@@ -187,6 +187,7 @@ export default {
     tipSnipEditDefaultTool: "Düzenleyici açıldığında hangi aracın etkin olacağı. “Son kullanılan” en son seçtiğin araçla başlar, ilk açılışta el aracıyla.",
     optSnipTextBackNone: "Yok",
     optSnipTextBackPlate: "Plaka",
+    optSnipTextBackWhite: "Beyaz",
     optSnipTextBackOutline: "Anahat",
     ocrBtnTitle: "Metni tanı (OCR)",
     snipModalOcr: "Metni tanı",

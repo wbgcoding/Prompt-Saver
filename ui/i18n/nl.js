@@ -187,6 +187,7 @@ export default {
     tipSnipEditDefaultTool: "Welk gereedschap actief is wanneer de bewerker wordt geopend. „Laatst gebruikt” start met het gereedschap dat je de vorige keer koos, bij de allereerste keer met de hand.",
     optSnipTextBackNone: "Geen",
     optSnipTextBackPlate: "Vlak",
+    optSnipTextBackWhite: "Wit",
     optSnipTextBackOutline: "Omtrek",
     ocrBtnTitle: "Tekst herkennen (OCR)",
     snipModalOcr: "Tekst herkennen",

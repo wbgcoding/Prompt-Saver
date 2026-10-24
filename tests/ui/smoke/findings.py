@@ -977,6 +977,39 @@ def run(browser, tmp):
       if (panel.getBoundingClientRect().width < 240) errs.push('978: the panel is narrower than its minimum width');
     }
 """)
+    failed += ar_probe('bz979', 'screenshot editor: the text box is narrow, black on white and the committed text lands where it was typed', 'index', '1000x780', '', ba_common + r"""
+    // 979: the box wraps the typed text; the committed text sits exactly where the box showed it.
+    if (!(await baOpen(''))) { errs.push('979: the editor did not open'); }
+    else {
+      await baTool('text');
+      const base = document.getElementById('snip-edit-base');
+      const cr = base.getBoundingClientRect(), z = cr.width / base.width;
+      await baClick(60, 50);
+      const ti = document.getElementById('snip-edit-text-input');
+      if (ti.classList.contains('hidden')) { errs.push('979: the text tool did not open the box'); }
+      else {
+        ti.value = 'Hi'; ti.dispatchEvent(new Event('input', { bubbles: true })); await sleep(40);
+        const cs = getComputedStyle(ti), tr = ti.getBoundingClientRect();
+        if (tr.width >= 80) errs.push('979: the box for "Hi" is ' + Math.round(tr.width) + ' px wide, expected under 80');
+        if (cs.backgroundColor !== 'rgb(255, 255, 255)' || cs.color !== 'rgb(0, 0, 0)') errs.push('979: the box is ' + cs.color + ' on ' + cs.backgroundColor + ', expected black on white');
+        const fontPx = parseFloat(cs.fontSize);
+        if (Math.abs(tr.height - (fontPx * 1.25 + 2)) > 0.6) errs.push('979: the box is ' + tr.height + ' px high, expected ' + (fontPx * 1.25 + 2));
+        const boxX = (tr.left + 1 + 4 - cr.left) / z, boxY = (tr.top + 1 - cr.top) / z;
+        const drawn = [];
+        const orig = CanvasRenderingContext2D.prototype.fillText;
+        CanvasRenderingContext2D.prototype.fillText = function (text, x, y) { drawn.push({ text: String(text), x, y }); return orig.apply(this, arguments); };
+        ti.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(120);
+        CanvasRenderingContext2D.prototype.fillText = orig;
+        const hit = drawn.filter((d) => d.text === 'Hi').pop();
+        if (!hit) errs.push('979: the committed text was not drawn');
+        else {
+          if (Math.abs(hit.x - boxX) > 1) errs.push('979: the text lands at x ' + hit.x + ', the box showed it at ' + boxX.toFixed(2));
+          if (Math.abs(hit.y - boxY) > 1) errs.push('979: the text lands at y ' + hit.y + ', the box showed it at ' + boxY.toFixed(2));
+        }
+      }
+    }
+""")
     failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>
 """, r"""
     await bootReady();

@@ -2198,16 +2198,19 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 #snip-edit-text-input {
   position: absolute;
   z-index: 5;
+  box-sizing: border-box;
   border: 1px dashed var(--accent);
-  background: var(--surface);
-  color: var(--fg);
-  padding: 2px 4px;
+  /* Black on white while editing, whatever the theme: that is how the text is drawn. */
+  background: #fff;
+  color: #000;
+  line-height: 1.25;
+  padding: 0 4px;
+  height: calc(1.25em + 2px);
   /* Matches snipEditDrawTextOp's canvas font exactly (also "sans-serif",
      not inherit) so the live input previews the same size/shape the exported
      image will actually have -- inherit picked up the app's own UI font here,
      which is not what gets drawn. */
   font-family: sans-serif;
-  min-width: 60px;
 }
 .snip-edit-measure {
   position: absolute;

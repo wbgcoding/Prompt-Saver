@@ -187,6 +187,7 @@ export default {
     tipSnipEditDefaultTool: "打开编辑器时激活的工具。“上次使用的”会从上次选择的工具开始，第一次打开时使用抓手。",
     optSnipTextBackNone: "无",
     optSnipTextBackPlate: "背景板",
+    optSnipTextBackWhite: "白色",
     optSnipTextBackOutline: "轮廓",
     ocrBtnTitle: "识别文本 (OCR)",
     snipModalOcr: "识别文本",

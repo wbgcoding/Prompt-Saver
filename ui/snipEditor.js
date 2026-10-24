@@ -263,7 +263,9 @@ export function initSnipEditor() {
         return Number.isFinite(v) && v >= lim[0] && v <= lim[1] ? v : def;
       };
       SE.perTool[tool] = {
-        color: txt("snipDefaultColor") || COLORS[1] || "#ef4444",
+        // Text starts black (on the white box); the other tools share the default colour. Every
+        // tool keeps its own colour for the rest of the session.
+        color: tool === "text" ? "#000000" : (txt("snipDefaultColor") || COLORS[1] || "#ef4444"),
         width: pick("width", widths[1]),
         filled: false,
         fontPx: pick("fontPx", SNIP_DEFAULT_SIZES.textPx),
@@ -886,7 +888,7 @@ export function initSnipEditor() {
       const op = SE.ops[i];
       if (op.tool === "text") {
         const w = snipEditMeasureTextWidth(op);
-        const h = op.fontPx * 1.3;
+        const h = op.fontPx * 1.25;
         if (pt.x >= op.point.x && pt.x <= op.point.x + w && pt.y >= op.point.y - 2 && pt.y <= op.point.y + h) return op;
         continue;
       }
@@ -944,7 +946,7 @@ export function initSnipEditor() {
       const op = SE.ops[i];
       if (op.tool !== "text") continue;
       const w = snipEditMeasureTextWidth(op);
-      const h = op.fontPx * 1.3;
+      const h = op.fontPx * 1.25;
       if (pt.x >= op.point.x && pt.x <= op.point.x + w && pt.y >= op.point.y - 2 && pt.y <= op.point.y + h) return op;
     }
     return null;
@@ -953,12 +955,24 @@ export function initSnipEditor() {
     const ts = snipEditToolState("text");
     SE.textEdit = { point: pt };
     snipEditTextInput.value = "";
-    snipEditTextInput.style.left = `${pt.x * snipEditScale()}px`;
-    snipEditTextInput.style.top = `${pt.y * snipEditScale()}px`;
+    // The box sits 1 px border + 4 px padding left and 1 px border above the text, so the
+    // committed text lands exactly where it was typed.
+    snipEditTextInput.style.left = `${pt.x * snipEditScale() - 5}px`;
+    snipEditTextInput.style.top = `${pt.y * snipEditScale() - 1}px`;
     snipEditTextInput.style.fontSize = `${ts.fontPx * snipEditScale()}px`;
-    snipEditTextInput.style.color = ts.color;
     snipEditTextInput.classList.remove("hidden");
+    snipEditFitTextInput();
     snipEditTextInput.focus();
+  }
+  // The box is as wide as the typed text (+12 px, at least 40 px).
+  function snipEditFitTextInput() {
+    const ts = snipEditToolState("text");
+    const ctx = snipEditBaseCtx;
+    ctx.save();
+    ctx.font = `${ts.fontPx * snipEditScale()}px sans-serif`;
+    const w = ctx.measureText(snipEditTextInput.value).width;
+    ctx.restore();
+    snipEditTextInput.style.width = `${Math.max(40, Math.ceil(w) + 12)}px`;
   }
   function snipEditCommitTextInput() {
     if (!SE.textEdit) return;
@@ -1179,7 +1193,7 @@ export function initSnipEditor() {
     if (tool === "text") {
       box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; snipRememberSize("text", "fontPx", v); }, [12, 16, 24, 32, 48, 64, 96]));
       box.appendChild(snipEditBuildSelectField(t("snipEditTextBack"), ts.back, [
-        ["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")],
+        ["none", t("optSnipTextBackNone")], ["white", t("optSnipTextBackWhite")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")],
       ], (v) => { ts.back = v; snipEditRenderContext(); }));
       if (ts.back === "outline") {
         box.appendChild(snipEditBuildNumField(t("snipEditTextOutline"), ts.outlinePx, 1, 12, t("snipEditTextOutlineTip"), (v) => { ts.outlinePx = v; snipRememberSize("text", "outlinePx", v); }));
@@ -1567,6 +1581,7 @@ export function initSnipEditor() {
     if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); snipEditCommitTextInput(); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); snipEditCancelTextInput(); }
   });
+  snipEditTextInput.addEventListener("input", snipEditFitTextInput);
   snipEditTextInput.addEventListener("blur", () => { if (SE.textEdit) snipEditCommitTextInput(); });
 
   // Only a text-entry target owns its keys. The editor's own toggles and sliders keep

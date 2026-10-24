@@ -576,9 +576,10 @@ caught, and disappears the instant the drag ends. Holding Alt while dragging
 turns snapping off for that one drag. Each editor has its own switch for this,
 sharing one distance setting between them.
 
-The text tool's background is a choice of none, a solid plate or an outline,
-so white or light-colored text stays readable on a light background too;
-plate was the only option before, and stays the default. An expert setting
+The text tool's background is a choice of none, white, a translucent plate or
+an outline, so the text stays readable on any background; black text on a
+white box is the default, and the text box in the editor is only as wide as
+what you type. An expert setting
 picks the outline width, and its color, black or white, follows the text
 color automatically for the best contrast.
 
@@ -1384,10 +1385,10 @@ Ziehen endet. Gedrückt gehaltenes Alt schaltet das Einrasten für diesen einen
 Zug ab. Jeder Editor hat dafür einen eigenen Schalter, die Toleranz teilen sie
 sich.
 
-Der Hintergrund des Textwerkzeugs ist jetzt eine Wahl zwischen keinem, einer
-deckenden Platte oder einem Umriss, damit auch weißer oder heller Text auf
-hellem Untergrund lesbar bleibt; Platte war bisher die einzige Möglichkeit und
-bleibt die Vorgabe. Eine Expertenzeile stellt die Umrissbreite ein, seine
+Der Hintergrund des Textwerkzeugs ist eine Wahl zwischen keinem, Weiß, einer
+durchscheinenden Platte oder einem Umriss, damit der Text auf jedem Untergrund
+lesbar bleibt; Vorgabe ist schwarze Schrift auf einem weißen Feld, und das
+Textfeld im Editor ist nur so breit wie das, was du tippst. Eine Expertenzeile stellt die Umrissbreite ein, seine
 Farbe, schwarz oder weiß, folgt für den besten Kontrast automatisch der
 Textfarbe.
 

@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `snipedit`, `snipdraw`, or another
+`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `snipedit`, `snipdraw`, `sniptext`, or another
 page such as `video.html`.
 A group (`@settings`, `@library`, `@tiles`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -95,13 +95,18 @@ ACTS = {
     "tagpop_on": "$('grid-tag-btn').click(); await sleep(300); document.querySelector('.grid-tag-pop .tag-filter').click(); await sleep(300);",
     "snipedit": SNIP_OPEN,
     "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);",
+    "sniptext": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
+                "const lv = $('snip-edit-live'); const lr = lv.getBoundingClientRect();"
+                "lv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
+                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
+                "await sleep(200); const ti = $('snip-edit-text-input'); ti.value = 'Hi'; ti.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200);",
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "help", "help_capture", "stats", "backup"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
-    "@snip": ["snipedit", "snipdraw"],
+    "@snip": ["snipedit", "snipdraw", "sniptext"],
 }
 
 

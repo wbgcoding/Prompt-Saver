@@ -131,6 +131,15 @@ export function createSnipDraw(SE, snipEditBaseCtx, SNIP_DEFAULT_SIZES, SNIP_ARR
     ctx.textBaseline = "top";
     const w = ctx.measureText(op.text).width;
     const h = op.fontPx * 1.25;
+    if (op.back === "white") {
+      // Solid white box, no shadow: the letters stay crisp on any background.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(op.point.x - 4, op.point.y - 2, w + 8, h + 4);
+      ctx.fillStyle = op.color;
+      ctx.fillText(op.text, op.point.x, op.point.y);
+      ctx.restore();
+      return;
+    }
     if (op.back === "plate") {
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fillRect(op.point.x - 4, op.point.y - 2, w + 8, h + 4);

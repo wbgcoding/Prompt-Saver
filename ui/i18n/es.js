@@ -187,6 +187,7 @@ export default {
     tipSnipEditDefaultTool: "Qué herramienta está activa al abrir el editor. «Última usada» empieza con la herramienta elegida la última vez, y con la mano la primera vez que se abre.",
     optSnipTextBackNone: "Ninguno",
     optSnipTextBackPlate: "Bloque",
+    optSnipTextBackWhite: "Blanco",
     optSnipTextBackOutline: "Contorno",
     ocrBtnTitle: "Reconocer texto (OCR)",
     snipModalOcr: "Reconocer texto",

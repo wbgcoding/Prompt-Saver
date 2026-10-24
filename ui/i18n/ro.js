@@ -187,6 +187,7 @@ export default {
     tipSnipEditDefaultTool: "Care instrument este activ la deschiderea editorului. „Ultimul folosit” pornește cu instrumentul ales ultima dată, la prima deschidere cu mâna.",
     optSnipTextBackNone: "Niciunul",
     optSnipTextBackPlate: "Placă",
+    optSnipTextBackWhite: "Alb",
     optSnipTextBackOutline: "Contur",
     ocrBtnTitle: "Recunoaște textul (OCR)",
     snipModalOcr: "Recunoaște textul",

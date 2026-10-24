@@ -96,12 +96,12 @@ export const EXPERT_DROPDOWNS = {
   snipTextBack: {
     label: "valSnipTextBack",
     gate: "snipEditor",
-    def: "plate",
-    options: () => [["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
+    def: "white",
+    options: () => [["none", t("optSnipTextBackNone")], ["white", t("optSnipTextBackWhite")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
     get: () => {
       const stored = settings.ui_texts?.snipTextBack;
       if (stored) return stored;
-      return settings.ui_flags?.snipTextPlate === false ? "none" : "plate";
+      return settings.ui_flags?.snipTextPlate === false ? "none" : "white";
     },
     set: async (v) => {
       await persistUiText("snipTextBack", v);

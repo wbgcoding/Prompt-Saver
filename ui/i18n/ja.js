@@ -187,6 +187,7 @@ export default {
     tipSnipEditDefaultTool: "エディターを開いたときにアクティブになるツール。「前回使用したもの」は前回選んだツールで始まり、初回はハンドになります。",
     optSnipTextBackNone: "なし",
     optSnipTextBackPlate: "背景板",
+    optSnipTextBackWhite: "白",
     optSnipTextBackOutline: "アウトライン",
     ocrBtnTitle: "テキストを認識 (OCR)",
     snipModalOcr: "テキストを認識",

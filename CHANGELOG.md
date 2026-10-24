@@ -360,7 +360,7 @@ the video editor and the introduction tour ship on).
 - **Text outline, in both editors.** The text tool's background is now a
   choice of none, a solid plate or an outline, so white or light-coloured
   text stays readable on a light background too. Plate was the only option
-  before and stays the default; an expert setting picks the outline width,
+  before; an expert setting picks the default and the outline width,
   and its colour, black or white, follows the text colour for the best
   contrast.
 - **Move a selected shape or overlay with the arrow keys.** Holding Ctrl
@@ -588,6 +588,11 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **The screenshot editor's text box is narrow and black on white.** The box
+  now wraps the letters you type instead of stretching across the picture, shows
+  black text on white, and the text lands exactly where you typed it. Text
+  starts black on a white backing (new choice "White" next to none, plate and
+  outline) and remembers its own colour apart from the other tools.
 - **The screenshot editor's options stay put when you change a size.** Picking
   a stroke width or typing a number no longer rebuilds the options panel, so it
   does not jump and the keyboard focus stays in the field. Saving the last size
