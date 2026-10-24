@@ -516,18 +516,52 @@ pub(crate) const LANG_CODES: [&str; 10] = [
 
 #[link(name = "kernel32")]
 extern "system" {
-    fn GetUserDefaultLocaleName(name: *mut u16, len: i32) -> i32;
+    fn GetUserPreferredUILanguages(
+        flags: u32,
+        num_languages: *mut u32,
+        buffer: *mut u16,
+        buffer_len: *mut u32,
+    ) -> i32;
+    fn GetUserDefaultUILanguage() -> u16;
+    fn LCIDToLocaleName(locale: u32, name: *mut u16, len: i32, flags: u32) -> i32;
 }
 
-// The Windows user locale as a BCP-47 tag such as "de-DE"; empty when it cannot be read.
+const MUI_LANGUAGE_NAME: u32 = 0x8;
+
+// First entry of a double-nul terminated multi-string buffer; empty when there is none.
+pub(crate) fn first_multi_sz(buf: &[u16]) -> String {
+    let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    String::from_utf16_lossy(&buf[..end])
+}
+
+// The Windows display language as a BCP-47 tag such as "de-DE" (the language the interface
+// follows, not the regional format); empty when it cannot be read.
 pub(crate) fn system_locale() -> String {
-    // LOCALE_NAME_MAX_LENGTH is 85 units including the terminating nul.
-    let mut buf = [0u16; 85];
-    let n = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
-    if n <= 1 {
-        return String::new();
+    let mut count: u32 = 0;
+    let mut len: u32 = 0;
+    let sized = unsafe {
+        GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, std::ptr::null_mut(), &mut len)
+    };
+    if sized != 0 && len > 1 {
+        let mut buf = vec![0u16; len as usize];
+        let ok = unsafe {
+            GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, buf.as_mut_ptr(), &mut len)
+        };
+        if ok != 0 {
+            let first = first_multi_sz(&buf);
+            if !first.is_empty() {
+                return first;
+            }
+        }
     }
-    String::from_utf16_lossy(&buf[..(n as usize - 1)])
+    // Fallback: the install-independent UI language id, converted to a locale name.
+    let lcid = unsafe { GetUserDefaultUILanguage() } as u32;
+    let mut name = [0u16; 85];
+    let n = unsafe { LCIDToLocaleName(lcid, name.as_mut_ptr(), name.len() as i32, 0) };
+    if n > 1 {
+        return String::from_utf16_lossy(&name[..(n as usize - 1)]);
+    }
+    String::new()
 }
 
 pub(crate) fn resolve_lang(pref: &str) -> &'static str {

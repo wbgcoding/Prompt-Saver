@@ -254,3 +254,19 @@ fn the_system_locale_is_a_non_empty_language_tag() {
     assert!(tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "odd locale tag: {tag}");
     assert!(tag.chars().next().is_some_and(|c| c.is_ascii_alphabetic()));
 }
+
+#[test]
+fn the_first_entry_of_a_multi_string_buffer_is_the_display_language() {
+    let enc = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+    // "en-US\0de-DE\0\0" as GetUserPreferredUILanguages fills it.
+    let mut buf = enc("en-US");
+    buf.push(0);
+    buf.extend(enc("de-DE"));
+    buf.extend([0, 0]);
+    assert_eq!(crate::model::first_multi_sz(&buf), "en-US");
+    // A single entry, a buffer with no terminator and an empty list.
+    assert_eq!(crate::model::first_multi_sz(&enc("fr-FR\0\0")), "fr-FR");
+    assert_eq!(crate::model::first_multi_sz(&enc("ja-JP")), "ja-JP");
+    assert_eq!(crate::model::first_multi_sz(&[0, 0]), "");
+    assert_eq!(crate::model::first_multi_sz(&[]), "");
+}
