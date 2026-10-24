@@ -165,7 +165,8 @@ rem pdfium.dll is compiled INTO the exe (see pdfium_lib_path in images.rs) and u
 rem on first use, so nothing has to travel next to the portable exe any more.
 rem ffmpeg.exe is the opposite: it is NOT embedded (100+ MB). If src-tauri\ffmpeg.exe
 rem is present, tauri.conf.json's bundle.resources ships it inside the installer
-rem automatically; the portable exe here in dist\ never gets a copy and instead
+rem automatically, together with src-tauri\ffmpeg-LICENSE (the LICENSE file from the
+rem zip root, saved under that name); the portable exe here in dist\ never gets a copy and instead
 rem offers to download ffmpeg itself on first need (see ffmpeg_search_path in ffmpeg.rs).
 
 echo.

@@ -1243,6 +1243,7 @@ Section Uninstall
   ; (kept when this uninstall is only the first half of an update or reinstall)
   ${If} $KeepTools <> 1
     Delete "$INSTDIR\ffmpeg.exe"
+    Delete "$INSTDIR\ffmpeg-LICENSE"
     Delete "$INSTDIR\ffprobe.exe"
   ${EndIf}
   RMDir "$INSTDIR"

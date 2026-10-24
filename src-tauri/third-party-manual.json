@@ -18,6 +18,6 @@
     "version": "9.0.1 (gyan.dev essentials build)",
     "license": "GPL-3.0-or-later",
     "licenseId": "GPL-3.0-or-later",
-    "note": "Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe directly; the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1"
+    "note": "Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe directly, together with its license text (ffmpeg-LICENSE); the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1. Corresponding source for this build: that release page links it; the upstream tag is https://github.com/FFmpeg/FFmpeg/tree/n9.0.1 and the source archive is https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz"
   }
 ]

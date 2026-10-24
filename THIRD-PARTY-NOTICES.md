@@ -283,6 +283,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 
 - **PDFium** (BSD-3-Clause): Compiled into the executable and unpacked to a temporary folder the first time a PDF preview is rendered. Source: https://github.com/bblanchon/pdfium-binaries
 - **SQLite** (Public Domain): https://www.sqlite.org/copyright.html
-- **FFmpeg** (GPL-3.0-or-later): Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe directly; the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1
+- **FFmpeg** (GPL-3.0-or-later): Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe directly, together with its license text (ffmpeg-LICENSE); the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1. Corresponding source for this build: that release page links it; the upstream tag is https://github.com/FFmpeg/FFmpeg/tree/n9.0.1 and the source archive is https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz
 
 The full text of every license named above is shown in the app itself (About > Third-party licenses, expand any entry) and is embedded in the executable at build time from `src-tauri/license-texts/`.

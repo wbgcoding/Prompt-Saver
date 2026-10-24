@@ -173,9 +173,11 @@ Video export/conversion shells out to ffmpeg, which the installer ships as a
 plain file rather than compiling in. Download the gyan.dev "essentials" build
 (currently pinned to release
 [9.0.1](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)), extract
-`ffmpeg.exe` from the zip's `bin/` folder and put it in `src-tauri/` before
-building, since the installer bundle step fails without it (the portable exe still
-builds fine; it offers to download ffmpeg itself on first need instead).
+`ffmpeg.exe` from the zip's `bin/` folder and the zip's root `LICENSE` file (save it as
+`ffmpeg-LICENSE`) and put both in `src-tauri/` before building, since the installer
+bundle step fails without them (the portable exe still builds fine; it offers to
+download ffmpeg itself on first need instead). The installer carries the license text
+beside ffmpeg.exe, and the notices list the source of the pinned build.
 
 ```bat
 build.bat
@@ -226,7 +228,7 @@ point the app's data folder at it, or copy the file next to the portable exe.
 
 ## Tech stack
 
-[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `windows-capture` (screen recording), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg/ffprobe download extraction).
+[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg/ffprobe download extraction).
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
