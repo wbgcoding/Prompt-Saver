@@ -72,20 +72,26 @@ pub(crate) fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
     inflate_capped(DeflateDecoder::new(packed))
 }
 
+// Fill `buf` from the operating system's random source. A machine that cannot supply
+// randomness cannot encrypt safely, so this stops instead of continuing with a weak value.
+fn os_random(buf: &mut [u8]) {
+    use rand::TryRng;
+    rand::rngs::SysRng.try_fill_bytes(buf).expect("operating system random source");
+}
+
 pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
-    use rand::RngCore;
     let body = deflate(plain)?;
     let mut out = Vec::with_capacity(body.len() + 64);
     out.extend_from_slice(BACKUP_MAGIC);
     let mut nonce = [0u8; 12];
-    rand::rngs::OsRng.fill_bytes(&mut nonce);
+    os_random(&mut nonce);
     let key_bytes: [u8; 32] = match password {
         Some(pw) => {
             out.push(3); // password + deflate
             let mut salt = [0u8; 16];
-            rand::rngs::OsRng.fill_bytes(&mut salt);
+            os_random(&mut salt);
             let k = backup_derive_key(pw, &salt)?;
             out.extend_from_slice(&salt);
             k
@@ -176,9 +182,8 @@ pub(crate) fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32],
 pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
-    use rand::RngCore;
     let mut nonce = [0u8; 12];
-    rand::rngs::OsRng.fill_bytes(&mut nonce);
+    os_random(&mut nonce);
     let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
     let ct = cipher
         .encrypt(&Nonce::from(nonce), plain.as_bytes())
@@ -544,9 +549,8 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
     let (mut salt_b64, mut verify_b64) = read_meta();
     let mut fresh_key: Option<[u8; 32]> = None;
     if salt_b64.is_empty() {
-        use rand::RngCore;
         let mut salt = [0u8; 16];
-        rand::rngs::OsRng.fill_bytes(&mut salt);
+        os_random(&mut salt);
         let key = derive_off_thread(&password, move |pw| secret_derive_key(pw, &salt)).await?;
         let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
         let created = {

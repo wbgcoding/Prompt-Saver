@@ -134,7 +134,7 @@ pub(crate) fn install_webview2_runtime() -> bool {
     use std::os::windows::process::CommandExt;
     const BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     let resp = match download_agent().get(BOOTSTRAPPER_URL)
-        .set("User-Agent", brand::USER_AGENT)
+        .header("User-Agent", brand::USER_AGENT)
         .call()
     {
         Ok(r) => r,
@@ -143,6 +143,7 @@ pub(crate) fn install_webview2_runtime() -> bool {
     const CAP: u64 = 8 * 1024 * 1024;
     let mut bytes = Vec::new();
     if resp
+        .into_body()
         .into_reader()
         .take(CAP)
         .read_to_end(&mut bytes)

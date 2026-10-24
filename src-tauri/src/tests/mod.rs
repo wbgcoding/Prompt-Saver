@@ -32,6 +32,7 @@ mod fix_review;
 mod media_fixes;
 #[cfg(windows)]
 mod win_windows;
+mod http_client;
 mod data_dir_cleanup;
 mod final_fixes;
 

@@ -214,23 +214,27 @@ pub(crate) fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
 // finish a big file; the connect and each single read are bounded instead, which still ends a
 // stalled transfer.
 pub(crate) fn download_agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(30))
-        .timeout_read(std::time::Duration::from_secs(60))
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(std::time::Duration::from_secs(30)))
+        .timeout_per_read(Some(std::time::Duration::from_secs(60)))
         .build()
+        .into()
 }
 
 pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
     let resp = download_agent().get(FFMPEG_URL)
-        .set("User-Agent", brand::USER_AGENT)
+        .header("User-Agent", brand::USER_AGENT)
         .call()
         .map_err(|e| format!("download: {}", e))?;
-    let total: u64 = resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let total: u64 = resp.headers().get("Content-Length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     // Reserve the announced size once instead of regrowing a 100 MB buffer by doubling; a lying
     // header is capped by the limit the loop enforces.
     let mut bytes = Vec::with_capacity(total.min(FFMPEG_ZIP_MAX_BYTES) as usize);
     use std::io::Read;
-    let mut reader = resp.into_reader();
+    let mut reader = resp.into_body().into_reader();
     let mut buf = vec![0u8; 256 * 1024];
     // Progress goes out only when the shown value changes (whole percent, or every MiB without a
     // length): every report locks the store, updates the taskbar and wakes every window, which

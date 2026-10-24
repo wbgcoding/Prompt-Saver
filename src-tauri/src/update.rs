@@ -28,16 +28,27 @@ pub(crate) struct UpdateInfo {
     pub(crate) skipped: bool,
 }
 
+// The response body as text, capped at 10 MiB; invalid UTF-8 is an error, not a repair.
+pub(crate) fn body_text(resp: ureq::http::Response<ureq::Body>) -> Option<String> {
+    resp.into_body()
+        .into_with_config()
+        .limit(10 * 1024 * 1024)
+        .read_to_string()
+        .ok()
+}
+
 // Latest release tag, installer asset URL and changelog body. None on any
 // failure (offline, private repo, rate limit): checks never disturb the app.
 pub(crate) fn fetch_latest() -> Option<(String, String, String)> {
-    let body = ureq::get(&update_api())
-        .set("User-Agent", brand::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(10))
-        .call()
-        .ok()?
-        .into_string()
-        .ok()?;
+    let body = body_text(
+        ureq::get(&update_api())
+            .header("User-Agent", brand::USER_AGENT)
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(10)))
+            .build()
+            .call()
+            .ok()?,
+    )?;
     let json: serde_json::Value = serde_json::from_str(&body).ok()?;
     let tag = json["tag_name"].as_str()?.trim_start_matches('v').to_string();
     let url = json["assets"].as_array()?.iter().find_map(|a| {
@@ -625,13 +636,16 @@ pub(crate) async fn whats_new_refresh(since: Option<String>) -> Result<Vec<Whats
     tauri::async_runtime::spawn_blocking(move || {
         let url = format!("https://raw.githubusercontent.com/{}/main/docs/release-notes.md", brand::REPO);
         let resp = ureq::get(&url)
-            .set("User-Agent", brand::USER_AGENT)
-            .timeout(std::time::Duration::from_secs(10))
+            .header("User-Agent", brand::USER_AGENT)
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(10)))
+            .build()
             .call()
             .map_err(|e| format!("download: {}", e))?;
         let mut bytes = Vec::new();
         use std::io::Read;
-        resp.into_reader()
+        resp.into_body()
+            .into_reader()
             .take(RELEASE_NOTES_MAX_BYTES)
             .read_to_end(&mut bytes)
             .map_err(|e| format!("read: {}", e))?;
@@ -797,12 +811,13 @@ pub(crate) fn update_script_content(installer: &Path, app_exe: &Path) -> Result<
 // AppHandle crossing the boundary.
 pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     let resp = download_agent().get(&url)
-        .set("User-Agent", brand::USER_AGENT)
+        .header("User-Agent", brand::USER_AGENT)
         .call()
         .map_err(|e| format!("download: {}", e))?;
     let mut bytes = Vec::new();
     use std::io::Read;
-    resp.into_reader()
+    resp.into_body()
+        .into_reader()
         .take(UPDATE_MAX_BYTES)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("read: {}", e))?;
@@ -823,11 +838,13 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     // mismatch. Every release publishes the hash (`release:publish` in package.json); if one
     // ever does not, the update is done by hand.
     let want = ureq::get(&format!("{}.sha256", url))
-        .set("User-Agent", brand::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
+        .header("User-Agent", brand::USER_AGENT)
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build()
         .call()
         .ok()
-        .and_then(|r| r.into_string().ok())
+        .and_then(body_text)
         .map(|t| t.split_whitespace().next().unwrap_or("").to_ascii_lowercase())
         .filter(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
         .ok_or_else(|| "no usable checksum published for this update, download rejected".to_string())?;
@@ -841,11 +858,13 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     // Origin: the hash proves the download is intact, the signature that the publisher made
     // it. Someone who could replace both release files still has no signing key.
     let sig = ureq::get(&format!("{}.sig", url))
-        .set("User-Agent", brand::USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
+        .header("User-Agent", brand::USER_AGENT)
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build()
         .call()
         .ok()
-        .and_then(|r| r.into_string().ok())
+        .and_then(body_text)
         .unwrap_or_default();
     if !update_signature_valid(&digest, &sig, UPDATE_PUBLIC_KEY_B64) {
         return Err("update signature invalid: download rejected".to_string());

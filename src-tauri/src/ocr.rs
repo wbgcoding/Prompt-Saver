@@ -435,9 +435,9 @@ fn ps_single_quote(s: &str) -> String {
 // happened. The nonce is remembered while the request is in flight so the poll finds its
 // own file.
 fn request_nonce() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    (0..24).map(|_| char::from(b"abcdefghijklmnopqrstuvwxyz0123456789"[rng.gen_range(0..36)])).collect()
+    use rand::RngExt;
+    let mut rng = rand::rng();
+    (0..24).map(|_| char::from(b"abcdefghijklmnopqrstuvwxyz0123456789"[rng.random_range(0..36)])).collect()
 }
 fn pending_nonces() -> &'static Mutex<std::collections::HashMap<String, String>> {
     static PENDING: OnceLock<Mutex<std::collections::HashMap<String, String>>> = OnceLock::new();

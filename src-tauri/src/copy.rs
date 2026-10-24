@@ -123,7 +123,7 @@ pub(crate) fn rotation_advance(p: &Prompt, settings: &mut Settings) {
         if rest.is_empty() {
             rest = (0..total as u32).filter(|&i| i != shown).collect();
             use rand::seq::SliceRandom;
-            rest.shuffle(&mut rand::thread_rng());
+            rest.shuffle(&mut rand::rng());
             rest.push(shown); // never the first draw of the new cycle
         }
         settings.rotate_bag.insert(p.id.clone(), rest);
