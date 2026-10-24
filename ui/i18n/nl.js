@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "Eigen selectie",
     veOvKeysPick: "Toetsen kiezen",
     veOvKeysNoData: "Deze opname heeft geen toetsgegevens. Zet de instelling aan vóór het opnemen om ze vast te leggen.",
+    veKeysEmpty: "Voeg minstens één toets toe.",
     veOvActiveColor: "Markeerkleur",
     veOvVideo: "Video",
     veOvVolume: "Volume",

@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "Wybór własny",
     veOvKeysPick: "Wybierz klawisze",
     veOvKeysNoData: "To nagranie nie ma danych o klawiszach. Włącz to ustawienie przed nagrywaniem, aby je przechwycić.",
+    veKeysEmpty: "Dodaj co najmniej jeden klawisz.",
     veOvActiveColor: "Kolor podświetlenia",
     veOvVideo: "Wideo",
     veOvVolume: "Głośność",

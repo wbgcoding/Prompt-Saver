@@ -11,10 +11,23 @@ import { renderRects, snapRect } from "./videoPreview.js";
 let overlaySeq = 0;
 const newId = () => `ov${++overlaySeq}-${Date.now().toString(36)}`;
 
+// An overlay lasts at least this long: a zero-length one would never show a frame.
+const OV_MIN_MS = 100;
+
+// The marked range, when it spans something. A click that left a collapsed mark behind does not
+// count: an overlay born from it would be zero seconds long.
+function markedRange() {
+  if (!VE.sel) return null;
+  const startMs = Math.min(VE.sel.a, VE.sel.b), endMs = Math.max(VE.sel.a, VE.sel.b);
+  return endMs - startMs >= OV_MIN_MS ? { startMs, endMs } : null;
+}
+
 function defaultRange() {
-  if (VE.sel) return { startMs: Math.min(VE.sel.a, VE.sel.b), endMs: Math.max(VE.sel.a, VE.sel.b) };
+  const marked = markedRange();
+  if (marked) return marked;
   const trim = opOf("trim");
-  return { startMs: trim ? trim.startMs : 0, endMs: trim ? trim.endMs : VE.dur };
+  const range = { startMs: trim ? trim.startMs : 0, endMs: trim ? trim.endMs : VE.dur };
+  return range.endMs > range.startMs ? range : { startMs: 0, endMs: VE.dur };
 }
 
 export function centeredRect(fraction) {
@@ -48,7 +61,7 @@ export async function addOverlay(kind) {
   } else if (kind === "keys") {
     op = {
       ...base, rect: centeredRect(0.3), preset: "pressed", keys: [],
-      color: VE.ovColorDefault, activeColor: VE.ovKeysActiveColorDefault ?? "#3fa7ff", opacity: 100,
+      color: VE.ovKeysColorDefault ?? VE.ovColorDefault, activeColor: VE.ovKeysActiveColorDefault ?? "#3fa7ff", opacity: VE.ovKeysOpacityDefault ?? 100,
     };
   }
   if (!op) return;
@@ -470,6 +483,19 @@ function rememberOverlayValues(kind, changes) {
       VE.ovImageOpacityDefault = changes.opacity;
       invoke("set_ui_value", { key: "veOvLastImageOpacity", value: changes.opacity }).catch(() => {});
     }
+  } else if (kind === "keys") {
+    if (changes.color !== undefined) {
+      VE.ovKeysColorDefault = changes.color;
+      invoke("set_ui_text", { key: "veOvLastKeysColor", value: changes.color }).catch(() => {});
+    }
+    if (changes.activeColor !== undefined) {
+      VE.ovKeysActiveColorDefault = changes.activeColor;
+      invoke("set_ui_text", { key: "veOvLastKeysActiveColor", value: changes.activeColor }).catch(() => {});
+    }
+    if (changes.opacity !== undefined) {
+      VE.ovKeysOpacityDefault = changes.opacity;
+      invoke("set_ui_value", { key: "veOvLastKeysOpacity", value: changes.opacity }).catch(() => {});
+    }
   }
 }
 
@@ -510,12 +536,12 @@ export function renderOverlayEditor() {
   range.className = "ve-row2";
   const startInput = ovTrack("startMs", textInput(fmtTime(op.startMs), (v) => {
     const ms = parseTime(v);
-    if (ms != null) commitOverlay(op, { startMs: clamp(ms, 0, liveOverlay(op).endMs) });
+    if (ms != null) commitOverlay(op, { startMs: clamp(ms, 0, Math.max(0, liveOverlay(op).endMs - OV_MIN_MS)) });
     else renderOverlayEditor();
   }), (o) => fmtTime(o.startMs));
   const endInput = ovTrack("endMs", textInput(fmtTime(op.endMs), (v) => {
     const ms = parseTime(v);
-    if (ms != null) commitOverlay(op, { endMs: clamp(ms, liveOverlay(op).startMs, VE.dur) });
+    if (ms != null) commitOverlay(op, { endMs: clamp(ms, Math.min(VE.dur, liveOverlay(op).startMs + OV_MIN_MS), VE.dur) });
     else renderOverlayEditor();
   }), (o) => fmtTime(o.endMs));
   range.append(fieldRow(t("veOvFrom"), startInput), fieldRow(t("veOvTo"), endInput));
@@ -525,10 +551,10 @@ export function renderOverlayEditor() {
   useSel.type = "button";
   useSel.className = "ghost-btn ve-wide ve-use-sel";
   useSel.textContent = t("veOvUseSelection");
-  useSel.disabled = !VE.sel;
+  useSel.disabled = !markedRange();
   useSel.addEventListener("click", () => {
-    if (!VE.sel) return;
-    commitOverlay(op, { startMs: Math.min(VE.sel.a, VE.sel.b), endMs: Math.max(VE.sel.a, VE.sel.b) });
+    const marked = markedRange();
+    if (marked) commitOverlay(op, marked);
   });
   box.appendChild(useSel);
 

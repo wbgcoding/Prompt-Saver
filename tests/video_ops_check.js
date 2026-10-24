@@ -123,7 +123,7 @@ function baseState(ops) {
   expect("overlay volume survives a later start edit", cur.volume === 100, cur.volume);
   expect("overlay start survives a later end edit", cur.startMs === 3000, cur.startMs);
   expect("overlay end is the edited value", cur.endMs === 8000, cur.endMs);
-  expect("overlay range handlers clamp against the live overlay", src.includes("clamp(ms, 0, liveOverlay(op).endMs)") && src.includes("clamp(ms, liveOverlay(op).startMs, VE.dur)"));
+  expect("overlay range handlers clamp against the live overlay", src.includes("Math.max(0, liveOverlay(op).endMs - OV_MIN_MS)") && src.includes("liveOverlay(op).startMs + OV_MIN_MS"));
 }
 
 // An inserted section is only present as a movie= source inside the filter
@@ -511,6 +511,106 @@ async function exportIdleCheck() {
   expect("Escape then clears the marked range", run("handleEscape()") === "selection" && sb.VE.sel === null);
   expect("the window is still open", !log.includes("close"));
   expect("Escape with nothing left closes the window", run("handleEscape()") === "close" && log.includes("close"));
+}
+
+// The key overlay: fill under the label, label centred by its own size, no stray key for an empty
+// pick, and a preview that draws the same grid. videoKeys.js is loaded whole with its imports stubbed.
+{
+  const keysSrc = fs.readFileSync(path.join(__dirname, "..", "ui", "videoKeys.js"), "utf8")
+    .replace(/\r\n/g, "\n")
+    .replace(/^import .*$/gm, "")
+    .replace(/^export /gm, "");
+  const sb = {
+    FONT_FILES: [["segoeui", "segoeui.ttf"]], fontsDir: "F", outMs: (ms) => ms, t: (k) => k,
+    VE: { keySidecar: { hold_ms: 400, events: [{ vk: 0x41, down: true, t_ms: 1000 }, { vk: 0x41, down: false, t_ms: 1200 }] } },
+    commitOverlay: () => {}, liveOverlay: (o) => o,
+    ffPath: (p) => p, ffText: (s) => String(s), hexToFf: (hex, pct) => `${hex}@${pct}`,
+  };
+  vm.createContext(sb);
+  vm.runInContext(keysSrc, sb, { filename: "videoKeys.js (extracted)" });
+  const run = (code) => vm.runInContext(code, sb);
+  sb.__op = { kind: "keys", preset: "game", rect: { x: 0, y: 0, w: 400, h: 250 }, color: "#ffffff", activeColor: "#0000ff", opacity: 100, startMs: 0, endMs: 5000, keys: [] };
+  const filters = run("buildKeysFilters(__op)");
+  const labelIdx = (ch) => filters.findIndex((f) => f.startsWith("drawtext") && f.endsWith(`text='${ch}'`));
+  const aIdx = labelIdx("A");
+  const fillBefore = (i) => { for (let j = i - 1; j >= 0 && !filters[j].startsWith("drawtext"); j--) if (filters[j].includes("t=fill")) return j; return -1; };
+  expect("the key overlay has a label for key A", aIdx > 0);
+  expect("a pressed key's fill is drawn before its label", fillBefore(aIdx) >= 0 && fillBefore(aIdx) < aIdx, filters.slice(aIdx - 3, aIdx + 1).join(" | "));
+  expect("the fill sits right after the key outline", filters[fillBefore(aIdx) - 1].includes("t=2"));
+  expect("a key that is never pressed gets no fill", fillBefore(labelIdx("Q")) === -1);
+  expect("the label is centred horizontally on its own width", /:x=\d+\+\(\d+-text_w\)\/2:/.test(filters[aIdx]), filters[aIdx]);
+  expect("the label is centred vertically on its own height", /:y=\d+\+\(\d+-text_h\)\/2:/.test(filters[aIdx]), filters[aIdx]);
+  expect("no fixed label offset is left", !/x=\d+:y=\d+:fontsize/.test(filters[aIdx]));
+  // A long name shrinks to its key; a single letter keeps the larger size.
+  sb.__wide = { ...sb.__op, preset: "custom", rect: { x: 0, y: 0, w: 200, h: 100 }, keys: [0x41, 0x20, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53] };
+  const crowded = run("buildKeysFilters(__wide)");
+  const sizeOf = (list, ch) => Number((list.find((f) => f.startsWith("drawtext") && f.endsWith(`text='${ch}'`)).match(/fontsize=(\d+)/) || [])[1]);
+  expect("a long label is smaller than a letter on the same keys", sizeOf(crowded, "Space") < sizeOf(crowded, "A"), `${sizeOf(crowded, "Space")} vs ${sizeOf(crowded, "A")}`);
+  // An empty custom pick draws nothing, and the preview says so.
+  sb.__empty = { ...sb.__op, preset: "custom", keys: [] };
+  expect("an empty custom pick adds no filter", run("buildKeysFilters(__empty)").length === 0);
+  expect("an empty custom pick is flagged in the preview model", run("keysPreviewModel(__empty)").empty === true);
+  // The preview model: same grid, first key pressed; the pressed preset gets one sample bar.
+  const grid = run("keysPreviewModel(__op)");
+  expect("the preview draws the whole grid", grid.cells.length === 20 && !grid.empty && grid.bar === null, String(grid.cells.length));
+  expect("the preview shows exactly one pressed sample key", grid.cells.filter((c) => c.active).length === 1 && grid.cells[0].active);
+  sb.__pressed = { ...sb.__op, preset: "pressed" };
+  const bar = run("keysPreviewModel(__pressed)");
+  expect("the pressed preset previews a sample bar", bar.cells.length === 0 && bar.bar && bar.bar.w === 400 && bar.bar.label === "A");
+  expect("the pressed preset still exports a fill before its label", (() => {
+    const f = run("buildKeysFilters(__pressed)");
+    return f.length === 2 && f[0].includes("t=fill") && f[1].startsWith("drawtext");
+  })());
+}
+
+// Remembered key colours and opacity, and an overlay range that must span something.
+{
+  const calls = [];
+  const sb = { VE: {}, invoke: (cmd, args) => { calls.push([cmd, args.key, args.value]); return Promise.resolve(); } };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock("rememberOverlayValues", "function rememberOverlayValues(kind, changes) {"), sb);
+  vm.runInContext('rememberOverlayValues("keys", { color: "#112233", activeColor: "#445566", opacity: 40 })', sb);
+  expect("the key colour is remembered for the next key overlay", sb.VE.ovKeysColorDefault === "#112233");
+  expect("the pressed colour is remembered for the next key overlay", sb.VE.ovKeysActiveColorDefault === "#445566");
+  expect("the key opacity is remembered for the next key overlay", sb.VE.ovKeysOpacityDefault === 40);
+  expect("the key defaults are saved in the settings store", ["veOvLastKeysColor", "veOvLastKeysActiveColor", "veOvLastKeysOpacity"].every((k) => calls.some((c) => c[1] === k)), JSON.stringify(calls));
+
+  const pushed = [];
+  const rsb = {
+    VE: { sel: null, dur: 10000, w: 1920, h: 1080, ovColorDefault: "#ffffff", ovKeysColorDefault: "#112233", ovKeysOpacityDefault: 40, ovKeysActiveColorDefault: "#445566", ops: [] },
+    opOf: (tool) => (tool === "trim" ? rsb.trim : null), trim: null,
+    TXT_READY: true, textsReady: Promise.resolve(), even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r,
+    pushOp: (op) => pushed.push(op), showPanel: () => {}, t: (k) => k, FONT_FILES: [["segoeui", "segoeui.ttf"]], Date,
+  };
+  vm.createContext(rsb);
+  vm.runInContext([
+    extractLine("OV_MIN_MS", "const OV_MIN_MS = 100;"),
+    "let overlaySeq = 0; const newId = () => `ov${++overlaySeq}`;",
+    extractBlock("markedRange", "function markedRange() {"),
+    extractBlock("defaultRange", "function defaultRange() {"),
+    extractBlock("centeredRect", "function centeredRect(fraction) {"),
+    extractBlock("addOverlay", "async function addOverlay(kind) {"),
+  ].join("\n"), rsb);
+  // addOverlay only awaits when the texts are not ready yet, so with them ready it runs straight through.
+  {
+    vm.runInContext('addOverlay("keys")', rsb);
+    const k = pushed[0];
+    expect("a new key overlay starts with the remembered colour", k && k.color === "#112233", k && k.color);
+    expect("a new key overlay starts with the remembered opacity", k && k.opacity === 40, k && String(k.opacity));
+    expect("a new key overlay starts with the remembered pressed colour", k && k.activeColor === "#445566");
+    expect("a new overlay without a mark covers the whole recording", k && k.startMs === 0 && k.endMs === 10000);
+    rsb.VE.sel = { a: 3000, b: 3000 };
+    vm.runInContext('addOverlay("keys")', rsb);
+    expect("a collapsed mark does not make a zero-length overlay", pushed[1].endMs > pushed[1].startMs, JSON.stringify([pushed[1].startMs, pushed[1].endMs]));
+    rsb.VE.sel = { a: 4000, b: 2000 };
+    vm.runInContext('addOverlay("keys")', rsb);
+    expect("a real mark (either direction) sets the overlay range", pushed[2].startMs === 2000 && pushed[2].endMs === 4000);
+    rsb.VE.sel = null;
+    rsb.trim = { startMs: 500, endMs: 500 };
+    vm.runInContext('addOverlay("keys")', rsb);
+    expect("a degenerate trim falls back to the whole recording", pushed[3].startMs === 0 && pushed[3].endMs === 10000);
+
+  }
 }
 
 // Removing an operation is an undo step: undo brings it back with every

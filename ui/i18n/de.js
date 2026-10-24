@@ -560,6 +560,7 @@ export default {
     veOvKeysCustom: "Freie Auswahl",
     veOvKeysPick: "Tasten wählen",
     veOvKeysNoData: "Diese Aufnahme hat keine Tastendaten. Schalter vor der Aufnahme einschalten, um sie aufzuzeichnen.",
+    veKeysEmpty: "Mindestens eine Taste hinzufügen.",
     veOvActiveColor: "Hervorhebungsfarbe",
     veOvVideo: "Video",
     veOvVolume: "Lautstärke",

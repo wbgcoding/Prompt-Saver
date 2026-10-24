@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "Özel seçim",
     veOvKeysPick: "Tuşları seç",
     veOvKeysNoData: "Bu kayıtta tuş verisi yok. Yakalamak için kayıttan önce bu ayarı açın.",
+    veKeysEmpty: "En az bir tuş ekleyin.",
     veOvActiveColor: "Vurgu rengi",
     veOvVideo: "Video",
     veOvVolume: "Ses düzeyi",

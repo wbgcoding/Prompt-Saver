@@ -560,6 +560,7 @@ export default {
     veOvKeysCustom: "Custom selection",
     veOvKeysPick: "Choose keys",
     veOvKeysNoData: "This recording has no key data. Turn the setting on before recording to capture it.",
+    veKeysEmpty: "Add at least one key.",
     veOvActiveColor: "Highlight color",
     veOvVideo: "Video",
     veOvVolume: "Volume",

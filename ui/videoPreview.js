@@ -2,6 +2,7 @@
 // preview.
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
+import { keysPreviewModel } from "./videoKeys.js";
 import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
@@ -476,22 +477,43 @@ function buildLiveOverlayEl(op, vb, reuse) {
     return el;
   }
   if (op.kind === "keys") {
-    // A plain outline plus its preset name; the per-key layout and press highlighting is drawn by
-    // the export's ffmpeg filters, so the preview only shows where and how big the overlay sits.
+    // The key grid the export burns in, with its first key shown as pressed so colours and sizes
+    // can be judged before exporting. Which keys light up when is only known to the export.
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-keys") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-keys";
     rectStyle(el, op.rect);
-    el.style.borderColor = op.color;
+    el.style.outlineColor = op.color;
     el.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
-    el.textContent = t(overlayLabelKeysPresetKey(op.preset));
+    const model = keysPreviewModel(op);
+    const px = (v) => `${v * vb.scale}px`;
+    const parts = [];
+    for (const c of model.cells) {
+      const cell = document.createElement("div");
+      cell.className = "ve-live-key";
+      cell.style.cssText = `left:${px(c.x)};top:${px(c.y)};width:${px(c.w)};height:${px(c.h)};font-size:${px(c.fontSize)};`
+        + `border-color:${op.color};color:${op.color};background:${c.active ? op.activeColor : "transparent"}`;
+      cell.textContent = c.label;
+      parts.push(cell);
+    }
+    if (model.bar) {
+      const bar = document.createElement("div");
+      bar.className = "ve-live-key ve-live-key-bar";
+      bar.style.cssText = `left:${px(model.bar.x)};top:${px(model.bar.y)};width:${px(model.bar.w)};height:${px(model.bar.h)};`
+        + `font-size:${px(model.bar.fontSize)};border-color:transparent;color:#fff;background:${op.activeColor}`;
+      bar.textContent = model.bar.label;
+      parts.push(bar);
+    }
+    if (model.empty) {
+      const note = document.createElement("span");
+      note.className = "ve-live-keys-note";
+      note.textContent = t("veKeysEmpty");
+      parts.push(note);
+    }
+    el.replaceChildren(...parts);
     return el;
   }
   return null;
 }
-
-const overlayLabelKeysPresetKey = (preset) => ({
-  pressed: "veOvKeysPressed", half: "veOvKeysHalf", full: "veOvKeysFull", game: "veOvKeysGame", custom: "veOvKeysCustom",
-}[preset] || "veOvKeys");
 
 function resizeRect(orig, handle, point, keepRatio) {
   let x1 = orig.x, y1 = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;

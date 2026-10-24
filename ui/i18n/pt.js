@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "Seleção personalizada",
     veOvKeysPick: "Escolher teclas",
     veOvKeysNoData: "Esta gravação não tem dados de teclas. Ative a opção antes de gravar para capturá-los.",
+    veKeysEmpty: "Adicione pelo menos uma tecla.",
     veOvActiveColor: "Cor de destaque",
     veOvVideo: "Vídeo",
     veOvVolume: "Volume",

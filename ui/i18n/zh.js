@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "自定义选择",
     veOvKeysPick: "选择按键",
     veOvKeysNoData: "此录制没有按键数据。请在录制前开启此设置以进行捕获。",
+    veKeysEmpty: "请至少添加一个按键。",
     veOvActiveColor: "高亮颜色",
     veOvVideo: "视频",
     veOvVolume: "音量",

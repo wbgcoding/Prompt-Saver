@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "カスタム選択",
     veOvKeysPick: "キーを選ぶ",
     veOvKeysNoData: "この録画にはキーのデータがありません。記録するには録画前にこの設定をオンにしてください。",
+    veKeysEmpty: "キーを1つ以上追加してください。",
     veOvActiveColor: "強調表示の色",
     veOvVideo: "動画",
     veOvVolume: "音量",

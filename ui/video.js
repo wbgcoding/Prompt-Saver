@@ -169,6 +169,7 @@ export const VE = {
   ovDupOffsetPx: 16,
   ovTextOutlineDefault: 3,
   ovKeysActiveColorDefault: "#3fa7ff",
+  ovKeysOpacityDefault: 100,
   ovVideoVolumeDefault: 0,
   fadeMsDefault: 500,
   ovFontDefault: "segoeui",
@@ -2029,6 +2030,10 @@ export function applySettings(settings) {
   if (Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
   const lastImageOpacity = Number(values.veOvLastImageOpacity);
   if (Number.isFinite(lastImageOpacity) && lastImageOpacity > 0) VE.ovImageOpacityDefault = Math.round(lastImageOpacity);
+  VE.ovKeysColorDefault = HEX_RE.test(texts.veOvLastKeysColor || "") ? texts.veOvLastKeysColor : VE.ovColorDefault;
+  if (HEX_RE.test(texts.veOvLastKeysActiveColor || "")) VE.ovKeysActiveColorDefault = texts.veOvLastKeysActiveColor;
+  const lastKeysOpacity = Number(values.veOvLastKeysOpacity);
+  if (Number.isFinite(lastKeysOpacity) && lastKeysOpacity > 0) VE.ovKeysOpacityDefault = Math.round(lastKeysOpacity);
   VE.ovFrameOpacityDefault = 100;
   const lastFrameOpacity = Number(values.veOvLastFrameOpacity);
   if (Number.isFinite(lastFrameOpacity) && lastFrameOpacity > 0) VE.ovFrameOpacityDefault = Math.round(lastFrameOpacity);

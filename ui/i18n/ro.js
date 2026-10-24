@@ -584,6 +584,7 @@ export default {
     veOvKeysCustom: "Selecție personalizată",
     veOvKeysPick: "Alege tastele",
     veOvKeysNoData: "Această înregistrare nu are date despre taste. Activează setarea înainte de înregistrare pentru a le captura.",
+    veKeysEmpty: "Adaugă cel puțin o tastă.",
     veOvActiveColor: "Culoare de evidențiere",
     veOvVideo: "Video",
     veOvVolume: "Volum",
