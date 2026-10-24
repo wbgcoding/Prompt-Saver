@@ -230,6 +230,24 @@ fn test_runs_use_a_temp_folder_of_their_own() {
     assert!(temp.is_dir(), "the sandbox temp folder must exist");
 }
 
+// A copy of this test binary started as a child (the instance-registry test does that) inherits
+// the sandbox variables. It must leave the parent's sandbox alone: wiping it at start, or
+// removing it at exit, deleted every scratch file the other tests had in the temp folder.
+#[test]
+fn a_child_copy_of_the_test_binary_leaves_the_sandbox_alone() {
+    let marker = std::env::temp_dir().join(format!("ps-child-sandbox-marker-{}", std::process::id()));
+    fs::write(&marker, b"x").unwrap();
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--list", "--quiet"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert!(marker.is_file(), "the child's start or exit must not touch the parent's temp folder");
+    let _ = fs::remove_file(&marker);
+}
+
 // A data folder outside the profile (a custom location the user picked, or any
 // other drive-rooted path this run never resolved to a known folder) is never
 // a folder the named placeholders recognise: the structural catch-all must

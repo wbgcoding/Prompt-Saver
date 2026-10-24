@@ -34,6 +34,11 @@ extern "C" fn remove_sandbox() {
 }
 
 extern "C" fn enter_sandbox() {
+    // A copy of the test binary started by a test inherits the sandbox variables: it shares the
+    // parent's sandbox and must neither wipe it now nor remove it at its own exit.
+    if std::env::var_os(SANDBOX_ENV).is_some() {
+        return;
+    }
     // A pid the sandbox is created for may have been used by an earlier run
     // that died before it could clean up: start from nothing.
     let root = sandbox_root();

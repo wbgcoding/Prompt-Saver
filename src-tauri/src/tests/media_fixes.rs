@@ -879,7 +879,7 @@ fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
 
 #[test]
 fn a_clip_export_path_is_judged_by_its_parent_before_the_file_is_touched() {
-    let root = std::env::temp_dir().join(format!("ps-clipexp-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ps-clipexp-parent-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let temp = root.join("tmp");
     let other = root.join("other");
