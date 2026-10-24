@@ -1164,6 +1164,80 @@ section(() => {
   check(extractBlock(src, "export function closeLangsModal(").includes("st.elevChain = (st.elevChain || 0) + 1"), "closing the dialog retires the chain");
 });
 
+// 69. A pause started by a pointerdown on a drag region always ends, also when the window never
+// moves (no pointerup, no onMoved): the settle timer, focus and the hard cap resume the toast.
+section(() => {
+  const core = read("core.js");
+  let now = 1000;
+  let nextId = 1;
+  const timers = new Map();
+  const classes = new Set();
+  const doc = {};
+  const win = {};
+  const el = {};
+  let moved = () => {};
+  const advance = (ms) => {
+    const end = now + ms;
+    for (;;) {
+      const due = [...timers.entries()].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      timers.delete(due[0]);
+      now = due[1].at;
+      due[1].fn();
+    }
+    now = end;
+  };
+  const code = `let toastTimer = null; let toastHideTimer = null;
+${extractBlock(core, "export function hideToast(").replace("export ", "")}
+${core.slice(core.indexOf("export const TOAST_RESUME_MIN_MS"), core.indexOf("// Default toast icon")).replace(/export /g, "")}
+function showFor(ms) { clearTimeout(toastTimer); resetToastPause(); toastEl.classList.add("show"); armToastTimer(ms); }`;
+  class FakeElement { closest() { return { getAttribute: () => "" }; } }
+  const target = new FakeElement();
+  const sb = run(code, {
+    Date: { now: () => now }, Element: FakeElement,
+    setTimeout: (fn, ms) => { const id = nextId++; timers.set(id, { fn, at: now + ms }); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+    toastEl: {
+      classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
+      addEventListener: (n, fn) => { el[n] = fn; },
+    },
+    document: { addEventListener: (n, fn) => { doc[n] = fn; } },
+    window: { addEventListener: (n, fn) => { win[n] = fn; } },
+    getCurrentWindow: () => ({ onMoved: (fn) => { moved = fn; return Promise.resolve(); } }),
+  });
+  check(typeof sb.showFor === "function" && typeof doc.pointerdown === "function", "the toast pause block loads in the sandbox");
+  const shown = () => classes.has("show");
+  // A plain click on the header: pointerdown only, nothing moves, nothing else fires.
+  sb.showFor(2000);
+  doc.pointerdown({ target });
+  advance(300);
+  check(shown(), "the toast is paused right after the press");
+  advance(100 + 3000 - 1);
+  check(shown(), "a still press leaves the toast at least the resume minimum");
+  advance(2);
+  check(!shown(), "a still press lets the toast end after the settle time, not after the 30 s cap");
+  // A real drag: moves keep the pause, the last move starts the settle.
+  sb.showFor(2000);
+  doc.pointerdown({ target });
+  for (let i = 0; i < 20; i++) { advance(200); moved(); }
+  check(shown(), "the toast stays while the window keeps moving");
+  advance(400 + 3000 + 10);
+  check(!shown(), "the toast ends after the window stopped moving");
+  // Focus ends a press at once.
+  sb.showFor(2000);
+  doc.pointerdown({ target });
+  win.focus();
+  advance(3000 + 10);
+  check(!shown(), "window focus resumes a paused toast");
+  // The hard cap still frees a pointer that never leaves the toast.
+  sb.showFor(2000);
+  el.pointerenter();
+  advance(29000);
+  check(shown(), "a hovered toast stays up inside the cap");
+  advance(1000 + 3000 + 10);
+  check(!shown(), "the hard cap resumes a hovered toast");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

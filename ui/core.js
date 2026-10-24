@@ -313,9 +313,9 @@ export function hideToast() {
 // Auto-hide that can be paused. The toast keeps a deadline; while the pointer rests on it or
 // the window is being dragged by its header, the clock stops and the remaining time is kept.
 // The native move loop of a window drag swallows the matching pointerup, so a drag ends when
-// the window stops reporting moves (TOAST_MOVE_SETTLE_MS after the last one), with pointerup
-// and focus as extra triggers. Resuming never leaves less than TOAST_RESUME_MIN_MS, and a
-// pause never lasts longer than TOAST_PAUSE_CAP_MS.
+// the window stops reporting moves (TOAST_MOVE_SETTLE_MS after the last one, or after the
+// press when it never moves), with pointerup and focus as extra triggers. Resuming never
+// leaves less than TOAST_RESUME_MIN_MS, and a pause never lasts longer than TOAST_PAUSE_CAP_MS.
 export const TOAST_RESUME_MIN_MS = 3000;
 export const TOAST_PAUSE_CAP_MS = 30000;
 export const TOAST_MOVE_SETTLE_MS = 400;
@@ -376,6 +376,10 @@ document.addEventListener("pointerdown", (e) => {
   if (!reg || reg.getAttribute("data-tauri-drag-region") === "false") return;
   toastDragging = true;
   pauseToast();
+  // A press that never moves the window (a click, a double-click) gets no pointerup and no
+  // onMoved: the settle timer ends it, and every real move pushes it out again.
+  clearTimeout(toastSettleTimer);
+  toastSettleTimer = setTimeout(endToastDrag, TOAST_MOVE_SETTLE_MS);
 }, true);
 document.addEventListener("pointerup", endToastDrag, true);
 document.addEventListener("pointercancel", endToastDrag, true);
