@@ -212,13 +212,21 @@ pub(crate) fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
 // The HTTP client for the large downloads (ffmpeg, the installer, the WebView2 bootstrapper).
 // ureq's overall request timeout would also bound reading the body, so a slow link could never
 // finish a big file; the connect and each single read are bounded instead, which still ends a
-// stalled transfer.
+// stalled transfer. Proxy variables in the environment are ignored, as before: a stale one
+// left behind by a debugging proxy would otherwise break every download without a word.
 pub(crate) fn download_agent() -> ureq::Agent {
     ureq::Agent::config_builder()
+        .proxy(None)
         .timeout_connect(Some(std::time::Duration::from_secs(30)))
         .timeout_per_read(Some(std::time::Duration::from_secs(60)))
         .build()
         .into()
+}
+
+// The client for the small requests (update check, hash and signature files, release notes),
+// with the same proxy rule as download_agent.
+pub(crate) fn request_agent() -> ureq::Agent {
+    ureq::Agent::config_builder().proxy(None).build().into()
 }
 
 pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {

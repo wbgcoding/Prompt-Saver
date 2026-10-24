@@ -41,7 +41,7 @@ pub(crate) fn body_text(resp: ureq::http::Response<ureq::Body>) -> Option<String
 // failure (offline, private repo, rate limit): checks never disturb the app.
 pub(crate) fn fetch_latest() -> Option<(String, String, String)> {
     let body = body_text(
-        ureq::get(&update_api())
+        crate::ffmpeg::request_agent().get(&update_api())
             .header("User-Agent", brand::USER_AGENT)
             .config()
             .timeout_global(Some(std::time::Duration::from_secs(10)))
@@ -635,7 +635,7 @@ pub(crate) fn whats_new_current() -> Vec<WhatsNewSection> {
 pub(crate) async fn whats_new_refresh(since: Option<String>) -> Result<Vec<WhatsNewSection>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let url = format!("https://raw.githubusercontent.com/{}/main/docs/release-notes.md", brand::REPO);
-        let resp = ureq::get(&url)
+        let resp = crate::ffmpeg::request_agent().get(&url)
             .header("User-Agent", brand::USER_AGENT)
             .config()
             .timeout_global(Some(std::time::Duration::from_secs(10)))
@@ -837,7 +837,7 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     // never executed, so a missing, unreadable or malformed hash file aborts the update like a
     // mismatch. Every release publishes the hash (`release:publish` in package.json); if one
     // ever does not, the update is done by hand.
-    let want = ureq::get(&format!("{}.sha256", url))
+    let want = crate::ffmpeg::request_agent().get(&format!("{}.sha256", url))
         .header("User-Agent", brand::USER_AGENT)
         .config()
         .timeout_global(Some(std::time::Duration::from_secs(30)))
@@ -857,7 +857,7 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     }
     // Origin: the hash proves the download is intact, the signature that the publisher made
     // it. Someone who could replace both release files still has no signing key.
-    let sig = ureq::get(&format!("{}.sig", url))
+    let sig = crate::ffmpeg::request_agent().get(&format!("{}.sig", url))
         .header("User-Agent", brand::USER_AGENT)
         .config()
         .timeout_global(Some(std::time::Duration::from_secs(30)))

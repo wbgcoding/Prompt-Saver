@@ -1,4 +1,4 @@
-use crate::ffmpeg::download_agent;
+use crate::ffmpeg::{download_agent, request_agent};
 use crate::update::body_text;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -41,6 +41,14 @@ fn the_download_agent_sends_the_app_user_agent_and_reads_the_body() {
     assert_eq!(got, b"hello");
     let head = rx.recv_timeout(Duration::from_secs(5)).expect("request seen").to_ascii_lowercase();
     assert!(head.contains(&format!("user-agent: {}", crate::brand::USER_AGENT.to_ascii_lowercase())), "{head}");
+}
+
+// Both clients ignore proxy variables in the environment, as the old client did. ureq's
+// default config reads them, so this pins the explicit opt-out.
+#[test]
+fn both_agents_ignore_proxy_variables() {
+    assert!(download_agent().config().proxy().is_none());
+    assert!(request_agent().config().proxy().is_none());
 }
 
 #[test]
