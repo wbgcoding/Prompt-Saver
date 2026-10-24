@@ -506,6 +506,7 @@ export default {
     veStillSaved: "Bild gespeichert: {path}",
     veStillNotSaved: "Das Bild konnte nicht gespeichert werden.",
     veNeedSelection: "Wähle zuerst einen Bereich auf der Zeitleiste aus.",
+    veMarkOutside: "Die Abspielposition liegt außerhalb des behaltenen Teils.",
     veZoomOut: "Verkleinern",
     veZoomIn: "Vergrößern",
     veZoomFit: "Einpassen",

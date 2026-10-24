@@ -377,8 +377,9 @@ export function removeOps(match) {
   VE.ops.forEach((o, at) => { if (o.tool !== "removal" && match(o)) removed.push({ op: o, at }); });
   if (!removed.length) return;
   VE.ops = VE.ops.filter((o) => !removed.some((r) => r.op === o));
+  const floor = VE.floor;
   VE.floor = Math.max(0, VE.floor - removed.filter((r) => r.at < VE.floor).length);
-  pushOp({ tool: "removal", removed });
+  pushOp({ tool: "removal", removed, floor });
 }
 
 function restoreRemoved(marker) {
@@ -392,6 +393,8 @@ export function undo() {
   if (cur.tool === "removal") {
     VE.ops.pop();
     restoreRemoved(cur);
+    // The removal lowered the floor for every locked op it took out; they are back, so is it.
+    if (Number.isFinite(cur.floor)) VE.floor = Math.max(VE.floor, Math.min(cur.floor, VE.ops.length));
     VE.redo.push(cur);
   } else if (cur._prev) {
     // This slot was a replacement (pushReplacing): step it back to the
@@ -409,6 +412,7 @@ export function redo() {
   if (!VE.redo.length) return;
   const next = VE.redo.pop();
   if (next.tool === "removal") {
+    VE.floor = Math.max(0, VE.floor - next.removed.filter((r) => r.at < VE.floor).length);
     VE.ops = VE.ops.filter((o) => !next.removed.some((r) => r.op === o));
     VE.ops.push(next);
   } else if (next._prev) {
@@ -581,11 +585,17 @@ function renderOps() {
 const KEPT_CUTS_BUF = [];
 const KEPT_SEGMENTS_BUF = [];
 
-// The kept parts of the source, in order: the trim range minus every cut.
-export function keptSegments() {
+// The trim range held inside the recording: what the export uses and the timeline shows.
+export function trimBounds() {
   const trim = opOf("trim");
   const a = trim ? clamp(trim.startMs, 0, VE.dur) : 0;
   const b = trim ? clamp(trim.endMs, a, VE.dur) : VE.dur;
+  return { a, b };
+}
+
+// The kept parts of the source, in order: the trim range minus every cut.
+export function keptSegments() {
+  const { a, b } = trimBounds();
   KEPT_CUTS_BUF.length = 0;
   for (const c of opsOf("cut")) {
     const ca = clamp(Math.min(c.startMs, c.endMs), a, b);
@@ -774,9 +784,7 @@ function renderStrip() {
 }
 
 export function renderRegions() {
-  const trim = opOf("trim");
-  const a = trim ? trim.startMs : 0;
-  const b = trim ? trim.endMs : VE.dur;
+  const { a, b } = trimBounds();
   $("ve-dim-a").style.width = `${msToPx(a)}px`;
   $("ve-dim-b").style.left = `${msToPx(b)}px`;
   $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(b))}px`;
@@ -850,7 +858,6 @@ export async function loadStrip() {
   // Only ever ask for more, and only when it is a real step up: regenerating a
   // filmstrip is the most expensive call this window makes.
   if (VE.stripCount && want <= VE.stripCount * 1.6) return;
-  VE.stripCount = want;
   // This call can still be in flight when the user switches source; the generation check on
   // return stops a slow filmstrip for the old video from painting over the new one's.
   const myGen = VE.loadGen;
@@ -859,10 +866,12 @@ export async function loadStrip() {
     if (VE.loadGen !== myGen) return;
     if (Array.isArray(paths) && paths.length) {
       VE.strip = paths;
+      VE.stripCount = want;
       renderStrip();
     }
   } catch (err) {
-    if (VE.loadGen === myGen) noteFfmpeg(err);
+    // Left at zero, so the next resize or reload asks again instead of keeping an empty strip.
+    if (VE.loadGen === myGen) { VE.stripCount = 0; noteFfmpeg(err); }
   }
 }
 
@@ -1116,6 +1125,13 @@ timelineEl.addEventListener("wheel", (e) => {
 
 // ---------------------------------------------------------------- edit panel
 
+// Moves one trim edge by `step` and stops it a minimum clip away from the other one, so the
+// opposite handle never gets pushed along.
+function nudgeTrim(trim, edge, step) {
+  if (edge === "a") return [clamp(trim.startMs + step, 0, trim.endMs - MIN_CLIP_MS), trim.endMs];
+  return [trim.startMs, clamp(trim.endMs + step, trim.startMs + MIN_CLIP_MS, VE.dur)];
+}
+
 function setTrim(startMs, endMs) {
   const a = clamp(Math.min(startMs, endMs), 0, VE.dur);
   const b = clamp(Math.max(startMs, endMs), a + MIN_CLIP_MS, VE.dur);
@@ -1348,8 +1364,10 @@ $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $
 $("ve-undo").addEventListener("click", undo);
 $("ve-redo").addEventListener("click", redo);
 $("ve-play").addEventListener("click", togglePlay);
-$("ve-to-start").addEventListener("click", () => seek(keptSegments()[0].a));
-$("ve-to-end").addEventListener("click", () => seek(keptSegments().slice(-1)[0].b));
+const keptStart = () => keptSegments()[0].a;
+const keptEnd = () => keptSegments().slice(-1)[0].b;
+$("ve-to-start").addEventListener("click", () => seek(keptStart()));
+$("ve-to-end").addEventListener("click", () => seek(keptEnd()));
 // Stepping by a fixed frameMs() from a scrubbed playhead drifts off the frame grid, so snap to
 // the real previous/next frame boundary. The small epsilon absorbs float error from a
 // non-integer frame duration (e.g. 29.97fps), so a playhead already on a boundary still
@@ -1363,12 +1381,21 @@ function stepFrame(dir) {
 $("ve-prev-frame").addEventListener("click", () => stepFrame(-1));
 $("ve-next-frame").addEventListener("click", () => stepFrame(1));
 
+// Marking only makes sense on the kept part: the toast says why a press did nothing.
+function playheadInKept() {
+  const { a, b } = trimBounds();
+  if (VE.playhead >= a && VE.playhead <= b) return true;
+  toast(t("veMarkOutside"));
+  return false;
+}
 $("ve-mark-in").addEventListener("click", () => {
+  if (!playheadInKept()) return;
   const b = VE.sel && VE.sel.b > VE.playhead ? VE.sel.b : VE.dur;
   VE.sel = { a: VE.playhead, b };
   renderRegions();
 });
 $("ve-mark-out").addEventListener("click", () => {
+  if (!playheadInKept()) return;
   const a = VE.sel && VE.sel.a < VE.playhead ? VE.sel.a : 0;
   VE.sel = { a, b: VE.playhead };
   renderRegions();
@@ -1389,12 +1416,17 @@ $("ve-cut-add").addEventListener("click", () => {
 $("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut"));
 
 $("ve-still").addEventListener("click", async () => {
+  if ($("ve-still").disabled) return;
+  $("ve-still").disabled = true;
   try {
     const saved = await invoke("extract_still_frame", { path: VE.src, atMs: Math.round(VE.playhead) });
     toast(saved ? t("veStillSaved").replace("{path}", () => String(saved)) : t("veStillNotSaved"));
   } catch (err) {
     noteFfmpeg(err);
     toast(errMessageLogged(err, t, "video"));
+  } finally {
+    // An export in progress keeps the button off on its own, so only a free editor re-enables it.
+    $("ve-still").disabled = !!VE.exporting;
   }
 });
 
@@ -1682,7 +1714,9 @@ $("ve-export-name").addEventListener("input", () => {
 // the dialog below.
 $("ve-export-dest").addEventListener("change", () => {
   const value = $("ve-export-dest").value.trim();
-  VE.destOverride = value || null;
+  // A typed name with another extension would write one container under another's name.
+  VE.destOverride = value ? withExtension(value, formatExt(exportFormat())) : null;
+  $("ve-export-dest").value = destPath();
   updateExportNote();
 });
 $("ve-export-choose-folder").addEventListener("click", async () => {
@@ -1863,8 +1897,8 @@ document.addEventListener("keydown", (e) => {
       const dir = e.key === "ArrowLeft" ? -1 : 1;
       const step = (e.shiftKey ? 1000 : frameMs()) * dir;
       const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
-      if (focusedId === "ve-trim-a") setTrim(trim.startMs + step, trim.endMs);
-      else setTrim(trim.startMs, trim.endMs + step);
+      const [startMs, endMs] = nudgeTrim(trim, focusedId === "ve-trim-a" ? "a" : "b", step);
+      setTrim(startMs, endMs);
       return;
     }
   }
@@ -1898,8 +1932,8 @@ document.addEventListener("keydown", (e) => {
     }
     case "ArrowLeft": e.preventDefault(); if (e.shiftKey) seek(VE.playhead - 1000); else stepFrame(-1); break;
     case "ArrowRight": e.preventDefault(); if (e.shiftKey) seek(VE.playhead + 1000); else stepFrame(1); break;
-    case "Home": e.preventDefault(); seek(0); break;
-    case "End": e.preventDefault(); seek(VE.dur); break;
+    case "Home": e.preventDefault(); seek(e.shiftKey ? 0 : keptStart()); break;
+    case "End": e.preventDefault(); seek(e.shiftKey ? VE.dur : keptEnd()); break;
     case "i": case "I": e.preventDefault(); $("ve-mark-in").click(); break;
     case "o": case "O": e.preventDefault(); $("ve-mark-out").click(); break;
     case "c": case "C": e.preventDefault(); $("ve-cut-add").click(); break;

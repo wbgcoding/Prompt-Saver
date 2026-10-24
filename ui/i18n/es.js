@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Fotograma guardado: {path}",
     veStillNotSaved: "No se pudo guardar el fotograma.",
     veNeedSelection: "Selecciona primero un intervalo en la línea de tiempo.",
+    veMarkOutside: "El cabezal está fuera de la parte que se conserva.",
     veZoomOut: "Alejar",
     veZoomIn: "Acercar",
     veZoomFit: "Ajustar",

@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Fotogramma salvato: {path}",
     veStillNotSaved: "Impossibile salvare il fotogramma.",
     veNeedSelection: "Seleziona prima un intervallo nella sequenza temporale.",
+    veMarkOutside: "L'indicatore di riproduzione è fuori dalla parte mantenuta.",
     veZoomOut: "Riduci zoom",
     veZoomIn: "Aumenta zoom",
     veZoomFit: "Adatta",

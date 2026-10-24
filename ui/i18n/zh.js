@@ -530,6 +530,7 @@ export default {
     veStillSaved: "帧已保存：{path}",
     veStillNotSaved: "无法保存该帧。",
     veNeedSelection: "请先在时间线上选择一个范围。",
+    veMarkOutside: "播放位置在保留部分之外。",
     veZoomOut: "缩小",
     veZoomIn: "放大",
     veZoomFit: "适应",

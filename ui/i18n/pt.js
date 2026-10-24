@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Quadro salvo: {path}",
     veStillNotSaved: "Não foi possível salvar o quadro.",
     veNeedSelection: "Primeiro, selecione um intervalo na linha do tempo.",
+    veMarkOutside: "O cursor de reprodução está fora da parte mantida.",
     veZoomOut: "Reduzir zoom",
     veZoomIn: "Aumentar zoom",
     veZoomFit: "Ajustar",

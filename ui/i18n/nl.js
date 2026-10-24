@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Frame opgeslagen: {path}",
     veStillNotSaved: "Het frame kon niet worden opgeslagen.",
     veNeedSelection: "Selecteer eerst een bereik op de tijdlijn.",
+    veMarkOutside: "De afspeelpositie ligt buiten het behouden deel.",
     veZoomOut: "Uitzoomen",
     veZoomIn: "Inzoomen",
     veZoomFit: "Passend maken",

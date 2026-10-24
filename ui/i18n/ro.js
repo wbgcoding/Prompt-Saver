@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Cadru salvat: {path}",
     veStillNotSaved: "Cadrul nu a putut fi salvat.",
     veNeedSelection: "Selectează mai întâi un interval pe cronologie.",
+    veMarkOutside: "Poziția de redare este în afara părții păstrate.",
     veZoomOut: "Micșorează",
     veZoomIn: "Mărește",
     veZoomFit: "Potrivește",

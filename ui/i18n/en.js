@@ -506,6 +506,7 @@ export default {
     veStillSaved: "Frame saved: {path}",
     veStillNotSaved: "The frame could not be saved.",
     veNeedSelection: "Select a range on the timeline first.",
+    veMarkOutside: "The playhead is outside the kept part.",
     veZoomOut: "Zoom out",
     veZoomIn: "Zoom in",
     veZoomFit: "Fit",

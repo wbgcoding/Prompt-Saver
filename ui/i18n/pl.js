@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Zapisano klatkę: {path}",
     veStillNotSaved: "Nie udało się zapisać klatki.",
     veNeedSelection: "Najpierw zaznacz zakres na osi czasu.",
+    veMarkOutside: "Wskaźnik odtwarzania jest poza zachowaną częścią.",
     veZoomOut: "Pomniejsz",
     veZoomIn: "Powiększ",
     veZoomFit: "Dopasuj",

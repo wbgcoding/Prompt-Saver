@@ -42,6 +42,7 @@ function makeSandbox(extra) {
       extractLine("clamp", "const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));"),
       extractLine("opOf", "const opOf = (tool) => VE.ops.filter((o) => o.tool === tool).pop() || null;"),
       extractLine("opsOf", "const opsOf = (tool) => VE.ops.filter((o) => o.tool === tool);"),
+      extractBlock("trimBounds", "function trimBounds() {"),
       extractBlock("keptSegments", "function keptSegments() {"),
       extractBlock("speedRate", "const speedRate = () => {") + ";",
       extractBlock("timelinePlan", "function timelinePlan() {"),
@@ -723,6 +724,141 @@ async function exportIdleCheck() {
   expect("the fade label takes its unit from the translation", /\$\{t\("veUnitMs"\)\}/.test(src) && !/op\.outMs\} ms`/.test(src));
 }
 
+// Small function fixes: one check per finding.
+const pending = [];
+{
+  // Still frame: a second click while the first extraction runs does nothing.
+  {
+    let handler = null, calls = 0, release = null;
+    const still = { disabled: false, addEventListener: (_, fn) => { handler = fn; } };
+    const sb = {
+      $: () => still, VE: { src: "a.mp4", playhead: 120, exporting: false }, t: (k) => k, toast: () => {}, noteFfmpeg: () => {}, errMessageLogged: () => "",
+      invoke: () => { calls++; return new Promise((res) => { release = res; }); },
+    };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("still", '$("ve-still").addEventListener("click", async () => {') + ");", sb);
+    const first = handler();
+    handler();
+    expect("a second click on the still button starts no second extraction", calls === 1 && still.disabled === true, String(calls));
+    release("x");
+    pending.push(first.then(() => expect("the still button is usable again afterwards", still.disabled === false)));
+  }
+  // Marking in/out outside the kept part says why instead of doing nothing.
+  {
+    const handlers = {};
+    const toasts = [];
+    const sb = makeSandbox({
+      $: (id) => ({ addEventListener: (_, fn) => { handlers[id] = fn; } }), toast: (m) => toasts.push(m), t: (k) => k, renderRegions: () => {},
+    });
+    sb.VE = Object.assign(baseState([{ tool: "trim", startMs: 1000, endMs: 5000 }]), { sel: null, playhead: 500 });
+    vm.runInContext([
+      extractBlock("playheadInKept", "function playheadInKept() {"),
+      extractBlock("markIn", '$("ve-mark-in").addEventListener("click", () => {') + ");",
+      extractBlock("markOut", '$("ve-mark-out").addEventListener("click", () => {') + ");",
+    ].join("\n"), sb);
+    handlers["ve-mark-in"]();
+    expect("marking before the kept part toasts and marks nothing", toasts.join() === "veMarkOutside" && sb.VE.sel === null, toasts.join());
+    sb.VE.playhead = 6000;
+    handlers["ve-mark-out"]();
+    expect("marking after the kept part toasts and marks nothing", toasts.length === 2 && sb.VE.sel === null);
+    sb.VE.playhead = 2000;
+    handlers["ve-mark-in"]();
+    expect("marking inside the kept part sets the range", toasts.length === 2 && sb.VE.sel && sb.VE.sel.a === 2000);
+  }
+  // Home/End land where the jump buttons do; Shift reaches the raw ends.
+  {
+    const sb = makeSandbox({});
+    sb.VE = baseState([{ tool: "trim", startMs: 1000, endMs: 8000 }, { tool: "cut", startMs: 1000, endMs: 2000 }, { tool: "cut", startMs: 7000, endMs: 8000 }]);
+    sb.VE.dur = 10000;
+    vm.runInContext(["const keptStart = () => keptSegments()[0].a;", "const keptEnd = () => keptSegments().slice(-1)[0].b;"].join("\n"), sb);
+    expect("the shared start/end helpers mirror the jump buttons", src.includes("const keptStart = () => keptSegments()[0].a;") && src.includes("const keptEnd = () => keptSegments().slice(-1)[0].b;") && src.includes("seek(keptStart())") && src.includes("seek(keptEnd())"));
+    expect("Home goes to the kept start and End to the kept end", vm.runInContext("keptStart()", sb) === 2000 && vm.runInContext("keptEnd()", sb) === 7000);
+    expect("Shift+Home and Shift+End still reach the raw ends", src.includes("seek(e.shiftKey ? 0 : keptStart())") && src.includes("seek(e.shiftKey ? VE.dur : keptEnd())"));
+  }
+  // The arrow keys on a trim handle stop a minimum clip from the other edge.
+  {
+    const sb = { VE: { dur: 10000 }, MIN_CLIP_MS: 100, clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)) };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("nudgeTrim", "function nudgeTrim(trim, edge, step) {"), sb);
+    sb.__t = { startMs: 4000, endMs: 4200 };
+    const r = vm.runInContext('nudgeTrim(__t, "a", 1000)', sb);
+    expect("the start handle stops short of the end handle", r[0] === 4100 && r[1] === 4200, JSON.stringify(r));
+    const r2 = vm.runInContext('nudgeTrim(__t, "b", -1000)', sb);
+    expect("the end handle stops short of the start handle", r2[0] === 4000 && r2[1] === 4100, JSON.stringify(r2));
+    const r3 = vm.runInContext('nudgeTrim(__t, "b", 99999)', sb);
+    expect("the end handle stops at the recording end", r3[1] === 10000);
+  }
+  // The shaded regions use the trim exactly as the export does.
+  {
+    const sb = makeSandbox({});
+    sb.VE = baseState([{ tool: "trim", startMs: -500, endMs: 99999 }]);
+    sb.VE.dur = 10000;
+    const b = vm.runInContext("trimBounds()", sb);
+    expect("an out-of-range trim is held inside the recording", b.a === 0 && b.b === 10000, JSON.stringify(b));
+    expect("the timeline regions read the held trim", extractBlock("renderRegions", "function renderRegions() {").includes("trimBounds()"));
+  }
+  // A failed filmstrip call leaves the count unset so the next request tries again.
+  {
+    let fail = true;
+    const sb = {
+      VE: { ffmpeg: true, src: "a", dur: 5000, stripCount: 0, loadGen: 1, strip: [] }, trackWidth: () => 800, THUMB_PX: 80, clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)),
+      invoke: () => (fail ? Promise.reject(new Error("x")) : Promise.resolve(["p1"])), renderStrip: () => {}, noteFfmpeg: () => {},
+    };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("loadStrip", "async function loadStrip() {"), sb);
+    pending.push(vm.runInContext("loadStrip()", sb).then(() => {
+      expect("a failed filmstrip call keeps the count at zero", sb.VE.stripCount === 0, String(sb.VE.stripCount));
+      fail = false;
+      return vm.runInContext("loadStrip()", sb);
+    }).then(() => expect("a later call fills the strip and records the count", sb.VE.stripCount === 10 && sb.VE.strip.length === 1, String(sb.VE.stripCount))));
+  }
+  // Undoing a removal raises the floor again; redoing it lowers it again.
+  {
+    const sb = makeSandbox({ afterOpsChanged() {} });
+    sb.VE = Object.assign(baseState([{ tool: "cut", startMs: 0, endMs: 10 }, { tool: "cut", startMs: 20, endMs: 30 }]), { floor: 2, redo: [], undoMax: 50 });
+    const run = (code) => vm.runInContext(code, sb);
+    run("removeOps((o) => o.tool === 'cut')");
+    expect("removing locked ops lowers the floor", sb.VE.floor === 0, String(sb.VE.floor));
+    run("undo()");
+    expect("undoing the removal restores the floor", sb.VE.floor === 2 && sb.VE.ops.length === 2, String(sb.VE.floor));
+    run("undo()");
+    expect("undo cannot step below the original floor", sb.VE.ops.length === 2);
+    run("redo()");
+    expect("redoing the removal lowers the floor again", sb.VE.floor === 0 && sb.VE.ops.filter((o) => o.tool !== "removal").length === 0, String(sb.VE.floor));
+  }
+  // A typed destination takes the extension of the chosen format.
+  {
+    let handler = null;
+    const field = { value: " D:/out/clip.gif ", title: "", addEventListener: (_, fn) => { handler = fn; } };
+    const sb = {
+      $: () => field, VE: { destOverride: null }, exportFormat: () => "mp4", formatExt: (f) => f, updateExportNote: () => {},
+      withExtension: (p, ext) => `${String(p).replace(/\.[^\\/.]+$/, "")}.${ext}`, destPath: () => sb.VE.destOverride || "auto.mp4",
+    };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("dest", '$("ve-export-dest").addEventListener("change", () => {') + ");", sb);
+    handler();
+    expect("a typed clip.gif becomes clip.mp4 for the mp4 format", sb.VE.destOverride === "D:/out/clip.mp4" && field.value === "D:/out/clip.mp4", sb.VE.destOverride);
+    field.value = "  ";
+    handler();
+    expect("an emptied field goes back to the automatic name", sb.VE.destOverride === null);
+  }
+  // Shift-drag on a corner keeps the opposite corner where it was.
+  {
+    const sb = {};
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("resizeRect", "function resizeRect(orig, handle, point, keepRatio) {"), sb);
+    sb.__o = { x: 100, y: 100, w: 200, h: 100 };
+    const nw = vm.runInContext('resizeRect(__o, "nw", { x: 0, y: 40 }, true)', sb);
+    expect("a north-west corner keeps the south-east corner fixed", nw.x + nw.w === 300 && nw.y + nw.h === 200 && Math.abs(nw.w / nw.h - 2) < 1e-9, JSON.stringify(nw));
+    const se = vm.runInContext('resizeRect(__o, "se", { x: 400, y: 150 }, true)', sb);
+    expect("a south-east corner keeps the north-west corner fixed", se.x === 100 && se.y === 100 && se.w === 300 && se.h === 150, JSON.stringify(se));
+    const ne = vm.runInContext('resizeRect(__o, "ne", { x: 400, y: 0 }, true)', sb);
+    expect("a north-east corner keeps the south-west corner fixed", ne.x === 100 && ne.y + ne.h === 200 && ne.w === 300, JSON.stringify(ne));
+    const free = vm.runInContext('resizeRect(__o, "nw", { x: 50, y: 50 }, false)', sb);
+    expect("without Shift the corner follows the pointer", free.x === 50 && free.y === 50 && free.w === 250 && free.h === 150);
+  }
+}
+
 // Removing an operation is an undo step: undo brings it back with every
 // field in its old slot, redo removes it again, earlier edits stay as they were.
 {
@@ -910,7 +1046,7 @@ async function exportIdleCheck() {
   }
 }
 
-cameraOverlayRaceCheck().then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
+cameraOverlayRaceCheck().then(() => Promise.all(pending)).then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);

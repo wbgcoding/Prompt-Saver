@@ -525,7 +525,16 @@ function resizeRect(orig, handle, point, keepRatio) {
   if (keepRatio && orig.w && orig.h) {
     const ratio = orig.w / orig.h;
     if (handle === "n" || handle === "s") next.w = next.h * ratio;
-    else next.h = next.w / ratio;
+    else if (handle === "e" || handle === "w") next.h = next.w / ratio;
+    else {
+      // A corner: the opposite corner stays where it was, the dragged one follows the pointer
+      // on the original proportions.
+      const ax = handle.includes("w") ? orig.x + orig.w : orig.x;
+      const ay = handle.includes("n") ? orig.y + orig.h : orig.y;
+      next.h = next.w / ratio;
+      next.x = point.x < ax ? ax - next.w : ax;
+      next.y = point.y < ay ? ay - next.h : ay;
+    }
   }
   return next;
 }

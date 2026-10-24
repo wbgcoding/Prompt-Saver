@@ -530,6 +530,7 @@ export default {
     veStillSaved: "フレームを保存しました: {path}",
     veStillNotSaved: "フレームを保存できませんでした。",
     veNeedSelection: "先にタイムラインで範囲を選択してください。",
+    veMarkOutside: "再生位置が残す範囲の外にあります。",
     veZoomOut: "縮小",
     veZoomIn: "拡大",
     veZoomFit: "全体表示",

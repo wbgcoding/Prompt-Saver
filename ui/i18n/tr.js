@@ -530,6 +530,7 @@ export default {
     veStillSaved: "Kare kaydedildi: {path}",
     veStillNotSaved: "Kare kaydedilemedi.",
     veNeedSelection: "Önce zaman çizelgesinde bir aralık seçin.",
+    veMarkOutside: "Oynatma konumu tutulan bölümün dışında.",
     veZoomOut: "Uzaklaştır",
     veZoomIn: "Yakınlaştır",
     veZoomFit: "Sığdır",
