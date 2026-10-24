@@ -32,6 +32,14 @@ pub(crate) fn rec_can_pause(phase: RecPhase) -> bool {
 pub(crate) fn rec_can_resume(phase: RecPhase) -> bool {
     phase == RecPhase::Paused
 }
+// The name the "recording-state" event carries; no session at all reads as idle.
+pub(crate) fn rec_state_name(phase: Option<RecPhase>) -> &'static str {
+    match phase {
+        None | Some(RecPhase::Idle) => "idle",
+        Some(RecPhase::Recording) => "recording",
+        Some(RecPhase::Paused) => "paused",
+    }
+}
 pub(crate) fn rec_can_finish(phase: RecPhase) -> bool {
     // stop and cancel are reachable from the same two phases.
     matches!(phase, RecPhase::Recording | RecPhase::Paused)

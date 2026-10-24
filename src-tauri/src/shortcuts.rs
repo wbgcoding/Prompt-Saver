@@ -597,6 +597,7 @@ pub(crate) fn trigger_rec_pause_hotkey(app: &AppHandle) {
     };
     if toggled {
         apply_tray_menu(app); // keep the tray's Pause/Resume label in sync
+        emit_recording_state(app);
     }
 }
 

@@ -119,9 +119,8 @@ export function bindCapture() {
         .catch((e) => errToast(e));
     }
   }
-  // Driven by the recording state, not the click: set on a successful start, cleared on
-  // stop/cancel/auto-stop, and re-synced by a slow poll so a missed event cannot leave the
-  // button glowing.
+  // Driven by the recording state, not the click: the backend announces every change with
+  // "recording-state", and showing the window again re-syncs it in case one was missed.
   function setRecordBtnState(state) {
     const btn = $("record-btn");
     btn.classList.toggle("is-recording", state === "recording");
@@ -139,8 +138,8 @@ export function bindCapture() {
     const status = await invoke("recording_status").catch(() => null);
     setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
   }
-  setInterval(syncRecordBtnFromStatus, 5000);
-  // Catches up when the window is shown again instead of waiting out the poll interval.
+  listen("recording-state", (e) => setRecordBtnState(e.payload));
+  // Catches up when the window is shown again.
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) syncRecordBtnFromStatus();
   });

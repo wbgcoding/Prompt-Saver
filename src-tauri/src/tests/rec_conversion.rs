@@ -607,3 +607,11 @@ fn every_recording_captured_emit_is_preceded_by_the_main_window_reveal() {
     }
     assert_eq!(emits, 2, "expected the stop path and the failed-continue path");
 }
+
+#[test]
+fn the_recording_state_event_names_idle_recording_and_paused() {
+    assert_eq!(rec_state_name(None), "idle");
+    assert_eq!(rec_state_name(Some(RecPhase::Idle)), "idle");
+    assert_eq!(rec_state_name(Some(RecPhase::Recording)), "recording");
+    assert_eq!(rec_state_name(Some(RecPhase::Paused)), "paused");
+}

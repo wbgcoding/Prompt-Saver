@@ -148,6 +148,16 @@ SECTION = """\
       }
     }
     window.__REC_ACTIVE__ = false;
+    // 995: the backend announces every recording state change and the record button follows,
+    // with no poll in between.
+    {
+      const state = () => (recordBtnEl.classList.contains('is-paused') ? 'paused' : recordBtnEl.classList.contains('is-recording') ? 'recording' : 'idle');
+      for (const next of ['recording', 'paused', 'recording', 'idle']) {
+        window.__FIRE__('recording-state', next);
+        await sleep(60);
+        if (state() !== next) out.errors.push('995: after recording-state ' + next + ' the record button reads ' + state());
+      }
+    }
     // 835: the bar failing to open after a good start must not reset a live
     // recording to idle. The countdown runs first, so wait for the bar call.
     window.__FIRE__('recording-cancelled');

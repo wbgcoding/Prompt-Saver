@@ -302,7 +302,18 @@ pub(crate) async fn start_recording(
     // that state. The same goes for the tray's two extra rows.
     rearm_hotkeys(&app);
     apply_tray_menu(&app);
+    emit_recording_state(&app);
     Ok(())
+}
+
+// Tells every window (the main window's record button) where the recording stands, from the
+// session itself, so the button follows without polling.
+#[cfg(windows)]
+pub(crate) fn emit_recording_state(app: &AppHandle) {
+    let phase = app
+        .try_state::<RecordingState>()
+        .and_then(|rstate| rstate.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.phase));
+    let _ = app.emit("recording-state", rec_state_name(phase));
 }
 
 // One target switch at a time: the first-frame wait runs without the recording lock, so a
@@ -586,6 +597,7 @@ pub(crate) async fn finish_and_continue_recording(
             if paused {
                 apply_tray_menu(&app); // the tray's Pause row shows Resume again
             }
+            emit_recording_state(&app);
             Ok(payload)
         }
         ContinueOutcome::StoppedInstead(err) => {
@@ -593,6 +605,7 @@ pub(crate) async fn finish_and_continue_recording(
             hide_rec_outline(&app);
             rearm_hotkeys(&app);
             apply_tray_menu(&app);
+            emit_recording_state(&app);
             sweep_recordings_and_notify(&app);
             Err(err)
         }
@@ -611,6 +624,7 @@ pub(crate) fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>)
         do_pause_recording(session);
     }
     apply_tray_menu(&app); // the tray's Pause row switches to Resume
+    emit_recording_state(&app);
     Ok(())
 }
 
@@ -626,6 +640,7 @@ pub(crate) fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>
         do_resume_recording(session);
     }
     apply_tray_menu(&app); // the tray's Resume row switches back to Pause
+    emit_recording_state(&app);
     Ok(())
 }
 
@@ -711,6 +726,7 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     // recording, on every end path (button, hotkey, auto-stop).
     rearm_hotkeys(app);
     apply_tray_menu(app);
+    emit_recording_state(app);
     // Safe now: this recording is already gone from RecordingState, so a leftover cannot be
     // the file that just finished.
     sweep_recordings_and_notify(app);
@@ -785,6 +801,7 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
     // and drop the tray's two extra rows.
     rearm_hotkeys(&app);
     apply_tray_menu(&app);
+    emit_recording_state(&app);
     sweep_recordings_and_notify(&app); // same moment as a normal stop, see above
     // The composer's record button learns of a cancel only through this event (that click
     // lives in the rec-bar window), like stop's "recording-captured".
