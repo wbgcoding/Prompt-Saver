@@ -17,7 +17,7 @@ import { applyTheme, applyTileStyle, bindTheme, closeThemeEditor, wireTheme } fr
 import { applySettingsCore, applySettingsUi, bindSettingsPanel, closeImportMenu, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
 import { bindHotkeys } from "./hotkeys.js";
 import { bindAbout } from "./about.js";
-import { applyFlags, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, syncBannerStack, warnDataDirSyncFolder } from "./expertMenu.js";
+import { applyFlags, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, warnDataDirSyncFolder } from "./expertMenu.js";
 import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
 import { bindDictation, closeLangsModal, wireDictation } from "./dictation.js";
@@ -320,24 +320,6 @@ function bind() {
     assignSettingsWriteFailed(false);
     if (!$("settings-expert").classList.contains("hidden")) renderExpert();
   });
-  // The one persistent, always-visible sign that the remote-access receiver
-  // is reachable at all: shown for as long as it is actually running, with
-  // its port and an immediate off switch, never just while the setting is on.
-  function updateRemoteApiBanner(status) {
-    const running = !!status?.running;
-    $("remote-api-banner").classList.toggle("hidden", !running);
-    if (running) {
-      setStatusText($("remote-api-banner-text"), "remoteApiBadge", "port", status.port);
-    }
-    syncBannerStack();
-  }
-  listen("remote-api-status", (e) => updateRemoteApiBanner(e.payload));
-  // The receiver replaced an expired certificate by itself: say so, like a manual renewal.
-  listen("remote-tls-renewed", () => toast(t("remoteTlsRenewed")));
-  invoke("remote_api_status").then(updateRemoteApiBanner).catch(() => {});
-  $("remote-api-banner-off").addEventListener("click", async () => {
-    try { await invoke("remote_api_stop_now"); } catch (e) { errToast(e); }
-  });
   // Sealing broke while the app was already running. The startup question is long
   // over by then, so the backend pushes it instead of this window polling for it.
   listen("store-unsealed", () => {
@@ -502,7 +484,7 @@ async function maybeOfferEditorDraftRecovery() {
 }
 
 // Each launch-time step runs on its own: one that fails must not skip the rest
-// (the tour, the crash-draft recovery, a promptsaver:// link that started the app).
+// (the tour, the crash-draft recovery).
 async function runGuarded(step) {
   try { return await step(); } catch (err) { errToast(err); return undefined; }
 }
@@ -606,9 +588,6 @@ async function init() {
         await runGuarded(() => maybeAskUpdateConsent(sealWarned));
         await runGuarded(() => maybeOpenFirstRunTour(sealWarned));
         await runGuarded(maybeOfferEditorDraftRecovery);
-        // A promptsaver:// link that started this process waits in the backend
-        // until this listener side is up; ask for it only now.
-        invoke("run_pending_launch_url").catch(() => {});
       });
     };
     setTimeout(reveal, 1500);

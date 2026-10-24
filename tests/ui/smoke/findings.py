@@ -214,7 +214,7 @@ def run(browser, tmp):
       if (ink !== 'rgb(0, 0, 0)' && ink !== '#000' && ink !== 'black') errs.push('563-14: a light tinted member has ink ' + JSON.stringify(ink) + ', expected a dark one');
     }
 """)
-    failed += ar_probe('g2', 'expert menu bulk actions never flip demo mode, remote access, network, sync or the URL scheme', 'index', '1000x780', '<script>window.__DEMO_TEST__ = true;</script>\n', r"""
+    failed += ar_probe('g2', 'expert menu bulk actions never flip demo mode, network or sync', 'index', '1000x780', '<script>window.__DEMO_TEST__ = true;</script>\n', r"""
     await bootReady();
     const flagCalls = () => callsFor('set_ui_flag');
     document.getElementById('gear').click();
@@ -249,22 +249,6 @@ def run(browser, tmp):
     if (!seq.length || seq[0][0] !== 'reset_expert') errs.push('564-2: reset all did not run reset_expert');
     const back = seq.find(([c, a]) => c === 'set_ui_flag' && a.key === 'demoMode');
     if (!back || back[1].enabled !== true) errs.push('564-2: reset all left a running demo session without its marker');
-""")
-    failed += ar_probe('g3', 'expert menu: a stored remote rate limit of 0 (unlimited) shows as unlimited, not 5/min', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { remoteApi: true }, ui_values: { remoteRateLimit: 0 } };</script>\n', r"""
-    await bootReady();
-    document.getElementById('gear').click(); await sleep(200);
-    document.getElementById('expert-open').click(); await sleep(300);
-    let row = null;
-    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
-      tb.click(); await sleep(80);
-      row = document.querySelector('#expert-flags [data-setting-row="remoteRateLimit"]');
-      if (row) break;
-    }
-    if (!row) { errs.push('564-3: the remote rate limit row was not found'); }
-    else {
-      const out = row.querySelector('.value-out').textContent;
-      if (out !== 'Unlimited') errs.push('564-3: the stored 0 shows as ' + JSON.stringify(out) + ', expected Unlimited');
-    }
 """)
     failed += ar_probe('g4', 'expert menu: video folder numbers follow the folder, a late answer for an old folder is ignored', 'index', '1000x780', '', r"""
     await bootReady();

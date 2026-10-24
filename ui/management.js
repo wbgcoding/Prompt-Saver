@@ -1,5 +1,5 @@
-// Statistics, duplicate finder, compare view, trash, error log and the receiver dialogs.
-import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, settings, t, toast, txt, undoToast, val } from "./core.js";
+// Statistics, duplicate finder, compare view, trash, error log.
+import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
 import { applyFlags, applyValues, renderExpert, rowResetBtn, withTip } from "./expertMenu.js";
 import { loadPalette, refreshColorUI } from "./theme.js";
@@ -648,114 +648,6 @@ export async function clearErrorLogAll() {
   renderErrorLogList();
 }
 
-// Regenerating replaces the stored hash, so a fresh plaintext is shown exactly once, as
-// when the receiver is first turned on (flagRow's remoteApi branch).
-export async function openRemotePasswordDialog() {
-  const ok = await confirmDialog({
-    title: t("remotePasswordDialogTitle"),
-    message: t("remotePasswordDialogMessageExisting"),
-    confirmLabel: t("remotePasswordRegenerate"),
-  });
-  if (!ok) return;
-  let fresh;
-  try {
-    fresh = await invoke("remote_api_regenerate_password");
-  } catch (e) {
-    errToast(e);
-    return;
-  }
-  await confirmDialog({
-    title: t("remotePasswordDialogTitle"),
-    message: t("remotePasswordDialogMessageNew"),
-    input: { type: "text", value: fresh },
-    confirmLabel: t("close"),
-    oneButton: true,
-  });
-}
-
-// One line or comma per address/range: validated server-side (the same
-// CIDR check the receiver itself uses) before it is ever saved.
-export async function openRemoteRangesDialog() {
-  const current = settings.ui_texts?.remoteAllowedRanges || "";
-  const value = await confirmDialog({
-    title: t("remoteRangesDialogTitle"),
-    message: t("remoteRangesDialogMessage"),
-    input: { type: "text", value: current, placeholder: "192.168.1.0/24" },
-    confirmLabel: t("save"),
-  });
-  if (value === null) return;
-  try {
-    await invoke("set_remote_allowed_ranges", { ranges: value });
-    settings.ui_texts = { ...(settings.ui_texts || {}), remoteAllowedRanges: value };
-  } catch (e) {
-    const prefix = "not a valid address or range: ";
-    if (String(e).startsWith(prefix)) toast(t("remoteRangesInvalid").replace("{value}", () => String(e).slice(prefix.length)));
-    else errToast(e);
-  }
-}
-
-// The certificate other devices check: its fingerprint (with a copy button), a
-// save-for-other-devices button and a renewal. Renewing invalidates the old
-// certificate at once, so it asks first; the loop shows the new fingerprint.
-export async function openRemoteTlsDialog() {
-  for (;;) {
-    let fingerprint = null;
-    try { fingerprint = await invoke("remote_tls_fingerprint"); } catch (e) { fingerprint = null; }
-    const answer = await confirmDialog({
-      title: t("remoteTlsFingerprint"),
-      message: t("remoteTlsActionTip"),
-      input: { type: "text", value: fingerprint || EMPTY_VALUE, copy: true },
-      confirmLabel: t("remoteTlsSave"),
-      altLabel: t("remoteTlsRenew"),
-      cancelLabel: t("close"),
-      danger: false,
-    });
-    if (answer === null || answer === false) return;
-    if (answer === "alt") {
-      const sure = await confirmDialog({ title: t("remoteTlsRenew"), message: t("remoteTlsRenewConfirm"), confirmLabel: t("remoteTlsRenew") });
-      if (!sure) continue;
-      try {
-        await invoke("remote_tls_renew");
-        toast(t("remoteTlsRenewed"));
-      } catch (e) { errToast(e); }
-      continue;
-    }
-    try {
-      await invoke("remote_tls_save_cert");
-    } catch (e) {
-      if (String(e) !== "canceled") errToast(e);
-    }
-    return;
-  }
-}
-
-// The certificate lifetime switch. Switching makes a new certificate, so it asks
-// first; nothing is saved on cancel. The backend saves the flag and the new
-// certificate in one write and restarts a running receiver. True when applied.
-export async function toggleShortLivedCert(enabled) {
-  const sure = await confirmDialog({ title: t("remoteTlsRenew"), message: t("remoteTlsRenewConfirm"), confirmLabel: t("remoteTlsRenew") });
-  if (!sure) return false;
-  try {
-    await invoke("remote_tls_set_short_lived", { enabled });
-  } catch (e) {
-    const msg = String(e);
-    // Flag and certificate were saved; only the receiver failed to come back up.
-    // The switch keeps the saved state and the restart error is shown on its own.
-    if (msg.startsWith("restart-failed:")) {
-      settings.ui_flags = { ...(settings.ui_flags || {}), remoteTlsShortLived: enabled };
-      errToast(msg.slice("restart-failed:".length));
-      return true;
-    }
-    if (msg === "save-failed") toast(t("persistFailed"));
-    else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
-    else errToast(e);
-    return false;
-  }
-  settings.ui_flags = { ...(settings.ui_flags || {}), remoteTlsShortLived: enabled };
-  toast(t("remoteTlsRenewed"));
-  return true;
-}
-
 export function bindManagement() {
   $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
   $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
@@ -778,9 +670,6 @@ export function bindManagement() {
 export function wireManagement() {
   EXPERT_ACTIONS["trash-open"] = openTrash;
   EXPERT_ACTIONS["error-log-open"] = openErrorLog;
-  EXPERT_ACTIONS["remote-password-open"] = openRemotePasswordDialog;
-  EXPERT_ACTIONS["remote-ranges-open"] = openRemoteRangesDialog;
-  EXPERT_ACTIONS["remote-tls-open"] = openRemoteTlsDialog;
   // Runs the same sweep on demand: an explicit click always gets an answer, even "nothing
   // to clean up".
   EXPERT_ACTIONS["rec-sweep-now"] = async () => {

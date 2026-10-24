@@ -71,8 +71,6 @@ pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("rotateMaxEntries", 2.0, 50.0, false),
     ("bgDoneKeepMin", 1.0, 120.0, false),
     ("undoToastMs", 0.0, 20000.0, false),
-    ("remotePort", 1024.0, 65535.0, false),
-    ("remoteRateLimit", 5.0, 300.0, true),
 ];
 
 // Preset-or-custom selects: the whole-number range the free-entry field accepts,

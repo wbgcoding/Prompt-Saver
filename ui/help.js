@@ -728,22 +728,6 @@ export const HELP_CONTENT = {
     },
     {
       section: "system",
-      title: "Remote access & links",
-      whatItIs: "Two optional ways for other programs to reach the app: links that open or copy a tile, and a password-protected receiver for commands.",
-      howTo: [
-        "Turn on promptsaver links in the expert menu to let a link open or copy a tile.",
-        "Turn on remote access to let another program on this computer send commands; copy the password shown once.",
-        "To allow other devices, turn on \"Allow from the local network\" and list the allowed address ranges.",
-        "Open \"Certificate…\" to see the fingerprint, save the certificate for the other device, or make a new one.",
-        "For iPhone, iPad or Mac, turn on \"Short certificate for Apple devices (825 days)\"; switching asks first and then makes a new certificate.",
-      ],
-      whatHappens:
-        "Both are off by default. A link can only open or copy, never change or delete, and the first open and the first copy each ask once. The receiver never starts without a password, and the app keeps it in a form it cannot read back; ten wrong tries lock that caller out for ten minutes. Requests are size and rate limited and logged without the password. A banner with the port and an off button stays on screen while it runs. Without the network switch it only listens on this computer; with it, the connection is encrypted and every device has to trust the saved certificate. A new certificate replaces the old one at once, so every device needs the new file; make one after this computer's network address changed. Resetting settings switches remote access and links off. The certificate is valid for 10 years, or for 825 days with the short setting, which Apple devices require; devices then need the new certificate about every two years. An expired certificate is renewed when the receiver starts, with a message.",
-      settings: ["Remote access, network access, address ranges, port, requests per minute, password, certificate, links: Expert menu → System & data → Remote access"],
-      tip: "Anyone in the allowed ranges who has the password can read and change tiles: keep the ranges narrow.",
-    },
-    {
-      section: "system",
       title: "Command line",
       whatItIs: "The program file also works as a command line tool, for scripts and quick jobs without opening the window.",
       howTo: [
@@ -752,7 +736,7 @@ export const HELP_CONTENT = {
         "Add --json for machine-readable output, and --yes to any command that changes something.",
       ],
       whatHappens:
-        "If the app is already running, the command goes to it and its answer is printed; otherwise the command runs on its own without a window. Only one copy ever touches the data at a time. Without --yes a changing command only says what it would do. Folder locations, the vault, the backup password and every remote access setting, recording copies from other apps and the link switch cannot be changed from here, only in the app.",
+        "If the app is already running, the command goes to it and its answer is printed; otherwise the command runs on its own without a window. Only one copy ever touches the data at a time. Without --yes a changing command only says what it would do. Folder locations, the vault, the backup password and recording copies from other apps cannot be changed from here, only in the app.",
       settings: [],
     },
     {
@@ -1492,22 +1476,6 @@ export const HELP_CONTENT = {
     },
     {
       section: "system",
-      title: "Fernzugriff & Links",
-      whatItIs: "Zwei optionale Wege, über die andere Programme die App erreichen: Links, die eine Kachel öffnen oder kopieren, und ein passwortgeschützter Empfänger für Befehle.",
-      howTo: [
-        "promptsaver-Links im Expertenmenü einschalten, damit ein Link eine Kachel öffnen oder kopieren kann.",
-        "Den Fernzugriff einschalten, damit ein anderes Programm auf diesem Rechner Befehle senden kann; das einmal angezeigte Passwort kopieren.",
-        "Für andere Geräte „Aus dem lokalen Netzwerk zulassen“ einschalten und die erlaubten Adressbereiche eintragen.",
-        "„Zertifikat…“ öffnen, um den Fingerabdruck zu sehen, das Zertifikat für das andere Gerät zu speichern oder ein neues zu erzeugen.",
-        "Für iPhone, iPad oder Mac „Kurzes Zertifikat für Apple-Geräte (825 Tage)“ einschalten; das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.",
-      ],
-      whatHappens:
-        "Beides ist ab Werk aus. Ein Link kann nur öffnen oder kopieren, nie ändern oder löschen, und das erste Öffnen und das erste Kopieren fragen je einmal nach. Der Empfänger startet nie ohne Passwort, und die App speichert es nur in einer Form, aus der es nicht wieder lesbar wird; zehn falsche Versuche sperren den Aufrufer zehn Minuten. Anfragen sind in Größe und Anzahl begrenzt und werden ohne das Passwort protokolliert. Solange er läuft, bleibt ein Banner mit Port und Ausschalter sichtbar. Ohne den Netzwerk-Schalter lauscht er nur auf diesem Rechner; mit ihm ist die Verbindung verschlüsselt, und jedes Gerät muss dem gespeicherten Zertifikat vertrauen. Ein neues Zertifikat ersetzt das alte sofort, jedes Gerät braucht dann die neue Datei; nach einer geänderten Netzwerkadresse dieses Rechners ein neues erzeugen. Das Zurücksetzen der Einstellungen schaltet Fernzugriff und Links aus. Das Zertifikat gilt 10 Jahre, mit der kurzen Einstellung 825 Tage, was Apple-Geräte verlangen; Geräte brauchen dann etwa alle zwei Jahre das neue Zertifikat. Ein abgelaufenes Zertifikat wird beim Start des Empfängers erneuert, mit einer Meldung.",
-      settings: ["Fernzugriff, Netzwerkzugriff, Adressbereiche, Port, Anfragen pro Minute, Passwort, Zertifikat, Links: Expertenmenü → System & Daten → Fernzugriff"],
-      tip: "Jeder in den erlaubten Bereichen, der das Passwort kennt, kann Kacheln lesen und ändern: die Bereiche eng halten.",
-    },
-    {
-      section: "system",
       title: "Befehlszeile",
       whatItIs: "Die Programmdatei funktioniert auch als Kommandozeilen-Werkzeug, für Skripte und schnelle Aufgaben, ohne das Fenster zu öffnen.",
       howTo: [
@@ -1517,7 +1485,7 @@ export const HELP_CONTENT = {
         "--json für maschinenlesbare Ausgabe anhängen, und --yes an jeden Befehl, der etwas ändert.",
       ],
       whatHappens:
-        "Läuft die App bereits, geht der Befehl an sie und ihre Antwort wird ausgegeben; sonst läuft der Befehl allein, ohne Fenster. Es greift immer nur eine Kopie auf die Daten zu. Ohne --yes sagt ein ändernder Befehl nur, was er täte. Ordnerorte, der Tresor, das Sicherungspasswort und jede Fernzugriff-Einstellung, das Aufnehmen von Kopien aus anderen Apps und der Link-Schalter lassen sich hier nicht ändern, nur in der App.",
+        "Läuft die App bereits, geht der Befehl an sie und ihre Antwort wird ausgegeben; sonst läuft der Befehl allein, ohne Fenster. Es greift immer nur eine Kopie auf die Daten zu. Ohne --yes sagt ein ändernder Befehl nur, was er täte. Ordnerorte, der Tresor, das Sicherungspasswort und das Aufnehmen von Kopien aus anderen Apps lassen sich hier nicht ändern, nur in der App.",
       settings: [],
     },
     {

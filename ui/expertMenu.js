@@ -14,7 +14,6 @@ import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, fmtUnit, fmtUnitName, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { reloadEverything, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
-import { toggleShortLivedCert } from "./management.js";
 import { closeBackups } from "./backups.js";
 import { varFixedListRow } from "./editor.js";
 import { openVideoCleanup } from "./recordingTools.js";
@@ -427,14 +426,6 @@ export function flagRow(key) {
       }
       return;
     }
-    // The certificate lifetime switch makes a new certificate: confirmed first,
-    // saved together with the certificate by its own command, and the switch
-    // goes back to where it was when it is cancelled or fails.
-    if (key === "remoteTlsShortLived") {
-      if (!(await toggleShortLivedCert(enabled))) input.checked = !enabled;
-      else syncRowReset("flags", key); // the reset icon follows the new value
-      return;
-    }
     // Turning sync on starts writing every text prompt as a plain-text .md file
     // next to the encrypted DB: say so before it happens, not just in the help doc.
     if (key === "promptSync" && enabled) {
@@ -459,30 +450,9 @@ export function flagRow(key) {
       else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
       else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
       else if (msg === "save-failed") toast(t("persistFailed"));
-      else if (msg === "remote-off-not-saved") toast(t("remoteOffNotSaved"));
-      else if (msg === "remote-network-off-not-saved") toast(t("remoteNetworkOffNotSaved"));
-      else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
       else errToast(err);
-      // Switching the receiver off always takes effect, even when the write did
-      // not land, so that one error keeps the switch off instead of reverting it.
-      const stayed = msg === "remote-off-not-saved" || msg === "remote-network-off-not-saved";
-      settings.ui_flags = { ...(settings.ui_flags || {}), [key]: stayed ? enabled : !enabled };
-      input.checked = stayed ? enabled : !enabled;
-    }
-    // Turning the receiver on may have just minted its very first password
-    // (see set_ui_flag's own remoteApi branch): shown here, once, in a
-    // selectable field, and never retrievable again after this.
-    if (key === "remoteApi" && enabled) {
-      const shown = await invoke("remote_api_take_shown_password").catch(() => null);
-      if (shown) {
-        await confirmDialog({
-          title: t("remotePasswordDialogTitle"),
-          message: t("remotePasswordDialogMessageNew"),
-          input: { type: "text", value: shown },
-          confirmLabel: t("close"),
-          oneButton: true,
-        });
-      }
+      settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
+      input.checked = !enabled;
     }
     // Read once at process start (before the builder exists): flipping it live
     // cannot change which guard is already running.
@@ -927,10 +897,8 @@ export function renderDataDirReadOnlyBanner() {
 }
 
 // One slot above the grid for every notice: only the most important active one
-// shows, a counter beside it steps through the rest. Highest priority first; the
-// remote access sign is the app's one network surface and must never be the
-// hidden one.
-export const BANNER_PRIORITY = ["remote-api-banner", "data-dir-readonly-banner", "demo-mode-banner", "grid-overflow", "examples-banner"];
+// shows, a counter beside it steps through the rest. Highest priority first.
+export const BANNER_PRIORITY = ["data-dir-readonly-banner", "demo-mode-banner", "grid-overflow", "examples-banner"];
 export let bannerFront = 0; // which of the active notices is showing (index, wraps)
 export let bannerActiveKey = ""; // joined ids of the active set the index belongs to
 export function bannerIsActive(id) {

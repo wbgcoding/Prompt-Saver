@@ -275,14 +275,6 @@ export const OPT_FLAG_LABELS = {
   // Per-entry encryption. Off by default: an untouched install has nothing to type a vault
   // password for.
   secretPrompts: "flagSecretPrompts",
-  // The local remote-access receiver and the promptsaver:// link scheme. Both off by default:
-  // this is the app's one network surface.
-  remoteApi: "flagRemoteApi",
-  remoteNetworkFilter: "flagRemoteNetworkFilter",
-  // Certificate lifetime (825 days instead of ten years). Flipping it makes a
-  // new certificate, so it has its own confirmed command (toggleShortLivedCert).
-  remoteTlsShortLived: "remoteTlsShortLived",
-  urlScheme: "flagUrlScheme",
   // System-wide key capture for the video editor's "keys" overlay. Off by default: no low-level
   // keyboard hook exists in this app unless the user turns this on for a specific recording.
   keyOverlay: "flagKeyOverlay",
@@ -455,10 +447,6 @@ export const EXPERT_VALUES = {
   bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
   // How long the Undo button on a destructive-action toast stays clickable.
   undoToastMs: { label: "valUndoToastMs", min: 0, max: 20000, step: 500, def: 8000, unit: "ms", zeroLabel: "valOff", offAtZero: true },
-  // The port shows on the persistent badge while the receiver runs; a companion program reads
-  // it from there, not from this slider.
-  remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi", input: true },
-  remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi", topUnlimited: true },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option). The
@@ -565,11 +553,6 @@ export const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }, { id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
-    // The only new network surface in the app, off by default.
-    // A link can only open or copy an entry; the receiver can do everything
-    // the command line can, gated by its own password and network switch.
-    { title: "expGroupRemote", flags: ["remoteApi", { key: "remoteNetworkFilter", gate: "remoteApi" }, { key: "remoteTlsShortLived", gate: "remoteNetworkFilter" }, "urlScheme"], values: ["remotePort", "remoteRateLimit"],
-      actions: [{ id: "remote-password-open", label: "remotePasswordAction", gate: "remoteApi" }, { id: "remote-ranges-open", label: "remoteRangesAction", gate: "remoteNetworkFilter" }, { id: "remote-tls-open", label: "remoteTlsAction", tip: "remoteTlsActionTip", gate: "remoteNetworkFilter" }] },
     // Switches and caps for finding a fault, not for everyday use: folded until opened.
     { title: "expGroupDiagnostics", flags: ["allowMultipleInstances", "dataDirLock", "demoMode", "mediaMetaBackfill", { key: "recSweepBroken", gate: "screenRecord" }], values: ["errorLogKeepKb", "bgDoneKeepMin"],
       actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }] },
@@ -589,9 +572,8 @@ FLAG_GATES.favViewButton = "favorites";
 
 // Demo mode is a session with its own enable and disable commands and a restart,
 // so no bulk action (category reset, reset all) may ever write it.
-export const EXPERT_BULK_NEVER = ["demoMode", "remoteTlsShortLived"];
-// What an expert reset writes back: the backend clears the certificate lifetime flag
-// itself (the certificate stays), so only the demo session marker survives it.
+export const EXPERT_BULK_NEVER = ["demoMode"];
+// What an expert reset writes back: only the demo session marker survives it.
 export const EXPERT_RESET_KEEP = ["demoMode"];
 // Kilobytes of a text attachment the preview reads, per step of the attachPreviewSize choice.
 export const ATTACH_PREVIEW_KB = { short: 3, medium: 8, long: 32 };
@@ -662,7 +644,6 @@ export const EXPERT_TIPS = [
   "nameMaxLen", "searchListMax", "maxViews", "gridMax",
   "statsTopN", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySizeLevel", "showLibrary",
-  "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator",
 ];
 export const EXPERT_TIP_SET = new Set(EXPERT_TIPS);

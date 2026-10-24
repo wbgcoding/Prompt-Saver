@@ -4285,22 +4285,6 @@ body.drag-over::after {
   letter-spacing: 0.02em;
   flex: 0 0 auto;
 }
-/* Stays visible for as long as the local remote-access receiver is running --
-   the one persistent, always-on-screen sign of the app's one network surface. */
-.remote-api-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 12.5px;
-  flex: 0 0 auto;
-}
 .lib-item .dot {
   width: 10px;
   height: 10px;
