@@ -3892,33 +3892,6 @@ input[type="password"]::-ms-clear { display: none; }
 
 /* Color dots of the batch color bars */
 .lib-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.lib-color {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  padding: 0;
-  background: var(--surface-2);
-}
-.lib-color.active { border-color: var(--fg); }
-/* "No color filter": grey circle with a red strike-through. */
-.lib-color-all {
-  position: relative;
-  background: var(--surface-2);
-  border-color: var(--border);
-  overflow: hidden;
-}
-.lib-color-all::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -2px;
-  width: 2px;
-  height: 22px;
-  background: #e23b3b;
-  transform: translateX(-50%) rotate(45deg);
-}
 
 /* Copy-history journal: one list, a sort field switches recent | most used, uniform rows.
    Fills the available height; the list scrolls when there are many entries. */
@@ -4426,7 +4399,6 @@ body.drag-over::after {
 }
 .library-list.lib-tiles-view .lib-item .lib-name-row { justify-content: center; }
 .library-list.lib-tiles-view .lib-item .lib-text,
-.library-list.lib-tiles-view .lib-item .lib-tags,
 .library-list.lib-tiles-view .lib-item .lib-tag-marks,
 .library-list.lib-tiles-view .lib-item .lib-rotate-tag,
 .library-list.lib-tiles-view .lib-item .lib-image-hit-tag,
@@ -4538,8 +4510,6 @@ body.drag-over::after {
 .lib-tag-marks { display: inline-flex; gap: 4px; flex: 0 0 auto; pointer-events: none; }
 .tag-mark { padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 500; line-height: 1.6; color: var(--muted); background: var(--surface); white-space: nowrap; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; }
 .tag-mark.tag-colored { background: color-mix(in srgb, var(--chip-color) 22%, transparent); color: var(--fg); }
-.lib-sub { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
-.lib-subrow { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .lib-sub-right { flex: 0 0 auto; font-weight: 600; }
 .lib-text {
   color: var(--muted);
@@ -5315,7 +5285,6 @@ button.tag-chip:hover { border-color: var(--accent); }
 }
 .tag-action:hover { border-color: var(--accent); color: var(--fg); }
 .tag-action:last-child { margin-left: auto; }
-.lib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 
 #tag-modal.overlay { z-index: 68; }
 .tag-manager-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
