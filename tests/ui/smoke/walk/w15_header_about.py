@@ -16,7 +16,7 @@ SECTION = """\
     }
     // 729: help is the question-mark button in the settings head, left of the close
     // button, visible on the settings page and on the expert page; the expert menu
-    // button sits alone in its row at normal button size.
+    // button is the primary button of the System line at normal button size.
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
       if (document.getElementById('settings-main').classList.contains('hidden')) {
@@ -34,8 +34,7 @@ SECTION = """\
         if (!(hr.right <= close729.getBoundingClientRect().left + 1)) out.errors.push('729: help-open is not left of the close button');
         if (!help729.getAttribute('aria-label') || !help729.title) out.errors.push('729: help-open has no accessible name or tooltip');
         const eo729 = document.getElementById('expert-open');
-        const row729 = eo729.parentElement;
-        if (row729.querySelectorAll('button').length !== 1) out.errors.push('729: the expert menu button shares its row');
+        if (!eo729.classList.contains('primary-btn') || !eo729.closest('#updates-field')) out.errors.push('975: the expert menu button is not the primary button of the System line');
         if (eo729.getBoundingClientRect().width > 260) out.errors.push('729: the expert menu button is wider than a normal button: ' + Math.round(eo729.getBoundingClientRect().width));
         await click('expert-open');
         const hr2 = help729.getBoundingClientRect();
@@ -81,14 +80,16 @@ SECTION = """\
           out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(lineH) + ' vs ' + Math.round(lineHOld));
         }
         uv.textContent = 'Version 2.7.0';
-        // The switch and its interval sit in one non-wrapping group; count them as two controls.
+        // The switch and its interval sit in one non-wrapping group; count them as two controls. The
+        // Expert menu button closes the line.
         const kids727 = [...line1.children].flatMap((k) => (k.classList.contains('update-auto') ? [...k.children] : [k]));
-        if (kids727.length !== 5 || !line1.contains(ub) || !line1.contains(ui727)) {
-          out.errors.push('727: the System line does not hold all five controls (' + kids727.length + ')');
+        if (kids727.length !== 6 || !line1.contains(ub) || !line1.contains(ui727) || !line1.contains(document.getElementById('expert-open'))) {
+          out.errors.push('727: the System line does not hold all six controls (' + kids727.length + ')');
         }
         const oneRow727 = (label) => {
-          // Below the minimum window size the line may wrap; it never cuts a text.
-          const mids = kids727.map((k) => { const r = k.getBoundingClientRect(); return r.top + r.height / 2; });
+          // Below the minimum window size the line may wrap; it never cuts a text. The Expert menu
+          // button closing the line may drop to a second row of its own.
+          const mids = kids727.filter((k) => k.id !== 'expert-open').map((k) => { const r = k.getBoundingClientRect(); return r.top + r.height / 2; });
           if (window.innerWidth >= 680 && Math.max(...mids) - Math.min(...mids) > 4) out.errors.push('727: the System line wraps in ' + label + ' at ' + window.innerWidth + 'px');
           const cut = [uv, aboutBtn, ub].filter((el) => el.scrollWidth > el.clientWidth + 1);
           if (cut.length) out.errors.push('727: ' + cut.map((el) => el.id).join(', ') + ' cut in ' + label + ' at ' + window.innerWidth + 'px');

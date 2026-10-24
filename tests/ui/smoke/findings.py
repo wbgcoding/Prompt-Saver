@@ -1009,8 +1009,8 @@ def run(browser, tmp):
     }
     if (document.querySelector('.hotkey-row button.ghost-btn[id$="-clear"]')) errs.push('908: a text Clear button is still in the markup');
 """)
-    failed += ar_probe('bm909', 'settings: one switch per row, screenshot saving in its own Capture section', 'index', '880x600', '', r"""
-    // 909: one switch per row, the capture switch in a section of its own.
+    failed += ar_probe('bm909', 'settings: switches in two columns (one below 440px), screenshot saving in its own Capture section', 'index', '880x600', '', r"""
+    // 909: two switch columns (one when the dialog is narrower than 440px), the capture switch in a section of its own.
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
@@ -1018,7 +1018,8 @@ def run(browser, tmp):
     if (!grids.length) errs.push('909: fixture: no switch grid in the settings');
     for (const g of grids) {
       const tracks = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length;
-      if (tracks !== 1) errs.push('909: a switch grid has ' + tracks + ' columns');
+      const want = document.querySelector('#settings .modal').clientWidth < 440 ? 1 : 2;
+      if (tracks !== want) errs.push('909: a switch grid has ' + tracks + ' columns, expected ' + want);
     }
     const cb = document.getElementById('opt-screenshot-folder');
     const sec = cb && cb.closest('section');
@@ -1054,8 +1055,8 @@ def run(browser, tmp):
     if (!callsFor('preview_import').length) errs.push('910: From file did not start the import preview');
     if (!pop.classList.contains('hidden')) errs.push('910: choosing an entry left the menu open');
 """)
-    failed += ar_probe('bm912', 'settings: the expert menu button has a normal size, not the full dialog width', 'index', '880x600', '', r"""
-    // 912: the button is one short ghost button at the left edge of its row.
+    failed += ar_probe('bm912', 'settings: the expert menu button has a normal size and closes the System line', 'index', '880x600', '', r"""
+    // 912: the button is one short primary button at the right end of the System line.
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
@@ -1063,8 +1064,8 @@ def run(browser, tmp):
     const r = eo.getBoundingClientRect();
     if (!(r.width > 0)) errs.push('912: the expert menu button is not visible');
     if (r.width >= 260) errs.push('912: the expert menu button is ' + Math.round(r.width) + 'px wide, expected under 260');
-    const row = eo.parentElement.getBoundingClientRect();
-    if (r.left - row.left > 4) errs.push('912: the expert menu button is not at the left edge of its row');
+    if (!eo.classList.contains('primary-btn')) errs.push('912: the expert menu button is not primary-styled');
+    if (eo !== eo.parentElement.lastElementChild) errs.push('912: the expert menu button is not the last item of the System line');
     if (eo.scrollWidth > eo.clientWidth + 1) errs.push('912: the expert menu label is cut');
 """)
     failed += ar_probe('bm913', 'settings: the update interval sits beside the Auto update switch and shows only while it is on', 'index', '880x600', '', r"""

@@ -2203,6 +2203,7 @@ the video editor and the introduction tour ship on).
 - **The tag filter popup fits its chips.** A few tags no longer leave an empty column.
 - **Hiding the input bar** moved into the toolbar right-click menu, under hiding the top bar; the small button next to Save is gone.
 - **The header logo is plain branding.** It no longer opens the project page; the About window keeps that link.
+- **The settings window is one compact list.** Small headings instead of divider lines, the switches in two columns and tighter controls make it about a third shorter; the Expert menu button moved into the System line.
 
 ## 2.6.3 (2026-07-26)
 

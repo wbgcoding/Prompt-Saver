@@ -2893,15 +2893,21 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
-#expert-open { flex: 0 0 auto; padding-inline: 16px; }
+#expert-open { flex: 0 0 auto; padding-inline: 16px; white-space: nowrap; }
+/* Compact controls inside the settings list: the dialog is one short scroll list. */
+#settings-main .modal-input { padding-block: 6px; }
+#settings-main .ghost-btn, #settings-main .primary-btn { padding-block: 6px; }
+#settings-main .update-interval > select { padding-block: 6px; }
+#settings-main .three-col { gap: 4px 10px; }
+#settings-main .three-col .field { gap: 3px; }
 /* Help (settings) and Shortcuts (help) sit in the head, right beside the close button;
    the title keeps the left. */
 #settings .modal-head .modal-title,
 #help .modal-head .modal-title { margin-right: auto; }
-/* Settings sections: one titled block each, hairline between them. A section without
-   any control stays hidden. */
-.settings-sec { display: flex; flex-direction: column; gap: 10px; }
-.settings-sec + .settings-sec { border-top: 1px solid var(--border); padding-top: 12px; }
+/* Settings sections: one compact list, a small muted heading above each block and no
+   divider lines. A section without any control stays hidden. */
+.settings-sec { display: flex; flex-direction: column; gap: 4px; }
+.settings-sec + .settings-sec { margin-top: 14px; }
 .settings-sec:not(:has(button, input, select)) { display: none; }
 /* Red at rest, not only on hover: the two buttons here cannot be undone. The two-click
    confirm stays. */
@@ -2911,7 +2917,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 }
 .settings-sec-title {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -2924,7 +2930,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    enough that the body hits its floor the dialog itself has to scroll to the rest. */
 #settings .modal { overflow: hidden auto; }
 #settings-main {
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 0;
   flex: 1 1 auto; min-height: 140px;
 }
 #settings-expert {
@@ -4105,7 +4111,7 @@ body.drag-over::after {
 /* System: one line with the version status, About, the check button, the auto-update
    switch and the interval, which takes the room left over at the right edge. */
 .update-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.update-line > .ghost-btn { flex: 0 0 auto; padding-inline: 10px; white-space: nowrap; }
+.update-line > .ghost-btn, .update-line > .primary-btn { flex: 0 0 auto; padding-inline: 10px; white-space: nowrap; }
 /* The interval list sits right beside the switch and shows only while Auto update is on.
    Only when even that is not enough (the minimum window in a long language) the line
    wraps instead of cutting a text. */
@@ -4802,9 +4808,12 @@ body.drag-over::after {
 @media (max-width: 520px) {
   .switch-grid, .three-col { grid-template-columns: minmax(0, 1fr); }
 }
-/* The settings list one switch per row. 520px keeps the switch near its label on
-   the wide dialog instead of drifting to the far right edge. */
-#settings-main .switch-grid { grid-template-columns: minmax(0, 520px); gap: 8px; }
+/* The settings switches sit in two columns; a dialog narrower than 440px (a viewport under
+   about 470px) stacks them. */
+#settings-main .switch-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 16px; }
+@media (max-width: 468px) {
+  #settings-main .switch-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .switch-grid .switch-field { align-items: center; }
 .switch-grid .switch-field > span { white-space: normal; line-height: 1.3; }
 .switch {

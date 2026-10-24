@@ -58,6 +58,9 @@ ACTS = {
     "settings": "$('gear').click(); await sleep(300);",
     "settings_end": "$('gear').click(); await sleep(300); $('settings-main').lastElementChild.scrollIntoView(); await sleep(100);",
     "expert": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);",
+    # Prints the height of the settings list into the shot: the scroll content of the dialog and
+    # what is visible of it, so a compaction of the dialog can be compared as numbers.
+    "settings_probe": "$('gear').click(); await sleep(300); const sm = $('settings-main'); const pr = document.createElement('pre'); pr.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;color:#000;font:700 22px monospace;padding:8px'; pr.textContent = 'scrollHeight=' + sm.scrollHeight + ' clientHeight=' + sm.clientHeight + ' width=' + $('settings').querySelector('.modal').clientWidth; document.body.appendChild(pr);",
     "expert_system": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].at(-1).click(); await sleep(300); $('expert-flags').scrollTop = 1e6; await sleep(200);",
     "expert_end": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); $('expert-flags').scrollTop = 1e6; await sleep(200);",
     "library": "$('library-btn').click(); await sleep(400);",
