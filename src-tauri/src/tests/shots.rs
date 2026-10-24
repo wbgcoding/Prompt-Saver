@@ -202,3 +202,14 @@ fn the_screenshot_delete_recognises_current_and_legacy_names() {
     assert!(own(&legacy, "png"));
     assert!(!own(&format!("{}2024-05-05.jpg", crate::brand::LEGACY_SCREENSHOT_PREFIX), "jpg"));
 }
+
+#[test]
+fn the_editor_save_accepts_only_a_plain_capture_stem() {
+    use crate::snip::is_shot_stem as ok;
+    assert!(ok("Screenshot-Explorer-2026-10-24_17-23-41"));
+    assert!(ok("Screenshot-2026-10-24_17-23-41"));
+    for bad in ["holiday", r"Screenshot-..\..\evil", "Screenshot-a/b", "Screenshot-C:x", "Screenshot-a.", "Screenshot-a ", "Screenshot-a\nb"] {
+        assert!(!ok(bad), "{bad:?}");
+    }
+    assert!(!ok(&format!("Screenshot-{}", "a".repeat(200))));
+}

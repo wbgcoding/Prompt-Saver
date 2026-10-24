@@ -444,6 +444,8 @@ pub(crate) struct SnipResult {
     pub(crate) path: String,
     // Suggested button name: "Screenshot <app?> <timestamp>".
     pub(crate) name: String,
+    // Matching file stem "Screenshot-<app?>-<timestamp>", reused when the editor saves.
+    pub(crate) stem: String,
 }
 
 // A selectable top-level window in stitched-image physical pixels.
@@ -1234,6 +1236,11 @@ pub(crate) fn screenshot_dir(custom: &str) -> PathBuf {
 
 // Save already-encoded screenshot bytes into the given folder as "<stem>.<ext>".
 // "" on failure. Never re-encodes: the caller decides the format up front.
+// A stem the UI hands back from a capture: our own prefix, a plain file name, no path parts.
+pub(crate) fn is_shot_stem(s: &str) -> bool {
+    s.starts_with("Screenshot-") && s.len() <= 200 && !s.chars().any(|c| c.is_control() || "\\/:*?\"<>|".contains(c)) && !s.ends_with('.') && !s.ends_with(' ')
+}
+
 pub(crate) fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
     use std::io::Write;
     let _ = fs::create_dir_all(dir);
@@ -1268,7 +1275,7 @@ pub(crate) fn data_url_bytes(data_url: &str) -> Vec<u8> {
 // enabled after the shot, or an edit changed the image after an auto-save). Returns the
 // path. format overrides the screenshotFormat setting for this one save.
 #[tauri::command]
-pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>) -> Result<Option<String>, String> {
+pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>, stem: Option<String>) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return Err(format!(
             "image is too large ({} MB); the limit is {} MB",
@@ -1293,7 +1300,9 @@ pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, 
         .await
         .map_err(|e| e.to_string())?;
     let (out_bytes, format) = out_bytes?;
-    let path = save_screenshot(&out_bytes, &screenshot_dir(&custom), &format!("Screenshot-{}", local_stamp()), screenshot_format_ext(&format));
+    // The capture's own stem keeps the source app in the name; anything else gets a fresh stamp.
+    let stem = stem.filter(|s| is_shot_stem(s)).unwrap_or_else(|| format!("Screenshot-{}", local_stamp()));
+    let path = save_screenshot(&out_bytes, &screenshot_dir(&custom), &stem, screenshot_format_ext(&format));
     Ok(if path.is_empty() { None } else { Some(path) })
 }
 

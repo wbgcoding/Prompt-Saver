@@ -64,6 +64,7 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
         })
         .unwrap_or((false, String::new(), SNIP_SAVE_Q, "png".to_string()));
 
+    let stem_for_ui = stem.clone();
     let (data_url, path) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String), String> {
         // The data URL feeds an <img>/canvas on the JS side (the result dialog's
         // preview, then the editor if it opens); every offered format is one a
@@ -103,7 +104,7 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .clear();
-    let _ = app.emit("snip-captured", SnipResult { data_url, path, name });
+    let _ = app.emit("snip-captured", SnipResult { data_url, path, name, stem: stem_for_ui });
     Ok(())
 }
 

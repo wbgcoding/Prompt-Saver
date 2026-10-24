@@ -694,6 +694,7 @@ export function bindCapture() {
   // touch that shot's state or files.
   let snipCaptureGen = 0;
   let pendingSnipName = ""; // backend-suggested "Screenshot <app?> <timestamp>"
+  let pendingSnipStem = ""; // its file stem "Screenshot-<app?>-<timestamp>", empty for an opened file
   // Set only for a file opened for editing from outside the app: the folder "Save as..."
   // defaults into, since the original is never touched. Empty for an ordinary capture.
   let pendingSnipOriginDir = "";
@@ -703,7 +704,7 @@ export function bindCapture() {
   async function saveSnipToFolder(dataUrl) {
     const oldPath = pendingSnipPath;
     const gen = snipCaptureGen;
-    const saved = (await invoke("save_screenshot_now", { dataUrl }).catch(() => "")) || "";
+    const saved = (await invoke("save_screenshot_now", { dataUrl, stem: pendingSnipStem || undefined }).catch(() => "")) || "";
     if (saved) {
       // The same timestamp name overwrites the old file in place; then the old path is the new one
       // and must stay.
@@ -726,7 +727,7 @@ export function bindCapture() {
           dataUrl,
           format,
           defaultDir: pendingSnipOriginDir || undefined,
-          defaultName: pendingSnipOriginDir ? pendingSnipName : undefined,
+          defaultName: pendingSnipOriginDir ? pendingSnipName : pendingSnipStem || undefined,
         });
         if (path) toast(t("snipEditSavedTo").replace("{path}", () => path));
       } catch (err) { errToast(err); }
@@ -775,6 +776,7 @@ export function bindCapture() {
     recordToolUsage("screenshot");
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
+    pendingSnipStem = e.payload?.stem || "";
     pendingSnipOriginDir = "";
     snipEditOpen(shot, {
       // finalize_capture already put the unedited image on the clipboard (and optionally on disk).
@@ -788,6 +790,7 @@ export function bindCapture() {
       onCancel: () => {
         pendingSnipPath = "";
         pendingSnipName = "";
+        pendingSnipStem = "";
       },
       actions: snipEditActions,
     });
@@ -799,6 +802,7 @@ export function bindCapture() {
     snipCaptureGen++;
     pendingSnipPath = "";
     pendingSnipName = res.name || "";
+    pendingSnipStem = "";
     pendingSnipOriginDir = res.origin_dir || "";
     const { retry, ...fileActions } = snipEditActions;
     snipEditOpen(res.data_url, {
