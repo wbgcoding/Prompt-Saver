@@ -43,6 +43,7 @@ function extractBlock(label, marker) {
 const clampLine = extractLine("clamp", "const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));");
 const opOfLine = extractLine("opOf", "const opOf = (tool) => VE.ops.filter((o) => o.tool === tool).pop() || null;");
 const opsOfLine = extractLine("opsOf", "const opsOf = (tool) => VE.ops.filter((o) => o.tool === tool);");
+const trimBoundsBlock = extractBlock("trimBounds", "function trimBounds() {");
 const keptSegmentsBlock = extractBlock("keptSegments", "function keptSegments() {");
 const speedRateBlock = extractBlock("speedRate", "const speedRate = () => {") + ";";
 const timelinePlanBlock = extractBlock("timelinePlan", "function timelinePlan() {");
@@ -73,7 +74,7 @@ extractLine(
 const sandbox = { VE: null, KEPT_CUTS_BUF: [], KEPT_SEGMENTS_BUF: [] };
 vm.createContext(sandbox);
 vm.runInContext(
-  [clampLine, opOfLine, opsOfLine, keptSegmentsBlock, speedRateBlock, timelinePlanBlock, planEntryOutMsBlock, outMsBlock].join("\n"),
+  [clampLine, opOfLine, opsOfLine, trimBoundsBlock, keptSegmentsBlock, speedRateBlock, timelinePlanBlock, planEntryOutMsBlock, outMsBlock].join("\n"),
   sandbox,
   { filename: "video.js (extracted)" }
 );

@@ -86,6 +86,14 @@ function atempoChain(rate) {
 export const exportFormat = () => $("ve-export-format").value || "mp4";
 export const exportQuality = () => $("ve-export-quality").value || "high";
 
+// The size the picture has after the crop and before the scale: the crop rectangle when a
+// crop exists, else the source. Scale presets, the percent field, the ratio lock, the size
+// line and the bitrate estimate all read it, so they follow the crop.
+export function effectiveSize() {
+  const crop = opOf("crop");
+  return crop ? { w: crop.rect.w, h: crop.rect.h } : { w: VE.w, h: VE.h };
+}
+
 // The scale op is the one resolution setting of the window: both the
 // Edit-tab fields and the Export-tab summary read and write it directly.
 export function scaleTarget() {
@@ -206,7 +214,9 @@ export function buildVideoChain() {
         const gap = op.thickness * 2;
         chain(`drawbox=x=${op.rect.x + gap}:y=${op.rect.y + gap}:w=${Math.max(2, op.rect.w - 2 * gap)}:h=${Math.max(2, op.rect.h - 2 * gap)}:color=${color}:t=${op.thickness}:${enable}`);
       } else if (op.style === "soft") {
-        chain(`drawbox=x=${op.rect.x}:y=${op.rect.y}:w=${op.rect.w}:h=${op.rect.h}:color=${hexToFf(op.color, (op.opacity || 100) * 0.4)}:t=${op.thickness * 3}:${enable}`);
+        // The preview shows a glow around the frame, so the softer box sits outside it.
+        const halo = op.thickness * 3;
+        chain(`drawbox=x=${op.rect.x - halo}:y=${op.rect.y - halo}:w=${op.rect.w + 2 * halo}:h=${op.rect.h + 2 * halo}:color=${hexToFf(op.color, (op.opacity || 100) * 0.4)}:t=${halo}:${enable}`);
       }
     } else if (op.kind === "text") {
       const font = FONT_FILES.find(([id]) => id === op.font) || FONT_FILES[0];
@@ -398,23 +408,42 @@ export function buildAudioChain() {
 }
 
 // A pure trim with nothing else touched can be copied instead of re-encoded:
-// instant, and bit-identical to the source.
-export function isLosslessCopy() {
+// instant, and the picture is bit-identical to the source. The result says what happens to the
+// sound: "all" copies every audio stream, "first" keeps only the first one (the mic is muted),
+// "mix" copies the picture and mixes both tracks into one AAC stream (a recording with a mic
+// carries two streams, and most players only play the first). null = a real re-encode.
+export function copyAudioMode() {
   // Only mp4 can carry an h264/aac stream untouched; the other three
   // formats always need a real re-encode to become themselves at all.
-  if (exportFormat() !== "mp4") return false;
-  if (exportQuality() === "lossless") return false; // an explicit re-encode was asked for
+  if (exportFormat() !== "mp4") return null;
+  if (exportQuality() === "lossless") return null; // an explicit re-encode was asked for
   // A source whose own streams are not already safe to copy (h264/hevc video,
   // aac-or-silent audio: e.g. a webm/VP9 file dragged in from elsewhere)
   // fails ffmpeg's "-c copy" outright instead of producing a trimmed export.
-  if (VE.probe && VE.probe.stream_copy_safe === false) return false;
-  if (opsOf("cut").length) return false;
-  if (opOf("crop") || opOf("speed") || opOf("fade") || opOf("scale") || opsOf("overlay").length) return false;
+  if (VE.probe && VE.probe.stream_copy_safe === false) return null;
+  if (opsOf("cut").length) return null;
+  if (opOf("crop") || opOf("speed") || opOf("fade") || opOf("scale") || opsOf("overlay").length) return null;
   // An inserted section only exists as a movie= source in the filter graph,
   // which a plain copy of the main file would leave out.
-  if (opsOf("clip").some((c) => !c.missing)) return false;
+  if (opsOf("clip").some((c) => !c.missing)) return null;
   const { sys, mic } = VE.audio;
+  const plain = (track) => !track.mute && track.vol === 100;
   // A track the recording does not have has no state to compare: its mute button is
   // disabled and its default (muted) would otherwise rule the copy out for good.
-  return (!VE.hasSys || (!sys.mute && sys.vol === 100)) && (!VE.hasMic || (!mic.mute && mic.vol === 100));
+  if (!VE.hasMic) return !VE.hasSys || plain(sys) ? "all" : null;
+  // A mic without a system track is the only stream, so there is nothing to mix.
+  if (!VE.hasSys) return plain(mic) ? "all" : null;
+  if (!plain(sys)) return null;
+  if (mic.mute) return "first";
+  return plain(mic) ? "mix" : null;
+}
+
+export function isLosslessCopy() {
+  return copyAudioMode() !== null;
+}
+
+// The audio graph of the "mix" copy. The trim is not part of it: the backend cuts the input at
+// the start point, so the sound begins where the copied picture begins.
+export function buildCopyMixChain() {
+  return "[0:a:0][0:a:1]amix=inputs=2:normalize=0[aout]";
 }

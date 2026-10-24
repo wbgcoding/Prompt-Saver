@@ -15,7 +15,7 @@ import { LANGS, fullTexts, loadLang } from "./i18n.js";
 import { createColorPop } from "./colorpop.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
-import { secs, exportFormat, exportQuality } from "./videoGraph.js";
+import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
 import { centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
@@ -169,6 +169,7 @@ export const VE = {
   ovDupOffsetPx: 16,
   ovTextOutlineDefault: 3,
   ovKeysActiveColorDefault: "#3fa7ff",
+  ovKeysOpacityDefault: 100,
   ovVideoVolumeDefault: 0,
   fadeMsDefault: 500,
   ovFontDefault: "segoeui",
@@ -376,8 +377,9 @@ export function removeOps(match) {
   VE.ops.forEach((o, at) => { if (o.tool !== "removal" && match(o)) removed.push({ op: o, at }); });
   if (!removed.length) return;
   VE.ops = VE.ops.filter((o) => !removed.some((r) => r.op === o));
+  const floor = VE.floor;
   VE.floor = Math.max(0, VE.floor - removed.filter((r) => r.at < VE.floor).length);
-  pushOp({ tool: "removal", removed });
+  pushOp({ tool: "removal", removed, floor });
 }
 
 function restoreRemoved(marker) {
@@ -391,6 +393,8 @@ export function undo() {
   if (cur.tool === "removal") {
     VE.ops.pop();
     restoreRemoved(cur);
+    // The removal lowered the floor for every locked op it took out; they are back, so is it.
+    if (Number.isFinite(cur.floor)) VE.floor = Math.max(VE.floor, Math.min(cur.floor, VE.ops.length));
     VE.redo.push(cur);
   } else if (cur._prev) {
     // This slot was a replacement (pushReplacing): step it back to the
@@ -408,6 +412,7 @@ export function redo() {
   if (!VE.redo.length) return;
   const next = VE.redo.pop();
   if (next.tool === "removal") {
+    VE.floor = Math.max(0, VE.floor - next.removed.filter((r) => r.at < VE.floor).length);
     VE.ops = VE.ops.filter((o) => !next.removed.some((r) => r.op === o));
     VE.ops.push(next);
   } else if (next._prev) {
@@ -496,7 +501,7 @@ function opLabel(op) {
     case "cut": return `${t("veOpCut")} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     case "crop": return `${t("veOpCrop")} ${op.rect.w}×${op.rect.h}`;
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
-    case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ms`;
+    case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ${t("veUnitMs")}`;
     case "scale": return `${t("veOpScale")} ${op.w}×${op.h}`;
     case "overlay": return `${t("veOpOverlay")}: ${t(overlayLabelKey(op.kind))}`;
     default: return op.tool;
@@ -511,6 +516,26 @@ export const overlayLabelKey = (kind) => ({
 
 export function extraClipCount() {
   return VE.ops.filter((o) => o.tool === "clip" || (o.tool === "overlay" && o.kind === "video")).length;
+}
+
+function deleteOp(op) {
+  if (op.tool === "crop") changeCrop(() => removeOps((o) => o === op));
+  else removeOps((o) => o === op);
+}
+
+// Selecting an op row: an overlay is selected and its editor opened, every op with a start
+// time also moves the playhead there.
+function selectOp(op) {
+  if (op.tool === "overlay") selectOverlay(op.id);
+  if (Number.isFinite(op.startMs)) seek(op.startMs);
+}
+
+// Makes an overlay the edited one and opens its editor; null leaves the selection. Used by the
+// list rows and by clicks on the picture.
+export function selectOverlay(id) {
+  VE.selOv = id;
+  if (id) showPanel("ve-panel-overlays");
+  renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint();
 }
 
 function renderOps() {
@@ -529,9 +554,18 @@ function renderOps() {
   shown.forEach((op) => {
     const row = document.createElement("div");
     row.className = "ve-op-row";
-    const label = document.createElement("span");
+    // A button, so Tab reaches every row: Enter or a click selects the op (an overlay opens its
+    // editor) and moves the playhead to where it starts, Delete removes it.
+    const label = document.createElement("button");
+    label.type = "button";
     label.className = "ve-op-label";
     label.textContent = opLabel(op);
+    label.addEventListener("click", () => selectOp(op));
+    label.addEventListener("keydown", (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      e.preventDefault();
+      deleteOp(op);
+    });
     row.appendChild(label);
     const del = document.createElement("button");
     del.type = "button";
@@ -539,12 +573,8 @@ function renderOps() {
     del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
     del.title = t("veOpRemove");
     del.setAttribute("aria-label", `${t("veOpRemove")}: ${opLabel(op)}`);
-    del.addEventListener("click", () => removeOps((o) => o === op));
+    del.addEventListener("click", () => deleteOp(op));
     row.appendChild(del);
-    if (op.tool === "overlay") {
-      row.classList.add("ve-op-clickable");
-      label.addEventListener("click", () => { VE.selOv = op.id; showPanel("ve-panel-overlays"); renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint(); });
-    }
     list.appendChild(row);
   });
 }
@@ -559,11 +589,17 @@ function renderOps() {
 const KEPT_CUTS_BUF = [];
 const KEPT_SEGMENTS_BUF = [];
 
-// The kept parts of the source, in order: the trim range minus every cut.
-export function keptSegments() {
+// The trim range held inside the recording: what the export uses and the timeline shows.
+export function trimBounds() {
   const trim = opOf("trim");
   const a = trim ? clamp(trim.startMs, 0, VE.dur) : 0;
   const b = trim ? clamp(trim.endMs, a, VE.dur) : VE.dur;
+  return { a, b };
+}
+
+// The kept parts of the source, in order: the trim range minus every cut.
+export function keptSegments() {
+  const { a, b } = trimBounds();
   KEPT_CUTS_BUF.length = 0;
   for (const c of opsOf("cut")) {
     const ca = clamp(Math.min(c.startMs, c.endMs), a, b);
@@ -752,9 +788,7 @@ function renderStrip() {
 }
 
 export function renderRegions() {
-  const trim = opOf("trim");
-  const a = trim ? trim.startMs : 0;
-  const b = trim ? trim.endMs : VE.dur;
+  const { a, b } = trimBounds();
   $("ve-dim-a").style.width = `${msToPx(a)}px`;
   $("ve-dim-b").style.left = `${msToPx(b)}px`;
   $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(b))}px`;
@@ -799,12 +833,12 @@ export function renderRegions() {
   document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
 }
 
-// Shared by the timeline itself and its two trim handles: a screen reader gets
-// the plain time it would otherwise have to infer from a bare pixel position.
+// The two trim handles are sliders: a screen reader gets the plain time it would otherwise have
+// to infer from a bare pixel position. The values are milliseconds, so a short clip still moves.
 function setTimeValue(el, ms, durMs) {
   el.setAttribute("aria-valuemin", "0");
-  el.setAttribute("aria-valuemax", String(Math.round(durMs / 1000)));
-  el.setAttribute("aria-valuenow", String(Math.round(ms / 1000)));
+  el.setAttribute("aria-valuemax", String(Math.round(durMs)));
+  el.setAttribute("aria-valuenow", String(Math.round(ms)));
   el.setAttribute("aria-valuetext", t("a11yTimeOfTotal").replace("{time}", fmtTime(ms)).replace("{total}", fmtTime(durMs)));
 }
 
@@ -812,7 +846,6 @@ function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
   $("ve-frame").textContent = t("veFrameNo").replace("{n}", String(frameOf(VE.playhead) + 1));
-  setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 
 // ---------------------------------------------------------------- filmstrip + waveform
@@ -829,7 +862,6 @@ export async function loadStrip() {
   // Only ever ask for more, and only when it is a real step up: regenerating a
   // filmstrip is the most expensive call this window makes.
   if (VE.stripCount && want <= VE.stripCount * 1.6) return;
-  VE.stripCount = want;
   // This call can still be in flight when the user switches source; the generation check on
   // return stops a slow filmstrip for the old video from painting over the new one's.
   const myGen = VE.loadGen;
@@ -838,10 +870,12 @@ export async function loadStrip() {
     if (VE.loadGen !== myGen) return;
     if (Array.isArray(paths) && paths.length) {
       VE.strip = paths;
+      VE.stripCount = want;
       renderStrip();
     }
   } catch (err) {
-    if (VE.loadGen === myGen) noteFfmpeg(err);
+    // Left at zero, so the next resize or reload asks again instead of keeping an empty strip.
+    if (VE.loadGen === myGen) { VE.stripCount = 0; noteFfmpeg(err); }
   }
 }
 
@@ -1095,6 +1129,13 @@ timelineEl.addEventListener("wheel", (e) => {
 
 // ---------------------------------------------------------------- edit panel
 
+// Moves one trim edge by `step` and stops it a minimum clip away from the other one, so the
+// opposite handle never gets pushed along.
+function nudgeTrim(trim, edge, step) {
+  if (edge === "a") return [clamp(trim.startMs + step, 0, trim.endMs - MIN_CLIP_MS), trim.endMs];
+  return [trim.startMs, clamp(trim.endMs + step, trim.startMs + MIN_CLIP_MS, VE.dur)];
+}
+
 function setTrim(startMs, endMs) {
   const a = clamp(Math.min(startMs, endMs), 0, VE.dur);
   const b = clamp(Math.max(startMs, endMs), a + MIN_CLIP_MS, VE.dur);
@@ -1211,12 +1252,14 @@ function renderScalePresets() {
 // enlarge would make every preset "keep original"). Only a preset equal to the source height
 // needs no op. A percent value applies as typed.
 function scaleForHeightPreset(h) {
-  if (!VE.w || !VE.h || h === VE.h) return null;
-  return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
+  const eff = effectiveSize();
+  if (!eff.w || !eff.h || h === eff.h) return null;
+  return { w: even(Math.round((eff.w * h) / eff.h)), h: even(h) };
 }
 function scaleForPercent(pct) {
-  if (!VE.w || !VE.h) return null;
-  return { w: even(Math.round((VE.w * pct) / 100)), h: even(Math.round((VE.h * pct) / 100)) };
+  const eff = effectiveSize();
+  if (!eff.w || !eff.h) return null;
+  return { w: even(Math.round((eff.w * pct) / 100)), h: even(Math.round((eff.h * pct) / 100)) };
 }
 
 // Returns the preset key matching the current scale op exactly ("" for no
@@ -1251,33 +1294,34 @@ export function applyScalePresetKey(key) {
 
 function updateScaleCurrent() {
   const scale = opOf("scale");
-  if (!isUncommitted($("ve-scale-w"))) { $("ve-scale-w").value = scale ? scale.w : VE.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
-  if (!isUncommitted($("ve-scale-h"))) { $("ve-scale-h").value = scale ? scale.h : VE.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
+  const eff = effectiveSize();
+  if (!isUncommitted($("ve-scale-w"))) { $("ve-scale-w").value = scale ? scale.w : eff.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
+  if (!isUncommitted($("ve-scale-h"))) { $("ve-scale-h").value = scale ? scale.h : eff.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
   if (!isUncommitted($("ve-scale-pct"))) {
-    const pct = scale && VE.w ? Math.round((scale.w / VE.w) * 100) : 100;
+    const pct = scale && eff.w ? Math.round((scale.w / eff.w) * 100) : 100;
     $("ve-scale-pct").value = pct;
     $("ve-scale-pct").numFieldRefresh?.();
   }
 
   const line = $("ve-scale-current");
-  if (!VE.w || !VE.h) {
+  if (!eff.w || !eff.h) {
     line.textContent = "";
   } else if (!scale) {
-    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", () => VE.w).replace("{sh}", () => VE.h);
+    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", () => eff.w).replace("{sh}", () => eff.h);
   } else {
     const kbps = videoKbps();
     const durS = totalOutMs() / 1000;
     let text = kbps != null && durS > 0
       ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS), LANG))
       : t("veScaleCurrentNoSize");
-    text = text.replace("{sw}", () => VE.w).replace("{sh}", () => VE.h).replace("{tw}", () => scale.w).replace("{th}", () => scale.h);
-    if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
+    text = text.replace("{sw}", () => eff.w).replace("{sh}", () => eff.h).replace("{tw}", () => scale.w).replace("{th}", () => scale.h);
+    if (scale.w > eff.w || scale.h > eff.h) text += " " + t("veScaleUpscaleNote");
     line.textContent = text;
   }
 
   const key = currentScalePresetKey();
   // Only a selected height preset that is taller than the source gets the hint.
-  $("ve-scale-uphint").classList.toggle("hidden", !(scale && key !== null && SCALE_HEIGHT_PRESETS.includes(Number(key)) && scale.h > VE.h));
+  $("ve-scale-uphint").classList.toggle("hidden", !(scale && key !== null && SCALE_HEIGHT_PRESETS.includes(Number(key)) && scale.h > eff.h));
   for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
@@ -1324,8 +1368,10 @@ $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $
 $("ve-undo").addEventListener("click", undo);
 $("ve-redo").addEventListener("click", redo);
 $("ve-play").addEventListener("click", togglePlay);
-$("ve-to-start").addEventListener("click", () => seek(keptSegments()[0].a));
-$("ve-to-end").addEventListener("click", () => seek(keptSegments().slice(-1)[0].b));
+const keptStart = () => keptSegments()[0].a;
+const keptEnd = () => keptSegments().slice(-1)[0].b;
+$("ve-to-start").addEventListener("click", () => seek(keptStart()));
+$("ve-to-end").addEventListener("click", () => seek(keptEnd()));
 // Stepping by a fixed frameMs() from a scrubbed playhead drifts off the frame grid, so snap to
 // the real previous/next frame boundary. The small epsilon absorbs float error from a
 // non-integer frame duration (e.g. 29.97fps), so a playhead already on a boundary still
@@ -1339,12 +1385,21 @@ function stepFrame(dir) {
 $("ve-prev-frame").addEventListener("click", () => stepFrame(-1));
 $("ve-next-frame").addEventListener("click", () => stepFrame(1));
 
+// Marking only makes sense on the kept part: the toast says why a press did nothing.
+function playheadInKept() {
+  const { a, b } = trimBounds();
+  if (VE.playhead >= a && VE.playhead <= b) return true;
+  toast(t("veMarkOutside"));
+  return false;
+}
 $("ve-mark-in").addEventListener("click", () => {
+  if (!playheadInKept()) return;
   const b = VE.sel && VE.sel.b > VE.playhead ? VE.sel.b : VE.dur;
   VE.sel = { a: VE.playhead, b };
   renderRegions();
 });
 $("ve-mark-out").addEventListener("click", () => {
+  if (!playheadInKept()) return;
   const a = VE.sel && VE.sel.a < VE.playhead ? VE.sel.a : 0;
   VE.sel = { a, b: VE.playhead };
   renderRegions();
@@ -1365,12 +1420,17 @@ $("ve-cut-add").addEventListener("click", () => {
 $("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut"));
 
 $("ve-still").addEventListener("click", async () => {
+  if ($("ve-still").disabled) return;
+  $("ve-still").disabled = true;
   try {
     const saved = await invoke("extract_still_frame", { path: VE.src, atMs: Math.round(VE.playhead) });
     toast(saved ? t("veStillSaved").replace("{path}", () => String(saved)) : t("veStillNotSaved"));
   } catch (err) {
     noteFfmpeg(err);
     toast(errMessageLogged(err, t, "video"));
+  } finally {
+    // An export in progress keeps the button off on its own, so only a free editor re-enables it.
+    $("ve-still").disabled = !!VE.exporting;
   }
 });
 
@@ -1444,12 +1504,29 @@ numberField({
   decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", wheelEnabled: numFieldWheelOn,
 });
 
+// Every crop edit goes through here: the scale op was worked out from the crop it was set
+// against, so it is worked out again for the new crop. A scale that matches a preset keeps
+// that preset; a free size with the ratio lock keeps its height and takes the new aspect; a
+// free size without the lock is a deliberate distortion and stays. Each is its own undo step.
+export function changeCrop(change) {
+  const scale = opOf("scale");
+  const key = scale ? currentScalePresetKey() : "";
+  const before = effectiveSize();
+  change();
+  if (!scale || !opOf("scale")) return;
+  const now = effectiveSize();
+  if (before.w === now.w && before.h === now.h) return;
+  if (key) applyScalePresetKey(key);
+  else if (key === null && $("ve-scale-lock").checked && now.h) setScaleOp((scale.h * now.w) / now.h, scale.h);
+}
+export const pushCrop = (rect) => changeCrop(() => pushReplacing((o) => o.tool === "crop", { tool: "crop", rect }));
+
 $("ve-crop-on").addEventListener("change", () => {
-  if ($("ve-crop-on").checked) pushReplacing((o) => o.tool === "crop", { tool: "crop", rect: centeredRect(0.8) });
-  else removeOps((o) => o.tool === "crop");
+  if ($("ve-crop-on").checked) pushCrop(centeredRect(0.8));
+  else changeCrop(() => removeOps((o) => o.tool === "crop"));
 });
 $("ve-crop-reset").addEventListener("click", () => {
-  pushReplacing((o) => o.tool === "crop", { tool: "crop", rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }) });
+  pushCrop(snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }));
 });
 for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
   $(id).addEventListener("change", () => {
@@ -1459,7 +1536,7 @@ for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
       w: Number($("ve-crop-w").value) || VE.w,
       h: Number($("ve-crop-h").value) || VE.h,
     });
-    pushReplacing((o) => o.tool === "crop", { tool: "crop", rect });
+    pushCrop(rect);
   });
 }
 
@@ -1498,21 +1575,25 @@ function setScaleOp(w, h) {
   if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
   const cw = even(clamp(Math.round(w), 16, 7680));
   const ch = even(clamp(Math.round(h), 16, 7680));
-  // Back at the source size is no scaling at all, so the entry goes away.
-  if (VE.w && VE.h && cw === even(VE.w) && ch === even(VE.h)) { removeOps((o) => o.tool === "scale"); return; }
+  // Back at the size the crop leaves (the source size without a crop) is no scaling at all,
+  // so the entry goes away.
+  const eff = effectiveSize();
+  if (eff.w && eff.h && cw === even(eff.w) && ch === even(eff.h)) { removeOps((o) => o.tool === "scale"); return; }
   pushReplacing((o) => o.tool === "scale", { tool: "scale", w: cw, h: ch });
 }
 
 $("ve-scale-w").addEventListener("change", () => {
-  const w = Number($("ve-scale-w").value) || VE.w;
-  const h = $("ve-scale-lock").checked && VE.w && VE.h ? Math.round((w * VE.h) / VE.w) : (opOf("scale") || { h: VE.h }).h;
+  const eff = effectiveSize();
+  const w = Number($("ve-scale-w").value) || eff.w;
+  const h = $("ve-scale-lock").checked && eff.w && eff.h ? Math.round((w * eff.h) / eff.w) : (opOf("scale") || { h: eff.h }).h;
   setScaleOp(w, h);
   persistExportSettings();
   updateExportNote();
 });
 $("ve-scale-h").addEventListener("change", () => {
-  const h = Number($("ve-scale-h").value) || VE.h;
-  const w = $("ve-scale-lock").checked && VE.w && VE.h ? Math.round((h * VE.w) / VE.h) : (opOf("scale") || { w: VE.w }).w;
+  const eff = effectiveSize();
+  const h = Number($("ve-scale-h").value) || eff.h;
+  const w = $("ve-scale-lock").checked && eff.w && eff.h ? Math.round((h * eff.w) / eff.h) : (opOf("scale") || { w: eff.w }).w;
   setScaleOp(w, h);
   persistExportSettings();
   updateExportNote();
@@ -1523,12 +1604,13 @@ $("ve-scale-pct").addEventListener("change", () => {
   if (target) { setScaleOp(target.w, target.h); persistExportSettings(); updateExportNote(); }
 });
 $("ve-scale-lock").addEventListener("change", () => {
-  if (!$("ve-scale-lock").checked || !VE.w || !VE.h) return;
+  const eff = effectiveSize();
+  if (!$("ve-scale-lock").checked || !eff.w || !eff.h) return;
   const scale = opOf("scale");
   if (!scale) return;
-  // Re-locking snaps the current values back onto the source aspect ratio
+  // Re-locking snaps the current values back onto the aspect ratio of the cropped picture
   // immediately, keyed off the width so both fields agree afterward.
-  setScaleOp(scale.w, Math.round((scale.w * VE.h) / VE.w));
+  setScaleOp(scale.w, Math.round((scale.w * eff.h) / eff.w));
   persistExportSettings();
 });
 $("ve-export-scale-edit").addEventListener("click", () => showPanel("ve-panel-edit"));
@@ -1544,6 +1626,12 @@ $("ve-add-video").addEventListener("click", (e) => {
   startAddVideo(r.left, r.bottom);
 });
 
+// A mute button names what a click will do: Mute while the track plays, Unmute once it is muted.
+function muteKey(id, key, kind) {
+  if (!id.startsWith("ve-mute-") || !VE.audio[kind].mute) return key;
+  return key === "veMuteMic" ? "veUnmuteMic" : "veUnmuteSystem";
+}
+
 // A recording without a microphone track leaves those controls off and says why, instead of
 // offering a slider that could change nothing. An export format that drops audio (gif) does
 // the same to both tracks' controls, on top of any per-track reason.
@@ -1552,14 +1640,14 @@ export function updateAudioLabels() {
   for (const [id, key] of [["ve-mute-mic", "veMuteMic"], ["ve-vol-mic", "veVolumeMic"]]) {
     const el = $(id);
     el.disabled = !VE.hasMic || silent;
-    const label = silent ? t("veNoAudioNote") : VE.hasMic ? t(key) : t("veNoMicTrack");
+    const label = silent ? t("veNoAudioNote") : VE.hasMic ? t(muteKey(id, key, "mic")) : t("veNoMicTrack");
     el.title = label;
     el.setAttribute("aria-label", label);
   }
   for (const [id, key] of [["ve-mute-sys", "veMuteSystem"], ["ve-vol-sys", "veVolumeSystem"]]) {
     const el = $(id);
     el.disabled = !VE.hasSys || silent;
-    const label = silent ? t("veNoAudioNote") : VE.hasSys ? t(key) : t("veNoAudioTrack");
+    const label = silent ? t("veNoAudioNote") : VE.hasSys ? t(muteKey(id, key, "sys")) : t("veNoAudioTrack");
     el.title = label;
     el.setAttribute("aria-label", label);
   }
@@ -1571,9 +1659,15 @@ function updateVolumeValueText(volId) {
   $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", () => $(volId).value));
 }
 
+function syncMuteButton(kind, id) {
+  $(id).classList.toggle("ve-muted-btn", VE.audio[kind].mute);
+  $(id).setAttribute("aria-pressed", VE.audio[kind].mute ? "true" : "false");
+}
+
 function syncAudioButtons() {
-  $("ve-mute-sys").classList.toggle("ve-muted-btn", VE.audio.sys.mute);
-  $("ve-mute-mic").classList.toggle("ve-muted-btn", VE.audio.mic.mute);
+  syncMuteButton("sys", "ve-mute-sys");
+  syncMuteButton("mic", "ve-mute-mic");
+  updateAudioLabels();
   $("ve-vol-sys").value = VE.audio.sys.vol;
   $("ve-vol-mic").value = VE.audio.mic.vol;
   updateVolumeValueText("ve-vol-sys");
@@ -1583,7 +1677,8 @@ function syncAudioButtons() {
 function audioControl(kind, muteId, volId) {
   $(muteId).addEventListener("click", () => {
     VE.audio[kind].mute = !VE.audio[kind].mute;
-    $(muteId).classList.toggle("ve-muted-btn", VE.audio[kind].mute);
+    syncMuteButton(kind, muteId);
+    updateAudioLabels();
     applyPreviewSpeed();
     updateExportNote();
   });
@@ -1623,7 +1718,9 @@ $("ve-export-name").addEventListener("input", () => {
 // the dialog below.
 $("ve-export-dest").addEventListener("change", () => {
   const value = $("ve-export-dest").value.trim();
-  VE.destOverride = value || null;
+  // A typed name with another extension would write one container under another's name.
+  VE.destOverride = value ? withExtension(value, formatExt(exportFormat())) : null;
+  $("ve-export-dest").value = destPath();
   updateExportNote();
 });
 $("ve-export-choose-folder").addEventListener("click", async () => {
@@ -1644,7 +1741,7 @@ function applyPreset(format, quality, downscale) {
   $("ve-export-quality").value = quality;
   // These presets are about a smaller file: they only ever shrink, so a
   // source already at or below their height keeps its own size.
-  const shrink = downscale && VE.h && Number(downscale) < VE.h ? downscale : "";
+  const shrink = downscale && effectiveSize().h && Number(downscale) < effectiveSize().h ? downscale : "";
   applyScalePresetKey(shrink);
   persistExportSettings();
   updateExportNote();
@@ -1656,12 +1753,14 @@ $("ve-preset-gif").addEventListener("click", () => applyPreset("gif", "small", "
 
 $("ve-export-start").addEventListener("click", () => startExport(false));
 $("ve-export-clip").addEventListener("click", () => startExport(true));
-// Always visible, like the screenshot editor's Cancel: it stops a running export,
-// and with nothing running it closes the window (asking first when edits are unsaved).
-$("ve-export-cancel").addEventListener("click", () => {
-  if (VE.exporting) invoke("cancel_export").catch(() => {});
-  else closeWindow();
-});
+// Stops a running export; with nothing running it only leads back to the Edit tab, so a click
+// meant as "never mind" cannot close the editor.
+function exportStopOrBack() {
+  if (VE.exporting) { invoke("cancel_export").catch(() => {}); return; }
+  showPanel("ve-panel-edit");
+  $("ve-tab-edit").focus();
+}
+$("ve-export-cancel").addEventListener("click", exportStopOrBack);
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
   const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : errMessageLogged(err, t, "video")); return null; });
@@ -1720,6 +1819,35 @@ async function closeWindow() {
 
 const TYPING = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
+// Escape in a field gives back what the field held when it got focus (or when it last committed),
+// so a half-typed file name or time is abandoned instead of taking the whole editor with it.
+const NON_TEXT_INPUT = new Set(["checkbox", "radio", "range", "button", "submit", "color", "file"]);
+const isTextField = (el) => !!el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !NON_TEXT_INPUT.has(el.type)));
+let fieldFocus = null;
+document.addEventListener("focusin", (e) => { fieldFocus = isTextField(e.target) ? { el: e.target, value: e.target.value } : null; });
+document.addEventListener("change", (e) => { if (fieldFocus && fieldFocus.el === e.target) fieldFocus.value = e.target.value; }, true);
+
+// Escape peels off one layer at a time: the field being typed in, the selected overlay, the marked
+// range, and only when nothing is left the window. Returns the layer it took.
+function handleEscape() {
+  const el = document.activeElement;
+  if (isTextField(el)) {
+    if (fieldFocus && fieldFocus.el === el && el.value !== fieldFocus.value) {
+      el.value = fieldFocus.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    el.blur();
+    return "field";
+  }
+  // A selected overlay only gives up the arrow keys, never the window: closing here would throw
+  // away every edit just because something is selected.
+  if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return "overlay"; }
+  if (VE.sel) { VE.sel = null; renderRegions(); renderOverlayEditor(); return "selection"; }
+  closeWindow();
+  return "close";
+}
+
 document.addEventListener("keydown", (e) => {
   if (!$("confirm-modal").classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); dismissConfirm(); }
@@ -1747,10 +1875,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     e.preventDefault();
     if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
-    // A selected overlay only gives up the arrow keys, never the window: closing here would throw
-    // away every edit just because something is selected.
-    if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return; }
-    closeWindow();
+    handleEscape();
     return;
   }
   if (typing) return;
@@ -1776,8 +1901,8 @@ document.addEventListener("keydown", (e) => {
       const dir = e.key === "ArrowLeft" ? -1 : 1;
       const step = (e.shiftKey ? 1000 : frameMs()) * dir;
       const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
-      if (focusedId === "ve-trim-a") setTrim(trim.startMs + step, trim.endMs);
-      else setTrim(trim.startMs, trim.endMs + step);
+      const [startMs, endMs] = nudgeTrim(trim, focusedId === "ve-trim-a" ? "a" : "b", step);
+      setTrim(startMs, endMs);
       return;
     }
   }
@@ -1811,8 +1936,8 @@ document.addEventListener("keydown", (e) => {
     }
     case "ArrowLeft": e.preventDefault(); if (e.shiftKey) seek(VE.playhead - 1000); else stepFrame(-1); break;
     case "ArrowRight": e.preventDefault(); if (e.shiftKey) seek(VE.playhead + 1000); else stepFrame(1); break;
-    case "Home": e.preventDefault(); seek(0); break;
-    case "End": e.preventDefault(); seek(VE.dur); break;
+    case "Home": e.preventDefault(); seek(e.shiftKey ? 0 : keptStart()); break;
+    case "End": e.preventDefault(); seek(e.shiftKey ? VE.dur : keptEnd()); break;
     case "i": case "I": e.preventDefault(); $("ve-mark-in").click(); break;
     case "o": case "O": e.preventDefault(); $("ve-mark-out").click(); break;
     case "c": case "C": e.preventDefault(); $("ve-cut-add").click(); break;
@@ -1978,6 +2103,10 @@ export function applySettings(settings) {
   if (Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
   const lastImageOpacity = Number(values.veOvLastImageOpacity);
   if (Number.isFinite(lastImageOpacity) && lastImageOpacity > 0) VE.ovImageOpacityDefault = Math.round(lastImageOpacity);
+  VE.ovKeysColorDefault = HEX_RE.test(texts.veOvLastKeysColor || "") ? texts.veOvLastKeysColor : VE.ovColorDefault;
+  if (HEX_RE.test(texts.veOvLastKeysActiveColor || "")) VE.ovKeysActiveColorDefault = texts.veOvLastKeysActiveColor;
+  const lastKeysOpacity = Number(values.veOvLastKeysOpacity);
+  if (Number.isFinite(lastKeysOpacity) && lastKeysOpacity > 0) VE.ovKeysOpacityDefault = Math.round(lastKeysOpacity);
   VE.ovFrameOpacityDefault = 100;
   const lastFrameOpacity = Number(values.veOvLastFrameOpacity);
   if (Number.isFinite(lastFrameOpacity) && lastFrameOpacity > 0) VE.ovFrameOpacityDefault = Math.round(lastFrameOpacity);

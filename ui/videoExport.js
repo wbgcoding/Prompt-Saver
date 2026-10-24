@@ -3,7 +3,7 @@ import { makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtByt
 import { errMessageLogged } from "./errors.js";
 import { exportNameIsValid } from "./exportName.js";
 import { confirmDialog } from "./dialog.js";
-import { exportFormat, exportQuality, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, isLosslessCopy } from "./videoGraph.js";
+import { exportFormat, exportQuality, effectiveSize, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, buildCopyMixChain, copyAudioMode, isLosslessCopy } from "./videoGraph.js";
 import { $, clamp, ETA_MIN_PCT, ETA_MIN_SECS, EXPORT_KBPS, fmtTime, formatExt, invoke, keptSegments, LANG, showExportErrorDetails, SILENT_FORMAT_LENGTH_WARN_MS, SILENT_FORMATS, t, toast, totalOutMs, updateAudioLabels, VE } from "./video.js";
 
 // ---------------------------------------------------------------- export
@@ -92,10 +92,20 @@ async function refreshExportSizeNote(format) {
   $("ve-export-note").textContent = notes.join(" ");
 }
 
+// The button beside Export: "Stop export" while a run is going, otherwise "Back" to the Edit tab.
+// The i18n key moves with the text so a later language pass keeps the right label.
+export function syncExportButton() {
+  const key = VE.exporting ? "veStopExport" : "veBack";
+  const button = $("ve-export-cancel");
+  button.dataset.i18n = key;
+  button.textContent = t(key);
+}
+
 // The one place that decides whether Export/Copy-to-clipboard may be clicked: an invalid or
 // empty file name joins the "still exporting"/"ffmpeg missing" reasons, so no call site has to
 // know about the others.
 export function applyExportGate() {
+  syncExportButton();
   const valid = exportNameIsValid($("ve-export-name").value);
   $("ve-export-name").classList.toggle("invalid", !valid);
   $("ve-export-name-hint").classList.toggle("hidden", valid);
@@ -166,7 +176,8 @@ export async function startExport(toClipboard) {
   // The backend takes whole milliseconds; a tempo such as 1.3x makes the output length fractional.
   const total = Math.round(totalOutMs());
   if (total < 1) { toast(t("veNothingToExport")); return; }
-  const lossless = isLosslessCopy();
+  const copyMode = copyAudioMode();
+  const lossless = copyMode !== null;
   const format = exportFormat();
   // Claimed before the first await, so a double click cannot start a second export.
   VE.exporting = true;
@@ -182,6 +193,7 @@ export async function startExport(toClipboard) {
   const stillHere = () => VE.loadGen === gen;
   VE.exporting = true;
   exportRun = { gen, total };
+  syncExportButton();
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
   $("ve-export-saveas").classList.add("hidden");
@@ -200,7 +212,10 @@ export async function startExport(toClipboard) {
         src_path: src,
         dest_path: dest,
         filter_chain: lossless ? null : buildVideoChain(),
-        audio_map: lossless ? null : buildAudioChain(),
+        audio_map: lossless ? (copyMode === "mix" ? buildCopyMixChain() : null) : buildAudioChain(),
+        // What a stream copy does with the audio tracks: "all" copies every stream, "first" keeps
+        // the first (mic muted), "mix" mixes both into one stream.
+        copy_audio: copyMode || "all",
         media_paths: lossless ? [] : exportMediaPaths(),
         lossless_copy: lossless,
         // Distinct from lossless_copy: the "Lossless" quality tier forces a real re-encode (see
@@ -311,10 +326,13 @@ export async function startExport(toClipboard) {
 export function videoKbps() {
   const base = EXPORT_KBPS[exportQuality()];
   if (base == null) return null;
-  const target = scaleTarget();
-  if (!target || !VE.h || target.h >= VE.h) return base;
+  if (!VE.w || !VE.h) return base;
+  // The output size is the crop, then the scale; the bitrate follows the linear size.
+  const out = scaleTarget() || effectiveSize();
+  const ratio = Math.sqrt((out.w * out.h) / (VE.w * VE.h));
+  if (!(ratio < 1)) return base;
   // Fewer pixels need fewer bits; the floor keeps a 480p clip from going muddy.
-  return Math.max(800, Math.round(base * (target.h / VE.h)));
+  return Math.max(800, Math.round(base * ratio));
 }
 
 // ---------------------------------------------------------------- ffmpeg presence

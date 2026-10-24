@@ -2,7 +2,8 @@
 // preview.
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
-import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushReplacing, RECT_MIN_PX, t, VE, videoEl } from "./video.js";
+import { keysPreviewModel } from "./videoKeys.js";
+import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, selectOverlay, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
 const $ = (id) => document.getElementById(id);
@@ -41,7 +42,6 @@ const toSource = (clientX, clientY) => {
 // rectangles stay placed and draggable at any zoom/pan. 1 = fit-to-stage and the floor:
 // shrinking further would only add letterboxing.
 const PREVIEW_ZOOM_MIN = 1;
-const PREVIEW_ZOOM_MAX = 8;
 
 // The video's own painted size at zoom 1, straight from the stage + source
 // aspect ratio: kept independent of the live (already zoomed) bounding rect
@@ -108,6 +108,54 @@ $("ve-stage").addEventListener("wheel", (e) => {
   applyPreviewTransform();
 }, { passive: false });
 
+// Clicking the picture picks the overlay under the pointer: the one drawn on top among those
+// showing at the playhead. The pointer is in source pixels and `tol` is the slack, also in
+// source pixels, that makes a thin frame border or a short text line easy to hit. A frame is
+// hollow, so only its border band counts; a text overlay has no stored size, so its box is
+// estimated from the font size and the longest line.
+export function overlayAt(point, tol) {
+  const now = VE.playhead;
+  const stack = overlayStack();
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const op = stack[i];
+    if (now < op.startMs || now > op.endMs) continue;
+    let box = null;
+    if (op.kind === "text") {
+      const lines = String(op.text || "").split("\n");
+      const longest = Math.max(1, ...lines.map((l) => l.length));
+      const pad = op.back === "plate" ? Math.max(4, Math.round(op.fontPx / 4)) : 0;
+      box = { x: op.x, y: op.y, w: longest * op.fontPx * 0.6 + pad * 2, h: lines.length * op.fontPx * 1.25 + pad * 2 };
+    } else if (op.rect) {
+      box = op.rect;
+    }
+    if (!box) continue;
+    const inside = point.x >= box.x - tol && point.x <= box.x + box.w + tol && point.y >= box.y - tol && point.y <= box.y + box.h + tol;
+    if (!inside) continue;
+    if (op.kind === "frame") {
+      const band = (op.thickness || 4) + tol;
+      const deep = point.x > box.x + band && point.x < box.x + box.w - band && point.y > box.y + band && point.y < box.y + box.h - band;
+      if (deep) continue;
+    }
+    return op;
+  }
+  return null;
+}
+
+// Selects the overlay under the pointer the way a list row does (the playhead stays) and starts
+// a move from there. False when no overlay is showing at that spot.
+function grabOverlayAt(e) {
+  const hit = overlayAt(toSource(e.clientX, e.clientY), HIT_SLACK_PX / videoBox().scale);
+  if (!hit) return false;
+  if (VE.selOv !== hit.id) selectOverlay(hit.id);
+  e.preventDefault();
+  beginRectDrag(VE.ops.find((o) => o.id === hit.id), null, e);
+  return true;
+}
+
+// A press on the empty picture only deselects on release, and only when the pointer did not
+// travel, so a pan or a stray drag keeps the selection.
+let emptyPress = null;
+
 // Pan: middle-click always (as in the screenshot editor), plain left-drag only once zoomed in,
 // so at zoom 1 an empty-stage drag arms no useless grab cursor. Space is Play/Pause in this
 // window, so it is not a pan modifier. A click on a crop/overlay rectangle is left to
@@ -119,6 +167,11 @@ $("ve-stage").addEventListener("pointerdown", (e) => {
   if (VE.drag) return;
   if (e.target.closest(".ve-rect")) return;
   if (e.target.closest("#ve-preview-zoom")) return; // the zoom pill/reset button sits inside the stage
+  emptyPress = null;
+  if (e.button === 0) {
+    if (grabOverlayAt(e)) return;
+    emptyPress = { x: e.clientX, y: e.clientY };
+  }
   if (VE.previewZoom <= 1) return; // nothing to pan at 1:1, whichever button
   e.preventDefault();
   $("ve-stage").setPointerCapture(e.pointerId);
@@ -135,8 +188,13 @@ function endPreviewPan() {
   if (VE.drag && VE.drag.kind === "pan") VE.drag = null;
   $("ve-stage").classList.remove("ve-panning");
 }
-$("ve-stage").addEventListener("pointerup", endPreviewPan);
-$("ve-stage").addEventListener("pointercancel", endPreviewPan);
+$("ve-stage").addEventListener("pointerup", (e) => {
+  const press = emptyPress;
+  emptyPress = null;
+  endPreviewPan();
+  if (press && VE.selOv && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) selectOverlay(null);
+});
+$("ve-stage").addEventListener("pointercancel", () => { emptyPress = null; endPreviewPan(); });
 $("ve-preview-zoom-reset").addEventListener("click", resetPreviewZoom);
 $("ve-preview-zoom-in").addEventListener("click", () => setPreviewZoom(VE.previewZoom * VE.zoomStepFactor));
 $("ve-preview-zoom-out").addEventListener("click", () => setPreviewZoom(VE.previewZoom / VE.zoomStepFactor));
@@ -190,6 +248,7 @@ export function snapRect(rect) {
 }
 
 const HANDLES = ["nw", "n", "ne", "w", "e", "sw", "s", "se"];
+const HIT_SLACK_PX = 6; // on-screen slack when clicking an overlay in the preview
 
 function rectFor(op) {
   if (op.tool === "crop") return op.rect;
@@ -476,22 +535,43 @@ function buildLiveOverlayEl(op, vb, reuse) {
     return el;
   }
   if (op.kind === "keys") {
-    // A plain outline plus its preset name; the per-key layout and press highlighting is drawn by
-    // the export's ffmpeg filters, so the preview only shows where and how big the overlay sits.
+    // The key grid the export burns in, with its first key shown as pressed so colours and sizes
+    // can be judged before exporting. Which keys light up when is only known to the export.
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-keys") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-keys";
     rectStyle(el, op.rect);
-    el.style.borderColor = op.color;
+    el.style.outlineColor = op.color;
     el.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
-    el.textContent = t(overlayLabelKeysPresetKey(op.preset));
+    const model = keysPreviewModel(op);
+    const px = (v) => `${v * vb.scale}px`;
+    const parts = [];
+    for (const c of model.cells) {
+      const cell = document.createElement("div");
+      cell.className = "ve-live-key";
+      cell.style.cssText = `left:${px(c.x)};top:${px(c.y)};width:${px(c.w)};height:${px(c.h)};font-size:${px(c.fontSize)};`
+        + `border-color:${op.color};color:${op.color};background:${c.active ? op.activeColor : "transparent"}`;
+      cell.textContent = c.label;
+      parts.push(cell);
+    }
+    if (model.bar) {
+      const bar = document.createElement("div");
+      bar.className = "ve-live-key ve-live-key-bar";
+      bar.style.cssText = `left:${px(model.bar.x)};top:${px(model.bar.y)};width:${px(model.bar.w)};height:${px(model.bar.h)};`
+        + `font-size:${px(model.bar.fontSize)};border-color:transparent;color:#fff;background:${op.activeColor}`;
+      bar.textContent = model.bar.label;
+      parts.push(bar);
+    }
+    if (model.empty) {
+      const note = document.createElement("span");
+      note.className = "ve-live-keys-note";
+      note.textContent = t("veKeysEmpty");
+      parts.push(note);
+    }
+    el.replaceChildren(...parts);
     return el;
   }
   return null;
 }
-
-const overlayLabelKeysPresetKey = (preset) => ({
-  pressed: "veOvKeysPressed", half: "veOvKeysHalf", full: "veOvKeysFull", game: "veOvKeysGame", custom: "veOvKeysCustom",
-}[preset] || "veOvKeys");
 
 function resizeRect(orig, handle, point, keepRatio) {
   let x1 = orig.x, y1 = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;
@@ -503,21 +583,25 @@ function resizeRect(orig, handle, point, keepRatio) {
   if (keepRatio && orig.w && orig.h) {
     const ratio = orig.w / orig.h;
     if (handle === "n" || handle === "s") next.w = next.h * ratio;
-    else next.h = next.w / ratio;
+    else if (handle === "e" || handle === "w") next.h = next.w / ratio;
+    else {
+      // A corner: the opposite corner stays where it was, the dragged one follows the pointer
+      // on the original proportions.
+      const ax = handle.includes("w") ? orig.x + orig.w : orig.x;
+      const ay = handle.includes("n") ? orig.y + orig.h : orig.y;
+      next.h = next.w / ratio;
+      next.x = point.x < ax ? ax - next.w : ax;
+      next.y = point.y < ay ? ay - next.h : ay;
+    }
   }
   return next;
 }
 
-$("ve-rects").addEventListener("pointerdown", (e) => {
-  const rectEl = e.target.closest(".ve-rect");
-  if (!rectEl) return;
-  const id = rectEl.dataset.op;
-  const op = id === "crop" ? opOf("crop") : VE.ops.find((o) => o.id === id);
+// Starts moving (no handle) or resizing (a handle name) a crop box or an overlay.
+function beginRectDrag(op, handle, e) {
   if (!op) return;
-  e.preventDefault();
   $("ve-rects").setPointerCapture(e.pointerId);
   const point = toSource(e.clientX, e.clientY);
-  const handle = e.target.dataset.handle || null;
   VE.drag = {
     kind: "rect",
     op,
@@ -527,6 +611,19 @@ $("ve-rects").addEventListener("pointerdown", (e) => {
     live: op.rect ? { ...op.rect } : null,
     livePoint: op.rect ? null : { x: op.x, y: op.y },
   };
+}
+
+$("ve-rects").addEventListener("pointerdown", (e) => {
+  const rectEl = e.target.closest(".ve-rect");
+  if (!rectEl) return;
+  const id = rectEl.dataset.op;
+  const op = id === "crop" ? opOf("crop") : VE.ops.find((o) => o.id === id);
+  if (!op) return;
+  const handle = e.target.dataset.handle || null;
+  // The crop box spans most of the picture: an overlay showing inside it wins over moving the box.
+  if (op.tool === "crop" && !handle && grabOverlayAt(e)) return;
+  e.preventDefault();
+  beginRectDrag(op, handle, e);
 });
 
 $("ve-rects").addEventListener("pointermove", (e) => {
@@ -607,7 +704,7 @@ function endRectDrag() {
     // A click-release with no movement (or one that snaps back to where it started) is not an
     // edit and must not push an undo step or wipe the redo stack.
     if (rectsEqual(rect, drag.orig)) { op.rect = rect; renderRects(); return; }
-    pushReplacing((o) => o.tool === "crop", { tool: "crop", rect });
+    pushCrop(rect);
   } else {
     if (rectsEqual(raw, drag.orig)) { op.rect = raw; renderRects(); return; }
     pushReplacing((o) => o.id === op.id, { ...op, rect: raw }, { keepEditor: true });

@@ -1,6 +1,6 @@
 // Video editor: the keystroke overlay, key presses recorded with a take and drawn over the
 // export.
-import { FONT_FILES, fontsDir, outMs, VE } from "./video.js";
+import { FONT_FILES, fontsDir, outMs, t, VE } from "./video.js";
 import { commitOverlay, liveOverlay } from "./videoOverlays.js";
 import { ffPath, ffText, hexToFf } from "./videoGraph.js";
 
@@ -52,12 +52,14 @@ function keysLayoutRows(op) {
   if (op.preset === "half") return KEY_LAYOUT_HALF;
   if (op.preset === "full") return KEY_LAYOUT_FULL;
   if (op.preset === "game") return KEY_LAYOUT_GAME;
-  if (op.preset === "custom") return [op.keys && op.keys.length ? op.keys : [0x41]];
+  // An empty pick draws nothing (the editor says so) instead of a stray "A".
+  if (op.preset === "custom") return op.keys && op.keys.length ? [op.keys] : [];
   return null; // "pressed" has no fixed grid
 }
 
 // Every key rendered at equal width, rows centered against the widest one.
 function keysGridRects(rows, rect) {
+  if (!rows.length) return [];
   const maxCols = Math.max(...rows.map((r) => r.length));
   const cellW = rect.w / maxCols;
   const cellH = rect.h / rows.length;
@@ -134,6 +136,39 @@ function pressedSpans(op, maxSlots) {
   return spans;
 }
 
+// Label size of one grid key: a share of the key height, shrunk so a long name such as "Space"
+// or "Shift" still fits the key's width.
+function keyFontSize(k, label) {
+  const byHeight = Math.round(k.h * 0.4);
+  const byWidth = Math.floor(k.w / (label.length * 0.6 + 0.4));
+  return Math.max(6, Math.min(byHeight, byWidth));
+}
+
+// The bar a pressed key gets in the "pressed" preset, slot 0 being the top one.
+function pressedBar(op, slot) {
+  const maxSlots = Math.min(4, Math.max(1, Math.floor(op.rect.h / 28)));
+  const rowH = op.rect.h / maxSlots;
+  const y = Math.round(op.rect.y + slot * rowH);
+  const h = Math.max(12, Math.round(rowH) - 4);
+  return { maxSlots, y, h, fontSize: Math.max(10, Math.round(h * 0.6)) };
+}
+
+// What the preview draws for an overlay, in overlay-local source pixels: the same grid the export
+// burns in, with the first key shown as pressed so the colours can be judged. `bar` is the single
+// sample bar of the "pressed" preset; `empty` flags a custom pick without keys.
+export function keysPreviewModel(op) {
+  if (op.preset === "pressed") {
+    const bar = pressedBar(op, 0);
+    return { cells: [], bar: { x: 0, y: bar.y - op.rect.y, w: op.rect.w, h: bar.h, fontSize: bar.fontSize, label: "A" }, empty: false };
+  }
+  const rows = keysLayoutRows(op);
+  const cells = keysGridRects(rows, { x: 0, y: 0, w: op.rect.w, h: op.rect.h }).map((k, i) => {
+    const label = keyLabel(k.vk);
+    return { x: k.x, y: k.y, w: k.w, h: k.h, label, fontSize: keyFontSize(k, label), active: i === 0 };
+  });
+  return { cells, bar: null, empty: cells.length === 0 };
+}
+
 // Produces the drawbox/drawtext filter strings this overlay adds to the chain; called once per
 // op from buildVideoChain(), factored out for length.
 export function buildKeysFilters(op) {
@@ -143,25 +178,26 @@ export function buildKeysFilters(op) {
   const activeColor = hexToFf(op.activeColor, op.opacity ?? 100);
   const textColor = hexToFf("#ffffff", 100);
   if (op.preset === "pressed") {
-    const maxSlots = Math.max(1, Math.floor(op.rect.h / 28)) || 4;
-    const rowH = op.rect.h / Math.min(maxSlots, 4);
-    for (const s of pressedSpans(op, Math.min(maxSlots, 4))) {
+    const maxSlots = pressedBar(op, 0).maxSlots;
+    for (const s of pressedSpans(op, maxSlots)) {
       const enable = keysEnable(op, [[s.start, s.end]]);
       if (!enable) continue;
-      const y = Math.round(op.rect.y + s.slot * rowH);
-      const h = Math.max(12, Math.round(rowH) - 4);
-      filters.push(`drawbox=x=${op.rect.x}:y=${y}:w=${op.rect.w}:h=${h}:color=${activeColor}:t=fill:${enable}`);
-      filters.push(`drawtext=fontfile='${font}':x=${op.rect.x + 8}:y=${y + Math.round(h / 4)}:fontsize=${Math.max(10, Math.round(h * 0.6))}:fontcolor=${textColor}:expansion=none:${enable}:text='${ffText(keyLabel(s.vk))}'`);
+      const bar = pressedBar(op, s.slot);
+      filters.push(`drawbox=x=${op.rect.x}:y=${bar.y}:w=${op.rect.w}:h=${bar.h}:color=${activeColor}:t=fill:${enable}`);
+      filters.push(`drawtext=fontfile='${font}':x=${op.rect.x + 8}:y=${bar.y + Math.round(bar.h / 4)}:fontsize=${bar.fontSize}:fontcolor=${textColor}:expansion=none:${enable}:text='${ffText(keyLabel(s.vk))}'`);
     }
     return filters;
   }
   const rows = keysLayoutRows(op);
   const holdMs = (VE.keySidecar && VE.keySidecar.hold_ms) || 400;
   for (const k of keysGridRects(rows, op.rect)) {
+    const label = keyLabel(k.vk);
     filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${color}:t=2`);
-    filters.push(`drawtext=fontfile='${font}':x=${k.x + k.w / 2 - 6}:y=${k.y + k.h / 2 - 8}:fontsize=${Math.max(10, Math.round(k.h * 0.4))}:fontcolor=${color}:expansion=none:text='${ffText(keyLabel(k.vk))}'`);
+    // The press fill goes down before the label so the label stays readable on top of it, and the
+    // label is centred on the key by its own measured size rather than by a guessed offset.
     const enable = keysEnable(op, keyPressSpans(k.vk, holdMs));
     if (enable) filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${activeColor}:t=fill:${enable}`);
+    filters.push(`drawtext=fontfile='${font}':x=${k.x}+(${k.w}-text_w)/2:y=${k.y}+(${k.h}-text_h)/2:fontsize=${keyFontSize(k, label)}:fontcolor=${color}:expansion=none:text='${ffText(label)}'`);
   }
   return filters;
 }
@@ -171,6 +207,12 @@ export function buildKeysFilters(op) {
 export function keysPickerRow(op) {
   const wrap = document.createElement("div");
   wrap.className = "ve-keys-picker";
+  // Without a key the overlay draws nothing, so say so right where the keys are picked.
+  const hint = document.createElement("p");
+  hint.className = "modal-hint ve-keys-empty";
+  hint.textContent = t("veKeysEmpty");
+  hint.hidden = !!(op.keys && op.keys.length);
+  wrap.appendChild(hint);
   for (const row of KEY_LAYOUT_FULL) {
     for (const vk of row) {
       const label = document.createElement("label");
@@ -181,6 +223,7 @@ export function keysPickerRow(op) {
       box.addEventListener("change", () => {
         const keys = new Set(liveOverlay(op).keys || []);
         if (box.checked) keys.add(vk); else keys.delete(vk);
+        hint.hidden = keys.size > 0;
         commitOverlay(op, { keys: [...keys] });
       });
       label.append(box, document.createTextNode(keyLabel(vk)));

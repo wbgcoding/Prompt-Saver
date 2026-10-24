@@ -554,9 +554,10 @@ and Ctrl+0 zoom in, zoom out and fit the view in either one, and Ctrl+Z,
 Ctrl+Y (or Ctrl+Shift+Z) undo and redo through the same button pair. In the
 screenshot editor, clicking an existing rectangle, ellipse, line or arrow
 selects it and shows the same handles as dragging one out fresh. The video
-editor keeps selecting its overlays from its own list instead, since it only
-draws an overlay's handles once that overlay is already selected; the two
-toolbars stay where they are too, a bar on top for the screenshot editor and
+editor does the same for its overlays: clicking one in the preview selects it
+(the top-most one showing at the playhead) and a drag moves it, a click on an
+empty spot deselects, and the overlay list still works as before; the two
+toolbars stay where they are, a bar on top for the screenshot editor and
 a side column next to the timeline for the video editor, because the
 timeline needs the room the screenshot editor doesn't. In the screenshot
 editor, undo, redo and zoom sit at the left end of the bottom bar.

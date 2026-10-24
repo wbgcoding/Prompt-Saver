@@ -364,6 +364,7 @@ fn export_video_real_ffmpeg_lossless_trim_shortens_the_clip_via_stream_copy() {
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: true,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: None,
@@ -395,6 +396,7 @@ fn export_video_real_ffmpeg_filter_chain_crops_via_the_v_output_label() {
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(1000),
@@ -425,6 +427,7 @@ fn export_video_real_ffmpeg_filter_chain_scales_to_the_requested_dimensions() {
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(1000),
@@ -473,6 +476,7 @@ pub(super) fn run_format_export(ffmpeg: &Path, src: &Path, dest: &Path, format: 
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: format.to_string(),
         video_kbps: Some(2000),
@@ -540,6 +544,7 @@ pub(super) fn run_overlay_export(ffmpeg: &Path, src: &Path, dest: &Path, filter_
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(1000),
@@ -719,6 +724,7 @@ fn export_video_real_ffmpeg_lossless_quality_is_far_larger_than_a_capped_bitrate
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: true,
         format: "mp4".to_string(),
         video_kbps: Some(300),
@@ -733,6 +739,7 @@ fn export_video_real_ffmpeg_lossless_quality_is_far_larger_than_a_capped_bitrate
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(300),
@@ -770,6 +777,7 @@ fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif(
         audio_map: Some("[0:a]volume=1[aout]".to_string()),
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "gif".to_string(),
         video_kbps: None,
@@ -868,6 +876,7 @@ fn export_video_real_ffmpeg_two_clips_of_different_resolution_and_rate_concatena
         audio_map: Some(audio_chain),
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(1000),
@@ -915,6 +924,7 @@ fn export_video_real_ffmpeg_a_silent_inserted_clip_gets_silence_and_does_not_shi
         audio_map: Some(audio_chain),
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(1000),
@@ -1035,6 +1045,7 @@ fn export_video_real_ffmpeg_cancel_leaves_no_destination_file() {
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality: false,
         format: "mp4".to_string(),
         video_kbps: Some(4000),
@@ -1185,5 +1196,77 @@ fn batch_export_one_broken_source_does_not_stop_the_others() {
     }
     assert_eq!(ok, 2, "the two valid recordings must still both succeed");
     assert_eq!(failed, 1, "only the broken recording must be counted as failed");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn copy_request(copy_audio: CopyAudio, filter_chain: Option<&str>, audio_map: Option<&str>, lossless_copy: bool) -> ExportRequest {
+    ExportRequest {
+        src_path: String::new(),
+        dest_path: String::new(),
+        filter_chain: filter_chain.map(str::to_string),
+        audio_map: audio_map.map(str::to_string),
+        media_paths: Vec::new(),
+        lossless_copy,
+        copy_audio,
+        lossless_quality: false,
+        format: "mp4".to_string(),
+        video_kbps: None,
+        trim_start_ms: Some(0),
+        trim_end_ms: Some(1000),
+        total_ms: 1000,
+    }
+}
+
+#[test]
+fn copy_plan_picks_the_audio_handling_for_a_trim_only_export() {
+    let mix = "[0:a:0][0:a:1]amix=inputs=2:normalize=0[aout]";
+    // A source with one audio track keeps the plain copy of every stream.
+    assert_eq!(copy_plan(&copy_request(CopyAudio::All, None, None, true)), CopyPlan::Plain);
+    // A muted mic keeps only the first track.
+    assert_eq!(copy_plan(&copy_request(CopyAudio::First, None, None, true)), CopyPlan::FirstAudio);
+    // Both tracks audible: picture copied, sound mixed into one stream.
+    assert_eq!(copy_plan(&copy_request(CopyAudio::Mix, None, Some(mix), true)), CopyPlan::VideoCopyMix);
+    // Anything else, including a mix request without its graph, is the ordinary re-encode.
+    assert_eq!(copy_plan(&copy_request(CopyAudio::Mix, None, None, true)), CopyPlan::Reencode);
+    assert_eq!(copy_plan(&copy_request(CopyAudio::All, Some("[0:v]null[vout]"), None, true)), CopyPlan::Reencode);
+    assert_eq!(copy_plan(&copy_request(CopyAudio::All, None, None, false)), CopyPlan::Reencode);
+}
+
+#[test]
+fn copy_audio_arrives_from_the_frontend_by_name_and_defaults_to_all() {
+    let base = r#"{"src_path":"a","dest_path":"b","filter_chain":null,"audio_map":null,"lossless_copy":true,"lossless_quality":false,"format":"mp4","video_kbps":null,"trim_start_ms":null,"trim_end_ms":null,"total_ms":1"#;
+    let parse = |extra: &str| serde_json::from_str::<ExportRequest>(&format!("{base}{extra}}}")).unwrap().copy_audio;
+    assert_eq!(parse(""), CopyAudio::All);
+    assert_eq!(parse(r#","copy_audio":"first""#), CopyAudio::First);
+    assert_eq!(parse(r#","copy_audio":"mix""#), CopyAudio::Mix);
+}
+
+#[test]
+fn export_video_real_ffmpeg_copy_with_a_mic_track_leaves_one_audible_stream() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let Some(ffprobe) = test_ffprobe() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-exporttest-micmix-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 3, "64x48");
+    let sidecar = make_test_wav(&dir, "src.mic.wav", 3);
+    mux_mic_track_blocking(&ffmpeg, &src, &sidecar, 128).expect("mux should succeed");
+    assert!(probe_recording_blocking(&ffprobe, &src).unwrap().has_mic_track);
+    let mix = "[0:a:0][0:a:1]amix=inputs=2:normalize=0[aout]";
+    for (name, copy_audio, audio_map, expect_mic_track) in [
+        ("mix.mp4", CopyAudio::Mix, Some(mix), false),
+        ("first.mp4", CopyAudio::First, None, false),
+        ("all.mp4", CopyAudio::All, None, true),
+    ] {
+        let dest = dir.join(name);
+        let mut req = copy_request(copy_audio, None, audio_map, true);
+        req.src_path = src.to_string_lossy().to_string();
+        req.dest_path = dest.to_string_lossy().to_string();
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let probe = probe_recording_blocking(&ffprobe, &dest).unwrap();
+        assert!(probe.has_audio, "{name} must keep sound");
+        assert_eq!(probe.has_mic_track, expect_mic_track, "{name}: audio stream count");
+        assert!(probe.duration_ms <= 1600, "{name} was {}ms", probe.duration_ms);
+    }
     let _ = fs::remove_dir_all(&dir);
 }

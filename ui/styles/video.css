@@ -111,7 +111,9 @@ body.video-body {
 .ve-live-video { object-fit: contain; background: #000; }
 .ve-live-frame { border-style: solid; }
 .ve-live-keys {
-  border: 2px dashed currentColor;
+  /* An inset outline keeps the key cells aligned to the overlay's own corner, as in the export. */
+  outline: 2px dashed currentColor;
+  outline-offset: -2px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,6 +123,20 @@ body.video-body {
   padding: 2px;
   overflow: hidden;
 }
+/* One key of the grid, placed in overlay-local source pixels like the export's drawbox. */
+.ve-live-key {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ve-live-key-bar { justify-content: flex-start; padding-left: 8px; }
+.ve-live-keys-note { position: relative; }
 .ve-live-text {
   white-space: pre;
   line-height: 1.2;
@@ -320,7 +336,7 @@ body.video-body {
   flex: 1 1 0;
   padding: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px 6px 0 0;
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -372,6 +388,7 @@ body.video-body {
 /* The plain-filename field sits above the full-path one: the
    extension label next to it never gets its own input, so it cannot be
    typed into or mistaken for an editable part of the name. */
+.ve-name-field > label { color: var(--muted); font-size: 12px; }
 .ve-export-name-row { display: flex; align-items: center; gap: 6px; }
 .ve-export-name-row input { flex: 1 1 auto; min-width: 0; }
 .ve-export-name-row .ve-muted { flex: 0 0 auto; }
@@ -382,6 +399,8 @@ body.video-body {
 .ve-ov-add .ghost-btn { padding: 5px 8px; font-size: 12px; }
 /* The "keys" overlay's free-selection field: one checkbox per key of the
    full layout, wrapped rather than scrolled so every key stays reachable. */
+.ve-keys-empty { flex: 1 0 100%; margin: 0; }
+.ve-keys-empty[hidden] { display: none; }
 .ve-keys-picker { display: flex; flex-wrap: wrap; gap: 4px 10px; max-height: 160px; overflow-y: auto; padding: 4px 0; }
 .ve-keys-pick-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 .ve-ov-list { display: flex; flex-direction: column; gap: 4px; }
@@ -397,6 +416,7 @@ body.video-body {
   cursor: pointer;
 }
 .ve-ov-row:hover { border-color: var(--accent); }
+.ve-ov-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ve-ov-row.sel { border-color: var(--accent); background: var(--surface-2); }
 .ve-swatches { margin: 0; max-width: none; grid-auto-flow: column; grid-template-columns: repeat(auto-fit, 20px); gap: 6px; }
 .ve-swatches .swatch { width: 20px; height: 20px; }
@@ -411,8 +431,9 @@ body.video-body {
 .ve-ops-list { flex: 1 1 auto; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 3px; }
 .ve-op-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .ve-op-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ve-op-clickable .ve-op-label { cursor: pointer; }
-.ve-op-clickable .ve-op-label:hover { color: var(--accent); }
+button.ve-op-label { padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button.ve-op-label:hover { color: var(--accent); }
+button.ve-op-label:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 .ve-op-del { flex: 0 0 auto; }
 
 /* ---- toast ---- */
@@ -423,7 +444,7 @@ body.video-body {
   transform: translateX(-50%);
   max-width: 80vw;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
@@ -433,13 +454,13 @@ body.video-body {
 }
 
 /* Narrow window: the side panel drops under the preview. The preview keeps
-   40 % of the height and stays on top while the controls scroll under it; the
+   40 % of the height (at most 260px, so a short window keeps room for the controls) and stays on top while the controls scroll under it; the
    side panel is exactly as tall as the room below the preview, so scrolled to
    the end it shows whole, with its own panel scroll and the undo/redo row. */
 @media (max-width: 900px) {
-  .ve-main { flex-direction: column; overflow-y: auto; container-type: size; scroll-padding-top: 40vh; }
+  .ve-main { --ve-stage-h: min(40vh, 260px); flex-direction: column; overflow-y: auto; container-type: size; scroll-padding-top: var(--ve-stage-h); }
   .ve-left { display: contents; }
   .ve-left > * { flex: 0 0 auto; }
-  .ve-stage { position: sticky; top: 0; z-index: 3; flex: 0 0 40vh; height: 40vh; min-height: 0; }
-  .ve-side { flex: 0 0 auto; height: calc(100cqh - 40vh); max-height: none; max-width: none; overflow: hidden; border-left: none; border-top: 1px solid var(--border); }
+  .ve-stage { position: sticky; top: 0; z-index: 3; flex: 0 0 var(--ve-stage-h); height: var(--ve-stage-h); min-height: 0; }
+  .ve-side { flex: 0 0 auto; height: calc(100cqh - var(--ve-stage-h)); max-height: none; max-width: none; overflow: hidden; border-left: none; border-top: 1px solid var(--border); }
 }

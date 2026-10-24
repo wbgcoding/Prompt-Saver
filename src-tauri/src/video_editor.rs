@@ -649,9 +649,13 @@ pub(crate) fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, 
 //   filter_chain: ends with [vout] if present, else the source video is mapped unfiltered.
 //   audio_map:    ends with [aout] if present, else the source audio (if any) is mapped
 //                 unfiltered. Never sent for gif, which carries no audio.
-// trim_start_ms is an input-side "-ss" (keyframe-snapped for lossless_copy) and trim_end_ms
-// an output-side "-t <duration>", both applied before any filter graph, so a plain trim with
-// lossless_copy never touches a filter graph or re-encodes.
+// trim_start_ms is an input-side "-ss" and trim_end_ms an output-side "-t <duration>", both
+// applied before any filter graph, so a plain trim with lossless_copy never touches a filter
+// graph or re-encodes the picture. With a stream copy the start is not moved to a keyframe by
+// this code: ffmpeg begins at the nearest keyframe before it and the mp4 edit list hides the
+// lead-in, which is why the copy note tells the user where the cut really starts.
+// With lossless_copy the picture is always copied; copy_audio says what happens to the sound
+// (see copy_plan).
 #[derive(serde::Deserialize)]
 pub(crate) struct ExportRequest {
     pub(crate) src_path: String,
@@ -663,6 +667,8 @@ pub(crate) struct ExportRequest {
     #[serde(default)]
     pub(crate) media_paths: Vec<String>,
     pub(crate) lossless_copy: bool,
+    #[serde(default)]
+    pub(crate) copy_audio: CopyAudio,
     // "Lossless" picked as a re-encode quality tier, distinct from lossless_copy (the
     // stream-copy fast path). True whenever the quality dropdown is on "lossless", even when
     // another op (crop, overlay, ...) still forces a real re-encode.
@@ -674,6 +680,46 @@ pub(crate) struct ExportRequest {
     // The finished export's expected length. Only export_video's progress wrapper reads it, to
     // turn "ms encoded so far" into the percent shown in the running-jobs list.
     pub(crate) total_ms: u64,
+}
+
+// What a stream-copy export does with the recording's audio tracks. A recording with a mic has
+// two audio streams, and most players only play the first one.
+#[derive(serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum CopyAudio {
+    // Every audio stream is copied as it is (a source with at most one track).
+    #[default]
+    All,
+    // Only the first stream is kept: the mic is muted, so the other track would only be dead weight.
+    First,
+    // Both tracks are audible: the sound goes through audio_map into one AAC stream.
+    Mix,
+}
+
+// How export_video_blocking turns a request into ffmpeg arguments. Pure so each branch has a
+// unit test.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CopyPlan {
+    // Filter graph and encoder, as for every edit that touches the picture.
+    Reencode,
+    // Picture and every audio stream copied untouched.
+    Plain,
+    // Picture and the first audio stream copied untouched.
+    FirstAudio,
+    // Picture copied, sound mixed down by audio_map and encoded to AAC.
+    VideoCopyMix,
+}
+
+pub(crate) fn copy_plan(req: &ExportRequest) -> CopyPlan {
+    if !req.lossless_copy || req.filter_chain.is_some() {
+        return CopyPlan::Reencode;
+    }
+    match (req.copy_audio, req.audio_map.is_some()) {
+        (CopyAudio::Mix, true) => CopyPlan::VideoCopyMix,
+        (CopyAudio::First, false) => CopyPlan::FirstAudio,
+        (CopyAudio::All, false) => CopyPlan::Plain,
+        _ => CopyPlan::Reencode,
+    }
 }
 
 // Each export owns the generation number it was handed at start. Batch exports can run
@@ -1086,6 +1132,7 @@ pub(crate) fn run_batch_job_blocking(
         audio_map: None,
         media_paths: Vec::new(),
         lossless_copy: false,
+        copy_audio: CopyAudio::All,
         lossless_quality,
         format: format.to_string(),
         video_kbps,
@@ -1255,7 +1302,14 @@ pub(crate) fn trim_duration_secs(start_ms: Option<u64>, end_ms: Option<u64>) -> 
 pub(crate) fn export_video_blocking(
     ffmpeg: &Path, src: &Path, dst: &Path, req: &ExportRequest, my_gen: u64, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
+    let plan = copy_plan(req);
     let mut input_args: Vec<String> = Vec::new();
+    if plan == CopyPlan::VideoCopyMix {
+        // The sound is decoded here while the picture is copied from the keyframe before the start
+        // point. Without this the sound would start exactly at the start point and run ahead of the
+        // picture; with it both begin at that same keyframe.
+        input_args.push("-noaccurate_seek".to_string());
+    }
     if let Some(start) = req.trim_start_ms {
         if start > 0 {
             input_args.push("-ss".to_string());
@@ -1267,12 +1321,19 @@ pub(crate) fn export_video_blocking(
         output_args.push("-t".to_string());
         output_args.push(format!("{dur:.3}"));
     }
-    let plain_copy = req.lossless_copy && req.filter_chain.is_none() && req.audio_map.is_none();
     let mut filter_script: Option<PathBuf> = None;
-    if plain_copy {
+    if plan == CopyPlan::Plain {
         // Without an explicit -map, ffmpeg keeps only its single "best" audio stream, and a muxed-in
         // mic track (the second audio stream) would vanish on a lossless trim-only export.
         output_args.extend(["-map", "0:v", "-map", "0:a?", "-c", "copy"].map(String::from));
+    } else if plan == CopyPlan::FirstAudio {
+        output_args.extend(["-map", "0:v", "-map", "0:a:0?", "-c", "copy"].map(String::from));
+    } else if plan == CopyPlan::VideoCopyMix {
+        let graph = req.audio_map.as_deref().unwrap_or_default();
+        let script = write_filter_script(dst, graph)?;
+        output_args.extend(["-/filter_complex".to_string(), script.to_string_lossy().to_string()]);
+        filter_script = Some(script);
+        output_args.extend(["-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"].map(String::from));
     } else {
         // GIF carries no audio: never map or filter an audio stream into it, even if the frontend
         // sent one.
