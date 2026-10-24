@@ -83,6 +83,11 @@ ACTS = {
                     "if (gt) hb.scrollTop = gt.offsetTop - hb.offsetTop; await sleep(300);",
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
     "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
+    "tagpop": "$('grid-tag-btn').click(); await sleep(300);",
+    "tagpop1": "$('grid-tag-btn').click(); await sleep(300);",
+    "tagpop3": "$('grid-tag-btn').click(); await sleep(300);",
+    "tagpop12": "$('grid-tag-btn').click(); await sleep(300);",
+    "tagpop_on": "$('grid-tag-btn').click(); await sleep(300); document.querySelector('.grid-tag-pop .tag-filter').click(); await sleep(300);",
     "snipedit": SNIP_OPEN,
     "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);",
 }
@@ -90,7 +95,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "help", "help_capture", "stats", "backup"],
     "@library": ["library", "history"],
-    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
+    "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
     "@snip": ["snipedit", "snipdraw"],
 }
 
@@ -123,6 +128,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             theme = q.get("theme", "")
             if theme.isalpha():
                 head += f'<script>SETTINGS.theme = "{theme}"; window.__SHOT_THEME__ = "{theme}";</script>\n'
+            # The tag popover surfaces: one, three or twelve distinct tags across the demo prompts.
+            m = re.fullmatch(r"tagpop(\d+)", q.get("act", ""))
+            if m:
+                names = ["Work", "Draft", "Idea", "Research", "Personal", "Marketing", "Support", "Ops",
+                         "Legal", "Billing", "Roadmap", "Archive-2024"][:int(m.group(1))]
+                head += ("<script>PROMPTS.forEach((p, i) => { p.tags = " + repr(names).replace("'", '"') +
+                         ".filter((_, j) => j % PROMPTS.length === i); });</script>\n")
             # A headless shot freezes colour transitions part way (the theme fades in from the
             # light default), which paints the whole page washed out; shoot the settled state.
             head += '<style>*, *::before, *::after { transition: none !important; animation: none !important; }</style>\n'

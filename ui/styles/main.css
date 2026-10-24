@@ -1664,14 +1664,12 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 /* Grid tag filter: same filled-look active state as the pin toggle. */
 .grid-tag-btn.active { color: var(--accent-fg); background: var(--accent); }
 .grid-tag-btn.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
-/* Fixed column count instead of free wrap: a run of short tags no longer
-   trails off ragged on the right, it lines up in a grid like the expert menu's own
-   two-column rows. the count is a fixed 2. */
-.grid-tag-pop { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; align-items: start; min-width: 200px; max-width: 420px; padding: 10px; z-index: 90; }
-/* .tag-action:last-child normally gets margin-left:auto to hug the right edge of a
-   flex row (the library tagbar); inside this grid it must stretch full width instead. */
-.grid-tag-pop > .tag-action, .grid-tag-pop > .hint { grid-column: 1 / -1; }
-.grid-tag-pop > .tag-action { margin-left: 0; width: 100%; text-align: center; }
+/* The popover is as wide as its chips need: they wrap in a flex row, so one tag gives a
+   narrow box and a dozen fill rows up to the maximum, with no empty column. The hint and the
+   clear button take a full row of their own. */
+.ctx.grid-tag-pop { flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: flex-start; align-content: flex-start; width: max-content; min-width: 0; max-width: 420px; padding: 10px; z-index: 90; }
+.grid-tag-pop > .tag-action, .grid-tag-pop > .hint { flex: 1 1 100%; }
+.grid-tag-pop > .tag-action { margin-left: 0; text-align: center; }
 .grid-tag-pop .tag-chip { min-width: 0; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A tile that does not match the active filter stays in place (drag/reorder,
    grid geometry unaffected) but reads as excluded, not deleted. */

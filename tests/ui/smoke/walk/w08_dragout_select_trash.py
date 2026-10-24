@@ -864,9 +864,10 @@ SECTION = """\
         if (!pop || pop.classList.contains('hidden') || chips().length < 2) {
           out.errors.push('the grid tag popover shows ' + chips().length + ' chips instead of at least 2');
         } else {
-          // 81: chips line up in a fixed-column grid instead of free-wrapping.
-          const tracks = getComputedStyle(pop).gridTemplateColumns.trim().split(/[ ]+/);
-          if (tracks.length < 2) out.errors.push('81: the tag popover is not laid out in at least two columns');
+          // The popover is as wide as its chips: no empty column on the right of the last chip in a row.
+          const pr0 = pop.getBoundingClientRect();
+          const maxRight = Math.max(...chips().map(c => c.getBoundingClientRect().right));
+          if (pr0.right - maxRight > 14) out.errors.push('the tag popover has an empty column: ' + (pr0.right - maxRight) + 'px right of the last chip');
           const draftChip = chips().find(c => (c.querySelector('.tag-chip-label') || {}).textContent === 'Draft');
           if (!draftChip) {
             out.errors.push('the grid tag popover is missing the "Draft" chip');
