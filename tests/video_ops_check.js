@@ -468,6 +468,9 @@ async function exportIdleCheck() {
     renderOverlayList: () => log.push("list"), renderOverlayEditor: () => log.push("editor"), renderRects: () => log.push("rects"),
     renderRegions: () => log.push("regions"), updateNudgeHint: () => log.push("hint"), closeWindow: () => log.push("close"),
     Event: class { constructor(type) { this.type = type; } },
+    showPanel: (id) => log.push("panel:" + id),
+    $: () => ({ classList: { contains: () => sb.__exportHidden } }),
+    __exportHidden: true,
   };
   vm.createContext(sb);
   vm.runInContext(
@@ -511,6 +514,13 @@ async function exportIdleCheck() {
   sb.document.activeElement = null;
   expect("Escape then clears the marked range", run("handleEscape()") === "selection" && sb.VE.sel === null);
   expect("the window is still open", !log.includes("close"));
+  sb.__exportHidden = false;
+  sb.VE.exporting = true;
+  expect("Escape on the Export tab during an export still closes", run("handleEscape()") === "close" && log.includes("close"));
+  log.length = 0;
+  sb.VE.exporting = false;
+  expect("Escape on the Export tab returns to the Edit tab", run("handleEscape()") === "panel" && log.includes("panel:ve-panel-edit") && !log.includes("close"), log.join());
+  sb.__exportHidden = true;
   expect("Escape with nothing left closes the window", run("handleEscape()") === "close" && log.includes("close"));
 }
 

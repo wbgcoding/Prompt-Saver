@@ -1833,7 +1833,7 @@ document.addEventListener("focusin", (e) => { fieldFocus = isTextField(e.target)
 document.addEventListener("change", (e) => { if (fieldFocus && fieldFocus.el === e.target) fieldFocus.value = e.target.value; }, true);
 
 // Escape peels off one layer at a time: the field being typed in, the selected overlay, the marked
-// range, and only when nothing is left the window. Returns the layer it took.
+// range, the Export tab, and only when nothing is left the window. Returns the layer it took.
 function handleEscape() {
   const el = document.activeElement;
   if (isTextField(el)) {
@@ -1849,6 +1849,9 @@ function handleEscape() {
   // away every edit just because something is selected.
   if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return "overlay"; }
   if (VE.sel) { VE.sel = null; renderRegions(); renderOverlayEditor(); return "selection"; }
+  // The Export tab is a step on top of the edit view: Escape goes back to it first. While an
+  // export runs, Escape keeps its cancel-or-close meaning.
+  if (!VE.exporting && !$("ve-panel-export").classList.contains("hidden")) { showPanel("ve-panel-edit"); return "panel"; }
   closeWindow();
   return "close";
 }
