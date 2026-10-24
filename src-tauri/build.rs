@@ -62,88 +62,49 @@ fn handler_commands() -> Vec<&'static str> {
 
 #[derive(Deserialize)]
 struct CargoPackage {
-    id: String,
     name: String,
     version: String,
     license: Option<String>,
     license_file: Option<String>,
-    targets: Vec<CargoTarget>,
-}
-
-#[derive(Deserialize)]
-struct CargoTarget {
-    kind: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct CargoDepKind {
-    // null = a normal dependency, otherwise "dev" or "build".
-    kind: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct CargoNodeDep {
-    pkg: String,
-    dep_kinds: Vec<CargoDepKind>,
-}
-
-#[derive(Deserialize)]
-struct CargoNode {
-    id: String,
-    deps: Vec<CargoNodeDep>,
-}
-
-#[derive(Deserialize)]
-struct CargoResolve {
-    root: Option<String>,
-    nodes: Vec<CargoNode>,
 }
 
 #[derive(Deserialize)]
 struct CargoMetadata {
     packages: Vec<CargoPackage>,
-    resolve: CargoResolve,
 }
 
 // The platform the shipped binary is built for: the notice list covers exactly what is linked
 // into it, not what other platforms or the build itself would need.
 const NOTICE_TARGET: &str = "x86_64-pc-windows-msvc";
 
-// Ids of the packages that end up in the binary: reachable from the root package through normal
-// dependencies only. Build and dev dependencies and proc-macro crates run at compile time and
-// are not shipped, so neither they nor anything only they pull in is walked.
-fn shipped_package_ids(metadata: &CargoMetadata) -> std::collections::BTreeSet<String> {
-    let by_id: std::collections::HashMap<&str, &CargoNode> =
-        metadata.resolve.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
-    let packages: std::collections::HashMap<&str, &CargoPackage> =
-        metadata.packages.iter().map(|p| (p.id.as_str(), p)).collect();
-    let root = metadata
-        .resolve
-        .root
-        .as_deref()
-        .expect("cargo metadata reported no root package for the third-party license list");
-    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    let mut stack: Vec<&str> = vec![root];
-    while let Some(id) = stack.pop() {
-        if !seen.insert(id.to_string()) {
-            continue;
-        }
-        let Some(node) = by_id.get(id) else { continue };
-        for dep in &node.deps {
-            if !dep.dep_kinds.iter().any(|k| k.kind.is_none()) {
-                continue;
-            }
-            let is_proc_macro = packages
-                .get(dep.pkg.as_str())
-                .map(|p| p.targets.iter().any(|t| t.kind.iter().any(|k| k == "proc-macro")))
-                .unwrap_or(false);
-            if !is_proc_macro {
-                stack.push(dep.pkg.as_str());
-            }
-        }
+// Name and version of every crate linked into the binary. `cargo tree` resolves features per
+// target the way the real build does, so a crate that only a build-time copy of a dependency
+// pulls in (tauri-utils with its codegen features, for example) is not counted, while the
+// merged graph of `cargo metadata` would list it. Build and dev dependencies and proc-macro
+// crates run at compile time and are left out with everything only they pull in.
+fn shipped_crates(cargo: &str, manifest_dir: &str) -> std::collections::BTreeSet<(String, String)> {
+    let output = Command::new(cargo)
+        .args(["tree", "--target", NOTICE_TARGET, "-e", "normal,no-proc-macro", "--prefix", "none", "-f", "{p}", "--manifest-path"])
+        .arg(format!("{manifest_dir}/Cargo.toml"))
+        .output()
+        .expect("failed to run `cargo tree` while generating the third-party license list");
+    if !output.status.success() {
+        panic!(
+            "`cargo tree` failed while generating the third-party license list, refusing to \
+             ship a stale one:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
-    seen.remove(root);
-    seen
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .skip(1) // the app itself
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let name = parts.next()?;
+            let version = parts.next()?.strip_prefix('v')?;
+            Some((name.to_string(), version.to_string()))
+        })
+        .collect()
 }
 
 // Orders dotted versions numerically part by part ("1.9.0" before "1.10.0"); a part that is not
@@ -302,10 +263,10 @@ fn generate_third_party_notices() {
     });
 
     let mut used_keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    let shipped = shipped_package_ids(&metadata);
+    let shipped = shipped_crates(&cargo, &manifest_dir);
     let mut found: Vec<(String, String, String, Option<String>)> = Vec::new();
     for pkg in &metadata.packages {
-        if !shipped.contains(&pkg.id) {
+        if !shipped.contains(&(pkg.name.clone(), pkg.version.clone())) {
             continue;
         }
         let license = match &pkg.license {
