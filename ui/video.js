@@ -225,6 +225,8 @@ function applyI18n() {
   updateExportNote();
   updatePlayButton();
   updateAudioLabels();
+  updateVolumeValueText("ve-vol-sys");
+  updateVolumeValueText("ve-vol-mic");
   renderPlayhead();
 }
 

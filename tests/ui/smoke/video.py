@@ -27,6 +27,12 @@ VIDEO_DE_PROBE = """
     if (document.getElementById('ve-tab-edit').textContent.trim() === 'Edit') {
       errs.push('the German boot still shows English labels');
     }
+    // The volume sliders' screen-reader value is set before the texts load; it must be
+    // redone once they arrive instead of keeping the raw key.
+    for (const id of ['ve-vol-sys', 've-vol-mic']) {
+      const vt = document.getElementById(id).getAttribute('aria-valuetext') || '';
+      if (!/Prozent/.test(vt)) errs.push(id + ' aria-valuetext is not translated: ' + vt);
+    }
     // 934: the tool row groups its buttons so none wraps alone, Fit is an icon
     // and Export frame sits in the transport row beside the frame number.
     {
