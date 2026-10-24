@@ -588,6 +588,18 @@ the introduction tour ship on; the screenshot editor is always on).
 
 ### Improved
 
+- **One list of recent searches.** The library, the copy history and the
+  global search now share one list of recent searches with one look, so a
+  term you searched in one place is offered in the others. The separate lists
+  of earlier versions are merged into it once.
+- **The video editor never scrolls at its smallest size.** Its minimum window
+  size is now 920 × 600, where preview, timeline and side panel all fit side by
+  side.
+- **Help tabs stay on one line.** In a narrow window the help tabs scroll
+  sideways with a soft edge, like the expert menu's, instead of wrapping.
+- **The record button follows every way of starting, pausing and stopping.**
+  A hotkey, the tray menu or the control bar now updates it at once, instead
+  of within a few seconds.
 - **The screenshot editor replaces the dialog that followed it.** What the old
   result dialog offered now sits in the editor's bottom bar: Copy, Save (into the
   screenshot folder), Save as with a format choice, Save as button, Recognize
