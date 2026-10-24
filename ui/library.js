@@ -1514,7 +1514,7 @@ export function bindLibrary() {
       refreshImageHitsDebounced();
     }
   });
-  wireSearchSuggest($("library-q"), "recentSearchLib");
+  wireSearchSuggest($("library-q"));
   $("library-search-save").addEventListener("click", () => saveSavedSearch());
   $("library-sort").addEventListener("change", (e) => {
     settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };

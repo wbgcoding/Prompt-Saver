@@ -7,6 +7,7 @@ import { fillVarHighlighted } from "./promptVars.js";
 import { placePopover } from "./popover.js";
 import { buildShortcutRows, closeShortcutsOverlay, keysLabel, openShortcutsOverlay, SCOPE_TITLE_KEYS } from "./shortcuts.js";
 import { renderHotkeysList } from "./hotkeys.js";
+import { forgetSearch, recentList, recentRow, rememberSearch } from "./recentSearches.js";
 
 export function applyI18n() {
   document.documentElement.lang = LANG;
@@ -290,10 +291,10 @@ export async function wireWindowControls() {
 }
 
 // Themed recent-searches dropdown for a search field, replacing the browser's
-// unstyled native autofill. Terms live in ui_texts (DPAPI-encrypted like the rest),
-// most-recent first, deduped, capped. Picking one re-runs the field's own search.
+// unstyled native autofill. The terms are the shared list in recentSearches.js;
+// picking one re-runs the field's own search.
 let searchSuggestSeq = 0;
-export function wireSearchSuggest(input, storeKey) {
+export function wireSearchSuggest(input) {
   if (!input) return;
   input.setAttribute("autocomplete", "off");
   const pop = document.createElement("div");
@@ -307,24 +308,6 @@ export function wireSearchSuggest(input, storeKey) {
   input.setAttribute("aria-controls", popId);
   input.setAttribute("aria-expanded", "false");
   document.body.appendChild(pop);
-  const load = () => {
-    try { const a = JSON.parse(settings.ui_texts?.[storeKey] || "[]"); return Array.isArray(a) ? a : []; }
-    catch { return []; }
-  };
-  const remember = (term) => {
-    term = term.trim();
-    if (term.length < 2 || !flag("searchSuggest")) return;
-    const list = load().filter((x) => x.toLowerCase() !== term.toLowerCase());
-    list.unshift(term);
-    const value = JSON.stringify(list.slice(0, val("searchListMax")));
-    settings.ui_texts = { ...(settings.ui_texts || {}), [storeKey]: value };
-    invoke("set_ui_text", { key: storeKey, value }).catch(() => {});
-  };
-  const forget = (term) => {
-    const value = JSON.stringify(load().filter((x) => x.toLowerCase() !== term.toLowerCase()));
-    settings.ui_texts = { ...(settings.ui_texts || {}), [storeKey]: value };
-    invoke("set_ui_text", { key: storeKey, value }).catch(() => {});
-  };
   // Row highlighted by the arrow keys (-1 = none); the field keeps the focus throughout.
   let activeIdx = -1;
   const hide = () => {
@@ -348,7 +331,7 @@ export function wireSearchSuggest(input, storeKey) {
   const pick = (term) => {
     input.value = term;
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    remember(term);
+    rememberSearch(term);
     hide();
   };
   const show = () => {
@@ -356,37 +339,18 @@ export function wireSearchSuggest(input, storeKey) {
     input.removeAttribute("aria-activedescendant");
     if (!flag("searchSuggest")) { hide(); return; }
     const q = input.value.trim().toLowerCase();
-    const items = load().filter((x) => !q || x.toLowerCase().includes(q)).slice(0, val("searchListMax"));
+    const items = recentList().filter((x) => !q || x.toLowerCase().includes(q));
     pop.innerHTML = "";
     if (!items.length) { hide(); return; }
     for (const term of items) {
-      const row = document.createElement("div");
-      row.className = "search-suggest-item";
-      row.id = `${popId}-opt-${pop.children.length}`;
-      row.setAttribute("role", "option");
-      row.setAttribute("aria-selected", "false");
-      const label = document.createElement("span");
-      label.className = "search-suggest-text";
-      label.textContent = term;
-      label.addEventListener("mousedown", (e) => {
-        e.preventDefault(); // keep focus so blur-hide doesn't beat the click
-        pick(term);
-      });
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "search-suggest-del";
-      del.textContent = "×";
-      del.title = t("delete");
-      del.setAttribute("aria-label", t("delete"));
-      del.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        forget(term);
-        show(); // re-render the shortened list, keeping the popup open
-      });
-      row.dataset.term = term;
-      row.append(label, del);
-      pop.appendChild(row);
+      pop.appendChild(recentRow(term, {
+        id: `${popId}-opt-${pop.children.length}`,
+        onPick: pick,
+        onForget: (x) => {
+          forgetSearch(x);
+          show(); // re-render the shortened list, keeping the popup open
+        },
+      }));
     }
     const r = input.getBoundingClientRect();
     // Size to the terms (short), not the full search field: a full-width bar over a wide
@@ -412,17 +376,17 @@ export function wireSearchSuggest(input, storeKey) {
       hide();
     } else if (e.key === "Delete" && e.shiftKey && activeIdx >= 0 && rows[activeIdx]) {
       e.preventDefault();
-      forget(rows[activeIdx].dataset.term);
+      forgetSearch(rows[activeIdx].dataset.term);
       const keep = activeIdx;
       show();
       setActive(keep);
     } else if (e.key === "Enter") {
       if (activeIdx >= 0 && rows[activeIdx]) { e.preventDefault(); pick(rows[activeIdx].dataset.term); return; }
-      remember(input.value);
+      rememberSearch(input.value);
       hide();
     }
   });
-  input.addEventListener("blur", () => { remember(input.value); setTimeout(hide, 120); });
+  input.addEventListener("blur", () => { rememberSearch(input.value); setTimeout(hide, 120); });
 }
 
 // ---- Fullscreen media viewer (lightbox): click a preview to zoom (wheel) + pan

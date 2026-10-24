@@ -529,7 +529,7 @@ export function bindJournal() {
 
   const renderJournalDebounced = debounced(renderJournal);
   $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournalDebounced(); });
-  wireSearchSuggest($("journal-q"), "recentSearchJournal");
+  wireSearchSuggest($("journal-q"));
   $("journal-types").addEventListener("click", (e) => {
     const btn = e.target.closest(".lib-type");
     if (btn) { toggleTypeFilter(journalTypes, btn.dataset.type, $("journal-types"), "journalTypeFilterPick"); renderJournal(); }

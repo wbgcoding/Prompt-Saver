@@ -2444,15 +2444,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .gs-row-sub { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gs-more-row { color: var(--muted); font-size: 12px; justify-content: center; }
 .gs-empty { padding: 14px 9px; font-size: 13px; color: var(--muted); text-align: center; }
-.gs-recent-row { align-items: center; }
-.gs-recent-row .gs-row-name { flex: 1 1 auto; }
-.gs-recent-del {
-  flex: 0 0 auto;
-  align-self: center;
-  opacity: 0;
-}
-.gs-recent-row:hover .gs-recent-del,
-.gs-recent-del:focus-visible { opacity: 1; }
 .noflag-globalSearch #global-search-btn { display: none; }
 /* The header has no spare width left at the app's own minimum size: below
    this, the icon drops and Ctrl+K stays the only way in, same trade-off the
@@ -4617,7 +4608,7 @@ body.drag-over::after {
   opacity: 0;
   transition: opacity var(--transition), color var(--transition), background var(--transition);
 }
-.search-suggest-item:hover .search-suggest-del, .search-suggest-item.active .search-suggest-del { opacity: 1; }
+.search-suggest-item:hover .search-suggest-del, .search-suggest-item.active .search-suggest-del, .search-suggest-del:focus-visible { opacity: 1; }
 .search-suggest-del:hover { color: var(--danger); background: var(--surface); }
 .lib-types { display: flex; flex-wrap: wrap; gap: 6px; }
 .lib-type {

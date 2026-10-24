@@ -5,6 +5,7 @@ import { $, debounced, flag, gateOpen, invoke, optFlag, prompts, settings, t, va
 import { editPrompt } from "./editor.js";
 import { switchToView } from "./views.js";
 import { varPreview } from "./floatShared.js";
+import { clearSearches, forgetSearch, recentList, recentRow, rememberSearch } from "./recentSearches.js";
 import { EXPERT_DEFS, EXPERT_LABEL_KEYS, jumpToExpertSetting } from "./expertMenu.js";
 import { openSettingsDirectoryEntry, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit } from "./settingsSearch.js";
 import { EXPERT_TABS, flagLabelKey, groupFlags, SETTINGS_AREA_LABEL } from "./expertConfig.js";
@@ -240,53 +241,29 @@ export function gsRow(label, sub, color, onActivate) {
   return row;
 }
 
-// A recent-search row: same look as gsRow plus a per-term delete button, since
-// the recent list (unlike a live search hit) is something the user may want
-// to prune one term at a time.
+// A recent-search row: the shared recent-searches row, with the nav classes this overlay
+// needs (its own id for the active descendant, gs-recent-row / gs-recent-del hooks).
 export function gsRecentRow(term) {
-  const row = document.createElement("div");
-  row.className = "gs-row gs-recent-row";
-  row.setAttribute("role", "option");
-  row.id = `gs-opt-${++gsRowSeq}`;
-  const name = document.createElement("span");
-  name.className = "gs-row-name";
-  name.textContent = term;
-  row.appendChild(name);
-  const del = document.createElement("button");
-  del.type = "button";
-  del.className = "search-suggest-del gs-recent-del";
-  del.textContent = "×";
-  del.title = t("delete");
-  del.setAttribute("aria-label", t("delete"));
-  del.addEventListener("mousedown", (e) => e.preventDefault());
-  del.addEventListener("click", (e) => {
-    e.stopPropagation();
-    gsForgetRecent(term);
+  return recentRow(term, {
+    id: `gs-opt-${++gsRowSeq}`,
+    rowClass: "gs-recent-row",
+    delClass: "gs-recent-del",
+    onPick: gsPickRecent,
+    onForget: gsForgetRecent,
   });
-  row.appendChild(del);
-  row.addEventListener("mousedown", (e) => e.preventDefault());
-  row.addEventListener("click", () => { $("gs-input").value = term; gsQuery = term; gsRender(); });
-  return row;
 }
 
-export function gsRecentList() {
-  let list;
-  try { list = JSON.parse(settings.ui_texts?.globalSearchRecent || "[]"); } catch { list = []; }
-  return Array.isArray(list) ? list.slice(0, val("searchListMax")) : [];
-}
-
-export function gsSaveRecent(list) {
-  const value = JSON.stringify(list);
-  settings.ui_texts = { ...(settings.ui_texts || {}), globalSearchRecent: value };
-  invoke("set_ui_text", { key: "globalSearchRecent", value }).catch(() => {});
+function gsPickRecent(term) {
+  $("gs-input").value = term;
+  gsQuery = term;
+  gsRender();
 }
 
 // Deleting a term keeps keyboard focus on a delete button at (or near) the
 // same position so repeated Tab + Enter can clear several terms in a row.
 export function gsForgetRecent(term) {
-  const list = gsRecentList();
-  const idx = list.findIndex((x) => x.toLowerCase() === term.toLowerCase());
-  gsSaveRecent(list.filter((x) => x.toLowerCase() !== term.toLowerCase()));
+  const idx = recentList().findIndex((x) => x.toLowerCase() === term.toLowerCase());
+  forgetSearch(term);
   gsRender();
   const dels = $("gs-results").querySelectorAll(".gs-recent-del");
   if (dels.length) dels[Math.max(0, Math.min(idx, dels.length - 1))].focus();
@@ -294,19 +271,9 @@ export function gsForgetRecent(term) {
 }
 
 export function gsClearRecent() {
-  gsSaveRecent([]);
+  clearSearches();
   gsRender();
   $("gs-input").focus();
-}
-
-// Remembers a query for the "recent searches" list shown at rest: capped at
-// searchListMax (8 unless changed), newest first, deduped case-insensitively.
-export function gsRemember(term) {
-  term = term.trim();
-  if (term.length < 2) return;
-  let list = gsRecentList().filter((x) => x.toLowerCase() !== term.toLowerCase());
-  list.unshift(term);
-  gsSaveRecent(list.slice(0, val("searchListMax")));
 }
 
 export function gsSetActive(i) {
@@ -327,7 +294,7 @@ export function gsSetActive(i) {
 // (copy, switch view, open a dialog) wants the overlay itself out of the way
 // first, same order the launcher uses for its own select().
 export function gsActivate(hit) {
-  gsRemember(gsQuery);
+  rememberSearch(gsQuery);
   closeGlobalSearch();
   hit.run();
 }
@@ -339,7 +306,7 @@ export function gsRender() {
   gsFlatRows = [];
   const q = gsQuery.trim();
   if (q.length < 2) {
-    const list = gsRecentList();
+    const list = recentList();
     if (!list.length) {
       empty.textContent = t("globalSearchHint");
       empty.classList.remove("hidden");
@@ -349,7 +316,7 @@ export function gsRender() {
     empty.classList.add("hidden");
     box.appendChild(gsGroupHead("globalSearchRecentLabel", "recent", true));
     for (const term of list) {
-      const run = () => { $("gs-input").value = term; gsQuery = term; gsRender(); };
+      const run = () => gsPickRecent(term);
       const row = gsRecentRow(term);
       box.appendChild(row);
       gsFlatRows.push({ el: row, run });

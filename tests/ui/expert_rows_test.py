@@ -473,7 +473,7 @@ GS_PROBE = """
     for (let i = 1; i <= __TERMS__; i++) await run('Prompt ' + i);
     open();
     await sleep(200);
-    const names = [...document.querySelectorAll('#gs-results .gs-recent-row .gs-row-name')].map((r) => r.textContent);
+    const names = [...document.querySelectorAll('#gs-results .gs-recent-row .search-suggest-text')].map((r) => r.textContent);
     if (names.length !== __WANT__) errs.push('recent list holds ' + names.length + ' terms (' + names.join(',') + '), expected __WANT__');
     if (__WANT__ > 0 && names[0] !== 'Prompt __TERMS__') errs.push('newest recent term is ' + names[0] + ', expected Prompt __TERMS__');
   } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }

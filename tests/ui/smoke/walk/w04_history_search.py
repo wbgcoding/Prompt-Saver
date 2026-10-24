@@ -614,7 +614,7 @@ SECTION = """\
       // their own, so the list can hold more than the three just added here --
       // what matters is that the three newest are on top, in reverse order.
       let recentRows = [...document.querySelectorAll('#gs-results .gs-recent-row')];
-      const recentNames = recentRows.map((r) => r.querySelector('.gs-row-name').textContent);
+      const recentNames = recentRows.map((r) => r.querySelector('.search-suggest-text').textContent);
       if (recentNames.slice(0, 3).join(',') !== 'Prompt 3,Prompt 2,Prompt 1') {
         out.errors.push('528: the recent list top three are not the newest terms in order, got ' + recentNames.join(','));
       }
@@ -637,9 +637,9 @@ SECTION = """\
         firstDel.click();
         await sleep(100);
         let list528;
-        try { list528 = JSON.parse(SETTINGS.ui_texts.globalSearchRecent || '[]'); } catch (e) { list528 = null; }
+        try { list528 = JSON.parse(SETTINGS.ui_texts.recentSearches || '[]'); } catch (e) { list528 = null; }
         if (!Array.isArray(list528) || list528.length !== beforeCount - 1) {
-          out.errors.push('528: deleting one recent term did not shrink globalSearchRecent by one');
+          out.errors.push('528: deleting one recent term did not shrink recentSearches by one');
         }
         recentRows = [...document.querySelectorAll('#gs-results .gs-recent-row')];
         if (recentRows.length !== beforeCount - 1) {
@@ -655,9 +655,9 @@ SECTION = """\
       if (clearBtn) clearBtn.click();
       await sleep(100);
       let list528b;
-      try { list528b = JSON.parse(SETTINGS.ui_texts.globalSearchRecent || '[]'); } catch (e) { list528b = null; }
+      try { list528b = JSON.parse(SETTINGS.ui_texts.recentSearches || '[]'); } catch (e) { list528b = null; }
       if (!Array.isArray(list528b) || list528b.length !== 0) {
-        out.errors.push('528: clear all did not empty globalSearchRecent in the stub settings');
+        out.errors.push('528: clear all did not empty recentSearches in the stub settings');
       }
       if (document.querySelectorAll('#gs-results .gs-recent-row').length !== 0) {
         out.errors.push('528: clear all did not empty the recent list in the DOM');

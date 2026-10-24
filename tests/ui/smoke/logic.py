@@ -427,6 +427,54 @@ BACKUP_NOW_PROBE = """
     }
 """
 
+# 997: the library, journal and global search share ONE recent-search list (the three old keys
+# merge into it, a term remembered in one field shows in the others) and its rows look alike.
+RECENT_SEED = ('<script>window.__SEED_SETTINGS__ = { ui_texts: {'
+               ' globalSearchRecent: JSON.stringify(["Alpha", "Shared"]),'
+               ' recentSearchLib: JSON.stringify(["Beta", "shared"]),'
+               ' recentSearchJournal: JSON.stringify(["Gamma"]) } };</script>')
+RECENT_PROBE = """
+    // 997:
+    {
+      const rs = await import('./recentSearches.js');
+      const gs = await import('./globalSearch.js');
+      const core = await import('./core.js');
+      const got = rs.recentList().join(',');
+      if (got !== 'Alpha,Shared,Beta,Gamma') errs.push('997: the old lists merged into ' + got);
+      const tx = core.settings.ui_texts || {};
+      for (const k of ['globalSearchRecent', 'recentSearchLib', 'recentSearchJournal']) {
+        if (tx[k]) errs.push('997: the old key ' + k + ' still holds ' + tx[k]);
+      }
+      const lib = $('library-q');
+      lib.value = 'Libterm';
+      lib.dispatchEvent(new Event('blur'));
+      await gs.openGlobalSearch();
+      await sleep(250);
+      const rows = () => [...document.querySelectorAll('#gs-results .search-suggest-item')];
+      if (!rows().some((r) => r.dataset.term === 'Libterm')) errs.push('997: a library term is missing from the global search list');
+      const gsRow = rows()[0];
+      const snap = (el) => { const c = getComputedStyle(el); const o = {}; for (const k of ['height', 'width', 'fontSize', 'paddingTop', 'paddingLeft', 'paddingRight', 'borderRadius']) o[k] = c[k]; return o; };
+      const a = gsRow && snap(gsRow);
+      const da = gsRow && snap(gsRow.querySelector('.search-suggest-del'));
+      gs.closeGlobalSearch();
+      rs.rememberSearch('Globalterm');
+      lib.value = '';
+      lib.dispatchEvent(new Event('pointerdown'));
+      await sleep(100);
+      const pop = [...document.querySelectorAll('.search-suggest')].find((p) => !p.classList.contains('hidden'));
+      const libRow = pop && pop.querySelector('.search-suggest-item');
+      if (!libRow || libRow.dataset.term !== 'Globalterm') errs.push('997: a global term is missing from the library list: ' + (libRow && libRow.dataset.term));
+      if (gsRow && libRow) {
+        const b = snap(libRow);
+        for (const p of ['height', 'fontSize', 'paddingTop', 'paddingLeft', 'paddingRight', 'borderRadius']) {
+          if (a[p] !== b[p]) errs.push('997: recent row ' + p + ' differs, global ' + a[p] + ' vs field ' + b[p]);
+        }
+        const db = snap(libRow.querySelector('.search-suggest-del'));
+        if (da.width !== db.width || da.fontSize !== db.fontSize) errs.push('997: the delete button differs, ' + da.width + ' vs ' + db.width);
+      }
+    }
+"""
+
 def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
     side.write_text(
@@ -451,7 +499,8 @@ def run(browser, tmp):
             ("rec-edit", REC_EDIT_PROBE, ""),
             ("folder-second", FOLDER_SECOND_PROBE, ""),
             ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
-            ("backup-now", BACKUP_NOW_PROBE, "")):
+            ("backup-now", BACKUP_NOW_PROBE, ""),
+            ("recent-searches", RECENT_PROBE, RECENT_SEED)):
         errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:
