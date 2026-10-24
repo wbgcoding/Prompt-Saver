@@ -695,6 +695,25 @@ async function exportIdleCheck() {
   sb.VE.audio.sys.mute = true;
   expect("a muted system track offers Unmute", mk("ve-mute-sys", "veMuteSystem", "sys") === "veUnmuteSystem");
   expect("a volume slider keeps its name when muted", mk("ve-vol-mic", "veVolumeMic", "mic") === "veVolumeMic");
+  // The labels of the real function: a fixed accessible name, the tooltip swaps.
+  {
+    const els = {};
+    const mkEl = () => ({ disabled: false, title: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+    for (const id of ["ve-mute-mic", "ve-vol-mic", "ve-mute-sys", "ve-vol-sys"]) els[id] = mkEl();
+    const sb2 = { t: (k) => `<${k}>`, $: (id) => els[id], SILENT_FORMATS: new Set(), exportFormat: () => "mp4", VE: { hasMic: true, hasSys: true, audio: { sys: { mute: false }, mic: { mute: true } } } };
+    vm.createContext(sb2);
+    vm.runInContext([
+      extractBlock("muteKey", "function muteKey(id, key, kind) {"),
+      extractBlock("updateAudioLabels", "export function updateAudioLabels() {").replace("export function", "function"),
+    ].join("\n"), sb2);
+    vm.runInContext("updateAudioLabels()", sb2);
+    expect("a muted mic button keeps its accessible name", els["ve-mute-mic"].attrs["aria-label"] === "<veMuteMic>", els["ve-mute-mic"].attrs["aria-label"]);
+    expect("a muted mic button's tooltip offers Unmute", els["ve-mute-mic"].title === "<veUnmuteMic>", els["ve-mute-mic"].title);
+    expect("an unmuted system button names and tips Mute", els["ve-mute-sys"].attrs["aria-label"] === "<veMuteSystem>" && els["ve-mute-sys"].title === "<veMuteSystem>");
+    sb2.VE.hasMic = false;
+    vm.runInContext("updateAudioLabels()", sb2);
+    expect("a missing track says why in name and tooltip", els["ve-mute-mic"].attrs["aria-label"] === "<veNoMicTrack>" && els["ve-mute-mic"].title === "<veNoMicTrack>");
+  }
 
   // Op rows: the label is a button; click selects (overlay) and seeks; Delete removes.
   const log = [];

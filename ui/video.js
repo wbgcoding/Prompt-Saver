@@ -1626,7 +1626,8 @@ $("ve-add-video").addEventListener("click", (e) => {
   startAddVideo(r.left, r.bottom);
 });
 
-// A mute button names what a click will do: Mute while the track plays, Unmute once it is muted.
+// A mute button's tooltip names what a click will do: Mute while the track plays, Unmute once it is
+// muted. Its accessible name stays "Mute ..." and aria-pressed says whether it is on.
 function muteKey(id, key, kind) {
   if (!id.startsWith("ve-mute-") || !VE.audio[kind].mute) return key;
   return key === "veMuteMic" ? "veUnmuteMic" : "veUnmuteSystem";
@@ -1640,16 +1641,20 @@ export function updateAudioLabels() {
   for (const [id, key] of [["ve-mute-mic", "veMuteMic"], ["ve-vol-mic", "veVolumeMic"]]) {
     const el = $(id);
     el.disabled = !VE.hasMic || silent;
-    const label = silent ? t("veNoAudioNote") : VE.hasMic ? t(muteKey(id, key, "mic")) : t("veNoMicTrack");
-    el.title = label;
-    el.setAttribute("aria-label", label);
+    const reason = silent ? t("veNoAudioNote") : VE.hasMic ? "" : t("veNoMicTrack");
+    // The accessible name stays fixed and aria-pressed carries the muted state; only the
+    // tooltip says what the next click does.
+    el.title = reason || t(muteKey(id, key, "mic"));
+    el.setAttribute("aria-label", reason || t(key));
   }
   for (const [id, key] of [["ve-mute-sys", "veMuteSystem"], ["ve-vol-sys", "veVolumeSystem"]]) {
     const el = $(id);
     el.disabled = !VE.hasSys || silent;
-    const label = silent ? t("veNoAudioNote") : VE.hasSys ? t(muteKey(id, key, "sys")) : t("veNoAudioTrack");
-    el.title = label;
-    el.setAttribute("aria-label", label);
+    const reason = silent ? t("veNoAudioNote") : VE.hasSys ? "" : t("veNoAudioTrack");
+    // The accessible name stays fixed and aria-pressed carries the muted state; only the
+    // tooltip says what the next click does.
+    el.title = reason || t(muteKey(id, key, "sys"));
+    el.setAttribute("aria-label", reason || t(key));
   }
 }
 
