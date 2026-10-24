@@ -186,7 +186,7 @@ section(() => {
   const timers = new Map();
   let nextId = 1;
   const classes = new Set(["show"]);
-  const sandbox = run(`let toastHideTimer = null;\n${extractBlock(core, "export function hideToast(").replace("export ", "")}`, {
+  const sandbox = run(`let toastHideTimer = null; let toastTimer = null; const resetToastPause = () => {};\n${extractBlock(core, "export function hideToast(").replace("export ", "")}`, {
     toastEl: { classList: { remove: (c) => classes.delete(c), add: (c) => classes.add(c) } },
     setTimeout: (fn) => { const id = nextId++; timers.set(id, fn); return id; },
     clearTimeout: (id) => { timers.delete(id); },
