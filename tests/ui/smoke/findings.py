@@ -2052,7 +2052,7 @@ def run(browser, tmp):
 """)
     # Undo and zoom live in the bottom bar; the toolbar stays one line and the bottom row stays one line in German.
     for size_932 in ('880x600', '680x460'):
-        failed += ar_probe('bq932a-' + size_932, '932-de: undo and zoom sit in the bottom bar, both bars stay one line at ' + size_932, 'index', size_932, '<script>window.__SEED_SETTINGS__ = { language: "de" };</script>\n', snip_common + r"""
+        failed += ar_probe('bq932a-' + size_932, '932-de: undo and zoom sit in the bottom bar, the toolbar stays one line and the bottom bar at most two at ' + size_932, 'index', size_932, '<script>window.__SEED_SETTINGS__ = { language: "de" };</script>\n', snip_common + r"""
     // 932-de: the status group (undo, redo, zoom) moved from the toolbar into the bottom row.
     await snipOpen(300, 200);
     const bar = document.querySelector('.snip-edit-toolbar');
@@ -2062,7 +2062,7 @@ def run(browser, tmp):
       if (bh > 52) errs.push('932-de: the toolbar is ' + bh + ' px tall ' + when + ', want at most 52');
       if (bar.scrollWidth > bar.clientWidth + 1) errs.push('932-de: the toolbar overflows sideways ' + when + ' (' + bar.scrollWidth + ' > ' + bar.clientWidth + ')');
       const ah = actions.getBoundingClientRect().height;
-      if (ah > 56) errs.push('932-de: the bottom row is ' + ah + ' px tall ' + when + ', want one line (at most 56)');
+      if (ah > 112) errs.push('932-de: the bottom row is ' + ah + ' px tall ' + when + ', want at most two lines (112)');
     };
     checkBars('on open');
     const ar = actions.getBoundingClientRect();

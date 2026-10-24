@@ -35,7 +35,8 @@ REPO = Path(__file__).resolve().parents[1]
 # Windows that handle their own keys: their entries are documented in the overview
 # only, so no button has to show them. Ctrl+Tab has no button either.
 LIST_ONLY_SCOPES = {"launcher", "tray", "vars", "floating", "snipOverlay", "recBar", "camera"}
-LIST_ONLY_ACTIONS = {"mainNextView", "mainPrevView"}
+# snipApply is Enter on the editor's Close button, whose tooltip shows Esc (snipCancel).
+LIST_ONLY_ACTIONS = {"mainNextView", "mainPrevView", "snipApply"}
 
 ENTRY_RE = re.compile(
     r'\{\s*action:\s*"(?P<action>[^"]+)"\s*,\s*code:\s*"(?P<code>[^"]+)"\s*,\s*'
