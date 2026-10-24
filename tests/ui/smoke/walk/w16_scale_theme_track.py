@@ -867,6 +867,9 @@ SECTION = """\
           if (!hint395 || hint395.classList.contains('hidden')) {
             out.errors.push('395: the nudge hint is not shown while a shape is selected');
           }
+          if (hint395 && hint395.offsetHeight !== 0) {
+            out.errors.push('395: the nudge hint takes layout height, so showing it moves the image');
+          }
           // Handles are 8x8px squares (see snipEditPaintShapeHandles), too wide
           // to tell a 4px move apart from noise with a single pixel sample --
           // this instead finds the painted band's own centre within a window

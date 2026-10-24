@@ -929,6 +929,9 @@ VIDEO_PROBE = """
         if (hintEl.classList.contains('hidden')) {
           errs.push('395: the nudge hint is not shown while an overlay is selected');
         }
+        if (hintEl.offsetHeight !== 0) {
+          errs.push('395: the nudge hint takes layout height, so showing it resizes the preview');
+        }
         const beforeX = Number(xField395.value);
         for (let i = 0; i < 4; i++) {
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));

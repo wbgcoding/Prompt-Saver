@@ -208,10 +208,23 @@ body.video-body {
   font-size: 13px;
   pointer-events: none;
 }
+/* Takes no height: the hint floats over the bottom edge of the preview, so showing it on a
+   selection never resizes the preview. */
 .ve-nudge-hint {
-  flex: 0 0 auto;
+  flex: 0 0 0;
+  height: 0;
+  position: relative;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.ve-nudge-hint > span {
+  margin: 0 12px 6px;
   padding: 3px 10px;
-  border-top: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--surface);
   color: var(--muted);
   font-size: 11px;
