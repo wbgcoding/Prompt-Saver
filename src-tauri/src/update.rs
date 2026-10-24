@@ -405,18 +405,27 @@ pub(crate) fn is_generic_text_write_denied(key: &str) -> bool {
     is_machine_text_key(key) || is_vault_key(key)
 }
 
+// Text rows only the screenshot editor reads (the last size per tool and the last tool). No
+// other window shows them, so writing one must not wake every float and folder window.
+pub(crate) fn text_write_notifies(key: &str) -> bool {
+    !matches!(key, "snipToolSizes" | "snipLastTool")
+}
+
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command(async)]
 pub(crate) fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
     if is_generic_text_write_denied(&key) {
         return;
     }
+    let notify = text_write_notifies(&key);
     {
         let mut store = lock(&state);
         store.settings.ui_texts.insert(key, value);
         save_settings(&app, &store.settings);
     }
-    notify_float_settings(&app);
+    if notify {
+        notify_float_settings(&app);
+    }
 }
 
 // Dedicated setter for the screenshot save folder: the expert menu's "Change" button calls

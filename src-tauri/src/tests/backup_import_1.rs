@@ -501,6 +501,16 @@ fn is_protected_folder_key_covers_every_folder_setting_and_nothing_else() {
     assert!(!is_protected_folder_key("dataDir"), "dataDir has its own separate command and storage, not a ui_texts key");
 }
 
+// The editor writes the last tool size and tool a moment after every change; those two rows
+// are read by the editor alone, so they must not broadcast a settings change to the float windows.
+#[test]
+fn editor_only_text_rows_do_not_notify_the_float_windows() {
+    assert!(!text_write_notifies("snipToolSizes"));
+    assert!(!text_write_notifies("snipLastTool"));
+    assert!(text_write_notifies("copyFont"), "an ordinary text setting still notifies");
+    assert!(text_write_notifies("snipTextBack"), "only the two remembered-state rows are quiet");
+}
+
 #[test]
 fn outside_settings_that_switch_ocr_index_off_erase_the_picture_text() {
     let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());

@@ -588,6 +588,10 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **The screenshot editor's options stay put when you change a size.** Picking
+  a stroke width or typing a number no longer rebuilds the options panel, so it
+  does not jump and the keyboard focus stays in the field. Saving the last size
+  no longer wakes the floating button windows either.
 - **Screenshots stay sharp on scaled displays.** At 125 or 150 percent
   Windows scaling the editor's 100 percent view now shows one picture pixel per
   screen pixel instead of a stretched copy, and magnified pixels stay crisp. The

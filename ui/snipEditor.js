@@ -993,6 +993,16 @@ export function initSnipEditor() {
     const row = document.createElement("div");
     row.className = "snip-edit-width-row";
     const presets = SNIP_WIDTH_PRESETS_OF(tool);
+    // A size change updates these controls where they stand: rebuilding the panel would move
+    // it and drop the focus. They are filled in below, before any click can reach them.
+    const presetBtns = [];
+    let num = null;
+    const syncWidth = (px, fromField) => {
+      ts.width = px;
+      snipRememberSize(tool, "width", px);
+      presetBtns.forEach((b, i) => b.classList.toggle("sel", presets[i] === px));
+      if (!fromField && num) { num.value = String(px); num.numFieldRefresh?.(); }
+    };
     // Three visibly different stroke weights, readable at a glance.
     const STROKE_ICON_W = [2.5, 5, 8];
     ["snipEditWidthS", "snipEditWidthM", "snipEditWidthL"].forEach((lab, i) => {
@@ -1003,16 +1013,17 @@ export function initSnipEditor() {
       b.innerHTML = `<svg viewBox="0 0 20 12" width="20" height="12" aria-hidden="true"><line x1="2" y1="6" x2="18" y2="6" stroke="currentColor" stroke-width="${STROKE_ICON_W[i]}" stroke-linecap="round"/></svg>`;
       b.title = `${t(lab)} (${px}px)`;
       b.setAttribute("aria-label", `${t(lab)} (${px}px)`);
-      b.addEventListener("click", () => { ts.width = px; snipRememberSize(tool, "width", px); snipEditRenderContext(); });
+      b.addEventListener("click", () => syncWidth(px, false));
+      presetBtns.push(b);
       row.appendChild(b);
     });
     wrap.appendChild(row);
     const control = numberField({
       wheelEnabled: snipWheelOn(),
       value: ts.width, min: 1, max: 80, step: 1, steppers: false,
-      onChange: (v) => { ts.width = v; snipRememberSize(tool, "width", v); snipEditRenderContext(); },
+      onChange: (v) => syncWidth(v, true),
     });
-    const num = control.querySelector("input");
+    num = control.querySelector("input");
     num.title = t("snipEditWidthTip");
     num.setAttribute("aria-label", t("snipEditWidthTip"));
     wrap.appendChild(control);

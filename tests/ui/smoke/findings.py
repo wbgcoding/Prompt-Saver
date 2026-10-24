@@ -939,6 +939,44 @@ def run(browser, tmp):
       else if (!parsed.pen || parsed.pen.width !== 10) errs.push('649: saving line dropped the remembered pen size: ' + last);
     }
 """)
+    failed += ar_probe('bz978', 'screenshot editor: changing the pen size moves nothing, rebuilds nothing and keeps the focus', 'index', '1000x780', '', ba_common + r"""
+    // 978: a size change updates the panel where it stands.
+    if (!(await baOpen(''))) { errs.push('978: the editor did not open'); }
+    else {
+      await baTool('pen');
+      const panel = document.getElementById('snip-edit-context');
+      const field = () => panel.querySelector('.snip-edit-field input');
+      const rectOf = (el) => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map((v) => Math.round(v * 10) / 10).join(',') };
+      const before = { panel: rectOf(panel), input: field(), win: [window.innerWidth, window.innerHeight].join('x'), firstChild: panel.firstElementChild };
+      const sizeAfter = [];
+      const presets = [...panel.querySelectorAll('.snip-edit-width-btn')];
+      for (let i = 0; i < 10; i++) {
+        if (i % 2 === 0) {
+          const b = presets[i % 3];
+          b.focus(); b.click(); await sleep(30);
+          if (document.activeElement !== b) errs.push('978: clicking a size button moved the focus (round ' + i + ')');
+        } else {
+          const f = field(); f.focus(); f.value = String(3 + i * 2);
+          f.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+          if (document.activeElement !== f) errs.push('978: typing a size moved the focus (round ' + i + ')');
+        }
+        if (field() !== before.input) errs.push('978: the width field was rebuilt in round ' + i);
+        if (panel.firstElementChild !== before.firstChild) errs.push('978: the panel content was rebuilt in round ' + i);
+        if (rectOf(panel) !== before.panel) errs.push('978: the panel rect changed in round ' + i + ': ' + before.panel + ' -> ' + rectOf(panel));
+        sizeAfter.push(field().value);
+      }
+      if (window.innerWidth + 'x' + window.innerHeight !== before.win) errs.push('978: the window size changed');
+      presets[2].click(); await sleep(30);
+      if (field().value !== '14') errs.push('978: the large button left the field at ' + field().value + ', expected 14');
+      if (!presets[2].classList.contains('sel') || presets[0].classList.contains('sel') || presets[1].classList.contains('sel')) errs.push('978: the selected size button does not follow the large button');
+      const f = field(); f.value = '6'; f.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+      if (!presets[1].classList.contains('sel') || presets[2].classList.contains('sel')) errs.push('978: typing the medium size does not select the medium button');
+      f.value = '9'; f.dispatchEvent(new Event('change', { bubbles: true })); await sleep(30);
+      if (presets.some((b) => b.classList.contains('sel'))) errs.push('978: a size between the presets leaves a button selected');
+      if (getComputedStyle(panel).contain.indexOf('layout') < 0) errs.push('978: the panel has no layout containment: ' + getComputedStyle(panel).contain);
+      if (panel.getBoundingClientRect().width < 240) errs.push('978: the panel is narrower than its minimum width');
+    }
+""")
     failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>
 """, r"""
     await bootReady();
