@@ -61,11 +61,11 @@ export function setBars(header, composer) {
   applyBars();
 }
 
-// Mentions the double-click shortcut in the three bar buttons' tooltip while
+// Mentions the double-click shortcut in the two restore buttons' tooltip while
 // barToggleBoth is on, reusing the expert-menu row's explanation text.
 export function applyBarToggleTips() {
   const hint = flag("barToggleBoth") ? ` ${t("tipBarToggleBoth")}` : "";
-  const keys = { "hide-bottom": "hideBarBottom", "show-top": "showBarTop", "show-bottom": "showBarBottom" };
+  const keys = { "show-top": "showBarTop", "show-bottom": "showBarBottom" };
   for (const [id, key] of Object.entries(keys)) $(id).title = t(key) + hint;
 }
 
@@ -584,14 +584,10 @@ function armBarToggleBoth(first, target) {
 }
 
 export function bindWindowChrome() {
-  // Show/hide the top and bottom bars.
+  // Bring a hidden bar back. Hiding lives in the toolbar context menu.
   $("show-top").addEventListener("click", (e) => {
     setBars(true, settings.show_composer !== false);
     armBarToggleBoth(e, true);
-  });
-  $("hide-bottom").addEventListener("click", (e) => {
-    setBars(settings.show_header !== false, false);
-    armBarToggleBoth(e, false);
   });
   $("show-bottom").addEventListener("click", (e) => {
     setBars(settings.show_header !== false, true);

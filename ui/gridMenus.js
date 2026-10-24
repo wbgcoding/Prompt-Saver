@@ -350,26 +350,33 @@ export function buildToolbarMenu() {
     });
     toolbarMenu.appendChild(b);
   }
-  // Hiding the top bar is not a header button: it lives here, and the bar comes back
-  // through the small restore button.
+  // Hiding a bar is not a header button: both rows live here, and a bar comes back
+  // through its small restore button.
   if (flag("barToggles")) {
     const sep = document.createElement("div");
     sep.className = "ctx-sep";
     sep.setAttribute("role", "separator");
-    const hideRow = document.createElement("button");
-    hideRow.type = "button";
-    hideRow.className = "toolbar-item";
-    hideRow.setAttribute("role", "menuitem");
-    const slot = document.createElement("span");
-    slot.className = "tb-check";
-    const label = document.createElement("span");
-    label.textContent = t("hideTopBar");
-    hideRow.append(slot, label);
-    hideRow.addEventListener("click", () => {
-      closeToolbarMenu();
-      setBars(false, settings.show_composer !== false);
-    });
-    toolbarMenu.append(sep, hideRow);
+    toolbarMenu.appendChild(sep);
+    const hideRows = [
+      ["hideTopBar", () => setBars(false, settings.show_composer !== false)],
+      ["hideBarBottom", () => setBars(settings.show_header !== false, false)],
+    ];
+    for (const [labelKey, hide] of hideRows) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "toolbar-item";
+      row.setAttribute("role", "menuitem");
+      const slot = document.createElement("span");
+      slot.className = "tb-check";
+      const label = document.createElement("span");
+      label.textContent = t(labelKey);
+      row.append(slot, label);
+      row.addEventListener("click", () => {
+        closeToolbarMenu();
+        hide();
+      });
+      toolbarMenu.appendChild(row);
+    }
   }
 }
 export function openToolbarMenu(x, y) {

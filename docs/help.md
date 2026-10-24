@@ -746,8 +746,8 @@ is on; switching Auto update off turns the automatic check off.
 ### Toolbar
 
 Which buttons the header and composer bar show: quick grid-size control,
-the library button, and multiple views. Hide the top bar: right-click the gear
-or the top bar.
+the library button, and multiple views. Hide the top bar or the input bar: right-click the
+gear or the top bar.
 
 ### Privacy
 

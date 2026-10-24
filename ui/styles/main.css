@@ -35,8 +35,8 @@
   --transition-ms: 150ms;
   --gap: 8px;
   /* Win-controls (Minimize/Maximize/Close) and the composer's Save button
-     share this width so hide-bottom sits left of Save, the same fixed-width
-     block, on the same right-aligned edge. */
+     share this width so Save sits under the window buttons, on the same
+     right-aligned edge. */
   --win-btn-w: 36px;
   --win-btn-gap: 2px;
   --winctl-w: calc(3 * var(--win-btn-w) + 2 * var(--win-btn-gap));
@@ -400,14 +400,6 @@ body.no-composer .composer { display: none; }
    more room; this never touches the stored show_composer setting, so it comes
    back exactly as it was once the selection is cleared. */
 body.grid-selecting .composer { display: none; }
-.bar-toggle { opacity: 0.6; }
-.bar-toggle:hover { opacity: 1; }
-/* Bottom toggle: same height as the Save button -> shared center line. */
-.composer .bar-toggle {
-  height: 40px;
-  align-items: center;
-  justify-content: center;
-}
 /* Subtle floating buttons to bring a hidden bar back. */
 .bar-restore {
   position: fixed;
@@ -456,10 +448,8 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
 /* The tag filter sits after the view tabs, outside .header-actions, so it
    carries the header icon size itself. */
 #grid-tag-btn { padding: 4px; flex: 0 0 auto; }
-/* Hide-bar chevrons (bottom + the restore buttons) share one bolder look. */
-.composer #hide-bottom > svg,
+/* The restore chevrons share one bolder look. */
 .bar-restore > svg { width: 22px; height: 22px; }
-.composer #hide-bottom > svg path,
 .bar-restore > svg path { stroke-width: 2.6px; }
 /* Chain: tighter padding + a slightly larger, diagonal glyph so the link reads
    clearly and the button stays the same size as its neighbours (not bigger). */
@@ -1199,8 +1189,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
 }
 .input:focus { border-color: var(--accent); }
 .input::-webkit-scrollbar { display: none; width: 0; }
-/* Fixed to --winctl-w so Save lines up under win-controls (same width), with
-   hide-bottom left of it. Holds at the default UI scale; the composer carries its
+/* Fixed to --winctl-w so Save lines up under win-controls (same width). Holds at the default UI scale; the composer carries its
    own zoom (--composer-zoom) and Save its own icon zoom (--icon-zoom) on top of
    that, so a non-default scale can still drift the two edges apart by a rounding
    pixel or two. */
@@ -2256,7 +2245,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 #snip-edit .icon-btn:disabled,
 #snip-edit .icon-btn:disabled:hover { opacity: 0.35; cursor: default; background: transparent; color: var(--muted); }
 .snip-question span:last-child { color: var(--muted); font-size: 13px; }
-.noflag-barToggles .bar-toggle,
 .noflag-barToggles .bar-restore { display: none !important; }
 /* Kill all motion when animations are switched off in the expert menu. */
 .noflag-animations *,

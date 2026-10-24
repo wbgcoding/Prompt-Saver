@@ -184,9 +184,8 @@ SECTION = """\
         }
       }
     }
-    // 109: hide-bottom sits left of Save, and win-controls/Save share --winctl-w.
-    // Also: hiding the bar toggle (barToggles off) must not leave a gap where it
-    // used to sit. Only checked >= 700px:
+    // 109: win-controls and Save share --winctl-w. Also: switching the bar
+    // buttons off (barToggles off) must not shift them. Only checked >= 700px:
     // below the header's own ~690px wrap breakpoint, header-actions becomes the
     // SOLE item on its wrapped line and `.header`'s justify-content:space-between
     // has no second item left to space against, so it falls back to packing left
@@ -197,12 +196,12 @@ SECTION = """\
         await click('settings-close');
         await sleep(50);
       }
-      const hb = document.getElementById('hide-bottom');
+      if (document.getElementById('hide-bottom')) out.errors.push('971: the input bar still has a hide button');
       const winControls = document.querySelector('.win-controls');
       const saveBtn = document.getElementById('save');
       if (document.getElementById('hide-top')) out.errors.push('700: the top bar still has a hide button');
       // 704: each bar button names its own bar in the tooltip and the accessible name.
-      for (const [id704, want704] of [['hide-bottom', 'Hide input bar'], ['show-bottom', 'Show input bar'], ['show-top', 'Show top bar']]) {
+      for (const [id704, want704] of [['show-bottom', 'Show input bar'], ['show-top', 'Show top bar']]) {
         const el704 = document.getElementById(id704);
         if (!el704) { out.errors.push('704: ' + id704 + ' is missing'); continue; }
         if (el704.getAttribute('aria-label') !== want704) out.errors.push('704: ' + id704 + ' has the accessible name "' + el704.getAttribute('aria-label') + '"');
@@ -227,13 +226,9 @@ SECTION = """\
           if (getComputedStyle(saveBtn).opacity !== '1') out.errors.push('705: the disabled save button is faded instead of grey');
         }
       }
-      if (!hb || !winControls || !saveBtn) {
-        out.errors.push('hide-bottom, win-controls or save missing');
+      if (!winControls || !saveBtn) {
+        out.errors.push('win-controls or save missing');
       } else if (window.innerWidth >= 700) {
-        const hbR = hb.getBoundingClientRect();
-        if (hbR.right > saveBtn.getBoundingClientRect().left + 1) {
-          out.errors.push('hide-bottom is not left of save at ' + window.innerWidth + 'px');
-        }
         const wcRightBefore = Math.round(winControls.getBoundingClientRect().right);
         const saveRightBefore = Math.round(saveBtn.getBoundingClientRect().right);
         document.body.classList.add('noflag-barToggles');
@@ -284,7 +279,25 @@ SECTION = """\
       const tbMenu = document.querySelector('.toolbar-menu');
       document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));
       await sleep(150);
-      const hideRow = tbMenu && [...tbMenu.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Hide top bar');
+      let hideRow = tbMenu && [...tbMenu.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Hide top bar');
+      // 971: the input bar's row sits directly under the top bar's row and hides the composer.
+      if (hideRow) {
+        const bottomRow971 = hideRow.nextElementSibling;
+        if (!bottomRow971 || bottomRow971.textContent.trim() !== 'Hide input bar') {
+          out.errors.push('971: the toolbar menu has no Hide input bar row under Hide top bar');
+        } else {
+          bottomRow971.click();
+          await sleep(150);
+          if (!document.body.classList.contains('no-composer')) out.errors.push('971: Hide input bar did not hide the input bar');
+          if (document.body.classList.contains('no-header')) out.errors.push('971: Hide input bar also hid the top bar');
+          if (!tbMenu.classList.contains('hidden')) out.errors.push('971: the toolbar menu stayed open after Hide input bar');
+          await click('show-bottom');
+          await sleep(700);
+          document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));
+          await sleep(150);
+          hideRow = [...tbMenu.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Hide top bar');
+        }
+      }
       if (!tbMenu || tbMenu.classList.contains('hidden')) {
         out.errors.push('700: right-clicking the gear did not open the toolbar menu');
       } else if (!hideRow) {
@@ -324,8 +337,19 @@ SECTION = """\
       };
       const bothHidden = () => document.body.classList.contains('no-header') && document.body.classList.contains('no-composer');
       const bothShown = () => !document.body.classList.contains('no-header') && !document.body.classList.contains('no-composer');
-      await dbl('hide-bottom', true);
-      if (!bothHidden()) out.errors.push('426: double-clicking hide-bottom did not fold both bars');
+      // Hiding lives in the toolbar menu: input bar first, then the top bar (the
+      // menu opens from the top bar, so it has to stay until last).
+      const hideVia = async (label) => {
+        document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));
+        await sleep(150);
+        const row = [...document.querySelectorAll('.toolbar-menu button')].find((b) => b.textContent.trim() === label);
+        if (row) row.click();
+        else out.errors.push('426: the toolbar menu has no row ' + label);
+        await sleep(600);
+      };
+      await hideVia('Hide input bar');
+      await hideVia('Hide top bar');
+      if (!bothHidden()) out.errors.push('426: hiding both bars through the toolbar menu failed');
       await dbl('show-bottom', true);
       if (!bothShown()) out.errors.push('426: double-clicking show-bottom did not unfold both bars');
       // Switch barToggleBoth off through its real expert switch, same idiom as
@@ -351,15 +375,17 @@ SECTION = """\
         await sleep(200);
         await click('expert-back');
         document.getElementById('settings').classList.add('hidden');
-        await dbl('hide-bottom', false);
-        if (document.body.classList.contains('no-header')) {
-          out.errors.push('426: double-click still folded the other bar with the option off');
+        await hideVia('Hide input bar');
+        await hideVia('Hide top bar');
+        await dbl('show-bottom', true);
+        if (!document.body.classList.contains('no-header')) {
+          out.errors.push('426: double-click still unfolded the other bar with the option off');
         }
-        if (!document.body.classList.contains('no-composer')) {
+        if (document.body.classList.contains('no-composer')) {
           out.errors.push('426: the plain single click stopped working with the option off');
         }
-        // Undo the single click, then put the option back for the rest of the run.
-        await click('show-bottom');
+        // Bring the top bar back, then put the option back for the rest of the run.
+        await click('show-top');
         document.getElementById('settings').classList.remove('hidden');
         await click('expert-open');
         const backRow = await expertRow426('folds both bars');
@@ -371,10 +397,18 @@ SECTION = """\
       }
     }
     // 822: the second click of a double-click is recognised by position and time, not
-    // by a dblclick event. Both clicks within 500 ms and 8 px fold both bars; the same
-    // two clicks 700 ms apart, or 40 px apart, leave the top bar alone.
+    // by a dblclick event. Both clicks on the restore button within 500 ms and 8 px
+    // unfold both bars; the same two clicks 700 ms apart, or 40 px apart, bring back
+    // the input bar only.
     {
       const clickAt = (el, x, y) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window }));
+      const hideVia = async (label) => {
+        document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));
+        await sleep(150);
+        const row = [...document.querySelectorAll('.toolbar-menu button')].find((b) => b.textContent.trim() === label);
+        if (row) row.click();
+        await sleep(600);
+      };
       const reset = async () => {
         if (document.body.classList.contains('no-composer')) clickAt(document.getElementById('show-bottom'), 300, 300);
         await sleep(100);
@@ -383,7 +417,9 @@ SECTION = """\
       };
       const pair = async (gap, dx) => {
         await reset();
-        const hb = document.getElementById('hide-bottom');
+        await hideVia('Hide input bar');
+        await hideVia('Hide top bar');
+        const hb = document.getElementById('show-bottom');
         const r = hb.getBoundingClientRect();
         const x = r.left + r.width / 2, y = r.top + r.height / 2;
         clickAt(hb, x, y);
@@ -399,14 +435,14 @@ SECTION = """\
         return [document.body.classList.contains('no-header'), document.body.classList.contains('no-composer'), reached];
       };
       const quick = await pair(60, 0);
-      if (!(quick[0] && quick[1])) out.errors.push('822: two quick clicks on hide-bottom did not fold both bars: ' + quick);
+      if (quick[0] || quick[1]) out.errors.push('822: two quick clicks on show-bottom did not unfold both bars: ' + quick);
       if (quick[2] !== 0) out.errors.push('822: the press of the second click still reached the page under the pointer');
       const pressed = await pair(60, 40);
       if (pressed[2] !== 1) out.errors.push('822: a press 40 px away was held back');
       const slow = await pair(700, 0);
-      if (slow[0] || !slow[1]) out.errors.push('822: two clicks 700 ms apart changed more than the composer: ' + slow);
+      if (!slow[0] || slow[1]) out.errors.push('822: two clicks 700 ms apart changed more than the composer: ' + slow);
       const apart = await pair(60, 40);
-      if (apart[0] || !apart[1]) out.errors.push('822: a second click 40 px away changed more than the composer: ' + apart);
+      if (!apart[0] || apart[1]) out.errors.push('822: a second click 40 px away changed more than the composer: ' + apart);
       await reset();
       if (document.body.classList.contains('no-header') || document.body.classList.contains('no-composer')) {
         out.errors.push('822: the bars did not come back after the checks');
