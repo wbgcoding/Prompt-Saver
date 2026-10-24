@@ -1954,6 +1954,7 @@ the video editor and the introduction tour ship on).
 - **Rarely used visual effects are gone.** Blur tiles until hover and its blur strength, grayscale media, hidden tile names, accent-colored scrollbars and smooth scrolling are removed; frosted glass, blurred media and the text shadow stay.
 - **The help window no longer carries a "?" button.** All shortcuts stay one click away under "All shortcuts" in Settings.
 - **The expert menu is shorter again.** 44 fine-tuning values and safety-net switches are now fixed at their defaults.
+- **Two more expert switches.** Dragging to reorder tiles and to rearrange favorites is always on.
 
 ### Changed
 
@@ -2199,6 +2200,9 @@ the video editor and the introduction tour ship on).
 - **Placeholders have one short spelling.** {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. Prompts, history, trash and imports with the old {#{…}#} spelling are converted automatically.
 - Attachment preview size is a choice of short, medium or long instead of a slider.
 - The reset button of the expert menu sits at the end of the list.
+- **The tag filter popup fits its chips.** A few tags no longer leave an empty column.
+- **Hiding the input bar** moved into the toolbar right-click menu, under hiding the top bar; the small button next to Save is gone.
+- **The header logo is plain branding.** It no longer opens the project page; the About window keeps that link.
 
 ## 2.6.3 (2026-07-26)
 

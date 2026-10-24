@@ -851,6 +851,20 @@ fn removed_flags_are_dropped() {
 }
 
 #[test]
+fn stored_reorder_switches_are_gone_after_load() {
+    // Dragging to reorder tiles and rearrange favorites is always on now; an older
+    // store that still holds either switch (on or off) loses it once on load.
+    let json = r#"{"ui_flags": {"tileReorder": false, "favViewReorder": false, "copyFlash": false}}"#;
+    let mut s: Settings = serde_json::from_str(json).unwrap();
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    assert!(!s.has_removed_ui_values());
+    assert!(!s.ui_flags.contains_key("tileReorder"));
+    assert!(!s.ui_flags.contains_key("favViewReorder"));
+    assert_eq!(s.ui_flags.get("copyFlash"), Some(&false));
+}
+
+#[test]
 fn stored_rows_of_the_removed_receiver_are_gone_after_load() {
     // A settings blob an earlier version wrote, secrets included.
     let json = r#"{

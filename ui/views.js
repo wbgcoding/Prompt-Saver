@@ -208,7 +208,6 @@ export function renderFavGrid() {
 // Move a favorite to the drop cell, swapping with any occupant. Dropping on an empty cell
 // moves it there and frees the old one, so gaps are preserved.
 export async function placeFav(id, col, row) {
-  if (!flag("favViewReorder")) return;
   const layout = favLayoutMap();
   const ids = new Set(prompts.filter((p) => p.favorite).map((p) => p.id));
   for (const k of Object.keys(layout)) if (!ids.has(k)) delete layout[k];

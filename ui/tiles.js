@@ -837,10 +837,8 @@ export function wireTiles() {
   });
   window.addEventListener("pointermove", (e) => {
     if (!drag || drag.out) return;
-    // No reorder while chaining (a click selects) or when reorder is switched off in the expert
-    // menu, but a library-placed tile and a favorites-view reorder (intrinsic to that view) may
-    // always finish.
-    if (!drag.moved && (chainMode || (!flag("tileReorder") && !drag.fromLibrary && !favView))) return;
+    // No reorder while chaining: a click selects there.
+    if (!drag.moved && chainMode) return;
     if (!drag.moved) {
       if (Math.abs(e.clientX - drag.startX) < DRAG_THRESHOLD &&
           Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD) return;

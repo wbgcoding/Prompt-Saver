@@ -115,7 +115,6 @@ DEPENDENCIES = {
     "copySizeLevel": "bubbleMs",
     "tooltipDelayMs": "tooltipsEnabled",
     "favViewButton": "favorites",
-    "favViewReorder": "favViewButton",
     "favMaxCols": "favViewButton",
     # Appearance
     "frostedBlur": "frostedModals",

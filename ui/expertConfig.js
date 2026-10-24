@@ -53,7 +53,6 @@ export const FLAG_LABELS = {
   // shown on every progress bar in the app.
   taskbarProgress: "flagTaskbarProgress",
   importExport: "flagImportExport",
-  tileReorder: "flagTileReorder",
   dragToView: "flagDragToView",
   libraryTypeFilter: "flagLibraryTypeFilter",
   confirmClearHistory: "flagConfirmClearHistory",
@@ -62,7 +61,6 @@ export const FLAG_LABELS = {
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
-  favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
   autoInk: "expAutoInk",
   inkHalo: "flagInkHalo",
@@ -528,10 +526,10 @@ export const EXPERT_TABS = [
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting does: acting on a tile, the hover tooltip, and pure looks.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim"] },
     { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
-    { title: "expGroupFavorites", flags: ["favorites", { key: "tileFavBadge", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favMaxCols"] },
+    { title: "expGroupFavorites", flags: ["favorites", { key: "tileFavBadge", gate: "favorites" }], values: ["favMaxCols"] },
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume"] },
   ] },
   { title: "expTabAppearance", groups: [

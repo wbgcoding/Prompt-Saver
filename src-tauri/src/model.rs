@@ -869,6 +869,8 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
         "urlScheme",
         "urlSchemeOpenAllowed",
         "urlSchemeCopyAllowed",
+        "tileReorder",
+        "favViewReorder",
     ]
 }
 
