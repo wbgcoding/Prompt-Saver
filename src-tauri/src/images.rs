@@ -396,11 +396,11 @@ pub(crate) async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>)
             return None;
         }
         let index = page.unwrap_or(0).min(count as u32 - 1);
-        let page = pages.get(index as u16).ok()?;
+        let page = pages.get(index as i32).ok()?;
         let config = PdfRenderConfig::new()
             .set_target_width(1000)
             .set_maximum_height(1400);
-        let image = page.render_with_config(&config).ok()?.as_image();
+        let image = page.render_with_config(&config).ok()?.as_image().ok()?;
         let result = scale_and_encode(image);
         if result.is_empty() { None } else { Some(result) }
     })

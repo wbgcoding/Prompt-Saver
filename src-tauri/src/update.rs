@@ -835,7 +835,7 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
         use sha2::{Digest, Sha256};
         Sha256::digest(&bytes)
     };
-    if format!("{:x}", digest) != want {
+    if crate::ffmpeg::hex_lower(&digest) != want {
         return Err("update hash mismatch: download rejected".to_string());
     }
     // Origin: the hash proves the download is intact, the signature that the publisher made

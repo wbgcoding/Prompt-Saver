@@ -444,15 +444,15 @@ fn a_putty_like_pane_or_custom_control_gaps_instead_of_recording() {
 
 #[test]
 fn a_changed_hwnd_is_a_changed_identity_even_with_no_element_on_either_side() {
-    let a = (HWND(1 as *mut std::ffi::c_void), None);
+    let a = (HWND(std::ptr::dangling_mut::<std::ffi::c_void>()), None);
     let b = (HWND(2 as *mut std::ffi::c_void), None);
     assert!(focus_identity_changed(&None, &a, &b), "a different HWND alone is enough, no UIA object needed to see it");
 }
 
 #[test]
 fn the_same_hwnd_with_no_element_on_either_side_is_not_a_changed_identity() {
-    let a = (HWND(1 as *mut std::ffi::c_void), None);
-    let b = (HWND(1 as *mut std::ffi::c_void), None);
+    let a = (HWND(std::ptr::dangling_mut::<std::ffi::c_void>()), None);
+    let b = (HWND(std::ptr::dangling_mut::<std::ffi::c_void>()), None);
     assert!(!focus_identity_changed(&None, &a, &b));
 }
 
@@ -460,7 +460,7 @@ fn the_same_hwnd_with_no_element_on_either_side_is_not_a_changed_identity() {
 fn is_password_field_fails_closed_with_no_element_to_query() {
     // A missing element (UIA unavailable or the fetch failed) resolves to the fail-closed
     // Password answer.
-    assert!(is_password_field(HWND(1 as *mut std::ffi::c_void), None));
+    assert!(is_password_field(HWND(std::ptr::dangling_mut::<std::ffi::c_void>()), None));
 }
 
 #[test]
@@ -471,7 +471,7 @@ fn classify_control_is_unknown_with_no_element_to_query() {
 
 #[test]
 fn classify_identity_is_password_when_the_shared_element_is_missing() {
-    let identity = (HWND(1 as *mut std::ffi::c_void), None);
+    let identity = (HWND(std::ptr::dangling_mut::<std::ffi::c_void>()), None);
     assert_eq!(classify_identity(&identity), FieldClass::Password);
 }
 

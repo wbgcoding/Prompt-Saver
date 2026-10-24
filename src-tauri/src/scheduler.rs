@@ -175,5 +175,5 @@ pub fn retime(name: &str, interval: Duration) {
 
 // Never started (no periodic job was ever registered) means nothing to stop.
 pub fn shutdown(wait: Duration) -> bool {
-    GLOBAL.get().map_or(true, |s| s.shutdown(wait))
+    GLOBAL.get().is_none_or(|s| s.shutdown(wait))
 }

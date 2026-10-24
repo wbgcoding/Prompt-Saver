@@ -852,7 +852,7 @@ pub(crate) fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result
 
 pub(crate) fn import_file_hash(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(bytes))
+    crate::ffmpeg::hex_lower(&Sha256::digest(bytes))
 }
 
 // What an import would do, without touching the store. The file is picked here and its

@@ -1120,7 +1120,7 @@ fn cmd_list(store: &Store, tag: Option<&str>, favorite: bool, trash: bool, json:
     let filtered: Vec<&Prompt> = source
         .iter()
         .filter(|p| !favorite || p.favorite)
-        .filter(|p| key.as_deref().map_or(true, |k| p.tags.iter().any(|t| tag_key(t) == k)))
+        .filter(|p| key.as_deref().is_none_or(|k| p.tags.iter().any(|t| tag_key(t) == k)))
         .collect();
     if json {
         let items: Vec<PromptSummary> = filtered.iter().map(|p| PromptSummary { id: &p.id, name: &p.name, favorite: p.favorite, tags: &p.tags }).collect();
@@ -1196,7 +1196,7 @@ fn cmd_search(store: &Store, query: &str, tag: Option<&str>, json: bool) -> Outc
     let filtered: Vec<&Prompt> = store
         .prompts
         .iter()
-        .filter(|p| key.as_deref().map_or(true, |k| p.tags.iter().any(|t| tag_key(t) == k)))
+        .filter(|p| key.as_deref().is_none_or(|k| p.tags.iter().any(|t| tag_key(t) == k)))
         .filter(|p| {
             q.is_empty()
                 || p.name.to_lowercase().contains(&q)

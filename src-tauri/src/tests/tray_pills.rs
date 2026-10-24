@@ -455,7 +455,7 @@ fn a_menu_icon_is_a_full_opaque_16x16_chip() {
     for kind in [TrayKind::Text, TrayKind::Image, TrayKind::Media, TrayKind::File] {
         let px = tray_icon_pixels(kind, "");
         assert_eq!(px.len(), (TRAY_ICON_PX * TRAY_ICON_PX * 4) as usize);
-        assert!(px.chunks_exact(4).all(|p| p[3] == 255), "{kind:?} has a transparent pixel");
+        assert!(px.as_chunks::<4>().0.iter().all(|p| p[3] == 255), "{kind:?} has a transparent pixel");
     }
     // Each media kind is visibly a different chip.
     let mut seen: Vec<Vec<u8>> = Vec::new();

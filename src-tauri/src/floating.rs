@@ -505,7 +505,7 @@ pub(crate) fn merge_target(dragged: Rect, others: &[(String, Rect)], radius: f64
         if dist > radius {
             continue;
         }
-        if best.map_or(true, |(b, _)| dist < b) {
+        if best.is_none_or(|(b, _)| dist < b) {
             best = Some((dist, id.as_str()));
         }
     }

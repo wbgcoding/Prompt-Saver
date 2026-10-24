@@ -198,7 +198,7 @@ pub(crate) fn client_crop(window: (i32, i32, i32, i32), client: (i32, i32, i32, 
 
 /// GDI hands back blue, green, red, unused; the screenshot code wants red, green, blue, opaque.
 pub(crate) fn bgra_to_rgba_opaque(px: &mut [u8]) {
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
         p[3] = 255;
     }

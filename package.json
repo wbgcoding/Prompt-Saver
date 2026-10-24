@@ -11,6 +11,6 @@
     "release:publish": "gh release create v%npm_package_version% \"src-tauri/target/release/prompt-saver.exe\" \"dist/Prompt Saver_%npm_package_version%_x64-setup.exe\" \"dist/Prompt Saver_%npm_package_version%_x64-setup.exe.sha256\" \"dist/Prompt Saver_%npm_package_version%_x64-setup.exe.sig\" --title \"Prompt Saver %npm_package_version%\" --notes-file docs/release-notes.md"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4"
+    "@tauri-apps/cli": "^2.12.4"
   }
 }

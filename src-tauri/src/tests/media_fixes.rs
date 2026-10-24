@@ -628,7 +628,7 @@ fn an_old_data_folder_ffmpeg_moves_only_when_it_is_the_pinned_build() {
     let (data, local) = (root.join("data"), root.join("local"));
     fs::create_dir_all(&data).unwrap();
     let bytes = b"pinned build bytes";
-    let want: String = Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+    let want: String = crate::ffmpeg::hex_lower(&Sha256::digest(bytes));
 
     // The pinned copy moves, and the old place is empty afterwards.
     fs::write(data.join("ffmpeg.exe"), bytes).unwrap();

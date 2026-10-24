@@ -343,7 +343,7 @@ pub(crate) const BACKUP_CHECK_SECS: u64 = 900;
 // AppHandle. The second case also keeps two app starts shortly after each other from both
 // taking a backup: the later one sees the first as fresh and skips.
 pub(crate) fn backup_is_due(newest_age_secs: Option<u64>, interval_h: u64) -> bool {
-    newest_age_secs.map_or(true, |age| age >= interval_h.saturating_mul(3600))
+    newest_age_secs.is_none_or(|age| age >= interval_h.saturating_mul(3600))
 }
 
 // One round of the auto-backup job. Due-ness comes from the age of the newest backup on

@@ -917,7 +917,7 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
             continue;
         }
         let d = dup_dice(&target_grams, &dup_trigrams(&norm));
-        if d >= thr && best.as_ref().map_or(true, |(_, b)| d > *b) {
+        if d >= thr && best.as_ref().is_none_or(|(_, b)| d > *b) {
             best = Some((
                 SimilarHit { id: p.id.clone(), name: stats_display_name(p) },
                 d,

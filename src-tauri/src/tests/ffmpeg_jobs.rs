@@ -316,7 +316,7 @@ fn ffmpeg_install_rejects_non_executable_and_cleans_up() {
 fn ffmpeg_matching_hash_is_accepted() {
     let zip_bytes = ffmpeg_test_zip();
     use sha2::{Digest, Sha256};
-    let real_hash = format!("{:x}", Sha256::digest(&zip_bytes));
+    let real_hash = crate::ffmpeg::hex_lower(&Sha256::digest(&zip_bytes));
     assert!(verify_ffmpeg_zip_against(&zip_bytes, &real_hash).is_ok());
 }
 

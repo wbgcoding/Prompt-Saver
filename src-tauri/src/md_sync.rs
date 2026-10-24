@@ -117,7 +117,9 @@ pub(crate) fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
         }
         let little = bytes[0] == 0xFF;
         let units: Vec<u16> = rest
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| if little { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) })
             .collect();
         return String::from_utf16(&units).ok();

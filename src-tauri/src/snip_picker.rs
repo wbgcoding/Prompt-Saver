@@ -155,7 +155,7 @@ pub(crate) fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -
     let mut out = Vec::with_capacity((w * h * 3) as usize);
     for row in y..y + h {
         let start = ((row * iw + x) * 4) as usize;
-        for px in raw[start..start + (w * 4) as usize].chunks_exact(4) {
+        for px in raw[start..start + (w * 4) as usize].as_chunks::<4>().0 {
             out.extend_from_slice(&px[..3]);
         }
     }

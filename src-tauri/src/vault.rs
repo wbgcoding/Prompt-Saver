@@ -96,9 +96,9 @@ pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec
         }
     };
     out.extend_from_slice(&nonce);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key_bytes));
     let ct = cipher
-        .encrypt(Nonce::from_slice(&nonce), body.as_slice())
+        .encrypt(&Nonce::from(nonce), body.as_slice())
         .map_err(|_| "backup encryption failed".to_string())?;
     out.extend_from_slice(&ct);
     Ok(out)
@@ -129,9 +129,10 @@ pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Opti
         return Err("corrupt backup".to_string());
     }
     let (nonce, ct) = rest.split_at(12);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let nonce = Nonce::try_from(nonce).map_err(|_| "corrupt backup".to_string())?;
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key_bytes));
     let body = cipher
-        .decrypt(Nonce::from_slice(nonce), ct)
+        .decrypt(&nonce, ct)
         .map_err(|_| {
             if matches!(data[4], 0 | 2) {
                 // A fixed-key backup has no password to get wrong; asking for one would send the user after
@@ -178,9 +179,9 @@ pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
     use rand::RngCore;
     let mut nonce = [0u8; 12];
     rand::rngs::OsRng.fill_bytes(&mut nonce);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
     let ct = cipher
-        .encrypt(Nonce::from_slice(&nonce), plain.as_bytes())
+        .encrypt(&Nonce::from(nonce), plain.as_bytes())
         .unwrap_or_default();
     let mut out = Vec::with_capacity(SECRET_MAGIC.len() + nonce.len() + ct.len());
     out.extend_from_slice(SECRET_MAGIC);
@@ -200,9 +201,10 @@ pub(crate) fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, Str
     }
     let nonce = &raw[4..16];
     let ct = &raw[16..];
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let nonce = Nonce::try_from(nonce).map_err(|_| "corrupt-secret".to_string())?;
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
     let pt = cipher
-        .decrypt(Nonce::from_slice(nonce), ct)
+        .decrypt(&nonce, ct)
         .map_err(|_| "wrong-password".to_string())?;
     String::from_utf8(pt).map_err(|_| "corrupt-secret".to_string())
 }

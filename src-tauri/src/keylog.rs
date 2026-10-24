@@ -152,7 +152,7 @@ impl ActiveClock {
     // Judged by the key's own timestamp, not the current state, so a key queued before a
     // pause is not dropped when the consumer is late.
     fn is_paused_at(&self, t_ms: u64) -> bool {
-        self.pauses.iter().any(|(s, e)| t_ms >= *s && e.map_or(true, |e| t_ms < e))
+        self.pauses.iter().any(|(s, e)| t_ms >= *s && e.is_none_or(|e| t_ms < e))
     }
 
     // Active elapsed ms at t_ms with paused spans removed, the same basis as the video track.

@@ -4,7 +4,7 @@ version = "3.1.0"
 description = "Local offline prompt manager"
 authors = ["BGCoding"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.99"
 
 [lib]
 name = "prompt_saver_lib"
@@ -12,68 +12,68 @@ name = "prompt_saver_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
-tauri-build = { version = "=2.6.3", features = [] }
+tauri-build = { version = "=2.7.4", features = [] }
 # Used only to parse `cargo metadata` output while generating the third-party
 # license list; same versions as the runtime dependencies below.
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
+serde_json = "=1.0.154"
 
 [dependencies]
-tauri = { version = "=2.11.5", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-single-instance = "=2.4.3"
+tauri = { version = "=2.12.5", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-single-instance = "=2.5.4"
 # Optional global hotkey to summon the window + quick-launcher.
-tauri-plugin-global-shortcut = "=2.3.2"
+tauri-plugin-global-shortcut = "=2.4.1"
 # Async timer to re-assert snip overlay geometry after the per-monitor DPI settle.
 # "net" enables the named pipe that carries a second command-line launch's
 # request to the already-running instance and its answer back; "rt" is the
 # small standalone runtime that launch waits on it with, since nothing has
 # started Tauri's own runtime yet at that point. "sync" (Notify) and "macros"
 # (select!) drive the folder sync's wake-up and its loop.
-tokio = { version = "=1.53.1", features = ["time", "net", "rt", "sync", "macros"] }
+tokio = { version = "=1.54.1", features = ["time", "net", "rt", "sync", "macros"] }
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
-arboard = "=3.6.1"
-rfd = "=0.15.4"
+serde_json = "=1.0.154"
+arboard = "=3.7.0"
+rfd = "=0.17.2"
 sys-locale = "=0.3.2"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "=2.12.1", default-features = false, features = ["tls"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
-sha2 = "=0.10.9"
+sha2 = "=0.11.1"
 # Ed25519 check of signed updates; already in the tree through rustls.
 ring = "=0.17.14"
 # Encrypted single-file backups: AES-256-GCM + Argon2id password KDF (pure Rust, no
 # system/OpenSSL dependency). Default backups use a fixed key (portable); an optional
 # user password derives a stronger key.
-aes-gcm = "=0.10.3"
-argon2 = "=0.5.3"
-zeroize = "=1.9.0"
+aes-gcm = "=0.11.1"
+argon2 = "=0.6.0"
+zeroize = "=1.9.1"
 rand = "=0.8.8"
 # Backups are compressed before they are written (snapshots) or encrypted (.psb).
 flate2 = "=1.1.10"
 # Fast snip preview: SIMD JPEG (jpeg-encoder) + rayon to parallelize the BGRA→RGBA
 # conversion of a multi-monitor capture.
 rayon = "=1.12.0"
-jpeg-encoder = "=0.6.1"
+jpeg-encoder = "=0.7.1"
 # Local SQLite store (bundled engine, no system dependency).
-rusqlite = { version = "=0.32.1", features = ["bundled"] }
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use - see pdfium_lib_path in images.rs).
-pdfium-render = "=0.8.37"
+pdfium-render = "=0.9.4"
 # Extract ffmpeg.exe from its downloaded release zip. Deflate only:
 # gyan.dev's archive needs no other compression method.
-zip = { version = "=2.4.2", default-features = false, features = ["deflate"] }
+zip = { version = "=9.0.5", default-features = false, features = ["deflate"] }
 # Decodes the camera window's recorded chunks -- sent as base64 over IPC
 # instead of a JSON array of numbers, about a third bigger than raw instead
 # of three to four times bigger.
-base64 = "=0.22.1"
+base64 = "=0.23.1"
 
 [target.'cfg(windows)'.dependencies]
-winreg = "=0.52.0"
-clipboard-win = "=5.4.1"
+winreg = "=0.56.0"
+clipboard-win = "=5.4.3"
 # OCR: Windows' own built-in text recognizer, fully offline. Version
 # pinned exactly -- a newer release may need a newer compiler than this project's
-# rust-version = "1.77".
+# rust-version = "1.99".
 windows = { version = "=0.58.0", features = [
   "Media_Ocr", "Graphics_Imaging", "Storage", "Storage_Streams",
   # 125: voice dictation (Windows.Media.SpeechRecognition), same crate as OCR.
@@ -141,7 +141,7 @@ windows-capture = "=2.0.1"
 # mismatched version would fail to compile at that boundary instead of just
 # warning. Used only to answer the camera window's getUserMedia permission
 # prompt in Rust; WebView2 blocks the request forever otherwise.
-webview2-com = "=0.38.2"
+webview2-com = "=0.39.1"
 # Pinned to the exact release webview2-com itself resolves (checked against
 # Cargo.lock) -- needed directly, not just transitively, to read the
 # permission request's own PWSTR uri and to cast its args to the v3
@@ -149,7 +149,7 @@ webview2-com = "=0.38.2"
 # `webview2_windows_core`: the plain `windows-core` name above is already
 # taken by the 0.58 release the #[implement] macro needs, and the two
 # releases cannot share one crate name in the same build.
-webview2-windows-core = { package = "windows-core", version = "=0.61.2" }
+webview2-windows-core = { package = "windows-core", version = "=0.62.2" }
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.

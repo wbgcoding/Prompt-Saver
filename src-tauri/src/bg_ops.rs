@@ -102,7 +102,7 @@ pub(crate) fn aggregate_taskbar_state(ops: &HashMap<String, BgOp>) -> (&'static 
 // shows it, then is swept away on the next read or write.
 pub(crate) fn prune_finished_ops(ops: &mut HashMap<String, BgOp>, keep_min: f64) {
     let cutoff = now_ms().saturating_sub((keep_min.max(0.0) * 60_000.0) as u64);
-    ops.retain(|_, o| o.finished_at_ms.map_or(true, |f| f >= cutoff));
+    ops.retain(|_, o| o.finished_at_ms.is_none_or(|f| f >= cutoff));
 }
 
 pub(crate) fn bg_ops_running_count() -> usize {
