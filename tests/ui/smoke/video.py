@@ -1040,10 +1040,10 @@ VIDEO_PROBE = """
         origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
         await sleep(30);
         if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing a held show-original press did not restore the overlay layer');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
         await sleep(450);
         if (!overlayLive398.classList.contains('hidden')) errs.push('398: holding V did not hide the overlay layer');
-        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', code: 'KeyV', bubbles: true }));
         await sleep(30);
         if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing V did not restore the overlay layer');
       }
@@ -1144,7 +1144,7 @@ VIDEO_PROBE = """
         // frame overlay's chain must be exhausted at exactly that many undos,
         // never sooner and never later than the SINGLE row it owns disappearing.
         for (let i = 0; i < 40; i++) {
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true }));
         }
         await sleep(30);
         const rowsAfter = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
@@ -1181,7 +1181,7 @@ VIDEO_PROBE = """
             errs.push('392: duplicating an overlay produced ' + afterCount + ' rows, expected ' + (beforeCount + 1));
           }
           if (document.activeElement) document.activeElement.blur();
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true }));
           await sleep(30);
           const undoCount = document.querySelectorAll('#ve-ov-list .ve-ov-row').length;
           if (undoCount !== beforeCount) {
@@ -1429,7 +1429,7 @@ VIDEO_PROBE = """
       wField.value = '1280';
       wField.dispatchEvent(new Event('change'));
       await sleep(30);
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true }));
       await sleep(30);
       if (wField.value !== '1920' || hField.value !== '1080') {
         errs.push('366: undo did not restore the original resolution, got ' + wField.value + 'x' + hField.value);

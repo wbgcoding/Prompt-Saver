@@ -526,9 +526,19 @@ function opLabel(op) {
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
     case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ${t("veUnitMs")}`;
     case "scale": return `${t("veOpScale")} ${op.w}×${op.h}`;
-    case "overlay": return `${t("veOpOverlay")}: ${t(overlayLabelKey(op.kind))}`;
+    case "overlay": return `${t("veOpOverlay")}: ${overlayName(op)}`;
     default: return op.tool;
   }
+}
+
+// What an overlay is called in a list row or a bar tooltip: its kind, and for a text overlay the
+// first 20 characters of the text, so several text overlays can be told apart.
+export function overlayName(op) {
+  const base = t(overlayLabelKey(op.kind));
+  if (op.kind !== "text" || !op.text) return base;
+  const chars = Array.from(String(op.text).replace(/\s+/g, " ").trim());
+  if (!chars.length) return base;
+  return `${base} "${chars.slice(0, 20).join("")}${chars.length > 20 ? "\u2026" : ""}"`;
 }
 
 export const overlayLabelKey = (kind) => ({
@@ -558,7 +568,7 @@ function selectOp(op) {
 export function selectOverlay(id) {
   VE.selOv = id;
   if (id) showPanel("ve-panel-overlays");
-  renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint();
+  renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint(); renderRegions();
 }
 
 function renderOps() {
@@ -810,6 +820,22 @@ function renderStrip() {
   });
 }
 
+// The bar elements of the last render and the op each stands for: a press on a cut band or an
+// overlay bar selects that op, a press on its edge resizes it.
+const barOps = new WeakMap();
+const barEls = new Map();
+const BAR_EDGE_MIN_PX = 14;
+
+function addBarEdges(el, widthPx) {
+  if (widthPx < BAR_EDGE_MIN_PX) return;
+  for (const edge of ["a", "b"]) {
+    const grip = document.createElement("span");
+    grip.className = `ve-bar-edge ve-bar-edge-${edge}`;
+    grip.dataset.edge = edge;
+    el.appendChild(grip);
+  }
+}
+
 export function renderRegions() {
   const { a, b } = trimBounds();
   $("ve-dim-a").style.width = `${msToPx(a)}px`;
@@ -822,12 +848,17 @@ export function renderRegions() {
 
   const cuts = $("ve-cuts");
   cuts.innerHTML = "";
+  barEls.clear();
   for (const cut of opsOf("cut")) {
     const el = document.createElement("div");
     el.className = "ve-cut";
+    const width = Math.max(2, msToPx(Math.abs(cut.endMs - cut.startMs)));
     el.style.left = `${msToPx(Math.min(cut.startMs, cut.endMs))}px`;
-    el.style.width = `${Math.max(2, msToPx(Math.abs(cut.endMs - cut.startMs)))}px`;
+    el.style.width = `${width}px`;
     el.title = `${t("veOpCut")} ${fmtTime(cut.startMs)}-${fmtTime(cut.endMs)}`;
+    addBarEdges(el, width);
+    barOps.set(el, cut);
+    barEls.set(cut, el);
     cuts.appendChild(el);
   }
 
@@ -836,9 +867,13 @@ export function renderRegions() {
   for (const op of opsOf("overlay")) {
     const el = document.createElement("div");
     el.className = "ve-ovbar" + (op.id === VE.selOv ? " sel" : "");
+    const width = Math.max(3, msToPx(Math.max(0, op.endMs - op.startMs)));
     el.style.left = `${msToPx(op.startMs)}px`;
-    el.style.width = `${Math.max(3, msToPx(Math.max(0, op.endMs - op.startMs)))}px`;
-    el.title = `${t(overlayLabelKey(op.kind))} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    el.style.width = `${width}px`;
+    el.title = `${overlayName(op)} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    addBarEdges(el, width);
+    barOps.set(el, op);
+    barEls.set(op, el);
     bars.appendChild(el);
   }
 
@@ -1094,6 +1129,37 @@ function timelineMs(clientX) {
   return clamp(pxToMs(clientX - rect.left), 0, VE.dur);
 }
 
+// A drag that reaches past the visible timeline keeps scrolling it, faster the further out the
+// pointer is, and re-applies the drag at the last pointer position after every step.
+const AUTOSCROLL_MAX_PX = 40;
+const AUTOSCROLL_TICK_MS = 16;
+let dragClientX = 0;
+let dragTimer = 0;
+
+function dragAutoscroll() {
+  dragTimer = 0;
+  if (!VE.drag) return;
+  const view = timelineEl.getBoundingClientRect();
+  const over = dragClientX < view.left ? dragClientX - view.left : dragClientX > view.right ? dragClientX - view.right : 0;
+  if (over) {
+    const before = timelineEl.scrollLeft;
+    const step = Math.sign(over) * clamp(Math.abs(over) / 4, 2, AUTOSCROLL_MAX_PX);
+    timelineEl.scrollLeft = before + step;
+    if (timelineEl.scrollLeft !== before) applyTimelineDrag(dragClientX);
+  }
+  dragTimer = setTimeout(dragAutoscroll, AUTOSCROLL_TICK_MS);
+}
+
+function startDragAutoscroll(clientX) {
+  dragClientX = clientX;
+  if (!dragTimer) dragTimer = setTimeout(dragAutoscroll, AUTOSCROLL_TICK_MS);
+}
+
+function stopDragAutoscroll() {
+  if (dragTimer) clearTimeout(dragTimer);
+  dragTimer = 0;
+}
+
 // A press on the ruler band scrubs; a press anywhere lower on the track starts a selection that
 // only counts once the pointer moved a few pixels, so a plain click just sets the playhead.
 const DRAG_SLOP_PX = 4;
@@ -1103,35 +1169,77 @@ regionsEl.addEventListener("pointerdown", (e) => {
   // A press the page did not start as a real pointer (a synthetic one) has nothing to capture.
   try { regionsEl.setPointerCapture(e.pointerId); } catch { /* the move and up events still reach the track */ }
   const ms = timelineMs(e.clientX);
+  const trackLeft = $("ve-track").getBoundingClientRect().left;
   if (handle) {
     const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
-    VE.drag = { kind: "trim", edge: handle.id === "ve-trim-a" ? "a" : "b", live: { startMs: trim.startMs, endMs: trim.endMs } };
+    const edge = handle.id === "ve-trim-a" ? "a" : "b";
+    // The handle keeps the spot where it was grabbed instead of jumping its centre to the pointer.
+    const grabPx = e.clientX - (trackLeft + msToPx(edge === "a" ? trim.startMs : trim.endMs));
+    VE.drag = { kind: "trim", edge, grabPx, live: { startMs: trim.startMs, endMs: trim.endMs } };
+    startDragAutoscroll(e.clientX);
+    return;
+  }
+  const barEl = e.target.closest(".ve-cut, .ve-ovbar");
+  const barOp = barEl && barOps.get(barEl);
+  if (barOp) {
+    const grip = e.target.closest(".ve-bar-edge");
+    if (grip) {
+      if (barOp.tool === "overlay") selectOverlay(barOp.id);
+      const a = Math.min(barOp.startMs, barOp.endMs), b = Math.max(barOp.startMs, barOp.endMs);
+      const edge = grip.dataset.edge;
+      const grabPx = e.clientX - (trackLeft + msToPx(edge === "a" ? a : b));
+      VE.drag = { kind: "resize", op: barOp, edge, grabPx, live: { startMs: a, endMs: b } };
+      startDragAutoscroll(e.clientX);
+    } else {
+      selectOp(barOp);
+      VE.drag = { kind: "bar" };
+    }
     return;
   }
   const rulerH = $("ve-ruler").offsetHeight || 18;
   if (e.clientY - $("ve-track").getBoundingClientRect().top < rulerH) {
     VE.drag = { kind: "scrub" };
     seek(ms);
+    startDragAutoscroll(e.clientX);
     return;
   }
   VE.drag = { kind: "select", anchor: ms, startX: e.clientX, moved: false };
+  startDragAutoscroll(e.clientX);
 });
 
 regionsEl.addEventListener("pointermove", (e) => {
+  if (!VE.drag) return;
+  dragClientX = e.clientX;
+  applyTimelineDrag(e.clientX);
+});
+
+function applyTimelineDrag(clientX) {
   const drag = VE.drag;
   if (!drag) return;
-  const ms = timelineMs(e.clientX);
+  const ms = timelineMs(clientX);
   if (drag.kind === "scrub") { seek(ms); return; }
+  if (drag.kind === "resize") {
+    const grabbed = clamp(pxToMs(clientX - $("ve-track").getBoundingClientRect().left - drag.grabPx), 0, VE.dur);
+    if (drag.edge === "a") drag.live.startMs = clamp(grabbed, 0, drag.live.endMs - MIN_CLIP_MS);
+    else drag.live.endMs = clamp(grabbed, drag.live.startMs + MIN_CLIP_MS, VE.dur);
+    const el = barEls.get(drag.op);
+    if (el) {
+      el.style.left = `${msToPx(drag.live.startMs)}px`;
+      el.style.width = `${Math.max(2, msToPx(drag.live.endMs - drag.live.startMs))}px`;
+    }
+    return;
+  }
   if (drag.kind === "select") {
-    if (!drag.moved && Math.abs(e.clientX - drag.startX) < DRAG_SLOP_PX) return;
+    if (!drag.moved && Math.abs(clientX - drag.startX) < DRAG_SLOP_PX) return;
     drag.moved = true;
     VE.sel = { a: Math.min(drag.anchor, ms), b: Math.max(drag.anchor, ms) };
     renderRegions();
     return;
   }
   if (drag.kind === "trim") {
-    if (drag.edge === "a") drag.live.startMs = clamp(ms, 0, drag.live.endMs - MIN_CLIP_MS);
-    else drag.live.endMs = clamp(ms, drag.live.startMs + MIN_CLIP_MS, VE.dur);
+    const grabbed = clamp(pxToMs(clientX - $("ve-track").getBoundingClientRect().left - drag.grabPx), 0, VE.dur);
+    if (drag.edge === "a") drag.live.startMs = clamp(grabbed, 0, drag.live.endMs - MIN_CLIP_MS);
+    else drag.live.endMs = clamp(grabbed, drag.live.startMs + MIN_CLIP_MS, VE.dur);
     $("ve-trim-a").style.left = `${msToPx(drag.live.startMs)}px`;
     $("ve-trim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     setTimeValue($("ve-trim-a"), drag.live.startMs, VE.dur);
@@ -1140,12 +1248,22 @@ regionsEl.addEventListener("pointermove", (e) => {
     $("ve-dim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(drag.live.endMs))}px`;
   }
-});
+}
 
 function endTimelineDrag() {
   const drag = VE.drag;
   if (!drag) return;
   VE.drag = null;
+  stopDragAutoscroll();
+  if (drag.kind === "resize") {
+    const op = drag.op;
+    const a = Math.min(op.startMs, op.endMs), b = Math.max(op.startMs, op.endMs);
+    // A press on an edge that did not move it is no edit: no undo step, no dirty mark.
+    if (drag.live.startMs === a && drag.live.endMs === b) return;
+    const match = op.tool === "overlay" ? (o) => o.id === op.id : (o) => o === op;
+    pushReplacing(match, { ...op, startMs: drag.live.startMs, endMs: drag.live.endMs }, { keepEditor: true });
+    return;
+  }
   if (drag.kind === "select") {
     if (!drag.moved) seek(drag.anchor);
     else if (VE.sel && VE.sel.b - VE.sel.a < MIN_CLIP_MS) { VE.sel = null; renderRegions(); }
@@ -1167,7 +1285,8 @@ regionsEl.addEventListener("pointercancel", endTimelineDrag);
 timelineEl.addEventListener("wheel", (e) => {
   if (e.ctrlKey) {
     e.preventDefault();
-    setZoom(VE.zoom * (e.deltaY < 0 ? 1.25 : 0.8), VE.playhead);
+    // The zoom keeps the moment under the pointer where it is.
+    setZoom(VE.zoom * (e.deltaY < 0 ? 1.25 : 0.8), timelineMs(e.clientX));
   } else if (e.deltaY && !e.shiftKey) {
     e.preventDefault();
     timelineEl.scrollLeft += e.deltaY;
@@ -1994,12 +2113,13 @@ document.addEventListener("keydown", (e) => {
   }
   if (typing) return;
 
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+  // Letter shortcuts follow the physical key (e.code), so they work under any keyboard layout.
+  if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") { e.preventDefault(); redo(); return; }
   // Preview zoom: Ctrl+Plus/Minus/0, like the screenshot editor's canvas zoom; plain +/- stay the
   // timeline zoom below.
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
@@ -2060,17 +2180,20 @@ document.addEventListener("keydown", (e) => {
     case "ArrowRight": e.preventDefault(); if (e.shiftKey) seek(VE.playhead + 1000); else stepFrame(1); break;
     case "Home": e.preventDefault(); seek(e.shiftKey ? 0 : keptStart()); break;
     case "End": e.preventDefault(); seek(e.shiftKey ? VE.dur : keptEnd()); break;
-    case "i": case "I": e.preventDefault(); $("ve-mark-in").click(); break;
-    case "o": case "O": e.preventDefault(); $("ve-mark-out").click(); break;
-    case "c": case "C": e.preventDefault(); cutSelection(); break;
     case "+": case "=": e.preventDefault(); setZoom(VE.zoom * TIMELINE_ZOOM_STEP); break;
     case "-": e.preventDefault(); setZoom(VE.zoom / TIMELINE_ZOOM_STEP); break;
-    case "v": case "V": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;
+    default: break;
+  }
+  switch (e.code) {
+    case "KeyI": e.preventDefault(); $("ve-mark-in").click(); break;
+    case "KeyO": e.preventDefault(); $("ve-mark-out").click(); break;
+    case "KeyC": e.preventDefault(); cutSelection(); break;
+    case "KeyV": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;
     default: break;
   }
 });
 document.addEventListener("keyup", (e) => {
-  if (e.key.toLowerCase() === "v") veOriginalToggle.release();
+  if (e.code === "KeyV") veOriginalToggle.release();
 });
 
 // ---------------------------------------------------------------- loading

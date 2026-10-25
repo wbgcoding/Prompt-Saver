@@ -787,7 +787,7 @@ async function exportIdleCheck() {
   const log = [];
   const osb = {
     VE: { selOv: null }, seek: (ms) => log.push(`seek${ms}`), showPanel: (id) => log.push(id), renderOverlayList: () => {}, renderOverlayEditor: () => {},
-    renderRects: () => {}, updateNudgeHint: () => {}, changeCrop: (fn) => { log.push("crop"); fn(); }, removeOps: () => log.push("remove"),
+    renderRects: () => {}, updateNudgeHint: () => {}, renderRegions: () => {}, changeCrop: (fn) => { log.push("crop"); fn(); }, removeOps: () => log.push("remove"),
   };
   vm.createContext(osb);
   vm.runInContext([extractBlock("deleteOp", "function deleteOp(op) {"), extractBlock("selectOp", "function selectOp(op) {"), extractBlock("selectOverlay", "function selectOverlay(id) {")].join("\n"), osb);
@@ -1017,11 +1017,12 @@ const pending = [];
   const sb = {
     VE: { selOv: null }, showPanel: (id) => calls.push("panel:" + id), renderOverlayList: () => calls.push("list"),
     renderOverlayEditor: () => calls.push("editor"), renderRects: () => calls.push("rects"), updateNudgeHint: () => calls.push("hint"),
+    renderRegions: () => calls.push("regions"),
   };
   vm.createContext(sb);
   vm.runInContext(extractBlock("selectOverlay", "export function selectOverlay(id) {".replace("export ", "")), sb);
   vm.runInContext('selectOverlay("X")', sb);
-  expect("selecting opens the overlays panel and refreshes list, editor, rects and hint", sb.VE.selOv === "X" && calls.join() === "panel:ve-panel-overlays,list,editor,rects,hint", calls.join());
+  expect("selecting opens the overlays panel and refreshes list, editor, rects, hint and bars", sb.VE.selOv === "X" && calls.join() === "panel:ve-panel-overlays,list,editor,rects,hint,regions", calls.join());
   calls.length = 0;
   vm.runInContext("selectOverlay(null)", sb);
   expect("deselecting keeps the panel and clears the selection", sb.VE.selOv === null && !calls.some((c) => c.startsWith("panel:")) && calls.includes("rects"), calls.join());

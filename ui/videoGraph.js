@@ -15,15 +15,18 @@ export function ffPath(path) {
   return String(path).replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "'\\\\\\''");
 }
 
+// The apostrophe an exported text overlay actually shows (see ffText); the live preview uses the
+// same substitution so it matches the result.
+export const typographicApostrophe = (text) => String(text).replace(/'/g, "’");
+
 // The same two levels for drawtext's own text, plus one thing the parser cannot express: an
 // ASCII apostrophe is silently dropped by every escape form ffmpeg accepts (the
 // quote-escape-requote spelling renders "its", not "it's"), so it becomes the typographic
 // apostrophe. Backslashes are doubled before colons are escaped, or the escape's own backslash
 // would be doubled in turn.
 export function ffText(text) {
-  return String(text)
+  return typographicApostrophe(String(text))
     .replace(/\r?\n/g, " ")
-    .replace(/'/g, "’")
     .replace(/\\/g, "\\\\")
     .replace(/:/g, "\\:");
 }

@@ -3,7 +3,7 @@ import { numberField, parseFfmpegError } from "./floatShared.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { keysPickerRow } from "./videoKeys.js";
-import { $, clamp, deleteOp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
+import { $, clamp, deleteOp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, overlayName, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
 import { renderRects, snapRect } from "./videoPreview.js";
 
 // ---------------------------------------------------------------- overlays
@@ -35,6 +35,10 @@ export function centeredRect(fraction) {
   return snapRect({ x: (VE.w - w) / 2, y: (VE.h - h) / 2, w, h });
 }
 
+// The text overlay that was just added and whose text nobody has edited yet: clearing its field
+// takes the overlay back out instead of leaving an invisible one behind.
+let freshTextOv = null;
+
 export async function addOverlay(kind) {
   // Same race as startAddVideo: a button live from first paint that builds text with t() at
   // click time needs the lazy i18n import landed first.
@@ -43,8 +47,11 @@ export async function addOverlay(kind) {
   const base = { tool: "overlay", id: newId(), kind, ...range };
   let op = null;
   if (kind === "image") {
+    // The dialog can stay open while another recording loads; its answer then belongs to a
+    // file that is no longer in the editor.
+    const gen = VE.loadGen;
     const path = await invoke("pick_file_path").catch(() => null);
-    if (!path) return;
+    if (!path || VE.loadGen !== gen) return;
     // An apostrophe in the path has no escape ffmpeg's filter parser accepts, so
     // it is refused here with a reason instead of failing at export time.
     if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
@@ -65,6 +72,7 @@ export async function addOverlay(kind) {
     };
   }
   if (!op) return;
+  freshTextOv = kind === "text" ? op.id : null;
   VE.selOv = op.id;
   pushOp(op);
   showPanel("ve-panel-overlays");
@@ -79,13 +87,17 @@ async function pickExtraVideo() {
     toast(t("veClipLimit").replace("{n}", String(EXTRA_CLIPS_MAX)));
     return null;
   }
+  const gen = VE.loadGen;
   const path = await invoke("pick_file_path").catch(() => null);
-  if (!path) return null;
+  if (!path || VE.loadGen !== gen) return null;
   if (path.includes("'")) { toast(t("veOvImageQuote")); return null; }
   try {
     const probe = await invoke("probe_extra_video_source", { path });
+    // A different recording may have been opened while the probe ran.
+    if (VE.loadGen !== gen) return null;
     return { path, probe };
   } catch (err) {
+    if (VE.loadGen !== gen) return null;
     const { message } = parseFfmpegError(err, t);
     toast(message);
     return null;
@@ -293,7 +305,7 @@ export function renderOverlayList() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "ve-ov-row" + (op.id === VE.selOv ? " sel" : "");
-    row.textContent = `${t(overlayLabelKey(op.kind))} · ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    row.textContent = `${overlayName(op)} · ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     if (op.kind === "video") {
       const bits = [];
       if (!op.hasAudio || !(op.volume > 0)) bits.push(t("veClipMuted"));
@@ -414,8 +426,28 @@ function textInput(value, onChange) {
   input.type = "text";
   input.className = "modal-input";
   input.value = value;
-  input.addEventListener("change", () => onChange(input.value));
+  input.addEventListener("change", () => onChange(input.value, input));
   return input;
+}
+
+// A text overlay with nothing to show is not a state worth keeping. Committed empty: a freshly
+// added overlay (still selected, text never edited) is removed again; an existing one gets its
+// previous text back in the field and nothing is committed.
+function commitOverlayText(op, value, input) {
+  const cur = VE.ops.find((o) => o.id === op.id);
+  if (!cur) return;
+  if (value.trim()) {
+    if (freshTextOv === op.id) freshTextOv = null;
+    commitOverlay(cur, { text: value });
+    return;
+  }
+  if (freshTextOv === op.id && VE.selOv === op.id) {
+    freshTextOv = null;
+    VE.selOv = null;
+    removeOps((o) => o.id === op.id);
+    return;
+  }
+  input.value = cur.text;
 }
 
 function selectInput(options, value, onChange) {
@@ -666,7 +698,7 @@ export function renderOverlayEditor() {
   }
 
   if (op.kind === "text") {
-    box.appendChild(fieldRow(t("veOvTextValue"), ovTrack("text", textInput(op.text, (v) => commitOverlay(op, { text: v })), (o) => o.text)));
+    box.appendChild(fieldRow(t("veOvTextValue"), ovTrack("text", textInput(op.text, (v, input) => commitOverlayText(op, v, input)), (o) => o.text)));
     box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, FONT_LABELS[id] || id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
     box.appendChild(fieldRow(t("veOvFontSize"), ovTrack("fontPx", numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v }), [12, 16, 24, 32, 48, 64, 96]), (o) => String(o.fontPx))));
     const pos = document.createElement("div");

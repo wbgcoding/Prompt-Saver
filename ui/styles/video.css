@@ -302,8 +302,15 @@ body.video-body {
   border-left: 1px solid var(--danger);
   border-right: 1px solid var(--danger);
 }
-.ve-ovbar { position: absolute; bottom: 0; height: 5px; background: var(--muted); border-radius: 3px; }
+.ve-ovbar { position: absolute; bottom: 0; height: 5px; background: var(--muted); border-radius: 3px; pointer-events: auto; cursor: pointer; }
 .ve-ovbar.sel { background: var(--accent); }
+.ve-cut { pointer-events: auto; cursor: pointer; }
+/* The bar is only 5px high; the invisible strip around it makes it a fair target. */
+.ve-ovbar::before { content: ""; position: absolute; inset: -6px 0; }
+.ve-bar-edge { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.ve-bar-edge-a { left: 0; }
+.ve-bar-edge-b { right: 0; }
+.ve-ovbar .ve-bar-edge { top: -6px; bottom: -6px; }
 .ve-sel { position: absolute; top: 18px; bottom: 0; background: rgba(37, 99, 235, 0.18); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); pointer-events: none; }
 .ve-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--danger); pointer-events: none; }
 .ve-handle {
