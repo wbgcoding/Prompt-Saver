@@ -406,10 +406,10 @@ fn install_update_rejects_a_release_older_than_the_installed_version() {
     assert!(!update_url_is_newer_release(&format!("{base}//App-setup.exe")));
 }
 
-// The webview may load media and PDF attachments from anywhere the user picked,
-// so the asset protocol's allow list is deliberately wide. Everything that holds
-// the store itself has to be denied by name, or a crafted attachment path would
-// hand the page the whole database. Backups count: a snapshot folder holds a
+// The asset protocol allows paths added at run time (the data folder and the files
+// the user picked). Everything that holds the store itself is still denied by name,
+// so a crafted attachment path inside an allowed folder cannot hand the page the
+// whole database. Backups count: a snapshot folder holds a
 // gzipped copy of data.db, and a .psb is the same store in one file.
 #[test]
 fn asset_scope_denies_every_store_file() {
