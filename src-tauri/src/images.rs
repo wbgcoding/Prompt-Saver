@@ -197,6 +197,7 @@ pub(crate) async fn get_clipboard_file_path(app: AppHandle) -> Option<String> {
             .into_iter()
             .next()?;
         // The editor previews it before anything is saved.
+        crate::asset_scope::grant_picked_file(&first);
         crate::asset_scope::allow_file(&app, &first);
         Some(first)
     }
@@ -218,6 +219,7 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
     .flatten();
     let _ = win.set_focus();
     if let Some(p) = &result {
+        crate::asset_scope::grant_picked_file(p);
         crate::asset_scope::allow_file(&app_for_scope, p);
     }
     result
@@ -247,6 +249,7 @@ pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> 
     .flatten();
     let _ = win.set_focus();
     if let Some(p) = &result {
+        crate::asset_scope::grant_picked_file(p);
         crate::asset_scope::allow_file(&app_for_scope, p);
     }
     result

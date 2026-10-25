@@ -39,6 +39,103 @@ fn file_key(path: &Path) -> String {
     format!("f\u{1}{}", path.to_string_lossy().to_lowercase())
 }
 
+// Files the user handed to this session through a backend door: a file dialog, the clipboard, or
+// a file dropped on the main window. A renderer can name any string in an IPC call, so an
+// attachment source counts as the user's choice only if one of these doors recorded it first.
+static PICKED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+const PICKED_MAX: usize = 4096;
+
+fn picked_keys(raw: &str) -> Vec<String> {
+    let path = Path::new(raw);
+    let mut keys = vec![file_key(path)];
+    if let Ok(real) = fs::canonicalize(path) {
+        let key = file_key(&real);
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys
+}
+
+pub(crate) fn grant_picked_file(raw: &str) {
+    if raw.trim().is_empty() {
+        return;
+    }
+    let mut guard = PICKED.lock().unwrap_or_else(|e| e.into_inner());
+    let set = guard.get_or_insert_with(HashSet::new);
+    if set.len() >= PICKED_MAX {
+        set.clear();
+    }
+    set.extend(picked_keys(raw));
+}
+
+fn is_picked_file(raw: &str) -> bool {
+    let guard = PICKED.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().is_some_and(|set| picked_keys(raw).iter().any(|k| set.contains(k)))
+}
+
+// The key under which a stored prompt's path is remembered for the trust check.
+pub(crate) fn stored_key(raw: &str) -> String {
+    file_key(Path::new(raw))
+}
+
+// Whether an attachment source named in an IPC call may be copied, probed and shown: empty, a
+// file inside one of the app's own folders (resolved, so ".." and links do not escape), a file
+// the user picked this session, or a path a stored prompt already holds.
+pub(crate) fn attachment_source_trusted(raw: &str, roots: &[PathBuf], stored: &HashSet<String>) -> bool {
+    if raw.trim().is_empty() {
+        return true;
+    }
+    if stored.contains(&stored_key(raw)) || is_picked_file(raw) {
+        return true;
+    }
+    if Path::new(raw).components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return false;
+    }
+    let Ok(file) = fs::canonicalize(raw) else { return false };
+    if !file.is_file() {
+        return false;
+    }
+    let file_lower = PathBuf::from(file.to_string_lossy().to_lowercase());
+    roots.iter().any(|root| {
+        fs::canonicalize(root).is_ok_and(|r| file_lower.starts_with(PathBuf::from(r.to_string_lossy().to_lowercase())))
+    })
+}
+
+// The folders a renderer-named attachment may come from: everything the app itself writes media
+// to (data, recordings, screenshots, the export folder, its temp folder).
+fn attachment_source_roots(app: &AppHandle, settings: &Settings) -> Vec<PathBuf> {
+    let text = |k: &str| settings.ui_texts.get(k).cloned().unwrap_or_default();
+    let mut roots = media_dirs(&data_dir(app), &text("recordingDir"), &std::env::temp_dir());
+    roots.push(crate::snip::screenshot_dir(&text("screenshotDir")));
+    let export = text("videoExportDir");
+    if !export.trim().is_empty() {
+        roots.push(PathBuf::from(export));
+    }
+    roots
+}
+
+// The check the attachment commands run before they copy or probe a source. Takes the store lock
+// only to read the settings and the stored paths, so call it before the slow work.
+pub(crate) fn source_trusted_now(app: &AppHandle, state: &State<'_, Db>, raw: &str) -> bool {
+    if raw.trim().is_empty() {
+        return true;
+    }
+    let (roots, stored) = {
+        let store = lock(state);
+        let stored: HashSet<String> = store
+            .prompts
+            .iter()
+            .chain(store.trash.iter())
+            .flat_map(|p| [p.file_path.as_str(), p.icon_path.as_str()])
+            .filter(|s| !s.trim().is_empty())
+            .map(stored_key)
+            .collect();
+        (attachment_source_roots(app, &store.settings), stored)
+    };
+    attachment_source_trusted(raw, &roots, &stored)
+}
+
 // The folders the windows read media from: data folder (stills, thumbnails, raw recordings),
 // recording folder (saved takes), and the app's own temp folder (editor working copies,
 // filmstrips, clip exports). Empty and repeated entries are dropped.

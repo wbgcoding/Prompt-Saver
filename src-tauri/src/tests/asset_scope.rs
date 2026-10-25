@@ -73,3 +73,93 @@ fn first_sighting_reports_a_key_only_once() {
     assert!(!crate::asset_scope::first_sighting(&mut seen, "k".to_string()));
     assert!(crate::asset_scope::first_sighting(&mut seen, "other".to_string()));
 }
+
+fn scratch_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("ps-scope-{}-{}", tag, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("scratch dir");
+    dir
+}
+
+fn touch(path: &Path) -> String {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("parent");
+    }
+    fs::write(path, b"x").expect("file");
+    path.to_string_lossy().to_string()
+}
+
+// An attachment source the renderer names is trusted only from the app's own folders, from a
+// file the user picked in a dialog this session, or when a stored prompt already holds it.
+#[test]
+fn attachment_source_trust_needs_an_app_folder_a_pick_or_a_stored_path() {
+    let base = scratch_dir("trust");
+    let root = base.join("data");
+    let roots = vec![root.clone()];
+    let none: HashSet<String> = HashSet::new();
+    let inside = touch(&root.join("files").join("a.png"));
+    let outside = touch(&base.join("Documents").join("secret.pdf"));
+    assert!(crate::asset_scope::attachment_source_trusted("", &roots, &none));
+    assert!(crate::asset_scope::attachment_source_trusted(&inside, &roots, &none));
+    assert!(!crate::asset_scope::attachment_source_trusted(&outside, &roots, &none));
+    // A climb out of an allowed folder is not inside it.
+    let climbing = root.join("..").join("Documents").join("secret.pdf").to_string_lossy().to_string();
+    assert!(!crate::asset_scope::attachment_source_trusted(&climbing, &roots, &none));
+    // A path a stored prompt already holds stays usable.
+    let stored: HashSet<String> = [crate::asset_scope::stored_key(&outside)].into_iter().collect();
+    assert!(crate::asset_scope::attachment_source_trusted(&outside, &roots, &stored));
+    // A dialog pick is proof; a different file next to it is not.
+    let picked = touch(&base.join("Pictures").join("logo.png"));
+    let sibling = touch(&base.join("Pictures").join("other.png"));
+    assert!(!crate::asset_scope::attachment_source_trusted(&picked, &roots, &none));
+    crate::asset_scope::grant_picked_file(&picked);
+    assert!(crate::asset_scope::attachment_source_trusted(&picked, &roots, &none));
+    assert!(!crate::asset_scope::attachment_source_trusted(&sibling, &roots, &none));
+    let _ = fs::remove_dir_all(&base);
+}
+
+// Same bytes, other spelling of the folder: a case change or a short path does not slip past.
+#[test]
+fn attachment_source_trust_compares_resolved_paths() {
+    let base = scratch_dir("resolved");
+    let root = base.join("Data");
+    let inside = touch(&root.join("x.png"));
+    let none: HashSet<String> = HashSet::new();
+    let upper = inside.to_uppercase();
+    if Path::new(&upper).exists() {
+        assert!(crate::asset_scope::attachment_source_trusted(&upper, &[root.clone()], &none));
+    }
+    let _ = fs::remove_dir_all(&base);
+}
+
+// The scope is widened after the write went through, never for a refused or failed one.
+#[test]
+fn the_scope_widens_only_after_a_write_succeeded() {
+    let src = include_str!("../store.rs");
+    for name in ["pub(crate) fn save_prompts(", "pub(crate) fn save_prompts_and_trash(", "pub(crate) fn write_settings_outcome("] {
+        let start = src.find(name).unwrap_or_else(|| panic!("{name} exists"));
+        let body = &src[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let blocked = body.find("data_dir_write_blocked(app)").unwrap_or_else(|| panic!("{name} checks the read-only gate"));
+        let widen = body.find("asset_scope::allow_").unwrap_or_else(|| panic!("{name} widens the scope"));
+        assert!(widen > blocked, "{name} must widen the scope only after the read-only check");
+        let first_return = body.find("return false").unwrap_or(usize::MAX).min(body.find("SettingsWrite::Refused").unwrap_or(usize::MAX));
+        assert!(widen > first_return, "{name} must not widen the scope before a refusal returns");
+    }
+}
+
+// The renderer never names an arbitrary local file for an attachment: the commands that take
+// one vet it, and every backend door that hands a path to the user records it as picked.
+#[test]
+fn attachment_commands_vet_sources_and_pickers_record_grants() {
+    let prompts = include_str!("../prompts.rs");
+    for name in ["pub(crate) async fn add_prompt(", "pub(crate) async fn update_prompt("] {
+        let start = prompts.find(name).unwrap_or_else(|| panic!("{name} exists"));
+        let body = &prompts[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        assert!(body.contains("source_trusted_now"), "{name} must vet attachment sources");
+    }
+    let images = include_str!("../images.rs");
+    assert_eq!(images.matches("asset_scope::grant_picked_file").count(), 3, "both pickers and the clipboard file record the pick");
+    assert!(include_str!("../main_window.rs").contains("DragDropEvent::Drop"), "a file dropped on the main window is recorded as picked");
+}

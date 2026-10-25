@@ -1263,7 +1263,6 @@ pub(crate) fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a 
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
 pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
-    crate::asset_scope::allow_store_files(app, store);
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -1284,6 +1283,7 @@ pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         };
         if ok {
             drop_stale_fallback(&dir, "prompts.json");
+            crate::asset_scope::allow_store_files(app, store);
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
             return true;
         }
@@ -1295,6 +1295,7 @@ pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         let _ = app.emit("persist-failed", "prompts");
         return false;
     }
+    crate::asset_scope::allow_store_files(app, store);
     spawn_sync_write_all(app, store);
     true
 }
@@ -1324,7 +1325,6 @@ pub(crate) fn save_trash(app: &AppHandle, store: &Store) -> bool {
 // The atomic counterpart to save_prompts + save_trash for delete_prompt/restore_prompt
 // (see db_write_prompts_and_trash).
 pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
-    crate::asset_scope::allow_store_files(app, store);
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -1342,6 +1342,7 @@ pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
         };
         if ok {
             drop_stale_fallback(&dir, "prompts.json");
+            crate::asset_scope::allow_store_files(app, store);
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
             return true;
         }
@@ -1386,7 +1387,6 @@ pub(crate) enum SettingsWrite {
 // path below calls this one so it does not clear its own mark twice.
 pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> SettingsWrite {
     mirror_minimize_to_tray(settings);
-    crate::asset_scope::allow_app_dirs(app, settings);
     if data_dir_write_blocked(app) {
         return SettingsWrite::Refused;
     }
@@ -1398,6 +1398,7 @@ pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> Se
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
             drop_stale_fallback(&data_dir(app), "settings.json");
+            crate::asset_scope::allow_app_dirs(app, settings);
             // Announced only on the true to false transition (swap), not on every successful write.
             if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
                 let _ = app.emit("settings-write-recovered", ());
@@ -1414,6 +1415,7 @@ pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> Se
     if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
         let _ = app.emit("settings-write-recovered", ());
     }
+    crate::asset_scope::allow_app_dirs(app, settings);
     SettingsWrite::Written
 }
 

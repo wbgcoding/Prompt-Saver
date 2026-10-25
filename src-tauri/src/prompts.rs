@@ -799,7 +799,7 @@ pub(crate) async fn add_prompt(
     let store_dir = data_dir(&app);
     let own_dirs = own_storage_dirs(&app, &state);
     for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
-        if attachment_path_refused(&own_dirs, &store_dir, p) {
+        if attachment_path_refused(&own_dirs, &store_dir, p) || !crate::asset_scope::source_trusted_now(&app, &state, p) {
             return Err("source-not-allowed".to_string());
         }
     }
@@ -1226,6 +1226,10 @@ pub(crate) async fn update_prompt(
                 return Err("source-not-allowed".to_string());
             }
             keep_as_is[i] = true;
+        } else if held != Some(p) && !crate::asset_scope::source_trusted_now(&app, &state, p) {
+            // A new source must be an app folder or a file the user picked; the value the prompt
+            // already holds is never asked again.
+            return Err("source-not-allowed".to_string());
         }
     }
     let mut staged_copies = StagedCopies::new();
