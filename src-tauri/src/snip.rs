@@ -533,13 +533,19 @@ pub(crate) fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<imag
         }
         // GDI returns BGRA; convert to RGBA with opaque alpha, in parallel (a multi-monitor capture
         // is tens of millions of pixels).
-        use rayon::prelude::*;
-        buf.par_chunks_exact_mut(4).for_each(|px| {
-            px.swap(0, 2);
-            px[3] = 255;
-        });
+        bgra_to_opaque_rgba(&mut buf);
         image::RgbaImage::from_raw(w as u32, h as u32, buf)
     }
+}
+
+// Swaps the red and blue bytes of every 4-byte pixel and forces the alpha byte opaque.
+pub(crate) fn bgra_to_opaque_rgba(buf: &mut [u8]) {
+    crate::parallel::par_slabs_mut(buf, 4, |slab| {
+        for px in slab.as_chunks_mut::<4>().0 {
+            px.swap(0, 2);
+            px[3] = 255;
+        }
+    });
 }
 
 // Whole virtual desktop via GDI → (image, origin_x, origin_y) global physical px.

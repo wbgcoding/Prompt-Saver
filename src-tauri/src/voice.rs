@@ -82,18 +82,16 @@ pub(super) fn languages() -> Result<Vec<VoiceLang>, String> {
 // Whether Windows' online-speech consent is on: one REG_DWORD, readable and writable without
 // elevation. A missing key counts as not accepted.
 fn online_speech_accepted() -> bool {
-    winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
-        .open_subkey("Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy")
-        .and_then(|k| k.get_value::<u32, _>("HasAccepted"))
+    crate::registry::Key::open_read(crate::registry::Hive::CurrentUser, r"Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy")
+        .and_then(|k| k.get_u32("HasAccepted"))
         .map(|v| v == 1)
         .unwrap_or(false)
 }
 
 pub(super) fn enable_online_speech() -> Result<(), String> {
-    let (key, _) = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
-        .create_subkey("Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy")
-        .map_err(|e| e.to_string())?;
-    key.set_value("HasAccepted", &1u32).map_err(|e| e.to_string())
+    crate::registry::Key::create_write(crate::registry::Hive::CurrentUser, r"Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy")
+        .and_then(|key| key.set_u32("HasAccepted", 1))
+        .map_err(|e| e.to_string())
 }
 
 // "auto" -> the system speech language if a pack for it is installed, otherwise (or for an

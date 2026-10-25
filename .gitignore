@@ -49,3 +49,4 @@ test-data/
 
 # Parked features, kept locally only
 parked/
+!src-tauri/src/tests/fixtures/*.psb

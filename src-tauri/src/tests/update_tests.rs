@@ -52,19 +52,23 @@ fn portable_update_points_at_the_release_page_of_the_offered_version() {
 
 #[test]
 fn an_update_signature_must_match_the_digest_and_the_key() {
-    use base64::Engine as _;
-    let b64 = base64::engine::general_purpose::STANDARD;
     let rng = ring::rand::SystemRandom::new();
     let pkcs8 = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
     let pair = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
-    let key = b64.encode(ring::signature::KeyPair::public_key(&pair).as_ref());
+    let key = base64_encode(ring::signature::KeyPair::public_key(&pair).as_ref());
     let digest = [7u8; 32];
-    let sig = b64.encode(pair.sign(&digest).as_ref());
+    let sig = base64_encode(pair.sign(&digest).as_ref());
     assert!(update_signature_valid(&digest, &sig, &key));
     let mut other = digest;
     other[0] ^= 1;
     assert!(!update_signature_valid(&other, &sig, &key));
     assert!(!update_signature_valid(&digest, "", &key));
+    // Garbage that is not base64 decodes to nothing and must fail closed, never verify.
+    for bad in ["not base64 at all!", "####", "AAAA", "   ", "=", "\u{20ac}\u{20ac}"] {
+        assert!(!update_signature_valid(&digest, bad, &key), "signature {bad:?}");
+    }
+    assert!(!update_signature_valid(&digest, &sig, ""), "an empty key never verifies");
+    assert!(!update_signature_valid(&digest, &sig, "%%%%"), "a garbage key never verifies");
     assert!(!update_signature_valid(&digest, &sig, UPDATE_PUBLIC_KEY_B64));
 }
 

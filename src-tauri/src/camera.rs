@@ -7,8 +7,8 @@
 // install_permission_handler is that answer, for camera and microphone only, in this one
 // window.
 
+use crate::images::base64_decode;
 use crate::{lock, recording_dir, sidecar_path, Db, RecordingState, CAM_SIDECAR_EXT};
-use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::OpenOptions;
@@ -189,10 +189,20 @@ fn take_matching(slot: &mut Option<CamSession>, path: &Path) -> Result<CamSessio
 // so a long take never sits in renderer memory. Bytes travel as base64 (camera.js encodes,
 // this decodes): about a third bigger than raw, instead of three to four times for a JSON
 // number array.
+// base64_decode answers malformed input with an empty Vec, so an empty result from non-empty
+// input is the error; an empty chunk stays a valid no-op.
+pub(crate) fn decode_camera_chunk(b64: &str) -> Result<Vec<u8>, String> {
+    let bytes = base64_decode(b64);
+    if bytes.is_empty() && !b64.trim().is_empty() {
+        return Err("invalid camera chunk".to_string());
+    }
+    Ok(bytes)
+}
+
 #[tauri::command]
 pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
     // Decoded before the lock is taken: the synchronous finish commands wait on it.
-    let bytes = base64::engine::general_purpose::STANDARD.decode(bytes_b64).map_err(|e| e.to_string())?;
+    let bytes = decode_camera_chunk(&bytes_b64)?;
     let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
     let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
     if session.output_path != Path::new(&path) {

@@ -395,13 +395,15 @@ pub(crate) fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: 
 // configured recording folder and every name a bare recording file name; anything else
 // reads as 0 without being probed.
 pub(crate) fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String], configured: &Path) -> Vec<u64> {
-    use rayon::prelude::*;
     let dir_ok = path_matches_configured_dir(dir, configured);
     // Probed in parallel (each one is a child process); collect keeps the order of `names`.
-    names
-        .par_iter()
-        .map(|name| if dir_ok && is_bare_recording_name(name) { probe_media_meta(ffprobe, &dir.join(name)).0 } else { 0 })
-        .collect()
+    crate::parallel::par_map(names, |name| {
+        if dir_ok && is_bare_recording_name(name) {
+            probe_media_meta(ffprobe, &dir.join(name)).0
+        } else {
+            0
+        }
+    })
 }
 
 #[tauri::command]

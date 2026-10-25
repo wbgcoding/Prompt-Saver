@@ -74,14 +74,58 @@ pub(crate) fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
 
 // Fill `buf` from the operating system's random source. A machine that cannot supply
 // randomness cannot encrypt safely, so this stops instead of continuing with a weak value.
-fn os_random(buf: &mut [u8]) {
-    use rand::TryRng;
-    rand::rngs::SysRng.try_fill_bytes(buf).expect("operating system random source");
+pub(crate) fn os_random(buf: &mut [u8]) {
+    use ring::rand::SecureRandom;
+    ring::rand::SystemRandom::new().fill(buf).expect("operating system random source");
+}
+
+// A uniform value in 0..n from the operating system's random source. Values from the
+// uneven tail of the 32-bit range are redrawn, so no result is favoured by a modulo bias.
+pub(crate) fn random_below(n: usize) -> usize {
+    if n <= 1 {
+        return 0;
+    }
+    let n = n as u64;
+    let limit = (1u64 << 32) / n * n;
+    loop {
+        let mut b = [0u8; 4];
+        os_random(&mut b);
+        let v = u32::from_le_bytes(b) as u64;
+        if v < limit {
+            return (v % n) as usize;
+        }
+    }
+}
+
+// Fisher-Yates over `random_below`: every order of `items` is equally likely.
+pub(crate) fn shuffle_random<T>(items: &mut [T]) {
+    for i in (1..items.len()).rev() {
+        items.swap(i, random_below(i + 1));
+    }
+}
+
+// AES-256-GCM with no associated data (ring). The output is ciphertext | tag(16); the 12-byte
+// nonce is stored by the caller in front of it. Every call site draws a fresh random nonce.
+pub(crate) fn aead_seal(key: &[u8; 32], nonce: [u8; 12], plain: &[u8]) -> Option<Vec<u8>> {
+    use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+    let key = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).ok()?);
+    let mut buf = plain.to_vec();
+    key.seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::empty(), &mut buf).ok()?;
+    Some(buf)
+}
+
+// Inverse of `aead_seal`; None for a wrong key, any changed byte or a too-short input.
+pub(crate) fn aead_open(key: &[u8; 32], nonce: &[u8], ct_and_tag: &[u8]) -> Option<Vec<u8>> {
+    use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+    let nonce = Nonce::try_assume_unique_for_key(nonce).ok()?;
+    let key = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).ok()?);
+    let mut buf = ct_and_tag.to_vec();
+    let n = key.open_in_place(nonce, Aad::empty(), &mut buf).ok()?.len();
+    buf.truncate(n);
+    Some(buf)
 }
 
 pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {
-    use aes_gcm::aead::{Aead, KeyInit};
-    use aes_gcm::{Aes256Gcm, Key, Nonce};
     let body = deflate(plain)?;
     let mut out = Vec::with_capacity(body.len() + 64);
     out.extend_from_slice(BACKUP_MAGIC);
@@ -102,10 +146,7 @@ pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec
         }
     };
     out.extend_from_slice(&nonce);
-    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key_bytes));
-    let ct = cipher
-        .encrypt(&Nonce::from(nonce), body.as_slice())
-        .map_err(|_| "backup encryption failed".to_string())?;
+    let ct = aead_seal(&key_bytes, nonce, body.as_slice()).ok_or_else(|| "backup encryption failed".to_string())?;
     out.extend_from_slice(&ct);
     Ok(out)
 }
@@ -113,8 +154,6 @@ pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec
 // Ok(Some(json)) = decrypted; Ok(None) = not our format (caller tries plaintext JSON);
 // Err("password-required") = a password-mode backup and no/failed key.
 pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>, String> {
-    use aes_gcm::aead::{Aead, KeyInit};
-    use aes_gcm::{Aes256Gcm, Key, Nonce};
     if data.len() < 5 || &data[0..4] != BACKUP_MAGIC {
         return Ok(None);
     }
@@ -135,19 +174,15 @@ pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Opti
         return Err("corrupt backup".to_string());
     }
     let (nonce, ct) = rest.split_at(12);
-    let nonce = Nonce::try_from(nonce).map_err(|_| "corrupt backup".to_string())?;
-    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key_bytes));
-    let body = cipher
-        .decrypt(&nonce, ct)
-        .map_err(|_| {
-            if matches!(data[4], 0 | 2) {
-                // A fixed-key backup has no password to get wrong; asking for one would send the user after
-                // something that cannot help.
-                "corrupt backup".to_string()
-            } else {
-                "wrong password or corrupt backup".to_string()
-            }
-        })?;
+    let body = aead_open(&key_bytes, nonce, ct).ok_or_else(|| {
+        if matches!(data[4], 0 | 2) {
+            // A fixed-key backup has no password to get wrong; asking for one would send the user after
+            // something that cannot help.
+            "corrupt backup".to_string()
+        } else {
+            "wrong password or corrupt backup".to_string()
+        }
+    })?;
     Ok(Some(if packed { inflate(&body)? } else { body }))
 }
 
@@ -180,14 +215,9 @@ pub(crate) fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32],
 }
 
 pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
-    use aes_gcm::aead::{Aead, KeyInit};
-    use aes_gcm::{Aes256Gcm, Key, Nonce};
     let mut nonce = [0u8; 12];
     os_random(&mut nonce);
-    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
-    let ct = cipher
-        .encrypt(&Nonce::from(nonce), plain.as_bytes())
-        .unwrap_or_default();
+    let ct = aead_seal(key, nonce, plain.as_bytes()).unwrap_or_default();
     let mut out = Vec::with_capacity(SECRET_MAGIC.len() + nonce.len() + ct.len());
     out.extend_from_slice(SECRET_MAGIC);
     out.extend_from_slice(&nonce);
@@ -198,19 +228,13 @@ pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
 // A wrong password and a corrupt ciphertext fail the same way (AEAD tag mismatch), so there
 // is no separate "wrong password" path to get subtly wrong; the cipher itself is the check.
 pub(crate) fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
-    use aes_gcm::aead::{Aead, KeyInit};
-    use aes_gcm::{Aes256Gcm, Key, Nonce};
     let raw = base64_decode(stored);
     if raw.len() < SECRET_MAGIC.len() + 12 || &raw[0..4] != SECRET_MAGIC {
         return Err("corrupt-secret".to_string());
     }
     let nonce = &raw[4..16];
     let ct = &raw[16..];
-    let nonce = Nonce::try_from(nonce).map_err(|_| "corrupt-secret".to_string())?;
-    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
-    let pt = cipher
-        .decrypt(&nonce, ct)
-        .map_err(|_| "wrong-password".to_string())?;
+    let pt = aead_open(key, nonce, ct).ok_or_else(|| "wrong-password".to_string())?;
     String::from_utf8(pt).map_err(|_| "corrupt-secret".to_string())
 }
 

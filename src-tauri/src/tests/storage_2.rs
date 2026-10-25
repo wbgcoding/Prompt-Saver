@@ -289,12 +289,9 @@ fn backups_are_compressed_and_old_ones_still_open() {
     let mut legacy = Vec::from(&BACKUP_MAGIC[..]);
     legacy.push(0);
     {
-        use aes_gcm::aead::{Aead, KeyInit};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
         let nonce = [7u8; 12];
         legacy.extend_from_slice(&nonce);
-        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(BACKUP_FIXED_KEY));
-        legacy.extend_from_slice(&cipher.encrypt(&Nonce::from(nonce), &plain[..]).unwrap());
+        legacy.extend_from_slice(&aead_seal(&BACKUP_FIXED_KEY, nonce, &plain[..]).unwrap());
     }
     assert_eq!(backup_decrypt(&legacy, None).expect("decrypt").expect("psb"), plain);
 }
@@ -1247,15 +1244,16 @@ fn prompts_and_trash_write_together_or_not_at_all() {
 // pinned byte for byte.
 #[test]
 fn argon2_and_aes_gcm_output_match_older_releases() {
-    use aes_gcm::aead::{Aead, KeyInit};
-    use aes_gcm::{Aes256Gcm, Key, Nonce};
     let hex = |b: &[u8]| crate::ffmpeg::hex_lower(b);
     let mut key = [0u8; 32];
     argon2::Argon2::default()
         .hash_password_into(b"correct horse", &[9u8; 16], &mut key)
         .expect("derive");
     assert_eq!(hex(&key), "c5ddcc8506428944319bd9efd13cab76e4f46bd5d76e09a4aa7aa710a8002aaf");
-    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
-    let ct = cipher.encrypt(&Nonce::from([7u8; 12]), &b"hello vault"[..]).expect("encrypt");
+    let ct = aead_seal(&key, [7u8; 12], &b"hello vault"[..]).expect("encrypt");
     assert_eq!(hex(&ct), "48df4ad09197b35aafb5262d4a06e31d0d7a9e9771952bcf318cb5");
+    assert_eq!(aead_open(&key, &[7u8; 12], &ct).expect("decrypt"), b"hello vault");
+    assert!(aead_open(&key, &[8u8; 12], &ct).is_none(), "another nonce does not open it");
+    assert!(aead_open(&key, &[7u8; 11], &ct).is_none(), "a short nonce is refused");
+    assert!(aead_open(&key, &[7u8; 12], &ct[..8]).is_none(), "shorter than a tag is refused");
 }

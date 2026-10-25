@@ -34,6 +34,10 @@ mod store_tests;
 mod trash_tests;
 mod paths_tests;
 mod vault_tests;
+mod parallel_tests;
+#[cfg(windows)]
+mod registry_tests;
+mod crypto_fixtures;
 mod media_files_tests;
 mod video_editor_tests;
 mod views_tests;

@@ -435,9 +435,7 @@ fn ps_single_quote(s: &str) -> String {
 // happened. The nonce is remembered while the request is in flight so the poll finds its
 // own file.
 fn request_nonce() -> String {
-    use rand::RngExt;
-    let mut rng = rand::rng();
-    (0..24).map(|_| char::from(b"abcdefghijklmnopqrstuvwxyz0123456789"[rng.random_range(0..36)])).collect()
+    (0..24).map(|_| char::from(b"abcdefghijklmnopqrstuvwxyz0123456789"[crate::vault::random_below(36)])).collect()
 }
 fn pending_nonces() -> &'static Mutex<std::collections::HashMap<String, String>> {
     static PENDING: OnceLock<Mutex<std::collections::HashMap<String, String>>> = OnceLock::new();
@@ -495,11 +493,10 @@ pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> 
 // rights just granted. PowerShell takes the script as base64 of its UTF-16LE bytes, so no
 // quoting is involved.
 pub(super) fn elevated_params(script: &str) -> Result<String, String> {
-    use base64::Engine;
     let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
     let params = format!(
         "-NoProfile -NonInteractive -EncodedCommand {}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
+        crate::images::base64_encode(&bytes)
     );
     // CreateProcess accepts a command line of at most 32767 characters.
     if params.len() > 30_000 {
@@ -593,9 +590,8 @@ fn elevation_denied_by_policy() -> bool {
     if account_can_elevate() {
         return false;
     }
-    winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
-        .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")
-        .and_then(|k| k.get_value::<u32, _>("ConsentPromptBehaviorUser"))
+    crate::registry::Key::open_read(crate::registry::Hive::LocalMachine, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")
+        .and_then(|k| k.get_u32("ConsentPromptBehaviorUser"))
         .map(|v| v == 0)
         .unwrap_or(false)
 }

@@ -299,6 +299,14 @@ fn a_camera_window_without_its_permission_handler_is_destroyed() {
 }
 
 #[test]
+fn a_camera_chunk_decodes_and_garbage_is_an_error() {
+    assert_eq!(crate::camera::decode_camera_chunk("AQID").unwrap(), vec![1u8, 2, 3]);
+    assert_eq!(crate::camera::decode_camera_chunk("").unwrap(), Vec::<u8>::new(), "an empty chunk is a no-op");
+    assert!(crate::camera::decode_camera_chunk("not base64!").is_err());
+    assert!(crate::camera::decode_camera_chunk("AQ#D").is_err());
+}
+
+#[test]
 fn a_failed_camera_sidecar_write_is_reported() {
     let root = std::env::temp_dir().join(format!("ps-camside-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);

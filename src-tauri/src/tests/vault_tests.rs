@@ -211,3 +211,43 @@ fn a_dropped_secret_session_leaves_no_key_bytes() {
     unsafe { std::mem::ManuallyDrop::drop(&mut sess) };
     assert_eq!(sess.key, [0u8; 32], "the key must be zeroed on drop");
 }
+
+// The shuffle behind the random rotation order: each of the 24 orders of four items comes up
+// about equally often, so no entry is favoured. 10 000 shuffles give about 417 per order with a
+// spread near 20; the bounds sit far outside that.
+#[test]
+fn the_secure_shuffle_is_roughly_uniform_over_four_items() {
+    let mut counts = std::collections::HashMap::new();
+    for _ in 0..10_000 {
+        let mut v = [0u8, 1, 2, 3];
+        shuffle_random(&mut v);
+        *counts.entry(v).or_insert(0u32) += 1;
+    }
+    assert_eq!(counts.len(), 24, "every order must be reachable");
+    for (order, n) in &counts {
+        assert!((280..=560).contains(n), "order {order:?} came up {n} times of 10000");
+    }
+    let mut empty: [u8; 0] = [];
+    shuffle_random(&mut empty);
+    let mut one = [7u8];
+    shuffle_random(&mut one);
+    assert_eq!(one, [7]);
+}
+
+#[test]
+fn random_below_stays_in_range_and_covers_it() {
+    assert_eq!(random_below(0), 0);
+    assert_eq!(random_below(1), 0);
+    let mut seen = [false; 36];
+    for _ in 0..2_000 {
+        let v = random_below(36);
+        assert!(v < 36);
+        seen[v] = true;
+    }
+    assert!(seen.iter().all(|&s| s), "all 36 values show up in 2000 draws");
+    let mut a = [0u8; 32];
+    let mut b = [0u8; 32];
+    os_random(&mut a);
+    os_random(&mut b);
+    assert_ne!(a, b, "two draws of 32 bytes differ");
+}

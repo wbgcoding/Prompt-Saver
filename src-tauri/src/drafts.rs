@@ -24,8 +24,7 @@ pub(crate) async fn stat_file(path: String) -> Result<(i64, i64), String> {
 // does not list recording paths or text overlay contents in clear. A row in the legacy form
 // (plain "kind:path" id, plain columns) is still found through its legacy id.
 pub(crate) fn edit_state_id(kind: &str, target: &str) -> String {
-    use sha2::{Digest, Sha256};
-    format!("{kind}:{}", crate::ffmpeg::hex_lower(&Sha256::digest(target.as_bytes())))
+    format!("{kind}:{}", crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(target.as_bytes())))
 }
 
 pub(crate) fn edit_state_legacy_id(kind: &str, target: &str) -> String {
