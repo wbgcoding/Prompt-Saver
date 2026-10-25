@@ -127,7 +127,7 @@ fn attachment_source_trust_compares_resolved_paths() {
     let none: HashSet<String> = HashSet::new();
     let upper = inside.to_uppercase();
     if Path::new(&upper).exists() {
-        assert!(crate::asset_scope::attachment_source_trusted(&upper, &[root.clone()], &none));
+        assert!(crate::asset_scope::attachment_source_trusted(&upper, std::slice::from_ref(&root), &none));
     }
     let _ = fs::remove_dir_all(&base);
 }

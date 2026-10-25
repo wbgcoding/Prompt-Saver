@@ -1428,9 +1428,7 @@ fn copy_log_migration_writes_nothing_while_read_only() {
     let dir = ddlock_test_dir("migrate-ro");
     let mut conn = db_conn_at(&dir).unwrap();
     let legacy = || {
-        let mut s = Settings::default();
-        s.copy_log = vec![CopyEntry { id: "b".into(), ts: 20 }, CopyEntry { id: "a".into(), ts: 10 }];
-        s
+        Settings { copy_log: vec![CopyEntry { id: "b".into(), ts: 20 }, CopyEntry { id: "a".into(), ts: 10 }], ..Default::default() }
     };
     let rows = |c: &Connection| -> i64 { c.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap() };
     let marker = |c: &Connection| c.query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(())).is_ok();
