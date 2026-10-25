@@ -28,7 +28,8 @@ impl SyncRoundHost for RigHost<'_> {
     fn on_replace(&self, _settings: &Settings, old: &Prompt, _updated: &Prompt) {
         self.0.replaced.lock().unwrap().push(old.text.clone());
     }
-    fn save(&self, _store: &Store, prompts_changed: bool, _settings_changed: bool) {
+    fn on_trashed(&self, _ids: &[String]) {}
+    fn save(&self, _store: &Store, prompts_changed: bool, _settings_changed: bool, _trash_changed: bool) {
         // The app saves the prompts, and that save queues the folder write.
         if prompts_changed {
             self.0.dirty.store(true, Ordering::SeqCst);
@@ -159,6 +160,17 @@ impl SyncInst {
         let now = self.now();
         let moved = delete_prompt_core(&mut self.lock(), id, now, |_, _| true).unwrap();
         assert!(moved, "{}: no prompt {id} to delete", self.name);
+        self.dirty.store(true, Ordering::SeqCst);
+    }
+
+    // The user restores a prompt from the trash.
+    pub(super) fn restore(&self, id: &str) {
+        let mut s = self.lock();
+        let pos = s.trash.iter().position(|p| p.id == id).unwrap_or_else(|| panic!("{}: no trashed prompt {id}", self.name));
+        let mut p = s.trash.remove(pos);
+        p.trashed_at = 0;
+        s.prompts.push(p);
+        drop(s);
         self.dirty.store(true, Ordering::SeqCst);
     }
 
@@ -574,4 +586,126 @@ fn multi_activating_with_an_older_library_does_not_push_it_back_into_the_folder(
     assert_eq!(rig.a.get(&id).unwrap().text, "new text");
     assert!(rig.conflict_copies().is_empty(), "a conflict copy appeared: {:?}", rig.conflict_copies());
     rig.assert_converged();
+}
+
+#[test]
+fn multi_a_prompt_deleted_on_a_is_gone_on_b_and_never_comes_back() {
+    let rig = Rig::new();
+    let id = rig.a.add("Doomed", "short lived");
+    let keep = rig.a.add("Stays", "survivor");
+    rig.settle();
+    assert!(rig.b.get(&id).is_some());
+    rig.a.delete(&id);
+    rig.settle();
+    assert!(rig.b.get(&id).is_none(), "B still has the deleted prompt");
+    assert!(rig.a.get(&id).is_none(), "the deleted prompt came back on A");
+    assert!(rig.b.in_trash(&id), "B should have trashed its copy, not dropped it");
+    assert!(rig.b.get(&keep).is_some());
+    rig.assert_converged();
+}
+
+
+#[test]
+fn multi_b_edits_a_prompt_a_has_deleted_and_the_edit_survives() {
+    let rig = Rig::new();
+    let id = rig.a.add("Contested", "original");
+    rig.settle();
+    rig.a.delete(&id);
+    rig.a.step(&rig.dir);
+    rig.tick(3);
+    // B has not seen the delete yet and edits.
+    rig.b.edit(&id, |p| p.text = "edited after the delete".into());
+    rig.settle();
+    assert!(rig.holds_text("edited after the delete"), "B's edit was lost");
+    // Whichever side wins, both end in the same state.
+    rig.assert_converged();
+}
+
+
+#[test]
+fn multi_clocks_ten_minutes_apart_still_converge() {
+    let rig = Rig::new();
+    rig.a.skew(-600);
+    rig.b.skew(600);
+    let id = rig.a.add("Skewed", "one");
+    rig.settle();
+    rig.b.edit(&id, |p| p.text = "two".into());
+    rig.settle();
+    rig.a.edit(&id, |p| p.text = "three".into());
+    rig.settle();
+    assert_eq!(rig.b.get(&id).unwrap().text, "three");
+    let gone = rig.a.add("Skewed away", "x");
+    rig.settle();
+    rig.b.delete(&gone);
+    rig.settle();
+    assert!(rig.a.get(&gone).is_none(), "the delete did not cross the skew");
+    rig.assert_converged();
+}
+
+
+#[test]
+fn multi_a_restored_prompt_gets_its_file_back_and_b_does_not_sweep_it() {
+    let rig = Rig::new();
+    let id = rig.a.add("Back again", "restored text");
+    rig.settle();
+    rig.a.delete(&id);
+    rig.settle();
+    assert!(rig.b.in_trash(&id));
+    rig.a.restore(&id);
+    rig.settle();
+    assert!(rig.a.get(&id).is_some(), "the restored prompt vanished again on A");
+    assert!(rig.dir.join(format!("{id}.md")).exists(), "the restored prompt has no file");
+    assert!(!rig.dir.join(format!("{id}.deleted")).exists(), "the old delete marker stayed and would trash it elsewhere");
+    // B keeps its trash copy (a trashed prompt is never imported as new); restoring it there is
+    // the user's move.
+    assert!(rig.b.in_trash(&id));
+    rig.b.restore(&id);
+    rig.settle();
+    rig.assert_converged();
+}
+
+
+#[test]
+fn multi_a_delete_marker_expires_after_thirty_days_and_a_young_one_stays() {
+    let rig = Rig::new();
+    let id = rig.a.add("Gone", "x");
+    rig.settle();
+    rig.a.delete(&id);
+    rig.settle();
+    let tomb = rig.dir.join(format!("{id}.deleted"));
+    assert!(tomb.exists(), "the delete left no marker");
+    rig.tick(29 * 86400);
+    rig.settle();
+    assert!(tomb.exists(), "the marker went before its time");
+    rig.tick(2 * 86400);
+    rig.a.settings(|_| {});
+    rig.settle();
+    assert!(!tomb.exists(), "the marker outlived its thirty days");
+    rig.assert_converged();
+}
+
+
+#[test]
+fn multi_a_delete_marker_does_not_trash_a_confidential_prompt_of_the_same_id() {
+    let rig = Rig::new();
+    let id = rig.a.add("Shared", "x");
+    rig.settle();
+    rig.b.edit(&id, |p| p.secret = true);
+    rig.a.delete(&id);
+    rig.settle();
+    assert!(rig.b.get(&id).is_some_and(|p| p.secret), "B's confidential prompt was trashed by a remote delete");
+}
+
+
+#[test]
+fn multi_leaving_a_folder_removes_the_delete_markers_it_holds_and_names_a_stranger() {
+    let rig = Rig::new();
+    let id = rig.a.add("Gone", "x");
+    rig.settle();
+    rig.a.delete(&id);
+    rig.settle();
+    fs::write(rig.dir.join("abc.deleted"), "not a time").unwrap();
+    let scan = sync_dir_scan(&rig.dir);
+    assert_eq!(scan.foreign, vec!["abc.deleted".to_string()]);
+    assert!(scan.ours.iter().any(|p| p.file_name().is_some_and(|n| n.to_string_lossy() == format!("{id}.deleted"))));
 }

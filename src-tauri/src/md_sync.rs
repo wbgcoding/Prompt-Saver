@@ -27,6 +27,10 @@ pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
 // After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
 // pauses, says so once, and retries only every SYNC_PAUSED_FACTOR intervals.
 pub(crate) const SYNC_FAIL_MAX: u32 = 5;
+/// A tombstone (`<id>.deleted`, the delete time as text) stays this long. Every instance that
+/// opens the folder within that time learns about the delete; one that comes back later than
+/// that finds the file gone and, holding a copy, writes it again.
+pub(crate) const SYNC_TOMB_SECS: u64 = 30 * 86400;
 pub(crate) const SYNC_PAUSED_FACTOR: u64 = 10;
 
 pub(crate) fn sync_enabled(settings: &Settings) -> bool {
@@ -747,6 +751,8 @@ pub(crate) struct SyncState {
     pub(crate) known: Mutex<std::collections::HashSet<String>>,
     pub(crate) written: Mutex<SyncWrittenMap>,
     pub(crate) synced: Mutex<SyncSyncedMap>,
+    /// Tombstones this instance has acted on, per file: path -> the text the file held.
+    pub(crate) tombs: Mutex<HashMap<String, String>>,
     pub(crate) health: Mutex<SyncHealth>,
     /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
     /// test sets it, to play the role of a machine with a skewed clock.
@@ -914,6 +920,87 @@ pub(crate) fn sync_synced_note(path: &Path, render_hash: u64) {
 
 pub(crate) fn sync_synced_is(path: &Path, render_hash: u64) -> bool {
     sync_synced_lock().get(&sync_seen_key(path)) == Some(&render_hash)
+}
+
+// ---- Tombstones ----
+//
+// A file that simply vanishes tells another instance nothing: it still holds the prompt and
+// writes the file again, and the delete is undone. So the delete leaves `<id>.deleted` behind
+// (the time as text), written before the prompt's file is removed. An instance that sees one
+// for a prompt it holds moves its copy to its own trash and does not write the file; one that
+// has acted on a tombstone and later holds the prompt again (a restore from the trash) removes
+// it with its next write.
+
+pub(crate) fn sync_tomb_path(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.deleted"))
+}
+
+fn sync_tomb_read(path: &Path) -> Option<String> {
+    let bytes = read_file_capped(path, 256).ok()?;
+    Some(String::from_utf8_lossy(&bytes).trim().to_string())
+}
+
+fn sync_tomb_handled(path: &Path, content: &str) -> bool {
+    sync_state().tombs.lock().unwrap_or_else(|e| e.into_inner()).get(&sync_seen_key(path)).is_some_and(|c| c == content)
+}
+
+fn sync_tomb_note(path: &Path, content: &str) {
+    sync_state().tombs.lock().unwrap_or_else(|e| e.into_inner()).insert(sync_seen_key(path), content.to_string());
+}
+
+// Leaves the tombstone of a prompt this instance is about to remove from the folder. False
+// when it could not be written: the file then stays, and the next sweep tries again.
+fn sync_tomb_put(dir: &Path, stem: &str) -> bool {
+    let path = sync_tomb_path(dir, stem);
+    let content = sync_now_secs().to_string();
+    if write_bytes_atomic_strict(&path, content.as_bytes()).is_err() {
+        append_crash_log(&format!("prompt-sync: the delete marker of {stem} could not be written"));
+        return false;
+    }
+    sync_tomb_note(&path, &content);
+    true
+}
+
+// Whether the prompt's file may be written. A tombstone this instance has not acted on yet
+// blocks it (the poll trashes the copy first); one it has acted on is a prompt that came back
+// and is removed here.
+fn sync_tomb_allows_write(dir: &Path, stem: &str) -> bool {
+    let path = sync_tomb_path(dir, stem);
+    let Some(content) = sync_tomb_read(&path) else { return true };
+    if sync_tomb_handled(&path, &content) {
+        let _ = fs::remove_file(&path);
+        return true;
+    }
+    false
+}
+
+// The tombstones in the folder: (prompt id, path, content).
+fn sync_tombs_in(dir: &Path) -> Vec<(String, PathBuf, String)> {
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.extension().and_then(|x| x.to_str()) != Some("deleted") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|x| x.to_str()).filter(|s| sync_safe_id(s)).map(str::to_string) else { continue };
+        if let Some(content) = sync_tomb_read(&path) {
+            out.push((stem, path, content));
+        }
+    }
+    out
+}
+
+// An old tombstone goes; so does one nobody can read the time from, once its file is as old.
+fn sync_tomb_expired(path: &Path, content: &str) -> bool {
+    match content.parse::<u64>() {
+        Ok(at) => sync_now_secs().saturating_sub(at) > SYNC_TOMB_SECS,
+        Err(_) => fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|d| d.as_secs() > SYNC_TOMB_SECS),
+    }
 }
 
 // What the app would write for `p` right now, as the hash `sync_synced_note` keeps.
@@ -1113,6 +1200,9 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
         let on_disk = fs::read(&path).unwrap_or_default();
+        if on_disk.is_empty() && !sync_tomb_allows_write(&dir, &p.id) {
+            continue; // another instance deleted this prompt: the poll moves our copy to the trash
+        }
         if on_disk == content.as_bytes() {
             sync_file_note_current(&path, hash);
             sync_synced_note(&path, hash);
@@ -1262,6 +1352,13 @@ pub(crate) fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::
     let Ok(entries) = fs::read_dir(dir) else { return };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
+        if name.strip_suffix(".deleted").is_some_and(sync_safe_id) {
+            let path = e.path();
+            if sync_tomb_read(&path).is_some_and(|c| sync_tomb_expired(&path, &c)) {
+                let _ = fs::remove_file(&path);
+            }
+            continue;
+        }
         if !name.ends_with(".md") || name == "AGENTS.md" || wanted.contains(&name) {
             continue;
         }
@@ -1289,6 +1386,9 @@ pub(crate) fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::
             .is_some_and(|(fields, _)| md_is_ours(&fields));
         let stem = name.trim_end_matches(".md");
         if ours && !is_live(stem) {
+            if !sync_tomb_put(dir, stem) {
+                continue;
+            }
             let _ = fs::remove_file(&path);
             sync_known_lock().remove(&sync_seen_key(&path));
         }
@@ -1485,6 +1585,9 @@ pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
     // folder's entries: the map also holds other folders' files (the previous folder
     // after a switch), whose records a scan of this one has no business dropping.
     sync_seen_lock().retain(|key, _| Path::new(key).parent() != Some(dir) || present.contains(key));
+    // A file that vanished is not known any more: if it comes back it is somebody's new file,
+    // not one this instance may sweep.
+    sync_known_lock().retain(|key| Path::new(key).parent() != Some(dir) || present.contains(key));
     Ok((to_read, files, all))
 }
 
@@ -1506,7 +1609,9 @@ pub(crate) trait SyncRoundHost {
     fn on_replace(&self, settings: &Settings, old: &Prompt, updated: &Prompt);
     /// Persist what the round changed (settings first, as `save_settings` and
     /// `save_prompts` are separate writes).
-    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool);
+    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool, trash_changed: bool);
+    /// Prompts the round moved to the trash (their pills, hotkeys and windows let go).
+    fn on_trashed(&self, ids: &[String]);
     /// Every open window still holds what it fetched last.
     fn notify(&self);
 }
@@ -1535,7 +1640,18 @@ impl SyncRoundHost for AppRoundHost<'_> {
         }
     }
 
-    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool) {
+    fn on_trashed(&self, ids: &[String]) {
+        for id in ids {
+            close_floating_window(self.0, id);
+            if let Some(conn) = db_conn(self.0) {
+                discard_editor_draft_if(&conn, |t| t == id);
+            }
+        }
+        rearm_hotkeys(self.0);
+        sync_float_windows(self.0);
+    }
+
+    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool, trash_changed: bool) {
         // Prompts and Settings are saved separately (save_prompts never touches settings): without
         // this a placement-only change would be echoed back out by save_prompts'
         // spawn_sync_write_all and then lost on restart while the file kept claiming the new
@@ -1543,7 +1659,9 @@ impl SyncRoundHost for AppRoundHost<'_> {
         if settings_changed {
             save_settings(self.0, &store.settings);
         }
-        if prompts_changed {
+        if trash_changed {
+            save_prompts_and_trash(self.0, store);
+        } else if prompts_changed {
             save_prompts(self.0, store);
         }
     }
@@ -1570,6 +1688,44 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
 
 fn path_of(dir: &Path, stem: &str) -> PathBuf {
     dir.join(format!("{stem}.md"))
+}
+
+// Acts on the folder's delete markers: a prompt the library still holds is moved to its trash
+// (never dropped, so a local edit made meanwhile stays recoverable). Called with the folder
+// lock held.
+fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
+    let tombs = sync_tombs_in(dir);
+    if tombs.is_empty() {
+        return;
+    }
+    let mut trashed: Vec<String> = Vec::new();
+    {
+        let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        for (stem, path, content) in &tombs {
+            if sync_tomb_handled(path, content) {
+                continue;
+            }
+            sync_tomb_note(path, content);
+            if sync_tomb_expired(path, content) {
+                continue;
+            }
+            // A confidential prompt is not part of the folder, so a delete there is not its.
+            if store.prompts.iter().any(|p| &p.id == stem && !p.secret)
+                && matches!(crate::prompts::delete_prompt_core(&mut store, stem, now_secs(), |_, _| true), Ok(true))
+            {
+                trashed.push(stem.clone());
+            }
+        }
+        if trashed.is_empty() {
+            return;
+        }
+        host.save(&store, true, true, true);
+    }
+    host.on_trashed(&trashed);
+    host.notify();
 }
 
 pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
@@ -1616,6 +1772,7 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
             }
         }
     }
+    sync_poll_tombstones(db, &dir, host);
     if to_read.is_empty() {
         return; // nothing changed: no prompt or settings copy is made
     }
@@ -1691,7 +1848,7 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
             sync_synced_note(&path_of(&dir, stem), sync_render_hash(p, &store.settings));
         }
     }
-    host.save(&store, changed, settings_changed);
+    host.save(&store, changed, settings_changed, false);
     drop(store);
     if changed || settings_changed {
         host.notify();
@@ -1738,6 +1895,8 @@ pub(crate) fn sync_dir_scan(dir: &Path) -> SyncDirScan {
                     .is_some_and(|(fields, _)| md_is_ours(&fields))
         } else if let Some(rest) = name.strip_suffix(".md.lock") {
             sync_safe_id(rest) // our own write lock, cleared by whoever holds it
+        } else if let Some(rest) = name.strip_suffix(".deleted") {
+            sync_safe_id(rest) && sync_tomb_read(&path).is_some_and(|c| c.parse::<u64>().is_ok()) // a delete marker: only a time
         } else {
             // Deliberately NOT the `.tmp` half of an interrupted write of ours: a
             // file called "notes.tmp" could just as easily be the user's own, and
