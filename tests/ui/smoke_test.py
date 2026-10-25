@@ -13,7 +13,7 @@ directions, since it only ever appears during startup. Skips cleanly when no
 Chromium browser is installed.
 
 The suites live in the smoke/ folder next to this file: main_walk, side_windows,
-video, boots, video_expert (video.run_expert) and findings.
+video, video_edit, boots, video_expert (video.run_expert) and findings.
 
 Run:  python tests/ui/smoke_test.py [--only SUITE]...
 Exit: 0 = clean, 1 = problems found.
@@ -26,7 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke import boots, findings, logic, main_walk, side_windows, video
+from smoke import boots, findings, logic, main_walk, side_windows, video, video_edit
 from smoke.harness import REPO, HERE, CHROME_CANDIDATES, install_manifest_recorder
 
 # Run order: the single boots come before the video expert boot, the generated findings last.
@@ -34,6 +34,7 @@ SUITES = (
     ("main_walk", main_walk.run),
     ("side_windows", side_windows.run),
     ("video", video.run),
+    ("video_edit", video_edit.run),
     ("boots", boots.run),
     ("logic", logic.run),
     ("video_expert", video.run_expert),

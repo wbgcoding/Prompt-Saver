@@ -13,6 +13,7 @@ import { APP_NAME } from "./brand.js";
 import { errMessageLogged } from "./errors.js";
 import { LANGS, fullTexts, loadLang } from "./i18n.js";
 import { createColorPop } from "./colorpop.js";
+import { insertWinButtons, wireWinButtons } from "./winButtons.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
@@ -206,6 +207,9 @@ export function t(key) {
 const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
 const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
 
+// Re-reads the labels of the minimize and maximize buttons; set once the bar is wired.
+let syncWinButtons = null;
+
 function applyI18n() {
   if (!TXT_READY) return;
   document.documentElement.lang = LANG;
@@ -228,6 +232,7 @@ function applyI18n() {
   updateVolumeValueText("ve-vol-sys");
   updateVolumeValueText("ve-vol-mic");
   renderPlayhead();
+  if (syncWinButtons) syncWinButtons();
 }
 
 export async function loadTexts(settings) {
@@ -1364,6 +1369,8 @@ for (const tab of document.querySelectorAll(".ve-tab")) {
 $("ve-export-open").addEventListener("click", () => { showPanel("ve-panel-export"); $("ve-export-start").focus(); });
 
 $("ve-close").addEventListener("click", () => closeWindow());
+// The window has no OS title bar, so the bar carries minimize and maximize/restore too.
+syncWinButtons = wireWinButtons({ win: appWin, ...insertWinButtons($("ve-close"), "ve"), translate: t });
 $("ve-shortcuts").addEventListener("click", () => openShortcutsModal("videoEditor"));
 $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
 $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });

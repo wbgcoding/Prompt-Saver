@@ -595,6 +595,9 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Window buttons in the screenshot editor.** The editor bar now has minimize and
   maximize/restore buttons next to the close button. Drag the bar or its title to move
   the window, double-click it to maximize or restore.
+- **Video editor bar.** The whole bar now drags the window (the file name and title
+  too, not only the empty strip), as does the camera window bar. The editor also
+  has minimize and maximize/restore buttons next to the close button.
 - **Expert menu cards sit without gaps.** The cards of a tab now fill columns
   from top to bottom, so a short card is followed by the next card instead of
   empty space. The reading order is therefore column by column, not row by row.
