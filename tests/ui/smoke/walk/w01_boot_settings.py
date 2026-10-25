@@ -294,6 +294,36 @@ SECTION = """\
         if (filtered.length > 1 && !filtered[0].classList.contains('collapsed')) {
           out.errors.push('help search results with more than one hit are not collapsed by default');
         }
+        // 998: a word that only the tip contains is marked there, and the article opens.
+        search.value = 'eyes';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        const tipMark = document.querySelector('#help-body .help-tip mark.help-mark');
+        if (!tipMark) out.errors.push('998: a word found only in a tip is not marked in the tip');
+        else if (tipMark.closest('.help-group').classList.contains('collapsed')) {
+          out.errors.push('998: the article with the hit in its tip stays collapsed');
+        }
+        // Several hits, every article whose marked word sits below the overview opens.
+        search.value = 'toast';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        let deepHits = 0;
+        for (const g of groups()) {
+          if (g.querySelector('.help-happens mark, .help-settings mark, .help-tip mark, .help-steps mark')) {
+            deepHits++;
+            if (g.classList.contains('collapsed')) out.errors.push('998: an article with a hit below its overview is collapsed');
+          }
+        }
+        if (!deepHits) out.errors.push('998: no article shows a marked word below its overview');
+        // Running help text is in full contrast, not the muted color.
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        const fgCol = getComputedStyle(document.querySelector('#help-body')).color;
+        for (const sel of ['.help-happens', '.help-settings', '.help-tip']) {
+          const el = document.querySelector('#help-body ' + sel);
+          if (el && getComputedStyle(el).color !== fgCol) out.errors.push('998: ' + sel + ' is not in the normal text color');
+        }
         search.value = 'zzz_no_such_help_topic_zzz';
         search.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(200);

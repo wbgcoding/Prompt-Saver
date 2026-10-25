@@ -2455,10 +2455,10 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    actual instructions, not secondary detail. */
 .help-steps { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
 .help-steps li { margin-bottom: 2px; }
-/* "What happens" is detail (storage, side effects, limits), not the lead sentence:
-   muted like a settings row so the two paragraphs don't read as equally important. */
-.help-happens { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
-.help-settings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--fg); }
+/* "What happens" is detail (storage, side effects, limits) but still body text: full
+   contrast, set apart from the lead sentence by a thin rule at its left edge. */
+.help-happens { margin: 0; padding-left: 8px; border-left: 2px solid var(--border); font-size: 13px; line-height: 1.5; color: var(--fg); }
+.help-settings { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
 .help-settings li { margin-bottom: 2px; }
 .help-tip {
   display: flex;
@@ -2469,7 +2469,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   border-radius: 8px;
   background: var(--surface-2);
   font-size: 12px;
-  color: var(--muted);
+  color: var(--fg);
 }
 .help-tip-ico { flex: 0 0 auto; color: var(--accent); }
 /* Inline copy of a real button's icon, dropped in place of {icon:key} in
