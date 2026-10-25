@@ -1216,7 +1216,7 @@ export default {
     flagPromptSync: "Prompts als Markdown-Dateien synchronisieren",
     syncBackupFailed: "Die Sicherung vor der ersten Synchronisierung ist fehlgeschlagen, deshalb bleibt die Synchronisierung aus. Sicherungsordner prüfen und erneut versuchen.",
     syncWriteFailed: "Der Synchronisierungsordner konnte nicht beschrieben werden, deshalb bleibt die Synchronisierung aus. Ordner prüfen und erneut versuchen.",
-    tipPromptSync: "Spiegelt jeden reinen Textprompt als .md-Datei, die sich von Hand bearbeiten lässt, inklusive Ansicht, Rasterposition und Ordner. Beta: beim Einschalten läuft automatisch eine Sicherung.",
+    tipPromptSync: "Spiegelt jeden reinen Textprompt als .md-Datei, die sich von Hand bearbeiten lässt, inklusive Ansicht, Rasterposition und Ordner. Beim Einschalten läuft automatisch eine Sicherung.",
     syncPlaintextConfirm: "Anders als die Datenbank sind die dabei entstehenden .md-Dateien Klartext: Jeder mit Zugriff auf den Sync-Ordner kann deine Prompts lesen. Vermeide für Sensibles einen synchronisierten oder freigegebenen Ordner.",
     syncPlaintextConfirmOk: "Trotzdem einschalten",
     valSyncDir: "Sync-Ordner",

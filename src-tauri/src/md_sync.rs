@@ -14,8 +14,9 @@ pub(crate) use health::*;
 // position sync (an imported prompt lands in the first free cell of the active view); no
 // hotkey sync (it has its own conflict invariants); conflicts resolve as "whichever side
 // changed since the last successful sync wins this cycle, the other is retried next".
-// Worst case a change waits one poll interval. Beta: there is no multi-instance
-// crash-simulation stress test yet.
+// Worst case a change waits one poll interval. Several instances sharing one folder are
+// exercised by the two-instance rig in tests/md_sync_multi.rs (crashes, clock skew, locks,
+// deletes, renames).
 pub(crate) const SYNC_POLL_SECS: u64 = 5;
 
 // A lock is held only around one small file write, so 15 s is far past any real one. The

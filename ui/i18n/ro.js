@@ -1244,7 +1244,7 @@ export default {
     flagPromptSync: "Sincronizează prompturile ca fișiere Markdown",
     syncBackupFailed: "Copia de siguranță dinaintea primei sincronizări a eșuat: sincronizarea rămâne oprită. Verifică folderul de copii și încearcă din nou.",
     syncWriteFailed: "Nu s-a putut scrie în folderul de sincronizare: sincronizarea rămâne oprită. Verifică folderul și încearcă din nou.",
-    tipPromptSync: "Reflectă fiecare prompt doar-text ca fișier .md editabil manual, inclusiv vizualizarea, poziția în grilă și folderul acestuia. Beta: la activare se face automat o copie de rezervă.",
+    tipPromptSync: "Reflectă fiecare prompt doar-text ca fișier .md editabil manual, inclusiv vizualizarea, poziția în grilă și folderul acestuia. La activare se face automat o copie de rezervă.",
     syncPlaintextConfirm: "Spre deosebire de baza de date, fișierele .md create astfel sunt text simplu: oricine are acces la folderul de sincronizare îți poate citi prompturile. Evită un folder sincronizat sau partajat pentru conținut sensibil.",
     syncPlaintextConfirmOk: "Activează oricum",
     valSyncDir: "Folder de sincronizare",

@@ -248,7 +248,7 @@ export const OPT_FLAG_LABELS = {
   // Off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
   multiViewPrompt: "flagMultiViewPrompt",
-  // Prompt-folders-as-Markdown (beta: see the module note above sync_enabled() in
+  // Prompt-folders-as-Markdown (see the module note at the top of
   // md_sync.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
@@ -492,7 +492,7 @@ export const EXPERT_TABS = [
     // Copying several different prompts as one text.
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form, plus the
-    // Markdown mirror of prompt folders (beta, text-only prompts as .md files).
+    // Markdown mirror of prompt folders (text-only prompts as .md files).
     { title: "expGroupFolders", flags: ["floating", "folders", "promptSync"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"], paths: ["syncDir"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.

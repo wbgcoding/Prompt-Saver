@@ -1244,7 +1244,7 @@ export default {
     flagPromptSync: "Sincronizza i prompt come file Markdown",
     syncBackupFailed: "Il backup di sicurezza prima della prima sincronizzazione non è riuscito: la sincronizzazione resta disattivata. Controlla la cartella dei backup e riprova.",
     syncWriteFailed: "Non è stato possibile scrivere nella cartella di sincronizzazione: la sincronizzazione resta disattivata. Controlla la cartella e riprova.",
-    tipPromptSync: "Rispecchia ogni prompt di solo testo come file .md modificabile a mano, incluse la sua vista, posizione nella griglia e cartella. Beta: viene eseguito un backup automatico all'attivazione.",
+    tipPromptSync: "Rispecchia ogni prompt di solo testo come file .md modificabile a mano, incluse la sua vista, posizione nella griglia e cartella. Viene eseguito un backup automatico all'attivazione.",
     syncPlaintextConfirm: "A differenza del database, i file .md creati sono testo semplice, quindi chiunque abbia accesso alla cartella di sincronizzazione può leggere i tuoi prompt. Evita una cartella sincronizzata o condivisa per contenuti sensibili.",
     syncPlaintextConfirmOk: "Attiva comunque",
     valSyncDir: "Cartella di sincronizzazione",

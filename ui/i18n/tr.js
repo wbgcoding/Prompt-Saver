@@ -1244,7 +1244,7 @@ export default {
     flagPromptSync: "İstemleri Markdown dosyaları olarak eşitle",
     syncBackupFailed: "İlk eşitleme öncesi güvenlik yedeği başarısız oldu; eşitleme kapalı kalıyor. Yedek klasörünü kontrol edip yeniden deneyin.",
     syncWriteFailed: "Eşitleme klasörüne yazılamadı; eşitleme kapalı kalıyor. Klasörü kontrol edip yeniden deneyin.",
-    tipPromptSync: "Yalnızca metin içeren her istemi görünümü, ızgara konumu ve klasörü dahil olmak üzere elle düzenlenebilir bir .md dosyası olarak yansıtır. Beta: açıldığı anda otomatik yedek alınır.",
+    tipPromptSync: "Yalnızca metin içeren her istemi görünümü, ızgara konumu ve klasörü dahil olmak üzere elle düzenlenebilir bir .md dosyası olarak yansıtır. Açıldığı anda otomatik yedek alınır.",
     syncPlaintextConfirm: "Veritabanının aksine, oluşturulan .md dosyaları düz metindir: senkronizasyon klasörüne erişimi olan herkes istemlerini okuyabilir. Hassas içerikler için senkronize veya paylaşılan bir klasörden kaçının.",
     syncPlaintextConfirmOk: "Yine de aç",
     valSyncDir: "Eşitleme klasörü",
