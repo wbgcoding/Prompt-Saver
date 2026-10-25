@@ -822,6 +822,13 @@ pub(crate) fn export_file_name_from(name: &str, fallback: &str) -> String {
 // Exporting a file over itself would have ffmpeg read and overwrite one file, so it is
 // refused rather than left to reserve_unique_dest_path. dest need not exist, so only its
 // parent is canonicalized; names compare case-insensitively, as Windows does.
+// The text gate for the paths of an export request other than its source: the destination and
+// every media file. Decided on text alone and before any fs call, so a refused UNC spelling
+// never makes this machine contact a host.
+pub(crate) fn export_request_paths_refused(own_dirs: &[PathBuf], dest_path: &str, media_paths: &[String]) -> bool {
+    is_foreign_network_path(dest_path, own_dirs) || media_paths.iter().any(|m| is_foreign_network_path(m, own_dirs))
+}
+
 pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     let Ok(src_canon) = fs::canonicalize(src) else { return false };
     let dest_parent = dest.parent().unwrap_or_else(|| Path::new("."));
@@ -1026,6 +1033,9 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     if is_foreign_network_path(&req.src_path, &own_dirs) {
         return Err("source-not-allowed".to_string());
     }
+    if export_request_paths_refused(&own_dirs, &req.dest_path, &req.media_paths) {
+        return Err("export destination not recognized".to_string());
+    }
     let src = PathBuf::from(&req.src_path);
     if !src.is_file() {
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
@@ -1187,6 +1197,7 @@ pub(crate) async fn export_recordings_batch(
     // The batch dialog lists only this app's own recordings, so nothing else may
     // be handed to ffmpeg through it.
     let allowed_sources = recording_source_dirs(&app, &state);
+    let own_dirs = own_storage_dirs(&app, &state);
 
     for item in items {
         if in_flight.len() >= parallel {
@@ -1194,7 +1205,8 @@ pub(crate) async fn export_recordings_batch(
             if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
         }
         let item_src = PathBuf::from(&item.src_path);
-        if !item_src.is_file() || !is_own_recording_source(&allowed_sources, &item_src) {
+        // is_own_recording_source decides on the text before it touches the file system.
+        if !is_own_recording_source(&allowed_sources, &item_src) || export_request_paths_refused(&own_dirs, &item.dest_path, &[]) {
             failed += 1;
             continue;
         }
