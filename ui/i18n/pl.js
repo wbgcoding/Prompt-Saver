@@ -647,6 +647,7 @@ export default {
     veOvBlock: "Rozmiar bloku (px)",
     veOvDim: "Przyciemnienie (%)",
     veOvRemove: "Usuń tę nakładkę",
+    veOvRemoveArmed: "Usunąć?",
     veKeysSampleHint: "Wyróżniony klawisz pokazuje, jak wygląda wciśnięty klawisz.",
     veOvImageQuote: "Nie można tutaj użyć apostrofu w ścieżce pliku. Zmień nazwę pliku lub przenieś go do innego folderu.",
     veTickError: "Podgląd wideo napotkał problem i przestał się aktualizować; sam eksport nie jest tym dotknięty.",

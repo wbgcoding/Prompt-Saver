@@ -647,6 +647,7 @@ export default {
     veOvBlock: "块大小 (px)",
     veOvDim: "变暗程度 (%)",
     veOvRemove: "移除此叠加层",
+    veOvRemoveArmed: "删除？",
     veKeysSampleHint: "高亮的按键显示按下按键时的样子。",
     veOvImageQuote: "此处的文件路径不能包含撇号。请重命名文件或将其移动到其他文件夹。",
     veTickError: "视频预览遇到问题并已停止更新；导出本身不受影响。",

@@ -207,4 +207,33 @@ def run(browser, tmp):
     if (hints.length !== 1) errs.push('4026: the sample hint appears ' + hints.length + ' times in the keys editor');
     """)
 
+    # 4027: each overlay row ends in a two-step remove cross; Delete removes the selected overlay.
+    failed += vprobe('ovremove', 'overlay row remove cross arms, removes, undoes', r"""
+    // 4027: overlay removal.
+    const { addOverlay } = await import('./videoOverlays.js');
+    const rowsOf = () => [...document.querySelectorAll('#ve-ov-list .ve-ov-item')];
+    const count = () => VE.ops.filter((o) => o.tool === 'overlay').length;
+    await addOverlay('frame'); await addOverlay('pixelate'); await sleep(150);
+    if (count() !== 2 || rowsOf().length !== 2) { errs.push('4027: setup gave ' + count() + ' overlays and ' + rowsOf().length + ' rows'); return; }
+    const del = () => rowsOf()[0].querySelector('.ve-ov-del');
+    if (!del()) { errs.push('4027: the row has no remove cross'); return; }
+    if (del().title !== 'Remove this overlay' || del().getAttribute('aria-label') !== 'Remove this overlay') errs.push('4027: cross label is "' + del().title + '"');
+    del().click(); await sleep(50);
+    if (!del().classList.contains('confirm') || del().textContent !== 'Remove?') errs.push('4027: the first click did not arm, text "' + del().textContent + '"');
+    if (count() !== 2) errs.push('4027: the first click already removed an overlay');
+    await sleep(3400);
+    if (del().classList.contains('confirm') || del().textContent === 'Remove?') errs.push('4027: the armed cross did not expire');
+    del().click(); await sleep(50); del().click(); await sleep(150);
+    if (count() !== 1 || rowsOf().length !== 1) errs.push('4027: the second click left ' + count() + ' overlays');
+    mod.undo(); await sleep(150);
+    if (count() !== 2 || rowsOf().length !== 2) errs.push('4027: undo gave ' + count() + ' overlays');
+    // Delete on a selected overlay removes it without arming.
+    const id = VE.ops.filter((o) => o.tool === 'overlay')[0].id;
+    mod.selectOverlay(id); await sleep(100);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+    await sleep(150);
+    if (count() !== 1 || VE.ops.some((o) => o.id === id)) errs.push('4027: Delete did not remove the selected overlay');
+    mod.undo(); await sleep(100);
+    if (count() !== 2) errs.push('4027: undo after Delete gave ' + count() + ' overlays');
+    """)
     return failed

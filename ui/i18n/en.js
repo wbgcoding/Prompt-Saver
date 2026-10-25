@@ -624,6 +624,7 @@ export default {
     veOvBlock: "Block size (px)",
     veOvDim: "Darkening (%)",
     veOvRemove: "Remove this overlay",
+    veOvRemoveArmed: "Remove?",
     veKeysSampleHint: "The highlighted key shows how a pressed key looks.",
     veOvImageQuote: "An apostrophe in the file path cannot be used here. Rename the file or move it to another folder.",
     veTickError: "The video preview ran into a problem and stopped updating; the export itself is unaffected.",

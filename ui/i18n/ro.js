@@ -647,6 +647,7 @@ export default {
     veOvBlock: "Dimensiunea blocului (px)",
     veOvDim: "Întunecare (%)",
     veOvRemove: "Elimină această suprapunere",
+    veOvRemoveArmed: "Elimini?",
     veKeysSampleHint: "Tasta evidențiată arată cum arată o tastă apăsată.",
     veOvImageQuote: "Aici nu se poate folosi un apostrof în calea fișierului. Redenumește fișierul sau mută-l în alt folder.",
     veTickError: "Previzualizarea video a întâmpinat o problemă și s-a oprit din actualizare; exportul în sine nu este afectat.",

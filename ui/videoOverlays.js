@@ -3,7 +3,7 @@ import { numberField, parseFfmpegError } from "./floatShared.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { keysPickerRow } from "./videoKeys.js";
-import { $, clamp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
+import { $, clamp, deleteOp, even, EXTRA_CLIPS_MAX, extraClipCount, fmtTime, FONT_FILES, FONT_LABELS, invoke, keptSegments, openColorPop, opOf, opsOf, OVERLAY_COLORS, overlayLabelKey, parseTime, pushOp, pushReplacing, removeOps, renderRegions, settings, showPanel, speedRate, t, textsReady, toast, TXT_READY, updateNudgeHint, VE } from "./video.js";
 import { renderRects, snapRect } from "./videoPreview.js";
 
 // ---------------------------------------------------------------- overlays
@@ -288,6 +288,8 @@ export function renderOverlayList() {
   const overlays = opsOf("overlay");
   $("ve-ov-empty").classList.toggle("hidden", overlays.length > 0);
   for (const op of overlays) {
+    const item = document.createElement("div");
+    item.className = "ve-ov-item";
     const row = document.createElement("button");
     row.type = "button";
     row.className = "ve-ov-row" + (op.id === VE.selOv ? " sel" : "");
@@ -310,8 +312,42 @@ export function renderOverlayList() {
       e.preventDefault();
       openOvCtxPop(op, e.clientX, e.clientY);
     });
-    list.appendChild(row);
+    item.append(row, ovRemoveButton(op));
+    list.appendChild(item);
   }
+}
+
+// The armed cross falls back after this long, like the confirm buttons of the main window.
+const OV_DISARM_MS = 3000;
+const OV_X_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+
+// The cross at the end of an overlay row. One click arms it (the cross turns into "Remove?" for
+// a moment), the second click removes the overlay, which Ctrl+Z brings back.
+function ovRemoveButton(op) {
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "icon-btn ve-ov-del";
+  del.innerHTML = OV_X_SVG;
+  del.title = t("veOvRemove");
+  del.setAttribute("aria-label", t("veOvRemove"));
+  let timer = 0;
+  const disarm = () => {
+    clearTimeout(timer);
+    del.classList.remove("confirm");
+    del.innerHTML = OV_X_SVG;
+  };
+  del.addEventListener("click", () => {
+    if (!del.classList.contains("confirm")) {
+      del.classList.add("confirm");
+      del.textContent = t("veOvRemoveArmed");
+      timer = setTimeout(disarm, OV_DISARM_MS);
+      return;
+    }
+    disarm();
+    if (VE.selOv === op.id) VE.selOv = null;
+    deleteOp(op);
+  });
+  return del;
 }
 
 function clipPositionLabel(op) {

@@ -540,7 +540,7 @@ export function extraClipCount() {
   return VE.ops.filter((o) => o.tool === "clip" || (o.tool === "overlay" && o.kind === "video")).length;
 }
 
-function deleteOp(op) {
+export function deleteOp(op) {
   if (op.tool === "crop") changeCrop(() => removeOps((o) => o === op));
   else removeOps((o) => o === op);
 }
@@ -1994,6 +1994,14 @@ document.addEventListener("keydown", (e) => {
       stepFrame(e.key === "," ? -1 : 1);
       return;
     }
+  }
+  // Delete or Backspace removes the overlay selected on the picture (undoable). A key that a
+  // focused row already took for itself (defaultPrevented) is not used twice.
+  if (selectedOverlay && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+    e.preventDefault();
+    VE.selOv = null;
+    deleteOp(selectedOverlay);
+    return;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 

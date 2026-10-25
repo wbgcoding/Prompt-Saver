@@ -647,6 +647,7 @@ export default {
     veOvBlock: "Blokgrootte (px)",
     veOvDim: "Verduistering (%)",
     veOvRemove: "Deze overlay verwijderen",
+    veOvRemoveArmed: "Verwijderen?",
     veKeysSampleHint: "De gemarkeerde toets laat zien hoe een ingedrukte toets eruitziet.",
     veOvImageQuote: "Een apostrof in het bestandspad kan hier niet worden gebruikt. Wijzig de bestandsnaam of verplaats het bestand naar een andere map.",
     veTickError: "De videovoorvertoning liep tegen een probleem aan en werkt niet meer bij; de export zelf wordt hierdoor niet beïnvloed.",

@@ -606,6 +606,9 @@ the introduction tour ship on; the screenshot editor is always on).
   the trim fields can no longer cross each other.
 - **Keys overlay preview.** The preview now shows the W key as pressed (not Esc or the
   first key), with a short hint under the settings that explains the highlighted key.
+- **Remove overlays from the list.** Every overlay row has a cross at its end: the first
+  click turns it into "Remove?", the second removes the overlay (Ctrl+Z brings it back).
+  Delete or Backspace removes the overlay selected on the picture.
 - **Expert menu cards sit without gaps.** The cards of a tab now fill columns
   from top to bottom, so a short card is followed by the next card instead of
   empty space. The reading order is therefore column by column, not row by row.
