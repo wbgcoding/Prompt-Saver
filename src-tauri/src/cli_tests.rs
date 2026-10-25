@@ -172,6 +172,7 @@ fn fixture_store() -> Store {
         layouts: std::collections::HashMap::new(),
         color: String::new(),
         members: Vec::new(),
+        sync_ids: Vec::new(),
     });
     store.settings.active_view = "v1".to_string();
     store.prompts.push(mk_prompt("p1", "Alpha", "alpha text", &["work"], true));

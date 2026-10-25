@@ -1441,6 +1441,7 @@ fn cmd_view_add(store: &mut Store, name: &str, color: Option<&str>, json: bool) 
         layouts: std::collections::HashMap::new(),
         color: color.unwrap_or("").to_string(),
         members: Vec::new(),
+        sync_ids: Vec::new(),
     };
     let id = view.id.clone();
     store.settings.views.push(view);

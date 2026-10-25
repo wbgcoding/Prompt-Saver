@@ -900,9 +900,17 @@ fn cell_of(inst: &SyncInst, id: &str) -> String {
     sync_placement_for(p, &s.settings).cell
 }
 
+// The cell the tile really sits in on this machine (`cell_of` is what its file would say).
+fn local_cell_of(inst: &SyncInst, id: &str) -> String {
+    let s = inst.lock();
+    let v = &s.settings.views[0];
+    let c = v.layouts.get(&grid_key(v.cols, v.rows)).and_then(|m| m.get(id)).unwrap();
+    format!("{},{}", c[0], c[1])
+}
+
 #[test]
 fn multi_a_cell_outside_the_smaller_grid_on_b_stays_where_a_put_it() {
-    let rig = Rig::new();
+    let mut rig = Rig::new();
     // B's first view is smaller than A's: the cell A picked does not exist there.
     rig.b.settings(|s| {
         s.views[0].cols = 3;
@@ -915,14 +923,18 @@ fn multi_a_cell_outside_the_smaller_grid_on_b_stays_where_a_put_it() {
         s.views[0].members.push(id.clone());
     });
     rig.settle();
-    let on_b = cell_of(&rig.b, &id);
+    let on_b = local_cell_of(&rig.b, &id);
     assert_ne!(on_b, "4,3", "B cannot hold that cell");
+    assert_eq!(cell_of(&rig.b, &id), "4,3", "B's file no longer says what A wrote");
+    // B is closed and opened again: what it knew about the folder is gone, the library stays.
+    rig.b.restart();
+    rig.b.start(&rig.dir);
     // B edits the text: its write must not carry B's stand-in cell back to A.
     rig.b.edit(&id, |p| p.text = "text, edited on B".to_string());
     rig.settle();
     assert_eq!(rig.a.get(&id).unwrap().text, "text, edited on B");
     assert_eq!(cell_of(&rig.a, &id), "4,3", "A's tile was moved by B's write");
-    assert_eq!(cell_of(&rig.b, &id), on_b, "B's own stand-in cell changed");
+    assert_eq!(local_cell_of(&rig.b, &id), on_b, "B's own stand-in cell changed");
     let file = fs::read_to_string(rig.dir.join(format!("{id}.md"))).unwrap();
     assert!(file.contains("cell: 4,3\n"), "the file lost A's cell: {file}");
     assert!(file.contains("grid: 5x4\n"), "the file lost A's grid size: {file}");
@@ -953,7 +965,7 @@ fn put_in_view(inst: &SyncInst, view: &str, id: &str, cell: [u32; 2]) {
 
 #[test]
 fn multi_a_renamed_view_is_renamed_on_the_other_side_not_added_again() {
-    let rig = Rig::new();
+    let mut rig = Rig::new();
     // The two first views have different ids, as on two real machines.
     rig.b.settings(|s| {
         s.views[0].id = "bmain".to_string();
@@ -963,6 +975,9 @@ fn multi_a_renamed_view_is_renamed_on_the_other_side_not_added_again() {
     put_in_view(&rig.a, "main", &id, [1, 1]);
     rig.settle();
     assert_eq!(view_names(&rig.b), vec!["Main".to_string()], "B grew a view on the first sync");
+    // B is closed and opened again before the rename arrives.
+    rig.b.restart();
+    rig.b.start(&rig.dir);
     rig.a.settings(|s| s.views[0].name = "Job".to_string());
     rig.settle();
     assert_eq!(view_names(&rig.a), vec!["Job".to_string()], "A's views changed");
@@ -973,7 +988,7 @@ fn multi_a_renamed_view_is_renamed_on_the_other_side_not_added_again() {
 
 #[test]
 fn multi_a_view_made_on_a_is_renamed_on_b_after_it_was_created_there() {
-    let rig = Rig::new();
+    let mut rig = Rig::new();
     let mut fresh = test_view("fresh");
     fresh.name = "Fresh".to_string();
     rig.a.settings(|s| s.views.push(fresh));
@@ -981,6 +996,8 @@ fn multi_a_view_made_on_a_is_renamed_on_b_after_it_was_created_there() {
     put_in_view(&rig.a, "fresh", &id, [2, 0]);
     rig.settle();
     assert_eq!(view_names(&rig.b), vec!["Fresh".to_string(), "Main".to_string()]);
+    rig.b.restart();
+    rig.b.start(&rig.dir);
     rig.a.settings(|s| s.views.iter_mut().find(|v| v.id == "fresh").unwrap().name = "Fresher".to_string());
     rig.settle();
     assert_eq!(view_names(&rig.b), vec!["Fresher".to_string(), "Main".to_string()], "B kept the old name or added a view");

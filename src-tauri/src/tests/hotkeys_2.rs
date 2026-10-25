@@ -621,6 +621,7 @@ pub(super) fn test_view(id: &str) -> View {
         layouts: HashMap::new(),
         color: String::new(),
         members: Vec::new(),
+        sync_ids: Vec::new(),
     }
 }
 

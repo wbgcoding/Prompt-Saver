@@ -575,6 +575,7 @@ pub(crate) fn add_view(app: AppHandle, state: State<Db>, name: String, color: St
         layouts: HashMap::new(),
         color: color.trim().to_string(),
         members: Vec::new(),
+        sync_ids: Vec::new(),
     };
     store.settings.active_view.clone_from(&view.id);
     store.settings.views.push(view);
