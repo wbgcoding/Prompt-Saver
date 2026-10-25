@@ -879,7 +879,6 @@ fn recalled_windows_do_not_overlap_on_a_scaled_screen() {
 // file a same-user process could swap after the consent prompt.
 #[test]
 fn the_elevated_script_travels_as_an_encoded_command_and_decodes_exactly() {
-    use base64::Engine;
     let script = "$ErrorActionPreference = 'Stop'\r\ntry { Add-WindowsCapability -Online -Name 'Language.OCR~~~de-DE~0.0.1.0' } catch { }\r\n";
     let params = ocr::elevated_params(script).unwrap();
     assert!(params.contains("-EncodedCommand "));
@@ -887,7 +886,13 @@ fn the_elevated_script_travels_as_an_encoded_command_and_decodes_exactly() {
     assert!(!params.contains("-File"), "no script file is referenced: {params}");
     assert!(!params.contains("-Command "), "no inline command either: {params}");
     let payload = params.rsplit("-EncodedCommand ").next().unwrap();
-    let raw = base64::engine::general_purpose::STANDARD.decode(payload).unwrap();
+    let raw = base64_decode(payload);
+    assert!(!raw.is_empty());
+    // RFC 4648 vectors pin the shared encoder and decoder now that no second implementation checks them.
+    for (plain, coded) in [("", ""), ("f", "Zg=="), ("fo", "Zm8="), ("foo", "Zm9v"), ("foob", "Zm9vYg=="), ("fooba", "Zm9vYmE="), ("foobar", "Zm9vYmFy")] {
+        assert_eq!(base64_encode(plain.as_bytes()), coded);
+        assert_eq!(base64_decode(coded), plain.as_bytes());
+    }
     let units: Vec<u16> = raw.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
     assert_eq!(String::from_utf16(&units).unwrap(), script);
     assert!(ocr::elevated_params(&"x".repeat(40_000)).is_err(), "an oversized script is refused, not truncated");

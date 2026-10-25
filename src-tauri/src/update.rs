@@ -745,11 +745,12 @@ pub(crate) const UPDATE_PUBLIC_KEY_B64: &str = "Z1ty4r3YnfqsEo+h3gee71jt+QcyINxb
 // True when `sig_text` (base64, as published in `<installer>.sig`) is a valid Ed25519
 // signature over the installer's SHA-256 digest under `public_key_b64`.
 pub(crate) fn update_signature_valid(digest: &[u8], sig_text: &str, public_key_b64: &str) -> bool {
-    use base64::Engine as _;
-    let b64 = base64::engine::general_purpose::STANDARD;
-    let (Ok(sig), Ok(key)) = (b64.decode(sig_text.trim()), b64.decode(public_key_b64)) else {
+    // base64_decode answers malformed input with an empty Vec: an empty signature or key is
+    // never valid, so a garbage file fails closed here instead of reaching the verifier.
+    let (sig, key) = (base64_decode(sig_text.trim()), base64_decode(public_key_b64));
+    if sig.is_empty() || key.is_empty() {
         return false;
-    };
+    }
     ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
         .verify(digest, &sig)
         .is_ok()

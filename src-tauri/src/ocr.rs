@@ -495,11 +495,10 @@ pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> 
 // rights just granted. PowerShell takes the script as base64 of its UTF-16LE bytes, so no
 // quoting is involved.
 pub(super) fn elevated_params(script: &str) -> Result<String, String> {
-    use base64::Engine;
     let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
     let params = format!(
         "-NoProfile -NonInteractive -EncodedCommand {}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
+        crate::images::base64_encode(&bytes)
     );
     // CreateProcess accepts a command line of at most 32767 characters.
     if params.len() > 30_000 {
