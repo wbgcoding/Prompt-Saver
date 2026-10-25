@@ -220,6 +220,9 @@ VIDEO_PROBE = """
         if (shortcutsModal.classList.contains('hidden')) {
           errs.push('video editor: shortcuts overview did not open');
         } else {
+          const keysTab = document.querySelector('#ve-help-nav .ve-help-tab[data-help="keys"]');
+          if (keysTab) keysTab.click();
+          await sleep(50);
           const rows = shortcutsModal.querySelectorAll('.shortcuts-row');
           if (rows.length === 0) errs.push('video editor: shortcuts overview opened with no rows');
           document.getElementById('shortcuts-modal-close').click();

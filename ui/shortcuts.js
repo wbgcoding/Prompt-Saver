@@ -66,6 +66,7 @@ export const SHORTCUTS = [
   { action: "veMarkIn", code: "KeyI", mods: [], scopes: ["videoEditor"], descKey: "veMarkInTip" },
   { action: "veCutSel", code: "KeyC", mods: [], scopes: ["videoEditor"], descKey: "veCutSelTip" },
   { action: "veShowOriginal", code: "KeyV", mods: [], scopes: ["videoEditor"], descKey: "showOriginalTip" },
+  { action: "veHelp", code: "F1", mods: [], scopes: ["videoEditor"], descKey: "veHelpOpen" },
 
   // ---- list-only: windows that handle their own keys ----
   { action: "launcherClose", code: "Escape", mods: [], scopes: ["launcher"], descKey: "close" },

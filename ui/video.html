@@ -19,7 +19,7 @@
     <span class="ve-titlebar-label" data-i18n="veTitle">Video editor</span>
     <span id="ve-file" class="ve-file"></span>
     <button id="ve-export-open" class="primary-btn ve-export-open" type="button" data-tauri-drag-region="false" data-i18n="veExportOpen" data-i18n-title="veExportOpenTip">Export…</button>
-    <button id="ve-shortcuts" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="shortcutsTitle" data-i18n-aria="shortcutsTitle">
+    <button id="ve-shortcuts" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="veHelpOpen" data-i18n-aria="veHelpOpen" data-shortcut="veHelp">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.2 9.5a2.8 2.8 0 1 1 3.9 2.6c-.9.4-1.4 1-1.4 2.1"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg>
     </button>
     <button id="ve-close" class="icon-btn ve-close" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
@@ -377,19 +377,32 @@
     </div>
   </div>
 
-  <!-- Same shape as the main window's shortcuts overview; this window cannot
-       reach that one either, so it carries its own with identical markup. -->
-  <div id="shortcuts-modal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal modal-narrow">
+  <!-- The help dialog: a section list on the left, the text on the right. The ids of the
+       old shortcuts overview stay, the last section is that overview. -->
+  <div id="shortcuts-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ve-help-title">
+    <div class="modal ve-help">
       <div class="modal-titlebar">
-        <h2 class="modal-title" data-i18n="shortcutsTitle">Keyboard shortcuts</h2>
+        <h2 id="ve-help-title" class="modal-title" data-i18n="veHelpTitle">Video editor help</h2>
         <button id="shortcuts-modal-close" class="icon-btn modal-x" type="button" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
           </svg>
         </button>
       </div>
-      <div id="shortcuts-modal-list" class="shortcuts-list"></div>
+      <div class="ve-help-body">
+        <div id="ve-help-nav" class="ve-help-nav" role="tablist" aria-orientation="vertical">
+          <button type="button" class="ve-help-tab" role="tab" data-help="nav" data-i18n="veHelpNavTitle">Getting around</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="sel" data-i18n="veHelpSelTitle">Selecting a range</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="cut" data-i18n="veHelpCutTitle">Trim and cut</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="edit" data-i18n="veHelpEditTitle">Speed, fades, crop and size</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="ov" data-i18n="veHelpOvTitle">Overlays</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="audio" data-i18n="veHelpAudioTitle">Sound</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="export" data-i18n="veHelpExportTitle">Export</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="close" data-i18n="veHelpCloseTitle">Saving your work</button>
+          <button type="button" class="ve-help-tab" role="tab" data-help="keys" data-i18n="veHelpKeysTitle">Shortcuts</button>
+        </div>
+        <div id="shortcuts-modal-list" class="ve-help-content" role="tabpanel" tabindex="0"></div>
+      </div>
     </div>
   </div>
 

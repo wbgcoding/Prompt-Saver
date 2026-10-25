@@ -235,6 +235,7 @@ function applyI18n() {
   renderPlayhead();
   if (syncWinButtons) syncWinButtons();
   syncSelectionButtons();
+  renderHelp();
 }
 
 export async function loadTexts(settings) {
@@ -319,16 +320,73 @@ export function toast(message) {
   toastTimer = setTimeout(() => el.classList.add("hidden"), VE_TOAST_MS);
 }
 
-// The "?" overview: same modal/modal-narrow/modal-titlebar shell as
-// the shared confirm dialog, filled straight from SHORTCUTS.
-function openShortcutsModal(scope) {
+// The help dialog: a section list on the left, the text of the chosen section on the right.
+// The last section is the shortcut overview, filled straight from SHORTCUTS.
+const HELP_SECTIONS = ["nav", "sel", "cut", "edit", "ov", "audio", "export", "close", "keys"];
+const HELP_KEYS = {
+  nav: ["veHelpNavTitle", "veHelpNavBody"], sel: ["veHelpSelTitle", "veHelpSelBody"],
+  cut: ["veHelpCutTitle", "veHelpCutBody"], edit: ["veHelpEditTitle", "veHelpEditBody"],
+  ov: ["veHelpOvTitle", "veHelpOvBody"], audio: ["veHelpAudioTitle", "veHelpAudioBody"],
+  export: ["veHelpExportTitle", "veHelpExportBody"], close: ["veHelpCloseTitle", "veHelpCloseBody"],
+  keys: ["veHelpKeysTitle", "veHelpKeysBody"],
+};
+let helpSection = "nav";
+
+function renderHelp() {
   const list = $("shortcuts-modal-list");
+  if (!list) return;
   list.innerHTML = "";
-  buildShortcutRows(list, shortcutRows(scope));
+  document.querySelectorAll("#ve-help-nav .ve-help-tab").forEach((b) => {
+    const on = b.dataset.help === helpSection;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on ? "true" : "false");
+    b.tabIndex = on ? 0 : -1;
+  });
+  const [titleKey, bodyKey] = HELP_KEYS[helpSection];
+  const h = document.createElement("h3");
+  h.className = "ve-help-h";
+  h.textContent = t(titleKey);
+  list.appendChild(h);
+  for (const para of t(bodyKey).split("\n\n")) {
+    const p = document.createElement("p");
+    p.className = "ve-help-p";
+    p.textContent = para;
+    list.appendChild(p);
+  }
+  if (helpSection === "keys") {
+    const rows = document.createElement("div");
+    rows.className = "shortcuts-list ve-help-keys";
+    buildShortcutRows(rows, shortcutRows("videoEditor"));
+    list.appendChild(rows);
+  }
+  list.scrollTop = 0;
+}
+function setHelpSection(id, focusTab) {
+  if (!HELP_KEYS[id]) return;
+  helpSection = id;
+  renderHelp();
+  if (focusTab) document.querySelector(`#ve-help-nav .ve-help-tab[data-help="${id}"]`)?.focus();
+}
+function openShortcutsModal() {
+  helpSection = "nav";
+  renderHelp();
   openShortcutsOverlay($("shortcuts-modal"));
+  document.querySelector("#ve-help-nav .ve-help-tab.active")?.focus();
 }
 function closeShortcutsModal() {
   closeShortcutsOverlay($("shortcuts-modal"));
+}
+// Arrow keys, Home and End move between the sections while a section button has the focus.
+function helpNavKey(e) {
+  if (!e.target.closest?.(".ve-help-tab")) return;
+  const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+  let i = HELP_SECTIONS.indexOf(helpSection);
+  if (step) i = (i + step + HELP_SECTIONS.length) % HELP_SECTIONS.length;
+  else if (e.key === "Home") i = 0;
+  else if (e.key === "End") i = HELP_SECTIONS.length - 1;
+  else return;
+  e.preventDefault();
+  setHelpSection(HELP_SECTIONS[i], true);
 }
 
 // ---------------------------------------------------------------- operation list
@@ -1530,7 +1588,8 @@ $("ve-export-open").addEventListener("click", () => { showPanel("ve-panel-export
 $("ve-close").addEventListener("click", () => closeWindow());
 // The window has no OS title bar, so the bar carries minimize and maximize/restore too.
 syncWinButtons = wireWinButtons({ win: appWin, ...insertWinButtons($("ve-close"), "ve"), translate: t });
-$("ve-shortcuts").addEventListener("click", () => openShortcutsModal("videoEditor"));
+$("ve-shortcuts").addEventListener("click", () => openShortcutsModal());
+$("ve-help-nav").addEventListener("click", (e) => { const b = e.target.closest(".ve-help-tab"); if (b) setHelpSection(b.dataset.help, false); });
 $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
 $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
 $("ve-undo").addEventListener("click", undo);
@@ -2088,8 +2147,9 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (!$("shortcuts-modal").classList.contains("hidden")) {
-    if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); }
+    if (e.key === "Escape" || e.code === "F1") { e.preventDefault(); closeShortcutsModal(); }
     else if (e.key === "Tab") trapTabWithin($("shortcuts-modal"), e);
+    else helpNavKey(e);
     return;
   }
   if (!colorPop.classList.contains("hidden")) {
@@ -2104,6 +2164,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }
     if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
   }
+  if (e.code === "F1") { e.preventDefault(); openShortcutsModal(); return; }
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") {
     e.preventDefault();

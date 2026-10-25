@@ -410,4 +410,45 @@ def run(browser, tmp):
     if (count() !== 1) errs.push('4032: a current image pick added ' + count() + ' overlays');
     window.__STUB_DELAY_MS__ = {};
     """)
+
+    # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
+    failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
+    const $ = (id) => document.getElementById(id);
+    const { SHORTCUTS } = await import('./shortcuts.js');
+    const modal = $('shortcuts-modal');
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if (!modal.classList.contains('hidden')) errs.push('help: the dialog starts open');
+    if (!/\(F1\)$/.test($('ve-shortcuts').title)) errs.push('help: the button title does not end in (F1): ' + $('ve-shortcuts').title);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', code: 'F1', bubbles: true, cancelable: true }));
+    await sleep(60);
+    if (modal.classList.contains('hidden')) errs.push('help: F1 did not open the dialog');
+    const tabs = [...document.querySelectorAll('#ve-help-nav .ve-help-tab')];
+    if (tabs.length !== 9) errs.push('help: ' + tabs.length + ' sections, want 9');
+    if (tabs[tabs.length - 1].dataset.help !== 'keys') errs.push('help: the shortcut list is not the last section');
+    const heading = () => { const h = document.querySelector('#shortcuts-modal-list .ve-help-h'); return h ? h.textContent : ''; };
+    const first = heading();
+    if (!first || /^veHelp/.test(first)) errs.push('help: first section has no heading: ' + first);
+    if (document.querySelectorAll('#shortcuts-modal-list .ve-help-p').length < 2) errs.push('help: the first section shows fewer than two paragraphs');
+    if (document.activeElement !== tabs[0]) errs.push('help: the first section button does not hold the focus');
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true, cancelable: true }));
+    await sleep(40);
+    if (!tabs[1].classList.contains('active') || heading() === first) errs.push('help: ArrowDown did not move to the next section');
+    tabs[4].click(); await sleep(40);
+    if (tabs[4].getAttribute('aria-selected') !== 'true' || tabs[1].getAttribute('aria-selected') !== 'false') errs.push('help: aria-selected does not follow the click');
+    if (!document.querySelector('#shortcuts-modal-list .ve-help-p')) errs.push('help: the overlays section has no text');
+    tabs[8].click(); await sleep(40);
+    const want = new Set(SHORTCUTS.filter((e) => e.scopes.includes('videoEditor') && !e.action.endsWith('Alt')).map((e) => e.descKey)).size;
+    const rows = document.querySelectorAll('#shortcuts-modal-list .shortcuts-row');
+    if (rows.length !== want || want < 15) errs.push('help: shortcut section has ' + rows.length + ' rows, registry has ' + want);
+    const keysOf = [...rows].map((r) => r.querySelector('.shortcuts-row-keys').textContent);
+    if (keysOf.indexOf('F1') < 0) errs.push('help: the list does not show F1');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', code: 'F1', bubbles: true, cancelable: true }));
+    await sleep(60);
+    if (!modal.classList.contains('hidden')) errs.push('help: a second F1 did not close the dialog');
+    $('ve-shortcuts').click(); await sleep(60);
+    if (!tabs[0].classList.contains('active')) errs.push('help: reopening does not start at the first section');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+    await sleep(60);
+    if (!modal.classList.contains('hidden')) errs.push('help: Escape did not close the dialog');
+    """)
     return failed

@@ -7,7 +7,7 @@
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
 `tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `sniptext`, or another
-page such as `video.html`.
+page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
 """
@@ -55,6 +55,8 @@ await sleep(800);
 """
 ACTS = {
     "main": "",
+    # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
+    **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "sel", "cut", "edit", "ov", "audio", "export", "close", "keys")},
     "settings": "$('gear').click(); await sleep(300);",
     "settings_end": "$('gear').click(); await sleep(300); $('settings-main').lastElementChild.scrollIntoView(); await sleep(100);",
     "expert": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);",
@@ -200,7 +202,10 @@ def main():
     picked = [x for s in args.surfaces for x in GROUPS.get(s, [s])] if args.surfaces else list(ACTS)
     for s, size, lang, theme, scale in itertools.product(dict.fromkeys(picked), sizes, langs, themes, scales):
         w, h = size.split("x")
-        page, act = (s, "main") if s.endswith(".html") else ("index.html", s)
+        if ":" in s and s.split(":", 1)[0].endswith(".html"):
+            page, act = s.split(":", 1)
+        else:
+            page, act = (s, "main") if s.endswith(".html") else ("index.html", s)
         # The default theme and scale keep the short file name the tool always wrote.
         extra = ("" if theme == "dark" else f"_{theme}") + ("" if scale == "1" else f"_x{scale}")
         png = out / f"{Path(page).stem}_{act}_{lang}_{w}x{h}{extra}.png"
