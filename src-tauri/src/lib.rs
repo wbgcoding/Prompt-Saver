@@ -206,6 +206,9 @@ use media_files::*;
 
 mod parallel;
 
+#[cfg(windows)]
+mod registry;
+
 mod autostart;
 use autostart::*;
 

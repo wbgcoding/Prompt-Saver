@@ -590,9 +590,8 @@ fn elevation_denied_by_policy() -> bool {
     if account_can_elevate() {
         return false;
     }
-    winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
-        .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")
-        .and_then(|k| k.get_value::<u32, _>("ConsentPromptBehaviorUser"))
+    crate::registry::Key::open_read(crate::registry::Hive::LocalMachine, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")
+        .and_then(|k| k.get_u32("ConsentPromptBehaviorUser"))
         .map(|v| v == 0)
         .unwrap_or(false)
 }

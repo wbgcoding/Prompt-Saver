@@ -3212,7 +3212,6 @@ dependencies = [
  "windows",
  "windows-capture",
  "windows-core",
- "winreg",
  "zeroize",
  "zip",
 ]

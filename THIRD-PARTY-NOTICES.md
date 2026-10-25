@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-230 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
+229 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 
 | Name | Version | License |
 |---|---|---|
@@ -220,7 +220,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | windows-version | 0.1.7 | MIT OR Apache-2.0 |
 | windows_x86_64_msvc | 0.52.6 | MIT OR Apache-2.0 |
 | winnow | 1.0.4 | MIT |
-| winreg | 0.56.0 | MIT |
 | writeable | 0.6.4 | Unicode-3.0 |
 | wry | 0.57.1 | Apache-2.0 OR MIT |
 | yoke | 0.8.4 | Unicode-3.0 |

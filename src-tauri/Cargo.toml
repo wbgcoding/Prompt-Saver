@@ -60,7 +60,6 @@ pdfium-render = "=0.9.4"
 zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "=0.56.0"
 clipboard-win = "=5.4.3"
 # OCR: Windows' own built-in text recognizer, fully offline. Version
 # pinned exactly -- a newer release may need a newer compiler than this project's
@@ -105,6 +104,8 @@ windows = { version = "=0.62.2", features = [
   # window or the secure desktop swallowing it) cannot leave a modifier
   # stuck "held" forever.
   "Win32_UI_Input_KeyboardAndMouse",
+  # The registry values read and written through registry.rs (autostart, speech consent).
+  "Win32_System_Registry",
 ] }
 # The #[implement] macro's generated code names the `windows_core` crate
 # directly, so it has to be a real, nameable dependency of this crate under

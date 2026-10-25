@@ -5,13 +5,8 @@ use super::*;
 // Add/remove the app in the per-user Windows autostart registry key.
 #[cfg(windows)]
 pub(crate) fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), String> {
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
-    use winreg::RegKey;
-    let run = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey_with_flags(
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            KEY_SET_VALUE,
-        )
+    use crate::registry::{Hive, Key};
+    let run = Key::open_write(Hive::CurrentUser, r"Software\Microsoft\Windows\CurrentVersion\Run")
         .map_err(|e| e.to_string())?;
     // A value an earlier name of this product registered would keep launching the
     // app twice; drop it whichever way the setting goes.
@@ -21,7 +16,7 @@ pub(crate) fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), Stri
     if enabled {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let flag = if minimized { " --minimized" } else { "" };
-        run.set_value(AUTOSTART_KEY, &format!("\"{}\"{}", exe.display(), flag))
+        run.set_string(AUTOSTART_KEY, &format!("\"{}\"{}", exe.display(), flag))
             .map_err(|e| e.to_string())
     } else {
         match run.delete_value(AUTOSTART_KEY) {
@@ -56,12 +51,10 @@ pub(crate) fn set_always_on_top(app: AppHandle, state: State<Db>, enabled: bool)
 // put back exactly what was there.
 #[cfg(windows)]
 pub(crate) fn autostart_command() -> Result<Option<String>, String> {
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
-    use winreg::RegKey;
-    let run = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Run", KEY_READ)
+    use crate::registry::{Hive, Key};
+    let run = Key::open_read(Hive::CurrentUser, r"Software\Microsoft\Windows\CurrentVersion\Run")
         .map_err(|e| e.to_string())?;
-    match run.get_value::<String, _>(AUTOSTART_KEY) {
+    match run.get_string(AUTOSTART_KEY) {
         Ok(v) => Ok(Some(v)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
@@ -71,13 +64,11 @@ pub(crate) fn autostart_command() -> Result<Option<String>, String> {
 
 #[cfg(windows)]
 pub(crate) fn autostart_restore(prior: Option<String>) -> Result<(), String> {
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
-    use winreg::RegKey;
-    let run = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Run", KEY_SET_VALUE)
+    use crate::registry::{Hive, Key};
+    let run = Key::open_write(Hive::CurrentUser, r"Software\Microsoft\Windows\CurrentVersion\Run")
         .map_err(|e| e.to_string())?;
     match prior {
-        Some(cmd) => run.set_value(AUTOSTART_KEY, &cmd).map_err(|e| e.to_string()),
+        Some(cmd) => run.set_string(AUTOSTART_KEY, &cmd).map_err(|e| e.to_string()),
         None => match run.delete_value(AUTOSTART_KEY) {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -235,13 +226,11 @@ pub(crate) fn remove_legacy_protocol_with(
 
 #[cfg(windows)]
 pub(crate) fn remove_legacy_protocol_key() {
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
-    use winreg::RegKey;
+    use crate::registry::{delete_tree, Hive, Key};
     let Ok(exe) = std::env::current_exe() else { return };
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let read_command = || {
-        match hkcu.open_subkey_with_flags(format!("{LEGACY_PROTOCOL_KEY}\\shell\\open\\command"), KEY_READ) {
-            Ok(key) => match key.get_value::<String, _>("") {
+        match Key::open_read(Hive::CurrentUser, &format!("{LEGACY_PROTOCOL_KEY}\\shell\\open\\command")) {
+            Ok(key) => match key.get_string("") {
                 Ok(v) => Ok(Some(v)),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(e) => Err(e.to_string()),
@@ -250,7 +239,7 @@ pub(crate) fn remove_legacy_protocol_key() {
             Err(e) => Err(e.to_string()),
         }
     };
-    let delete_key = || match hkcu.delete_subkey_all(LEGACY_PROTOCOL_KEY) {
+    let delete_key = || match delete_tree(Hive::CurrentUser, LEGACY_PROTOCOL_KEY) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e.to_string()),
