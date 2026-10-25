@@ -1124,6 +1124,7 @@ pub fn run() {
                 // Backstop for every way out of the app: whatever counter state was
                 // still being collected goes to disk before the process does.
                 flush_settings_now(app);
+                md_sync::sync_flush_on_exit(app);
                 // Matches register_running_instance() in setup() above: an
                 // orderly exit un-registers this pid immediately; a crash or
                 // task-kill leaves it for other_instance_running() to prune

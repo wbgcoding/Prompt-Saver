@@ -81,11 +81,10 @@ impl SyncInst {
 
     // What the app does when it starts with the feature on (see start_sync_poll).
     pub(super) fn start(&self, dir: &Path) {
-        let (prompts, settings) = {
-            let s = self.lock();
-            (s.prompts.clone(), s.settings.clone())
-        };
-        self.run(|| sync_seed_seen(dir, &prompts, &settings));
+        let due = self.run(|| sync_start_core(&self.db, dir));
+        if due {
+            self.dirty.store(true, Ordering::SeqCst);
+        }
     }
 
     // The app is closed and opened again: the library stays, what the instance remembered
@@ -94,6 +93,8 @@ impl SyncInst {
         let fresh = SyncState::default();
         fresh.clock_skew.store(self.state.clock_skew.load(Ordering::SeqCst), Ordering::SeqCst);
         self.state = Box::leak(Box::new(fresh));
+        // A write that was queued but not run yet dies with the process.
+        self.dirty.store(false, Ordering::SeqCst);
     }
 
     // The user switches the feature on (see set_ui_flag): the folder is written, then the
@@ -1032,4 +1033,121 @@ fn multi_a_hand_typed_colour_that_is_not_a_hex_value_is_not_stored() {
     assert_eq!(rig.a.get(&id).unwrap().color, "#abcdef");
     assert_eq!(rig.b.get(&id).unwrap().color, "#abcdef");
     rig.assert_converged();
+}
+
+// ---- restarts, boot window, clocks and first contact ----
+
+fn leftover_of(rig: &Rig, id: &str) -> PathBuf {
+    rig.dir.join(format!("{id}.md"))
+}
+
+#[test]
+fn multi_a_delete_made_just_before_closing_the_app_is_not_undone_on_the_next_start() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Doomed", "gone for good");
+    rig.settle();
+    assert!(leftover_of(&rig, &id).exists());
+    // The user deletes it and the app closes before the folder write ran.
+    rig.a.delete(&id);
+    rig.a.restart();
+    rig.a.start(&rig.dir);
+    rig.settle();
+    assert!(rig.a.in_trash(&id), "the deleted prompt left the trash after a restart");
+    assert!(rig.a.get(&id).is_none(), "the deleted prompt came back into the grid");
+    assert!(rig.b.get(&id).is_none(), "the deleted prompt is still live on B");
+    assert!(!leftover_of(&rig, &id).exists(), "the file of a deleted prompt stayed in the folder");
+}
+
+#[test]
+fn multi_a_delete_made_while_the_feature_was_off_is_not_undone_by_switching_it_on() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Old", "text");
+    rig.settle();
+    // The feature is switched off, the prompt deleted, the feature switched on again.
+    rig.a.settings(|s| {
+        s.ui_flags.insert("promptSync".to_string(), false);
+    });
+    rig.a.delete(&id);
+    // The app ran without the feature, so nothing remembers the folder.
+    rig.a.restart();
+    rig.a.settings(|s| {
+        s.ui_flags.insert("promptSync".to_string(), true);
+    });
+    rig.a.activate(&rig.dir);
+    rig.settle();
+    assert!(rig.a.in_trash(&id), "switching the feature on restored a deleted prompt");
+    assert!(rig.a.get(&id).is_none());
+}
+
+#[test]
+fn multi_a_machine_offline_for_over_thirty_days_does_not_pull_a_deleted_prompt_out_of_the_trash() {
+    let rig = Rig::new();
+    let id = rig.a.add("Old news", "same text");
+    rig.settle();
+    // A is off. B deletes the prompt and the marker is written.
+    rig.b.delete(&id);
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    assert!(rig.dir.join(format!("{id}.deleted")).exists());
+    // Thirty-one days later B runs a round, the marker expires and is swept.
+    rig.tick(31 * 86400);
+    rig.b.settings(|_| {});
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    assert!(!rig.dir.join(format!("{id}.deleted")).exists(), "the old marker was not swept");
+    // A comes back, saves something, and writes the prompt's file again unchanged.
+    rig.a.settings(|_| {});
+    rig.a.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    assert!(rig.b.in_trash(&id), "a stale machine's untouched file restored the prompt on B");
+    assert!(rig.b.get(&id).is_none());
+}
+
+#[test]
+fn multi_an_edit_of_a_prompt_the_other_side_deleted_long_ago_still_restores_it() {
+    let rig = Rig::new();
+    let id = rig.a.add("Old news", "same text");
+    rig.settle();
+    rig.b.delete(&id);
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    rig.tick(31 * 86400);
+    rig.b.settings(|_| {});
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    // A edits the prompt after all that time: that is a decision, not a leftover.
+    rig.a.edit(&id, |p| p.text = "new words".into());
+    rig.settle();
+    assert_eq!(rig.b.get(&id).map(|p| p.text), Some("new words".to_string()), "an edited file did not restore the prompt");
+    assert!(!rig.b.in_trash(&id));
+}
+
+#[test]
+fn multi_a_leftover_file_of_a_deleted_prompt_is_cleaned_up_when_its_owner_starts_again() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Crashed", "left over");
+    rig.a.step(&rig.dir);
+    let bytes = fs::read(leftover_of(&rig, &id)).unwrap();
+    rig.a.delete(&id);
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    fs::write(leftover_of(&rig, &id), &bytes).unwrap();
+    rig.a.restart();
+    rig.a.start(&rig.dir);
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    assert!(!leftover_of(&rig, &id).exists(), "the leftover file stayed");
+    assert!(rig.dir.join(format!("{id}.deleted")).exists(), "the delete marker went missing");
+    assert!(rig.a.in_trash(&id));
 }

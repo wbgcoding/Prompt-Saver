@@ -1716,6 +1716,7 @@ pub(crate) fn delete_prompt_core(store: &mut Store, id: &str, now: u64, save: im
         Some(pos) => {
             let mut p = store.prompts.remove(pos);
             p.trashed_at = now;
+            crate::md_sync::sync_owe_marker(&mut store.settings, &p);
             store.trash.insert(0, p); // newest-deleted first
             Some(pos)
         }
@@ -1768,6 +1769,7 @@ pub(crate) fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -
     // (trashed_at: 0) originals if the save fails.
     for mut p in moved.iter().cloned().rev() {
         p.trashed_at = now;
+        crate::md_sync::sync_owe_marker(&mut store.settings, &p);
         store.trash.insert(0, p);
     }
     for view in &mut store.settings.views {

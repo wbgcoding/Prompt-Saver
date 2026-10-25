@@ -361,6 +361,12 @@ pub(crate) struct Settings {
     // Where a synced file put a tile that this machine had to seat elsewhere, per prompt id.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub(crate) sync_file_cells: HashMap<String, crate::md_sync::SyncFileCell>,
+    // What the folder sync knows about the delete marker of a trashed prompt, per id: 0 while
+    // the marker is still owed to the folder (the delete was made here), otherwise the time it
+    // was first seen there. Lets a restart tell a delete that never reached the folder from a
+    // restore made on another machine.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub(crate) sync_trash_marks: HashMap<String, u64>,
 }
 
 pub(crate) fn default_theme() -> String {
@@ -458,6 +464,7 @@ impl Default for Settings {
             views: Vec::new(),
             tile_folders: Vec::new(),
             sync_file_cells: HashMap::new(),
+            sync_trash_marks: HashMap::new(),
         }
     }
 }

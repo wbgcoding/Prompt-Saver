@@ -1172,6 +1172,39 @@ fn sync_tomb_expired(path: &Path, content: &str) -> bool {
     }
 }
 
+// A prompt that goes to the trash while the feature is on owes the folder a delete marker. The
+// sweep writes it later and in the background, so the debt is kept with the settings: a restart
+// before the sweep ran must still know the file left in the folder is this delete's leftover.
+pub(crate) fn sync_owe_marker(settings: &mut Settings, p: &Prompt) {
+    if sync_enabled(settings) && !p.secret && sync_safe_id(&p.id) {
+        settings.sync_trash_marks.insert(p.id.clone(), 0);
+    }
+}
+
+// Whether a file's text is a different prompt from the trashed row it shares an id with
+// (someone edited it), as against a copy of what the row already says.
+fn sync_file_differs_from_row(row: &Prompt, content: &str, prompts: &[Prompt]) -> bool {
+    let blank = SyncPlacement::default();
+    match apply_md_with_tags(row, content, &canonical_tags(prompts)) {
+        Some(updated) => prompt_to_md(row, &blank) != prompt_to_md(&updated, &blank),
+        None => false,
+    }
+}
+
+// Whether a file that shows up for an id sitting in this library's trash is a newer state than
+// the delete (a restore or an edit made elsewhere) and not the delete's own leftover or a stale
+// copy. The evidence: this machine saw the delete marker and it has since gone, or the text
+// differs from the trashed prompt.
+fn sync_restore_evidence(store: &Store, stem: &str, content: &str) -> bool {
+    // A marker seen long ago and gone now is as likely to have expired as to have been removed
+    // by a restore, so only a recent sighting counts.
+    let now = sync_now_secs();
+    if store.settings.sync_trash_marks.get(stem).is_some_and(|&seen| seen > 0 && now.saturating_sub(seen) <= SYNC_TOMB_SECS) {
+        return true;
+    }
+    store.trash.iter().find(|p| p.id == stem).is_some_and(|row| sync_file_differs_from_row(row, content, &store.prompts))
+}
+
 // What the app would write for `p` right now, as the hash `sync_synced_note` keeps.
 pub(crate) fn sync_render_hash(p: &Prompt, settings: &Settings) -> u64 {
     sync_content_hash(&prompt_to_md(p, &sync_placement_for(p, settings)))
@@ -1527,6 +1560,31 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     });
 }
 
+// The app is closing with a folder write still queued (a delete made a moment ago, say): it runs
+// once more here, on its own thread and for a few seconds at most, so the folder does not keep
+// what the library no longer has. Whatever it cannot finish is picked up by the next start.
+pub(crate) fn sync_flush_on_exit(app: &AppHandle) {
+    let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
+    if !q.0.lock().unwrap_or_else(|e| e.into_inner()).pending {
+        return;
+    }
+    let Some(state) = app.try_state::<Db>() else { return };
+    let (prompts, settings) = {
+        let store = lock(&state);
+        if !sync_enabled(&store.settings) {
+            return;
+        }
+        (store.prompts.clone(), store.settings.clone())
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        sync_write_all_impl(&app2, &prompts, &settings);
+        let _ = tx.send(());
+    });
+    let _ = rx.recv_timeout(std::time::Duration::from_secs(3));
+}
+
 // A prompt that left the library (deleted, trashed, or given an id this feature refuses)
 // takes its file with it, or the stale file would come back as a new prompt on the next
 // poll. Only files this feature could have written are swept: the sync folder is
@@ -1642,7 +1700,11 @@ pub(crate) fn sync_poll_apply(
             // Trashed here, and its file is written again with no delete marker beside it: the
             // other machine restored it (or edited it after the delete), which is newer than the
             // delete this machine acted on. It comes back out of the trash with the file's text;
-            // a second row with the same id would break restore, delete and purge.
+            // a second row with the same id would break restore, delete and purge. A file with
+            // no such evidence is the delete's own leftover and stays out.
+            if !sync_restore_evidence(store, &stem, &content) {
+                continue;
+            }
             if crate::trash::restore_trashed_core(store, &stem, |_| true).is_err() {
                 continue;
             }
@@ -1894,16 +1956,21 @@ fn path_of(dir: &Path, stem: &str) -> PathBuf {
 // lock held.
 fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
     let tombs = sync_tombs_in(dir);
-    if tombs.is_empty() {
-        return;
-    }
     let mut trashed: Vec<String> = Vec::new();
+    let mut marks_changed = false;
     {
         let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
+        let now = sync_now_secs().max(1);
         for (stem, path, content) in &tombs {
+            // A marker seen beside a trashed prompt: from here on its disappearance is evidence
+            // that another machine restored the prompt.
+            if store.trash.iter().any(|p| &p.id == stem && !p.secret) && store.settings.sync_trash_marks.get(stem).is_none_or(|&m| m == 0) {
+                store.settings.sync_trash_marks.insert(stem.clone(), now);
+                marks_changed = true;
+            }
             if sync_tomb_handled(path, content) {
                 continue;
             }
@@ -1915,13 +1982,25 @@ fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost)
             if store.prompts.iter().any(|p| &p.id == stem && !p.secret)
                 && matches!(crate::prompts::delete_prompt_core(&mut store, stem, now_secs(), |_, _| true), Ok(true))
             {
+                store.settings.sync_trash_marks.insert(stem.clone(), now);
                 trashed.push(stem.clone());
             }
         }
-        if trashed.is_empty() {
+        // Marks of prompts that left the trash (restored, purged) are let go.
+        let in_trash: std::collections::HashSet<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+        let before = store.settings.sync_trash_marks.len();
+        let mut marks = std::mem::take(&mut store.settings.sync_trash_marks);
+        marks.retain(|id, _| in_trash.contains(id));
+        marks_changed |= marks.len() != before;
+        store.settings.sync_trash_marks = marks;
+        if trashed.is_empty() && !marks_changed {
             return;
         }
-        host.save(&store, true, true, true);
+        let moved = !trashed.is_empty();
+        host.save(&store, moved, true, moved);
+    }
+    if trashed.is_empty() {
+        return;
     }
     host.on_trashed(&trashed);
     host.notify();
@@ -2359,6 +2438,49 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
     }
 }
 
+// A delete whose marker never reached the folder (the app closed, or the folder was away, before
+// the sweep ran) left its file behind. The file is this machine's own and unchanged, so it is
+// noted like any file of the library: the next write's sweep then leaves the marker and removes
+// it, and the poll does not mistake it for a restore. A file somebody edited, and one whose
+// marker was seen and has vanished (a restore elsewhere), is left to the poll. True when a
+// write is needed.
+pub(crate) fn sync_seed_owed(dir: &Path, prompts: &[Prompt], trash: &[Prompt], settings: &Settings) -> bool {
+    let mut any = false;
+    for row in trash.iter().filter(|p| !p.secret && sync_safe_id(&p.id)) {
+        let Some(&mark) = settings.sync_trash_marks.get(&row.id) else { continue };
+        let path = dir.join(format!("{}.md", row.id));
+        if !path.is_file() {
+            continue;
+        }
+        if mark > 0 && sync_tomb_read(&sync_tomb_path(dir, &row.id)).is_none() {
+            continue;
+        }
+        let Some(stamp) = sync_stamp_of(&path) else { continue };
+        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { continue };
+        let hash = sync_hash(&bytes);
+        let Some(content) = sync_decode_text(bytes) else { continue };
+        let ours = parse_frontmatter(&content).is_some_and(|(fields, _)| md_is_ours(&fields));
+        if !ours || sync_file_differs_from_row(row, &content, prompts) {
+            continue;
+        }
+        sync_known_note(&path);
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash });
+        any = true;
+    }
+    any
+}
+
+// The work of a start: learn the folder, then settle what an earlier run left unfinished.
+// True when a write is due.
+pub(crate) fn sync_start_core(db: &Mutex<Store>, dir: &Path) -> bool {
+    let (prompts, trash, settings) = {
+        let s = db.lock().unwrap_or_else(|e| e.into_inner());
+        (s.prompts.clone(), s.trash.clone(), s.settings.clone())
+    };
+    sync_seed_seen(dir, &prompts, &settings);
+    sync_seed_owed(dir, &prompts, &trash, &settings)
+}
+
 // Switching the feature on, or pointing it at another folder, with a library that may be
 // older than what the folder holds (another machine has been writing there). The folder is
 // learned and imported first, and only then is the library written: a write first would put
@@ -2368,8 +2490,7 @@ pub(crate) fn sync_activate_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncR
         let s = db.lock().unwrap_or_else(|e| e.into_inner());
         (s.prompts.clone(), s.settings.clone())
     };
-    let (prompts, settings) = snapshot(db);
-    sync_seed_seen(dir, &prompts, &settings);
+    sync_start_core(db, dir);
     sync_poll_core(db, dir, host);
     let (prompts, settings) = snapshot(db);
     write(&prompts, &settings)
@@ -2393,11 +2514,20 @@ pub(crate) fn start_sync_poll(app: AppHandle) {
         // first save can sweep anything: a prompt deleted in the first seconds of a
         // session must still take its file along.
         if let Some(state) = app.try_state::<Db>() {
-            let (dir, prompts, settings) = {
+            let dir = {
                 let s = lock(&state);
-                (sync_dir_path(&app, &s.settings), s.prompts.clone(), s.settings.clone())
+                sync_dir_path(&app, &s.settings)
             };
-            let _ = tauri::async_runtime::spawn_blocking(move || sync_seed_seen(&dir, &prompts, &settings)).await;
+            let app2 = app.clone();
+            let due = tauri::async_runtime::spawn_blocking(move || {
+                let state = app2.state::<Db>();
+                sync_start_core(&state, &dir)
+            })
+            .await
+            .unwrap_or(false);
+            if due {
+                spawn_sync_write_all(&app, &lock(&state));
+            }
         }
         loop {
             let Some(state) = app.try_state::<Db>() else {
