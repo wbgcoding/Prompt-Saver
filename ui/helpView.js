@@ -1,6 +1,6 @@
 // The help view: search, tabs, collapsed sections and deep links.
 import { HELP_CONTENT } from "./help.js";
-import { $, debounced, LANG, showActiveTab, syncEdgeFade, t, txt } from "./core.js";
+import { $, debounced, LANG, t, txt } from "./core.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
 
 // In-app documentation. EN + DE only (ui/help.js): every other language
@@ -111,16 +111,11 @@ export function setHelpText(el, text, terms, highlight) {
   appendHelpText(el, text, highlight ? terms : []);
 }
 
-// The tab bar is rebuilt on every render; one observer follows the current bar.
-let tabBarObserver = null;
-
 export function renderHelp() {
   const box = $("help-body");
   const tabBar = $("help-tabs-bar");
-  const keepTabScroll = tabBar.querySelector(".expert-tabs")?.scrollLeft || 0;
   box.innerHTML = "";
   tabBar.innerHTML = "";
-  if (tabBarObserver) { tabBarObserver.disconnect(); tabBarObserver = null; }
   const terms = helpNorm(helpQuery).trim().split(/\s+/).filter(Boolean);
   const searching = terms.length > 0;
   const cats = helpCategories();
@@ -140,14 +135,6 @@ export function renderHelp() {
       bar.appendChild(b);
     });
     tabBar.appendChild(bar);
-    bar.scrollLeft = keepTabScroll;
-    showActiveTab(bar);
-    syncEdgeFade(bar);
-    bar.addEventListener("scroll", () => syncEdgeFade(bar), { passive: true });
-    if (typeof ResizeObserver === "function") {
-      tabBarObserver = new ResizeObserver(() => { showActiveTab(bar); syncEdgeFade(bar); });
-      tabBarObserver.observe(bar);
-    }
   }
   const activeSection = searching ? null : sections[helpTab];
   // Fields carry a search weight (title matters far more than a settings line); a
