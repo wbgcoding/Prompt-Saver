@@ -309,14 +309,16 @@ pub(crate) fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
 }
 
 // The id a view carries in a file. A view this machine matched by name to another machine's
-// id keeps writing that id, so both machines' files for one prompt read the same; any other
-// view writes its own.
+// id writes the smallest of the two, so both machines settle on the same one instead of each
+// adopting the other's; any other view writes its own.
 pub(crate) fn sync_view_id_out(settings: &Settings, local: &str) -> String {
     settings
         .views
         .iter()
         .find(|v| v.id == local)
-        .and_then(|v| v.sync_ids.iter().filter(|foreign| !settings.views.iter().any(|o| &o.id == *foreign)).min().cloned())
+        .and_then(|v| {
+            v.sync_ids.iter().filter(|foreign| !settings.views.iter().any(|o| &o.id == *foreign)).chain(std::iter::once(&v.id)).min().cloned()
+        })
         .unwrap_or_else(|| local.to_string())
 }
 

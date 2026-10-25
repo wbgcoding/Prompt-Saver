@@ -1257,3 +1257,59 @@ fn multi_making_a_prompt_confidential_takes_it_off_the_other_machine_and_undoing
     assert!(!rig.b.in_trash(&id));
     rig.assert_converged();
 }
+
+#[test]
+fn multi_two_machines_that_name_their_first_view_differently_agree_on_one_id() {
+    let rig = Rig::new();
+    rig.b.settings(|s| {
+        s.views[0].id = "bmain".to_string();
+        s.active_view = "bmain".to_string();
+    });
+    let ia = rig.a.add("Tile A", "a");
+    put_in_view(&rig.a, "main", &ia, [0, 0]);
+    let ib = rig.b.add("Tile B", "b");
+    put_in_view(&rig.b, "bmain", &ib, [1, 0]);
+    // Both write their files, and both read the other's before either writes again.
+    rig.a.flush(&rig.dir);
+    rig.b.flush(&rig.dir);
+    rig.tick(3);
+    rig.a.poll(&rig.dir);
+    rig.b.poll(&rig.dir);
+    rig.tick(3);
+    rig.a.poll(&rig.dir);
+    rig.b.poll(&rig.dir);
+    rig.a.flush(&rig.dir);
+    rig.b.flush(&rig.dir);
+    rig.settle();
+    assert_eq!(view_names(&rig.a), vec!["Main".to_string()]);
+    assert_eq!(view_names(&rig.b), vec!["Main".to_string()]);
+    // The files carry one view id, and it stays put once the machines have agreed.
+    let ids_in_files = |rig: &Rig| -> Vec<String> {
+        [&ia, &ib]
+            .iter()
+            .map(|id| {
+                let text = std::fs::read_to_string(rig.dir.join(format!("{id}.md"))).unwrap_or_default();
+                text.lines().find(|l| l.starts_with("view_id:")).unwrap_or("").to_string()
+            })
+            .collect()
+    };
+    let first = ids_in_files(&rig);
+    assert!(!first[0].is_empty() && first[0] == first[1], "the two files name different view ids: {first:?}");
+    for _ in 0..3 {
+        rig.settle();
+    }
+    assert_eq!(ids_in_files(&rig), first, "the view id kept changing between the machines");
+    rig.assert_converged();
+}
+
+#[test]
+fn multi_two_machines_switching_the_feature_on_at_the_same_moment_end_up_with_both_libraries() {
+    let rig = Rig::new();
+    let x = rig.a.add("From A", "a");
+    let y = rig.b.add("From B", "b");
+    rig.a.activate(&rig.dir);
+    rig.b.activate(&rig.dir);
+    rig.settle();
+    assert!(rig.a.get(&y).is_some() && rig.b.get(&x).is_some(), "a library did not arrive on the other machine");
+    rig.assert_converged();
+}
