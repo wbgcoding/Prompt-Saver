@@ -1768,14 +1768,14 @@ def run(browser, tmp):
       await sleep(400);
     };
 """
-    # The help button sits right beside the close button, not in the middle of the title bar.
+    # The help button sits right beside the window buttons, not in the middle of the title bar.
     for size_828 in ('880x600', '680x460'):
-        failed += ar_probe('bq828-' + size_828, '828: the editor help button sits beside the close button at ' + size_828, 'index', size_828, '', snip_common + r"""
+        failed += ar_probe('bq828-' + size_828, '828: the editor help button sits beside the window buttons at ' + size_828, 'index', size_828, '', snip_common + r"""
     await snipOpen(300, 200);
     const help = document.getElementById('snip-edit-shortcuts').getBoundingClientRect();
-    const close = document.getElementById('snip-edit-close').getBoundingClientRect();
-    const gap = close.left - help.right;
-    if (!(gap >= 0 && gap <= 8)) errs.push('828: the help button is ' + gap + ' px left of the close button, want 0 to 8');
+    const nextBtn = document.getElementById('snip-edit-minimize').getBoundingClientRect();
+    const gap = nextBtn.left - help.right;
+    if (!(gap >= 0 && gap <= 8)) errs.push('828: the help button is ' + gap + ' px left of the window buttons, want 0 to 8');
 """)
     # Tool options open in a panel under the tool button, not in the toolbar row.
     snip_panel_common = snip_common + r"""
@@ -2105,6 +2105,92 @@ def run(browser, tmp):
       const r = el.getBoundingClientRect();
       if (r.width === 0) continue;
       if (r.left < -0.5 || r.right > window.innerWidth + 0.5) errs.push('932-de: ' + (el.id || el.className) + ' leaves the window (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ' of ' + window.innerWidth + ')');
+    }
+""")
+    # A placed text box opens again on a double-click or F2; one undo step brings the old text back.
+    for how_tx19 in ('dblclick', 'f2'):
+        failed += ar_probe('tx19-' + how_tx19, 'a placed text box is edited again by ' + how_tx19, 'index', '880x600', '', snip_common + r"""
+    const how = '""" + how_tx19 + r"""';
+    const live = document.getElementById('snip-edit-live');
+    const base = document.getElementById('snip-edit-base');
+    const stage = document.getElementById('snip-edit-stage');
+    const input = document.getElementById('snip-edit-text-input');
+    const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    const firePtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y,
+    }));
+    const at = (ix, iy) => { const sr = stage.getBoundingClientRect(); const z = sr.width / live.width; return [sr.left + ix * z, sr.top + iy * z]; };
+    const shot = () => base.toDataURL();
+    const key = (k, ctrl) => { document.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: !!ctrl, bubbles: true, cancelable: true })); };
+    const typeInto = (text, k) => {
+      input.value = text; input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: k || 'Enter', bubbles: true, cancelable: true }));
+    };
+    await snipOpen(400, 200);
+    const blank = shot();
+    document.querySelector('#snip-edit-tools button[data-tool="text"]').click(); await sleepMs(150);
+    const [px, py] = at(40, 60);
+    firePtr('pointerdown', px, py, live); firePtr('pointerup', px, py, window); await sleepMs(120);
+    if (input.classList.contains('hidden')) throw new Error('tx19: a click with the text tool opened no input');
+    typeInto('Totla'); await sleepMs(120);
+    const totla = shot();
+    if (totla === blank) errs.push('tx19: the first text was not drawn');
+    // The pair of presses a double-click is made of, then the dblclick itself.
+    const [hx, hy] = at(50, 70);
+    if (how === 'dblclick') {
+      // Any tool opens the box again, not only the text tool.
+      document.querySelector('#snip-edit-tools button[data-tool="rect"]').click(); await sleepMs(100);
+      firePtr('pointerdown', hx, hy, live); firePtr('pointerup', hx, hy, window);
+      firePtr('pointerdown', hx, hy, live); firePtr('pointerup', hx, hy, window);
+      live.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: hx, clientY: hy }));
+    } else {
+      key('F2');
+    }
+    await sleepMs(150);
+    if (input.classList.contains('hidden')) throw new Error('tx19: ' + how + ' did not open the text again');
+    if (input.value !== 'Totla') errs.push('tx19: the input shows "' + input.value + '", want Totla');
+    if (shot() === totla) errs.push('tx19: the box is still drawn on the canvas while its input is open');
+    typeInto('Total'); await sleepMs(150);
+    const total = shot();
+    if (total === totla || total === blank) errs.push('tx19: the corrected text did not replace the old one');
+    document.getElementById('snip-edit-undo').click(); await sleepMs(120);
+    if (shot() !== totla) errs.push('tx19: one undo did not bring back Totla');
+    document.getElementById('snip-edit-redo').click(); await sleepMs(120);
+    if (shot() !== total) errs.push('tx19: redo did not bring back Total');
+    document.getElementById('snip-edit-undo').click(); await sleepMs(80);
+    document.getElementById('snip-edit-undo').click(); await sleepMs(120);
+    if (shot() !== blank) errs.push('tx19: the edit left a second text op behind');
+""")
+    # The editor bar carries minimize and maximize/restore buttons in front of the close button.
+    failed += ar_probe('wb20', 'the editor bar has minimize and maximize buttons that follow the window state', 'index', '880x600', '', snip_common + r"""
+    const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    await snipOpen(300, 200);
+    await sleepMs(100);
+    const bar = document.querySelector('.snip-edit-titlebar');
+    const mn = document.getElementById('snip-edit-minimize');
+    const mx = document.getElementById('snip-edit-maximize');
+    const cl = document.getElementById('snip-edit-close');
+    if (bar.getAttribute('data-tauri-drag-region') !== 'deep') errs.push('wb20: the bar drag region is "' + bar.getAttribute('data-tauri-drag-region') + '", want deep');
+    if (!mn || !mx) { errs.push('wb20: a window button is missing'); }
+    else {
+      for (const b of [mn, mx]) {
+        if (b.getAttribute('data-tauri-drag-region') !== 'false') errs.push('wb20: ' + b.id + ' does not opt out of the drag region');
+        const sv = b.querySelector('svg');
+        if (!sv || sv.getAttribute('width') !== '18' || sv.getAttribute('stroke-width') !== '1.5') errs.push('wb20: ' + b.id + ' icon is not 18px with stroke 1.5');
+        if (!b.title || !b.getAttribute('aria-label')) errs.push('wb20: ' + b.id + ' has no label');
+      }
+      const r = (e) => e.getBoundingClientRect();
+      if (!(r(mn).right <= r(mx).left + 1 && r(mx).right <= r(cl).left + 1)) errs.push('wb20: the buttons are not in the order minimize, maximize, close');
+      if (Math.abs(r(mn).height - r(cl).height) > 1) errs.push('wb20: the minimize button is not as tall as the close button');
+      const maxTitle = mx.title;
+      if (mx.dataset.maximized !== '0') errs.push('wb20: the maximize button starts in the maximized state');
+      const iconBefore = mx.innerHTML;
+      mx.click(); await sleepMs(150);
+      if (mx.dataset.maximized !== '1' || mx.innerHTML === iconBefore) errs.push('wb20: a click did not switch to the restore icon');
+      if (mx.title === maxTitle) errs.push('wb20: the title did not change to Restore');
+      mx.click(); await sleepMs(150);
+      if (mx.dataset.maximized !== '0' || mx.innerHTML !== iconBefore) errs.push('wb20: a second click did not switch back');
+      if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('wb20: a window button closed the editor');
     }
 """)
     # ---- main window findings: generated block end ----

@@ -64,6 +64,7 @@ ACTS = {
     "tour": '$(\'gear\').click(); await sleep(300); $(\'expert-open\').click(); await sleep(400); const find = () => document.querySelector(".expert-action[data-action=\'tour-open\']"); let tb = find(); for (const tab of document.querySelectorAll(\'#expert-tabs-bar .expert-tab\')) { if (tb) break; tab.click(); await sleep(150); tb = find(); } tb.click(); await sleep(500); const hs = []; for (let i = 0; i < 4; i++) { hs.push(Math.round($(\'tour-body\').getBoundingClientRect().height) + \'/\' + Math.round(document.querySelector(\'#tour-body .tour-step\').offsetHeight)); if (i < 3) { $(\'tour-next\').click(); await sleep(150); } } $(\'tour-dots\').querySelector(\'.tour-dot\').click(); await sleep(200); const pr = document.createElement(\'pre\'); pr.style.cssText = \'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;color:#000;font:700 18px monospace;padding:6px\'; pr.textContent = \'body/step per page: \' + hs.join(\'  \') + \'  box=\' + Math.round(document.querySelector(\'#tour-modal .tour-modal-box\').getBoundingClientRect().height); document.body.appendChild(pr);',
     "expert_system": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].at(-1).click(); await sleep(300); $('expert-flags').scrollTop = 1e6; await sleep(200);",
     "expert_end": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); $('expert-flags').scrollTop = 1e6; await sleep(200);",
+    **{f"expert_t{i}": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); [...document.querySelectorAll('#expert-tabs-bar .expert-tab')][" + str(i) + "].click(); await sleep(300);" for i in range(6)},
     "library": "$('library-btn').click(); await sleep(400);",
     "history": "$('library-btn').click(); await sleep(400); $('library-tab-history').click(); await sleep(400);",
     "tilemenu": TILE_MENU,
@@ -109,7 +110,7 @@ ACTS = {
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
-    "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "help", "help_capture", "stats", "stats_off", "backup"],
+    "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
     "@recording": ["recresult"],

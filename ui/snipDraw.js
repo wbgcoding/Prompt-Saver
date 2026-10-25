@@ -126,6 +126,7 @@ export function createSnipDraw(SE, snipEditBaseCtx, SNIP_DEFAULT_SIZES, SNIP_ARR
     ctx.restore();
   }
   function snipEditDrawTextOp(ctx, op) {
+    if (op.editing) return; // its input is up; the typed text is the preview
     ctx.save();
     ctx.font = `${op.fontPx}px sans-serif`;
     ctx.textBaseline = "top";

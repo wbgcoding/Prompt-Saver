@@ -36,7 +36,8 @@ REPO = Path(__file__).resolve().parents[1]
 # only, so no button has to show them. Ctrl+Tab has no button either.
 LIST_ONLY_SCOPES = {"launcher", "tray", "vars", "floating", "snipOverlay", "recBar", "camera"}
 # snipApply is Enter on the editor's Close button, whose tooltip shows Esc (snipCancel).
-LIST_ONLY_ACTIONS = {"mainNextView", "mainPrevView", "snipApply"}
+# snipEditText (F2) opens a placed text box again; no button carries it.
+LIST_ONLY_ACTIONS = {"mainNextView", "mainPrevView", "snipApply", "snipEditText"}
 
 ENTRY_RE = re.compile(
     r'\{\s*action:\s*"(?P<action>[^"]+)"\s*,\s*code:\s*"(?P<code>[^"]+)"\s*,\s*'

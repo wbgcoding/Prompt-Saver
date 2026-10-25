@@ -31,6 +31,7 @@ export const SHORTCUTS = [
   { action: "snipZoomReset", code: "Digit0", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditFitTip" },
   { action: "snipApply", code: "Enter", mods: [], scopes: ["snipEditor"], descKey: "snipEditCloseTip" },
   { action: "snipCancel", code: "Escape", mods: [], scopes: ["snipEditor"], descKey: "snipEditCloseTip" },
+  { action: "snipEditText", code: "F2", mods: [], scopes: ["snipEditor"], descKey: "snipEditTextAgain" },
   { action: "snipShowOriginal", code: "KeyV", mods: [], scopes: ["snipEditor"], descKey: "showOriginalTip" },
   { action: "snipTool.crop", code: "Digit1", mods: [], scopes: ["snipEditor"], descKey: "snipToolCrop" },
   { action: "snipTool.pen", code: "Digit2", mods: [], scopes: ["snipEditor"], descKey: "snipToolPen" },
@@ -152,6 +153,10 @@ export function withShortcut(el, action, t, lang) {
   return el;
 }
 
+// Entries whose overview row names another way in as well: the row shows this text instead of the
+// key alone.
+const KEYS_TEXT = { snipEditText: "snipEditTextAgainKeys" };
+
 // Rows for a "?" overview table, one row per distinct key combo (an action
 // with an alt binding, e.g. veRedoAlt, is folded into its primary row's
 // description rather than listed twice). `scope` is one scope name or an
@@ -166,7 +171,8 @@ export function rowsForScope(scope, t, lang) {
     if (entry.action.endsWith("Alt")) continue; // shown as part of the primary action's row
     if (seen.has(entry.descKey)) continue;
     seen.add(entry.descKey);
-    rows.push({ desc: stripTrailingHint(t(entry.descKey)), keys: formatKeys(entry, lang) });
+    const keys = KEYS_TEXT[entry.action] ? t(KEYS_TEXT[entry.action]) : formatKeys(entry, lang);
+    rows.push({ desc: stripTrailingHint(t(entry.descKey)), keys });
   }
   return rows;
 }

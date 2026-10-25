@@ -1389,9 +1389,11 @@
        below, actions bottom-right. -->
   <div id="snip-edit" class="overlay snip-edit hidden" role="dialog" aria-modal="true" data-i18n-aria="snipEditTitle">
     <!-- The overlay covers the whole frameless main window, so this is the
-         only titlebar it has -- data-tauri-drag-region alone moves the window,
-         no JS needed (same as the main window's own header). -->
-    <div class="snip-edit-titlebar" data-tauri-drag-region>
+         only titlebar it has. "deep" lets the label and the empty bar move the
+         window (a double-click toggles maximize), the buttons opt out. The
+         minimize / maximize buttons are added in front of the close button by
+         winButtons.js. -->
+    <div class="snip-edit-titlebar" data-tauri-drag-region="deep">
       <span class="snip-edit-titlebar-label" data-i18n="snipEditTitle"></span>
       <button id="snip-edit-shortcuts" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="shortcutsTitle" data-i18n-aria="shortcutsTitle">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.2 9.5a2.8 2.8 0 1 1 3.9 2.6c-.9.4-1.4 1-1.4 2.1"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg>
