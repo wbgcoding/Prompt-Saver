@@ -62,8 +62,8 @@ export const SHORTCUTS = [
   { action: "veSeekEnd", code: "End", mods: [], scopes: ["videoEditor"], descKey: "veToEnd" },
   { action: "veSeekStartAlt", code: "Home", mods: ["shift"], scopes: ["videoEditor"], descKey: "veToSourceStart" },
   { action: "veSeekEndAlt", code: "End", mods: ["shift"], scopes: ["videoEditor"], descKey: "veToSourceEnd" },
-  { action: "veMarkIn", code: "KeyI", mods: [], scopes: ["videoEditor"], descKey: "veMarkInTip" },
   { action: "veMarkOut", code: "KeyO", mods: [], scopes: ["videoEditor"], descKey: "veMarkOutTip" },
+  { action: "veMarkIn", code: "KeyI", mods: [], scopes: ["videoEditor"], descKey: "veMarkInTip" },
   { action: "veCutSel", code: "KeyC", mods: [], scopes: ["videoEditor"], descKey: "veCutSelTip" },
   { action: "veShowOriginal", code: "KeyV", mods: [], scopes: ["videoEditor"], descKey: "showOriginalTip" },
 

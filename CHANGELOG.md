@@ -595,6 +595,20 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Window buttons in the screenshot editor.** The editor bar now has minimize and
   maximize/restore buttons next to the close button. Drag the bar or its title to move
   the window, double-click it to maximize or restore.
+- **Video editor bar.** The whole bar now drags the window (the file name and title
+  too, not only the empty strip), as does the camera window bar. The editor also
+  has minimize and maximize/restore buttons next to the close button.
+- **Video editor selection.** Dragging on the timeline now selects a range straight
+  away (a plain click only moves the playhead, the ruler strip scrubs). Trim, cut and
+  "use selection" stay disabled with a hint until a range exists. Trim clears the
+  selection, a cut sticking out of the trimmed part is clamped to it, cuts that touch
+  merge into one cut (one undo step), the mark-out button comes before mark-in, and
+  the trim fields can no longer cross each other.
+- **Keys overlay preview.** The preview now shows the W key as pressed (not Esc or the
+  first key), with a short hint under the settings that explains the highlighted key.
+- **Remove overlays from the list.** Every overlay row has a cross at its end: the first
+  click turns it into "Remove?", the second removes the overlay (Ctrl+Z brings it back).
+  Delete or Backspace removes the overlay selected on the picture.
 - **Expert menu cards sit without gaps.** The cards of a tab now fill columns
   from top to bottom, so a short card is followed by the next card instead of
   empty space. The reading order is therefore column by column, not row by row.

@@ -561,10 +561,10 @@ async function exportIdleCheck() {
   sb.__empty = { ...sb.__op, preset: "custom", keys: [] };
   expect("an empty custom pick adds no filter", run("buildKeysFilters(__empty)").length === 0);
   expect("an empty custom pick is flagged in the preview model", run("keysPreviewModel(__empty)").empty === true);
-  // The preview model: same grid, first key pressed; the pressed preset gets one sample bar.
+  // The preview model: same grid, the W key pressed; the pressed preset gets one sample bar.
   const grid = run("keysPreviewModel(__op)");
   expect("the preview draws the whole grid", grid.cells.length === 20 && !grid.empty && grid.bar === null, String(grid.cells.length));
-  expect("the preview shows exactly one pressed sample key", grid.cells.filter((c) => c.active).length === 1 && grid.cells[0].active);
+  expect("the preview shows exactly one pressed sample key", grid.cells.filter((c) => c.active).length === 1 && grid.cells.find((c) => c.active).label === "W");
   sb.__pressed = { ...sb.__op, preset: "pressed" };
   const bar = run("keysPreviewModel(__pressed)");
   expect("the pressed preset previews a sample bar", bar.cells.length === 0 && bar.bar && bar.bar.w === 400 && bar.bar.label === "A");

@@ -13,9 +13,9 @@
 </head>
 <body class="video-body">
   <!-- The window has no OS titlebar, so this row is both the title and the drag
-       surface (data-tauri-drag-region alone moves the window, same as the main
+       surface (a deep drag region moves the window from any part of the bar, same as the main
        window's header). -->
-  <div class="ve-titlebar" data-tauri-drag-region>
+  <div class="ve-titlebar" data-tauri-drag-region="deep">
     <span class="ve-titlebar-label" data-i18n="veTitle">Video editor</span>
     <span id="ve-file" class="ve-file"></span>
     <button id="ve-export-open" class="primary-btn ve-export-open" type="button" data-tauri-drag-region="false" data-i18n="veExportOpen" data-i18n-title="veExportOpenTip">Export…</button>
@@ -115,7 +115,7 @@
 
       <!-- Timeline: ruler, filmstrip and one waveform per audio track, all the
            same width, scrolled together. -->
-      <div id="ve-timeline" class="ve-timeline" tabindex="0" role="group" data-i18n-aria="veTimelineLabel">
+      <div id="ve-timeline" class="ve-timeline" tabindex="0" role="group" data-i18n-aria="veTimelineLabel" data-i18n-title="veTimelineHint">
         <div id="ve-track" class="ve-track">
           <div id="ve-ruler" class="ve-ruler" aria-hidden="true"></div>
           <div id="ve-filmstrip" class="ve-filmstrip" aria-hidden="true"></div>
@@ -138,8 +138,8 @@
 
       <div class="ve-tools">
         <div class="ve-tool-group" role="group" data-i18n-aria="veSelGroup">
-          <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip" data-shortcut="veMarkIn">Mark in</button>
           <button id="ve-mark-out" class="ghost-btn" type="button" data-i18n="veMarkOut" data-i18n-title="veMarkOutTip" data-shortcut="veMarkOut">Mark out</button>
+          <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip" data-shortcut="veMarkIn">Mark in</button>
           <button id="ve-sel-clear" class="ghost-btn" type="button" data-i18n="veSelClear" data-i18n-title="veSelClearTip">Clear selection</button>
         </div>
         <div class="ve-tool-group" role="group" data-i18n-aria="veTrimGroup">

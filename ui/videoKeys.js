@@ -154,7 +154,7 @@ function pressedBar(op, slot) {
 }
 
 // What the preview draws for an overlay, in overlay-local source pixels: the same grid the export
-// burns in, with the first key shown as pressed so the colours can be judged. `bar` is the single
+// burns in, with the W key shown as pressed so the colours can be judged. `bar` is the single
 // sample bar of the "pressed" preset; `empty` flags a custom pick without keys.
 export function keysPreviewModel(op) {
   if (op.preset === "pressed") {
@@ -162,9 +162,13 @@ export function keysPreviewModel(op) {
     return { cells: [], bar: { x: 0, y: bar.y - op.rect.y, w: op.rect.w, h: bar.h, fontSize: bar.fontSize, label: "A" }, empty: false };
   }
   const rows = keysLayoutRows(op);
-  const cells = keysGridRects(rows, { x: 0, y: 0, w: op.rect.w, h: op.rect.h }).map((k, i) => {
+  const rects = keysGridRects(rows, { x: 0, y: 0, w: op.rect.w, h: op.rect.h });
+  // W is the sample "pressed" key (the usual movement key); a layout without it shows its first.
+  const W_VK = 0x57;
+  const sample = Math.max(0, rects.findIndex((k) => k.vk === W_VK));
+  const cells = rects.map((k, i) => {
     const label = keyLabel(k.vk);
-    return { x: k.x, y: k.y, w: k.w, h: k.h, label, fontSize: keyFontSize(k, label), active: i === 0 };
+    return { x: k.x, y: k.y, w: k.w, h: k.h, label, fontSize: keyFontSize(k, label), active: i === sample };
   });
   return { cells, bar: null, empty: cells.length === 0 };
 }
