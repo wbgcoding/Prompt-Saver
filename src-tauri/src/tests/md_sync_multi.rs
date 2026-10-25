@@ -644,7 +644,7 @@ fn multi_clocks_ten_minutes_apart_still_converge() {
 
 
 #[test]
-fn multi_a_restored_prompt_gets_its_file_back_and_b_does_not_sweep_it() {
+fn multi_a_restored_prompt_comes_back_on_b_although_b_trashed_it() {
     let rig = Rig::new();
     let id = rig.a.add("Back again", "restored text");
     rig.settle();
@@ -656,12 +656,23 @@ fn multi_a_restored_prompt_gets_its_file_back_and_b_does_not_sweep_it() {
     assert!(rig.a.get(&id).is_some(), "the restored prompt vanished again on A");
     assert!(rig.dir.join(format!("{id}.md")).exists(), "the restored prompt has no file");
     assert!(!rig.dir.join(format!("{id}.deleted")).exists(), "the old delete marker stayed and would trash it elsewhere");
-    // B keeps its trash copy (a trashed prompt is never imported as new); restoring it there is
-    // the user's move.
-    assert!(rig.b.in_trash(&id));
-    rig.b.restore(&id);
-    rig.settle();
+    // A restore is newer than the delete marker B acted on: B takes the prompt out of its trash.
+    assert!(!rig.b.in_trash(&id), "B kept the prompt in its trash after A restored it");
+    assert_eq!(rig.b.get(&id).map(|p| p.text), Some("restored text".to_string()));
     rig.assert_converged();
+}
+
+#[test]
+fn multi_a_prompt_trashed_on_b_alone_stays_there_while_nobody_touches_its_file() {
+    let rig = Rig::new();
+    let id = rig.a.add("Mine", "x");
+    rig.settle();
+    rig.b.delete(&id);
+    rig.settle();
+    rig.settle();
+    assert!(rig.a.in_trash(&id), "A kept a prompt B deleted");
+    assert!(rig.b.in_trash(&id), "B's delete was undone by a file nobody changed");
+    assert!(!rig.dir.join(format!("{id}.md")).exists());
 }
 
 

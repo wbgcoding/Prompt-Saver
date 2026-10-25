@@ -1266,8 +1266,9 @@ pub(crate) fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placeme
     if !sync_seen_lock().contains_key(&sync_seen_key(path)) {
         return !sync_md_matches(p, placement, &text);
     }
-    // Seen but never known as a live prompt's file (it arrived while the prompt sat in
-    // the trash and was only skipped): a restore must not overwrite it silently.
+    // Seen but never known as a live prompt's file (it arrived beside a delete marker
+    // while the prompt sat in the trash and was only skipped): a restore must not
+    // overwrite it silently.
     if !sync_known_lock().contains(&sync_seen_key(path)) {
         return true;
     }
@@ -1636,15 +1637,25 @@ pub(crate) fn sync_poll_apply(
         // parse_frontmatter is cheap string splitting and apply_md_to_prompt re-parses itself, so
         // threading one shared HashMap through it is not worth the signature change.
         let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
+        let mut is_new = is_new;
+        if is_new && !store.prompts.iter().any(|p| p.id == stem) && store.trash.iter().any(|p| p.id == stem && !p.secret) {
+            // Trashed here, and its file is written again with no delete marker beside it: the
+            // other machine restored it (or edited it after the delete), which is newer than the
+            // delete this machine acted on. It comes back out of the trash with the file's text;
+            // a second row with the same id would break restore, delete and purge.
+            if crate::trash::restore_trashed_core(store, &stem, |_| true).is_err() {
+                continue;
+            }
+            is_new = false;
+            changed = true;
+            settings_changed = true;
+        }
         if is_new {
             if store.prompts.iter().any(|p| p.id == stem) {
                 continue; // added by something else in the meantime
             }
             if store.trash.iter().any(|p| p.id == stem) {
-                // Trashed here, written again by a machine that does not know: a second row with the same
-                // id would break restore, delete and purge. The file stays (the sweep takes only files this
-                // process wrote or read for a live prompt), and a later restore keeps it as a copy.
-                continue;
+                continue; // a confidential entry in the trash: never imported
             }
             let Some(np) = apply_md_with_tags(&sync_blank_prompt(stem), &content, &canonical_tags(&store.prompts)) else { continue };
             let id = np.id.clone();
@@ -1966,12 +1977,13 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
     }
     // Only now, with at least one file to read, is the library copied for the
     // comparison against what each file would be written as.
-    let (snapshot, settings_snapshot) = {
+    let (snapshot, settings_snapshot, trashed_ids) = {
         let store = store_lock();
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
-        (store.prompts.clone(), store.settings.clone())
+        let trashed: std::collections::HashSet<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+        (store.prompts.clone(), store.settings.clone(), trashed)
     };
     let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
     for SyncToRead { path, key, stem, name, stamp } in to_read {
@@ -2011,6 +2023,9 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
                 continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
+        } else if trashed_ids.contains(&stem) && sync_tomb_read(&sync_tomb_path(&dir, &stem)).is_some() {
+            // A file beside a delete marker is the delete's own leftover, not a newer state.
+            continue;
         } else {
             candidates.push((stem, content, true));
         }
@@ -2028,6 +2043,7 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
         return;
     }
     let stems: Vec<String> = candidates.iter().map(|(stem, _, _)| stem.clone()).collect();
+    let trash_before = store.trash.len();
     let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| host.on_replace(settings, old, updated));
     // The library now agrees with these files (or the file was refused): from here on a save
     // that renders the same is not a newer state than the file's.
@@ -2036,7 +2052,8 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
             sync_synced_note(&path_of(&dir, stem), sync_render_hash(p, &store.settings));
         }
     }
-    host.save(&store, changed, settings_changed, false);
+    let trash_changed = store.trash.len() != trash_before;
+    host.save(&store, changed, settings_changed, trash_changed);
     drop(store);
     if changed || settings_changed {
         host.notify();

@@ -1068,13 +1068,29 @@ fn sync_same_dir_compares_by_identity_not_spelling() {
 }
 
 #[test]
-fn sync_poll_does_not_import_a_file_whose_id_sits_in_the_trash() {
-    let trashed = sync_test_prompt();
+fn sync_poll_takes_a_trashed_id_out_of_the_trash_instead_of_adding_a_second_row() {
+    let mut trashed = sync_test_prompt();
+    trashed.trashed_at = 5;
+    let content = prompt_to_md(&trashed, &SyncPlacement::default());
+    let mut store = sync_apply_store(Vec::new(), vec![trashed]);
+    store.settings.views.push(super::hotkeys_2::test_view("v1"));
+    store.settings.active_view = "v1".to_string();
+    let (changed, _) = sync_apply(&mut store, "p1", content, true);
+    assert!(changed);
+    assert_eq!(store.prompts.len(), 1, "the file brings the one prompt back, not a second row");
+    assert!(store.trash.is_empty());
+    assert_eq!(store.prompts[0].trashed_at, 0);
+}
+
+#[test]
+fn sync_poll_does_not_import_a_file_whose_id_is_a_confidential_entry_in_the_trash() {
+    let mut trashed = sync_test_prompt();
+    trashed.secret = true;
     let content = prompt_to_md(&trashed, &SyncPlacement::default());
     let mut store = sync_apply_store(Vec::new(), vec![trashed]);
     let (changed, _) = sync_apply(&mut store, "p1", content, true);
     assert!(!changed);
-    assert!(store.prompts.is_empty(), "a trashed id must not come back as a second, live prompt");
+    assert!(store.prompts.is_empty(), "a confidential trash entry must not come back from a file");
     assert_eq!(store.trash.len(), 1);
 }
 
