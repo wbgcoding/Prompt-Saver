@@ -25,16 +25,23 @@ mod hotkeys_1;
 mod hotkeys_2;
 mod tray_pills;
 mod timer;
-mod robustness;
 mod placeholders;
-mod review_fixes;
-mod fix_review;
-mod media_fixes;
 #[cfg(windows)]
 mod win_windows;
 mod http_client;
 mod data_dir_cleanup;
-mod final_fixes;
+mod store_tests;
+mod trash_tests;
+mod paths_tests;
+mod vault_tests;
+mod media_files_tests;
+mod video_editor_tests;
+mod views_tests;
+mod clipwatch_tests;
+mod logging_tests;
+mod stats_tests;
+mod update_tests;
+mod os_integration;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;
@@ -75,17 +82,33 @@ pub(super) use tray_pills::*;
 #[allow(unused_imports)]
 pub(super) use timer::*;
 #[allow(unused_imports)]
-pub(super) use robustness::*;
-#[allow(unused_imports)]
 pub(super) use placeholders::*;
-#[allow(unused_imports)]
-pub(super) use review_fixes::*;
-#[allow(unused_imports)]
-pub(super) use fix_review::*;
-#[allow(unused_imports)]
-pub(super) use media_fixes::*;
 #[allow(unused_imports)]
 pub(super) use data_dir_cleanup::*;
 #[cfg(windows)]
 #[allow(unused_imports)]
 pub(super) use win_windows::*;
+#[allow(unused_imports)]
+pub(super) use store_tests::*;
+#[allow(unused_imports)]
+pub(super) use trash_tests::*;
+#[allow(unused_imports)]
+pub(super) use paths_tests::*;
+#[allow(unused_imports)]
+pub(super) use vault_tests::*;
+#[allow(unused_imports)]
+pub(super) use media_files_tests::*;
+#[allow(unused_imports)]
+pub(super) use video_editor_tests::*;
+#[allow(unused_imports)]
+pub(super) use views_tests::*;
+#[allow(unused_imports)]
+pub(super) use clipwatch_tests::*;
+#[allow(unused_imports)]
+pub(super) use logging_tests::*;
+#[allow(unused_imports)]
+pub(super) use stats_tests::*;
+#[allow(unused_imports)]
+pub(super) use update_tests::*;
+#[allow(unused_imports)]
+pub(super) use os_integration::*;

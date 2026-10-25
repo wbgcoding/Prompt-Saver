@@ -615,3 +615,67 @@ fn the_recording_state_event_names_idle_recording_and_paused() {
     assert_eq!(rec_state_name(Some(RecPhase::Recording)), "recording");
     assert_eq!(rec_state_name(Some(RecPhase::Paused)), "paused");
 }
+
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
+#[test]
+fn cancelling_interim_crops_does_not_deadlock_on_their_own_list_lock() {
+    let list: Arc<Mutex<InterimCrops>> = Arc::new(Mutex::new(Vec::new()));
+    let flag = Arc::new(AtomicBool::new(false));
+    let (flag2, list2) = (flag.clone(), list.clone());
+    // Mirrors a crop thread: runs until signalled, then takes the list lock to drop its own entry.
+    let handle = std::thread::spawn(move || {
+        while !flag2.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let me = std::thread::current().id();
+        list2.lock().unwrap().retain(|(_, h)| h.thread().id() != me);
+    });
+    list.lock().unwrap().push((flag, handle));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let list3 = list.clone();
+    std::thread::spawn(move || {
+        stop_and_join_interim_crops(&list3);
+        let _ = tx.send(());
+    });
+    assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "joining the crops hung");
+    assert!(list.lock().unwrap().is_empty());
+}
+
+#[test]
+fn follow_thread_keeps_the_bar_while_a_stop_is_refused_mid_switch() {
+    assert!(follow_stop_settled(true, false, false), "a stop that went through closes the bar");
+    assert!(!follow_stop_settled(false, false, true), "a continue in flight keeps it for a retry");
+    assert!(!follow_stop_settled(false, true, false), "a session that refused the stop keeps it");
+    assert!(follow_stop_settled(false, false, false), "nothing recording any more closes it");
+}
+
+#[test]
+fn recording_status_stats_the_file_after_the_session_lock_is_released() {
+    let src = include_str!("../rec_bar.rs").replace("\r\n", "\n");
+    let start = src.find("pub(crate) async fn recording_status(").unwrap();
+    let body = &src[start..src[start..].find("\n}\n").map(|i| start + i).unwrap()];
+    let lock_at = body.find("rstate.0.lock()").unwrap();
+    let scope_end = body.find("\n    };\n    let bytes").expect("the lock lives in its own block");
+    let stat_at = body.find("metadata(&output_path)").expect("stats a copied path");
+    assert!(lock_at < scope_end && scope_end < stat_at, "metadata must run after the lock block ends");
+    assert!(!body.contains("metadata(&session"), "never stat through the locked session");
+}
+
+// Structural fix, no red unit test: only comments and an attribute moved.
+#[test]
+fn the_follow_comment_and_cfg_sit_on_the_follow_function() {
+    let bar = source!("../rec_bar.rs");
+    assert!(bar.contains("// periodic jobs.
+#[cfg(windows)]
+pub(crate) fn spawn_rec_bar_follow("));
+    assert!(!bar.contains("// periodic jobs.
+#[cfg(windows)]
+// Bumped"));
+}

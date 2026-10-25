@@ -1211,3 +1211,54 @@ fn sync_startup_seed_lets_the_next_write_sweep_a_plaintext_file_of_a_now_confide
     assert!(foreign.exists(), "a file that is not ours is never touched");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
+#[test]
+fn a_synced_file_keeps_a_network_path_as_written() {
+    let mut p = sync_blank_prompt("p1".into());
+    p.file_path = String::new();
+    let md = format!("---\nname: x\ncolor: \ntags: \nnotes: \nfile: {}\nicon: //nas/ps/i.png\n---\nbody\n", r"\\nas\ps\a.pdf");
+    let out = apply_md_to_prompt(&p, &md).unwrap();
+    assert_eq!(out.file_path, r"\\nas\ps\a.pdf");
+    assert_eq!(out.icon_path, "//nas/ps/i.png");
+    let src = source!("../md_sync.rs");
+    assert!(!src.contains("is_network_path"), "the sync reader no longer blanks a path");
+}
+
+#[test]
+fn a_synced_file_keeps_the_paths_it_names() {
+    let p = md_sync_1::sync_test_prompt();
+    let md = prompt_to_md(&p, &SyncPlacement::default());
+    assert!(md.contains("file: \n") && md.contains("icon: \n"), "the fixture writes empty media lines");
+    let net = md.replace("file: \n", "file: \\\\host\\share\\x.mp4\n").replace("icon: \n", "icon: //host/share/i.png\n");
+    let got = apply_md_to_prompt(&p, &net).expect("valid frontmatter");
+    assert_eq!(got.file_path, r"\\host\share\x.mp4", "a network file path from the folder is kept as written");
+    assert_eq!(got.icon_path, "//host/share/i.png", "a network icon path from the folder is kept as written");
+    let local = md.replace("file: \n", "file: C:/clips/a.mp4\n").replace("icon: \n", "icon: C:/clips/i.png\n");
+    let got = apply_md_to_prompt(&p, &local).unwrap();
+    assert_eq!((got.file_path.as_str(), got.icon_path.as_str()), ("C:/clips/a.mp4", "C:/clips/i.png"));
+}
+
+#[test]
+fn the_startup_seed_removes_a_plaintext_file_of_a_confidential_prompt_itself() {
+    let dir = md_sync_1::sync_tmp_dir("seed-removes-secret");
+    let mut p = md_sync_1::sync_test_prompt();
+    std::fs::write(dir.join("p1.md"), prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+    let foreign = dir.join("p9.md");
+    std::fs::write(&foreign, "just my own notes, no header").unwrap();
+    p.secret = true;
+    let mut other = md_sync_1::sync_test_prompt();
+    other.id = "p9".into();
+    other.secret = true;
+    sync_seed_seen(&dir, &[p, other], &Settings::default());
+    assert!(!dir.join("p1.md").exists(), "the seed itself removes our plaintext copy");
+    assert!(foreign.exists(), "a file that is not ours is never touched");
+    let _ = std::fs::remove_dir_all(&dir);
+}

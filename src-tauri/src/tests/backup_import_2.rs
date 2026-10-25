@@ -933,3 +933,169 @@ fn copy_log_cap_keeps_exactly_cap_rows_after_deletions() {
     let ids: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
     assert_eq!(ids, ["p8", "p7", "p6", "p5", "p4"]);
 }
+
+#[test]
+fn a_backup_import_counts_the_network_links_it_removes() {
+    let mut a = test_prompt("a");
+    a.file_path = r"\\nas\share\a.mp4".into();
+    a.icon_path = "//nas/share/i.png".into();
+    let mut b = test_prompt("b");
+    b.file_path = "C:/local/b.mp4".into();
+    assert_eq!(count_network_links(&[a.clone(), b.clone()]), 2);
+    assert_eq!(clear_network_paths(&mut a), 2, "the clearing reports how many links it cut");
+    assert_eq!(clear_network_paths(&mut b), 0);
+    assert_eq!(count_network_links(&[a, b]), 0);
+}
+
+#[test]
+fn only_the_reserved_names_are_self_filling() {
+    assert!(is_dyn_var_name("@date"));
+    assert!(is_dyn_var_name("@uuid"));
+    assert!(!is_dyn_var_name("@kunde"), "@ plus an unreserved word is an ordinary variable");
+    assert!(!is_dyn_var_name("date"));
+    assert!(!is_dyn_var_name("@"));
+    let none = HashMap::new();
+    assert_eq!(resolve_static_vars("{?@kunde=Meier} {?@date}", &none, &none), "Meier {?@date}");
+    // The list the frontend uses must be the one used here.
+    let js = include_str!("../../../ui/promptVars.js");
+    let start = js.find("export const DYN_VARS = [").expect("DYN_VARS in promptVars.js");
+    let body = &js[start..js[start..].find("];").map(|i| start + i).unwrap()];
+    let mut js_names: Vec<String> = body.split('"').skip(1).step_by(2).map(|s| s.to_string()).collect();
+    js_names.sort();
+    let mut rust_names: Vec<String> = DYN_NAMES.iter().map(|s| s.to_string()).collect();
+    rust_names.sort();
+    assert_eq!(js_names, rust_names, "DYN_VARS (ui/promptVars.js) and DYN_NAMES (store.rs) must list the same names");
+}
+
+#[test]
+fn a_new_empty_snapshot_gets_its_names_cache_at_creation() {
+    let dir = stream_test_dir("empty-names");
+    {
+        let conn = Connection::open(dir.join("data.db")).unwrap();
+        conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);").unwrap();
+    }
+    let root = dir.join("backups");
+    let guard_src = std::sync::Mutex::new(0u8);
+    let name = backup_released(guard_src.lock().unwrap(), &dir, &root, 5, None, || {}).unwrap();
+    assert!(root.join(&name).join(BACKUP_NAMES_FILE).exists(), "written when the snapshot is made, not at the first listing");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn backup_names_cache_is_written_for_an_empty_snapshot() {
+    let dir = std::env::temp_dir().join(format!("{}-test-empty-names-cache", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&dir);
+    let folder = dir.join("20260101-000000");
+    std::fs::create_dir_all(&folder).unwrap();
+    let raw = dir.join("raw.db");
+    drop(full_schema_db(&raw, "e"));
+    gzip_to(&raw, &folder.join("data.db.gz")).unwrap();
+    let _ = std::fs::remove_file(&raw);
+
+    assert!(backup_prompt_names(&folder).is_empty());
+    assert!(folder.join(BACKUP_NAMES_FILE).exists(), "an empty snapshot is cached too, not unpacked on every listing");
+
+    // A snapshot that cannot be read at all must not get a cached empty list.
+    let bad = dir.join("20260102-000000");
+    std::fs::create_dir_all(&bad).unwrap();
+    std::fs::write(bad.join("data.db.gz"), b"not gzip").unwrap();
+    assert!(backup_prompt_names(&bad).is_empty());
+    assert!(!bad.join(BACKUP_NAMES_FILE).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn folder_import_upgrades_the_retired_placeholder_spelling() {
+    let item = folder_file_item("Note".to_string(), vec![], "Title\nHi {#{name}#} on {#{date}#}");
+    assert_eq!(item.text, "Hi {?name} on {?@date}");
+    let item = folder_file_item("Note".to_string(), vec![], &format!("one{}Dear {{#{{name}}#}}", VARIANT_SEP));
+    assert_eq!(item.variants, vec!["Dear {?name}".to_string()]);
+}
+
+pub(super) fn bare_import_store() -> Store {
+    Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() }
+}
+
+#[test]
+fn import_ignores_a_secret_flag_on_text_that_is_not_sealed() {
+    let json = r#"[{"name":"Fake","text":"plain words","secret":true}]"#;
+    let data = parse_json_data(json).unwrap();
+    let mut store = bare_import_store();
+    append_imported_prompts(&mut store, data.prompts);
+    assert!(!store.prompts[0].secret, "plain text with the flag set is imported as a plain entry");
+}
+
+#[test]
+fn csv_and_txt_exports_never_carry_confidential_entries() {
+    assert!(secrets_exportable("json", true));
+    assert!(!secrets_exportable("json", false));
+    assert!(!secrets_exportable("csv", true));
+    assert!(!secrets_exportable("txt", true));
+}
+
+#[test]
+fn import_drops_only_the_invalid_tags() {
+    let known = HashMap::new();
+    let long = "x".repeat(MAX_TAG_LEN + 1);
+    let tags = lenient_import_tags(vec!["Clients, 2025".into(), "Work".into(), long, "work".into(), "  ".into(), "Home".into()], &known);
+    assert_eq!(tags, vec!["Work".to_string(), "Home".to_string()], "good tags survive, bad and duplicate ones go");
+}
+
+#[test]
+fn import_truncates_an_over_long_note_on_a_char_boundary() {
+    let note = "\u{e4}".repeat(MAX_NOTES_LEN + 25);
+    let kept = lenient_import_note(&note);
+    assert_eq!(kept.chars().count(), MAX_NOTES_LEN);
+    assert!(kept.chars().all(|c| c == '\u{e4}'));
+    assert_eq!(lenient_import_note("short note"), "short note");
+}
+
+#[test]
+fn backup_export_writers_use_the_strict_replace() {
+    let src = include_str!("../vault.rs");
+    assert!(!src.contains("write_bytes_atomic(&path"), "a backup export must not fall back to an in-place write");
+    assert_eq!(src.matches("write_bytes_atomic_strict(&path").count(), 2);
+}
+
+#[test]
+fn user_picked_exports_never_write_in_place() {
+    for (name, src) in [
+        ("import_export.rs", include_str!("../import_export.rs")),
+        ("vault.rs", include_str!("../vault.rs")),
+        ("stats.rs", include_str!("../stats.rs")),
+    ] {
+        assert!(!src.contains("fs::write(&path"), "{name} writes a user-picked file in place instead of through write_bytes_atomic");
+    }
+}
+
+#[test]
+fn the_import_folder_scan_survives_an_unbounded_limit() {
+    let dir = std::env::temp_dir().join(format!("ps-scanmax-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("a.md"), "x").unwrap();
+    let (entries, truncated) = scan_import_folder(&dir, 3, usize::MAX);
+    assert_eq!(entries.len(), 1);
+    assert!(!truncated);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_oversized_plain_snapshot_is_refused_before_any_copy() {
+    let dir = std::env::temp_dir().join(format!("ps-bigplain-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let fake = dir.join("data.db");
+    let f = fs::File::create(&fake).unwrap();
+    f.set_len(MAX_INFLATED + 1).unwrap();
+    drop(f);
+    let err = stage_and_validate_backup(&fake, &dir).unwrap_err();
+    assert_eq!(err, "backup expands to more than 512 MB");
+    let leftovers: Vec<String> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(STAGED_RESTORE_PREFIX))
+        .collect();
+    assert!(leftovers.is_empty(), "no staged file remains: {leftovers:?}");
+    let _ = fs::remove_dir_all(&dir);
+}

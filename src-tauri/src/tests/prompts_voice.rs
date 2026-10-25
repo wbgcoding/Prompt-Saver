@@ -1036,3 +1036,252 @@ fn sync_sweep_spares_documents_the_app_did_not_write() {
     assert!(dir.join("AGENTS.md").exists(), "the readme must stay");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
+#[test]
+fn a_copy_restored_from_a_confidential_entry_is_confidential_and_sealed() {
+    let key = [7u8; 32];
+    let mut source = test_prompt("src");
+    source.secret = true;
+    let mut copy = build_restored_prompt(&source, "n", "plain body".to_string(), vec!["plain entry".to_string()], "");
+    assert!(!copy.secret);
+    seal_restored_prompt(&mut copy, &key);
+    assert!(copy.secret);
+    assert_ne!(copy.text, "plain body");
+    assert_eq!(secret_decrypt(&copy.text, &key).unwrap(), "plain body");
+    assert_eq!(secret_decrypt(&copy.variants[0], &key).unwrap(), "plain entry");
+}
+
+#[test]
+fn result_parts_survive_the_sweep_even_when_old() {
+    let dir = std::env::temp_dir().join(format!("ps-test-result-parts-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let part = part_info(&dir, "rec-2026-01-01-00-00-00.mp4");
+    let part_mic = dir.join("rec-2026-01-01-00-00-00.mic.wav");
+    fs::write(&part_mic, b"mic").unwrap();
+    let stray = dir.join("rec-2026-01-01-00-00-09.mp4");
+    fs::write(&stray, b"video").unwrap();
+    for f in [Path::new(&part.path), part_mic.as_path(), stray.as_path()] {
+        backdate(f, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+    }
+    *REC_RESULT_PARTS.lock().unwrap() = vec![part.clone()];
+    let protected = protected_take_paths();
+    REC_RESULT_PARTS.lock().unwrap().clear();
+    let empty = std::collections::HashSet::new();
+    let (count, _) = sweep_stale_recordings_in(&dir, &empty, &protected, false, Duration::from_secs(60), None);
+    assert_eq!(count, 1, "only the file that is no part of the open take goes");
+    assert!(Path::new(&part.path).exists(), "an earlier part waiting in the result dialog stays");
+    assert!(part_mic.exists(), "and so does its mic track");
+    assert!(!stray.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn pending_result_file_survives_the_sweep_even_when_old() {
+    let dir = std::env::temp_dir().join(format!("ps-test-pending-result-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let shown = dir.join("rec-2026-01-01-00-00-00.mp4");
+    let shown_keys = dir.join("rec-2026-01-01-00-00-00.keys.json");
+    let other = dir.join("rec-2026-01-01-00-00-05.mp4");
+    for f in [&shown, &shown_keys, &other] {
+        fs::write(f, b"video").unwrap();
+        backdate(f, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+    }
+    set_pending_recording(Some(shown.to_string_lossy().to_string()));
+    let protected = protected_take_paths();
+    set_pending_recording(None);
+    assert!(protected_take_paths().iter().all(|p| p != &shown), "closing the dialog releases the file");
+    let empty = std::collections::HashSet::new();
+    let (count, _) = sweep_stale_recordings_in(&dir, &empty, &protected, false, Duration::from_secs(60), None);
+    assert_eq!(count, 1);
+    assert!(shown.exists() && shown_keys.exists(), "the file an open dialog shows stays with its sidecar");
+    assert!(!other.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+//
+// The writers are stood in for by closures: `settings_fails` makes the settings write return
+// false (a real write failure, not a locked row), `rows_called` records whether the prompt
+// rows were written at all.
+
+pub(super) fn paired_fixture() -> Store {
+    let mut settings = Settings::default();
+    settings.migrate();
+    Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() }
+}
+
+pub(super) fn paired_save<'a>(settings_fails: bool, rows_fail: bool, rows_called: &'a std::cell::Cell<bool>, undone: &'a std::cell::Cell<bool>) -> impl Fn(&Store, &Settings) -> bool + 'a {
+    move |_st, _orig| {
+        save_pair_or_undo_first(
+            || !settings_fails,
+            || {
+                rows_called.set(true);
+                !rows_fail
+            },
+            || undone.set(true),
+        )
+    }
+}
+
+#[test]
+fn a_failed_settings_write_leaves_a_new_prompt_out_of_the_store_and_the_grid() {
+    let mut store = paired_fixture();
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let p = test_prompt("n1");
+    let r = add_placed_prompt_core(&mut store, &p, paired_save(true, false, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert!(store.prompts.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "no cell, no member left behind");
+    assert!(!rows.get(), "the prompt rows are not written when the settings write failed");
+    // And when only the rows fail, the settings written first are taken back.
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = add_placed_prompt_core(&mut store, &p, paired_save(false, true, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert!(rows.get() && undone.get());
+    assert!(store.prompts.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    // Both writes landing keeps the prompt and its seat.
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    add_placed_prompt_core(&mut store, &p, paired_save(false, false, &rows, &undone)).unwrap();
+    assert_eq!(store.prompts.len(), 1);
+    assert!(store.settings.active_view_mut().members.iter().any(|m| m == "n1"));
+}
+
+#[test]
+fn a_failed_settings_write_keeps_a_deleted_prompt_in_the_library_with_its_placement() {
+    let mut store = paired_fixture();
+    let p = test_prompt("d1");
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    add_placed_prompt_core(&mut store, &p, paired_save(false, false, &rows, &undone)).unwrap();
+    store.settings.floating.insert("d1".into(), Pos { x: 1, y: 2, ..Default::default() });
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = delete_prompt_core(&mut store, "d1", 9, paired_save(true, false, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert_eq!(store.prompts.len(), 1);
+    assert!(store.trash.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "view, cell and pill still name the prompt");
+    assert!(!rows.get());
+    // The batch variant behaves the same.
+    let ids = vec!["d1".to_string()];
+    let r = delete_batch_core(&mut store, &ids, 9, paired_save(true, false, &rows, &undone));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert_eq!(store.prompts.len(), 1);
+    assert!(store.trash.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    // A pair that lands moves it to the trash.
+    assert_eq!(delete_batch_core(&mut store, &ids, 9, paired_save(false, false, &rows, &undone)), Ok(true));
+    assert!(store.prompts.is_empty() && store.trash.len() == 1);
+}
+
+#[test]
+fn a_failed_settings_write_seeds_no_example_prompts() {
+    let mut store = paired_fixture();
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let created = vec![test_prompt("e1"), test_prompt("e2")];
+    let r = seed_examples_core(&mut store, created.clone(), paired_save(true, false, &rows, &undone));
+    assert_eq!(r.err(), Some("save-failed".to_string()));
+    assert!(store.prompts.is_empty());
+    assert!(!store.settings.examples_seeded);
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    assert!(!rows.get(), "nothing reached the prompt table, so a retry cannot duplicate");
+    let seeded = seed_examples_core(&mut store, created, paired_save(false, false, &rows, &undone)).unwrap();
+    assert_eq!(seeded.len(), 2);
+    assert!(store.settings.examples_seeded && store.prompts.len() == 2);
+}
+
+#[test]
+fn leftover_picture_text_is_cleared_at_boot_only_when_the_index_is_off_and_the_set_is_writable() {
+    let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut store = secret_test_store(vec![image_text_prompt("p1", "read from a picture")]);
+    store.settings.ui_flags.insert("ocrIndex".into(), true);
+    assert!(!heal_ocr_text_at_boot(&mut store), "index on: the text is wanted");
+    assert!(!store.prompts[0].image_text.is_empty());
+
+    store.settings.ui_flags.insert("ocrIndex".into(), false);
+    store.prompts_locked = true;
+    assert!(!heal_ocr_text_at_boot(&mut store), "locked prompt set is never rewritten");
+    assert!(!store.prompts[0].image_text.is_empty());
+    store.prompts_locked = false;
+
+    store.settings.ui_flags.insert("demoMode".into(), true);
+    assert!(!heal_ocr_text_at_boot(&mut store), "demo mode keeps its sample library");
+    assert!(!store.prompts[0].image_text.is_empty());
+    store.settings.ui_flags.remove("demoMode");
+
+    assert!(heal_ocr_text_at_boot(&mut store), "index off with stored text: cleared");
+    assert!(store.prompts[0].image_text.is_empty());
+    assert!(!heal_ocr_text_at_boot(&mut store), "nothing left to clear");
+}
+
+#[test]
+fn a_shutdown_during_voice_prepare_cancels_the_pending_start() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let (claiming, cancel) = (AtomicBool::new(true), AtomicBool::new(false));
+    voice_cmds::mark_pending_start_cancelled(&claiming, &cancel);
+    assert!(cancel.load(Ordering::SeqCst), "a start that is still preparing must be cancelled");
+    let (idle, cancel) = (AtomicBool::new(false), AtomicBool::new(false));
+    voice_cmds::mark_pending_start_cancelled(&idle, &cancel);
+    assert!(!cancel.load(Ordering::SeqCst), "no pending start, nothing to cancel");
+}
+
+#[cfg(windows)]
+#[test]
+fn a_hung_powershell_query_is_killed_at_its_deadline() {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60"]).creation_flags(0x0800_0000);
+    let t = std::time::Instant::now();
+    let res = ocr::run_with_deadline(cmd, std::time::Duration::from_millis(1500));
+    assert_eq!(res, Err("timeout".to_string()));
+    assert!(t.elapsed() < std::time::Duration::from_secs(20), "the child must not be waited out");
+    let mut quick = std::process::Command::new("powershell.exe");
+    quick.args(["-NoProfile", "-NonInteractive", "-Command", "Write-Output ok"]).creation_flags(0x0800_0000);
+    assert_eq!(ocr::run_with_deadline(quick, std::time::Duration::from_secs(60)).map(|s| s.trim().to_string()), Ok("ok".to_string()));
+}
+
+// Structural fix, no red unit test: a write that fails half-way cannot be provoked on demand.
+#[test]
+fn the_ocr_temp_guard_exists_before_the_png_is_written() {
+    let src = source!("../ocr.rs");
+    for save in ["im.save(&out)", "crop.save(&path)"] {
+        let at = src.find(save).expect(save);
+        let guard = src[..at].rfind("TempFileGuard(Some(").expect("guard");
+        assert!(at - guard < 400, "the guard sits right before {save}");
+    }
+}
+
+// Structural fix, no red unit test: where the work runs cannot be observed from a unit test.
+#[cfg(windows)]
+#[test]
+fn the_ocr_data_url_is_decoded_on_the_blocking_pool() {
+    let src = source!("../ocr_cmds.rs");
+    let cmd = src.split("pub(crate) async fn ocr_image_data").nth(1).unwrap().split("fn decode_ocr_data_url").next().unwrap();
+    let spawn = cmd.find("spawn_blocking").expect("blocking pool");
+    let decode = cmd.find("decode_ocr_data_url(&data_url)").expect("decode call");
+    assert!(decode > spawn, "decoding must happen inside the blocking closure");
+    assert!(!cmd.contains("data_url_bytes("), "no decode before the pool");
+    assert!(crate::ocr_cmds::decode_ocr_data_url("data:image/png;base64,AAAA").is_err());
+}
+
+// Structural fix, no red unit test: a panicking decoder inside the blocking pool cannot be
+// provoked without the real engine.
+#[test]
+fn a_failed_ocr_index_worker_marks_the_job_as_error() {
+    let src = source!("../ocr_cmds.rs");
+    let body = src.split("pub(crate) async fn ocr_index_backfill").nth(1).unwrap().split("pub(crate) async fn ocr_capabilities(").next().unwrap();
+    let at = body.find("Err(e) => {").expect("join error arm");
+    let arm = &body[at..at + 200];
+    assert!(arm.contains("push_bg_op(&app, \"ocr-index\", \"ocr-index\", \"error\""), "{arm}");
+}

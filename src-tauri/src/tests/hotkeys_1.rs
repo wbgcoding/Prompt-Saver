@@ -1331,3 +1331,60 @@ fn version_compare_pads_components() {
     assert!(!version_newer("1.8.0", "1.9.0"));
     assert!(version_newer("1.10.0", "1.9.0")); // numeric, not lexical
 }
+
+#[test]
+fn a_voice_key_counts_as_taken_only_while_its_switches_are_on() {
+    let mut settings = Settings { voice_hotkey: "Ctrl+Alt+V".to_string(), ..Default::default() };
+    let sc = parse_accel("Ctrl+Alt+V").unwrap();
+    // The hotkey switch is not on yet, so nothing uses the key.
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.insert("voiceHotkey".to_string(), true);
+    assert!(slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.insert("voice".to_string(), false);
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::App, sc));
+    settings.ui_flags.remove("voice");
+    // The voice slot never collides with itself.
+    assert!(!slot_key_taken(&settings, &[], HotkeySlot::Voice, sc));
+}
+
+// The voice combination outranks a prompt binding in the plan, so a prompt bound to
+// it would be stored as fine and never fire: it is refused when set and dropped when
+// a backup brings it in, while the voice hotkey is actually registered.
+#[test]
+fn a_prompt_hotkey_cannot_take_the_active_voice_combination() {
+    let others: Vec<&Prompt> = Vec::new();
+    assert_eq!(sanitize_hotkey("Ctrl+Alt+V", "", "ctrl+alt+v", "", "", &others), Err("hotkey-taken".into()));
+    assert_eq!(sanitize_hotkey("Ctrl+Alt+V", "", "", "", "", &others).unwrap(), "Ctrl+Alt+V");
+
+    let mut s = Settings { voice_hotkey: "Ctrl+Alt+V".to_string(), ..Settings::default() };
+    assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "", "off until its own switch is on");
+    s.ui_flags.insert("voiceHotkey".to_string(), true);
+    assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "Ctrl+Alt+V");
+    s.ui_flags.insert("voice".to_string(), false);
+    assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "", "and the voice feature itself");
+    s.ui_flags.insert("voice".to_string(), true);
+
+    let mut p = sample_prompts().remove(0);
+    p.hotkey = "ctrl+alt+v".to_string();
+    let mut prompts = vec![p];
+    let reserved = reserved_hotkeys(&s);
+    let reserved: Vec<&str> = reserved.iter().map(String::as_str).collect();
+    assert_eq!(drop_colliding_hotkeys("", &reserved, &mut prompts), 1);
+    assert!(prompts[0].hotkey.is_empty());
+}
+
+#[test]
+fn a_second_hotkey_rearm_asks_the_running_one_to_repeat_instead_of_overlapping() {
+    use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+    let (running, again) = (AtomicBool::new(false), AtomicBool::new(false));
+    assert!(claim_rearm(&running, &again), "the first caller runs");
+    again.store(false, SeqCst); // the runner clears the request at the top of its loop
+    assert!(!claim_rearm(&running, &again), "a caller during a run does not start its own");
+    assert!(again.load(SeqCst), "it leaves a request for the runner");
+    // The request is stored before the claim: a runner that releases the flag between
+    // the two still finds it, so a late caller can never be lost.
+    again.store(false, SeqCst);
+    running.store(false, SeqCst);
+    assert!(claim_rearm(&running, &again), "after the run ended the next caller runs again");
+    assert!(again.load(SeqCst), "the request is already in place when the claim is decided");
+}

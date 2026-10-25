@@ -213,3 +213,153 @@ fn the_editor_save_accepts_only_a_plain_capture_stem() {
     }
     assert!(!ok(&format!("Screenshot-{}", "a".repeat(200))));
 }
+
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
+#[test]
+fn window_capture_picks_the_monitor_under_its_centre() {
+    let mons = [(0, 0, 1920u32, 1080u32), (1920, 0, 1920, 1080), (-1280, 100, 1280, 1024)];
+    assert_eq!(monitor_index_for_rect(&mons, 100, 100, 800, 600), 0);
+    assert_eq!(monitor_index_for_rect(&mons, 2500, 200, 800, 600), 1);
+    assert_eq!(monitor_index_for_rect(&mons, -1000, 300, 600, 400), 2);
+    // A window nowhere near any screen keeps the primary capture.
+    assert_eq!(monitor_index_for_rect(&mons, 9000, 9000, 100, 100), 0);
+}
+
+// Structural fix (the overlay window cannot be built without a running app), so the check
+// reads the source: a failed overlay build must end the whole session, not just clear a flag.
+#[test]
+fn a_failed_overlay_build_ends_the_whole_snip_session() {
+    let src = source!("../snip.rs");
+    let arm = src.split("match build_snip_window(&app) {").nth(1).unwrap().split("Ok(w) => w,").nth(1).unwrap();
+    let arm = arm.split("return Err(e);").next().unwrap();
+    assert!(arm.contains("close_all_snip(&app)"));
+    assert!(!arm.contains("SNIP_ACTIVE.store(false"), "clearing one flag leaves the rest of the session behind");
+}
+
+// Structural fix, no red unit test: the rect comes from a live window enumeration, which a unit
+// test cannot fake. The pure choice (frame over client) is covered by snip_window_rect_prefers_the_frame.
+#[test]
+fn the_window_fallback_crops_the_frame_the_overlay_showed() {
+    let src = source!("../capture.rs");
+    // The rect comes from the one window probe, which crops the visible frame the overlay showed.
+    let at = src.find("pub(crate) fn probe_window(").expect("probe");
+    assert!(src[at..at + 600].contains("snip_window_rect(window_frame_rect(id)"));
+    assert!(src.contains("match probe.rect"));
+}
+
+#[test]
+fn an_attached_photo_previews_upright() {
+    let dir = std::env::temp_dir().join(format!("ps-photo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("sideways.jpg");
+    // 2x1 pixels with an orientation flag of 6: shown upright it is 1x2.
+    std::fs::write(&file, shots::jpeg_with_orientation(6)).unwrap();
+    let url = image_file_preview(&file.to_string_lossy()).expect("previews");
+    let img = decode_image_mem(&data_url_bytes(&url)).expect("the preview decodes");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!((img.width(), img.height()), (1, 2));
+}
+
+#[test]
+fn the_camera_page_asks_for_the_permission_state_and_has_no_timer_fallback() {
+    let js = source!("../../../ui/camera.js");
+    assert!(js.contains("invoke(\"camera_permission_ready\")"), "the page must query the flag after listening");
+    assert!(!js.contains("}, 1500)"), "no timer may count the permission as given");
+    let lib = source!("../lib.rs");
+    assert!(lib.contains("camera::camera_permission_ready"));
+    camera::camera_permission_ready();
+}
+
+// Structural fix, no red unit test: the cost is a 7 MB read per call, not a visible result.
+#[test]
+fn the_verified_pdfium_copy_is_remembered_after_the_first_check() {
+    let src = source!("../images.rs");
+    let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
+    let lookup = body.find("PDFIUM_VERIFIED.get()").expect("lookup");
+    let read = body.find("open_verified_pdfium(&cached").expect("content check");
+    assert!(lookup < read, "the remembered path is consulted before the content check");
+    assert_eq!(body.matches("PDFIUM_VERIFIED.set(").count(), 2);
+}
+
+// Structural fix, no red unit test: install_permission_handler cannot be made to fail in a test.
+#[test]
+fn a_camera_window_without_its_permission_handler_is_destroyed() {
+    let src = source!("../camera.rs");
+    let at = src.find("if let Err(e) = install_permission_handler(&app, &win) {").expect("error arm");
+    let arm = &src[at..at + 120];
+    assert!(arm.contains("win.destroy()"), "{arm}");
+    assert!(!src.contains("install_permission_handler(&app, &win)?;"));
+}
+
+#[test]
+fn a_failed_camera_sidecar_write_is_reported() {
+    let root = std::env::temp_dir().join(format!("ps-camside-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let session = |dir: &std::path::Path| crate::camera::CamSession {
+        output_path: dir.join("cam-1.webm"),
+        companion_path: None,
+        finishing: None,
+    };
+    // The folder does not exist, so the sidecar cannot be written.
+    assert!(crate::camera::finalize_session(&session(&root.join("missing")), 5, None).is_err());
+    std::fs::create_dir_all(&root).unwrap();
+    assert!(crate::camera::finalize_session(&session(&root), 5, Some(7)).is_ok());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_verified_pdfium_copy_is_held_open_so_it_cannot_be_swapped() {
+    let dir = std::env::temp_dir().join(format!("ps-pdfhold-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pdfium-test.dll");
+    fs::write(&path, b"expected bytes").unwrap();
+    // Content that differs is refused, and the refused open keeps nothing locked.
+    assert!(open_verified_pdfium(&path, b"other bytes").is_none());
+    assert!(fs::write(&path, b"expected bytes").is_ok());
+    let held = open_verified_pdfium(&path, b"expected bytes").expect("matches");
+    assert!(fs::write(&path, b"swapped").is_err(), "no write while the handle is held");
+    assert!(fs::remove_file(&path).is_err(), "no delete while the handle is held");
+    assert!(fs::rename(&path, dir.join("moved.dll")).is_err(), "no rename while the handle is held");
+    assert_eq!(fs::read(&path).unwrap(), b"expected bytes", "readers still get the file");
+    drop(held);
+    assert!(fs::remove_file(&path).is_ok());
+    let _ = fs::remove_dir_all(&dir);
+    // The lookup keeps the handle for the whole run, and never re-reads the path to verify.
+    let src = source!("../images.rs");
+    let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
+    assert!(body.contains("PDFIUM_HOLD.set("));
+    assert!(!body.contains("fs::read(&cached)"));
+}
+
+#[test]
+fn old_pdfium_copies_in_the_shared_temp_folder_are_removed_once_at_start() {
+    let root = std::env::temp_dir().join(format!("ps-oldpdf-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let dir = root.join(brand::TEMP_DIR);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("pdfium-1.2.3.dll"), b"old").unwrap();
+    fs::write(dir.join("pdfium-1.2.4.dll"), b"old").unwrap();
+    fs::write(dir.join("pdfium-notes.txt"), b"keep").unwrap();
+    fs::write(dir.join(format!("{}-ocr-1.png", brand::TEMP_PREFIX)), b"keep").unwrap();
+    remove_old_temp_pdfium_in(&root);
+    assert!(!dir.join("pdfium-1.2.3.dll").exists());
+    assert!(!dir.join("pdfium-1.2.4.dll").exists());
+    assert!(dir.join("pdfium-notes.txt").exists(), "only the dll copies go");
+    assert!(dir.join(format!("{}-ocr-1.png", brand::TEMP_PREFIX)).exists(), "other scratch files are not this pass's business");
+    // A missing folder is not an error.
+    remove_old_temp_pdfium_in(&root.join("absent"));
+    let _ = fs::remove_dir_all(&root);
+    // The start-up setup runs the pass, and the snip sweep comment names where the copy lives now.
+    let lib = source!("../lib.rs");
+    assert!(lib.contains("remove_old_temp_pdfium()"));
+    let snip = source!("../snip.rs");
+    assert!(!snip.contains("next to the versioned pdfium cache"), "the comment no longer places the cache in TEMP");
+}

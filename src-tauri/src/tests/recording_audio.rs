@@ -878,3 +878,295 @@ fn crop_and_flip_rows_bottom_up_rejects_an_out_of_range_crop_without_panicking()
     let out = crop_and_flip_rows_bottom_up(&raw, 2, 2, 8, 1, 1, 5, 5);
     assert!(out.iter().all(|&b| b == 0));
 }
+
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
+#[test]
+fn visible_canvas_rect_never_leaves_the_canvas() {
+    // Fully inside.
+    assert_eq!(visible_canvas_rect(100, 50, 800, 600, 1920, 1080), Some((100, 50, 800, 600)));
+    // Hanging over the right and bottom edge: only the visible part counts.
+    assert_eq!(visible_canvas_rect(1500, 900, 800, 600, 1920, 1080), Some((1500, 900, 420, 180)));
+    // Hanging over the left and top edge.
+    assert_eq!(visible_canvas_rect(-300, -100, 1000, 500, 1920, 1080), Some((0, 0, 700, 400)));
+    // Entirely off the canvas.
+    assert_eq!(visible_canvas_rect(2000, 10, 800, 600, 1920, 1080), None);
+    assert_eq!(visible_canvas_rect(-900, 10, 800, 600, 1920, 1080), None);
+}
+
+#[test]
+fn a_paused_tick_does_not_count_toward_the_recording_minute_limit() {
+    let mut elapsed = 0u64;
+    for paused in [false, false, true, true, true, false] {
+        elapsed += active_tick_secs(paused);
+    }
+    assert_eq!(elapsed, 3);
+    assert!(!recording_limit_reached(elapsed, 0, 1.0, 0.0), "a long pause must not reach the limit");
+}
+
+#[test]
+fn a_refused_start_removes_the_mic_sidecar_with_the_empty_output() {
+    let dir = std::env::temp_dir().join(format!("ps-refused-start-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("rec-x.mp4");
+    fs::write(&out, b"").unwrap();
+    fs::write(out.with_extension("mic.wav"), b"RIFF").unwrap();
+    recording::discard_start_leftovers(&out);
+    assert!(!out.exists());
+    assert!(!out.with_extension("mic.wav").exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn recording_timestamps_never_go_backwards() {
+    let mut last = None;
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 100), 100);
+    // A hold resend stamped ahead of a frame that arrived meanwhile.
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 400), 400);
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 330), 401);
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 401), 402);
+    assert_eq!(recording::strictly_increasing_ts(&mut last, 900), 900);
+}
+
+#[test]
+fn a_converted_recordings_sidecars_stay_referenced_through_the_sweep() {
+    let dir = std::env::temp_dir().join(format!("ps-test-rec-converted-sidecars-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let video = dir.join("2026-09-04_07-00-00.webm");
+    let mic = dir.join("2026-09-04_07-00-00.mic.wav");
+    let keys = dir.join("2026-09-04_07-00-00.keys.json");
+    for f in [&video, &mic, &keys] {
+        fs::write(f, b"data").unwrap();
+        backdate(f, Duration::from_secs(45 * 60));
+    }
+    assert_eq!(mic_sidecar_video_path(&mic), Some(video.clone()));
+    assert_eq!(keys_sidecar_video_path(&keys), Some(video.clone()));
+    let mut referenced = std::collections::HashSet::new();
+    referenced.insert(video.to_string_lossy().replace('/', "\\").to_lowercase());
+    let (count, _) = sweep_stale_recordings_in(&dir, &referenced, &[], false, Duration::from_secs(600), Some(Duration::from_secs(30 * 60)));
+    assert_eq!(count, 0, "the sidecars of a kept converted recording must survive");
+    assert!(mic.exists() && keys.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[cfg(windows)]
+#[test]
+fn a_paused_recording_does_not_spend_the_switch_first_frame_budget() {
+    assert_eq!(recording::switch_wait_budget_after_tick(2000, true), 2000);
+    assert_eq!(recording::switch_wait_budget_after_tick(2000, false), 1990);
+    assert_eq!(recording::switch_wait_budget_after_tick(5, false), 0);
+}
+
+#[test]
+fn clip_region_to_frame_keeps_the_pixels_that_lie_on_the_monitor() {
+    // Inside: unchanged.
+    assert_eq!(recording::clip_region_to_frame(100, 50, 400, 300, 1920, 1080), Some((100, 50, 400, 300)));
+    // Negative origin: the visible part keeps its size minus the overhang.
+    assert_eq!(recording::clip_region_to_frame(-100, -20, 400, 300, 1920, 1080), Some((0, 0, 300, 280)));
+    // Overhang past the right/bottom edge.
+    assert_eq!(recording::clip_region_to_frame(1800, 1000, 400, 300, 1920, 1080), Some((1800, 1000, 120, 80)));
+    // No overlap at all.
+    assert_eq!(recording::clip_region_to_frame(2000, 0, 100, 100, 1920, 1080), None);
+    assert_eq!(recording::clip_region_to_frame(-500, 0, 100, 100, 1920, 1080), None);
+    assert_eq!(recording::clip_region_to_frame(0, 0, 0, 100, 1920, 1080), None);
+}
+
+#[test]
+fn crop_and_flip_rows_bottom_up_copies_the_overlap_of_a_crop_that_overhangs_the_frame() {
+    // 2x2 frame, pixels 1..4 (first byte distinct), crop 3 wide starting at x=1.
+    let raw: Vec<u8> = vec![1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4];
+    let out = crop_and_flip_rows_bottom_up(&raw, 2, 2, 8, 1, 0, 3, 2);
+    // Bottom-up: row 1 (pixel 4) first, then row 0 (pixel 2); the missing columns stay black.
+    assert_eq!(out, vec![4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
+fn record_clock_never_steps_backwards_while_another_thread_pauses_and_resumes() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let clock = std::sync::Arc::new(RecordClock::new());
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    let toggler = {
+        let (clock, stop) = (clock.clone(), stop.clone());
+        std::thread::spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                clock.pause();
+                clock.resume();
+            }
+        })
+    };
+    let mut last = 0i64;
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_millis(400) {
+        let now = clock.now_ticks();
+        assert!(now >= last, "ticks went back from {last} to {now}");
+        last = now;
+    }
+    stop.store(true, Ordering::SeqCst);
+    toggler.join().unwrap();
+}
+
+#[test]
+fn reencode_refuses_a_png_header_claiming_huge_dimensions() {
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(b"IHDR");
+    ihdr.extend_from_slice(&60_000u32.to_be_bytes());
+    ihdr.extend_from_slice(&60_000u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let mut crc = flate2::Crc::new();
+    crc.update(&ihdr);
+    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+    png.extend_from_slice(&13u32.to_be_bytes());
+    png.extend_from_slice(&ihdr);
+    png.extend_from_slice(&crc.sum().to_be_bytes());
+    let began = std::time::Instant::now();
+    assert!(reencode_screenshot_bytes(&png, "png", 90).is_err());
+    assert!(began.elapsed() < Duration::from_secs(2), "took {:?}", began.elapsed());
+}
+
+pub(super) fn start_guard_spinner(flag: &Arc<AtomicBool>, done: &Arc<AtomicBool>) -> std::thread::JoinHandle<()> {
+    let (flag, done) = (flag.clone(), done.clone());
+    std::thread::spawn(move || {
+        while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        done.store(true, std::sync::atomic::Ordering::Relaxed);
+    })
+}
+
+#[test]
+fn start_guard_drop_ends_every_thread_it_holds_within_a_second() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let flag = Arc::new(AtomicBool::new(false));
+    let (done_a, done_b, done_c) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+    // The third thread blocks on a channel only the wake action closes, the way the
+    // feeder waits on its queue until a stop is requested.
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let blocked = {
+        let done = done_c.clone();
+        std::thread::spawn(move || {
+            let _ = rx.recv();
+            done.store(true, Ordering::Relaxed);
+        })
+    };
+    let mut guard = recording::StartGuard::new(move || drop(tx));
+    guard.add_flag(flag.clone());
+    guard.audio_threads.push(start_guard_spinner(&flag, &done_a));
+    guard.audio_threads.push(start_guard_spinner(&flag, &done_b));
+    guard.feeder = Some(blocked);
+    let began = std::time::Instant::now();
+    drop(guard);
+    assert!(began.elapsed() < Duration::from_secs(1), "dropping the guard waited too long");
+    assert!(done_a.load(Ordering::Relaxed) && done_b.load(Ordering::Relaxed), "the flagged threads ended");
+    assert!(done_c.load(Ordering::Relaxed), "the thread blocked on the channel was woken and ended");
+}
+
+#[test]
+fn start_guard_after_take_joins_and_stops_nothing() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let flag = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let woke = Arc::new(AtomicBool::new(false));
+    let mut guard = recording::StartGuard::new({
+        let woke = woke.clone();
+        move || woke.store(true, Ordering::Relaxed)
+    });
+    guard.add_flag(flag.clone());
+    guard.audio_threads.push(start_guard_spinner(&flag, &done));
+    let (audio, feeder, mic) = guard.take();
+    drop(guard);
+    assert!(!flag.load(Ordering::Relaxed), "a taken guard sets no stop flag");
+    assert!(!woke.load(Ordering::Relaxed), "a taken guard runs no wake action");
+    assert!(!done.load(Ordering::Relaxed), "the thread now belongs to the caller and still runs");
+    assert_eq!((audio.len(), feeder.is_some(), mic.is_some()), (1, false, false));
+    flag.store(true, Ordering::Relaxed);
+    for t in audio {
+        t.join().unwrap();
+    }
+    assert!(done.load(Ordering::Relaxed));
+}
+
+#[test]
+fn a_new_recording_never_takes_an_existing_name() {
+    let root = std::env::temp_dir().join(format!("ps-recname-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let name = rec_filename(2026, 10, 18, 12, 0, 0);
+    assert_eq!(free_rec_path(&root, &name), root.join(&name));
+    fs::write(root.join(&name), b"x").unwrap();
+    assert_eq!(free_rec_path(&root, &name), root.join("rec-2026-10-18_120000-2.mp4"));
+    fs::write(root.join("rec-2026-10-18_120000-2.mp4"), b"x").unwrap();
+    assert_eq!(free_rec_path(&root, &name), root.join("rec-2026-10-18_120000-3.mp4"));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_mic_sidecar_that_cannot_be_created_marks_the_mic_lost() {
+    let queue = Arc::new(AudioQueueShared::new());
+    let bad = std::env::temp_dir().join(format!("ps-nodir-{}", std::process::id())).join("x").join("rec.mic.wav");
+    crate::recording::mic_wav_writer_loop(
+        queue.clone(),
+        Arc::new(RecordClock::new()),
+        Arc::new(RecFeederShared::new()),
+        Arc::new(AtomicBool::new(false)),
+        bad,
+    );
+    assert!(queue.is_lost(), "the bar must hear about a mic track that is not being written");
+}
+
+// Structural fix, no red unit test: a refused thread spawn cannot be provoked in a test.
+#[test]
+fn a_refused_audio_thread_is_a_start_error_not_a_panic() {
+    let audio = source!("../audio.rs");
+    assert!(audio.contains("-> std::io::Result<thread::JoinHandle<()>>"));
+    assert!(!audio.contains("expect(\"spawn rec-audio thread\")"));
+    let rec = source!("../recording.rs");
+    assert_eq!(rec.matches("audio_stop.clone().unwrap(),\n        ).map_err(|e| e.to_string())?").count(), 2);
+}
+
+// Structural fix, no red unit test: the encoder needs a real media session to fail on demand.
+#[test]
+fn the_feeder_stops_feeding_after_the_first_encoder_error() {
+    let rec = source!("../recording.rs");
+    let drain = rec.split("fn drain_pending_frames(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(drain.contains("shared.request_stop();") && drain.contains("return;"), "the drain must leave at the first error");
+    assert!(rec.contains("!clock.is_paused() && shared.peek_encode_error().is_none()"), "hold and audio sends must stop after an error");
+}
+
+// Structural fix, no red unit test: the old shape could not fail at run time, which is the finding.
+#[test]
+fn stopping_and_cancelling_a_recording_return_plain_values() {
+    let rec = source!("../recording.rs");
+    assert!(rec.contains("pub fn stop(session: RecSession) -> StopResult {"));
+    assert!(rec.contains("pub fn cancel(session: RecSession) {"));
+    assert!(rec.contains("fn finish_and_stop(mut session: RecSession) -> (u64, Option<String>) {"));
+    let cmds = source!("../rec_cmds.rs");
+    assert!(!cmds.contains("recording::cancel(session)?"));
+    assert!(!cmds.contains("= stopped?;"));
+}
+
+#[test]
+fn saving_the_parts_does_not_hold_the_shared_list_lock() {
+    let part = |n: &str| RecordingPartInfo { path: n.to_string(), mic_wav_path: None };
+    let shared = std::sync::Mutex::new(vec![part("a"), part("b")]);
+    let seen = with_parts_outside_lock(&shared, |mine| {
+        assert!(shared.try_lock().is_ok(), "the lock is free while the parts are being moved");
+        assert_eq!(mine.len(), 2);
+        // "a" moved, "b" could not be: it must come back, ahead of a part added meanwhile.
+        mine.retain(|p| p.path == "b");
+        shared.lock().unwrap().push(part("c"));
+        7
+    });
+    assert_eq!(seen, 7);
+    let left: Vec<String> = shared.lock().unwrap().iter().map(|p| p.path.clone()).collect();
+    assert_eq!(left, vec!["b".to_string(), "c".to_string()]);
+}

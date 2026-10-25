@@ -651,3 +651,327 @@ fn trash_retention_zero_days_means_forever() {
     settings.ui_values.insert("trashRetentionDays".to_string(), 7.0);
     assert_eq!(trash_retention_secs(&settings), Some(7 * 86_400));
 }
+
+#[test]
+fn a_failed_update_switch_save_restores_the_previous_values() {
+    let mut s = Settings { auto_update: false, update_consent: UpdateConsent::No, ..Default::default() };
+    assert_eq!(set_update_choice(&mut s, true, |_| false), Err("save-failed".to_string()));
+    assert!(!s.auto_update, "the background check must not see a switch that failed to save");
+    assert_eq!(s.update_consent, UpdateConsent::No);
+    assert!(set_update_choice(&mut s, true, |_| true).is_ok());
+    assert!(s.auto_update && s.update_consent == UpdateConsent::Yes);
+}
+
+#[test]
+fn sync_poll_adds_an_unplaced_new_file_to_the_view_members() {
+    let mut p = sync_test_prompt();
+    p.id = "fresh".into();
+    let content = prompt_to_md(&p, &SyncPlacement::default());
+    let mut store = sync_apply_store(Vec::new(), Vec::new());
+    store.settings.views = vec![test_view("v1")];
+    store.settings.active_view = "v1".into();
+    let (changed, settings_changed) = sync_apply(&mut store, "fresh", content, true);
+    assert!(changed && settings_changed);
+    let view = store.settings.active_view_mut();
+    assert!(view.members.iter().any(|m| m == "fresh"), "the new prompt must belong to the view, not only sit on a cell");
+    let key = grid_key(view.cols, view.rows);
+    assert!(view.layouts.get(&key).is_some_and(|l| l.contains_key("fresh")));
+}
+
+#[test]
+fn a_data_wipe_leaves_no_prompt_placed_in_any_view() {
+    let mut s = Settings::default();
+    let mut v = test_view("a");
+    v.members = vec!["p1".into()];
+    v.layouts.entry("3x3".into()).or_default().insert("p1".into(), [0, 0]);
+    s.views = vec![v];
+    s.floating.insert("p1".into(), Pos::default());
+    clear_prompt_placements(&mut s);
+    assert!(s.views[0].members.is_empty());
+    assert!(s.views[0].layouts.is_empty());
+    assert!(s.floating.is_empty());
+    assert_eq!(s.views.len(), 1, "the view itself stays");
+    assert_eq!(first_free_cell_excluding(&s.views[0], &[]), Some([0, 0]), "the first cell is free again");
+}
+
+#[test]
+fn a_folder_edit_that_leaves_another_folder_with_one_member_keeps_that_member_on_the_grid() {
+    // "old" held a, b and c; the edit moved a and b into "new", leaving c alone.
+    let mut settings = Settings {
+        views: vec![test_view("v1")],
+        tile_folders: vec![
+            test_tile_folder("old", "v1", [1, 0], &["c"]),
+            test_tile_folder("new", "v1", [0, 0], &["a", "b"]),
+        ],
+        ..Settings::default()
+    };
+    let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+    finish_tile_folder_edit(&mut settings, &ids);
+    assert_eq!(settings.tile_folders.len(), 1, "the one-member folder is dissolved");
+    assert_eq!(settings.tile_folders[0].id, "new");
+    let view = &settings.views[0];
+    let key = grid_key(view.cols, view.rows);
+    assert_eq!(view.layouts.get(&key).and_then(|l| l.get("c")).copied(), Some([1, 0]), "c is a tile again, on the old folder's cell");
+}
+
+#[test]
+fn a_failed_settings_write_leaves_a_restored_prompt_in_the_trash() {
+    let mut store = paired_fixture();
+    let mut p = test_prompt("t1");
+    p.trashed_at = 5;
+    store.trash.push(p);
+    let before = serde_json::to_string(&store.settings).unwrap();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = restore_trashed_core(&mut store, "t1", |st| paired_save(true, false, &rows, &undone)(st, &Settings::default()));
+    assert_eq!(r, Err("save-failed".to_string()));
+    assert_eq!(store.trash.len(), 1);
+    assert_eq!(store.trash[0].trashed_at, 5);
+    assert!(store.prompts.is_empty());
+    assert_eq!(serde_json::to_string(&store.settings).unwrap(), before);
+    assert!(!rows.get());
+}
+
+#[test]
+fn close_decision_returns_while_the_store_is_locked() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    let store = Arc::new(Mutex::new(Store {
+        prompts: Vec::new(),
+        trash: Vec::new(),
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: Default::default(),
+    }));
+    let held = store.lock().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut s = Settings { minimize_to_tray: false, ..Settings::default() };
+        mirror_minimize_to_tray(&s);
+        let off = close_minimizes(false);
+        s.minimize_to_tray = true;
+        mirror_minimize_to_tray(&s);
+        let on = close_minimizes(false);
+        let portable = close_minimizes(true);
+        let _ = tx.send((off, on, portable));
+    });
+    let got = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("the close decision must not wait for the store lock");
+    drop(held);
+    assert_eq!(got, (false, true, false));
+}
+
+#[test]
+fn a_fresh_profile_never_checks_for_updates() {
+    let s = Settings::default();
+    assert_eq!(s.update_consent, UpdateConsent::Unasked);
+    assert!(!update::update_check_allowed(&s));
+    let mut yes = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
+    assert!(update::update_check_allowed(&yes));
+    yes.auto_update = false;
+    assert!(!update::update_check_allowed(&yes), "the switch still wins");
+}
+
+#[test]
+fn stored_settings_without_the_consent_key_keep_their_update_choice() {
+    let mut on: Settings = serde_json::from_str(r#"{"auto_update":true}"#).unwrap();
+    assert_eq!(on.update_consent, UpdateConsent::Legacy);
+    on.migrate();
+    assert_eq!(on.update_consent, UpdateConsent::Yes);
+    let mut off: Settings = serde_json::from_str(r#"{"auto_update":false}"#).unwrap();
+    off.migrate();
+    assert_eq!(off.update_consent, UpdateConsent::No);
+    let mut fresh = Settings::default();
+    fresh.migrate();
+    assert_eq!(fresh.update_consent, UpdateConsent::Unasked, "migrate leaves an unanswered profile alone");
+    let again: Settings = serde_json::from_str(&serde_json::to_string(&fresh).unwrap()).unwrap();
+    assert_eq!(again.update_consent, UpdateConsent::Unasked, "the unanswered state survives a save");
+}
+
+#[test]
+fn a_restore_keeps_the_local_update_consent_and_a_foreign_block_asks_again() {
+    let local = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
+    let mut incoming = Settings { update_consent: UpdateConsent::No, ..Settings::default() };
+    keep_machine_settings(&local, &mut incoming);
+    assert_eq!(incoming.update_consent, UpdateConsent::Yes);
+    let mut other = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
+    drop_machine_rows(&mut other);
+    assert_eq!(other.update_consent, UpdateConsent::Unasked);
+}
+
+pub(super) fn clamped_values(entries: &[(&str, f64)]) -> HashMap<String, f64> {
+    let mut s = Settings::default();
+    for (k, v) in entries {
+        s.ui_values.insert((*k).to_string(), *v);
+    }
+    s.migrate();
+    s.ui_values
+}
+
+#[test]
+fn a_stored_number_outside_its_slider_range_is_clamped_on_load() {
+    let v = clamped_values(&[
+        ("importFolderMax", 1e18),
+        ("uiScale", 5000.0),
+        ("historyMax", 5e9),
+    ]);
+    assert_eq!(v["importFolderMax"], 2000.0);
+    assert_eq!(v["uiScale"], 300.0);
+    assert_eq!(v["historyMax"], 1_000_000.0, "a stops entry is held to its last stop");
+    let v = clamped_values(&[("hoverLift", 7.0)]);
+    assert_eq!(v["hoverLift"], 7.0, "an in-range value is untouched");
+}
+
+#[test]
+fn a_value_that_is_not_a_finite_number_is_dropped() {
+    let v = clamped_values(&[("hoverLift", f64::NAN), ("tileRadius", f64::INFINITY), ("uiScale", f64::NEG_INFINITY)]);
+    for k in ["hoverLift", "tileRadius", "uiScale"] {
+        assert!(!v.contains_key(k), "{k} falls back to its default");
+    }
+}
+
+#[test]
+fn a_settings_import_clamps_the_numbers_it_brings() {
+    let mut live = Settings::default();
+    let file = SettingsOnlyExport {
+        ui_flags: HashMap::new(),
+        ui_values: HashMap::from([
+            ("importFolderMax".to_string(), 1e18),
+            ("hoverLift".to_string(), f64::NAN),
+        ]),
+        ui_texts: HashMap::new(),
+    };
+    merge_settings_only(&mut live, file, |_| true).unwrap();
+    assert_eq!(live.ui_values["importFolderMax"], 2000.0);
+    assert!(!live.ui_values.contains_key("hoverLift"));
+}
+
+#[test]
+fn an_import_refreshes_the_close_handlers_tray_setting() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    for (before, after) in [(true, false), (false, true)] {
+        let mut store = Store {
+            prompts: vec![sync_test_prompt()],
+            trash: Vec::new(),
+            settings: Settings { minimize_to_tray: before, ..Settings::default() },
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        mirror_minimize_to_tray(&store.settings);
+        let mut incoming = import_test_backup();
+        incoming.settings.minimize_to_tray = after;
+        // A failed write rolls everything back, the mirror included.
+        run_import(&mut store, import_test_backup_with(after), false, true, |_, _, _| false).unwrap_err();
+        assert_eq!(close_minimizes(false), before, "a rolled back import leaves the mirror alone");
+        run_import(&mut store, incoming, false, true, |_, _, _| true).unwrap();
+        assert_eq!(close_minimizes(false), after, "the imported setting must reach the close handler");
+        assert_eq!(store.settings.minimize_to_tray, after);
+    }
+    mirror_minimize_to_tray(&Settings::default());
+}
+
+pub(super) fn import_test_backup_with(minimize: bool) -> Backup {
+    let mut b = import_test_backup();
+    b.settings.minimize_to_tray = minimize;
+    b
+}
+
+#[test]
+fn an_imported_retention_that_would_purge_everything_is_snapped() {
+    let import = |key: &str, v: f64| {
+        let mut live = Settings::default();
+        let file = SettingsOnlyExport {
+            ui_flags: HashMap::new(),
+            ui_values: HashMap::from([(key.to_string(), v)]),
+            ui_texts: HashMap::new(),
+        };
+        merge_settings_only(&mut live, file, |_| true).unwrap();
+        live
+    };
+    // Half a day used to become 0 seconds of retention: the next start purged the whole trash.
+    let s = import("trashRetentionDays", 0.5);
+    assert_eq!(trash_retention_secs(&s), None, "a fraction below one day means keep, not purge");
+    assert_eq!(history_max_age(&import("historyDays", 0.5)), None);
+    // A number that overflowed the day-to-seconds product wrapped to a tiny value.
+    let s = import("trashRetentionDays", 2.14e14);
+    assert_eq!(s.ui_values["trashRetentionDays"], 3650.0);
+    assert_eq!(trash_retention_secs(&s), Some(3650 * 86_400));
+    assert_eq!(import("trashRetentionDays", -3.0).ui_values["trashRetentionDays"], 0.0);
+    // The free-entry field's whole numbers survive; a fraction is rounded.
+    assert_eq!(import("trashRetentionDays", 14.0).ui_values["trashRetentionDays"], 14.0);
+    assert_eq!(import("trashRetentionDays", 13.6).ui_values["trashRetentionDays"], 14.0);
+    // A select with no zero preset never gets one.
+    assert_eq!(import("backupIntervalH", 0.0).ui_values["backupIntervalH"], 1.0);
+    // The same on load.
+    let mut loaded = Settings::default();
+    loaded.ui_values.insert("recordingRetentionDays".into(), 0.25);
+    loaded.migrate();
+    assert_eq!(loaded.ui_values["recordingRetentionDays"], 0.0);
+}
+
+#[test]
+fn retention_arithmetic_cannot_overflow() {
+    let mut s = Settings::default();
+    s.ui_values.insert("trashRetentionDays".into(), 1e300);
+    s.ui_values.insert("historyDays".into(), 1e300);
+    assert_eq!(trash_retention_secs(&s), Some(u64::MAX));
+    assert_eq!(history_max_age(&s), Some(u64::MAX));
+}
+
+#[test]
+fn the_ui_value_setter_refuses_non_finite_numbers_and_clamps_the_rest() {
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(update::checked_ui_value("hoverLift", bad).is_err());
+        assert!(update::checked_ui_value("someKeyWithoutARange", bad).is_err());
+    }
+    assert_eq!(update::checked_ui_value("importFolderMax", 1e18), Ok(2000.0));
+    assert_eq!(update::checked_ui_value("trashRetentionDays", 0.5), Ok(0.0));
+    assert_eq!(update::checked_ui_value("updateCheckH", 1e9), Ok(168.0));
+    assert_eq!(update::checked_ui_value("hoverLift", 7.0), Ok(7.0));
+    assert_eq!(update::checked_ui_value("someKeyWithoutARange", 12345.5), Ok(12345.5));
+}
+
+// A folder change must not hold the store lock while it writes the library: the write
+// closure here proves another thread can take the store mutex mid-write.
+#[test]
+fn set_sync_dir_core_writes_without_holding_the_store_lock() {
+    let mut settings = Settings::default();
+    settings.ui_flags.insert("promptSync".into(), true);
+    let store = Mutex::new(Store {
+        prompts: vec![sync_test_prompt()],
+        trash: Vec::new(),
+        settings,
+        prompts_locked: false,
+        written: Default::default(),
+    });
+    let saved = std::cell::Cell::new(0usize);
+    let (old, new_dir, failures, enabled) = set_sync_dir_core(
+        &store,
+        "C:/sync-new",
+        &|_| saved.set(saved.get() + 1),
+        &|s| PathBuf::from(s.ui_texts.get("syncDir").cloned().unwrap_or_default()),
+        |prompts, settings| {
+            assert_eq!(prompts.len(), 1);
+            assert!(sync_enabled(settings));
+            let acquired = std::thread::scope(|sc| {
+                sc.spawn(|| {
+                    let start = std::time::Instant::now();
+                    while start.elapsed() < Duration::from_secs(1) {
+                        if store.try_lock().is_ok() {
+                            return true;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    false
+                })
+                .join()
+                .unwrap()
+            });
+            usize::from(!acquired)
+        },
+    );
+    assert_eq!(failures, 0, "the store mutex was free while the folder write ran");
+    assert!(enabled);
+    assert_eq!(saved.get(), 1);
+    assert_eq!(old, PathBuf::new());
+    assert_eq!(new_dir, PathBuf::from("C:/sync-new"));
+}

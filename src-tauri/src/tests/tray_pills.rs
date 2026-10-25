@@ -1112,3 +1112,98 @@ fn a_scaled_folder_centre_follows_its_own_box() {
     let (x2, _) = folder_centre(&pos, 1.0, 2.0);
     assert_eq!(x2, 100.0 + folder_box(1.0));
 }
+
+#[test]
+fn the_custom_tray_window_shows_an_ampersand_once() {
+    assert_eq!(tray_plain_label(&tray_label("A & B", TRAY_LABEL_MAX)), "A & B");
+    assert_eq!(tray_plain_label(&tray_label("a && b", TRAY_LABEL_MAX)), "a && b");
+}
+
+#[test]
+fn a_destroyed_float_window_leaves_the_closing_list_and_resyncs_only_after_a_gave_up_waiter() {
+    let mut list = vec![("a".to_string(), CloseWatch::Idle), ("b".to_string(), CloseWatch::Idle), ("c".to_string(), CloseWatch::Idle)];
+    // Never waited on: forgotten, nothing to replay.
+    assert!(!watch_destroyed(&mut list, "a"));
+    // The waiter is still polling and will replay the plan itself.
+    assert!(watch_claim(&mut list, "b"));
+    assert!(!watch_claim(&mut list, "b"));
+    assert!(!watch_destroyed(&mut list, "b"));
+    // The waiter gave up with the window alive: the Destroyed event replays once.
+    assert!(watch_claim(&mut list, "c"));
+    assert!(watch_give_up(&mut list, "c"));
+    assert!(!watch_claim(&mut list, "c"));
+    assert!(watch_destroyed(&mut list, "c"));
+    assert!(list.is_empty());
+    assert!(!watch_destroyed(&mut list, "c"));
+    // The window vanished before the waiter gave up: the waiter replays itself.
+    assert!(!watch_give_up(&mut list, "c"));
+}
+
+#[test]
+fn reopen_step_builds_only_when_the_label_is_free_and_waits_for_a_closing_window() {
+    assert_eq!(reopen_step(false, false), ReopenStep::Build);
+    assert_eq!(reopen_step(false, true), ReopenStep::Build);
+    assert_eq!(reopen_step(true, false), ReopenStep::Keep);
+    assert_eq!(reopen_step(true, true), ReopenStep::WaitThenSync);
+}
+
+#[test]
+fn the_app_placing_a_parked_pill_is_not_a_user_drag() {
+    // open_floating's own set_position fires Moved too; counting it as a drag wrote the park
+    // spot over the stored home and ended parking.
+    let mut placed = vec![("float-a".to_string(), (40, 60))];
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 60)), "the app's own placement");
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 60)), "a repeated event for it");
+    assert!(moved_is_user_drag(&mut placed, "float-a", (45, 61)), "a real drag");
+    assert!(moved_is_user_drag(&mut placed, "float-a", (40, 60)), "after a drag the old spot counts again");
+    assert!(moved_is_user_drag(&mut placed, "float-b", (40, 60)), "a window the app never parked");
+}
+#[test]
+fn a_maximized_window_keeps_its_normal_bounds() {
+    // Moved/Resized used to store the full work-area bounds, so quitting while maximized
+    // restored a non-maximized window at that size and lost the user's own.
+    let mut g = WindowGeom { x: 100, y: 80, width: 900, height: 600, maximized: false };
+    geom_after_move(&mut g, 0, 0, true);
+    geom_after_resize(&mut g, 1920, 1040, true);
+    assert!(g.maximized);
+    assert_eq!((g.x, g.y, g.width, g.height), (100, 80, 900, 600));
+    geom_after_resize(&mut g, 820, 540, false);
+    geom_after_move(&mut g, 120, 90, false);
+    assert!(!g.maximized);
+    assert_eq!((g.x, g.y, g.width, g.height), (120, 90, 820, 540));
+}
+#[test]
+fn old_saved_geometry_without_the_flag_loads_as_not_maximized() {
+    let g: WindowGeom = serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).unwrap();
+    assert!(!g.maximized);
+}
+#[test]
+fn the_quit_save_does_not_wait_behind_a_busy_store() {
+    // do_full_exit used a blocking lock on the event-loop thread; a backup holding the store
+    // froze every window. With the lock held the helper must report busy instead of waiting.
+    let m = Mutex::new(7);
+    let guard = m.lock().unwrap();
+    let mut ran = false;
+    assert!(!with_store_if_free(&m, |_| ran = true));
+    assert!(!ran);
+    drop(guard);
+    assert!(with_store_if_free(&m, |v| assert_eq!(*v, 7)));
+}
+
+#[test]
+fn float_recall_queries_monitors_before_taking_the_store_lock() {
+    // Structural fix (call order), so no red test exists: monitor queries wait
+    // for the main thread, which may itself be waiting on the store lock. The
+    // old body queried them after the lock; this pins the order.
+    let src = include_str!("../floating.rs");
+    let at = src.find("fn float_recall(").expect("float_recall");
+    let end = src[at..].find("\n}").expect("end") + at;
+    let body = &src[at..end];
+    let lock_at = body.find("lock(&state)").expect("takes the store lock");
+    // The scale factor comes from main_scale_factor, which does the monitor query.
+    assert!(src.contains("fn main_scale_factor(") && src.contains("available_monitors("));
+    for q in ["screen_snapshot(", "main_scale_factor("] {
+        let q_at = body.find(q).unwrap_or_else(|| panic!("{q} missing"));
+        assert!(q_at < lock_at, "{q} must run before the store lock is taken");
+    }
+}

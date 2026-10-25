@@ -196,3 +196,198 @@ fn saved_editor_state_follows_the_file_to_the_new_data_folder() {
     let n: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 2);
 }
+
+// The checks below compare multi-line source text; a checkout with Windows line endings
+// must read the same as one with Unix endings.
+macro_rules! source {
+    ($path:literal) => {
+        include_str!($path).replace("\r\n", "\n")
+    };
+}
+
+#[test]
+fn moving_the_data_folder_is_refused_while_a_recording_runs() {
+    let src = source!("../snip.rs");
+    let at = src.find("pub(crate) async fn set_data_dir").unwrap();
+    let body = &src[at..];
+    let rec = body.find("recording_active(&app) || REC_STARTING.load(Ordering::SeqCst)").expect("recording check");
+    let grant = body.find("consume_granted_dir(Path::new(trimmed), \"data\")").unwrap();
+    assert!(rec < grant, "the pick must survive a refusal");
+    assert!(body.contains("\"data-move-recording\""));
+    // A code of its own: the update message for the same running recording would mislead here.
+    let map = source!("../../../ui/errors.js");
+    assert!(map.contains("\"data-move-recording\": \"errDataMoveRecording\""));
+    assert!(map.contains("\"recording-active\": \"errUpdateRecordingActive\""));
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+        let text = fs::read_to_string(format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        assert!(text.contains("    errDataMoveRecording: \""), "{lang}");
+    }
+}
+
+#[test]
+fn the_data_folder_move_runs_off_the_runtime_and_one_at_a_time() {
+    let src = source!("../snip.rs");
+    let at = src.find("pub(crate) async fn set_data_dir").unwrap();
+    let body = &src[at..];
+    let body = &body[..body.find("fn move_data_dir_blocking").unwrap()];
+    let busy = body.find("\"data-move-busy\"").expect("a second call is refused");
+    let grant = body.find("consume_granted_dir").unwrap();
+    let spawn = body.find("tauri::async_runtime::spawn_blocking").expect("disk work is off the runtime");
+    assert!(busy < grant && grant < spawn);
+    assert!(body.contains("let _guard = guard;"), "the guard is released when the work ends");
+    // The step order inside the blocking part is the one the abort rules rely on.
+    let work = &src[src.find("fn move_data_dir_blocking").unwrap()..];
+    let work = &work[..work.find("\n}\n").unwrap()];
+    let flush = work.find("let mut flush").unwrap();
+    let rebase = work.find("let mut rebase").unwrap();
+    let mv = work.find("move_store_dir(&current, &new").unwrap();
+    assert!(flush < rebase && rebase < mv);
+    // The guard really is exclusive.
+    assert!(DATA_MOVE_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok());
+    {
+        let _g = DataMoveGuard;
+        assert!(DATA_MOVE_BUSY.load(Ordering::SeqCst));
+    }
+    assert!(!DATA_MOVE_BUSY.load(Ordering::SeqCst), "dropping the guard frees the slot");
+    let map = source!("../../../ui/errors.js");
+    assert!(map.contains("\"data-move-busy\": \"errDataMoveBusy\""));
+    let menu = source!("../../../ui/expertMenu.js");
+    assert!(menu.contains("dataDirMoving = true;") && menu.contains("dataDirMoving = false;"));
+    assert!(menu.contains("btn.disabled = true") && menu.contains("btn.disabled = false"));
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+        let text = fs::read_to_string(format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        assert!(text.contains("    errDataMoveBusy: \""), "{lang}");
+    }
+}
+
+#[test]
+fn the_backups_self_copy_guard_ignores_case() {
+    let src = source!("../snip.rs");
+    assert!(src.contains("old_backups.is_dir() && !path_is_inside_dir(new, &old_backups)"));
+    assert!(!src.contains("!new.starts_with(&old_backups)"));
+    let old = Path::new(r"C:\Data\backups");
+    assert!(path_is_inside_dir(Path::new(r"c:\data\BACKUPS\sub"), old));
+    assert!(!path_is_inside_dir(Path::new(r"C:\Data\backups2"), old));
+}
+
+#[test]
+fn a_verbatim_share_is_the_same_place_as_the_plain_one() {
+    assert_eq!(split_path_parts(r"\\?\UNC\nas\ps\data"), split_path_parts(r"\\nas\ps\data"));
+    assert_eq!(split_path_parts(r"\\?\unc\NAS\ps"), vec!["NAS".to_string(), "ps".to_string()]);
+    assert_eq!(split_path_parts(r"\\?\C:\x\y"), split_path_parts(r"C:\x\y"));
+    // A folder that merely starts with "unc" is no prefix.
+    assert_eq!(split_path_parts("uncle/x"), vec!["uncle".to_string(), "x".to_string()]);
+    let data = Path::new(r"\\nas\ps\data");
+    assert!(path_is_inside_dir(Path::new(r"\\?\UNC\nas\ps\data\files\a.pdf"), data));
+    assert!(!path_is_inside_dir(Path::new(r"\\?\UNC\nas\ps\data2\a.pdf"), data));
+    let own = [PathBuf::from(r"\\nas\ps\data")];
+    assert!(!is_foreign_network_path(r"\\?\UNC\nas\ps\data\files\a.pdf", &own));
+    assert!(is_foreign_network_path(r"\\?\UNC\nas\ps\other\a.pdf", &own));
+    assert!(is_foreign_network_path(r"\\?\UNC\evil\ps\data\a.pdf", &own));
+    assert!(is_foreign_network_path(r"\\?\UNC\nas\ps\data\..\other\a.pdf", &own));
+}
+
+#[test]
+fn an_update_uninstall_keeps_the_downloaded_ffmpeg() {
+    let nsi = include_str!("../../installer.nsi");
+    // The silent uninstall of the old version always precedes a fresh install, so it
+    // carries a keep marker, and the uninstall section reads it before deleting the tools.
+    let call = nsi.find("StrCpy $R1 \"$R1 _?=$4\"").expect("uninstall call");
+    let before = &nsi[..call];
+    assert!(before.contains("/KEEPTOOLS"), "the pre-install uninstall passes the keep marker");
+    let un = nsi.find("Section Uninstall").unwrap();
+    let del = nsi[un..].find("ffmpeg.exe\"").expect("ffmpeg delete") + un;
+    let guard = &nsi[un..del];
+    assert!(guard.contains("$KeepTools"), "the ffmpeg delete is guarded by the keep marker");
+    assert!(nsi.contains("GetOptions} $CMDLINE \"/KEEPTOOLS\""), "un.onInit reads the marker");
+}
+
+#[test]
+fn deleting_my_data_also_removes_the_per_user_local_tool_folder() {
+    let nsi = include_str!("../../installer.nsi").replace("\r\n", "\n");
+    let un = nsi.find("Section Uninstall").unwrap();
+    let branch = &nsi[un..];
+    let roaming = branch.find("RmDir /r \"$APPDATA\\${DATAFOLDER}\"").expect("roaming delete");
+    let local = branch.find("RmDir /r \"$LOCALAPPDATA\\${DATAFOLDER}\"").expect("local data folder delete");
+    assert!(local > roaming && local - roaming < 300, "the local folder is removed beside the roaming one");
+}
+
+#[test]
+fn the_live_data_folder_is_never_cleaned_whatever_was_remembered() {
+    // LAST_OLD_DATA_DIR is one global; the other tests that set it hold the same lock.
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("ps-test-live-dir-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let respelled = PathBuf::from(dir.to_string_lossy().to_uppercase());
+    // Remembered as the old folder, but it is the one in use (same folder, other casing).
+    assert!(!data_dir_cleanup_allowed(&dir, Some(&dir), &respelled));
+    let other = dir.join("elsewhere");
+    fs::create_dir_all(&other).unwrap();
+    assert!(data_dir_cleanup_allowed(&other, Some(&other), &dir));
+    assert!(!data_dir_cleanup_allowed(&other, None, &dir));
+    // A move onto the same folder under another spelling is no move at all.
+    let mut flushed = false;
+    let mut flush = || { flushed = true; Ok(()) };
+    let mut rebind = || {};
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    assert_eq!(move_store_dir(&dir, &respelled, &dir.join("pointer"), &mut flush, &mut rebind, &mut || Ok(())), Ok(false));
+    assert!(!flushed);
+    assert!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_busy_wal_checkpoint_aborts_the_move_instead_of_losing_rows() {
+    let dir = std::env::temp_dir().join(format!("ps-test-wal-busy-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("t.db");
+    let writer = Connection::open(&path).unwrap();
+    writer.query_row("PRAGMA journal_mode=WAL", [], |r| r.get::<_, String>(0)).unwrap();
+    writer.execute_batch("CREATE TABLE t(a); INSERT INTO t VALUES(1);").unwrap();
+    assert!(checkpoint_wal(&writer, 1).is_ok(), "an idle database checkpoints cleanly");
+    writer.execute_batch("INSERT INTO t VALUES(2);").unwrap();
+    let reader = Connection::open(&path).unwrap();
+    reader.execute_batch("BEGIN; SELECT * FROM t;").unwrap();
+    writer.execute_batch("INSERT INTO t VALUES(3);").unwrap();
+    assert!(checkpoint_wal(&writer, 1).is_err(), "a reader holding the log makes the checkpoint busy");
+    reader.execute_batch("COMMIT;").unwrap();
+    assert!(checkpoint_wal(&writer, 1).is_ok());
+    drop((writer, reader));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_startup_sweep_removes_only_old_temp_leftovers() {
+    let dir = std::env::temp_dir().join(format!("ps-tmpsweep-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let old_time = SystemTime::now() - Duration::from_secs(7200);
+    let make = |name: &str, old: bool| {
+        let f = fs::File::create(dir.join(name)).unwrap();
+        if old {
+            f.set_modified(old_time).unwrap();
+        }
+    };
+    make("settings.json.tmp-p1760000000000000000_1", true);
+    make("a.md.tmp-p1760000000000000000_2", true);
+    make("fresh.json.tmp-p1760000000000000000_3", false);
+    make("notes.tmp", true);
+    make("export.psb", true);
+    make("mine.tmp-abc", true);
+    fs::create_dir(dir.join("sub.tmp-p1_1")).unwrap();
+    assert_eq!(sweep_atomic_temps(&dir, Duration::from_secs(3600)), 2);
+    let mut left: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    left.sort();
+    assert_eq!(left, ["export.psb", "fresh.json.tmp-p1760000000000000000_3", "mine.tmp-abc", "notes.tmp", "sub.tmp-p1_1"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// Structural fix, no red unit test: the sweep results stay the same, only the directory reads drop.
+#[test]
+fn the_startup_sweep_reads_the_app_temp_folder_once() {
+    let src = source!("../snip.rs");
+    let body = src.split("pub(crate) fn sweep_stale_temp_files_in").nth(1).unwrap().split("pub(crate) fn remove_own_temp_leftovers_in").next().unwrap();
+    assert_eq!(body.matches("fs::read_dir(&ocr_dir)").count(), 1);
+}
