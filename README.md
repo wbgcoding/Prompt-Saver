@@ -160,7 +160,6 @@ npm run build              # portable exe + NSIS installer
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
-## Copyright
+## License
 
-© 2026 BG Coding. The source is published so anyone can see what the app does with
-their data — it is not released for reuse, redistribution or derivative works.
+© 2026 BGCoding. You may modify Prompt Saver and share it, original or modified, free of charge for non-commercial use; commercial use needs written permission. Full terms: [LICENSE](LICENSE).
