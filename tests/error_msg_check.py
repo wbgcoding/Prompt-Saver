@@ -20,7 +20,7 @@ ALLOW = {
         "ocr-no-language", "ocr-index-busy", "voice-no-language", "voice-busy", "voice-online-required",
         "recording-too-young-to-continue", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
-        "view-full:{deficit}", "invalid-exe",
+        "view-full:{deficit}", "view-full", "invalid-exe",
     ],
     "an export graph only this app's own UI builds; a refusal shows the generic export failure": [
         "export graph not allowed: {why}", "export graph not allowed: media file type",

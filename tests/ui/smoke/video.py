@@ -1040,10 +1040,10 @@ VIDEO_PROBE = """
         origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
         await sleep(30);
         if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing a held show-original press did not restore the overlay layer');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
         await sleep(450);
         if (!overlayLive398.classList.contains('hidden')) errs.push('398: holding V did not hide the overlay layer');
-        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', code: 'KeyV', bubbles: true }));
         await sleep(30);
         if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing V did not restore the overlay layer');
       }
@@ -1144,7 +1144,7 @@ VIDEO_PROBE = """
         // frame overlay's chain must be exhausted at exactly that many undos,
         // never sooner and never later than the SINGLE row it owns disappearing.
         for (let i = 0; i < 40; i++) {
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true }));
         }
         await sleep(30);
         const rowsAfter = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
@@ -1181,7 +1181,7 @@ VIDEO_PROBE = """
             errs.push('392: duplicating an overlay produced ' + afterCount + ' rows, expected ' + (beforeCount + 1));
           }
           if (document.activeElement) document.activeElement.blur();
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true }));
           await sleep(30);
           const undoCount = document.querySelectorAll('#ve-ov-list .ve-ov-row').length;
           if (undoCount !== beforeCount) {
@@ -1395,18 +1395,16 @@ VIDEO_PROBE = """
         }
       }
 
-      // The Export tab mirrors the same target as a read-only summary, and
-      // its "Change..." button jumps back to the Edit tab.
+      // The Export tab mirrors the same target as a read-only summary (no Change button) and
+      // shows the resulting size as plain text.
       document.getElementById('ve-export-open').click();
       await sleep(80);
       const summary = document.getElementById('ve-export-scale-summary').textContent;
-      if (!summary.includes('480') || !summary.includes('270')) {
-        errs.push('366: the export-tab scale summary does not show 480x270: ' + summary);
+      if (summary.trim() !== '480 × 270 px') {
+        errs.push('366: the export-tab scale summary is not the scaled size 480 x 270: ' + summary);
       }
-      document.getElementById('ve-export-scale-edit').click();
-      await sleep(80);
-      if (document.getElementById('ve-panel-edit').classList.contains('hidden')) {
-        errs.push('366: the export-tab "Change..." button did not jump back to the Edit tab');
+      if (document.getElementById('ve-export-scale-edit')) {
+        errs.push('366: the export tab still has a Change button next to the scale summary');
       }
 
       // A fixed-height preset at or above the source size leaves the frame
@@ -1431,7 +1429,7 @@ VIDEO_PROBE = """
       wField.value = '1280';
       wField.dispatchEvent(new Event('change'));
       await sleep(30);
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true }));
       await sleep(30);
       if (wField.value !== '1920' || hField.value !== '1080') {
         errs.push('366: undo did not restore the original resolution, got ' + wField.value + 'x' + hField.value);
@@ -2287,6 +2285,78 @@ def run_expert(browser, tmp):
       errs.push('537: the high-tier bitrate was ' + (req && req.video_kbps) + ', expected 12000 scaled to 8000');
     }
 
+    // 742: "Add to a tile after saving" opens on its remembered choice, files the finished export
+    // as a tile, tells a full grid, and stays quiet once switched off.
+    const tileBox = document.getElementById('ve-export-tile');
+    const addTileCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'video_editor_add_tile');
+    const toastText = () => document.getElementById('ve-toast').textContent;
+    const exportOnce = async () => {
+      const n = exportCalls().length;
+      document.getElementById('ve-export-start').click();
+      await until(() => exportCalls().length > n, 100);
+      await until(() => !document.getElementById('ve-export-start').disabled, 100);
+      await sleep(120);
+    };
+    if (!tileBox || !tileBox.checked) errs.push('742: the remembered tile checkbox was not on');
+    const tilesBefore = addTileCalls().length;
+    await exportOnce();
+    const added = addTileCalls().slice(tilesBefore);
+    if (added.length !== 1 || !added[0][1] || !/[.]webm$/.test(String(added[0][1].path))) {
+      errs.push('742: the export did not file one tile for the exported file: ' + JSON.stringify(added));
+    }
+    if (toastText() !== 'Added to a tile.') errs.push('742: the tile toast was ' + toastText());
+    window.__TILE_FULL__ = true;
+    await exportOnce();
+    if (toastText() !== 'Grid is full. Drag onto a tile to swap') errs.push('742: a full grid was not told, toast: ' + toastText());
+    window.__TILE_FULL__ = false;
+    tileBox.checked = false;
+    tileBox.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(80);
+    const saved = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_ui_value' && c[1].key === 'veExportTile').pop();
+    if (!saved || saved[1].value !== 0) errs.push('742: switching the tile box off was not remembered: ' + JSON.stringify(saved));
+    const callsBefore = addTileCalls().length;
+    await exportOnce();
+    if (addTileCalls().length !== callsBefore) errs.push('742: a tile was filed with the box off');
+
+    // 743: the quality options read Small, High, Lossless with High still the default.
+    {
+      const q = document.getElementById('ve-export-quality');
+      const order = [...q.options].map((o) => o.value).join(',');
+      if (order !== 'small,high,lossless') errs.push('743: the quality order is ' + order);
+    }
+    // 744: a cancelled export hides the progress row and keeps the message.
+    {
+      const destField = document.getElementById('ve-export-dest');
+      destField.value = 'C:/Custom/CANCELLED-clip.mp4';
+      destField.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(40);
+      const n = exportCalls().length;
+      document.getElementById('ve-export-start').click();
+      await until(() => exportCalls().length > n, 100);
+      await until(() => !document.getElementById('ve-export-start').disabled, 100);
+      await sleep(80);
+      if (!document.getElementById('ve-export-progress-row').classList.contains('hidden')) errs.push('744: the progress row stayed visible after a cancel');
+      if (document.getElementById('ve-export-status').textContent !== 'Export cancelled.') errs.push('744: the cancel message was ' + document.getElementById('ve-export-status').textContent);
+    }
+    // 745: a typed ".mp4" on an mp4 export is not doubled, in any letter case.
+    {
+      const f = document.getElementById('ve-export-format');
+      f.value = 'mp4';
+      f.dispatchEvent(new Event('change', { bubbles: true }));
+      const nm = document.getElementById('ve-export-name');
+      nm.value = 'clip.MP4';
+      nm.dispatchEvent(new Event('input', { bubbles: true }));
+      nm.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(40);
+      if (nm.value !== 'clip') errs.push('745: the name field kept the extension: ' + nm.value);
+      const n = exportCalls().length;
+      document.getElementById('ve-export-start').click();
+      await until(() => exportCalls().length > n, 100);
+      const req2 = exportCalls().pop()[1].req;
+      if (!/[\\/]clip[.]mp4$/.test(String(req2.dest_path))) errs.push('745: the export path was ' + req2.dest_path);
+      await until(() => !document.getElementById('ve-export-start').disabled, 100);
+    }
+
     // A new overlay of each kind starts from the remembered values, or the fixed defaults.
     document.getElementById('ve-tab-overlays').click();
     await sleep(60);
@@ -2331,7 +2401,7 @@ def run_expert(browser, tmp):
 </script>
 """
     seed = (
-        '<script>window.__SEED_UI_VALUES__ = {"veOvLastPixelateBlock": 24, "veOvLastSpotlightDim": 70, '
+        '<script>window.__SEED_UI_VALUES__ = {"veExportTile": 1, "veOvLastPixelateBlock": 24, "veOvLastSpotlightDim": 70, '
         '"veOvLastImageOpacity": 40};'
         'window.__SEED_UI_TEXTS__ = {"videoExportFormat": "webm", "videoExportQuality": "small", '
         '"videoExportScale": "720", "veOvLastTextColor": "#ef4444"};</script>\n')

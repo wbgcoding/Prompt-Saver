@@ -1479,6 +1479,27 @@ pub(crate) enum EditorLoadDecision {
     Accepted,
     Refused,
     NoAnswer,
+    // The window was destroyed while the request waited: nobody is left to answer, so the
+    // opener builds a fresh window instead of giving up.
+    Gone,
+}
+
+// What the opener does once the open editor has answered (or not): keep the re-target result,
+// or fall through to building a new window. A window that is gone after the wait (destroyed
+// before it could answer, or between the lookup and the ack registration) builds anew.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RetargetOutcome {
+    Done(bool),
+    BuildNew,
+}
+
+pub(crate) fn retarget_outcome(decision: &EditorLoadDecision, window_present: bool) -> RetargetOutcome {
+    match decision {
+        EditorLoadDecision::Gone => RetargetOutcome::BuildNew,
+        _ if !window_present => RetargetOutcome::BuildNew,
+        EditorLoadDecision::Refused => RetargetOutcome::Done(false),
+        EditorLoadDecision::Accepted | EditorLoadDecision::NoAnswer => RetargetOutcome::Done(true),
+    }
 }
 
 // Waits for the editor's answer. No message within `first` means the page is
@@ -1493,6 +1514,7 @@ pub(crate) fn wait_for_editor_decision(rx: &std::sync::mpsc::Receiver<String>, f
             Ok(s) => match s.as_str() {
                 "accepted" => return EditorLoadDecision::Accepted,
                 "refused" => return EditorLoadDecision::Refused,
+                "gone" => return EditorLoadDecision::Gone,
                 "asking" => {
                     wait = asked;
                     asking = true;
@@ -1512,15 +1534,145 @@ pub(crate) fn video_editor_load_ack(request_id: u64, state: String) {
 }
 
 // The editor window is gone (closed while an unsaved-edits question was open, or crashed):
-// every caller still waiting for its answer gets "refused" at once instead of hanging for the
-// long window, and the offered-but-never-taken source is dropped so a freshly opened editor
-// boots on the newly requested file, not the stale offer.
-pub(crate) fn refuse_pending_editor_requests() {
+// every caller still waiting for its answer gets "gone" at once instead of hanging for the
+// long window, and builds a fresh window for its file. The offered-but-never-taken source is
+// dropped so a freshly opened editor boots on the newly requested file, not the stale offer.
+pub(crate) fn release_pending_editor_requests() {
     let waiting = VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).take();
     for tx in waiting.into_iter().flat_map(|m| m.into_values()) {
-        let _ = tx.send("refused".to_string());
+        let _ = tx.send("gone".to_string());
     }
     *VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+// Close handling. A close the page cannot see coming (Alt+F4, the taskbar entry, the main
+// window quitting) is held back and handed to the page, which asks about unsaved edits and
+// then allows the close. VE_CLOSE_READY is set once the page listens for the request (before
+// that nobody could answer, so a close just goes through); VE_CLOSING_OK is the page's one-shot
+// permission; VE_QUIT_AFTER_CLOSE remembers that the app was on its way out when the editor was
+// asked, so the quit goes on once the editor is gone.
+static VE_CLOSE_READY: AtomicBool = AtomicBool::new(false);
+static VE_CLOSING_OK: AtomicBool = AtomicBool::new(false);
+static VE_QUIT_AFTER_CLOSE: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum EditorCloseAction {
+    Allow,
+    AskPage,
+}
+
+pub(crate) fn editor_close_action(page_ready: bool, allowed: bool) -> EditorCloseAction {
+    if allowed || !page_ready {
+        EditorCloseAction::Allow
+    } else {
+        EditorCloseAction::AskPage
+    }
+}
+
+// Asks the open editor before the app quits. True means the quit waits for the editor's
+// answer (the quit is re-issued once the editor is gone); false means nothing stands in the
+// way. The page brings its window forward only when it has a question. Runs inside the main
+// window's close handler, so it only flags and emits: it never creates or destroys a window.
+pub(crate) fn ask_editor_before_quit(app: &AppHandle) -> bool {
+    if app.get_webview_window(VIDEO_WIN_LABEL).is_none() || !VE_CLOSE_READY.load(Ordering::SeqCst) {
+        return false;
+    }
+    VE_QUIT_AFTER_CLOSE.store(true, Ordering::SeqCst);
+    let _ = app.emit_to(VIDEO_WIN_LABEL, "ve-close-requested", true);
+    true
+}
+
+// The page's side of the close handshake: "ready" (it listens), "allow" (it asked and the
+// person agreed, or nothing needed asking: the next close goes through), "cancel" (the person
+// kept the editor open, so a pending quit is dropped).
+#[tauri::command]
+pub(crate) fn video_editor_close_ack(app: AppHandle, state: String) {
+    match state.as_str() {
+        "ready" => VE_CLOSE_READY.store(true, Ordering::SeqCst),
+        "allow" => {
+            VE_CLOSING_OK.store(true, Ordering::SeqCst);
+            if VE_QUIT_AFTER_CLOSE.swap(false, Ordering::SeqCst) {
+                // The quit goes on from a plain thread once the window is really gone, never
+                // from inside a window event.
+                std::thread::spawn(move || {
+                    for _ in 0..200 {
+                        if app.get_webview_window(VIDEO_WIN_LABEL).is_none() {
+                            request_app_quit(&app);
+                            return;
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                });
+            }
+        }
+        "cancel" => VE_QUIT_AFTER_CLOSE.store(false, Ordering::SeqCst),
+        _ => {}
+    }
+}
+
+// The title of the tile an export is filed under: the file name without its extension.
+pub(crate) fn export_tile_name(path: &Path) -> String {
+    let stem = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    if stem.is_empty() {
+        path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+    } else {
+        stem
+    }
+}
+
+// Whether the active view has a cell for one more tile. A grid folder owns its cell outside the
+// layout, so those cells count as taken.
+pub(crate) fn export_tile_has_room(settings: &Settings) -> bool {
+    let Some(view) = settings.views.get(settings.active_index()) else { return false };
+    first_free_cell_excluding(view, &active_view_folder_cells(settings)).is_some()
+}
+
+// "Add to a tile after saving": files the finished export as a new tile in the active view's
+// first free cell, holding the file the way a dropped file does. Only a file this session's
+// export wrote is accepted. A full grid answers "view-full" and creates nothing.
+#[tauri::command]
+pub(crate) async fn video_editor_add_tile(app: AppHandle, state: State<'_, Db>, path: String) -> Result<String, String> {
+    let file = PathBuf::from(&path);
+    if !is_known_export_output(&file) || !file.is_file() {
+        return Err("source-not-allowed".to_string());
+    }
+    {
+        let store = lock(&state);
+        if !export_tile_has_room(&store.settings) {
+            return Err("view-full".to_string());
+        }
+    }
+    let name = export_tile_name(&file);
+    let prompt = crate::prompts::add_prompt(
+        app.clone(),
+        state.clone(),
+        name.clone(),
+        name,
+        String::new(),
+        None,
+        Some(false),
+        Some(false),
+        Some(path),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    // The main window holds its own copy of the grid.
+    let _ = app.emit_to("main", "store-synced", ());
+    Ok(prompt.id)
 }
 
 // Opens the editor for one recording; a second call re-targets the open window instead of
@@ -1556,18 +1708,19 @@ pub(crate) async fn open_video_editor(
     .map_err(|e| e.to_string())?;
     let origin_dir = origin_dir.unwrap_or_default();
     let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path.clone()) };
+    let mut carried: Option<(String, String, String)> = None;
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
         // The open editor may still refuse (unsaved edits kept), so the source is only offered here
         // and becomes pending once taken.
         let id = VE_LOAD_REQUEST_SEQ.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(id, tx);
-        let request = (src_path.clone(), origin_dir.clone(), overlay_path);
+        let request = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
         *VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(request.clone());
         let _ = app.emit_to(
             VIDEO_WIN_LABEL,
             "video-editor-load",
-            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt, request_id: Some(id) },
+            &VideoEditorSource { path: src_path.clone(), origin_dir: origin_dir.clone(), overlay_path: overlay_opt, request_id: Some(id) },
         );
         let _ = win.show();
         let _ = win.set_focus();
@@ -1585,17 +1738,33 @@ pub(crate) async fn open_video_editor(
         if still_mine {
             *slot = None;
         }
-        match decision {
-            EditorLoadDecision::Refused => return Ok(false),
-            EditorLoadDecision::Accepted => *pending.lock() = request,
-            // No answer: the page was still booting and pulled the request itself.
-            EditorLoadDecision::NoAnswer => {
-                if still_mine {
-                    *pending.lock() = request;
+        let outcome = retarget_outcome(&decision, app.get_webview_window(VIDEO_WIN_LABEL).is_some());
+        match outcome {
+            RetargetOutcome::Done(false) => return Ok(false),
+            RetargetOutcome::Done(true) => {
+                match decision {
+                    EditorLoadDecision::Accepted => *pending.lock() = request,
+                    // No answer: the page was still booting and pulled the request itself.
+                    _ => {
+                        if still_mine {
+                            *pending.lock() = request;
+                        }
+                    }
                 }
+                return Ok(true);
             }
+            // The window closed under the request: open a fresh one for this file.
+            RetargetOutcome::BuildNew => carried = Some(request),
         }
-        return Ok(true);
+    }
+    let (src_path, origin_dir, overlay_path) = carried.unwrap_or((src_path, origin_dir, overlay_path));
+    // The closed window's label may be released a moment after its destroy event; building too
+    // early would be refused as a duplicate label.
+    for _ in 0..40 {
+        if app.get_webview_window(VIDEO_WIN_LABEL).is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
@@ -1615,11 +1784,22 @@ pub(crate) async fn open_video_editor(
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
-    win.on_window_event(|event| {
-        if matches!(event, tauri::WindowEvent::Destroyed) {
-            refuse_pending_editor_requests();
+    let close_app = app.clone();
+    win.on_window_event(move |event| match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            let allowed = VE_CLOSING_OK.swap(false, Ordering::SeqCst);
+            if editor_close_action(VE_CLOSE_READY.load(Ordering::SeqCst), allowed) == EditorCloseAction::AskPage {
+                api.prevent_close();
+                let _ = close_app.emit_to(VIDEO_WIN_LABEL, "ve-close-requested", false);
+            }
+        }
+        tauri::WindowEvent::Destroyed => {
+            VE_CLOSE_READY.store(false, Ordering::SeqCst);
+            VE_CLOSING_OK.store(false, Ordering::SeqCst);
+            release_pending_editor_requests();
             FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
         }
+        _ => {}
     });
     set_capture_exclusion(&win, excluded);
     let geom = centered_on_primary(&win, VIDEO_WIN_W, VIDEO_WIN_H);

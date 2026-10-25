@@ -1,7 +1,7 @@
 // Video editor: the export run, its size estimate and the ffmpeg presence check.
 import { makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes } from "./floatShared.js";
 import { errMessageLogged } from "./errors.js";
-import { exportNameIsValid } from "./exportName.js";
+import { exportNameIsValid, stripFormatExt } from "./exportName.js";
 import { confirmDialog } from "./dialog.js";
 import { exportFormat, exportQuality, effectiveSize, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, buildCopyMixChain, copyAudioMode, isLosslessCopy } from "./videoGraph.js";
 import { $, clamp, ETA_MIN_PCT, ETA_MIN_SECS, EXPORT_KBPS, fmtTime, formatExt, invoke, keptSegments, LANG, showExportErrorDetails, SILENT_FORMAT_LENGTH_WARN_MS, SILENT_FORMATS, t, toast, totalOutMs, updateAudioLabels, VE } from "./video.js";
@@ -21,7 +21,7 @@ function sourceStem() {
 // The file-name field's own value, or the auto "<source stem>-edit" guess
 // when the user never touched it (or cleared it back to empty).
 export function exportNameStem() {
-  const custom = (VE.exportNameOverride || "").trim();
+  const custom = stripFormatExt(VE.exportNameOverride, formatExt(exportFormat()));
   return custom || `${sourceStem()}-edit`;
 }
 
@@ -272,6 +272,7 @@ export async function startExport(toClipboard) {
             $("ve-export-saveas").classList.remove("hidden");
           }
           toast(t("veExportDone").replace("{path}", () => outPath));
+          if ($("ve-export-tile").checked) await addExportTile(outPath);
         }
         return;
       } catch (err) {
@@ -298,6 +299,8 @@ export async function startExport(toClipboard) {
   } catch (err) {
     noteFfmpeg(err);
     const raw = String(err);
+    // Neither a cancel nor an error leaves a half-full bar behind; the message stays.
+    $("ve-export-progress-row").classList.add("hidden");
     // A user cancel is not a failure and never shows the error UI; a missing ffmpeg already has its
     // banner from noteFfmpeg(). Everything else is a real ffmpeg or filesystem failure, translated
     // by the shared classifier, with the raw text only under "Technical details".
@@ -321,6 +324,18 @@ export async function startExport(toClipboard) {
     $("ve-export-eta").textContent = "";
     // The editor moved on to another recording: its progress row is not ours to leave showing.
     if (!stillHere()) $("ve-export-progress-row").classList.add("hidden");
+  }
+}
+
+// "Add to a tile after saving": the finished file becomes a tile in the main window's active
+// view. A full grid is told to the person and nothing is created. A failed tile never turns a
+// finished export into an error.
+async function addExportTile(path) {
+  try {
+    await invoke("video_editor_add_tile", { path });
+    toast(t("veExportTileDone"));
+  } catch (err) {
+    toast(String(err).includes("view-full") ? t("gridFull") : errMessageLogged(err, t, "video"));
   }
 }
 

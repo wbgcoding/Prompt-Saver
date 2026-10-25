@@ -16,6 +16,7 @@ import { createColorPop } from "./colorpop.js";
 import { insertWinButtons, wireWinButtons } from "./winButtons.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
+import { stripFormatExt } from "./exportName.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
@@ -525,9 +526,19 @@ function opLabel(op) {
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
     case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ${t("veUnitMs")}`;
     case "scale": return `${t("veOpScale")} ${op.w}×${op.h}`;
-    case "overlay": return `${t("veOpOverlay")}: ${t(overlayLabelKey(op.kind))}`;
+    case "overlay": return `${t("veOpOverlay")}: ${overlayName(op)}`;
     default: return op.tool;
   }
+}
+
+// What an overlay is called in a list row or a bar tooltip: its kind, and for a text overlay the
+// first 20 characters of the text, so several text overlays can be told apart.
+export function overlayName(op) {
+  const base = t(overlayLabelKey(op.kind));
+  if (op.kind !== "text" || !op.text) return base;
+  const chars = Array.from(String(op.text).replace(/\s+/g, " ").trim());
+  if (!chars.length) return base;
+  return `${base} "${chars.slice(0, 20).join("")}${chars.length > 20 ? "\u2026" : ""}"`;
 }
 
 export const overlayLabelKey = (kind) => ({
@@ -557,7 +568,7 @@ function selectOp(op) {
 export function selectOverlay(id) {
   VE.selOv = id;
   if (id) showPanel("ve-panel-overlays");
-  renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint();
+  renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint(); renderRegions();
 }
 
 function renderOps() {
@@ -809,6 +820,22 @@ function renderStrip() {
   });
 }
 
+// The bar elements of the last render and the op each stands for: a press on a cut band or an
+// overlay bar selects that op, a press on its edge resizes it.
+const barOps = new WeakMap();
+const barEls = new Map();
+const BAR_EDGE_MIN_PX = 14;
+
+function addBarEdges(el, widthPx) {
+  if (widthPx < BAR_EDGE_MIN_PX) return;
+  for (const edge of ["a", "b"]) {
+    const grip = document.createElement("span");
+    grip.className = `ve-bar-edge ve-bar-edge-${edge}`;
+    grip.dataset.edge = edge;
+    el.appendChild(grip);
+  }
+}
+
 export function renderRegions() {
   const { a, b } = trimBounds();
   $("ve-dim-a").style.width = `${msToPx(a)}px`;
@@ -821,12 +848,17 @@ export function renderRegions() {
 
   const cuts = $("ve-cuts");
   cuts.innerHTML = "";
+  barEls.clear();
   for (const cut of opsOf("cut")) {
     const el = document.createElement("div");
     el.className = "ve-cut";
+    const width = Math.max(2, msToPx(Math.abs(cut.endMs - cut.startMs)));
     el.style.left = `${msToPx(Math.min(cut.startMs, cut.endMs))}px`;
-    el.style.width = `${Math.max(2, msToPx(Math.abs(cut.endMs - cut.startMs)))}px`;
+    el.style.width = `${width}px`;
     el.title = `${t("veOpCut")} ${fmtTime(cut.startMs)}-${fmtTime(cut.endMs)}`;
+    addBarEdges(el, width);
+    barOps.set(el, cut);
+    barEls.set(cut, el);
     cuts.appendChild(el);
   }
 
@@ -835,9 +867,13 @@ export function renderRegions() {
   for (const op of opsOf("overlay")) {
     const el = document.createElement("div");
     el.className = "ve-ovbar" + (op.id === VE.selOv ? " sel" : "");
+    const width = Math.max(3, msToPx(Math.max(0, op.endMs - op.startMs)));
     el.style.left = `${msToPx(op.startMs)}px`;
-    el.style.width = `${Math.max(3, msToPx(Math.max(0, op.endMs - op.startMs)))}px`;
-    el.title = `${t(overlayLabelKey(op.kind))} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    el.style.width = `${width}px`;
+    el.title = `${overlayName(op)} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    addBarEdges(el, width);
+    barOps.set(el, op);
+    barEls.set(op, el);
     bars.appendChild(el);
   }
 
@@ -1093,6 +1129,37 @@ function timelineMs(clientX) {
   return clamp(pxToMs(clientX - rect.left), 0, VE.dur);
 }
 
+// A drag that reaches past the visible timeline keeps scrolling it, faster the further out the
+// pointer is, and re-applies the drag at the last pointer position after every step.
+const AUTOSCROLL_MAX_PX = 40;
+const AUTOSCROLL_TICK_MS = 16;
+let dragClientX = 0;
+let dragTimer = 0;
+
+function dragAutoscroll() {
+  dragTimer = 0;
+  if (!VE.drag) return;
+  const view = timelineEl.getBoundingClientRect();
+  const over = dragClientX < view.left ? dragClientX - view.left : dragClientX > view.right ? dragClientX - view.right : 0;
+  if (over) {
+    const before = timelineEl.scrollLeft;
+    const step = Math.sign(over) * clamp(Math.abs(over) / 4, 2, AUTOSCROLL_MAX_PX);
+    timelineEl.scrollLeft = before + step;
+    if (timelineEl.scrollLeft !== before) applyTimelineDrag(dragClientX);
+  }
+  dragTimer = setTimeout(dragAutoscroll, AUTOSCROLL_TICK_MS);
+}
+
+function startDragAutoscroll(clientX) {
+  dragClientX = clientX;
+  if (!dragTimer) dragTimer = setTimeout(dragAutoscroll, AUTOSCROLL_TICK_MS);
+}
+
+function stopDragAutoscroll() {
+  if (dragTimer) clearTimeout(dragTimer);
+  dragTimer = 0;
+}
+
 // A press on the ruler band scrubs; a press anywhere lower on the track starts a selection that
 // only counts once the pointer moved a few pixels, so a plain click just sets the playhead.
 const DRAG_SLOP_PX = 4;
@@ -1102,35 +1169,77 @@ regionsEl.addEventListener("pointerdown", (e) => {
   // A press the page did not start as a real pointer (a synthetic one) has nothing to capture.
   try { regionsEl.setPointerCapture(e.pointerId); } catch { /* the move and up events still reach the track */ }
   const ms = timelineMs(e.clientX);
+  const trackLeft = $("ve-track").getBoundingClientRect().left;
   if (handle) {
     const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
-    VE.drag = { kind: "trim", edge: handle.id === "ve-trim-a" ? "a" : "b", live: { startMs: trim.startMs, endMs: trim.endMs } };
+    const edge = handle.id === "ve-trim-a" ? "a" : "b";
+    // The handle keeps the spot where it was grabbed instead of jumping its centre to the pointer.
+    const grabPx = e.clientX - (trackLeft + msToPx(edge === "a" ? trim.startMs : trim.endMs));
+    VE.drag = { kind: "trim", edge, grabPx, live: { startMs: trim.startMs, endMs: trim.endMs } };
+    startDragAutoscroll(e.clientX);
+    return;
+  }
+  const barEl = e.target.closest(".ve-cut, .ve-ovbar");
+  const barOp = barEl && barOps.get(barEl);
+  if (barOp) {
+    const grip = e.target.closest(".ve-bar-edge");
+    if (grip) {
+      if (barOp.tool === "overlay") selectOverlay(barOp.id);
+      const a = Math.min(barOp.startMs, barOp.endMs), b = Math.max(barOp.startMs, barOp.endMs);
+      const edge = grip.dataset.edge;
+      const grabPx = e.clientX - (trackLeft + msToPx(edge === "a" ? a : b));
+      VE.drag = { kind: "resize", op: barOp, edge, grabPx, live: { startMs: a, endMs: b } };
+      startDragAutoscroll(e.clientX);
+    } else {
+      selectOp(barOp);
+      VE.drag = { kind: "bar" };
+    }
     return;
   }
   const rulerH = $("ve-ruler").offsetHeight || 18;
   if (e.clientY - $("ve-track").getBoundingClientRect().top < rulerH) {
     VE.drag = { kind: "scrub" };
     seek(ms);
+    startDragAutoscroll(e.clientX);
     return;
   }
   VE.drag = { kind: "select", anchor: ms, startX: e.clientX, moved: false };
+  startDragAutoscroll(e.clientX);
 });
 
 regionsEl.addEventListener("pointermove", (e) => {
+  if (!VE.drag) return;
+  dragClientX = e.clientX;
+  applyTimelineDrag(e.clientX);
+});
+
+function applyTimelineDrag(clientX) {
   const drag = VE.drag;
   if (!drag) return;
-  const ms = timelineMs(e.clientX);
+  const ms = timelineMs(clientX);
   if (drag.kind === "scrub") { seek(ms); return; }
+  if (drag.kind === "resize") {
+    const grabbed = clamp(pxToMs(clientX - $("ve-track").getBoundingClientRect().left - drag.grabPx), 0, VE.dur);
+    if (drag.edge === "a") drag.live.startMs = clamp(grabbed, 0, drag.live.endMs - MIN_CLIP_MS);
+    else drag.live.endMs = clamp(grabbed, drag.live.startMs + MIN_CLIP_MS, VE.dur);
+    const el = barEls.get(drag.op);
+    if (el) {
+      el.style.left = `${msToPx(drag.live.startMs)}px`;
+      el.style.width = `${Math.max(2, msToPx(drag.live.endMs - drag.live.startMs))}px`;
+    }
+    return;
+  }
   if (drag.kind === "select") {
-    if (!drag.moved && Math.abs(e.clientX - drag.startX) < DRAG_SLOP_PX) return;
+    if (!drag.moved && Math.abs(clientX - drag.startX) < DRAG_SLOP_PX) return;
     drag.moved = true;
     VE.sel = { a: Math.min(drag.anchor, ms), b: Math.max(drag.anchor, ms) };
     renderRegions();
     return;
   }
   if (drag.kind === "trim") {
-    if (drag.edge === "a") drag.live.startMs = clamp(ms, 0, drag.live.endMs - MIN_CLIP_MS);
-    else drag.live.endMs = clamp(ms, drag.live.startMs + MIN_CLIP_MS, VE.dur);
+    const grabbed = clamp(pxToMs(clientX - $("ve-track").getBoundingClientRect().left - drag.grabPx), 0, VE.dur);
+    if (drag.edge === "a") drag.live.startMs = clamp(grabbed, 0, drag.live.endMs - MIN_CLIP_MS);
+    else drag.live.endMs = clamp(grabbed, drag.live.startMs + MIN_CLIP_MS, VE.dur);
     $("ve-trim-a").style.left = `${msToPx(drag.live.startMs)}px`;
     $("ve-trim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     setTimeValue($("ve-trim-a"), drag.live.startMs, VE.dur);
@@ -1139,12 +1248,22 @@ regionsEl.addEventListener("pointermove", (e) => {
     $("ve-dim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(drag.live.endMs))}px`;
   }
-});
+}
 
 function endTimelineDrag() {
   const drag = VE.drag;
   if (!drag) return;
   VE.drag = null;
+  stopDragAutoscroll();
+  if (drag.kind === "resize") {
+    const op = drag.op;
+    const a = Math.min(op.startMs, op.endMs), b = Math.max(op.startMs, op.endMs);
+    // A press on an edge that did not move it is no edit: no undo step, no dirty mark.
+    if (drag.live.startMs === a && drag.live.endMs === b) return;
+    const match = op.tool === "overlay" ? (o) => o.id === op.id : (o) => o === op;
+    pushReplacing(match, { ...op, startMs: drag.live.startMs, endMs: drag.live.endMs }, { keepEditor: true });
+    return;
+  }
   if (drag.kind === "select") {
     if (!drag.moved) seek(drag.anchor);
     else if (VE.sel && VE.sel.b - VE.sel.a < MIN_CLIP_MS) { VE.sel = null; renderRegions(); }
@@ -1166,7 +1285,8 @@ regionsEl.addEventListener("pointercancel", endTimelineDrag);
 timelineEl.addEventListener("wheel", (e) => {
   if (e.ctrlKey) {
     e.preventDefault();
-    setZoom(VE.zoom * (e.deltaY < 0 ? 1.25 : 0.8), VE.playhead);
+    // The zoom keeps the moment under the pointer where it is.
+    setZoom(VE.zoom * (e.deltaY < 0 ? 1.25 : 0.8), timelineMs(e.clientX));
   } else if (e.deltaY && !e.shiftKey) {
     e.preventDefault();
     timelineEl.scrollLeft += e.deltaY;
@@ -1371,9 +1491,9 @@ function updateScaleCurrent() {
   for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
-  $("ve-export-scale-summary").textContent = scale
-    ? t("veExportScaleSummary").replace("{w}", () => scale.w).replace("{h}", () => scale.h)
-    : t("veScaleOff");
+  // The size the file will have: the chosen target, or the (cropped) source size when unchanged.
+  const outSize = scale || eff;
+  $("ve-export-scale-summary").textContent = t("veExportScaleSummary").replace("{w}", () => outSize.w).replace("{h}", () => outSize.h);
 }
 
 // ---------------------------------------------------------------- panels + wiring
@@ -1678,7 +1798,6 @@ $("ve-scale-lock").addEventListener("change", () => {
   setScaleOp(scale.w, Math.round((scale.w * eff.h) / eff.w));
   persistExportSettings();
 });
-$("ve-export-scale-edit").addEventListener("click", () => showPanel("ve-panel-edit"));
 
 $("ve-ov-add-image").addEventListener("click", () => addOverlay("image"));
 $("ve-ov-add-frame").addEventListener("click", () => addOverlay("frame"));
@@ -1784,6 +1903,15 @@ $("ve-export-name").addEventListener("input", () => {
   $("ve-export-dest").title = destPath();
   applyExportGate();
 });
+// Leaving the field drops a typed ".<ext>" of the chosen format, so the shown name is the stem.
+$("ve-export-name").addEventListener("change", () => {
+  const stem = stripFormatExt($("ve-export-name").value, formatExt(exportFormat()));
+  $("ve-export-name").value = stem;
+  VE.exportNameOverride = stem;
+  $("ve-export-dest").value = destPath();
+  $("ve-export-dest").title = destPath();
+  applyExportGate();
+});
 // The target field is an input: typing a full path is a manual override, like picking one via
 // the dialog below.
 $("ve-export-dest").addEventListener("change", () => {
@@ -1793,6 +1921,8 @@ $("ve-export-dest").addEventListener("change", () => {
   $("ve-export-dest").value = destPath();
   updateExportNote();
 });
+$("ve-export-tile").addEventListener("change", persistExportSettings);
+
 $("ve-export-choose-folder").addEventListener("click", async () => {
   const folder = await invoke("pick_export_folder").catch(() => null);
   if (!folder) return;
@@ -1843,6 +1973,7 @@ $("ve-export-saveas").addEventListener("click", async () => {
 function persistExportSettings() {
   invoke("set_ui_text", { key: "videoExportFormat", value: exportFormat() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportQuality", value: exportQuality() }).catch(() => {});
+  invoke("set_ui_value", { key: "veExportTile", value: $("ve-export-tile").checked ? 1 : 0 }).catch(() => {});
   // A custom free-typed size has no preset to remember; it falls back to "keep original" next session.
   invoke("set_ui_text", { key: "videoExportScale", value: currentScalePresetKey() || "" }).catch(() => {});
   // videoExportDir is not resent here; the choose-folder handler above is the only place VE.destDir changes.
@@ -1850,9 +1981,36 @@ function persistExportSettings() {
 
 // ---------------------------------------------------------------- keyboard
 
-async function closeWindow() {
+// The window may be minimized or behind another one when a close the page did not start (the
+// taskbar entry, the app quitting) needs its question answered.
+async function bringForward() {
+  await appWin.unminimize().catch(() => {});
+  await appWin.show().catch(() => {});
+  await appWin.setFocus().catch(() => {});
+}
+
+// Every close path ends here: the titlebar button, Escape, and (through the backend's
+// "ve-close-requested") Alt+F4, the taskbar entry and the app quitting. `quit` is true when the
+// app itself is on its way out: a running export then needs no extra question (the app's own quit
+// dialog covers running jobs), and an unsaved-edits question still applies. Edits count as
+// unsaved until an export covers them, whether or not the autosave stored them.
+let closeAsking = false;
+async function closeWindow(opts) {
+  const quit = !!(opts && opts.quit);
+  if (closeAsking) return;
+  closeAsking = true;
+  try {
+    await closeWindowAsked(quit);
+  } finally {
+    closeAsking = false;
+  }
+}
+
+async function closeWindowAsked(quit) {
   let discarded = false;
-  if (VE.exporting) {
+  const keepOpen = () => { invoke("video_editor_close_ack", { state: "cancel" }).catch(() => {}); };
+  if (VE.exporting && !quit) {
+    await bringForward();
     // Three-way choice: keep it running in the background (the export is backend-driven and
     // survives this window closing), cancel it and close, or stay put. "Keep running" is the
     // default (Enter). With the edit state not kept, edits made after the export started would be
@@ -1866,11 +2024,12 @@ async function closeWindow() {
       altLabel: t("bgCancelClose"),
       danger: false,
     });
-    if (choice === false) return;
+    if (choice === false) { keepOpen(); return; }
     if (choice === "alt") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
+    await bringForward();
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
-    if (!ok) return;
+    if (!ok) { keepOpen(); return; }
     discarded = true;
   }
   if (discarded) {
@@ -1879,11 +2038,12 @@ async function closeWindow() {
     stopEditStateAutosave();
     if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
   } else {
-    // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety net for a close
-    // this cannot intercept (the native titlebar button skips this function); this just saves the
-    // last few seconds.
+    // Best-effort: this saves the last few seconds the periodic autosave (armEditStateAutosave)
+    // has not stored yet.
     await saveEditStateNow();
   }
+  // The backend holds back every close until the page allows this one.
+  await invoke("video_editor_close_ack", { state: "allow" }).catch(() => {});
   appWin.close().catch(() => {});
 }
 
@@ -1953,12 +2113,13 @@ document.addEventListener("keydown", (e) => {
   }
   if (typing) return;
 
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+  // Letter shortcuts follow the physical key (e.code), so they work under any keyboard layout.
+  if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") { e.preventDefault(); redo(); return; }
   // Preview zoom: Ctrl+Plus/Minus/0, like the screenshot editor's canvas zoom; plain +/- stay the
   // timeline zoom below.
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
@@ -2019,17 +2180,20 @@ document.addEventListener("keydown", (e) => {
     case "ArrowRight": e.preventDefault(); if (e.shiftKey) seek(VE.playhead + 1000); else stepFrame(1); break;
     case "Home": e.preventDefault(); seek(e.shiftKey ? 0 : keptStart()); break;
     case "End": e.preventDefault(); seek(e.shiftKey ? VE.dur : keptEnd()); break;
-    case "i": case "I": e.preventDefault(); $("ve-mark-in").click(); break;
-    case "o": case "O": e.preventDefault(); $("ve-mark-out").click(); break;
-    case "c": case "C": e.preventDefault(); cutSelection(); break;
     case "+": case "=": e.preventDefault(); setZoom(VE.zoom * TIMELINE_ZOOM_STEP); break;
     case "-": e.preventDefault(); setZoom(VE.zoom / TIMELINE_ZOOM_STEP); break;
-    case "v": case "V": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;
+    default: break;
+  }
+  switch (e.code) {
+    case "KeyI": e.preventDefault(); $("ve-mark-in").click(); break;
+    case "KeyO": e.preventDefault(); $("ve-mark-out").click(); break;
+    case "KeyC": e.preventDefault(); cutSelection(); break;
+    case "KeyV": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;
     default: break;
   }
 });
 document.addEventListener("keyup", (e) => {
-  if (e.key.toLowerCase() === "v") veOriginalToggle.release();
+  if (e.code === "KeyV") veOriginalToggle.release();
 });
 
 // ---------------------------------------------------------------- loading
@@ -2131,6 +2295,12 @@ listen("video-editor-load", async (e) => {
   loadRecording(path, originDir, overlayPath);
   ack("accepted");
 });
+// A close the page did not start (Alt+F4, the taskbar entry, the app quitting) arrives here and
+// takes the same path as the close button. The backend only holds closes back once told that this
+// listener exists.
+listen("ve-close-requested", (e) => { closeWindow({ quit: e.payload === true }); })
+  .then(() => invoke("video_editor_close_ack", { state: "ready" }))
+  .catch(() => {});
 listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (!VE.exporting || !exportRun || exportRun.gen !== VE.loadGen) return;
   const ms = Number(e.payload?.ms ?? e.payload ?? 0);
@@ -2146,6 +2316,7 @@ export function applySettings(settings) {
   // The export dialog opens on the user's own last choice.
   $("ve-export-format").value = normRecFormat(texts.videoExportFormat);
   $("ve-export-quality").value = texts.videoExportQuality || "high";
+  $("ve-export-tile").checked = values.veExportTile === 1;
   // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed), and a scale
   // preset needs the source size to become pixels, so it is deferred to VE.pendingScaleKey and
   // consumed once they are known. A scale op the user (or an earlier default) already set is

@@ -17,6 +17,7 @@
     "core:window:allow-outer-position",
     "core:window:allow-close",
     "core:window:allow-show",
+    "core:window:allow-unminimize",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:window:allow-scale-factor",
@@ -55,6 +56,8 @@
     "allow-set-video-export-dir",
     "allow-stat-file",
     "allow-theme-vars",
+    "allow-video-editor-add-tile",
+    "allow-video-editor-close-ack",
     "allow-video-editor-load-ack",
     "allow-video-editor-source",
     "allow-windows-fonts-dir"

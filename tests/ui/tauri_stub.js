@@ -609,6 +609,8 @@ const RESULTS = {
     if (destPath.includes("FAILCLASSIFY")) {
       return Promise.reject(JSON.stringify({ key: "ffErrNoSpace", code: null, raw: "out.mp4: No space left on device" }));
     }
+    // A destination containing "CANCELLED" ends the way a user cancel does.
+    if (destPath.includes("CANCELLED")) return Promise.reject("cancelled");
     if (destPath.includes("REFUSEDEST") && !window.__EXPORT_DEST_REFUSED_ONCE__) {
       window.__EXPORT_DEST_REFUSED_ONCE__ = true;
       return Promise.reject("export destination not recognized");
@@ -629,6 +631,12 @@ const RESULTS = {
     return { bytes: Math.round((kbps * 1000) / 8 * secs), low_bytes: null, high_bytes: null };
   },
   set_taskbar_progress: () => null,
+  // "Add to a tile after saving": a probe flips window.__TILE_FULL__ to get the full-grid answer.
+  video_editor_add_tile: (a) => {
+    if (window.__TILE_FULL__) return Promise.reject("view-full");
+    window.__TILE_ADDED__ = a && a.path;
+    return "tile-1";
+  },
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
   // A number back (the retention hours), not a bare true/false, since
   // discard now moves the file into "verworfen" instead of deleting it.
@@ -1577,7 +1585,7 @@ const noopWindow = {
   minimize: async () => {}, maximize: async () => {}, unmaximize: async () => {},
   toggleMaximize: async () => { window.__MAXIMIZED__ = !window.__MAXIMIZED__; },
   isMaximized: async () => !!window.__MAXIMIZED__, close: async () => {}, hide: async () => {},
-  show: async () => {}, setFocus: async () => {},
+  show: async () => {}, setFocus: async () => {}, unminimize: async () => {},
   innerSize: async () => ({ width: innerWidth, height: innerHeight }),
   scaleFactor: async () => 1, setZoom: async () => {},
 };

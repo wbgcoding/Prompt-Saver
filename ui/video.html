@@ -287,8 +287,8 @@
           <label class="field expert-dropdown-row">
             <span data-i18n="veExportQuality">Quality</span>
             <select id="ve-export-quality" class="modal-input">
-              <option value="high" data-i18n="veQualityHigh">High</option>
               <option value="small" data-i18n="veQualitySmall">Small</option>
+              <option value="high" data-i18n="veQualityHigh">High</option>
               <option value="lossless" data-i18n="veQualityLossless">Lossless</option>
             </select>
           </label>
@@ -296,7 +296,6 @@
             <span data-i18n="veScaleGroup">Resolution</span>
             <div class="export-row">
               <span id="ve-export-scale-summary" class="ve-muted"></span>
-              <button id="ve-export-scale-edit" class="ghost-btn" type="button" data-i18n="veExportScaleEdit">Change…</button>
             </div>
           </div>
           <p id="ve-export-note" class="modal-hint"></p>
@@ -314,6 +313,10 @@
           <div class="export-row">
             <button id="ve-export-choose-folder" class="ghost-btn" type="button" data-i18n="veExportChooseFolder" data-i18n-title="veExportChooseFolderTip">Export to…</button>
           </div>
+          <label class="field switch-field ve-switch-row">
+            <span data-i18n="veExportTile">Add to a tile after saving</span>
+            <input id="ve-export-tile" class="switch" type="checkbox" />
+          </label>
           <div id="ve-export-progress-row" class="ve-progress-row hidden">
             <progress id="ve-export-progress" class="ve-progress" max="100" value="0"></progress>
             <span id="ve-export-pct" class="ve-muted">0%</span>

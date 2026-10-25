@@ -980,10 +980,10 @@ SECTION = """\
             await sleep(30);
             if (isWhite398(200, 100)) out.errors.push('398: releasing a held show-original press did not restore the edit');
             if (!origBadge398.classList.contains('hidden')) out.errors.push('398: the original badge stayed visible after releasing a held press');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
             await sleep(450);
             if (!isWhite398(200, 100)) out.errors.push('398: holding V did not reveal the untouched capture');
-            document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', bubbles: true }));
+            document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', code: 'KeyV', bubbles: true }));
             await sleep(30);
             if (isWhite398(200, 100)) out.errors.push('398: releasing V did not restore the edit');
             if (undoBtn398.disabled !== undoWasDisabled398) out.errors.push('398: the show-original round trip changed the operation list (undo availability changed)');

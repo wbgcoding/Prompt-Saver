@@ -14,6 +14,16 @@ export const EXPORT_RESERVED_STEMS = new Set([
   "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ]);
 
+// The name without a trailing ".<ext>" of the chosen format (any letter case), so "clip.MP4"
+// with mp4 selected lands as clip.mp4 and not clip.mp4.mp4. A name that is only the extension
+// stays as typed (the stem would be empty).
+export function stripFormatExt(name, ext) {
+  const text = String(name == null ? "" : name).trim();
+  const tail = `.${String(ext || "").toLowerCase()}`;
+  if (tail.length < 2 || text.length <= tail.length) return text;
+  return text.slice(-tail.length).toLowerCase() === tail ? text.slice(0, -tail.length).trimEnd() : text;
+}
+
 export function exportNameIsValid(name) {
   const trimmed = (name || "").trim();
   if (!trimmed || trimmed === "." || trimmed === "..") return false;

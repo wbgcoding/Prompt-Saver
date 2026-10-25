@@ -3,6 +3,7 @@
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
 import { keysPreviewModel } from "./videoKeys.js";
+import { typographicApostrophe } from "./videoGraph.js";
 import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, selectOverlay, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
@@ -489,7 +490,7 @@ function buildLiveOverlayEl(op, vb, reuse) {
     } else if (op.back === "outline") {
       el.style.webkitTextStroke = `${Math.max(1, (op.outlinePx || 3) * vb.scale)}px ${contrastTextColor(op.color)}`;
     }
-    el.textContent = op.text;
+    el.textContent = typographicApostrophe(op.text);
     return el;
   }
   if (op.kind === "pixelate") {

@@ -140,12 +140,12 @@ def run(browser, tmp):
     const $ = (id) => document.getElementById(id);
     const cuts = () => VE.ops.filter((o) => o.tool === 'cut').map((o) => [o.startMs, o.endMs]);
     const trimOp = () => VE.ops.filter((o) => o.tool === 'trim').pop() || null;
-    const press = (key) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    const press = (key, code) => document.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
     mod.renderRegions();
     if (!$('ve-trim-set').disabled || !$('ve-cut-add').disabled) errs.push('4024: trim or cut is enabled without a selection');
     if ($('ve-trim-set').title !== 'Select a range first: drag on the timeline or use the selection buttons.') errs.push('4024: the disabled trim button has the tooltip "' + $('ve-trim-set').title + '"');
     if (!($('ve-mark-out').compareDocumentPosition($('ve-mark-in')) & Node.DOCUMENT_POSITION_FOLLOWING)) errs.push('4024: mark out does not come before mark in');
-    press('c');
+    press('c', 'KeyC');
     if ($('ve-toast').textContent !== 'Select a range on the timeline first.') errs.push('4024: C without a selection did not toast, got "' + $('ve-toast').textContent + '"');
     VE.sel = { a: 3000, b: 3000 }; mod.renderRegions();
     if (!$('ve-trim-set').disabled) errs.push('4024: a collapsed selection enables trim');
@@ -235,5 +235,179 @@ def run(browser, tmp):
     if (count() !== 1 || VE.ops.some((o) => o.id === id)) errs.push('4027: Delete did not remove the selected overlay');
     mod.undo(); await sleep(100);
     if (count() !== 2) errs.push('4027: undo after Delete gave ' + count() + ' overlays');
+    """)
+
+    # 4028: a drag that leaves the timeline while zoomed scrolls it on its own.
+    failed += vprobe('autoscroll', 'dragging past the timeline edge scrolls it', r"""
+    // 4028: drag autoscroll.
+    const $ = (id) => document.getElementById(id);
+    for (let i = 0; i < 6 && $('ve-track').getBoundingClientRect().width <= $('ve-timeline').clientWidth * 1.5; i++) { $('ve-zoom-in').click(); await sleep(60); }
+    const tl = $('ve-timeline');
+    if (tl.scrollWidth <= tl.clientWidth) { errs.push('4028: setup did not zoom in, scrollWidth ' + tl.scrollWidth); return; }
+    tl.scrollLeft = 0;
+    const reg = $('ve-regions');
+    const rr = reg.getBoundingClientRect(), tr = tl.getBoundingClientRect();
+    const y = rr.top + 40;
+    ptr('pointerdown', tr.left + 100, y, reg);
+    ptr('pointermove', tr.left + 160, y, reg);
+    ptr('pointermove', tr.right + 60, y, reg);
+    const moved = await until(() => tl.scrollLeft > 20, 60);
+    const mid = tl.scrollLeft;
+    await sleep(200);
+    const later = tl.scrollLeft;
+    ptr('pointerup', tr.right + 60, y, reg);
+    if (!moved) errs.push('4028: the timeline did not scroll while the pointer was past its right edge');
+    if (later <= mid) errs.push('4028: the scroll did not continue while the pointer stayed outside (' + mid + ' -> ' + later + ')');
+    const stop = tl.scrollLeft;
+    await sleep(200);
+    if (tl.scrollLeft !== stop) errs.push('4028: the timeline kept scrolling after the release');
+    if (!VE.sel || VE.sel.b <= VE.sel.a) errs.push('4028: the drag past the edge gave no selection ' + JSON.stringify(VE.sel));
+    """)
+
+    # 4029: cut bands and overlay bars take clicks; their edges resize.
+    failed += vprobe('barclick', 'overlay bars and cut bands select on click, edges resize', r"""
+    // 4029: clickable bars.
+    const { addOverlay } = await import('./videoOverlays.js');
+    const $ = (id) => document.getElementById(id);
+    await addOverlay('frame'); await addOverlay('pixelate'); await sleep(150);
+    const ovs = () => VE.ops.filter((o) => o.tool === 'overlay');
+    if (ovs().length !== 2) { errs.push('4029: setup gave ' + ovs().length + ' overlays'); return; }
+    // Widen both so the bars are clearly clickable, then deselect.
+    VE.selOv = null; mod.renderRegions();
+    const bars = () => [...document.querySelectorAll('#ve-regions .ve-ovbar')];
+    if (bars().length !== 2) { errs.push('4029: ' + bars().length + ' overlay bars'); return; }
+    const first = ovs()[0];
+    const bar = bars().find((b) => b.title.indexOf(mod.overlayName(first)) === 0) || bars()[0];
+    const br = bar.getBoundingClientRect();
+    const hit = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+    if (!hit || !hit.closest('.ve-ovbar')) errs.push('4029: a click on the bar centre would not reach the bar (' + (hit && hit.className) + ')');
+    const reg = $('ve-regions');
+    ptr('pointerdown', br.left + br.width / 2, br.top + br.height / 2, bar);
+    ptr('pointerup', br.left + br.width / 2, br.top + br.height / 2, reg);
+    await sleep(120);
+    const barOfSel = () => bars().filter((b) => b.classList.contains('sel'));
+    if (!VE.selOv) errs.push('4029: pressing an overlay bar selected nothing');
+    if (barOfSel().length !== 1) errs.push('4029: ' + barOfSel().length + ' bars show as selected');
+    if (!document.querySelector('#ve-ov-list .ve-ov-row.sel')) errs.push('4029: the matching list row is not selected');
+    if (VE.sel) errs.push('4029: a bar click started a range selection');
+    // Resize through the left edge: the start moves, the end stays, undo restores.
+    const id = VE.selOv;
+    const op0 = ovs().find((o) => o.id === id);
+    const b2 = barOfSel()[0];
+    const edge = b2.querySelector('.ve-bar-edge-a');
+    if (!edge) { errs.push('4029: the selected bar has no start edge handle'); return; }
+    const er = edge.getBoundingClientRect();
+    const ex = er.left + 2, ey = er.top + er.height / 2;
+    const hit2 = document.elementFromPoint(ex, ey);
+    if (!hit2 || !hit2.classList.contains('ve-bar-edge')) errs.push('4029: the edge handle is covered by ' + (hit2 && hit2.className));
+    const pxPerMs = $('ve-track').getBoundingClientRect().width / VE.dur;
+    const dx = Math.round(40 / pxPerMs / 1000) * 1000 * pxPerMs;
+    ptr('pointerdown', ex, ey, edge);
+    ptr('pointermove', ex + dx, ey, reg);
+    ptr('pointerup', ex + dx, ey, reg);
+    await sleep(120);
+    const op1 = ovs().find((o) => o.id === id);
+    if (!op1 || op1.endMs !== op0.endMs || op1.startMs === op0.startMs) errs.push('4029: the edge drag gave ' + JSON.stringify([op0.startMs, op0.endMs]) + ' -> ' + JSON.stringify(op1 && [op1.startMs, op1.endMs]));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true }));
+    await sleep(120);
+    const op2 = ovs().find((o) => o.id === id);
+    if (!op2 || op2.startMs !== op0.startMs || op2.endMs !== op0.endMs) errs.push('4029: undo did not restore the overlay range');
+    // A cut band selects its entry in the ops list.
+    VE.sel = { a: 3000, b: 9000 }; mod.renderRegions(); $('ve-cut-add').click(); await sleep(100);
+    const cut = document.querySelector('#ve-regions .ve-cut');
+    if (!cut) { errs.push('4029: no cut band after adding a cut'); return; }
+    VE.selOv = null; mod.renderRegions();
+    const cr = document.querySelector('#ve-regions .ve-cut').getBoundingClientRect();
+    const cutOp = VE.ops.find((o) => o.tool === 'cut');
+    VE.playhead = 100;
+    ptr('pointerdown', cr.left + cr.width / 2, cr.top + cr.height / 2, document.querySelector('#ve-regions .ve-cut'));
+    ptr('pointerup', cr.left + cr.width / 2, cr.top + cr.height / 2, reg);
+    await sleep(150);
+    if (VE.sel) errs.push('4029: a cut band click started a range selection');
+    if (Math.abs(VE.playhead - cutOp.startMs) > 50) errs.push('4029: a cut band click left the playhead at ' + VE.playhead + ' instead of the cut start ' + cutOp.startMs);
+    """)
+
+    # 4030: shortcuts follow the physical key, not the typed letter.
+    failed += vprobe('keycode', 'shortcuts work with a non-Latin layout', r"""
+    // 4030: e.code dispatch.
+    const $ = (id) => document.getElementById(id);
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    VE.sel = null; mod.renderRegions();
+    VE.playhead = 5000;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ш', code: 'KeyI', bubbles: true, cancelable: true }));
+    await sleep(60);
+    if (!VE.sel) errs.push('4030: Mark in on a Cyrillic layout (code KeyI) did nothing');
+    else if (VE.sel.a !== 5000) errs.push('4030: mark in set ' + JSON.stringify(VE.sel));
+    VE.sel = { a: 2000, b: 4000 }; mod.renderRegions();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'с', code: 'KeyC', bubbles: true, cancelable: true }));
+    await sleep(80);
+    if (!VE.ops.some((o) => o.tool === 'cut')) errs.push('4030: Cut on a Cyrillic layout (code KeyC) did nothing');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'я', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true }));
+    await sleep(80);
+    if (VE.ops.some((o) => o.tool === 'cut')) errs.push('4030: Ctrl+Z on a Cyrillic layout (code KeyZ) did not undo');
+    // A letter typed without that physical key does nothing.
+    VE.sel = null; mod.renderRegions();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', code: 'KeyK', bubbles: true, cancelable: true }));
+    await sleep(40);
+    if (VE.sel) errs.push('4030: a keydown with key i on another physical key still marked in');
+    """)
+
+    # 4031: an overlay committed without text goes away, the preview shows the exported apostrophe.
+    failed += vprobe('emptytext', 'empty text overlay is removed, bar titles name the text', r"""
+    // 4031: text overlay edge cases.
+    const { addOverlay } = await import('./videoOverlays.js');
+    const texts = () => VE.ops.filter((o) => o.tool === 'overlay' && o.kind === 'text');
+    const field = () => [...document.querySelectorAll('#ve-ov-editor input.modal-input')].find((i) => i.value === (texts()[0] ? texts()[0].text : '\u0000'));
+    const fire = (el, v) => { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+    await addOverlay('text'); await sleep(150);
+    if (texts().length !== 1) { errs.push('4031: setup gave ' + texts().length + ' text overlays'); return; }
+    let f = field();
+    if (!f) { errs.push('4031: the text field was not found'); return; }
+    fire(f, '');
+    await sleep(150);
+    if (texts().length !== 0) errs.push('4031: a fresh text overlay committed empty is still there');
+    if (document.querySelector('#ve-ov-list .ve-ov-item')) errs.push('4031: the list still shows a row after the empty commit');
+    if (document.querySelector('#ve-regions .ve-ovbar')) errs.push('4031: the timeline still shows a bar after the empty commit');
+    mod.undo(); await sleep(120);
+    mod.undo(); await sleep(120);
+    // Existing text: an empty commit restores the old text instead.
+    await addOverlay('text'); await sleep(150);
+    f = field();
+    fire(f, "it's a very long overlay line"); await sleep(150);
+    let op = texts()[0];
+    if (!op || op.text !== "it's a very long overlay line") { errs.push('4031: the text edit gave ' + JSON.stringify(op && op.text)); return; }
+    const bar = document.querySelector('#ve-regions .ve-ovbar');
+    if (!bar || bar.title.indexOf("it's a very long ove") < 0 || bar.title.indexOf("it's a very long overl") >= 0) errs.push('4031: the bar title is "' + (bar && bar.title) + '"');
+    const rowText = document.querySelector('#ve-ov-list .ve-ov-item').textContent;
+    if (rowText.indexOf("it's a very long ove") < 0 || rowText.indexOf("very long overlay") >= 0) errs.push('4031: the list row reads "' + rowText + '"');
+    const live = document.querySelector('.ve-live-text');
+    if (live && live.textContent.indexOf('’') < 0) errs.push('4031: the preview text keeps the plain apostrophe: ' + live.textContent);
+    if (!live) errs.push('4031: no live text element to check the apostrophe');
+    f = field();
+    fire(f, ''); await sleep(150);
+    op = texts()[0];
+    if (!op || op.text !== "it's a very long overlay line") errs.push('4031: an empty commit on an edited overlay changed it to ' + JSON.stringify(op && op.text));
+    f = field();
+    if (!f || f.value !== "it's a very long overlay line") errs.push('4031: the field did not get the old text back');
+    """)
+
+    # 4032: a picker that answers after another recording loaded adds nothing.
+    failed += vprobe('stalepick', 'a late file picker answer is ignored after a reload', r"""
+    // 4032: stale pick.
+    const { addOverlay } = await import('./videoOverlays.js');
+    const count = () => VE.ops.filter((o) => o.tool === 'overlay').length;
+    window.__STUB_DELAY_MS__ = { pick_file_path: 300 };
+    const p = addOverlay('image');
+    await sleep(60);
+    VE.loadGen += 1;
+    await p;
+    await sleep(100);
+    if (count() !== 0) errs.push('4032: a stale image pick added ' + count() + ' overlay(s)');
+    // The same pick without a reload in between still adds the image.
+    const p2 = addOverlay('image');
+    await p2;
+    await sleep(150);
+    if (count() !== 1) errs.push('4032: a current image pick added ' + count() + ' overlays');
+    window.__STUB_DELAY_MS__ = {};
     """)
     return failed
