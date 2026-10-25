@@ -1215,3 +1215,26 @@ fn multi_a_reader_whose_clock_is_far_ahead_does_not_sweep_a_fresh_delete_marker(
     assert!(rig.dir.join(format!("{id}.deleted")).exists(), "A swept a fresh delete marker");
     assert!(!leftover_of(&rig, &id).exists());
 }
+
+#[test]
+fn multi_a_file_left_beside_a_delete_marker_is_not_imported_by_a_machine_that_never_had_it() {
+    let rig = Rig::new();
+    let id = rig.a.add("Crashed", "left over");
+    rig.a.step(&rig.dir);
+    let bytes = fs::read(leftover_of(&rig, &id)).unwrap();
+    rig.a.delete(&id);
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    assert!(rig.dir.join(format!("{id}.deleted")).exists());
+    assert!(!leftover_of(&rig, &id).exists());
+    // A crash between writing the marker and removing the file leaves both.
+    fs::write(leftover_of(&rig, &id), &bytes).unwrap();
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    assert!(rig.b.get(&id).is_none(), "B imported a prompt that was deleted");
+    assert_eq!(rig.b.count(), 0);
+}

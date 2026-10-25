@@ -2083,13 +2083,12 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
     }
     // Only now, with at least one file to read, is the library copied for the
     // comparison against what each file would be written as.
-    let (snapshot, settings_snapshot, trashed_ids) = {
+    let (snapshot, settings_snapshot) = {
         let store = store_lock();
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
-        let trashed: std::collections::HashSet<String> = store.trash.iter().map(|p| p.id.clone()).collect();
-        (store.prompts.clone(), store.settings.clone(), trashed)
+        (store.prompts.clone(), store.settings.clone())
     };
     let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
     for SyncToRead { path, key, stem, name, stamp } in to_read {
@@ -2129,8 +2128,9 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
                 continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
-        } else if trashed_ids.contains(&stem) && sync_tomb_read(&sync_tomb_path(&dir, &stem)).is_some() {
-            // A file beside a delete marker is the delete's own leftover, not a newer state.
+        } else if sync_tomb_read(&sync_tomb_path(&dir, &stem)).is_some_and(|t| !sync_tomb_expired(&sync_tomb_path(&dir, &stem), &t)) {
+            // A file beside a live delete marker is the delete's own leftover, not a newer
+            // state: a machine that never had the prompt must not import it either.
             continue;
         } else {
             candidates.push((stem, content, true));
