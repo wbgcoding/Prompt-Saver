@@ -81,7 +81,7 @@ impl SyncInst {
 
     // What the app does when it starts with the feature on (see start_sync_poll).
     pub(super) fn start(&self, dir: &Path) {
-        let due = self.run(|| sync_start_core(&self.db, dir));
+        let due = self.run(|| sync_start_core(&self.db, dir, &RigHost(self)));
         if due {
             self.dirty.store(true, Ordering::SeqCst);
         }
@@ -1150,4 +1150,40 @@ fn multi_a_leftover_file_of_a_deleted_prompt_is_cleaned_up_when_its_owner_starts
     assert!(!leftover_of(&rig, &id).exists(), "the leftover file stayed");
     assert!(rig.dir.join(format!("{id}.deleted")).exists(), "the delete marker went missing");
     assert!(rig.a.in_trash(&id));
+}
+
+#[test]
+fn multi_a_save_in_the_first_seconds_after_start_keeps_the_newer_folder_text() {
+    let mut rig = Rig::new();
+    let x = rig.a.add("Shared", "yesterday");
+    let y = rig.a.add("Other", "o");
+    rig.settle();
+    // B is closed over night and A changes X.
+    rig.b.restart();
+    rig.a.edit(&x, |p| p.text = "today".into());
+    rig.a.step(&rig.dir);
+    rig.tick(10);
+    // B opens and saves something else before its first poll came round.
+    rig.b.start(&rig.dir);
+    rig.b.edit(&y, |p| p.text = "o2".into());
+    rig.b.flush(&rig.dir);
+    let file = fs::read_to_string(leftover_of(&rig, &x)).unwrap();
+    assert!(file.contains("today"), "the older library overwrote the newer folder text:\n{file}");
+    assert!(rig.conflict_copies().is_empty(), "the newer text was pushed into a conflict copy: {:?}", rig.conflict_copies());
+    rig.settle();
+    assert_eq!(rig.b.get(&x).map(|p| p.text), Some("today".to_string()));
+    assert_eq!(rig.a.get(&x).map(|p| p.text), Some("today".to_string()));
+    rig.assert_converged();
+}
+
+#[test]
+fn multi_nothing_is_written_to_the_folder_before_its_first_read_is_done() {
+    let rig = Rig::new();
+    let id = rig.a.add("Held back", "x");
+    rig.a.state.booting.store(true, Ordering::SeqCst);
+    assert!(rig.a.flush(&rig.dir) > 0, "a write before the first read must count as failed so it is retried");
+    assert!(!leftover_of(&rig, &id).exists(), "the folder was written before it was read");
+    rig.a.state.booting.store(false, Ordering::SeqCst);
+    assert_eq!(rig.a.flush(&rig.dir), 0);
+    assert!(leftover_of(&rig, &id).exists());
 }

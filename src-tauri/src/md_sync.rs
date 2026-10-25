@@ -923,6 +923,9 @@ pub(crate) struct SyncState {
     /// The lock files this instance holds right now: lock path -> the text it wrote into it.
     pub(crate) locks: Mutex<HashMap<String, String>>,
     pub(crate) health: Mutex<SyncHealth>,
+    /// True from the start of the app until the first poll has read the folder: a write before
+    /// that would put a library that may be older than the folder over the folder's text.
+    pub(crate) booting: std::sync::atomic::AtomicBool,
     /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
     /// test sets it, to play the role of a machine with a skewed clock.
     #[cfg(test)]
@@ -1356,6 +1359,10 @@ pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {
 
 // The window-free half of sync_write_all_impl: what the background flush runs.
 pub(crate) fn sync_write_all_core(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
+    // Counted as a failed write, so the queue tries again after a poll interval.
+    if sync_state().booting.load(Ordering::SeqCst) {
+        return 1;
+    }
     let _run = sync_run_lock();
     sync_write_dir_checked(dir, prompts, settings, is_live)
 }
@@ -2470,15 +2477,24 @@ pub(crate) fn sync_seed_owed(dir: &Path, prompts: &[Prompt], trash: &[Prompt], s
     any
 }
 
-// The work of a start: learn the folder, then settle what an earlier run left unfinished.
-// True when a write is due.
-pub(crate) fn sync_start_core(db: &Mutex<Store>, dir: &Path) -> bool {
+// The work of a start: learn the folder, settle what an earlier run left unfinished and read
+// the folder once, so a save in the first seconds meets the folder's current text instead of the
+// state the library was closed with. True when a write is due.
+pub(crate) fn sync_start_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) -> bool {
     let (prompts, trash, settings) = {
         let s = db.lock().unwrap_or_else(|e| e.into_inner());
         (s.prompts.clone(), s.trash.clone(), s.settings.clone())
     };
     sync_seed_seen(dir, &prompts, &settings);
-    sync_seed_owed(dir, &prompts, &trash, &settings)
+    let due = sync_seed_owed(dir, &prompts, &trash, &settings);
+    let ready = {
+        let s = db.lock().unwrap_or_else(|e| e.into_inner());
+        !s.prompts_locked && sync_enabled(&s.settings)
+    };
+    if ready {
+        sync_poll_core(db, dir, host);
+    }
+    due
 }
 
 // Switching the feature on, or pointing it at another folder, with a library that may be
@@ -2490,8 +2506,7 @@ pub(crate) fn sync_activate_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncR
         let s = db.lock().unwrap_or_else(|e| e.into_inner());
         (s.prompts.clone(), s.settings.clone())
     };
-    sync_start_core(db, dir);
-    sync_poll_core(db, dir, host);
+    sync_start_core(db, dir, host);
     let (prompts, settings) = snapshot(db);
     write(&prompts, &settings)
 }
@@ -2505,10 +2520,21 @@ pub(crate) fn sync_activate_impl(app: &AppHandle) -> usize {
     sync_activate_core(&state, &dir, &AppRoundHost(app), &|prompts, settings| sync_write_all_impl(app, prompts, settings))
 }
 
+// Holds the folder writes back (SyncState.booting) until the first read of the folder is done,
+// however that ends.
+struct SyncBootGuard(&'static SyncState);
+
+impl Drop for SyncBootGuard {
+    fn drop(&mut self) {
+        self.0.booting.store(false, Ordering::SeqCst);
+    }
+}
+
 pub(crate) fn start_sync_poll(app: AppHandle) {
     if !sync_poll_try_claim() {
         return; // already running - set_ui_flag calls this again on every activation
     }
+    sync_state().booting.store(true, Ordering::SeqCst);
     tauri::async_runtime::spawn(async move {
         // Learn which files on disk belong to prompts we already have before the
         // first save can sweep anything: a prompt deleted in the first seconds of a
@@ -2521,13 +2547,16 @@ pub(crate) fn start_sync_poll(app: AppHandle) {
             let app2 = app.clone();
             let due = tauri::async_runtime::spawn_blocking(move || {
                 let state = app2.state::<Db>();
-                sync_start_core(&state, &dir)
+                let _open = SyncBootGuard(sync_state());
+                sync_start_core(&state, &dir, &AppRoundHost(&app2))
             })
             .await
             .unwrap_or(false);
             if due {
                 spawn_sync_write_all(&app, &lock(&state));
             }
+        } else {
+            sync_state().booting.store(false, Ordering::SeqCst);
         }
         loop {
             let Some(state) = app.try_state::<Db>() else {
