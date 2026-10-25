@@ -50,6 +50,11 @@ pub(crate) fn hex_lower(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+// SHA-256 of `bytes` (ring's implementation), as the raw 32 bytes.
+pub(crate) fn sha256(bytes: &[u8]) -> Vec<u8> {
+    ring::digest::digest(&ring::digest::SHA256, bytes).as_ref().to_vec()
+}
+
 pub(crate) fn hex_decode(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) || !s.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
@@ -196,10 +201,9 @@ pub(crate) fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<
     if bytes.len() < 4 || &bytes[0..2] != b"PK" {
         return Err("downloaded file is not a valid archive".to_string());
     }
-    use sha2::{Digest, Sha256};
-    let got = Sha256::digest(bytes);
+    let got = sha256(bytes);
     let want = hex_decode(want_hex).ok_or_else(|| "bad pinned hash".to_string())?;
-    if !ct_eq(got.as_slice(), &want) {
+    if !ct_eq(&got, &want) {
         return Err("ffmpeg download hash mismatch, rejected".to_string());
     }
     Ok(())
@@ -346,11 +350,10 @@ pub(crate) fn install_ffmpeg_from_zip(bytes: &[u8], dir: &Path) -> Result<String
     Ok(final_path.to_string_lossy().to_string())
 }
 
-fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
-    use sha2::{Digest, Sha256};
+pub(crate) fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
     use std::io::Read;
     let mut file = fs::File::open(path)?;
-    let mut hasher = Sha256::new();
+    let mut hasher = ring::digest::Context::new(&ring::digest::SHA256);
     let mut buf = vec![0u8; 1024 * 1024];
     loop {
         let n = file.read(&mut buf)?;
@@ -359,7 +362,7 @@ fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(hex_lower(&hasher.finalize()))
+    Ok(hex_lower(hasher.finish().as_ref()))
 }
 
 #[derive(Debug, PartialEq, Eq)]

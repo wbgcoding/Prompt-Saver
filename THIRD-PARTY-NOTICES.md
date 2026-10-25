@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-232 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
+230 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 
 | Name | Version | License |
 |---|---|---|
@@ -34,7 +34,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | clipboard-win | 5.4.3 | BSL-1.0 |
 | cmov | 0.5.4 | Apache-2.0 OR MIT |
 | color_quant | 1.1.0 | MIT |
-| const-oid | 0.10.2 | Apache-2.0 OR MIT |
 | cookie | 0.18.2 | MIT OR Apache-2.0 |
 | cpubits | 0.1.1 | MIT OR Apache-2.0 |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
@@ -156,7 +155,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | serde_spanned | 1.1.2 | MIT OR Apache-2.0 |
 | serde_with | 3.24.0 | MIT OR Apache-2.0 |
 | serialize-to-javascript | 0.1.2 | MIT OR Apache-2.0 |
-| sha2 | 0.11.1 | MIT OR Apache-2.0 |
 | simd-adler32 | 0.3.10 | MIT |
 | siphasher | 1.0.4 | MIT OR Apache-2.0 |
 | smallvec | 1.16.4 | MIT OR Apache-2.0 |

@@ -37,7 +37,6 @@ rfd = "=0.17.2"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
-sha2 = "=0.11.1"
 # Ed25519 check of signed updates; already in the tree through rustls.
 ring = "=0.17.14"
 # Encrypted single-file backups: AES-256-GCM + Argon2id password KDF (pure Rust, no
@@ -156,8 +155,6 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.adler2]
 opt-level = 3
-[profile.release.package.sha2]
-opt-level = 3
 [profile.dev.package.miniz_oxide]
 opt-level = 3
 [profile.dev.package.flate2]
@@ -167,6 +164,4 @@ opt-level = 3
 [profile.dev.package.crc32fast]
 opt-level = 3
 [profile.dev.package.adler2]
-opt-level = 3
-[profile.dev.package.sha2]
 opt-level = 3

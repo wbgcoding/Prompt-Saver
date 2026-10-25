@@ -817,10 +817,7 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
         .map(|t| t.split_whitespace().next().unwrap_or("").to_ascii_lowercase())
         .filter(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
         .ok_or_else(|| "no usable checksum published for this update, download rejected".to_string())?;
-    let digest = {
-        use sha2::{Digest, Sha256};
-        Sha256::digest(&bytes)
-    };
+    let digest = crate::ffmpeg::sha256(&bytes);
     if crate::ffmpeg::hex_lower(&digest) != want {
         return Err("update hash mismatch: download rejected".to_string());
     }

@@ -312,11 +312,37 @@ fn ffmpeg_install_rejects_non_executable_and_cleans_up() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// Digests computed outside this program (Python hashlib) pin every SHA-256 call site, so the
+// swap of the hashing library cannot change a stored id, a pinned check or an import marker.
+#[test]
+fn sha256_call_sites_keep_their_known_digests() {
+    let hex = |b: &[u8]| crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(b));
+    assert_eq!(hex(b""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    assert_eq!(hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    assert_eq!(hex(b"pinned build bytes"), "f27e2019333096dcc037f8ef842178e39b222f4962467ae417fee1cbefb08cee");
+    let big = vec![b'a'; 3 * 1024 * 1024 + 17];
+    assert_eq!(hex(&big), "8cb91458835f2fefeb12cf01e67a7ea18523a0567d4835a974dc04c2ddbb955b");
+    // The streamed file hash agrees with the one-shot hash (the file spans several read buffers).
+    let dir = std::env::temp_dir().join(format!("ps-sha-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("big.bin"), &big).unwrap();
+    assert_eq!(sha256_file_hex(&dir.join("big.bin")).unwrap(), hex(&big));
+    let _ = fs::remove_dir_all(&dir);
+    assert_eq!(
+        crate::drafts::edit_state_id("video", "D:/clips/a.mp4"),
+        "video:2f0193ff1cb41c38789b7ff922b9f7584c9ce6a29d8ea6d185ef93cd8efbd902"
+    );
+    assert_eq!(
+        crate::import_export::import_file_hash(b"name,text\r\nA,B\r\n"),
+        "8897fabf711f5de7d98da5b79217b0f5fff79db2b59e6552f17aff3bb58abdce"
+    );
+}
+
 #[test]
 fn ffmpeg_matching_hash_is_accepted() {
     let zip_bytes = ffmpeg_test_zip();
-    use sha2::{Digest, Sha256};
-    let real_hash = crate::ffmpeg::hex_lower(&Sha256::digest(&zip_bytes));
+    let real_hash = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(&zip_bytes));
     assert!(verify_ffmpeg_zip_against(&zip_bytes, &real_hash).is_ok());
 }
 
@@ -649,13 +675,12 @@ fn an_ffmpeg_older_than_the_export_graph_syntax_is_skipped_on_path() {
 
 #[test]
 fn an_old_data_folder_ffmpeg_moves_only_when_it_is_the_pinned_build() {
-    use sha2::{Digest, Sha256};
     let root = std::env::temp_dir().join(format!("ps-oldtool-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     let (data, local) = (root.join("data"), root.join("local"));
     fs::create_dir_all(&data).unwrap();
     let bytes = b"pinned build bytes";
-    let want: String = crate::ffmpeg::hex_lower(&Sha256::digest(bytes));
+    let want: String = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(bytes));
 
     // The pinned copy moves, and the old place is empty afterwards.
     fs::write(data.join("ffmpeg.exe"), bytes).unwrap();
