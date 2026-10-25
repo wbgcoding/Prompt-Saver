@@ -44,11 +44,11 @@ xcap = "0.0.14"
 # conversion of a multi-monitor capture.
 rayon = "1"
 jpeg-encoder = "0.6"
-# Local SQLite store (bundled engine — no system dependency).
+# Local SQLite store (bundled engine, no system dependency).
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
-# unpacked on first use — see pdfium_lib_path in lib.rs).
+# unpacked on first use, see pdfium_lib_path in lib.rs).
 pdfium-render = "0.8"
 
 [target.'cfg(windows)'.dependencies]
@@ -66,7 +66,7 @@ codegen-units = 16
 strip = true
 # NOTE: the shipped exe must not carry the paths of the machine it was built on.
 # `strip` drops the debug info, but panic locations from dependencies stay in the
-# binary as literals — build.bat remaps them via RUSTFLAGS (profile.trim-paths is
+# binary as literals, build.bat remaps them via RUSTFLAGS (profile.trim-paths is
 # still nightly-only).
 # Incremental is OFF on purpose: its codegen cache added ~2.8 GB to target/ for only
 # a few seconds off repeat builds. Deps still stay compiled in target/release/deps

@@ -6,7 +6,7 @@
 //
 // Contract, and what this enforces:
 //   * a language listed in terms.forms must cover EVERY form that appears in that
-//     language's strings — a half-translated language would ship a mixed sentence;
+//     language's strings, a half-translated language would ship a mixed sentence;
 //   * a form that must stay as it is (the "promt/prompt" typo example) is mapped to
 //     itself, so leaving it alone is a decision, not an oversight;
 //   * languages not listed are reported as still to do, and do not fail the run.
@@ -82,7 +82,7 @@ for (const file of brands) {
       .filter((f) => !f.includes(" ") && !found.has(f));
     for (const sp of spare) notes.push(`${slug}: ${lang} maps "${sp}", which no string contains`);
   }
-  if (todo.length) notes.push(`${slug}: still to translate — ${todo.join(", ")}`);
+  if (todo.length) notes.push(`${slug}: still to translate, ${todo.join(", ")}`);
 }
 
 for (const n of notes) console.log("note:", n);

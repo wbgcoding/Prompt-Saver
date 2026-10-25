@@ -105,7 +105,7 @@ let libSelected = new Set();
 let libLastId = null;          // anchor for shift-click range select
 let libDisplayOrder = [];      // ids in current display order (for range select)
 let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
-// 11: grid bulk selection — its own Set, independent of the library's libSelected.
+// 11: grid bulk selection, its own Set, independent of the library's libSelected.
 // Folder tiles are excluded: a folder stands for several prompts, and "select,
 // then recolor/move/delete" has no single obvious meaning for the group itself.
 let gridSelected = new Set();
@@ -120,7 +120,7 @@ let expertResetTimer = null;
 let versionLabel = ""; // "Version 1.6.0", shown as the clickable releases link
 
 // Hide the settings modal and reset the Updates status line back to the version
-// number — unless a real update is pending (the "update available" state stays).
+// number, unless a real update is pending (the "update available" state stays).
 // So a transient "already newest version" message doesn't linger after reopening.
 function hideSettings() {
   settingsEl.classList.add("hidden");
@@ -178,7 +178,7 @@ function resolveLang(pref) {
 const t = (key) =>
   applyTerms(String(I18N[LANG][key] ?? I18N.en[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
 
-// The product name never appears in the markup — every [data-brand] element (the
+// The product name never appears in the markup, every [data-brand] element (the
 // <title> and the header label) is filled from ui/brand.js. Runs at load, before
 // the first backend round trip, so the header is never briefly blank.
 const applyBrand = () => {
@@ -207,7 +207,7 @@ const THEME_VAR_GROUPS = [
   ["themeGroupAccent", ["accent", "accent-fg", "danger"]],
 ];
 // The built-in themes a custom theme can inherit from ("system" is not one of
-// them — it has no rules of its own). Order matches the settings dropdown.
+// them, it has no rules of its own). Order matches the settings dropdown.
 const BUILTIN_THEMES = [
   "light", "dark", "programmer", "ai", "cyberpunk", "retro", "mono", "gradient",
   "sunset", "ocean", "forest", "lavender", "candy", "coffee", "midnight",
@@ -217,7 +217,7 @@ const customThemes = () => (flag("customThemes") ? settings.custom_themes || [] 
 const customThemeId = (pref) => (String(pref || "").startsWith("custom:") ? String(pref).slice(7) : "");
 const findCustomTheme = (pref) => customThemes().find((c) => c.id === customThemeId(pref)) || null;
 
-// Overrides of the active theme, straight from the local settings — the backend
+// Overrides of the active theme, straight from the local settings, the backend
 // sends the same set with every theme-changed event.
 function activeThemeVars() {
   return findCustomTheme(settings.theme)?.vars || {};
@@ -231,7 +231,7 @@ function applyTheme(theme, vars) {
 }
 
 // Inline overrides are the whole custom-theme mechanism, so always clear the full
-// set first — switching to a built-in theme must leave nothing behind.
+// set first, switching to a built-in theme must leave nothing behind.
 function applyThemeVars(vars) {
   const style = document.documentElement.style;
   for (const key of THEME_VARS) style.removeProperty(`--${key}`);
@@ -354,13 +354,13 @@ function fitTileText(tile, maxW, maxH) {
 }
 
 // Measurement box cached per grid state: as long as the window and grid
-// layout are unchanged, every render uses the EXACT same box — moving tiles
+// layout are unchanged, every render uses the EXACT same box, moving tiles
 // around can never change a fitted text size.
 const fitBox = { key: "", maxW: 0, maxH: 0 };
 
 // `boxOnly` = skip the per-tile work while the measurement box is unchanged. Used by
 // the resize handler: dragging the window edge changes the pixel size on every frame,
-// but the quantized box only moves every FIT_QUANT px — re-fitting every tile in
+// but the quantized box only moves every FIT_QUANT px, re-fitting every tile in
 // between is what made the grid shimmer during a resize.
 function fitAllTiles(boxOnly) {
   const globalAuto = Number(settings.tile_size) === 0;
@@ -382,7 +382,7 @@ function fitAllTiles(boxOnly) {
     const prevW = fitBox.maxW;
     const prevH = fitBox.maxH;
     // Shared box = smallest grid CELL (cells exist for every slot) minus the
-    // tile chrome from computed style — fractional-exact, no per-cell rounding.
+    // tile chrome from computed style, fractional-exact, no per-cell rounding.
     let cellW = Infinity;
     let cellH = Infinity;
     for (const cell of gridEl.children) {
@@ -399,7 +399,7 @@ function fitAllTiles(boxOnly) {
       parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     fitBox.key = key;
     // Quantize to an 8px bucket: DPI handoffs and monitor drags shift cell
-    // rounding by ±1px — inside one bucket the fitted size cannot change,
+    // rounding by ±1px, inside one bucket the fitted size cannot change,
     // and the slack guarantees the text never clips after such a shift.
     fitBox.maxW = Math.floor((cellW - chromeW) / FIT_QUANT) * FIT_QUANT;
     fitBox.maxH = Math.floor((cellH - chromeH - 2) / FIT_QUANT) * FIT_QUANT;
@@ -419,7 +419,7 @@ window.addEventListener("resize", () => {
 
 // Re-measure cells when the window moves to a monitor with a different scale
 // factor. The fit cache is kept: sizes are in DPI-independent CSS px, and the
-// quantized box leaves enough slack that ±1px rounding can never clip — so a
+// quantized box leaves enough slack that ±1px rounding can never clip, so a
 // cross-monitor drag can never change an already fitted text size.
 function watchDpr() {
   matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener(
@@ -453,7 +453,7 @@ function readableInk(hex) {
 }
 
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
-// `tint` (a #rrggbb) paints the icon badge in that colour — F26 uses it so the
+// `tint` (a #rrggbb) paints the icon badge in that colour, F26 uses it so the
 // picked colour is visible next to its value.
 // Every toast is now the same themed card (icon badge + message), matching the
 // update notification, so nothing looks like the old flat pill.
@@ -534,14 +534,14 @@ function renderNumPop() {
 }
 
 // UI scale now uses the WebView's NATIVE zoom (set from Rust, like Ctrl +/-), which
-// keeps event coords and getBoundingClientRect in one coordinate space — so
+// keeps event coords and getBoundingClientRect in one coordinate space, so
 // JS-positioned fixed popups need no compensation. Kept as a hook (always 1) so the
 // existing `/ z` call sites stay no-ops instead of being ripped out everywhere.
 const uiZoom = () => 1;
 
 // ---- ONE placement rule for every popover, dropdown and context menu ----
 // Below the anchor when it fits, above it when it does not, and always clamped into
-// the window on both axes — a popover that opens past an edge is unreachable, and
+// the window on both axes, a popover that opens past an edge is unreachable, and
 // that was the same defect in the theme editor, the value pickers and the colour
 // row. Call it AFTER the content is built: the size has to be measurable.
 const POP_PAD = 6;
@@ -560,7 +560,7 @@ function placePopover(el, rect, gap = 4) {
   if (h <= below || below >= above) { top = rect.bottom + gap; room = below; }
   else { top = rect.top - gap - Math.min(h, above); room = above; }
   // Too tall for either side: keep it inside and let it scroll rather than cut it.
-  // Everything below reasons about the height it will ACTUALLY have — clamping with
+  // Everything below reasons about the height it will ACTUALLY have, clamping with
   // the unshrunk height would drag a tall popover to the top of the window and over
   // the very thing it belongs to.
   let shown = h;
@@ -634,7 +634,7 @@ function openValuePop(anchor, items, current, onPick) {
     });
     numPop.appendChild(row);
   }
-  // Width follows the widest entry, not the anchor — so the clamp has to run on the
+  // Width follows the widest entry, not the anchor, so the clamp has to run on the
   // real box, which is why it happens after the rows exist.
   placePopover(numPop, anchor.getBoundingClientRect());
   if (selected) selected.scrollIntoView({ block: "center" });
@@ -818,7 +818,7 @@ function applyBars() {
   document.body.classList.toggle("no-composer", !composer);
   $("show-top").classList.toggle("hidden", header);
   $("show-bottom").classList.toggle("hidden", composer);
-  // The grid area changed size — re-fit the tile text.
+  // The grid area changed size, re-fit the tile text.
   requestAnimationFrame(() => fitAllTiles());
 }
 
@@ -905,11 +905,11 @@ const FLAG_LABELS = {
   fuzzySearch: "flagFuzzySearch",       // F18
   batchOps: "flagBatchOps",             // F8
   promptHistory: "flagPromptHistory",   // F7
-  usageStats: "statsEnable",            // F11 — only ever rendered in the backups dialog
+  usageStats: "statsEnable",            // F11, only ever rendered in the backups dialog
   dupFinder: "flagDupFinder",           // F6
   dupImportCheck: "flagDupImportCheck", // F6
   autoBackup: "flagAutoBackup",         // F2
-  autoPaste: "flagAutoPaste",           // F19 — normal setting now (default on)
+  autoPaste: "flagAutoPaste",           // F19, normal setting now (default on)
   dynVars: "flagDynVars",               // F12 self-filling placeholder names
   choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
@@ -919,7 +919,7 @@ const FLAG_LABELS = {
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
-  colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
+  colorPicker: "flagColorPicker",       // F26 pipette, pick a screen colour to the clipboard
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
   tileFolders: "flagTileFolders",       // F27 drop a tile into another to make a grid folder
   tags: "flagTags",                     // F1 tags + library tag filter
@@ -989,7 +989,7 @@ const OPT_FLAG_LABELS = {
   // Off = one instance app-wide (a second launch focuses the first, as always). On =
   // the OS-level single-instance guard is skipped entirely at startup, so several
   // windows can run side by side. Read once at launch, before settings normally
-  // load — toggling it needs a restart to take effect (flagRow() toasts that).
+  // load, toggling it needs a restart to take effect (flagRow() toasts that).
   allowMultipleInstances: "flagAllowMultipleInstances",
   // 51: off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
@@ -1009,7 +1009,7 @@ const optFlag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) === true;
 const flagState = (key) => (isOptFlag(key) ? optFlag(key) : flag(key));
 const flagLabelKey = (key) => OPT_FLAG_LABELS[key] || FLAG_LABELS[key];
 // A setting may declare `gate: "flagKey"` (or "!flagKey" to invert) so its row hides
-// while that feature is off — no dead controls for disabled things. Values, selects,
+// while that feature is off, no dead controls for disabled things. Values, selects,
 // dropdowns and paths carry it in their definition; a flag carries it in the group's
 // `flags` list, written as { key, gate } instead of a bare key.
 const flagEntry = (f) => (typeof f === "string" ? { key: f } : f);
@@ -1160,10 +1160,10 @@ const EXPERT_VALUES = {
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
 const EXPERT_SELECTS = {
   historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
-  // F2 backup interval (hours) — a preset-or-custom select right under backupKeep.
+  // F2 backup interval (hours), a preset-or-custom select right under backupKeep.
   backupIntervalH: { label: "valBackupInterval", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "autoBackup" },
   // 91: how long a deleted prompt sits in the trash before it is purged automatically.
-  // No feature gate — trash is not optional, delete always goes through it.
+  // No feature gate, trash is not optional, delete always goes through it.
   trashRetentionDays: { label: "valTrashRetentionDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever" },
 };
 
@@ -1240,8 +1240,8 @@ const EXPERT_DROPDOWNS = {
 };
 
 // Expert menu organised into tabs. The shape is deliberate: the first tab holds
-// FEATURES — a toggle followed by everything that tunes it, so a switched-off
-// feature costs exactly one line — while the remaining tabs hold the general
+// FEATURES, a toggle followed by everything that tunes it, so a switched-off
+// feature costs exactly one line, while the remaining tabs hold the general
 // values that belong to no single feature.
 const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
@@ -1250,7 +1250,7 @@ const EXPERT_TABS = [
     { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop"], values: ["snipPreviewVh", "loupeZoom"], dropdowns: ["pickerFormat"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
-    // The editor: what it shows beside the text box. F14/F15 belong together — the
+    // The editor: what it shows beside the text box. F14/F15 belong together, the
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
@@ -1353,7 +1353,7 @@ function applyValues() {
   root.setProperty("--view-border", `${val("viewBorder")}px`);
   // Appearance scales. UI scale drives the WebView's native zoom (robust); the rest
   // stay CSS `zoom` on their own elements (1 = unchanged). Only push the native zoom
-  // when it actually changed — applyValues runs on every slider tick, and a redundant
+  // when it actually changed, applyValues runs on every slider tick, and a redundant
   // IPC per tick would flood the backend while dragging an unrelated value.
   const uiZoomFactor = val("uiScale") / 100;
   if (uiZoomFactor !== _lastUiZoom) {
@@ -1475,7 +1475,7 @@ function flagRow(key) {
     } catch (err) {
       toast(String(err));
     }
-    // Read once at process start (before the builder exists) — flipping it live
+    // Read once at process start (before the builder exists), flipping it live
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
@@ -1491,7 +1491,7 @@ function flagRow(key) {
 }
 
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
-// for it threw away and recreated every tile — visible as a flash through the
+// for it threw away and recreated every tile, visible as a flash through the
 // translucent settings overlay. Only these actually change tile DOM.
 const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen"]);
 // Re-fit the tile text to the new box size without touching the DOM.
@@ -1585,9 +1585,9 @@ function selectRow(key) {
   num.min = 1;
   num.max = 3650;
   num.className = "modal-input expert-num";
-  // The presets show their unit ("7d", "24h") right on the option — the free-entry
+  // The presets show their unit ("7d", "24h") right on the option, the free-entry
   // field cannot, since it holds only the number. Without this, a value typed here
-  // looked unit-less and Ben tried typing the unit into the number field itself
+  // looked unit-less and users tried typing the unit into the number field itself
   // ("7d"), which a number input silently discards with no error at all.
   const unit = document.createElement("span");
   unit.className = "expert-num-unit";
@@ -1789,7 +1789,7 @@ async function savePalette(colors) {
   await renderGrid(true);
 }
 
-// Translation-key lookup per setting kind — used by the expert-menu search.
+// Translation-key lookup per setting kind, used by the expert-menu search.
 const EXPERT_LABEL_KEYS = {
   flags: (k) => flagLabelKey(k),
   values: (k) => EXPERT_VALUES[k].label,
@@ -1797,10 +1797,10 @@ const EXPERT_LABEL_KEYS = {
   dropdowns: (k) => EXPERT_DROPDOWNS[k].label,
   paths: (k) => EXPERT_PATHS[k].label,
 };
-// The def a given setting kind lives in — so its optional `gate` can be read.
+// The def a given setting kind lives in, so its optional `gate` can be read.
 const EXPERT_DEFS = { values: EXPERT_VALUES, selects: EXPERT_SELECTS, dropdowns: EXPERT_DROPDOWNS, paths: EXPERT_PATHS };
 // Flags that own gated rows. Only those change the menu's shape when toggled, so
-// only those need a re-render — the rest are body classes and re-rendering the
+// only those need a re-render, the rest are body classes and re-rendering the
 // whole tab for them just made the list flicker.
 const GATING_FLAGS = new Set(
   [
@@ -1811,13 +1811,13 @@ const GATING_FLAGS = new Set(
 );
 // Expert-menu action buttons (id -> handler); populated by the features that own them.
 const EXPERT_ACTIONS = {};
-// A search matches if the term is in the active language OR in English — English
+// A search matches if the term is in the active language OR in English, English
 // is the lingua franca, so a non-native speaker's query still finds the setting.
 function i18nHit(key, q) {
   return (I18N[LANG][key] || "").toLowerCase().includes(q) || (I18N.en[key] || "").toLowerCase().includes(q);
 }
 // P68: expert-menu search also matches a setting's tooltip text, not just its
-// label — a setting is often findable only by a word that lives in the tip.
+// label, a setting is often findable only by a word that lives in the tip.
 function settingHit(settingKey, labelKey, q) {
   if (i18nHit(labelKey, q)) return true;
   if (!EXPERT_TIP_SET.has(settingKey)) return false;
@@ -2055,7 +2055,7 @@ function activeView() {
 }
 const gridKeyOf = (v) => `${v.cols}x${v.rows}`;
 const layoutOf = (v) => v.layouts?.[gridKeyOf(v)] || {};
-// 51: every OTHER view currently holding this prompt — a client-side scan, no
+// 51: every OTHER view currently holding this prompt, a client-side scan, no
 // round trip, since every view's layout is already loaded in `settings`.
 const viewsContaining = (id, exceptViewId) =>
   settings.views.filter((v) => v.id !== exceptViewId && Object.prototype.hasOwnProperty.call(layoutOf(v), id));
@@ -2077,7 +2077,7 @@ function saveFavLayout(map) {
 }
 
 // Star button visibility (setting + expert flag) + pressed state. In the favorites
-// view the grid-size control stays visible (so the size is shown) but read-only —
+// view the grid-size control stays visible (so the size is shown) but read-only,
 // the favorites grid sizes itself.
 function refreshFavViewUi() {
   const btn = $("fav-view-btn");
@@ -2166,7 +2166,7 @@ function renderFavGrid() {
 }
 
 // Move a favorite to the drop cell, swapping with any occupant. Dropping on an
-// empty cell just moves it there and frees the old one — gaps are preserved.
+// empty cell just moves it there and frees the old one, gaps are preserved.
 async function placeFav(id, col, row) {
   if (!flag("favViewReorder")) return;
   const layout = favLayoutMap();
@@ -2234,7 +2234,7 @@ async function renderGrid(skipFetch = false) {
   if (favView && !favViewEnabled()) favView = false; // setting switched off underneath us
   if (favView) { renderFavGrid(); return; }
   const view = activeView();
-  // P53: a colored border around the grid itself (expert opt, default off) —
+  // P53: a colored border around the grid itself (expert opt, default off),
   // reuses the view's own color, kept current on every render so it never
   // shows a stale color after switching views.
   document.documentElement.style.setProperty("--active-view-color", view.color || "transparent");
@@ -2260,7 +2260,7 @@ async function renderGrid(skipFetch = false) {
     const cell = layout[p.id];
     if (cell) byCell.set(cellKey(...cell), p);
   }
-  // A folder whose cell fell outside a resized grid — or landed on a taken one —
+  // A folder whose cell fell outside a resized grid, or landed on a taken one,
   // moves to the first free cell, and that repair is written back.
   const folderAt = new Map();
   for (const f of folders) {
@@ -2294,7 +2294,7 @@ async function renderGrid(skipFetch = false) {
   }
   gridEl.innerHTML = "";
   gridEl.appendChild(frag);
-  // 1: first run, nothing anywhere yet — a plain grid explains nothing on its own.
+  // 1: first run, nothing anywhere yet, a plain grid explains nothing on its own.
   $("grid-empty").classList.toggle("hidden", prompts.length > 0);
 
   pruneVideoCache();
@@ -2323,7 +2323,7 @@ function renderViews() {
     const add = document.createElement("button");
     add.className = "view-btn view-add-top";
     add.innerHTML = PLUS_ICON;
-    add.setAttribute("aria-label", t("addView")); // aria only — no hover tooltip
+    add.setAttribute("aria-label", t("addView")); // aria only, no hover tooltip
     add.addEventListener("click", () => openViewModal(null));
     viewsEl.appendChild(add);
   }
@@ -2391,7 +2391,7 @@ function viewTabOrder() {
   }
   return out;
 }
-// Every view in the order the tab bar shows it (group members inline) — the order
+// Every view in the order the tab bar shows it (group members inline), the order
 // keyboard switching walks.
 const viewOrder = () => viewTabOrder().flatMap((e) => (e.group ? e.views : [e.view]));
 
@@ -2455,7 +2455,7 @@ function closeViewGroupPop() {
 }
 
 // Shared by openViewGroupPop() and renderViewsPop(): both build a checkbox + optional
-// colour dot + name row for a view — a new column here only needs adding once (127).
+// colour dot + name row for a view, a new column here only needs adding once (127).
 function viewRowBase(v, on) {
   const row = document.createElement("button");
   row.type = "button";
@@ -2617,7 +2617,7 @@ async function moveViewToGroup(viewId, groupId) {
 
 // Dragging a tab: onto another loose tab makes a group of the two, onto a group
 // tab joins it, out of the popover leaves the group. Pointer events rather than
-// HTML5 drag-and-drop — the webview reserves that for file drops.
+// HTML5 drag-and-drop, the webview reserves that for file drops.
 let tabDrag = null;
 let tabDragBlockClick = false;
 
@@ -2629,7 +2629,7 @@ function makeTabDraggable(el, viewId, fromGroup, groupId) {
   });
 }
 
-// Pour one folder's views into another and let the emptied one dissolve — a single
+// Pour one folder's views into another and let the emptied one dissolve, a single
 // write, so the tab bar never shows the half-moved state.
 async function mergeViewGroups(fromId, intoId) {
   const from = viewGroupList().find((g) => g.id === fromId);
@@ -2719,7 +2719,7 @@ function openViewModal(view) {
   viewModal.title.textContent = view ? t("editViewTitle") : t("addView").replace(/^\+\s*/, "");
   viewModal.name.value = view ? view.name : "";
   renderViewColor();
-  // Grid size (columns × rows) is editable only for an existing view — a new one
+  // Grid size (columns × rows) is editable only for an existing view, a new one
   // starts at the default and can be resized here afterwards.
   viewModal.gridField.classList.toggle("hidden", !view);
   if (view) {
@@ -2766,7 +2766,7 @@ async function confirmViewModal() {
   await renderGrid(true);
 }
 
-// P50: a new, empty view with the same name/color/grid size as the source — its
+// P50: a new, empty view with the same name/color/grid size as the source, its
 // tile placements are not copied, since a prompt cannot yet sit in two views at
 // once (see WORK.md item 51).
 async function duplicateView(v) {
@@ -2788,9 +2788,9 @@ async function duplicateView(v) {
 // 2, 3 …) and the joined text (newline-separated) lands on the clipboard after
 // every pick. It auto-ends after a paste (Ctrl+V while focused, or leaving the
 // window to paste elsewhere) or when the button is clicked again. Only text
-// prompts qualify — image/file/video buttons copy media, which can't be joined.
+// prompts qualify, image/file/video buttons copy media, which can't be joined.
 let chainMode = false;
-let chainLock = false; // "always on" — survives window blur until turned off by hand
+let chainLock = false; // "always on", survives window blur until turned off by hand
 const chainSel = []; // selected prompt ids, in pick order
 const chainTexts = new Map(); // id -> resolved copy text (variables already filled)
 
@@ -2882,8 +2882,8 @@ function onChainClick() {
   else setChainMode(false); // latched → off
 }
 
-// ---- Themed tooltips: ONE shared popup for every hover hint — rich tile previews
-// AND the native `title` on any button/icon — so nothing falls back to the OS
+// ---- Themed tooltips: ONE shared popup for every hover hint, rich tile previews
+// AND the native `title` on any button/icon, so nothing falls back to the OS
 // tooltip. A raw `title` is converted to `data-tip` on first hover (removed so the
 // OS tip never fires); tiles carry `data-tip-name`/`data-tip-body` for the richer
 // name + preview + hint layout.
@@ -2946,7 +2946,7 @@ function wireClear(el) {
   });
   upd();
 }
-// Wire every text/number input + textarea (idempotent) — call again after any render
+// Wire every text/number input + textarea (idempotent), call again after any render
 // that creates new fields (expert menu, dialogs, backups panel).
 function wireClearButtons(root = document) {
   const sel = "input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]), textarea";
@@ -2972,7 +2972,7 @@ function wireTooltips() {
     if (x + r.width + PAD > innerWidth) x = cx - OFF - r.width;
     if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
     const z = uiZoom(); // fixed popup lives inside the zoomed body
-    // 137: the flip above only guards the edge it checked — near a corner, with a
+    // 137: the flip above only guards the edge it checked, near a corner, with a
     // wide tooltip (expert tooltipWidth), the flipped side can itself run off the
     // FAR edge. Clamp both bounds, same as placePopover does for every other popup.
     tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD)) / z}px`;
@@ -3022,7 +3022,7 @@ function wireTooltips() {
     if (drag) return; // no hover hints mid-drag
     if (!flag("tooltipsEnabled")) { if (tipCur || tipPending) hideTileTip(); return; } // master switch off
     const el = e.target.closest?.("[data-tip-name], [data-tip], [title]");
-    // Minimize/maximize/close never get a hint — they are universally understood
+    // Minimize/maximize/close never get a hint, they are universally understood
     // and a tooltip right under the cursor there is only in the way.
     if (!el || el.closest(".win-controls")) { if (tipCur) hideTileTip(); clearTipShow(); return; }
     if (el.hasAttribute("title")) { el.dataset.tip = el.getAttribute("title"); el.removeAttribute("title"); }
@@ -3032,7 +3032,7 @@ function wireTooltips() {
     if (!name) { hideTileTip(); return; }
     if (el === tipCur) return;     // already showing on this element
     if (el === tipPending) return; // already scheduled for this element
-    if (el === tipExpired) return; // timed out here — hover elsewhere to reset
+    if (el === tipExpired) return; // timed out here, hover elsewhere to reset
     // New target: drop any pending/showing tip, then (re)arm the show-delay so
     // casually sweeping the pointer across the window shows nothing.
     clearTipShow();
@@ -3144,7 +3144,7 @@ function wireSearchSuggest(input, storeKey) {
       pop.appendChild(row);
     }
     const r = input.getBoundingClientRect();
-    // Size to the terms (short), not the full search field — a full-width bar over a
+    // Size to the terms (short), not the full search field, a full-width bar over a
     // wide library search looked oversized. Clamp: at least 220px, at most the field.
     pop.style.width = "";
     pop.style.minWidth = `${Math.min(220, r.width)}px`;
@@ -3217,7 +3217,7 @@ function wireLightbox() {
 }
 
 // ---- F17 private notes: context the user keeps next to a prompt. Read in the
-// editor, the tile tooltip and the library search — never in any copy path.
+// editor, the tile tooltip and the library search, never in any copy path.
 const notesOn = () => optFlag("promptNotes");
 // Cap what the tooltip shows so one long note can never fill the screen.
 const clipNote = (s) => {
@@ -3230,7 +3230,7 @@ function buildTile(p) {
   tile.className = "tile";
   tile.dataset.id = p.id;
   if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
-  // 24: a tag filter dims what does not match instead of hiding it — the cell
+  // 24: a tag filter dims what does not match instead of hiding it, the cell
   // stays occupied, so drag/reorder/grid geometry never has to treat it as empty.
   if (gridTags.size && !tagMatches(p, gridTags)) tile.classList.add("tile-dimmed");
   // 11: bulk-selection checkbox. Its own pointerdown/click stop propagation so a
@@ -3251,7 +3251,7 @@ function buildTile(p) {
   if (flag("tilePreview")) {
     tile.dataset.tipName = p.name;
     if (preview && preview !== p.name) tile.dataset.tipBody = preview;
-    // 6: two prompts of wildly different length look identical on the tile itself —
+    // 6: two prompts of wildly different length look identical on the tile itself,
     // the same char/~token readout the editor already shows, reused here so there is
     // only one formula for "how long is this" in the whole app.
     if (p.text) {
@@ -3332,7 +3332,7 @@ function buildTile(p) {
   tile.appendChild(name);
 
   // Subtle type badge in the top-left corner. It reflects what the button
-  // COPIES (file/image/video) — a decorative media icon never changes it.
+  // COPIES (file/image/video), a decorative media icon never changes it.
   const typeIcon = p.file_path
     ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
     : p.copy_image ? ICON_IMAGE : "";
@@ -3385,7 +3385,7 @@ function buildTile(p) {
 }
 
 // ---- Video tiles: YouTube-style hover bar ----
-// Video tiles keep their DOM element across grid re-renders — rebuilding
+// Video tiles keep their DOM element across grid re-renders, rebuilding
 // would restart playback. Reparenting the cached wrapper does not.
 const videoCache = new Map(); // prompt id -> { src, wrap }
 
@@ -3408,7 +3408,7 @@ function getVideoWrap(p, src) {
     }));
   }
   applyVideoPrefs(video, settings.video_prefs?.[p.id]);
-  // Ensure a freshly added video actually starts — the autoplay attribute alone
+  // Ensure a freshly added video actually starts, the autoplay attribute alone
   // can be unreliable for dynamically created elements. Muted videos may play.
   if (flag("videoAutoplay")) video.play().catch(() => {});
   videoCache.set(p.id, { src, wrap });
@@ -3424,7 +3424,7 @@ function pruneVideoCache() {
 // 132: library/journal thumbnails used to get a fresh <img> with a reassigned
 // base64 src on EVERY render (search re-renders the whole row list on every
 // keystroke), forcing the browser to re-decode the same blob each time. One cache
-// per panel — library and journal can both stay mounted at once (see the video
+// per panel, library and journal can both stay mounted at once (see the video
 // IntersectionObserver comment above), so a single shared cache would rip a thumb
 // out of whichever panel isn't rendering right now.
 const libThumbCache = new Map(); // prompt id -> { key, el }
@@ -3436,7 +3436,7 @@ function pruneThumbCache(cache) {
 }
 
 // Looping tile videos pause while the window is hidden (tray/minimised)
-// and resume afterwards — manual pauses stay paused.
+// and resume afterwards, manual pauses stay paused.
 document.addEventListener("visibilitychange", () => {
   document.querySelectorAll(".tile-video").forEach((v) => {
     if (document.hidden) {
@@ -3492,7 +3492,7 @@ function endDragVisuals() {
 // file dropped onto the window becomes a prompt); starting a drag is untouched, so a
 // plain HTML5 dragstart is all it takes to hand the prompt to the OS.
 // A modifier is required everywhere because every drag source already owns its plain
-// drag — tiles reorder, library rows get placed on the grid, the pill moves its window.
+// drag, tiles reorder, library rows get placed on the grid, the pill moves its window.
 const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 const dragOutMod = () => DRAG_OUT_MODS[txt("dragOutModifier")] || "ctrlKey";
 const dragOutWired = new WeakSet();
@@ -3527,7 +3527,7 @@ function startDragOut(e, p) {
   e.dataTransfer.effectAllowed = "copy";
   e.dataTransfer.setData("text/plain", text);
   if (p.file_path) e.dataTransfer.setData("text/uri-list", fileUri(p.file_path));
-  // The OS owns the gesture from here — drop the pointer-drag bookkeeping so the
+  // The OS owns the gesture from here, drop the pointer-drag bookkeeping so the
   // ghost/hover cell of a reorder can never be left behind.
   drag = null;
   endDragVisuals();
@@ -3536,7 +3536,7 @@ function startDragOut(e, p) {
 window.addEventListener("pointermove", (e) => {
   if (!drag || drag.out) return;
   // No reorder while chaining (a click selects) or when reorder is switched off in
-  // the expert menu — but always allow finishing a library-placed tile or a
+  // the expert menu, but always allow finishing a library-placed tile or a
   // favorites-view reorder (reordering favorites is intrinsic to that view).
   if (!drag.moved && (chainMode || (!flag("tileReorder") && !drag.fromLibrary && !favView))) return;
   if (!drag.moved) {
@@ -3545,7 +3545,7 @@ window.addEventListener("pointermove", (e) => {
     drag.moved = true;
     drag.el.classList.add("dragging");
     document.body.classList.add("drag-active");
-    // Dragging out of the library: hide the overlay so the grid is visible — and
+    // Dragging out of the library: hide the overlay so the grid is visible, and
     // anything the library was raised over, or the grid stays covered.
     if (drag.fromLibrary) {
       libraryEl.classList.add("hidden");
@@ -3560,7 +3560,7 @@ window.addEventListener("pointermove", (e) => {
     drag.ghost.classList.remove("dragging");
     drag.ghost.style.width = `${r.width}px`;
     drag.ghost.style.height = `${r.height}px`;
-    // A cloned <video> would autoplay and decode while following the cursor —
+    // A cloned <video> would autoplay and decode while following the cursor,
     // that, not the move itself, makes video-tile drags stutter.
     drag.ghost.querySelectorAll("video").forEach((v) => {
       v.removeAttribute("autoplay");
@@ -3611,7 +3611,7 @@ window.addEventListener("pointerup", async (e) => {
     const cell = cellAt(e.clientX, e.clientY);
     if (!cell) return;
     const target = [Number(cell.dataset.col), Number(cell.dataset.row)];
-    // Onto an occupied cell the folder simply stays put — a folder never swaps a
+    // Onto an occupied cell the folder simply stays put, a folder never swaps a
     // tile away, that is what dropping INTO it is for.
     if (cell.firstElementChild && cell.firstElementChild !== el) return;
     if (await saveFolder(f, { cell: target })) await renderGrid(true);
@@ -3622,7 +3622,7 @@ window.addEventListener("pointerup", async (e) => {
     if (el.classList.contains("tile")) {
       const p = prompts.find((x) => x.id === id);
       if (chainMode) { if (p) await toggleChainPick(p); return; } // pick (asks vars), don't copy
-      // A prompt that still needs input ALWAYS routes through the dialog — the
+      // A prompt that still needs input ALWAYS routes through the dialog, the
       // double-click paste shortcut would otherwise fire on the 2nd click and paste
       // stale clipboard without ever asking. A click only copies, never pastes.
       if (p && dialogTokens(p).length) {
@@ -3630,7 +3630,7 @@ window.addEventListener("pointerup", async (e) => {
         return;
       }
       if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // F19: 2nd fast click pastes
-      // P38: a click swallowed by the cooldown used to give no feedback at all —
+      // P38: a click swallowed by the cooldown used to give no feedback at all,
       // a quick shake says "that didn't do anything" instead of silence.
       if (copyOnCooldown(id)) {
         el.classList.add("cooldown-blocked");
@@ -3649,7 +3649,7 @@ window.addEventListener("pointerup", async (e) => {
   if (!cell) return;
   if (favView) { await placeFav(id, Number(cell.dataset.col), Number(cell.dataset.row)); return; }
   if (armed) { await dropIntoFolder(id, armed, cell); return; } // F27
-  // P8: only a genuine reorder of an already-placed tile gets an undo offer — a
+  // P8: only a genuine reorder of an already-placed tile gets an undo offer, a
   // brand-new placement (drag in from the library, double-click-create) has
   // nothing to move back FROM, so prevCell stays undefined and the toast is skipped.
   const prevCell = layoutOf(activeView())[id];
@@ -3728,7 +3728,7 @@ async function autoPasteNow(el) {
   }
 }
 
-// Pure layout move: the tile element is re-parented as-is — its fitted text
+// Pure layout move: the tile element is re-parented as-is, its fitted text
 // size cannot change and a playing video keeps running. Falls back to a full
 // render when the tile isn't in the grid yet (placed from the library).
 function moveTileDom(id, col, row) {
@@ -3747,7 +3747,7 @@ function moveTileDom(id, col, row) {
 // state immediately, persistence runs in the background.
 async function placeTile(id, col, row) {
   const view = activeView();
-  // 51: off by default — placing a prompt here drops it from every other view it
+  // 51: off by default, placing a prompt here drops it from every other view it
   // sits in first, keeping the historical "one placement" guarantee. On, a prompt
   // can sit in several views at once (same object, same data, everywhere).
   if (!optFlag("multiViewPrompt")) {
@@ -3787,7 +3787,7 @@ gridEl.addEventListener("dblclick", (e) => {
 
 // ---- F27 grid folders: several prompts collapsed into one cell ----
 // Ships ON. A member has no layout entry of its own while it sits in a folder, so
-// switching the feature off simply shows every prompt as its own tile again — the
+// switching the feature off simply shows every prompt as its own tile again, the
 // folders stay stored and come back with it.
 const tileFoldersOn = () => flag("tileFolders");
 const tileFolderList = () => (tileFoldersOn() ? settings.tile_folders || [] : []);
@@ -3797,7 +3797,7 @@ const folderMembers = (f) =>
   (f.members || []).map((id) => prompts.find((p) => p.id === id)).filter(Boolean);
 const folderTitle = (f) => f.name || t("tileFolderDefaultName");
 
-// One write per change — name, colour, cell and members always travel together, so
+// One write per change, name, colour, cell and members always travel together, so
 // the grid never shows a half-moved folder.
 async function saveFolder(f, patch) {
   try {
@@ -3880,7 +3880,7 @@ async function dissolveTileFolder(f) {
 }
 
 // Take one member out and put it on `cell`. The second-to-last one leaving dissolves
-// the folder — the backend's invariant, so there is no special case here.
+// the folder, the backend's invariant, so there is no special case here.
 async function takeOutOfFolder(id, cell) {
   try {
     settings = await invoke("take_out_of_tile_folder", { id, cell });
@@ -3944,7 +3944,7 @@ function buildFolderTile(f) {
       { label: t("tileFolderDissolve"), danger: true, run: () => dissolveTileFolder(f) },
     ], e.clientX, e.clientY);
   });
-  // Same drag machine as a tile — only what a press means differs (open, not copy).
+  // Same drag machine as a tile, only what a press means differs (open, not copy).
   tile.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     drag = { folderId: f.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile };
@@ -4121,7 +4121,7 @@ function openCtx(id, x, y) {
   pinBtn.classList.toggle("hidden", !flag("floating"));
   const pinned = !!settings.floating?.[id];
   pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
-  // In the favorites view a prompt can't be hidden/removed — unstar it instead.
+  // In the favorites view a prompt can't be hidden/removed, unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // 51: nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
@@ -4132,7 +4132,7 @@ function closeCtx() {
   ctxId = null;
 }
 
-// ---- 51: "also show in" popover — place/unplace this prompt on other views ----
+// ---- 51: "also show in" popover, place/unplace this prompt on other views ----
 const viewsPop = document.createElement("div");
 viewsPop.className = "ctx views-pop hidden";
 viewsPop.setAttribute("role", "menu");
@@ -4143,7 +4143,7 @@ function closeViewsPop() {
 function renderViewsPop(id) {
   viewsPop.innerHTML = "";
   for (const v of settings.views) {
-    if (v.id === settings.active_view) continue; // already here — that's why the menu was opened
+    if (v.id === settings.active_view) continue; // already here, that's why the menu was opened
     const on = Object.prototype.hasOwnProperty.call(layoutOf(v), id);
     const row = viewRowBase(v, on);
     row.setAttribute("role", "menuitemcheckbox");
@@ -4162,7 +4162,7 @@ function openViewsPop(id, rect) {
   placePopover(viewsPop, rect);
 }
 
-// ---- 24: grid tag filter — header toolbar popover, own Set from the library's ----
+// ---- 24: grid tag filter, header toolbar popover, own Set from the library's ----
 const gridTagPop = document.createElement("div");
 gridTagPop.className = "ctx grid-tag-pop hidden";
 gridTagPop.setAttribute("role", "menu");
@@ -4332,7 +4332,7 @@ function renderSwatches(selected) {
   );
 }
 
-// Live caption overlay on the modal media preview — mirrors the on-tile render
+// Live caption overlay on the modal media preview, mirrors the on-tile render
 // (0 = default size, 1 = auto-scale, else fixed px) so the user sees it as-is.
 function updateCaptionPreview() {
   const el = modal.captionPreview;
@@ -4345,7 +4345,7 @@ function updateCaptionPreview() {
   el.style.fontSize = size > 1 ? `${size}px` : "";
 }
 
-// Serialized content of the open modal — compared on dismiss to detect edits.
+// Serialized content of the open modal, compared on dismiss to detect edits.
 function modalSnapshot() {
   if (!modalState) return "";
   return JSON.stringify([
@@ -4370,15 +4370,15 @@ function extractVars(text) {
   return seen;
 }
 const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
-// A fence whose body is only whitespace ({#{ }#}) never becomes a real variable —
-// extractVars() silently drops it — so it would sit in the copied text unfilled and
+// A fence whose body is only whitespace ({#{ }#}) never becomes a real variable,
+// extractVars() silently drops it, so it would sit in the copied text unfilled and
 // unexplained. 34: catch it before save instead of leaving it a silent trap.
 const hasEmptyVarToken = (text) =>
   [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
 
 // 14: a placeholder gets a visible accent wherever raw prompt text is previewed, so
 // "does this prompt ask for anything" no longer surprises you only at copy time. DOM
-// text nodes + a plain span, never innerHTML — a token is user-typed text.
+// text nodes + a plain span, never innerHTML, a token is user-typed text.
 function fillVarHighlighted(el, text) {
   el.textContent = "";
   let last = 0;
@@ -4396,7 +4396,7 @@ function fillVarHighlighted(el, text) {
 // F13: a token is either a plain name or `name|opt,opt,…`. Options are trimmed and
 // empty ones dropped; a comma always starts the next option, so an option can never
 // contain one. A bar without a usable name or option list stays an ordinary
-// text variable — the whole token is then its name, so the placeholder still fills.
+// text variable, the whole token is then its name, so the placeholder still fills.
 function parseVar(token) {
   const raw = String(token).trim();
   const bar = raw.indexOf("|");
@@ -4415,7 +4415,7 @@ const DYN_VARS = [
 ];
 const DYN_SET = new Set(DYN_VARS);
 // A reserved name is WRITTEN with a slash fence: {#{/date\}#}. That keeps every plain
-// word free for a variable of the user's own — "date" only fills itself in when it is
+// word free for a variable of the user's own, "date" only fills itself in when it is
 // spelled /date\. Old prompts are rewritten once by the store migration.
 const DYN_OPEN = "/";
 const DYN_CLOSE = "\\";
@@ -4463,7 +4463,7 @@ function isoStamp(d) {
     `T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}` +
     `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
 }
-// Short throwaway id — the same platform RNG as the UUID, just eight characters.
+// Short throwaway id, the same platform RNG as the UUID, just eight characters.
 const shortId = () =>
   [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 8);
 // {#{counter}#} counts copies, so its value has to survive a restart. Kept in the
@@ -4476,7 +4476,7 @@ function nextVarCounter() {
   invoke("set_ui_text", { key: "varCounter", value: String(next) }).catch(() => {});
   return next;
 }
-// RFC 4122 v4, lowercase — built from the platform RNG, no dependency.
+// RFC 4122 v4, lowercase, built from the platform RNG, no dependency.
 function uuidV4() {
   const b = crypto.getRandomValues(new Uint8Array(16));
   b[6] = (b[6] & 0x0f) | 0x40;
@@ -4515,15 +4515,15 @@ function dynValue(name, now, ctx) {
 }
 
 // The variable tokens of a prompt that are worth resolving at all (text prompts
-// only — an image/file prompt copies its media, not its text).
+// only, an image/file prompt copies its media, not its text).
 const varTokens = (p) =>
   (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(p.text) : []);
-// The subset the user still has to fill in by hand — the only reason to open a dialog.
+// The subset the user still has to fill in by hand, the only reason to open a dialog.
 const dialogTokens = (p) => varTokens(p).filter((tok) => !isDynVar(parseVar(tok).name));
 
 // The one place every copy path goes through: reserved names resolve themselves,
 // the rest are asked for once. Returns the finished text, null when the user
-// cancelled — or false when `standalone` was asked for and the small window could
+// cancelled, or false when `standalone` was asked for and the small window could
 // not be opened, so the caller can fall back to the in-window dialog.
 // `standalone` is set only by copies started from OUTSIDE the app (global hotkey,
 // tray): everything inside the window uses the in-window dialog.
@@ -4595,7 +4595,7 @@ function renderVarHelper() {
       const b = document.createElement("button");
       b.type = "button";
       // P42: clipboard reads live external data, unlike the other self-filling
-      // names — worth a visual nudge so it isn't missed among the rest.
+      // names, worth a visual nudge so it isn't missed among the rest.
       b.className = name === "clipboard" ? "vars-chip vars-chip-highlight" : "vars-chip";
       b.textContent = dynToken(name);
       b.title = t(DYN_TIPS[name]); // hover engine themes any [title]
@@ -4675,7 +4675,7 @@ function promptVarsDialog(vars) {
       const usedLast = options.includes(last);
       control.value = usedLast ? last : options[0];
       // P36: says outright that this pick came from last time, not just the checkbox
-      // state (there is none for a choice variable — it remembers silently).
+      // state (there is none for a choice variable, it remembers silently).
       if (usedLast) control.title = t("rememberedValueHint");
       // A single option is a fixed value: still shown, but nothing to choose.
       if (options.length === 1) control.disabled = true;
@@ -4730,7 +4730,7 @@ function promptVarsDialog(vars) {
     const cancel = $("vars-close");
     const clearAll = $("vars-clear-all");
     const collect = () => Object.fromEntries(rows.map((r) => [r.token, r.control.value]));
-    // Only plain text fields have an empty state worth clearing to — a choice
+    // Only plain text fields have an empty state worth clearing to, a choice
     // dropdown always needs a value, so it is left on whatever it already shows.
     const onClearAll = () => {
       for (const r of rows) if (!r.choice) r.control.value = "";
@@ -4772,7 +4772,7 @@ function promptVarsDialog(vars) {
 
 // Record a copy for the history/usage journal (backend honours the privacy flag).
 // Every successful copy path ends here, which makes it the one place that may start
-// the cooldown — see below.
+// the cooldown, see below.
 const recordCopy = (id) => {
   markCopied(id);
   return invoke("record_copy", { id }).catch(() => {});
@@ -4781,8 +4781,8 @@ const recordCopy = (id) => {
 // Per-prompt copy throttle: block re-copying the SAME prompt within the cooldown
 // (expert value, 0 = off). Other prompts are never blocked, so a wrong pick can
 // be corrected instantly. Returns true if this copy should be skipped.
-// The check is pure: a copy that never happened — the placeholder dialog was
-// cancelled — must not lock the prompt out for the whole cooldown.
+// The check is pure: a copy that never happened, the placeholder dialog was
+// cancelled, must not lock the prompt out for the whole cooldown.
 const copyTimes = new Map();
 const COPY_TIMES_CAP = 256; // sweep entries past the cooldown once the map grows
 function copyOnCooldown(id) {
@@ -4820,7 +4820,7 @@ function accelFromEvent(e) {
 }
 
 // Turn a stored Tauri accelerator ("CommandOrControl+Shift+P") into a readable,
-// localized label ("Strg + Umschalt + P"). Display only — the raw accelerator is
+// localized label ("Strg + Umschalt + P"). Display only, the raw accelerator is
 // what stays saved and registered.
 const MOD_LABELS = {
   CommandOrControl: () => t("keyCtrl"), Control: () => t("keyCtrl"),
@@ -4838,7 +4838,7 @@ function prettyAccel(accel) {
 // paste option on); a plain click copies and nothing else, exactly like a prompt
 // without variables.
 async function copyTextWithVars(p, el, paste = false) {
-  // A double-click can never reach the tile a second time — the dialog already
+  // A double-click can never reach the tile a second time, the dialog already
   // covers it, and that second press used to land on the overlay and dismiss it.
   // Swallow it instead and treat it as the double-click it was: fill in the
   // variables, then paste.
@@ -4869,7 +4869,7 @@ async function copyTextWithVars(p, el, paste = false) {
 // Used ONLY by copies started outside the app (global prompt hotkey, tray quick
 // copy): a small always-on-top window asks for the placeholders so the app the user
 // is working in keeps the foreground. Everything the variables MEAN still lives
-// here — that window is a form, it renders rows and hands the answers back.
+// here, that window is a form, it renders rows and hands the answers back.
 let varsWindowPending = null;
 
 async function promptVarsWindow(tokens) {
@@ -4899,7 +4899,7 @@ async function promptVarsWindow(tokens) {
     askRemember: useRemember,
     rows: rows.map(({ name, options, value, remember }) => ({ name, options, value, remember })),
   };
-  // A second hotkey while a window is still open cancels the older copy — one
+  // A second hotkey while a window is still open cancels the older copy, one
   // pending question at a time, or two answers would race for one clipboard.
   const stale = varsWindowPending;
   varsWindowPending = null;
@@ -4909,7 +4909,7 @@ async function promptVarsWindow(tokens) {
     invoke("open_var_window", { payload: JSON.stringify(payload), rows: rows.length })
       .catch(() => { varsWindowPending = null; resolve(false); });
   });
-  if (answer === false) return false; // no window — the caller falls back
+  if (answer === false) return false; // no window, the caller falls back
   if (!answer) return null;
   let parsed;
   try { parsed = JSON.parse(answer); } catch (_) { return null; }
@@ -4961,7 +4961,7 @@ window.addEventListener("blur", () => {
 });
 window.addEventListener("focus", () => { clearTimeout(kbFadeTimer); });
 function moveKbFocus(dc, dr) {
-  // Use whichever layout the grid is currently showing — the favorites view lays out
+  // Use whichever layout the grid is currently showing, the favorites view lays out
   // from favLayoutMap(), not the active view, so arrow keys must follow that.
   const layout = favView ? favLayoutMap() : layoutOf(activeView());
   const cells = Object.entries(layout);
@@ -4983,7 +4983,7 @@ function moveKbFocus(dc, dr) {
 // One activation path for "copy this prompt now": Enter on a focused tile and a
 // prompt hotkey (F20) both land here, so usage recording, chain semantics and
 // placeholder filling behave identically. `paste` decides whether the copy is also
-// pushed into the last app — Enter follows the auto-paste setting, a hotkey follows
+// pushed into the last app, Enter follows the auto-paste setting, a hotkey follows
 // its own option.
 async function activateTile(id, paste = flag("autoPaste")) {
   const p = prompts.find((x) => x.id === id);
@@ -5001,7 +5001,7 @@ async function activateTile(id, paste = flag("autoPaste")) {
   }
 }
 
-// A prompt was triggered from outside the grid — its global hotkey (F20) or a tray
+// A prompt was triggered from outside the grid, its global hotkey (F20) or a tray
 // quick-copy entry (F23). Placeholders that still need typing are asked for in a
 // small window of their own, so the app the user is working in stays in front;
 // everything else copies (and optionally pastes) without ever showing up.
@@ -5009,7 +5009,7 @@ async function onPromptHotkey(id, paste) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
   if (dialogTokens(p).length) {
-    // Chain mode is an in-window gesture — a hotkey then still goes through the grid.
+    // Chain mode is an in-window gesture, a hotkey then still goes through the grid.
     if (flag("varPopupWindow") && !chainMode) { await copyOutsideApp(p, paste); return; }
     await invoke("focus_main_window").catch(() => {}); // fallback: the in-window dialog
   }
@@ -5094,7 +5094,7 @@ function showHotkeyError(msg) {
   modal.hotkeyErr.classList.toggle("hidden", !msg);
 }
 
-// What a hotkey without its own choice inherits — named on the row, so "Default"
+// What a hotkey without its own choice inherits, named on the row, so "Default"
 // never leaves the user guessing which of the two it means.
 const hotkeyPasteDefault = () => (optFlag("promptHotkeyPaste") ? t("promptHotkeyPaste") : t("promptHotkeyCopy"));
 
@@ -5140,7 +5140,7 @@ const hotkeyTakenMsg = (owner) =>
 
 // Global hotkeys have to be off while a field is capturing: Windows hands a
 // registered combination to the owning process, not to the focused window, so the
-// key press would never reach the field — the prompt behind it would simply be
+// key press would never reach the field, the prompt behind it would simply be
 // copied, with no error to show for it.
 let hotkeyCaptureOn = false;
 function hotkeyCapture(on) {
@@ -5207,7 +5207,7 @@ function scheduleLenCounter() {
 }
 
 // Search re-renders the whole result list, which for a large library means rebuilding
-// every row (and re-decoding every image thumbnail) — far too much to do on each
+// every row (and re-decoding every image thumbnail), far too much to do on each
 // keystroke. The field itself stays live; only the list waits for a short pause in
 // typing. Short enough to feel immediate, long enough that a fast typist renders once.
 const SEARCH_DEBOUNCE_MS = 120;
@@ -5312,7 +5312,7 @@ const HL_ALIAS = {
   sh: "bash", bash: "bash", shell: "bash", zsh: "bash", console: "bash",
   rs: "rust", rust: "rust",
 };
-// One regex per language, compiled once — never per keystroke.
+// One regex per language, compiled once, never per keystroke.
 const HL_RE = Object.fromEntries(Object.entries(HL_RULES).map(([id, def]) => [
   id,
   new RegExp(def.rules.map(([cls, src]) => `(?<${cls}>${src})`).join("|"), `g${def.flags || ""}`),
@@ -5360,9 +5360,9 @@ function mdInline(s) {
 // Markdown rules would eat its punctuation (a leading "-", "#" or "*" turns into a
 // list, a heading or italics), so such a prompt is rendered as one highlighted block.
 // The heuristic keys on three things, all cheap:
-//   1. a language cue — a construct only that language writes (fn/def/SELECT/<tag>),
-//   2. shape — most non-empty lines end in code punctuation or are indented,
-//   3. no prose — not a single line reads like a sentence in running text.
+//   1. a language cue, a construct only that language writes (fn/def/SELECT/<tag>),
+//   2. shape, most non-empty lines end in code punctuation or are indented,
+//   3. no prose, not a single line reads like a sentence in running text.
 // A cue marked strong stands on its own (a shebang, a whole JSON document, an SQL
 // statement in the usual upper case) and skips the shape test, which those write too
 // few punctuated line ends to pass; every other cue needs the shape as well.
@@ -5404,7 +5404,7 @@ function detectCodeLang(text) {
 }
 
 function renderMarkdown(text) {
-  // An unfenced code prompt is one block, not Markdown — see detectCodeLang.
+  // An unfenced code prompt is one block, not Markdown, see detectCodeLang.
   if (flag("codeAutoDetect")) {
     const lang = detectCodeLang(text);
     if (lang) {
@@ -5464,7 +5464,7 @@ function renderMarkdown(text) {
 }
 
 // Replace layout: the rendered pane stands in for the textarea until the user clicks
-// into it. `mdEditing` is that moment — everywhere else the prompt reads as Markdown.
+// into it. `mdEditing` is that moment, everywhere else the prompt reads as Markdown.
 let mdEditing = false;
 let mdTimer = 0;
 let mdLastText = null;
@@ -5476,11 +5476,11 @@ function renderMdPreview(force) {
   if (!force && s === mdLastText) return;
   mdLastText = s;
   // The only innerHTML in this feature, and it is fed a string assembled purely from
-  // escaped slices plus literal tags — see renderMarkdown.
+  // escaped slices plus literal tags, see renderMarkdown.
   box.innerHTML = renderMarkdown(s);
 }
 function scheduleMdPreview() {
-  // Nothing to draw into while the pane is hidden — but mark it stale, so the next
+  // Nothing to draw into while the pane is hidden, but mark it stale, so the next
   // time it is shown it is rebuilt from the current text instead of a stale render.
   if (modal.mdPreview.classList.contains("hidden")) { mdLastText = null; return; }
   clearTimeout(mdTimer);
@@ -5496,7 +5496,7 @@ function syncMdUi(textVisible) {
   if (!on) mdEditing = false;
   // ONE field: the rendered pane stands in for the textarea and hands it back on a
   // click. Two panes side by side was the second thing on screen that did the same
-  // job — there is no layout option any more.
+  // job, there is no layout option any more.
   modal.mdWrap.classList.toggle("hidden", !on || mdEditing);
   // Hide the WRAPPER, not just the textarea: the clear-X wrapper stays in flow with
   // an empty box and pushes the rendered pane down, so the field appeared to jump
@@ -5513,7 +5513,7 @@ function syncMdUi(textVisible) {
   if (on) renderMdPreview(true);
 }
 
-// 31: word-level diff between two texts via a classic LCS backtrack — no
+// 31: word-level diff between two texts via a classic LCS backtrack, no
 // dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
 // a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
 // rather than freezing the editor while it opens the history panel.
@@ -5541,7 +5541,7 @@ function diffWords(oldText, newText) {
   while (j < m) out.push({ type: "add", text: b[j++] });
   return out;
 }
-// Text nodes only — never innerHTML on prompt content, same rule the Markdown
+// Text nodes only, never innerHTML on prompt content, same rule the Markdown
 // preview follows (a prompt's own text is fully user-controlled).
 function renderDiffInto(el, tokens) {
   el.textContent = "";
@@ -5581,7 +5581,7 @@ async function loadHistory(id) {
     time.textContent = new Date(v.ts * 1000).toLocaleString(LANG);
     const prev = document.createElement("span");
     prev.className = "hist-preview";
-    prev.textContent = (v.name ? v.name + " — " : "") + (v.text || "").slice(0, 80);
+    prev.textContent = (v.name ? v.name + ", " : "") + (v.text || "").slice(0, 80);
     // Explicit expand chevron (collapsed by default) → reveals the COMPLETE text.
     const expand = document.createElement("button");
     expand.type = "button";
@@ -5610,7 +5610,7 @@ async function loadHistory(id) {
     head.append(time, prev, expand, restore);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
-    // 31: diff against whatever came right after this snapshot — the live editor
+    // 31: diff against whatever came right after this snapshot, the live editor
     // text for the newest row, the next-newer snapshot for every other one.
     const newerText = idx === 0 ? modal.text.value : list[idx - 1].text;
     const tokens = diffWords(v.text || "", newerText || "");
@@ -5655,7 +5655,7 @@ function collapsibleHead(labelText, contentEl, stateKey) {
   return h;
 }
 // Label + bounded number field, as used by the backup and statistics panels.
-// Clearing the field means "back to the default" — it is committed on blur, so
+// Clearing the field means "back to the default", it is committed on blur, so
 // an empty field mid-typing is left alone.
 function numRow(labelKey, key, min, max, onSet, extraClass) {
   const l = document.createElement("label");
@@ -5681,7 +5681,7 @@ function numRow(labelKey, key, min, max, onSet, extraClass) {
 async function renderStatsPanel(body) {
   // Feature toggle + (when on) the top-N field share one row.
   const on = flag("usageStats");
-  // Fetch BEFORE clearing — otherwise the panel paints empty during the await,
+  // Fetch BEFORE clearing, otherwise the panel paints empty during the await,
   // which read as a flash on every re-render.
   let s = null;
   if (on) {
@@ -5706,7 +5706,7 @@ async function renderStatsPanel(body) {
   if (!on) return;
   // Everything below the toggle folds away as one block (state remembered), so the
   // backup dialog is not half statistics every time it opens. `root` stays the panel
-  // itself — the clear-X wiring at the end has to reach the top-N field in the head
+  // itself, the clear-X wiring at the end has to reach the top-N field in the head
   // row, which is NOT inside the collapsible part.
   const root = body;
   const panel = document.createElement("div");
@@ -5725,21 +5725,21 @@ async function renderStatsPanel(body) {
   // Three rows of four: what the library holds, how long/heavily used the prompts
   // are, and the raw copy activity.
   cards.append(
-    // — Inventory —
+    // Inventory
     card(t("statTotalPrompts"), nf(s.total_prompts)),
     card(t("statWithMedia"), nf(prompts.filter((p) => p.image || p.file_path || p.copy_image).length)),
     card(t("statWithVars"), nf(prompts.filter((p) => extractVars(p.text || "").length > 0).length)),
     card(t("statViews"), nf((settings.views || []).length)),
-    // — Content + intensity —
-    card(t("statTopCopies"), s.top && s.top.length ? nf(s.top[0].count) : "—"),
-    card(t("statAvg"), s.used_count ? s.avg_copies.toFixed(1) : "—"),
+    // Content and intensity
+    card(t("statTopCopies"), s.top && s.top.length ? nf(s.top[0].count) : "–"),
+    card(t("statAvg"), s.used_count ? s.avg_copies.toFixed(1) : "–"),
     card(t("statChars"), nf(s.total_chars)),
-    card(t("statAvgLen"), s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "—"),
-    // — Copy activity —
+    card(t("statAvgLen"), s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "–"),
+    // Copy activity
     card(t("statTotalCopies"), nf(s.total_copies)),
-    card(t("statCopies7"), s.history_on ? nf(s.copies7) : "—"),
-    card(t("statCopies30"), s.history_on ? nf(s.copies30) : "—"),
-    card(t("statPerDay"), s.history_on ? (s.copies30 / 30).toFixed(1) : "—"),
+    card(t("statCopies7"), s.history_on ? nf(s.copies7) : "–"),
+    card(t("statCopies30"), s.history_on ? nf(s.copies30) : "–"),
+    card(t("statPerDay"), s.history_on ? (s.copies30 / 30).toFixed(1) : "–"),
   );
   body.appendChild(cards);
   // Overview (2 columns wide) next to the per-view breakdown (1 column).
@@ -5751,10 +5751,10 @@ async function renderStatsPanel(body) {
   };
   const info = document.createElement("div");
   info.className = "stat-views";
-  // Only what the cards above do NOT already show — the most-used count is a card
+  // Only what the cards above do NOT already show, the most-used count is a card
   // and a bar below it, so it stays out of here.
   if (s.recent_ts) info.appendChild(infoRow(t("statRecent"), `${s.recent_name} · ${new Date(s.recent_ts * 1000).toLocaleDateString(LANG)}`));
-  // Longest and shortest: the name on the label line, its size on a line of its own —
+  // Longest and shortest: the name on the label line, its size on a line of its own,
   // one row could not hold name, characters and tokens without cutting one off.
   const sizeRow = (label, name, chars) => {
     info.appendChild(infoRow(label, name));
@@ -5845,7 +5845,7 @@ function jumpToPrompt(name) {
   $("library-q").value = libQuery;
   renderLibrary();
 }
-// Inline expert panels (backups + statistics) — filled on demand by renderExpert.
+// Inline expert panels (backups + statistics), filled on demand by renderExpert.
 
 // ---- F6 duplicate finder ----
 async function openDupes() {
@@ -5944,7 +5944,7 @@ EXPERT_ACTIONS["dupes-open"] = openDupes;
 
 // ---- 91: trash ----
 // Deleting a prompt (grid tile, library row, editor, multi-select) always moves it
-// here first — delete_prompt/batch_prompts("delete") no longer hard-remove. This
+// here first, delete_prompt/batch_prompts("delete") no longer hard-remove. This
 // dialog is the only place it can come back from, or be purged for good.
 let trashList = [];
 async function openTrash() {
@@ -6088,7 +6088,7 @@ async function renderBackupPanel(body) {
       const dd = document.createElement("div"); dd.className = "dt-date"; dd.textContent = d.toLocaleDateString(LANG);
       const tt = document.createElement("div"); tt.className = "dt-time"; tt.textContent = d.toLocaleTimeString(LANG);
       vv.append(dd, tt);
-    } else { vv.textContent = "—"; }
+    } else { vv.textContent = "–"; }
     const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
     c.append(vv, ll); return c;
   };
@@ -6143,9 +6143,9 @@ async function renderBackupPanel(body) {
     iv.append(ivl, ivs); left.appendChild(iv);
   }
 
-  // Right column — retention. 62: a 2x2 preset grid replaces the old switch. Three
+  // Right column, retention. 62: a 2x2 preset grid replaces the old switch. Three
   // tiles set a plain count (backupGfs off); the fourth ("Erweitert") turns on the
-  // same GFS tiers the old switch revealed — same underlying settings, just reached
+  // same GFS tiers the old switch revealed, same underlying settings, just reached
   // by picking a tile instead of flipping a switch first.
   const RETENTION_PRESETS = [
     { label: "backupRetentionLight", n: 5 },
@@ -6179,11 +6179,11 @@ async function renderBackupPanel(body) {
   gridEl.appendChild(advBtn);
   right.appendChild(gridEl);
   // Both retention states live in the same slot, which keeps the height of the taller
-  // one — otherwise picking a tile shifts everything below it by two rows.
+  // one, otherwise picking a tile shifts everything below it by two rows.
   const slot = document.createElement("div"); slot.className = "backup-retention-slot";
   right.appendChild(slot);
   if (gfsOn) {
-    // Day / week beside each other, month / year underneath — four small fields.
+    // Day / week beside each other, month / year underneath, four small fields.
     // The tiers replace the plain count entirely (the backend ignores it while smart
     // retention is on), so the count the user set stays untouched for when it is off.
     const tiers = document.createElement("div"); tiers.className = "backup-tier-grid";
@@ -6196,10 +6196,10 @@ async function renderBackupPanel(body) {
   }
   // Optional backup password. Without one, backups use a fixed key and restore on any
   // PC; with one they need exactly this password. The stored password is never sent
-  // back to the UI — the eye only reveals what was just typed in this session.
+  // back to the UI, the eye only reveals what was just typed in this session.
   const pwRow = document.createElement("div"); pwRow.className = "field backup-pw-row";
   // Dots as the PLACEHOLDER, never as a value: they show that a password exists
-  // without putting anything revealable — or accidentally saveable — in the field.
+  // without putting anything revealable, or accidentally saveable, in the field.
   const PW_DOTS = "••••••••";
   const pwLabel = document.createElement("span"); pwLabel.textContent = t("backupPasswordLabel");
   const pwWrap = document.createElement("div"); pwWrap.className = "backup-pw-wrap";
@@ -6220,13 +6220,13 @@ async function renderBackupPanel(body) {
     pwIn.type = show ? "text" : "password";
     eye.setAttribute("aria-label", t(show ? "hidePassword" : "showPassword"));
   });
-  // Saving happens ONLY through this button — leaving the field must never change
+  // Saving happens ONLY through this button, leaving the field must never change
   // the password by accident.
   const save = document.createElement("button");
   save.type = "button";
   save.className = "ghost-btn backup-pw-save";
   save.textContent = t("save");
-  // Removing is its own button below — an empty field here saves nothing, so the
+  // Removing is its own button below, an empty field here saves nothing, so the
   // password can never be dropped by an absent-minded click on Save.
   const remove = document.createElement("button");
   const syncPwButtons = () => {
@@ -6269,13 +6269,13 @@ async function renderBackupPanel(body) {
   });
   syncPwButtons();
   pwWrap.append(pwIn, eye);
-  // Field and both buttons stay on one line, so the row spans both columns —
+  // Field and both buttons stay on one line, so the row spans both columns,
   // neither column alone is wide enough for all three.
   const pwControls = document.createElement("div"); pwControls.className = "backup-pw-controls";
   pwControls.append(pwWrap, save, remove);
   pwRow.append(pwLabel, pwControls);
   set.appendChild(pwRow);
-  // P63: the consequence of forgetting it, spelled out where it's set — not just
+  // P63: the consequence of forgetting it, spelled out where it's set, not just
   // in a toast after the fact, which is easy to miss.
   const pwWarn = document.createElement("p");
   pwWarn.className = "modal-hint backup-pw-hint";
@@ -6290,15 +6290,15 @@ async function renderBackupPanel(body) {
   const sizes = backups.map((b) => b.size);
   const cards = document.createElement("div"); cards.className = "stat-cards";
   // Row 1: how many backups there are and what they cost in disk space.
-  // Row 2: the time axis — how far back they reach and when the next one is due.
+  // Row 2: the time axis, how far back they reach and when the next one is due.
   cards.append(
     card(t("backupCount"), nf(backups.length)),
     card(t("backupTotalSize"), fmtBytes(total)),
-    card(t("backupLargest"), backups.length ? fmtBytes(Math.max(...sizes)) : "—"),
-    card(t("backupSmallest"), backups.length ? fmtBytes(Math.min(...sizes)) : "—"),
+    card(t("backupLargest"), backups.length ? fmtBytes(Math.max(...sizes)) : "–"),
+    card(t("backupSmallest"), backups.length ? fmtBytes(Math.min(...sizes)) : "–"),
     card(t("backupSpan"), newest && oldest
       ? `${nf(Math.max(0, Math.round((newest - oldest) / 86400000)))} d`
-      : "—"),
+      : "–"),
     dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
     dtCard(t("backupNewest"), newest),
     dtCard(t("backupOldest"), oldest),
@@ -6315,12 +6315,12 @@ async function renderBackupPanel(body) {
     for (const b of backups) {
       const row = document.createElement("div"); row.className = "backup-row";
       const name = document.createElement("span"); name.className = "backup-name"; name.textContent = prettyStamp(b.name);
-      // What is actually in that snapshot — read from the snapshot itself, not guessed.
+      // What is actually in that snapshot, read from the snapshot itself, not guessed.
       const count = document.createElement("span"); count.className = "backup-count";
-      count.textContent = b.prompts === null || b.prompts === undefined ? "—" : nf(b.prompts);
+      count.textContent = b.prompts === null || b.prompts === undefined ? "–" : nf(b.prompts);
       count.title = t("backupPrompts");
       // 61: names are read straight from the snapshot (DPAPI-sealed exactly like the
-      // live library — a local snapshot is never password-protected, only the
+      // live library, a local snapshot is never password-protected, only the
       // separate manual export-to-file has that option), so there is nothing to ask
       // for here. An empty list just means an older backup made before this existed.
       let namesBox = null;
@@ -6370,7 +6370,7 @@ async function restoreBackup(name) {
   const dataOn = $("confirm-cb-data").checked;
   const settingsOn = $("confirm-cb-settings").checked;
   const scope = dataOn && settingsOn ? "all" : dataOn ? "data" : "settings";
-  // P64: the same safety net as reset/delete — restoring replaces the current
+  // P64: the same safety net as reset/delete, restoring replaces the current
   // data just as permanently, so it earns the same offer of a backup first.
   await maybeBackupBeforeWipe();
   try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope }); }
@@ -6382,7 +6382,7 @@ let clipCount = 0; // number of collected clipboard items currently waiting in t
 function updateClipBadge() {
   const btn = $("clip-btn");
   if (!btn) return;
-  // The icon stays while the watcher runs — or always, if the user asked to keep
+  // The icon stays while the watcher runs, or always, if the user asked to keep
   // the paused buttons around (expert: pausedIcons).
   btn.classList.toggle("hidden", !optFlag("clipWatcher") && !optFlag("pausedIcons"));
   const tgl = $("clip-toggle");
@@ -6465,11 +6465,11 @@ function syncModalImageUi(mode) {
   const { image, showImage, copyImage, filePath, iconPath } = modalState;
   const kind = filePath ? mediaKind(filePath) : "";
   const iconKind = !image && iconPath ? mediaKind(iconPath) : "";
-  // Any media file previews straight from its path (image/gif/video) — so an
+  // Any media file previews straight from its path (image/gif/video), so an
   // image still shows even when the backend preview re-encode returned nothing.
   const fileMedia = !image && !iconKind && !!kind;
   const hasPreview = !!image || !!iconKind || fileMedia;
-  // Image and file prompts have no text field — the name doubles as the copy text.
+  // Image and file prompts have no text field, the name doubles as the copy text.
   // Plain text prompts expose it on create (review before saving) and edit.
   const textVisible = (mode === "edit" || mode === "create") && !copyImage && !filePath;
   // Full-height dialog only when editing a text prompt (max textarea space).
@@ -6545,7 +6545,7 @@ function syncModalImageUi(mode) {
     $("modal-file-icon").innerHTML = isPdf ? ICON_PDF : ICON_FILE;
     modal.fileName.textContent = filePath.split(/[\\/]/).pop();
     modal.fileName.title = filePath;
-    // 83: shown 1-based (page 1, 2, ...) — pdfPage itself stays the 0-based index
+    // 83: shown 1-based (page 1, 2, ...), pdfPage itself stays the 0-based index
     // pdf_preview expects, so the two never need converting anywhere else.
     modal.pdfPage.classList.toggle("hidden", !isPdf);
     if (isPdf) modal.pdfPage.value = String((modalState?.pdfPage || 0) + 1);
@@ -6604,7 +6604,7 @@ async function startFileCreate() {
   });
 }
 
-// Right click: take a file from the clipboard (not text) — a copied file, or a
+// Right click: take a file from the clipboard (not text), a copied file, or a
 // copied image (screenshot) kept as a new file.
 async function startFileFromClipboard() {
   await withDialog(async () => {
@@ -6632,7 +6632,7 @@ function closeModal() {
 // `icon` puts an SVG above the title, `input` turns it into a one-field prompt
 // (then it resolves to the entered string, or null when dismissed).
 let confirmCleanup = null;
-// `checkboxes`: [{key, label, checked}] — rendered into #confirm-checkbox-row,
+// `checkboxes`: [{key, label, checked}], rendered into #confirm-checkbox-row,
 // read back by the caller via document.getElementById(`confirm-cb-${key}`) once
 // the promise resolves true (the return value itself stays plain bool/string, so
 // no existing `if (!ok) return` caller needs to change). At least one must stay
@@ -6706,7 +6706,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     field.addEventListener("keydown", onKey);
     eye.addEventListener("click", onEye);
     // Escape and the stale-dialog sweep both come through here, so they must map
-    // their answer exactly like Cancel does — a prompt with an input field owes its
+    // their answer exactly like Cancel does, a prompt with an input field owes its
     // caller null, never false.
     confirmCleanup = finish;
     (input ? field : ok).focus();
@@ -6751,7 +6751,7 @@ async function confirmModal() {
   if (!modalState || modalSaving) return;
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
-  // 34: a {#{ }#} with no name inside never becomes a fillable variable — warn now,
+  // 34: a {#{ }#} with no name inside never becomes a fillable variable, warn now,
   // while it is still one click away from being fixed, instead of after it is saved.
   if (hasEmptyVarToken(modal.text.value)) {
     const proceed = await confirmDialog({
@@ -6779,7 +6779,7 @@ async function confirmModal() {
   const hotkey = modalState.hotkey || "";
   const hotkeyPaste = hotkey ? (modalState.hotkeyPaste || "") : "";
   const pdfPage = modalState.pdfPage || 0;
-  // 9: double-click on an empty cell opened this dialog for that exact spot — the
+  // 9: double-click on an empty cell opened this dialog for that exact spot, the
   // backend's own first-free-cell placement would otherwise ignore it.
   const targetCell = modalState.targetCell;
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
@@ -6822,7 +6822,7 @@ async function confirmModal() {
   // was sent means the OS refused the combination between the check and the save.
   if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
   // P89: the same near-duplicate check the import path already runs, now also
-  // after creating a prompt by hand — before closeModal() clears modalState.
+  // after creating a prompt by hand, before closeModal() clears modalState.
   const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
   const wasEdit = modalState.mode === "edit";
   closeModal();
@@ -6830,7 +6830,7 @@ async function confirmModal() {
   if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
   pollMissingFiles(); // a replaced file clears the error immediately
   if (!libraryEl.classList.contains("hidden")) {
-    // 17: an edit MAY have just changed this prompt's "last edited" rank — the
+    // 17: an edit MAY have just changed this prompt's "last edited" rank, the
     // library stayed open underneath the modal, so the usual refresh-on-open
     // (library-btn click) never fired for it.
     if (wasEdit && flag("promptHistory")) await refreshLastEdited();
@@ -6844,7 +6844,7 @@ async function confirmModal() {
 // cancel before anything is saved. Placement then follows the regular create path.
 // A stored prompt as the editor's fields. Both "edit" and "duplicate" go through
 // here so a newly added prompt field can never reach one and be forgotten in the
-// other — each caller then overrides only what genuinely differs between them.
+// other, each caller then overrides only what genuinely differs between them.
 function promptToModal(p) {
   const kind = p.file_path ? mediaKind(p.file_path) : "";
   return {
@@ -7007,7 +7007,7 @@ function renderTagChips() {
 }
 
 // P25: the 3 most-used tags across the library, minus ones already on this
-// prompt — click to add without typing.
+// prompt, click to add without typing.
 function renderTagQuickAdd() {
   const box = $("modal-tag-quickadd");
   if (!box || !modalState) return;
@@ -7047,7 +7047,7 @@ function addTagToModal(raw) {
   return true;
 }
 
-// `all` ignores what is typed — that is what the chevron next to the field opens,
+// `all` ignores what is typed, that is what the chevron next to the field opens,
 // so an existing tag can be picked without knowing its first letters.
 function renderTagSuggest(all = false) {
   const input = $("modal-tag-input");
@@ -7057,12 +7057,12 @@ function renderTagSuggest(all = false) {
   const hits = allTags()
     .filter((n) => !taken.has(tagKey(n)) && (!q || tagKey(n).includes(q)))
     .slice(0, all ? 40 : 8);
-  // Typing with no match just closes — a dropdown that keeps saying "nothing" while
+  // Typing with no match just closes, a dropdown that keeps saying "nothing" while
   // the user is still typing a NEW tag is in the way.
   if (!hits.length && !all) { closeTagSuggest(); return; }
   tagSuggest.innerHTML = "";
   if (!hits.length) {
-    // Opened by the handle with nothing to offer. This belongs IN the dropdown —
+    // Opened by the handle with nothing to offer. This belongs IN the dropdown,
     // a toast for "there is nothing here yet" reads like an error and is gone
     // before it is understood.
     const empty = document.createElement("div");
@@ -7130,7 +7130,7 @@ wireTagInput();
 
 // ---- Library: filter chips + manager ----
 // 135: the bar (and every chip's click listener) doesn't change while the user is
-// just typing a search query — skip rebuilding it unless the tag set or the active
+// just typing a search query, skip rebuilding it unless the tag set or the active
 // filter actually changed since the last render.
 let _lastTagFilterSig = null;
 function renderTagFilter() {
@@ -7151,7 +7151,7 @@ function renderTagFilter() {
   if (sig === _lastTagFilterSig) return;
   _lastTagFilterSig = sig;
   bar.innerHTML = "";
-  // P26: "Manage tags" stays reachable even before the first tag exists — the
+  // P26: "Manage tags" stays reachable even before the first tag exists, the
   // bar used to disappear entirely with nothing to filter by, hiding the only
   // way to find out tags exist at all.
   if (names.length) {
@@ -7212,7 +7212,7 @@ function renderTagManager() {
     list.appendChild(empty);
     return;
   }
-  // One backend pass per action, then a full state refetch — a tag on hundreds of
+  // One backend pass per action, then a full state refetch, a tag on hundreds of
   // prompts is rewritten in the store, never prompt by prompt from here.
   const refresh = async () => {
     await renderGrid();
@@ -7280,7 +7280,7 @@ function renderTagManager() {
 
 $("tag-modal-close")?.addEventListener("click", closeTagManager);
 // P27: one click assigns the palette to every tag that has no color yet, in the
-// order the palette lists them — round-robin once past the end.
+// order the palette lists them, round-robin once past the end.
 $("tag-colorize")?.addEventListener("click", async () => {
   const palette = COLORS.slice(1);
   if (!palette.length) return;
@@ -7314,7 +7314,7 @@ const THEME_VAR_LABELS = {
 };
 
 // The theme tokens are authored as hex or rgba(), and a color picker needs hex.
-// Alpha is dropped — only a value the user actually overrides is ever stored.
+// Alpha is dropped, only a value the user actually overrides is ever stored.
 function cssColorToHex(value) {
   const v = String(value || "").trim();
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
@@ -7337,7 +7337,7 @@ function cssColorToHex(value) {
 }
 
 // The colours a base theme resolves to. Only :root carries the theme rules, so the
-// probe runs on the document element itself and restores its state right away —
+// probe runs on the document element itself and restores its state right away,
 // no frame is painted in between, so nothing flickers.
 function baseThemeColors(base) {
   const root = document.documentElement;
@@ -7358,7 +7358,7 @@ function baseThemeColors(base) {
 let themeDraft = null;
 let themeRestore = null;
 // D75: the draft as it looked the moment the editor opened, so "Revert changes"
-// can undo everything done in THIS session without closing the editor — a
+// can undo everything done in THIS session without closing the editor, a
 // separate snapshot from themeRestore, which is the real window's pre-edit
 // theme (used only when the whole editor is cancelled).
 let themeDraftStart = null;
@@ -7378,14 +7378,14 @@ function draftFrom(theme) {
 }
 
 // Live preview. Writing the variables costs a style recalc, which the browser
-// already coalesces into the next frame — no grid rebuild, no IPC, so dragging a
+// already coalesces into the next frame, no grid rebuild, no IPC, so dragging a
 // colour stays smooth without an extra throttle in front of it.
 function previewThemeDraft() {
   if (!themeDraft) return;
   document.documentElement.setAttribute("data-theme", themeDraft.base);
   applyThemeVars(themeDraft.vars);
   // The pills and folders are their own windows and only ever hear the backend's
-  // theme-changed event, which fires on a real switch — without this the preview
+  // theme-changed event, which fires on a real switch, without this the preview
   // would stop at the main window's edge while they kept the old colours.
   broadcastTheme(themeDraft.base, themeDraft.vars);
 }
@@ -7610,7 +7610,7 @@ function fillThemeSelect() {
     sel.appendChild(opt);
   }
   sel.value = settings.theme || "system";
-  // A parked custom theme (feature off) has no entry — show the base it renders as.
+  // A parked custom theme (feature off) has no entry, show the base it renders as.
   if (!sel.value) sel.value = themeBase(settings.theme);
 }
 
@@ -7630,7 +7630,7 @@ $("theme-modal-close")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-cancel")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-revert")?.addEventListener("click", revertThemeDraft);
 // 76: export the currently selected SAVED theme (an unsaved draft has no id to
-// look up on the backend, hence the button hides for one — see renderThemeEditor).
+// look up on the backend, hence the button hides for one, see renderThemeEditor).
 $("theme-edit-export")?.addEventListener("click", async () => {
   if (!themeDraft?.id) return;
   try {
@@ -7715,7 +7715,7 @@ function videoSrc(p) {
   return "";
 }
 
-// Only the videos currently scrolled into view play — keeps a long list cheap.
+// Only the videos currently scrolled into view play, keeps a long list cheap.
 // Library and journal each get their own observer so opening one panel never
 // pauses the other's still-mounted video thumbnails.
 let _libObs = null;
@@ -7740,7 +7740,7 @@ function thumbDot(p) {
 // Shared row preview for library + journal: a looping muted inline video for
 // video prompts, an image for image/gif/stored-image prompts, else a color dot.
 // `cache` (132) reuses the element across re-renders of the SAME panel instead of
-// re-decoding the same base64 blob on every keystroke — appending an already-
+// re-decoding the same base64 blob on every keystroke, appending an already-
 // mounted node just reparents it, so an id whose thumb type stays the same never
 // gets a fresh <img>/<video>.
 function thumbEl(p, cache) {
@@ -7864,7 +7864,7 @@ function computeLibSearchScore(p) {
   if (best) return { score: best, fuzzy: false };
   if (!flag("fuzzySearch")) return { score: 0, fuzzy: false };
   // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
-  // clean words (scripts without spaces, e.g. CJK, stay one token — substring wins).
+  // clean words (scripts without spaces, e.g. CJK, stay one token, substring wins).
   const qWords = fuzzyTokens(q);
   if (!qWords.length) return { score: 0, fuzzy: false };
   for (const [val, w] of fields) {
@@ -7883,8 +7883,8 @@ function computeLibSearchScore(p) {
 function fuzzyTokens(s) {
   return s.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 }
-// A query word matches a field word by substring, whole-word edit distance, or —
-// for longer field words — edit distance against its leading prefix ("cde"→"code",
+// A query word matches a field word by substring, whole-word edit distance, or,
+// for longer field words, edit distance against its leading prefix ("cde"→"code",
 // "cde"→"codebase").
 function fuzzyWordHit(qw, vw, max) {
   if (vw.includes(qw)) return true;
@@ -7939,7 +7939,7 @@ function setLibColor(color) {
   setActiveFilter($("library-colors"), ".lib-color", "color", color);
 }
 
-// 17: "last edited" per prompt — from prompt_versions (a version row is only
+// 17: "last edited" per prompt, from prompt_versions (a version row is only
 // ever written on a real name/text change, see update_prompt), refetched
 // whenever the library opens or an edit lands while it's already open. A
 // prompt absent from the map has no version row (history off, or never
@@ -7961,7 +7961,7 @@ function sortLibraryItems(items) {
   const mode = libSortMode();
   const q = libQuery.trim();
   const nameOf = (p) => libLabel(p).toLowerCase();
-  // One Collator for the whole sort instead of one per pairwise comparison (135) —
+  // One Collator for the whole sort instead of one per pairwise comparison (135),
   // localeCompare(str, locale) builds a fresh one internally on every call.
   const collator = new Intl.Collator(LANG);
   const byName = (a, b) => collator.compare(nameOf(a), nameOf(b));
@@ -7971,7 +7971,7 @@ function sortLibraryItems(items) {
     return;
   }
   if (mode === "name") { items.sort(byName); return; }
-  // Usage/recency desc; unused (0) fall last, ties resolve by name — all stable.
+  // Usage/recency desc; unused (0) fall last, ties resolve by name, all stable.
   if (mode === "mostUsed") {
     items.sort((a, b) => ((settings.usage?.[b.id] || 0) - (settings.usage?.[a.id] || 0)) || byName(a, b));
   } else if (mode === "recentUsed") {
@@ -8010,7 +8010,7 @@ function dropLibraryFront(closeBehind) {
 }
 function hideLibrary() {
   libraryEl.classList.add("hidden");
-  // Prompts may have been edited or deleted while the library was up — the
+  // Prompts may have been edited or deleted while the library was up, the
   // statistics underneath would otherwise still show the old numbers.
   if (dropLibraryFront(false)) renderStatsPanel($("stats-panel"));
   if (gridDirty) { gridDirty = false; renderGrid(true); }
@@ -8065,7 +8065,7 @@ function renderLibrary() {
     // F18: dim rows that only matched via the typo-tolerant tier.
     if (libQuery.trim() && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
     // F8: selection state (the checkbox itself is a CSS ::before, shown while the
-    // list carries the .selecting class — so toggling select mode never re-renders).
+    // list carries the .selecting class, so toggling select mode never re-renders).
     if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
     row.title = libSelectMode ? "" : t("copy");
 
@@ -8183,7 +8183,7 @@ function setLibSelectMode(on) {
   btn?.classList.toggle("active", on);
   btn?.setAttribute("aria-pressed", String(on));
   $("lib-batch-bar").classList.toggle("hidden", !on);
-  // Toggle the checkbox column via a class — no list rebuild (instant on 1000s).
+  // Toggle the checkbox column via a class, no list rebuild (instant on 1000s).
   $("library-list").classList.toggle("selecting", on);
   if (on) { buildBatchColors(); fillBatchViews(); }
   applyLibSelectionDom();
@@ -8199,7 +8199,7 @@ function toggleLibSelect(id, shift) {
     if (libSelected.has(id)) libSelected.delete(id); else libSelected.add(id);
   }
   libLastId = id;
-  applyLibSelectionDom(); // in-place class toggle — no full re-render (fast on 1000s)
+  applyLibSelectionDom(); // in-place class toggle, no full re-render (fast on 1000s)
   updateBatchBar();
 }
 // Reflect the current selection onto the visible rows without rebuilding the list.
@@ -8244,7 +8244,7 @@ function fillBatchViews(selId = "lib-batch-view") {
   if (settings.active_view) sel.value = settings.active_view;
 }
 
-// ---- 11: grid bulk selection — reuses the same batch_prompts backend, its own
+// ---- 11: grid bulk selection, reuses the same batch_prompts backend, its own
 // selection state and toolbar (folder tiles are excluded, see gridSelected). ----
 function toggleGridSelect(id) {
   if (gridSelected.has(id)) gridSelected.delete(id); else gridSelected.add(id);
@@ -8273,7 +8273,7 @@ function clearGridSelection() {
   applyGridSelectionDom();
   updateGridBatchBar();
 }
-// 104: addView is all-or-nothing on the backend now — a full target view rejects
+// 104: addView is all-or-nothing on the backend now, a full target view rejects
 // the whole batch with this one error string instead of silently dropping ids.
 function batchErrorToast(e) {
   toast(String(e).includes("view-full") ? t("gridFull") : String(e));
@@ -8296,13 +8296,13 @@ async function doGridBatch(action, extra = {}) {
   await renderGrid(true);
 }
 // A real move (not just "also in"): drop the current view's placement first, then
-// place into the target — matches the "a prompt lives in exactly one view"
+// place into the target, matches the "a prompt lives in exactly one view"
 // invariant everywhere else in the app relies on.
 async function doGridMove(targetViewId) {
   const ids = [...gridSelected];
   if (!ids.length || !targetViewId) return;
   try {
-    // 104: place into the target FIRST — addView is all-or-nothing (backend), so a
+    // 104: place into the target FIRST, addView is all-or-nothing (backend), so a
     // full target throws here and every id is still exactly where it was. Only once
     // the target accepted them all does dropping the source placement become safe.
     await invoke("batch_prompts", { ids, action: "addView", color: null, favorite: null, viewId: targetViewId });
@@ -8317,7 +8317,7 @@ async function doBatch(action, extra = {}) {
   if (!ids.length) return;
   const idset = new Set(ids);
   try {
-    // Backend now returns ONLY settings (no prompt echo) — so a batch over
+    // Backend now returns ONLY settings (no prompt echo), so a batch over
     // image-heavy prompts no longer re-serialises every base64 blob over IPC.
     settings = await invoke("batch_prompts", {
       ids, action,
@@ -8330,7 +8330,7 @@ async function doBatch(action, extra = {}) {
   if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
   else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
   else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
-  // The grid sits hidden behind the library modal — rebuilding it (a full fit-text
+  // The grid sits hidden behind the library modal, rebuilding it (a full fit-text
   // pass) is deferred until the library closes.
   gridDirty = true;
   if (action === "delete") {
@@ -8356,7 +8356,7 @@ async function batchExport(format) {
   }
 }
 
-// Copy a prompt, filling {#{variables}#} first when applicable — reserved names
+// Copy a prompt, filling {#{variables}#} first when applicable, reserved names
 // resolve silently, the rest go through the dialog. Returns false if the copy
 // failed or the user cancelled. The single copy entry point for every path that
 // does not run the dialog's own double-click handling (grid, library, journal).
@@ -8407,8 +8407,8 @@ function syncLibraryCols() {
 // ---- Copy history & usage journal ----
 
 // One history entry, built like a library row on purpose: same thumbnail, same name
-// and text lines, same tag chips. What the history adds is the meta line — when it
-// was copied on the left, how often on the right — and a chip naming the type for
+// and text lines, same tag chips. What the history adds is the meta line, when it
+// was copied on the left, how often on the right, and a chip naming the type for
 // everything that is not plain text.
 function journalRow(p, meta, onClick) {
   const row = document.createElement("button");
@@ -8457,7 +8457,7 @@ function journalRow(p, meta, onClick) {
   }
   row.append(thumbEl(p, journalThumbCache), body);
   row.addEventListener("click", onClick);
-  // P55: edit straight from the history — same icon/pattern as the library row.
+  // P55: edit straight from the history, same icon/pattern as the library row.
   const edit = document.createElement("span");
   edit.className = "icon-btn lib-edit";
   edit.title = t("edit");
@@ -8694,12 +8694,12 @@ async function runImport() {
   const path = await runImportPreview();
   if (!path) return;
   try {
-    // No withDialog here — import_prompts re-reads the already-picked file, it
+    // No withDialog here, import_prompts re-reads the already-picked file, it
     // never opens a native dialog itself (that guard is preview_import's job).
     const count = await invoke("import_prompts", { path });
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
-    // Imported preferences apply on the spot — no restart needed.
+    // Imported preferences apply on the spot, no restart needed.
     LANG = resolveLang(settings.language);
     applyI18n();
     fillSizeSelects();
@@ -8794,7 +8794,7 @@ async function offerTakeover() {
   if (adopt) await reloadEverything();
 }
 
-// Delete all DATA (prompts, versions, copy history, clip inbox) — settings kept.
+// Delete all DATA (prompts, versions, copy history, clip inbox), settings kept.
 async function deleteData() {
   const btn = $("delete-data");
   if (!armButton(btn, t("deleteDataConfirm"))) {
@@ -8815,7 +8815,7 @@ async function maybeBackupBeforeWipe() {
   try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); } catch { /* best-effort */ }
 }
 
-// Reset all SETTINGS to defaults (theme, views, toggles, expert values) — prompts kept.
+// Reset all SETTINGS to defaults (theme, views, toggles, expert values), prompts kept.
 async function resetSettings() {
   const btn = $("reset-settings");
   if (!armButton(btn, t("resetSettingsConfirm"))) {
@@ -8886,7 +8886,7 @@ function bind() {
     mdEditing = editing;
     syncMdUi(true);
     const to = editing ? modal.text : modal.mdPreview;
-    if (editing) to.focus(); // never behind a frame callback — see scheduleMdPreview
+    if (editing) to.focus(); // never behind a frame callback, see scheduleMdPreview
     // Only the scroll position waits for layout; losing it costs nothing.
     requestAnimationFrame(() => {
       const s = to.scrollHeight - to.clientHeight;
@@ -8896,7 +8896,7 @@ function bind() {
   modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview")) mdSwap(true); });
   modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview")) mdSwap(true); });
   // Swapping back changes the height of the block, so doing it on the blur that a
-  // mousedown produces moves whatever the user is halfway through clicking — the
+  // mousedown produces moves whatever the user is halfway through clicking, the
   // click then lands somewhere else, or nowhere. Wait for the pointer to come up.
   let swapAfterClick = false;
   let pointerIsDown = false;
@@ -9036,7 +9036,7 @@ function bind() {
     syncModalImageUi(modalState.mode);
   });
 
-  // 83: re-requests the preview at the chosen page and saves it into pdf_page —
+  // 83: re-requests the preview at the chosen page and saves it into pdf_page,
   // the field only ever shows for a PDF attachment (syncModalImageUi).
   modal.pdfPage.addEventListener("change", async () => {
     if (!modalState) return;
@@ -9059,7 +9059,7 @@ function bind() {
   });
 
   // F26 pipette: the same frozen-desktop overlay, in colour-pick mode. The result
-  // is a clipboard value only — no prompt is created and nothing enters the history.
+  // is a clipboard value only, no prompt is created and nothing enters the history.
   $("picker-btn").addEventListener("click", () => {
     invoke("open_picker").catch((err) => toast(String(err)));
   });
@@ -9072,7 +9072,7 @@ function bind() {
   // click toggles it; a quick double-click latches it "always on".
   $("chain-btn").addEventListener("click", onChainClick);
   // A paste ends chain mode (unless latched). Ctrl/Cmd+V is only seen while we're
-  // focused; leaving the window to paste elsewhere blurs it — both finalize (the
+  // focused; leaving the window to paste elsewhere blurs it, both finalize (the
   // clipboard already holds the chain). Clicking the chain button is the manual off.
   document.addEventListener("keydown", (e) => {
     if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
@@ -9088,7 +9088,7 @@ function bind() {
     else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
   });
   // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
-  // on while Shift is down and off again when released — unless a prompt was picked
+  // on while Shift is down and off again when released, unless a prompt was picked
   // into the chain during the hold, in which case it latches "always on" so the
   // user can keep building the chain from there.
   let shiftChain = false;
@@ -9105,7 +9105,7 @@ function bind() {
     if (!chainSel.length) { setChainMode(false); return; }
     if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
   });
-  // Keep the chain armed while a variable dialog is open — switching windows to
+  // Keep the chain armed while a variable dialog is open, switching windows to
   // look something up must not abort the chain (it leaves the popup stranded). A
   // latched chain ignores blur entirely (that is the point of the lock).
   window.addEventListener("blur", () => { if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false); });
@@ -9314,7 +9314,7 @@ function bind() {
       setLibSelectMode(false);
     }
   }, true);
-  // 11: grid batch toolbar wiring — same shape as the library's, its own state.
+  // 11: grid batch toolbar wiring, same shape as the library's, its own state.
   $("grid-batch-none").addEventListener("click", clearGridSelection);
   $("grid-batch-colors").addEventListener("click", (e) => {
     const b = e.target.closest(".lib-color");
@@ -9346,7 +9346,7 @@ function bind() {
   $("trash-clear").addEventListener("click", () => emptyTrashAll());
   // F21 clipboard inbox.
   $("clip-btn").addEventListener("click", openClipInbox);
-  // Pause/resume collecting straight from the inbox — same switch as the expert one.
+  // Pause/resume collecting straight from the inbox, same switch as the expert one.
   $("clip-toggle").addEventListener("click", async () => {
     const on = !optFlag("clipWatcher");
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
@@ -9361,7 +9361,7 @@ function bind() {
   $("clip-clear").addEventListener("click", async () => { await invoke("clip_inbox_clear").catch((e) => toast(String(e))); refreshClipInbox(); });
   // Emergency wipe: clears the live inbox AND scrubs clip_inbox rows out of every
   // rotating backup snapshot. Irreversible and touches every backup, so it asks
-  // twice — the second dialog spells out that it cannot be undone.
+  // twice, the second dialog spells out that it cannot be undone.
   $("clip-purge-backups").addEventListener("click", async () => {
     const step1 = await confirmDialog({
       title: t("clipPurgeBackupsTitle"),
@@ -9539,7 +9539,7 @@ function bind() {
       toast(t("hotkeySet"));
     } catch (err) {
       // A refused combination changed nothing in the backend either, so the field
-      // keeps showing the hotkey that is really registered — with the reason why.
+      // keeps showing the hotkey that is really registered, with the reason why.
       $("opt-hotkey").value = prettyAccel(settings.hotkey);
       toast(HOTKEY_ERRORS[String(err)] ? hotkeyMessage(String(err)) : t("hotkeyFail"));
     }
@@ -9571,7 +9571,7 @@ function bind() {
     applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
   });
 
-  // Language: persist, then re-render every translated string in place —
+  // Language: persist, then re-render every translated string in place,
   // no restart, no reload.
   $("lang-select").addEventListener("change", async (e) => {
     await invoke("set_language", { lang: e.target.value });
@@ -9720,7 +9720,7 @@ function bind() {
     else if (!$("clip-modal").classList.contains("hidden")) $("clip-modal").classList.add("hidden");
     else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
     else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
-    // A library raised over the backups dialog is the topmost thing — it closes first.
+    // A library raised over the backups dialog is the topmost thing, it closes first.
     else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
     else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
     else if (!journalEl.classList.contains("hidden")) journalEl.classList.add("hidden");
@@ -9734,7 +9734,7 @@ function bind() {
   const updateVersion = $("update-version");
   // The status line (left of the button) is the version by default, and switches to
   // "Update to X available" once an update is found (manual OR auto). The button text
-  // never changes — it always offers a fresh manual check.
+  // never changes, it always offers a fresh manual check.
   const offerUpdate = (info) => {
     updateInfo = info;
     updateVersion.textContent = t("updateAvailableBtn").replace("{v}", info.version);
@@ -9758,8 +9758,8 @@ function bind() {
     install: $("update-modal-install"),
     close: $("update-modal-close"),
   };
-  // The release body arrives as Markdown. Render the part release notes actually use
-  // — headings, bullets, tables, bold and code — instead of dumping the raw source
+  // The release body arrives as Markdown. Render the part release notes actually use:
+  // headings, bullets, tables, bold and code, instead of dumping the raw source
   // with its "###" and "**" into a monospace box. Everything is built node by node:
   // the text comes from the network and must never reach innerHTML.
   const renderNotes = (box, text, version) => {
@@ -9842,7 +9842,7 @@ function bind() {
     updateBtn.disabled = false;
   });
   // Silently check for updates at launch and surface any in the status line. Only
-  // when update checking is enabled at all — the normal setting is the master switch.
+  // when update checking is enabled at all, the normal setting is the master switch.
   if (flag("checkUpdateOnStart") && settings.auto_update !== false) {
     invoke("check_update").then((info) => { if (info?.available) offerUpdate(info); }).catch(() => {});
   }
@@ -9889,26 +9889,26 @@ function bind() {
   listen("theme-changed", (e) => applyTheme(e.payload?.theme, e.payload?.vars));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
-  // F20: a prompt's global hotkey was pressed — run the same activation a tile does.
+  // F20: a prompt's global hotkey was pressed, run the same activation a tile does.
   // Whether it also pastes is the hotkey's OWN setting, falling back to the global one.
   listen("prompt-hotkey", (e) => {
     const id = String(e.payload);
     const mode = prompts.find((p) => p.id === id)?.hotkey_paste || "";
     onPromptHotkey(id, mode ? mode === "paste" : optFlag("promptHotkeyPaste"));
   });
-  // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
+  // F23: a quick-copy entry in the tray menu, same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
-  // P92: the very first close-to-tray — backend held the window open, we explain
+  // P92: the very first close-to-tray, backend held the window open, we explain
   // the tray menu, then hide it ourselves once the hint is dismissed.
   listen("first-tray-hide", async () => {
     await infoDialog(t("trayHintTitle"), t("trayHintMsg"));
     try { await window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.(); } catch { /* no-op */ }
   });
   // P60: the automatic backup has no frontend call site of its own to toast
-  // from — the backend says so once the snapshot is really on disk.
+  // from, the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
   // 113: save_prompts/save_trash used to fail silently to the user when both the DB
-  // and the JSON fallback failed (disk full, permissions). One toast per event —
+  // and the JSON fallback failed (disk full, permissions). One toast per event,
   // a stuck disk would otherwise spam this on every edit.
   listen("persist-failed", () => toast(t("persistFailed")));
   // The standalone fill-in window answered (null = cancelled or closed).
@@ -10013,7 +10013,7 @@ function setupDragDrop() {
       if (path) openFileCreate(path).catch((err) => toast(String(err)));
     }
   }).catch?.(() => {});
-  // Text dropped from another app (no file paths) — native handler ignores it.
+  // Text dropped from another app (no file paths), native handler ignores it.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => {
     if (!flag("dragDrop")) return;
@@ -10042,7 +10042,7 @@ async function applySettingsCore() {
   applyTheme(await invoke("current_theme").catch(() => settings.theme));
 }
 
-// The rest of applying loaded settings — flags, toolbar, the grid itself and the
+// The rest of applying loaded settings, flags, toolbar, the grid itself and the
 // settings-dialog controls. Split from applySettingsCore() because init() has to
 // wire event handlers in between; reloadEverything() calls both back to back.
 async function applySettingsUi() {
@@ -10079,7 +10079,7 @@ async function init() {
     console.error(e);
     try { toast(String((e && e.message) || e)); } catch (_) {}
   } finally {
-    // Reveal only after the first fitted paint — the user never sees text sizing.
+    // Reveal only after the first fitted paint, the user never sees text sizing.
     // A hidden WebView2 window can stop producing frames, so a timer backs the
     // rAF chain up: showing late beats never showing at all. Whichever wins, the
     // reveal runs exactly once.

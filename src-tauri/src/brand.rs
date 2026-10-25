@@ -1,9 +1,9 @@
-// Product identity. GENERATED — run `node tools/brand.js <brand>` to change it;
+// Product identity. GENERATED, run `node tools/brand.js <brand>` to change it;
 // the values live in brands/<brand>.json. Nothing else in the Rust code may spell
 // the product name.
 //
 // These strings decide where an installation keeps its data and how Windows knows
-// the app. Changing one strands every existing install — brand_values_are_pinned in
+// the app. Changing one strands every existing install, brand_values_are_pinned in
 // lib.rs asserts them for exactly that reason.
 
 pub const DISPLAY_NAME: &str = "Prompt Saver";

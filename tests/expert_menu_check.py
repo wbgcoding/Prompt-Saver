@@ -5,7 +5,7 @@ Catches the mistakes that are invisible until a user opens the menu:
   * the same setting listed in two groups (renders twice),
   * a `gate:` that points at a flag that does not exist,
   * a setting that exists but is not reachable from any tab,
-  * a setting that depends on another feature but carries no gate — the rule is
+  * a setting that depends on another feature but carries no gate, the rule is
     absolute: nothing dependent may stay on screen while its parent is off,
   * a gate whose parent flag lives in a different group (it would render far away
     from the toggle it belongs to, or not at all).
@@ -26,7 +26,7 @@ SRC = "\n".join(l for l in SRC.splitlines() if not l.lstrip().startswith("//"))
 
 # Settings deliberately absent from the tab list: normal settings in the settings
 # dialog, and the ones the backups dialog renders itself (renderBackupPanel /
-# renderStatsPanel, opened from settings — not from the expert menu).
+# renderStatsPanel, opened from settings, not from the expert menu).
 NOT_IN_EXPERT = {
     "autoPaste",
     # Backup settings, rendered by renderBackupPanel.
@@ -40,7 +40,7 @@ NOT_IN_EXPERT = {
 # must carry ("!x" = only while x is OFF). Maintained by hand on purpose: whether one
 # feature needs another is a product decision, not something text matching can guess.
 # Adding a dependent setting without adding it here (and gating it) is the mistake
-# this file exists to catch — so add both together.
+# this file exists to catch, so add both together.
 DEPENDENCIES = {
     # Creating prompts
     "storeFiles": "fileAttach",
@@ -265,7 +265,7 @@ for key, gate in sorted(declared.items()):
         problems.append(f"gate: '{gate}' (on '{key}') points at an unknown flag")
     elif key in group_of and parent in group_of and group_of[key] != group_of[parent]:
         problems.append(f"gate: '{key}' sits in {group_of[key]} but its parent "
-                        f"'{parent}' is in {group_of[parent]} — keep them together")
+                        f"'{parent}' is in {group_of[parent]}, keep them together")
     if key == parent:
         problems.append(f"gate: '{key}' gates itself")
 
@@ -279,7 +279,7 @@ for gate in re.findall(r'gate:\s*"([^"]+)"', tabs):
         problems.append(f"gate: '{gate}' in a tab points at an unknown flag")
 
 # The "(default off)" suffix is appended at render time from the `defaultOff`
-# string, so no label may carry it inline — that would double up or, worse, stick
+# string, so no label may carry it inline, that would double up or, worse, stick
 # to a feature that is on by default.
 i18n = (Path(__file__).resolve().parents[1] / "ui" / "i18n.js").read_text(encoding="utf-8")
 for line in i18n.splitlines():
@@ -287,7 +287,7 @@ for line in i18n.splitlines():
         problems.append(f"i18n: label carries the default-off suffix inline: {line.strip()[:70]}")
 
 # A key listed in EXPERT_TIPS but without a tip<Key> string shows no tooltip at
-# all — withTip() drops it silently, so nothing on screen says the string is
+# all, withTip() drops it silently, so nothing on screen says the string is
 # missing. Listing a key is a promise to write the explanation.
 tips = re.search(r"const EXPERT_TIPS = \[(.*?)\];", SRC, re.S)
 if not tips:

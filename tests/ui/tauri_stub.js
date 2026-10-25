@@ -99,7 +99,7 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // F17: exactly one prompt carries a private note, so the tooltip section and the
   // library search can be checked against a prompt that has none. "Moonshot" appears
   // in no name or body, so a search hit can only have come from the note.
-  notes: i === 0 ? "Moonshot idea — ask legal first.\nRewrite the ending." : "",
+  notes: i === 0 ? "Moonshot idea, ask legal first.\nRewrite the ending." : "",
   // F20: one prompt ships with a bound accelerator so the editor row has something
   // to display; the rest are free, so a capture can be checked against them.
   hotkey: i === 0 ? "CommandOrControl+Shift+9" : "",
@@ -111,7 +111,7 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
 const LAYOUT = {};
 PROMPTS.forEach((p, i) => { LAYOUT[p.id] = [i % 4, Math.floor(i / 4)]; });
 
-// 91: trash — three items so restore, single purge and empty-all each get their own
+// 91: trash, three items so restore, single purge and empty-all each get their own
 // target; t2 is anonymous, exercising the libLabel() fallback.
 const TRASH = [
   { id: "t1", name: "Deleted idea", text: "Body of the deleted prompt.", trashed_at: 1750000000, color: "", tags: [], notes: "", hotkey: "", file_path: "" },
@@ -126,7 +126,7 @@ const SETTINGS = {
   always_on_top: false, hotkey: "CommandOrControl+Shift+P", auto_update: true, skipped_versions: [],
   // Tags, custom themes, view groups and private notes ship off; the stub turns them
   // on so the smoke run covers that UI too. The Markdown preview is deliberately NOT
-  // listed — it ships on, and the run proves that.
+  // listed, it ships on, and the run proves that.
   // F25 is on too, so the expert menu renders its gated sliders and the folder
   // window has something to draw.
   // F26 is on too, so the pipette shows in the composer bar and its gated expert
@@ -153,7 +153,7 @@ const SETTINGS = {
   active_view: "home",
 };
 // A member has no cell of its own while it sits in a folder (mirrors the backend
-// dropping it on join) — without this, dissolve would look like it worked even with
+// dropping it on join), without this, dissolve would look like it worked even with
 // a stub that never restored one, because the stale index-based cell was still there.
 for (const f of SETTINGS.tile_folders) for (const m of f.members) delete LAYOUT[m];
 
@@ -226,7 +226,7 @@ const RESULTS = {
   // 76: simulates the OS save dialog succeeding; a real "canceled" rejection is
   // never exercised here, since there is no real dialog for the harness to cancel.
   export_custom_theme: () => null,
-  // 76: simulates picking a file and it parsing into a new saved theme — same
+  // 76: simulates picking a file and it parsing into a new saved theme, same
   // shape save_custom_theme returns, so the caller's refresh path is identical.
   import_custom_theme: () => {
     const id = "ct" + (SETTINGS.custom_themes.length + 1);
@@ -239,11 +239,11 @@ const RESULTS = {
   current_data_dir: () => "C:\\Data",
   default_screenshot_dir: () => "C:\\Pictures",
   // One snapshot carries its prompt count and names (61), one is from an older
-  // build and has neither — the list has to show both without a gap in the row.
+  // build and has neither, the list has to show both without a gap in the row.
   open_backups_folder: () => null,
-  // 17: p3 edited most recently, then p1, then p9 — everything else has no
+  // 17: p3 edited most recently, then p1, then p9, everything else has no
   // version row (never content-edited, or history was off) and sorts last.
-  // None of these three are favorited (favorite: i % 5 === 0) — favorites float
+  // None of these three are favorited (favorite: i % 5 === 0), favorites float
   // to the top independently of this sort, which would otherwise confuse the test.
   last_edited_map: () => ({ p3: 3000, p1: 2000, p9: 1000 }),
   // 88: two new prompts, one duplicate of something already in the library.
@@ -270,7 +270,7 @@ const RESULTS = {
   missing_files: () => [],
   has_backup_password: () => true,
   // One real group, so the duplicate cards actually render and the layout scan has
-  // something to measure — an empty list only ever proved the "none found" line.
+  // something to measure, an empty list only ever proved the "none found" line.
   find_duplicates: () => [{
     score: 0.94,
     members: [
@@ -299,12 +299,12 @@ const RESULTS = {
       "",
       "### Highlights",
       "",
-      "- **Bold lead** — followed by ordinary text.",
+      "- **Bold lead**, followed by ordinary text.",
       "- A bullet with `code` and a [link](https://example.invalid).",
     ].join("\n"),
   }),
   get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
-  // 91: trash — restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
+  // 91: trash, restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
   // reflects real effects, the way batch_prompts already mirrors "color" onto PROMPTS.
   list_trash: () => JSON.parse(JSON.stringify(TRASH)),
   restore_prompt: (a) => {
@@ -422,7 +422,7 @@ const RESULTS = {
     SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.id !== (a && a.id));
     return clone();
   },
-  // F27 grid folders: same answers as the backend — the settings blob, invariants
+  // F27 grid folders: same answers as the backend, the settings blob, invariants
   // applied (no prompt in two folders, under two members dissolves).
   save_tile_folder: (a) => {
     const members = (a && a.members) || [];
@@ -453,7 +453,7 @@ const RESULTS = {
     SETTINGS.tile_folders = SETTINGS.tile_folders.filter((x) => x.id !== (a && a.id));
     const view = f && SETTINGS.views.find((v) => v.id === f.view_id);
     if (view) {
-      // Other folders still on this view keep their own cell — a dissolved member
+      // Other folders still on this view keep their own cell, a dissolved member
       // must not be handed one of those, or it saves fine but never renders.
       const otherCells = SETTINGS.tile_folders.filter((g) => g.view_id === f.view_id).map((g) => g.cell);
       for (const member of f.members) {
@@ -479,10 +479,10 @@ const RESULTS = {
   copy_text: (a) => { window.__LAST_COPY__ = a && a.text; return true; },
   clipboard_text: () => "CLIPTEXT",
   // Always offer the portable take-over so the dialog is exercised on every run.
-  takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Example-Store",
+  takeover_offer: () => "C:\\Users\\User\\AppData\\Roaming\\Example-Store",
   takeover_apply: () => null,
   pick_backup_file: () => "C:\\Backups\\Backup 2026-07-25.psb",
-  // Refuses until a password is supplied — drives the retry prompt.
+  // Refuses until a password is supplied, drives the retry prompt.
   import_all: (a) => {
     if (!a || !a.password) throw new Error("password-required");
     if (a.password !== "letmein") throw new Error("wrong password or corrupt backup");
@@ -573,7 +573,7 @@ const noopWindow = {
 };
 
 // Backend events are kept so the probe can deliver one (window.__FIRE__), which is
-// the only way to exercise a code path the backend normally starts — e.g. a prompt
+// the only way to exercise a code path the backend normally starts, e.g. a prompt
 // hotkey being pressed while the app sits in the tray.
 const LISTENERS = {};
 window.__FIRE__ = (event, payload) => {

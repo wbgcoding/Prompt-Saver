@@ -7,16 +7,16 @@ Unlicense/CC0) that allow redistribution in a binary with attribution.
 
 ## Bundled binaries
 
-- **PDFium** — © The PDFium Authors, licensed under **BSD-3-Clause**. Compiled into
+- **PDFium**: © The PDFium Authors, licensed under **BSD-3-Clause**. Compiled into
   the executable and unpacked to a temporary folder when a PDF preview is first
   rendered. Source and full license text:
   https://github.com/bblanchon/pdfium-binaries
-- **SQLite** (bundled via the `rusqlite` crate) — in the **public domain**.
+- **SQLite** (bundled via the `rusqlite` crate), in the **public domain**.
   https://www.sqlite.org/copyright.html
 
 ## Runtime (not bundled)
 
-- **Microsoft Edge WebView2 Runtime** — provided by Microsoft under the Microsoft
+- **Microsoft Edge WebView2 Runtime**: provided by Microsoft under the Microsoft
   Software License Terms. Prompt Saver uses the runtime already installed on Windows
   (or offers Microsoft's official installer); it is not redistributed by this project.
 

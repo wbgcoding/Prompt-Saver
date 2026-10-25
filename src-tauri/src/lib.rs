@@ -19,7 +19,7 @@ use tauri::{
     WebviewWindowBuilder, WindowEvent,
 };
 
-// Bring the main window back from the tray — always at the saved size/position.
+// Bring the main window back from the tray, always at the saved size/position.
 fn show_main(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         if let Some(state) = app.try_state::<Db>() {
@@ -39,7 +39,7 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-// 100: global-hotkey action — open the standalone quick-launcher (fuzzy search,
+// 100: global-hotkey action, open the standalone quick-launcher (fuzzy search,
 // instant copy) instead of raising the main window. Replaces any launcher already
 // open, so a second hotkey press never leaves two fighting over the same focus.
 fn summon_launcher(app: &AppHandle) {
@@ -117,7 +117,7 @@ const RESERVED_KEYS: &[Code] = &[
 
 // Ctrl+<key> combinations every Windows application implements the same way. Taking
 // one globally means the user loses copy, paste or save in EVERY program. Only the
-// plain Ctrl form is blocked — adding Shift or Alt makes a distinct combination that
+// plain Ctrl form is blocked, adding Shift or Alt makes a distinct combination that
 // no longer belongs to anyone in particular, and that is the namespace users pick
 // their own shortcuts from.
 const UNIVERSAL_CTRL: &[Code] = &[
@@ -191,7 +191,7 @@ fn parse_accel(raw: &str) -> Option<Accel> {
 // Every accelerator that should be registered, in registration order. None marks
 // the app hotkey, Some(id) a prompt. Unusable accelerators and combinations an
 // earlier entry already claimed are skipped: the app hotkey wins, then the first
-// prompt in list order. `per_prompt` is the promptHotkeys feature toggle — off
+// prompt in list order. `per_prompt` is the promptHotkeys feature toggle, off
 // leaves the stored accelerators alone and simply registers none of them.
 fn hotkey_plan(app_hotkey: &str, prompts: &[Prompt], per_prompt: bool) -> Vec<(Accel, Option<String>)> {
     let mut plan = Vec::new();
@@ -268,14 +268,14 @@ struct HotkeyTargets(Mutex<Vec<(Accel, Option<String>)>>);
 
 // The single owner of the registered shortcut set: drop everything, then register
 // the app hotkey plus one accelerator per prompt. A combination the OS refuses is
-// owned by another app — it is cleared from the store instead of leaving a binding
+// owned by another app, it is cleared from the store instead of leaving a binding
 // the user believes in. Returns false when the APP hotkey was the refused one.
 // Must never run while the store mutex is held: registering hops to the main
 // thread, and the shortcut handler reads the store.
 fn rearm_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     // A binding stored by an older version can be one the blocklist now refuses.
-    // It is never registered again, so the stored string is cleared here — otherwise
+    // It is never registered again, so the stored string is cleared here, otherwise
     // the editor keeps showing a hotkey that does nothing.
     let (plan, mut dropped, mut app_ok) = match app.try_state::<Db>() {
         Some(state) => {
@@ -342,7 +342,7 @@ fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
 
 // While a hotkey field is capturing, every global hotkey has to be off. Windows
 // delivers a registered combination to the owning process instead of the focused
-// window, so the field would never see the key press — the user just watches the
+// window, so the field would never see the key press, the user just watches the
 // prompt behind it get copied and gets no error at all.
 #[tauri::command]
 async fn set_hotkey_capture(app: AppHandle, active: bool) -> Result<(), String> {
@@ -455,7 +455,7 @@ fn focus_main_window(app: AppHandle) {
 // A copy started from OUTSIDE the app must not drag the whole window forward just to
 // ask for a placeholder. This small always-on-top window asks, and nothing else moves.
 // The main window still owns every variable rule (which tokens need asking, what the
-// reserved names resolve to, what happens after the copy) — this window is a form:
+// reserved names resolve to, what happens after the copy), this window is a form:
 // it pulls the pending payload, hands back the typed values, and closes.
 const VAR_WIN_LABEL: &str = "vars-0";
 const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
@@ -504,7 +504,7 @@ fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPosition<f64>)
 }
 
 // Centred horizontally on the cursor's monitor, sitting in the upper third the way
-// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does — a search box
+// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does, a search box
 // that pops up at screen centre reads as a dialog, not a launcher.
 fn launcher_rect(app: &AppHandle) -> Rect {
     let (work, dpi, _cursor) = work_and_dpi_at_cursor(app);
@@ -619,7 +619,7 @@ fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<S
     Ok(())
 }
 
-// F12: the {#{username}#} placeholder. The account name never reaches a log — it is
+// F12: the {#{username}#} placeholder. The account name never reaches a log, it is
 // resolved straight into the copied text.
 #[tauri::command]
 fn os_user_name() -> String {
@@ -671,7 +671,7 @@ fn tray_cfg(settings: &Settings) -> TrayCfg {
 
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
 // collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
-// mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
+// mnemonic, and the cut counts CHARACTERS, a byte cut would split a multi-byte
 // name in the middle of a character. An over-long name is cut back to the last word
 // break in the tail rather than mid-word, so the entry still reads as words.
 fn tray_label(name: &str) -> String {
@@ -680,7 +680,7 @@ fn tray_label(name: &str) -> String {
     if text.chars().count() > TRAY_LABEL_MAX {
         let mut cut: String = text.chars().take(TRAY_LABEL_MAX - 1).collect();
         if let Some(space) = cut.rfind(' ') {
-            // Only when the break is near the end — otherwise a single long word
+            // Only when the break is near the end, otherwise a single long word
             // would shrink the label to almost nothing.
             if cut[..space].chars().count() >= TRAY_LABEL_MAX - TRAY_LABEL_WORD_BACK {
                 cut.truncate(space);
@@ -690,7 +690,7 @@ fn tray_label(name: &str) -> String {
         text.push('…');
     }
     if text.is_empty() {
-        text.push('—'); // a nameless prompt still needs something clickable
+        text.push('–'); // a nameless prompt still needs something clickable
     }
     text.replace('&', "&&")
 }
@@ -720,7 +720,7 @@ enum TrayKind {
 
 // The image fields are not exclusive: a picture can be the payload (copy_image), the
 // tile's face (show_image) or just a decoration next to the text. Only the first two
-// make the entry a picture — a decorated text prompt still copies text.
+// make the entry a picture, a decorated text prompt still copies text.
 fn tray_kind(p: &Prompt) -> TrayKind {
     if !p.file_path.trim().is_empty() {
         TrayKind::File
@@ -750,10 +750,10 @@ enum TraySection {
 }
 
 // The menu's dynamic part, in the order it is drawn: pinned favourites first, then
-// recents — the Windows jump-list idiom, so the curated section never moves under
+// recents, the Windows jump-list idiom, so the curated section never moves under
 // the user while the recents below it churn. A favourite is not repeated in the
 // recents; those backfill with the next unlisted prompt instead of leaving a gap.
-// Pure, so ordering, caps, dedupe and truncation stay testable — the menu API cannot.
+// Pure, so ordering, caps, dedupe and truncation stay testable, the menu API cannot.
 fn tray_plan(
     prompts: &[Prompt],
     last_used: &HashMap<String, u64>,
@@ -807,7 +807,7 @@ fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
     Some([c.0, c.1, c.2])
 }
 
-// Perceived brightness, 0..255 — decides whether the glyph is drawn light or dark.
+// Perceived brightness, 0..255, decides whether the glyph is drawn light or dark.
 fn tray_luma(c: [u8; 3]) -> u32 {
     (c[0] as u32 * 299 + c[1] as u32 * 587 + c[2] as u32 * 114) / 1000
 }
@@ -882,7 +882,7 @@ fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
     let mut chip = TrayChip::new(fill);
     chip.frame(0, 0, 15, 15, edge);
     match kind {
-        // Three text lines, the last one short — a paragraph at 16 px.
+        // Three text lines, the last one short, a paragraph at 16 px.
         TrayKind::Text => {
             chip.bar(4, 11, 4, 5, ink);
             chip.bar(4, 11, 7, 8, ink);
@@ -953,7 +953,7 @@ fn push_tray_section(
 }
 
 // Build the tray menu from the current store and install it. The store lock is
-// dropped before the first menu call — building a menu while holding it is the
+// dropped before the first menu call, building a menu while holding it is the
 // classic deadlock shape here.
 fn apply_tray_menu(app: &AppHandle) {
     let (lang, plan) = match app.try_state::<Db>() {
@@ -1017,7 +1017,7 @@ fn rebuild_tray(app: &AppHandle) {
 }
 
 // A tray entry runs the very same activation a tile click does (copy, usage,
-// chains, placeholder dialog) — but never the hotkey auto-paste: the click leaves
+// chains, placeholder dialog), but never the hotkey auto-paste: the click leaves
 // the tray in the foreground, so there is no text field to paste into.
 fn fire_tray_copy(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
@@ -1068,11 +1068,11 @@ struct Prompt {
     file_path: String,
     // 83: which page of an attached PDF the preview shows (0-based). Ignored for
     // any other attachment type. Clamped against the actual page count at render
-    // time (pdf_preview), never here — the file can change independently of this
+    // time (pdf_preview), never here, the file can change independently of this
     // number (a replaced attachment, or a shorter PDF at the same path).
     #[serde(default)]
     pdf_page: u32,
-    // Gif/video used as the tile icon only — shown, never copied.
+    // Gif/video used as the tile icon only, shown, never copied.
     #[serde(default)]
     icon_path: String,
     // Optional caption shown over media tiles (size 0 = default).
@@ -1093,19 +1093,19 @@ struct Prompt {
     #[serde(default)]
     tags: Vec<String>,
     // F17: private context for the user. Shown in the editor and (optionally) in the
-    // tile tooltip — never part of anything that reaches the clipboard.
+    // tile tooltip, never part of anything that reaches the clipboard.
     #[serde(default)]
     notes: String,
     // F20: global accelerator that copies this prompt from anywhere ("" = none).
     #[serde(default)]
     hotkey: String,
-    // F20: what THIS hotkey does — "copy", "paste" (copy and paste into the app the
+    // F20: what THIS hotkey does, "copy", "paste" (copy and paste into the app the
     // user was in), or "" = follow the global promptHotkeyPaste setting.
     #[serde(default)]
     hotkey_paste: String,
     // 91: unix seconds set the moment a prompt moves into the trash table; unused
     // (0) for every prompt still in store.prompts. Drives both the trash list's
-    // "deleted N days ago" and the retention sweep — never touched for anything
+    // "deleted N days ago" and the retention sweep, never touched for anything
     // else, so it never appears in an export or a fresh add_prompt/update_prompt.
     #[serde(default)]
     trashed_at: u64,
@@ -1183,7 +1183,7 @@ struct TileFolder {
 
 // F25: an Android-style folder holding several floating pills. It owns ONE window
 // (the folder icon; expanding only resizes it), so `pos` is the icon's top-left in
-// physical desktop pixels — the same space `Settings.floating` uses. A member keeps
+// physical desktop pixels, the same space `Settings.floating` uses. A member keeps
 // its own `floating` entry so switching the feature off puts every pill back where
 // it was.
 #[derive(Serialize, Deserialize, Clone)]
@@ -1265,7 +1265,7 @@ struct Settings {
     hotkey: String,
     #[serde(default = "default_on")]
     auto_update: bool,
-    // Update versions the user chose to skip — never offered again.
+    // Update versions the user chose to skip, never offered again.
     #[serde(default)]
     skipped_versions: Vec<String>,
     // Expert toggles: feature key -> enabled. A missing key means enabled, so
@@ -1278,7 +1278,7 @@ struct Settings {
     // Expert string options (e.g. copy-feedback font). Missing key = default.
     #[serde(default)]
     ui_texts: HashMap<String, String>,
-    // F6: prompt-id pairs (sorted) the user marked "not a duplicate" — never regrouped.
+    // F6: prompt-id pairs (sorted) the user marked "not a duplicate", never regrouped.
     #[serde(default)]
     dup_ignored: Vec<[String; 2]>,
     // F1: tag key (the lowercased name) -> chip color (#rrggbb). Keyed lowercase so a
@@ -1318,7 +1318,7 @@ struct Settings {
     // back on restores the folders instead of losing them.
     #[serde(default)]
     view_groups: Vec<ViewGroup>,
-    // F27: grid folders. Kept while the feature is off as well — the members simply
+    // F27: grid folders. Kept while the feature is off as well, the members simply
     // show as their own tiles again until it comes back on.
     #[serde(default)]
     tile_folders: Vec<TileFolder>,
@@ -1430,7 +1430,7 @@ fn grid_key(cols: u32, rows: u32) -> String {
 
 // WebView2-missing dialog texts; shown before settings exist, so the OS
 // locale decides (same language set as the UI). `{app}` is filled with the
-// product name once, in webview2_dialog — the translations never spell it.
+// product name once, in webview2_dialog, the translations never spell it.
 fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("WebView2 Runtime fehlt", "{app} benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach {app} einfach erneut starten."),
@@ -1610,7 +1610,7 @@ struct Store {
 }
 
 impl Store {
-    // F25/F27: keep both folder lists valid against the CURRENT prompt list — one call
+    // F25/F27: keep both folder lists valid against the CURRENT prompt list, one call
     // after every mutation that can remove a prompt. Idempotent.
     fn normalize_folders(&mut self) {
         let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
@@ -1723,7 +1723,7 @@ fn data_dir(app: &AppHandle) -> PathBuf {
     base
 }
 
-// The store's JSON files (prompts.json / settings.json — the DB-write fallback and the
+// The store's JSON files (prompts.json / settings.json, the DB-write fallback and the
 // legacy pre-SQLite format) hold full prompt bodies and private notes, so they are
 // DPAPI-sealed exactly like the SQLite rows. `dec_str` passes an un-prefixed value
 // through unchanged, which is what still lets a genuinely old plaintext install be
@@ -1735,7 +1735,7 @@ fn read_sealed_json<T: for<'de> Deserialize<'de> + Default>(path: &PathBuf) -> T
     }
 }
 
-// Every import reads a file the user picked — which may have come from someone else —
+// Every import reads a file the user picked, which may have come from someone else,
 // fully into memory before parsing. Check the size FIRST so a wrong pick (a disk image,
 // a video) fails with a clear message instead of exhausting memory. Mirrors the cap the
 // decompression path already applies via `inflate_capped`.
@@ -1830,7 +1830,7 @@ mod store_crypt {
 //
 // A DPAPI failure falls back to plaintext rather than refusing the write: hard-failing
 // here would mean the user cannot save at all, trading a confidentiality problem for
-// guaranteed data loss. It must never be SILENT though — a broken Windows profile
+// guaranteed data loss. It must never be SILENT though, a broken Windows profile
 // would otherwise downgrade the whole store from sealed to readable with nothing to
 // show for it. Logged once per run (this runs per row; a full save would flood the log).
 fn enc_str(plain: &str) -> String {
@@ -1903,7 +1903,7 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Resu
 // 91: same schema and shape as db_write_prompts/db_load's prompt half, but its own
 // table. A prompt "in the trash" simply isn't in `prompts` any more, so every
 // existing read of store.prompts (grid, library, tray, hotkeys, export, stats,
-// duplicate finder...) stays correct with zero changes — the alternative, a
+// duplicate finder...) stays correct with zero changes, the alternative, a
 // deleted_at flag on Prompt filtered everywhere, would have needed every one of
 // those call sites found and fixed, with real risk of missing one.
 fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<()> {
@@ -1944,7 +1944,7 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
 }
 
 // Returns (prompts, settings, any_plaintext, decrypt_failures). `decrypt_failures`
-// counts rows that WERE encrypted (ENC_PREFIX) but could not be decrypted/parsed —
+// counts rows that WERE encrypted (ENC_PREFIX) but could not be decrypted/parsed,
 // the caller must then avoid any destructive rewrite of the prompts table.
 fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
     let mut prompts = Vec::new();
@@ -1981,7 +1981,7 @@ fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
 
 // Peeks the "allowMultipleInstances" flag before the Tauri builder exists. The
 // single-instance plugin has to be attached (or not) at builder time, before any
-// AppHandle exists to resolve settings the normal way — so this mirrors
+// AppHandle exists to resolve settings the normal way, so this mirrors
 // default_data_dir()'s portable/APPDATA resolution and opens the DB directly. Any
 // failure (first run, missing DB, undecryptable row) yields false: single instance,
 // the safe default that matches every install before this option existed.
@@ -2010,12 +2010,12 @@ fn early_allow_multiple_instances() -> bool {
 // Append one copy event, then trim to the cap and the retention window. The cap
 // trim uses the rowid (monotonic insertion order): "keep rows whose rowid is
 // within `cap` of the newest" deletes at most one row per call in steady state
-// and touches nothing during growth — O(log n), so a million-entry history is
+// and touches nothing during growth, O(log n), so a million-entry history is
 // still cheap on every copy.
 // Trim the history to the cap (newest `cap` rows) and the retention window. Rows
 // kept are exactly those with rowid in (MAX-cap, MAX], i.e. at most `cap`, and
 // age-prune only ever deletes from the old (low-rowid) end, so the kept block
-// stays a contiguous newest-N — the cap can never be exceeded.
+// stays a contiguous newest-N, the cap can never be exceeded.
 fn db_trim_copy(conn: &Connection, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
     if cap == 0 {
         conn.execute("DELETE FROM copy_log", [])?;
@@ -2102,10 +2102,10 @@ fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
     }
     out
 }
-// 17: one prompt's last real content edit (name or text change — the only kind
+// 17: one prompt's last real content edit (name or text change, the only kind
 // that gets a version row, see update_prompt) is the newest `ts` it has in
 // prompt_versions. Bundled for every prompt at once (one GROUP BY, not an N+1
-// query per prompt) — a prompt absent from the result has never had a version
+// query per prompt), a prompt absent from the result has never had a version
 // row: history was off for all its edits, or it was never edited since creation.
 fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
     let mut out = std::collections::HashMap::new();
@@ -2161,14 +2161,14 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
     out
 }
 
-// Returns whether the prompts made it to durable storage (DB or JSON fallback) —
+// Returns whether the prompts made it to durable storage (DB or JSON fallback),
 // callers that follow a save with a destructive step (102: deleting an orphaned
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
 fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     // Safety valve: if some rows failed to decrypt at load, the in-memory list is a
     // SUBSET of what's on disk. Rewriting the table (DELETE + re-INSERT) would delete
-    // the unreadable rows permanently — so we refuse to persist prompt changes at all
+    // the unreadable rows permanently, so we refuse to persist prompt changes at all
     // until the situation is resolved. Prompt edits this session simply won't stick.
     if store.prompts_locked {
         return false;
@@ -2180,7 +2180,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     }
     // Last resort: JSON fallback. 101: load_store() reads this back and retries the
     // DB write on next launch, so a fallback here is not itself data loss. If even
-    // this fails (disk full / permission), the change really is lost — leave a
+    // this fails (disk full / permission), the change really is lost, leave a
     // diagnosable trace instead of failing silently.
     if !write_sealed_json(&data_dir(app).join("prompts.json"), &store.prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
@@ -2226,7 +2226,7 @@ const DYN_NAMES: [&str; 16] = [
 
 // Reserved names are now written {#{/date\}#} instead of {#{date}#}, which frees the
 // plain word for a variable of the user's own. Rewrite the old spelling so an existing
-// prompt keeps filling itself in. Idempotent — the new form no longer matches.
+// prompt keeps filling itself in. Idempotent, the new form no longer matches.
 fn fence_dyn_vars(text: &str) -> String {
     if !text.contains("{#{") {
         return text.to_string();
@@ -2243,7 +2243,7 @@ fn fence_dyn_vars(text: &str) -> String {
 
 fn migrate_prompts(prompts: &mut [Prompt]) {
     // `id` is the prompts table's PRIMARY KEY, so a duplicate makes the whole
-    // DELETE+INSERT rewrite fail — and save_prompts then quietly writes the JSON
+    // DELETE+INSERT rewrite fail, and save_prompts then quietly writes the JSON
     // fallback that the database path ignores, so the import looks like it worked and
     // the old prompts are back after a restart. An import (or a hand-edited backup) is
     // the only way two prompts can share an id; the second one gets a fresh one.
@@ -2304,7 +2304,7 @@ fn load_store(app: &AppHandle) -> Store {
         } else {
             // 101: prompts.json/settings.json otherwise only exist as a save_prompts/
             // save_settings fallback from a failed DB write earlier this session (they
-            // are deleted the moment the DB accepts the data again) — their presence
+            // are deleted the moment the DB accepts the data again), their presence
             // here means the DB never received that change, so the file, not the DB,
             // is the truth. Retry the write; keep the file (and the loaded data) if the
             // DB still refuses, so this keeps retrying every launch instead of quietly
@@ -2358,7 +2358,7 @@ fn load_store(app: &AppHandle) -> Store {
                     }
                 }
             } else {
-                // No legacy history to move — mark done so we never re-check.
+                // No legacy history to move, mark done so we never re-check.
                 let _ = conn.execute(
                     "INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')",
                     [],
@@ -2417,7 +2417,7 @@ const BUILTIN_THEMES: [&str; 15] = [
     "light", "dark", "programmer", "ai", "gradient", "sunset", "ocean", "forest", "midnight",
     "cyberpunk", "retro", "mono", "lavender", "candy", "coffee",
 ];
-// The colour variables a custom theme may override — the `:root` colour tokens of
+// The colour variables a custom theme may override, the `:root` colour tokens of
 // main.css. Everything else (shadow, radius, timings) stays with the base theme.
 const THEME_VAR_KEYS: [&str; 9] = [
     "bg", "surface", "surface-2", "fg", "muted", "border", "accent", "accent-fg", "danger",
@@ -2451,7 +2451,7 @@ fn valid_theme_name(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-// A custom theme may only inherit from a built-in one — never from another custom
+// A custom theme may only inherit from a built-in one, never from another custom
 // theme, so inheritance can never chain or form a cycle.
 fn valid_theme_base(base: &str) -> Result<String, String> {
     let base = base.trim();
@@ -2694,7 +2694,7 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
         let pid = prompt.id.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
-                // Fires for every pixel during a drag — never block the move
+                // Fires for every pixel during a drag, never block the move
                 // loop on a busy store; the next event carries the position.
                 if let Some(state) = app2.try_state::<Db>() {
                     if let Ok(mut store) = state.try_lock() {
@@ -2735,7 +2735,7 @@ fn folders_on(settings: &Settings) -> bool {
 
 // Pill and folder windows read the settings ONCE, when they open. Without this every
 // expert change (pill folders, drag-out, opacity, cooldown …) would only reach the
-// windows opened afterwards — i.e. a feature switched on while pills are on screen
+// windows opened afterwards, i.e. a feature switched on while pills are on screen
 // looked dead until a restart.
 fn notify_float_settings(app: &AppHandle) {
     for label in app.webview_windows().keys() {
@@ -2763,7 +2763,7 @@ fn folder_cols(settings: &Settings) -> u32 {
         .clamp(2.0, 5.0) as u32
 }
 
-// A box in PHYSICAL desktop pixels — the one coordinate space every monitor shares,
+// A box in PHYSICAL desktop pixels, the one coordinate space every monitor shares,
 // whatever its DPI. Sizes are converted per window with its own scale factor, so a
 // mixed-DPI setup stays correct.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2790,7 +2790,7 @@ impl Rect {
 }
 
 // Which pill the just-dropped one landed on: the NEAREST centre within `radius` whose
-// box ALSO really overlaps. Both conditions matter — the radius alone would fire for a
+// box ALSO really overlaps. Both conditions matter, the radius alone would fire for a
 // pill that merely sits nearby, the overlap alone for a long text pill whose far end
 // happens to touch. A short drag ends up far from every other pill and matches
 // nothing, which is what keeps a normal nudge from creating a folder. A centre
@@ -2843,8 +2843,8 @@ struct FolderLayout {
     pop: (f64, f64),  // popover offset inside the window
 }
 
-// Grow the folder window around its icon. The icon NEVER moves — it is what the user
-// clicked — so the popover goes on the first side with room (below, above, right,
+// Grow the folder window around its icon. The icon NEVER moves, it is what the user
+// clicked, so the popover goes on the first side with room (below, above, right,
 // left) and is then slid along its free axis until it lies inside the work area.
 // Everything is physical pixels of ONE monitor: pass that monitor's work rect and the
 // sizes already scaled by its factor, and edge flipping works the same on a second
@@ -2869,7 +2869,7 @@ fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> Fo
     let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
     // The popover is ALIGNED with the icon's leading edge, never centred on it. A
     // centred popover is wider than the icon on both sides, so the window ORIGIN moves
-    // left — and the icon has to be pushed right by the same amount inside it, one
+    // left, and the icon has to be pushed right by the same amount inside it, one
     // frame later. That one frame is the sideways jump on right-click. Aligned, the
     // origin stays exactly where it was whenever the popover fits below/right, which
     // is the normal case.
@@ -2966,7 +2966,7 @@ fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f6
 
 // Bring the folder list back to its invariants: only real prompt ids, no prompt in two
 // folders (the first folder listing it wins), a sane scale, and no folder left with
-// fewer than two members — that one dissolves, and its pill simply reappears at the
+// fewer than two members, that one dissolves, and its pill simply reappears at the
 // free position it kept all along. Runs on load and after every mutation. Idempotent.
 fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
@@ -3034,7 +3034,7 @@ fn folder_name_of(name: &str) -> Result<String, String> {
 struct FolderExpand(Mutex<HashMap<String, Rect>>);
 
 // 43: pill/folder windows dismissed "for now" (their own context menu, not the
-// permanent Remove/Dissolve). In memory only, like FolderExpand above — cleared
+// permanent Remove/Dissolve). In memory only, like FolderExpand above, cleared
 // on restart, never written to settings.
 struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
 
@@ -3194,7 +3194,7 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder) {
                 // stored position follows the icon, not the grown box.
                 let off = folder_expansion(&app2, &fid).unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
                 if let Some(state) = app2.try_state::<Db>() {
-                    // Fires for every pixel of a drag — never block the move loop.
+                    // Fires for every pixel of a drag, never block the move loop.
                     if let Ok(mut store) = state.try_lock() {
                         if let Some(f) = store.settings.float_folders.iter_mut().find(|f| f.id == fid) {
                             f.pos = Pos {
@@ -3219,7 +3219,7 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder) {
 
 // Open/close pill and folder windows until the desktop matches the stored plan. The
 // single place that turns settings into windows, so every mutation just calls it.
-// MUST NOT run while the store mutex is held — it creates and closes windows.
+// MUST NOT run while the store mutex is held, it creates and closes windows.
 fn sync_float_windows(app: &AppHandle) {
     let (want_pills, want_folders, pills, folders) = {
         let state: State<Db> = app.state();
@@ -3227,7 +3227,7 @@ fn sync_float_windows(app: &AppHandle) {
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
         let (mut want_pills, mut want_folders) = float_window_plan(&store.settings, &ids);
         // 43: "hide for now" drops the id from the plan, which the stale-window
-        // loop below then closes if it was already open — the same one filter
+        // loop below then closes if it was already open, the same one filter
         // both closes it now and keeps it from reopening until the next launch.
         if let Some(hidden) = app.try_state::<HiddenFloats>() {
             let hidden = hidden.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -3279,7 +3279,7 @@ const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 
 // Reverse lookup built once at compile time: base64_decode runs over whole images and
 // every sealed settings/prompt line at startup, so an O(64) scan per byte (the linear
-// alphabet search this replaced) was real, measurable work — this makes it O(1).
+// alphabet search this replaced) was real, measurable work, this makes it O(1).
 const fn build_b64_decode_table() -> [u8; 256] {
     let mut table = [0xFFu8; 256];
     let mut i = 0;
@@ -3378,7 +3378,7 @@ fn scale_and_encode(img: image::DynamicImage) -> String {
     }
 }
 
-// Async: dialogs and clipboard reads run off the main thread — the window
+// Async: dialogs and clipboard reads run off the main thread, the window
 // stays responsive and the pickers open without a noticeable delay.
 #[tauri::command]
 async fn get_clipboard_image() -> Option<String> {
@@ -3449,7 +3449,7 @@ async fn load_image_file(path: String) -> Option<String> {
     if result.is_empty() { None } else { Some(result) }
 }
 
-// pdfium is only needed for PDF previews, and it is a plain DLL — so it travels
+// pdfium is only needed for PDF previews, and it is a plain DLL, so it travels
 // inside the exe and is unpacked on first use. That keeps the portable build a
 // single self-contained file instead of "exe plus a DLL you must not lose".
 static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
@@ -3481,7 +3481,7 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     let cached = pdfium_cache_path();
     // The cache path is predictable and lives in a world-writable %TEMP%, so the file
     // found there is only trusted when its CONTENT matches the copy compiled into this
-    // exe — a length check alone would let any process running as this user pre-plant a
+    // exe, a length check alone would let any process running as this user pre-plant a
     // same-size DLL and get it loaded as native code. Rewritten otherwise, which also
     // repairs a truncated write from an interrupted first run.
     if fs::read(&cached).is_ok_and(|got| got == PDFIUM_DLL) {
@@ -3498,9 +3498,9 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
 }
 
 // Render one page of a PDF to a preview image (data URL). Returns None if pdfium
-// is unavailable or the file cannot be read — the caller then keeps the PDF as a
+// is unavailable or the file cannot be read, the caller then keeps the PDF as a
 // plain file attachment without a preview. `page` (83) is clamped against the
-// actual page count here, not by the caller — the stored number and the file can
+// actual page count here, not by the caller, the stored number and the file can
 // disagree (a shorter PDF re-attached at the same path), and clamping is what
 // keeps that case showing the last page instead of nothing at all.
 #[tauri::command]
@@ -3547,7 +3547,7 @@ fn missing_files(state: State<Db>) -> Vec<String> {
 
 // ---------- Prompt commands ----------
 
-// Async: clones one prompt that may carry a large base64 image — off the UI thread.
+// Async: clones one prompt that may carry a large base64 image, off the UI thread.
 #[tauri::command]
 async fn get_prompt(state: State<'_, Db>, id: String) -> Result<Option<Prompt>, String> {
     Ok(lock(&state).prompts.iter().find(|p| p.id == id).cloned())
@@ -3560,7 +3560,7 @@ fn first_free_cell(view: &View) -> Option<[u32; 2]> {
 
 // Same, but also treats `extra` cells (e.g. another grid folder's own cell, which
 // lives outside view.layouts) as taken. Without this, a cell handed out here could
-// coincide with a folder's cell — the tile would save fine but never draw, since
+// coincide with a folder's cell, the tile would save fine but never draw, since
 // the renderer gives a folder priority over whatever else sits on its cell.
 fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]> {
     let key = grid_key(view.cols, view.rows);
@@ -3660,7 +3660,7 @@ fn cleanup_orphan_files(app: &AppHandle, store: &Store) {
     };
     // Compare case-insensitively with normalized separators (Windows) so a still
     // referenced file is never mistaken for an orphan and deleted. 91: a trashed
-    // prompt still owns its files until it is actually purged — leaving trash out
+    // prompt still owns its files until it is actually purged, leaving trash out
     // of this scan would let an UNRELATED cleanup pass (triggered by some other
     // prompt's add/delete) sweep away a file a trashed prompt still needs to be
     // restorable.
@@ -3682,7 +3682,7 @@ fn cleanup_orphan_files(app: &AppHandle, store: &Store) {
 }
 
 // Async: persisting all prompts (base64 images) to SQLite must not block the UI
-// thread — a sync command runs on it and froze the window while saving.
+// thread, a sync command runs on it and froze the window while saving.
 #[tauri::command]
 async fn add_prompt(
     app: AppHandle,
@@ -3770,7 +3770,7 @@ async fn add_prompt(
     Ok(prompt)
 }
 
-// Async: same reason as add_prompt — the SQLite write stays off the UI thread.
+// Async: same reason as add_prompt, the SQLite write stays off the UI thread.
 #[tauri::command]
 async fn update_prompt(
     app: AppHandle,
@@ -3870,7 +3870,7 @@ async fn update_prompt(
         Some((p, s, r)) => (Some(p), s, r),
         None => (None, 1.0, false),
     };
-    // Re-arm outside the lock, then hand back what is actually stored — the re-arm
+    // Re-arm outside the lock, then hand back what is actually stored, the re-arm
     // clears an accelerator the OS refused.
     let updated = match updated {
         Some(p) if rebind => {
@@ -3899,7 +3899,7 @@ async fn list_versions(app: AppHandle, prompt_id: String) -> Result<Vec<PromptVe
 }
 
 // 17: the library's "last edited" sort mode. A prompt missing from the map has
-// never had a version row (see db_last_edited) — the frontend sorts those last.
+// never had a version row (see db_last_edited), the frontend sorts those last.
 #[tauri::command]
 async fn last_edited_map(app: AppHandle) -> Result<std::collections::HashMap<String, u64>, String> {
     Ok(db_conn(&app).map(|c| db_last_edited(&c)).unwrap_or_default())
@@ -3952,7 +3952,7 @@ fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) {
 
 // Async: keeps the prompt-table rewrite off the UI thread.
 #[tauri::command]
-// 91: "delete" moves a prompt into the trash table instead of removing it — media
+// 91: "delete" moves a prompt into the trash table instead of removing it, media
 // files and version history stay exactly as they were, untouched until a real
 // purge (purge_prompt/empty_trash, or the retention sweep). Everything else here
 // (views, floating, folders, hotkeys, tray) is unchanged from the old hard-delete:
@@ -4019,7 +4019,7 @@ async fn batch_prompts(
     let mut store = lock(&state);
     match action.as_str() {
         "delete" => {
-            // 91: move to trash, same as the single-prompt delete_prompt command —
+            // 91: move to trash, same as the single-prompt delete_prompt command,
             // media files and version history stay untouched until a real purge.
             let mut moved: Vec<Prompt> = Vec::new();
             store.prompts.retain(|p| {
@@ -4119,7 +4119,7 @@ fn list_trash(state: State<Db>) -> Vec<Prompt> {
 // Places the restored prompt in the ACTIVE view via the same first_free_cell scan
 // add_prompt already uses for a brand-new prompt: if the view is full, the prompt
 // still comes back (reachable through the library) just without a grid cell of its
-// own — the same graceful fallback, never a hard failure or a silently dropped
+// own, the same graceful fallback, never a hard failure or a silently dropped
 // prompt. Every other app-level association (floating, folder membership, hotkey)
 // was already let go at delete time and is not reconstructed.
 #[tauri::command]
@@ -4185,7 +4185,7 @@ fn empty_trash(app: AppHandle, state: State<Db>) -> Vec<Prompt> {
 
 // 91: drop anything past the retention window (0/off by settings default, same
 // "0 = forever" convention as historyDays). Runs once at startup, mirroring
-// prune_history's own startup sweep — never on a timer, so a long-idle app does
+// prune_history's own startup sweep, never on a timer, so a long-idle app does
 // not surprise-purge something the user only just noticed in the trash.
 fn trash_retention_secs(settings: &Settings) -> Option<u64> {
     let days = settings.ui_values.get("trashRetentionDays").copied().unwrap_or(30.0);
@@ -4371,7 +4371,7 @@ fn set_tile_style(app: AppHandle, state: State<Db>, font: String, size: u32) {
 // ---------- Grid / layout commands (per active view) ----------
 
 // Replace the placement map of the active view's current grid size.
-// Async: fires on every drag/hide — keep the settings write off the UI thread.
+// Async: fires on every drag/hide, keep the settings write off the UI thread.
 #[tauri::command]
 async fn set_layout(app: AppHandle, state: State<'_, Db>, layout: HashMap<String, [u32; 2]>) -> Result<(), String> {
     let mut store = lock(&state);
@@ -4398,7 +4398,7 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
     if new_key != old_key {
         if view.cols >= old_cols && view.rows >= old_rows {
             // Growing: the grid expands around the current arrangement.
-            // Saved layouts double as backups — prompts that an earlier
+            // Saved layouts double as backups, prompts that an earlier
             // shrink pushed out return to their remembered spots (largest
             // arrangement first, only onto free cells).
             let merged = {
@@ -4509,7 +4509,7 @@ fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<
 // instead of truncating keeps the user's text from being silently cut in half.
 const MAX_NOTES_LEN: usize = 10_000;
 
-// Normalize line endings and enforce the ceiling. Notes may contain newlines —
+// Normalize line endings and enforce the ceiling. Notes may contain newlines,
 // the TXT exporter escapes them (see notes_escape).
 fn sanitize_notes(raw: &str) -> Result<String, String> {
     let text = raw.replace("\r\n", "\n").replace('\r', "\n");
@@ -4611,7 +4611,7 @@ fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
 }
 
 // Replace `old` with `new` in every prompt and move the color entry, in ONE store
-// pass — a tag on hundreds of prompts must not turn into hundreds of round trips.
+// pass, a tag on hundreds of prompts must not turn into hundreds of round trips.
 // Idempotent, and renaming onto an existing tag merges the two.
 #[tauri::command]
 async fn rename_tag(
@@ -4626,7 +4626,7 @@ async fn rename_tag(
     let mut store = lock(&state);
     let prompts_changed = rename_tag_in(&mut store.prompts, &old_key, &new);
     if let Some(color) = store.settings.tag_colors.remove(&old_key) {
-        // The target's own color wins if it already has one — it is the surviving tag.
+        // The target's own color wins if it already has one, it is the surviving tag.
         store.settings.tag_colors.entry(new_key).or_insert(color);
     }
     if prompts_changed {
@@ -4899,7 +4899,7 @@ fn set_view_group_member(
 // no prompt in two folders (the first folder listing it wins), no two folders on the
 // same cell of the same view (the first one keeps it, the next is moved aside by the
 // renderer because its cell is cleared to the origin only if free), and no folder
-// left with fewer than two members — that one dissolves and its prompts become tiles
+// left with fewer than two members, that one dissolves and its prompts become tiles
 // again. Runs on load and after every mutation. Idempotent.
 // `view_ids` rather than `&[View]` (135): every caller only ever needs to check
 // membership, so passing ids instead of whole views spares a clone of every view's
@@ -4941,7 +4941,7 @@ fn save_tile_folder(
     cell: [u32; 2],
     members: Vec<String>,
 ) -> Result<Settings, String> {
-    // A folder may stay unnamed — it then shows the member count alone.
+    // A folder may stay unnamed, it then shows the member count alone.
     let name = folder_name_of(&name)?;
     let color = valid_tag_color(&color)?;
     let mut store = lock(&state);
@@ -5043,10 +5043,10 @@ fn take_out_of_tile_folder(
 }
 
 // Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each
-// member lands on the first free cell of the folder's view — the folder's own cell is
+// member lands on the first free cell of the folder's view, the folder's own cell is
 // free again by the time this runs, so it is usually one of them. Cells held by any
 // OTHER folder still in that view are excluded too (they live outside view.layouts,
-// so first_free_cell alone would not see them — a member could otherwise be handed a
+// so first_free_cell alone would not see them, a member could otherwise be handed a
 // cell another folder already owns and never actually appear on screen).
 #[tauri::command]
 fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
@@ -5099,7 +5099,7 @@ struct AppState {
 }
 
 // Async: cloning every prompt (incl. large base64 images) must not run on the
-// UI thread — a big library would otherwise stall the window on each render.
+// UI thread, a big library would otherwise stall the window on each render.
 #[tauri::command]
 async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     let store = lock(&state);
@@ -5110,7 +5110,7 @@ async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
 }
 
 // 133: the quick launcher only ever reads id/name/text/color, on a surface that has
-// to be ready the instant its hotkey fires — get_state's full clone (every base64
+// to be ready the instant its hotkey fires, get_state's full clone (every base64
 // image included) was exactly the wrong cost to pay there. The four fields are
 // small strings, so cloning just those (instead of the whole Prompt, image and all)
 // is the actual saving.
@@ -5261,7 +5261,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
     let mut never_used: Vec<StatBar> = store
         .prompts
         .iter()
-        // Never copied — not "not lately", so the list means exactly what it says.
+        // Never copied, not "not lately", so the list means exactly what it says.
         .filter(|p| usage.get(&p.id).copied().unwrap_or(0) == 0)
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
         .collect();
@@ -5490,7 +5490,7 @@ struct BackupInfo {
     prompts: Option<usize>,
     // 61: the prompt names themselves, same "written once, cheap to read back after"
     // treatment as `prompts` above. The snapshot beside it has every row DPAPI-sealed,
-    // so this cache is sealed the same way — plaintext here would hand anyone copying
+    // so this cache is sealed the same way, plaintext here would hand anyone copying
     // the data folder to another Windows account the full list of prompt names while
     // the snapshot itself stayed unreadable, which is exactly the protection the seal
     // exists for.
@@ -5530,7 +5530,7 @@ fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
 }
 
 // Decrypt each row (same DPAPI seal `db_load` uses on the live store) and pull out
-// just the name — best-effort, a row that fails to decrypt/parse is skipped rather
+// just the name, best-effort, a row that fails to decrypt/parse is skipped rather
 // than failing the whole list.
 fn read_prompt_names(path: &std::path::Path) -> Vec<String> {
     let Ok(conn) = Connection::open(path) else { return Vec::new() };
@@ -5545,7 +5545,7 @@ fn read_prompt_names(path: &std::path::Path) -> Vec<String> {
 // The names cache carries real prompt titles, so it is DPAPI-sealed like every row in
 // the snapshot it sits beside. `dec_str` passes an un-prefixed value straight through,
 // so a plaintext cache written by an earlier build still reads and is re-sealed on the
-// next write — no migration step needed.
+// next write, no migration step needed.
 fn write_prompt_names(cache: &std::path::Path, names: &[String]) {
     if let Ok(json) = serde_json::to_string(names) {
         let _ = fs::write(cache, enc_str(&json));
@@ -5558,7 +5558,7 @@ fn read_prompt_names_cache(cache: &std::path::Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-// 61: same cached-note treatment as `backup_prompt_count` — computed once (here, or
+// 61: same cached-note treatment as `backup_prompt_count`, computed once (here, or
 // at creation time in `do_backup`) and read straight back after.
 fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
     let cache = folder.join(BACKUP_NAMES_FILE);
@@ -5586,7 +5586,7 @@ fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
 fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
     data_dir(app).join("backups")
 }
-// A backup folder name is a local_stamp() (digits, '-', '_') — reject anything with
+// A backup folder name is a local_stamp() (digits, '-', '_'), reject anything with
 // path separators or traversal so a crafted name can never escape the backups dir.
 fn valid_backup_name(name: &str) -> bool {
     !name.is_empty()
@@ -5686,7 +5686,7 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
     };
     // The newest `keep` snapshots survive whatever the tiers say. A tier keeps one
     // backup per distinct day, so without this a second backup made the same day
-    // would delete the first one — correct by the letter of the rule, and exactly
+    // would delete the first one, correct by the letter of the rule, and exactly
     // the kind of surprise a backup feature must not produce.
     let mut keep_set: HashSet<String> = names.iter().rev().take(keep).cloned().collect();
     for (count, idx) in [(g.daily, 0), (g.weekly, 1), (g.monthly, 2), (g.yearly, 3)] {
@@ -5694,7 +5694,7 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
             keep_set.insert(n);
         }
     }
-    // Every tier at zero would wipe the lot — keep the newest one instead.
+    // Every tier at zero would wipe the lot, keep the newest one instead.
     if keep_set.is_empty() {
         if let Some(newest) = names.last() {
             keep_set.insert(newest.clone());
@@ -5719,7 +5719,7 @@ fn rotate_backups(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) {
 // Consistent snapshot of data.db via VACUUM INTO (WAL-safe, no locking games). Writes
 // a temp file first and renames on success, so a failure leaves no partial snapshot.
 // A snapshot is stored gzipped: a vacuumed store is mostly JSON text, so this
-// takes a few MB down to a fraction of that — and ten of them are kept by default.
+// takes a few MB down to a fraction of that, and ten of them are kept by default.
 // `data.db` (uncompressed) is still accepted so older backups keep working.
 const BACKUP_DB_GZ: &str = "data.db.gz";
 // How often the auto-backup thread looks at the clock. The shortest interval the UI
@@ -5775,7 +5775,7 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
         let conn = Connection::open(&src).map_err(|e| e.to_string())?;
         conn.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map_err(|e| e.to_string())?;
     }
-    // Compress the vacuumed copy, then drop the raw one — never leave both behind.
+    // Compress the vacuumed copy, then drop the raw one, never leave both behind.
     let packed = gzip_to(&tmp, &dest);
     // The count and names are taken from the vacuumed copy while it is still
     // unpacked, so the list never has to decompress a snapshot for either.
@@ -5799,7 +5799,7 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     Ok(name)
 }
 // A folder name "YYYY-MM-DD_HH-MM-SS" as seconds on a local civil timeline. Two of
-// these subtract cleanly — the zone offset cancels — which is all the schedule needs
+// these subtract cleanly, the zone offset cancels, which is all the schedule needs
 // and avoids trusting a modification time that any sync or antivirus tool may reset.
 fn stamp_secs(name: &str) -> Option<i64> {
     let (date, time) = name.split_once('_')?;
@@ -5833,7 +5833,7 @@ async fn list_backups(app: AppHandle) -> Result<Vec<BackupInfo>, String> {
 }
 
 // 65: hands the user straight to the snapshot folder. The path is always the app's
-// own backups_dir() — never taken from the frontend — so there is nothing here for a
+// own backups_dir(), never taken from the frontend, so there is nothing here for a
 // crafted argument to redirect; `explorer` gets exactly one argument, no shell involved.
 #[tauri::command]
 fn open_backups_folder(app: AppHandle) -> Result<(), String> {
@@ -5862,7 +5862,7 @@ async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 // Unpack (gunzip if needed) a backup file BESIDE the live store, then prove it is
-// an openable SQLite file. Shared by every restore scope — a snapshot that fails
+// an openable SQLite file. Shared by every restore scope, a snapshot that fails
 // either step must never touch the live database.
 fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
     let staged = dir.join("data.db.restoring");
@@ -5886,11 +5886,11 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
 }
 
 // 70: merge only the tables `scope` asks for from `staged` into the live `target`
-// database, inside one transaction — any failure leaves `target` untouched. "data"
+// database, inside one transaction, any failure leaves `target` untouched. "data"
 // mirrors exactly the tables delete_all_data already treats as data; "settings"
 // touches only the meta['settings'] row, never the meta['copy_log_migrated']
 // migration marker. A table missing from an older backup (e.g. "trash", added in
-// 91) is skipped rather than failing the whole restore — its live rows stay put.
+// 91) is skipped rather than failing the whole restore, its live rows stay put.
 fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
     let mut conn = Connection::open(target).map_err(|e| e.to_string())?;
     conn.execute("ATTACH DATABASE ?1 AS backup", [staged.to_string_lossy().to_string()])
@@ -5925,7 +5925,7 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
 
 // Restore: snapshot the current store first (safety), then either swap the whole
 // data.db (scope "all") or merge just the requested tables in place (scope "data"/
-// "settings") — either way relaunch after, so nothing can half-apply.
+// "settings"), either way relaunch after, so nothing can half-apply.
 #[tauri::command]
 async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
@@ -5944,7 +5944,7 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         if scope == "all" {
             // Writing straight onto data.db truncates it first, so a disk that fills
             // up (or any I/O error) halfway through would leave the user with
-            // neither the old database nor the restored one — swap via rename instead.
+            // neither the old database nor the restored one, swap via rename instead.
             if let Err(e) = fs::rename(&staged, &target) {
                 let _ = fs::remove_file(&staged);
                 return Err(e.to_string());
@@ -6038,7 +6038,7 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
     Ok(settings)
 }
 
-// 76: name/base/vars only — never the internal id, so importing a theme on another
+// 76: name/base/vars only, never the internal id, so importing a theme on another
 // install always creates a fresh one instead of colliding with (or silently
 // overwriting) whatever already has that id there.
 #[derive(Serialize, Deserialize)]
@@ -6076,7 +6076,7 @@ fn export_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<(
 }
 
 // Reuses save_custom_theme's own validation (name/base/vars) so an imported file
-// is never trusted more than a value typed into the editor by hand — a malformed
+// is never trusted more than a value typed into the editor by hand, a malformed
 // or hand-edited JSON file gets the exact same rejection a bad manual entry would.
 #[tauri::command]
 fn import_custom_theme(app: AppHandle, state: State<Db>) -> Result<Settings, String> {
@@ -6091,7 +6091,7 @@ fn import_custom_theme(app: AppHandle, state: State<Db>) -> Result<Settings, Str
 }
 
 // F17: the single place that decides what text a copy puts on the clipboard. The
-// private notes are deliberately not part of it — every copy path goes through
+// private notes are deliberately not part of it, every copy path goes through
 // here (or through copy_text with an already-resolved body), so a note can never
 // leak into the clipboard.
 fn copy_payload(p: &Prompt) -> &str {
@@ -6099,7 +6099,7 @@ fn copy_payload(p: &Prompt) -> &str {
 }
 
 // The most-called command in the app (every tile/pill/hotkey copy goes through it),
-// so it clones only the ONE field the chosen branch actually needs — not the whole
+// so it clones only the ONE field the chosen branch actually needs, not the whole
 // Prompt (134), which on an image prompt meant cloning that base64 blob on every
 // text-branch check too.
 enum CopyPayload {
@@ -6132,7 +6132,7 @@ async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
     })
 }
 
-// Put arbitrary text on the clipboard — used after filling prompt placeholders.
+// Put arbitrary text on the clipboard, used after filling prompt placeholders.
 #[tauri::command]
 async fn copy_text(text: String) -> bool {
     note_own_copy(&text); // F21
@@ -6183,7 +6183,7 @@ fn history_max_age(settings: &Settings) -> Option<u64> {
 }
 
 // History length is an expert value (default 100, ceiling COPY_HISTORY_MAX), paired
-// with the retention-window cutoff — the two limits `db_trim_copy` always applies
+// with the retention-window cutoff, the two limits `db_trim_copy` always applies
 // together. One place for both, so startup trimming and live recording can't drift.
 fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>) {
     let cap = settings
@@ -6232,7 +6232,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         save_settings(&app, &store.settings);
         (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
-    // The history itself lives in its own table — appended outside the lock so a
+    // The history itself lives in its own table, appended outside the lock so a
     // huge log never blocks other DB work and never bloats the settings blob.
     if let Some(conn) = db_conn(&app) {
         if dedup {
@@ -6240,7 +6240,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
                 .query_row("SELECT id FROM copy_log ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))
                 .ok();
             if last.as_deref() == Some(entry.id.as_str()) {
-                return Ok(()); // identical consecutive copy — don't add another row
+                return Ok(()); // identical consecutive copy, don't add another row
             }
         }
         let _ = db_append_copy(&conn, &entry, cap, cutoff);
@@ -6274,9 +6274,9 @@ async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<CopyE
         .unwrap_or_default()
 }
 
-// 43: "hide for now" — a pill or folder id (both flat strings from different id
+// 43: "hide for now", a pill or folder id (both flat strings from different id
 // spaces, never colliding), dismissed until the app restarts. NOT the permanent
-// unpin (toggle_floating/dissolve_float_folder) — the entry in settings.floating
+// unpin (toggle_floating/dissolve_float_folder), the entry in settings.floating
 // / float_folders stays untouched, so it comes right back on the next launch.
 #[tauri::command]
 async fn hide_float_for_now(app: AppHandle, id: String) {
@@ -6290,7 +6290,7 @@ async fn hide_float_for_now(app: AppHandle, id: String) {
 // (sync commands run on the main thread, which WebView2 needs free).
 #[tauri::command]
 async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
-    // F25: a pill inside a folder has no window of its own, but it is still pinned —
+    // F25: a pill inside a folder has no window of its own, but it is still pinned,
     // unpinning has to take it out of the folder as well.
     let in_folder = {
         let store = lock(&state);
@@ -6654,7 +6654,7 @@ mod clipwatch {
                 return;
             }
         }
-        // Text only — image/file clipboard payloads are ignored.
+        // Text only, image/file clipboard payloads are ignored.
         let text = match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
             Ok(t) => t,
             Err(_) => return,
@@ -6720,7 +6720,7 @@ mod clipwatch {
             AddClipboardFormatListener(hwnd);
             WATCHER_HWND.store(hwnd, Ordering::Release);
             // stop() may have fired before the window existed (its PostMessage would
-            // have been lost) — tear down now instead of blocking on GetMessageW forever.
+            // have been lost), tear down now instead of blocking on GetMessageW forever.
             if WATCHER_STOP.load(Ordering::Acquire) {
                 RemoveClipboardFormatListener(hwnd);
                 DestroyWindow(hwnd);
@@ -6782,7 +6782,7 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
 
 // Emergency purge: something sensitive (a password) ended up in the clipboard inbox
 // and may be sitting inside one or more ROTATING SNAPSHOTS too, DPAPI-sealed but
-// still on disk. clip_inbox_clear only ever touched the live DB — this walks every
+// still on disk. clip_inbox_clear only ever touched the live DB, this walks every
 // backup folder, opens its snapshot, deletes clip_inbox rows if any, and VACUUMs so
 // the bytes are actually overwritten (a bare DELETE leaves them in SQLite's free
 // pages until something else reuses that space). Returns how many snapshots had
@@ -6858,7 +6858,7 @@ async fn set_float_bounds(
             // OPT-IN, and only the pill menu asks for it: that placement picks a side
             // that fits and falls back to "below" when none does, which used to push
             // the buttons off the screen edge. Every other caller has already worked
-            // out the exact box it wants — a live edge-resize computes the origin from
+            // out the exact box it wants, a live edge-resize computes the origin from
             // the size it is about to set, so clamping it here moved the window out
             // from under the cursor on every frame near a screen edge.
             let (x, y) = if clamp.unwrap_or(false) {
@@ -6921,12 +6921,12 @@ fn hit_label(hit: &str) -> String {
 }
 
 // Live merge feedback while a pill is dragged. The OS move loop owns the pointer, so
-// no webview sees the motion — the backend polls the dragged window instead and lights
+// no webview sees the motion, the backend polls the dragged window instead and lights
 // up the window that would swallow it. (generation, currently lit window label)
 struct DragHint(Mutex<(u64, Option<String>)>);
 
 const HINT_TICK_MS: u64 = 70;
-const HINT_MAX_TICKS: u32 = 700; // ~50 s guard — no drag runs longer
+const HINT_MAX_TICKS: u32 = 700; // ~50 s guard, no drag runs longer
 
 // Move the highlight, telling the old target to drop it. Emits only on a change.
 fn light_hint(app: &AppHandle, label: Option<String>) {
@@ -6988,7 +6988,7 @@ async fn float_drag_hint(app: AppHandle, state: State<'_, Db>, id: String, activ
 }
 
 // A pill was dropped after a drag: did it land on another pill or on a folder? The
-// check has to run HERE — the pills are separate OS windows, so only the backend knows
+// check has to run HERE, the pills are separate OS windows, so only the backend knows
 // where they all are. Called ONCE per drag END, never while dragging.
 #[tauri::command]
 async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
@@ -7032,8 +7032,8 @@ async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> 
             let store = lock(&state);
             float_scale_of(&store.settings, key)
         };
-        // The new folder takes the target pill's place — centred on it, so it lands
-        // where the user aimed — and its icon size mirrors that pill's size.
+        // The new folder takes the target pill's place, centred on it, so it lands
+        // where the user aimed, and its icon size mirrors that pill's size.
         let target = targets
             .iter()
             .find(|(t, _)| t == &hit)
@@ -7112,7 +7112,7 @@ struct FolderGeom {
     height: f64,
 }
 
-// Open the folder by growing its OWN window around the icon — no second window is
+// Open the folder by growing its OWN window around the icon, no second window is
 // ever spawned, so z-order and focus stay exactly as simple as a single pill's. The
 // popover size comes in as logical pixels (what the webview measured) and is scaled
 // with THIS window's factor, so the same call is correct on a second monitor at a
@@ -7243,7 +7243,7 @@ fn rename_float_folder(app: AppHandle, state: State<Db>, id: String, name: Strin
 }
 
 // A folder window has no themed dialog of its own, so the rename is asked for in the
-// MAIN window (confirmDialog) and applied from there — never a native message box.
+// MAIN window (confirmDialog) and applied from there, never a native message box.
 #[tauri::command]
 async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
     let name = {
@@ -7266,7 +7266,7 @@ async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, id: String)
 }
 
 // Dissolve a folder: every member goes back to being a free pill. Nothing is deleted.
-// Each one asks for the position it kept all along, but they are fanned apart first —
+// Each one asks for the position it kept all along, but they are fanned apart first,
 // merging put them on top of each other, so restoring the wishes unchanged would leave
 // a stack that looks like a single pill.
 #[tauri::command]
@@ -7297,7 +7297,7 @@ async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, id: String)
             .collect();
         (members, folder.pos)
     };
-    // Pills and folders already on screen are obstacles — this folder's own window is
+    // Pills and folders already on screen are obstacles, this folder's own window is
     // about to close, so it is not one.
     let taken: Vec<Rect> = app
         .webview_windows()
@@ -7390,7 +7390,7 @@ async fn remove_folder_member(
 }
 
 // Persist the per-prompt video player state (volume, mute, loop).
-// Async: can fire while scrubbing — keep the settings write off the UI thread.
+// Async: can fire while scrubbing, keep the settings write off the UI thread.
 #[tauri::command]
 async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volume: u32, muted: bool, looped: bool) -> Result<(), String> {
     let mut store = lock(&state);
@@ -7425,8 +7425,8 @@ struct SnipState(Mutex<Vec<MonitorCap>>);
 struct SnipPreview(Arc<Mutex<Option<Option<SnipBg>>>>);
 
 // True while a snip session is on screen (between open_snip and capture/cancel).
-// The overlay window itself is kept alive and reused, so this flag — not the
-// window's existence — is what tells open_snip a snip is already in progress.
+// The overlay window itself is kept alive and reused, so this flag, not the
+// window's existence, is what tells open_snip a snip is already in progress.
 static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // F26: the running session is a colour pick (loupe overlay) rather than a region
@@ -7436,7 +7436,7 @@ static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 // End the current snip session: HIDE (never close) the reusable overlay so its
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
-// full WebView2 cold-start — keeping it alive is the whole speed win.
+// full WebView2 cold-start, keeping it alive is the whole speed win.
 fn close_all_snip(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
@@ -7449,7 +7449,7 @@ fn close_all_snip(app: &AppHandle) {
     PICK_ACTIVE.store(false, Ordering::SeqCst);
 }
 
-// Hide (or restore) the app's own windows — the main window and floating pills —
+// Hide (or restore) the app's own windows, the main window and floating pills,
 // around a snip, so a screenshot never contains the app itself (this also
 // reveals whatever the main window was covering, e.g. Task Manager).
 fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
@@ -7461,7 +7461,7 @@ fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
                 let _ = win.show();
                 // Bring the main window back to the front (and out of any minimized
                 // state) so finishing/cancelling a snip never leaves it hidden behind
-                // other windows — which reads as the app having minimized itself.
+                // other windows, which reads as the app having minimized itself.
                 if label == "main" {
                     let _ = win.unminimize();
                     let _ = win.set_focus();
@@ -7472,7 +7472,7 @@ fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
 }
 
 // Hide (or re-show) only the snip overlay(s). Used by the window-capture
-// workaround, which needs to grab the LIVE desktop — the overlay (showing the
+// workaround, which needs to grab the LIVE desktop, the overlay (showing the
 // frozen image) would otherwise be what gets captured.
 fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
     for (label, win) in app.webview_windows() {
@@ -7483,7 +7483,7 @@ fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
 }
 
 // The snip preview JPEG is written to a temp file and shown via the asset
-// protocol — far quicker than passing a multi-MB base64 data URL through IPC and
+// protocol, far quicker than passing a multi-MB base64 data URL through IPC and
 // decoding it in the overlay. A rotating name avoids any stale webview cache.
 static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
 static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -7546,7 +7546,7 @@ struct SnipWindow {
 // ---- Fast screen capture via GDI (one BitBlt; no per-monitor DXGI setup) ----
 
 // Capture a screen rectangle (global physical px) with GDI BitBlt. Immediate (no
-// DXGI latency) and includes every visible window — elevated ones too.
+// DXGI latency) and includes every visible window, elevated ones too.
 #[cfg(windows)]
 fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImage> {
     #[link(name = "user32")]
@@ -7574,7 +7574,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
     const SRCCOPY: u32 = 0x00CC_0020;
     // Reject non-positive or absurdly large rects: keep w*h*4 a sane allocation so
     // a spoofed/extreme virtual-screen metric can never abort the process on OOM.
-    // 300M px ≈ 1.2 GB RGBA — far above any real multi-monitor desktop.
+    // 300M px ≈ 1.2 GB RGBA, far above any real multi-monitor desktop.
     if w <= 0 || h <= 0 || (w as u64) * (h as u64) > 300_000_000 {
         return None;
     }
@@ -7586,7 +7586,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
         let mem = CreateCompatibleDC(screen);
         let bmp = CreateCompatibleBitmap(screen, w, h);
         let old = SelectObject(mem, bmp);
-        // SRCCOPY only (no CAPTUREBLT — it forces a slow full recomposite). The
+        // SRCCOPY only (no CAPTUREBLT, it forces a slow full recomposite). The
         // DWM-composited desktop already includes every normal/elevated window.
         let blt_ok = BitBlt(mem, 0, 0, w, h, screen, x, y, SRCCOPY) != 0;
         // Deselect the bitmap before GetDIBits (required by the API).
@@ -7619,7 +7619,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
         if got == 0 {
             return None;
         }
-        // GDI returns BGRA; convert to RGBA and force opaque alpha. Parallelized —
+        // GDI returns BGRA; convert to RGBA and force opaque alpha. Parallelized,
         // a multi-monitor capture is tens of millions of pixels, so a serial swap
         // was a big slice of the freeze time.
         use rayon::prelude::*;
@@ -7688,8 +7688,8 @@ fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
 
 // A monitor's global physical origin -> where its capture starts inside the
 // stitched frozen image. The virtual desktop's origin is negative as soon as a
-// monitor sits left of or above the primary, so this shift — not any DPI scale
-// factor — is what makes a pixel on a differently scaled second monitor address
+// monitor sits left of or above the primary, so this shift, not any DPI scale
+// factor, is what makes a pixel on a differently scaled second monitor address
 // the byte the capture actually holds. Every frozen coordinate is physical.
 fn stitch_offset(global: i32, origin: i32) -> i64 {
     (global - origin) as i64
@@ -7697,7 +7697,7 @@ fn stitch_offset(global: i32, origin: i32) -> i64 {
 
 // ---------- F26: colour picker ----------
 // Same freeze + overlay as the snipping tool; the overlay just runs in pick mode.
-// The picked value goes to the CLIPBOARD ONLY — no prompt, no copy history.
+// The picked value goes to the CLIPBOARD ONLY, no prompt, no copy history.
 
 // Loupe magnification + output notation, straight from the expert menu.
 struct PickCfg {
@@ -7772,7 +7772,7 @@ fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
 }
 
 // One rectangular patch of the frozen desktop as packed RGB, row by row. The rect
-// must lie fully inside the image — a caller that clamped badly gets nothing back
+// must lie fully inside the image, a caller that clamped badly gets nothing back
 // rather than a silently shifted patch.
 fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
     let (iw, ih) = img.dimensions();
@@ -7800,13 +7800,13 @@ struct ColorPick {
 }
 
 // Longest tile edge the overlay may ask for. The loupe needs a few dozen pixels
-// around the cursor, so this is generous — but it is also the cap that stops a
+// around the cursor, so this is generous, but it is also the cap that stops a
 // bogus request from allocating a desktop-sized buffer.
 const PICK_TILE_MAX: u32 = 512;
 
 // Hand the overlay ONE patch of the frozen desktop as packed RGB (3 bytes per
 // pixel, row order). The loupe samples locally, so it caches a patch and only asks
-// again when the cursor nears its edge — shipping the whole desktop instead cost a
+// again when the cursor nears its edge, shipping the whole desktop instead cost a
 // ~58 MB transfer on a multi-monitor setup, which is what made the picker slow to
 // open. Empty outside a pick session or for a rect that is not fully on the frame.
 #[tauri::command]
@@ -7855,7 +7855,7 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     Ok(text)
 }
 
-// Build the (hidden) snip overlay window — borderless WS_POPUP, no shadow, fixed
+// Build the (hidden) snip overlay window, borderless WS_POPUP, no shadow, fixed
 // size, always-on-top. Created once and reused across snips so the WebView2
 // cold-start is paid a single time. A Destroyed handler clears the session and
 // restores the app's windows if the overlay is ever torn down.
@@ -7905,7 +7905,7 @@ async fn open_snip(
 }
 
 // F26: the very same freeze + overlay, opened in colour-pick mode. Reusing the
-// pipeline is what makes the picker pixel-exact and DPI-correct for free — the
+// pipeline is what makes the picker pixel-exact and DPI-correct for free, the
 // frozen frame is taken BEFORE the overlay shows, so the overlay is never in its
 // own capture source.
 #[tauri::command]
@@ -7932,7 +7932,7 @@ async fn begin_capture(
 ) -> Result<(), String> {
     // Atomically claim the session. If one is already active and its overlay still
     // exists, surface that instead of starting a second. (Stale flag with no
-    // window — e.g. the overlay was destroyed — falls through: reclaim and start.)
+    // window, e.g. the overlay was destroyed, falls through: reclaim and start.)
     if SNIP_ACTIVE
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -7982,7 +7982,7 @@ async fn begin_capture(
     let slot = preview.0.clone();
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
     tauri::async_runtime::spawn_blocking(move || {
-        // Encode the capture at NATIVE resolution — pixel-sharp overlay, no downscale.
+        // Encode the capture at NATIVE resolution, pixel-sharp overlay, no downscale.
         let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { SNIP_Q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j) {
                 Some(path) => (path, true),
@@ -8002,7 +8002,7 @@ async fn begin_capture(
     });
 
     // Reuse the overlay if it already exists. A long-idle HIDDEN WebView2 is heavily
-    // background-throttled (clamped timers, paused rAF/IPC) — THAT, not cold-start, is
+    // background-throttled (clamped timers, paused rAF/IPC), THAT, not cold-start, is
     // why the first snip lagged behind a retry (whose webview was shown moments ago).
     // So wake it WITHOUT a flash: show it 2×2 off-screen, which flips the page to
     // "visible" and resumes its JS at full speed. snip_present (fired on the frozen
@@ -8010,8 +8010,8 @@ async fn begin_capture(
     // and flash-free. Same path for the first snip and every retry → same speed.
     if let Some(win) = app.get_webview_window("snip-0") {
         // Park it at FULL size but just off-screen (below everything), shown so the
-        // webview un-throttles and paints. snip_present then only MOVES it on-screen —
-        // no resize, no DPI re-assert — so the reveal can't flicker.
+        // webview un-throttles and paints. snip_present then only MOVES it on-screen,
+        // no resize, no DPI re-assert, so the reveal can't flicker.
         let _ = win.set_size(PhysicalSize::new(total_w, total_h));
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y + total_h as i32 + 100));
         let _ = win.show();
@@ -8057,7 +8057,7 @@ async fn reveal_snip(app: &AppHandle) {
     };
     if let Some(win) = app.get_webview_window("snip-0") {
         // Already full-size (parked off-screen on reuse), so this moves it on-screen in
-        // one shot — no resize, no re-assert → no flicker. The frozen image is already
+        // one shot, no resize, no re-assert → no flicker. The frozen image is already
         // decoded (snip_present fires on its onload). set_size covers the cold path.
         let _ = win.set_size(PhysicalSize::new(total_w, total_h));
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y));
@@ -8092,7 +8092,7 @@ fn spawn_reveal_watchdog(app: AppHandle) {
 }
 
 // The overlay page asks this on load: begin a session immediately only if one is
-// already active (the cold-build path), otherwise stay idle — this is what lets the
+// already active (the cold-build path), otherwise stay idle, this is what lets the
 // window be pre-warmed at startup without auto-triggering a bogus snip. Reused
 // windows are driven per-snip by the "snip-begin" event instead.
 #[tauri::command]
@@ -8101,7 +8101,7 @@ fn snip_should_begin() -> bool {
 }
 
 // Visible top-level windows overlapping the virtual desktop, topmost first, in
-// stitched-image physical pixels — for hover highlight + single-window capture.
+// stitched-image physical pixels, for hover highlight + single-window capture.
 #[tauri::command]
 fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
     // Read the stitched origin/bounds, then drop the lock before the OS-wide
@@ -8140,16 +8140,16 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
     out
 }
 
-// Overlay preview JPEG quality (encoded at native resolution — pixel-sharp).
+// Overlay preview JPEG quality (encoded at native resolution, pixel-sharp).
 const SNIP_Q: u8 = 80;
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed
-// out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode — paid
+// out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode, paid
 // only when the pipette is opened, never on the screenshot path.
 const PICK_Q: u8 = 92;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
-// size + encode time — a full-res PNG data URL used to stall the whole app on save.
+// size + encode time, a full-res PNG data URL used to stall the whole app on save.
 const SNIP_SAVE_Q: u8 = 90;
 
 // Encode RGBA bytes to a JPEG for the overlay preview. jpeg-encoder = SIMD baseline JPEG,
@@ -8264,7 +8264,7 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
         return Ok(false);
     }
     // Defense in depth: only ever delete inside a folder we actually save screenshots
-    // to (the configured/default screenshot dir, or temp) — never an arbitrary location
+    // to (the configured/default screenshot dir, or temp), never an arbitrary location
     // a matching file name could otherwise point at.
     let parent = match p.parent().and_then(|d| d.canonicalize().ok()) {
         Some(d) => d,
@@ -8299,7 +8299,7 @@ fn current_data_dir(app: AppHandle) -> String {
     data_dir(&app).to_string_lossy().to_string()
 }
 
-// The exact folder the last set_data_dir moved AWAY from — the only directory
+// The exact folder the last set_data_dir moved AWAY from, the only directory
 // delete_data_dir is allowed to clean, so the webview can never point that command
 // at another app's folder full of same-named files (settings.json / data.db).
 static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -8320,7 +8320,7 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     if new == current {
         return Ok(old);
     }
-    // Remember which folder we are leaving — the only one delete_data_dir may clean.
+    // Remember which folder we are leaving, the only one delete_data_dir may clean.
     *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.clone());
     // Flush the live state to the current location first.
     {
@@ -8352,14 +8352,14 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
 }
 
 // Delete the store files in a folder (old location after a move). Only ever
-// removes our known data files — never the folder itself or anything else.
+// removes our known data files, never the folder itself or anything else.
 #[tauri::command]
 async fn delete_data_dir(path: String) -> bool {
     let dir = PathBuf::from(&path);
     if !dir.is_dir() {
         return false;
     }
-    // Only ever clean the folder set_data_dir just moved away from — never an
+    // Only ever clean the folder set_data_dir just moved away from, never an
     // arbitrary webview-supplied directory that happens to hold same-named files.
     let allowed = LAST_OLD_DATA_DIR
         .lock()
@@ -8419,7 +8419,7 @@ fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<St
         })
     });
 
-    // "Screenshot" + a precise timestamp (+ the source app for a window shot) — the
+    // "Screenshot" + a precise timestamp (+ the source app for a window shot), the
     // button name and the optional folder file share the same stamp.
     let stamp = local_stamp();
     let label = app_name.as_deref().map(clean_app_name).filter(|s| !s.is_empty());
@@ -8428,7 +8428,7 @@ fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<St
         None => (format!("Screenshot {}", stamp), format!("Screenshot-{}", stamp)),
     };
 
-    // Default: temp-only — the shot lives only as an in-app prompt (encrypted,
+    // Default: temp-only, the shot lives only as an in-app prompt (encrypted,
     // removed when the prompt is deleted). The folder copy is opt-in and honors
     // a custom screenshot directory (expert menu).
     let (save_to_folder, custom_dir) = app
@@ -8503,7 +8503,7 @@ fn luma_range(img: &image::RgbaImage) -> Option<(i32, i32)> {
     Some((min_l, max_l))
 }
 
-// True when a direct PrintWindow capture looks blocked — near black OR perfectly
+// True when a direct PrintWindow capture looks blocked, near black OR perfectly
 // uniform. Used only to decide whether to fall back to the frozen screen, where a
 // uniform-but-valid window still ends up captured.
 fn capture_looks_bad(img: &image::RgbaImage) -> bool {
@@ -8513,7 +8513,7 @@ fn capture_looks_bad(img: &image::RgbaImage) -> bool {
     }
 }
 
-// True when the FINAL crop is unusable — empty or pure black. Protected windows
+// True when the FINAL crop is unusable, empty or pure black. Protected windows
 // (Task Manager, secured dialogs) that even the frozen screen could not capture
 // end up black; such a defective image must never be saved (we error instead).
 fn capture_is_blank(img: &image::RgbaImage) -> bool {
@@ -8593,7 +8593,7 @@ fn show_window(hwnd: isize, cmd: i32) {
 
 // True when the window belongs to a higher-integrity / elevated process (e.g.
 // Task Manager). Such windows block PrintWindow, which can return a misleading
-// part-black image instead of failing cleanly — so we skip the direct path for
+// part-black image instead of failing cleanly, so we skip the direct path for
 // them and capture via the frozen desktop / minimize workaround, which work
 // regardless of elevation. Heuristic: a medium-integrity caller cannot open an
 // elevated process for PROCESS_QUERY_INFORMATION (access denied).
@@ -8625,10 +8625,10 @@ fn window_is_protected(id: u32) -> bool {
     }
 }
 
-// Capture the chosen window. PrintWindow first — it grabs the window's own
+// Capture the chosen window. PrintWindow first, it grabs the window's own
 // content, excluding anything stacked on top (clean for normal windows).
 // Protected/elevated windows (e.g. Task Manager) block PrintWindow. If nothing
-// covers the target, crop the frozen desktop (taken with our windows hidden) —
+// covers the target, crop the frozen desktop (taken with our windows hidden),
 // a GDI grab contains even elevated windows, with no flicker. If other windows
 // DO cover it, the freeze has them baked in, so run the workaround: hide our
 // overlay, minimize the covering windows, grab the now-clear area live, then
@@ -8650,7 +8650,7 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
             false
         }
     };
-    // 1. Direct PrintWindow — best for normal windows (own content, no overlays).
+    // 1. Direct PrintWindow, best for normal windows (own content, no overlays).
     // Skipped for elevated windows: PrintWindow is unreliable there and can pass
     // the quality check with a wrong image, so route them to the robust paths.
     let direct = if protected {
@@ -8730,7 +8730,7 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
 }
 
 // Open the project's GitHub page in the default browser (app logo → repo,
-// version label → releases). The URLs are hardcoded — the webview can never open
+// version label → releases). The URLs are hardcoded, the webview can never open
 // an arbitrary address.
 #[tauri::command]
 fn open_repo(page: Option<String>) -> Result<(), String> {
@@ -8751,8 +8751,8 @@ fn open_repo(page: Option<String>) -> Result<(), String> {
 
 // Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
 // Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
-// space, so — unlike a CSS `zoom` on <body> — it never desyncs popup positioning
-// or grid hit-testing. Clamped to the slider's 50–300% range.
+// space, so, unlike a CSS `zoom` on <body>, it never desyncs popup positioning
+// or grid hit-testing. Clamped to the slider's 50-300% range.
 #[tauri::command]
 fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
     let f = factor.clamp(0.5, 3.0);
@@ -8766,7 +8766,7 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// The project's own GitHub repo — the only host any of this ever talks to.
+// The project's own GitHub repo, the only host any of this ever talks to.
 fn repo_url() -> String {
     format!("https://github.com/{}", brand::REPO)
 }
@@ -8791,7 +8791,7 @@ struct UpdateInfo {
 }
 
 // Latest release tag, installer asset URL and changelog body. None on any
-// failure (offline, private repo, rate limit) — checks never disturb the app.
+// failure (offline, private repo, rate limit), checks never disturb the app.
 fn fetch_latest() -> Option<(String, String, String)> {
     let body = ureq::get(&update_api())
         .set("User-Agent", brand::USER_AGENT)
@@ -8894,7 +8894,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     }
     // Capture exclusion applies live to every open window. Never hold the store
     // lock across window API calls (deadlock risk). The flag says "allow
-    // screenshots", so the exclusion is its OPPOSITE — passing it straight through
+    // screenshots", so the exclusion is its OPPOSITE, passing it straight through
     // is what made the switch work backwards.
     if is_capture {
         for (_label, win) in app.webview_windows() {
@@ -8921,7 +8921,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     }
     // F25: switching folders off puts every member back on screen as its own pill (the
     // folders themselves are kept, so switching it on again restores them). This is a
-    // SYNC command, so it runs on the main thread — opening and closing windows there
+    // SYNC command, so it runs on the main thread, opening and closing windows there
     // is the documented way to deadlock WebView2, hence the hop onto the runtime.
     if is_folders {
         let handle = app.clone();
@@ -8976,7 +8976,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
         save_settings(&app, &store.settings);
     }
     // Cleared flags put the screenshot permission back to its default (off), which
-    // means the exclusion is on — re-assert it on every window so it is immediate.
+    // means the exclusion is on, re-assert it on every window so it is immediate.
     for (_label, win) in app.webview_windows() {
         set_capture_exclusion(&win, true);
     }
@@ -8984,7 +8984,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     notify_float_settings(&app);
 }
 
-// Add a version to the skip list — it will not be offered again.
+// Add a version to the skip list, it will not be offered again.
 #[tauri::command]
 fn skip_version(app: AppHandle, state: State<Db>, version: String) {
     let mut store = lock(&state);
@@ -9024,7 +9024,7 @@ fn valid_update_url(url: &str) -> bool {
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
-    // Only our own release assets under the exact pinned repo path — not any github.com URL.
+    // Only our own release assets under the exact pinned repo path, not any github.com URL.
     if !valid_update_url(&url) {
         return Err("invalid update source".to_string());
     }
@@ -9039,13 +9039,13 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .take(UPDATE_MAX_BYTES)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("read: {}", e))?;
-    // A file that exactly hit the cap was almost certainly truncated — never run a
+    // A file that exactly hit the cap was almost certainly truncated, never run a
     // partial installer.
     if bytes.len() as u64 >= UPDATE_MAX_BYTES {
         return Err("installer too large / truncated".to_string());
     }
     // Sanity-check the download is actually a Windows executable (PE "MZ" header)
-    // before we ever run it — a corruption/wrong-format guard. NOTE: this is not
+    // before we ever run it, a corruption/wrong-format guard. NOTE: this is not
     // cryptographic authentication; integrity today rests on TLS to the pinned repo
     // path. Publishing a per-release SHA-256 (or code-signing) and verifying it here
     // is the next hardening step.
@@ -9053,7 +9053,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         return Err("downloaded file is not a valid installer".to_string());
     }
     // Integrity: the SHA-256 published beside the installer in the release
-    // (`<installer>.sha256`, same pinned path) must be present AND match. Fail closed —
+    // (`<installer>.sha256`, same pinned path) must be present AND match. Fail closed,
     // an installer we cannot authenticate is never executed, so a hash file that is
     // missing, unreadable or malformed aborts the update just like a mismatch does.
     // Every release publishes the hash (see `release:publish` in package.json); if one
@@ -9066,11 +9066,11 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .and_then(|r| r.into_string().ok())
         .map(|t| t.split_whitespace().next().unwrap_or("").to_ascii_lowercase())
         .filter(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
-        .ok_or_else(|| "no usable checksum published for this update — download rejected".to_string())?;
+        .ok_or_else(|| "no usable checksum published for this update, download rejected".to_string())?;
     {
         use sha2::{Digest, Sha256};
         if format!("{:x}", Sha256::digest(&bytes)) != want {
-            return Err("update hash mismatch — download rejected".to_string());
+            return Err("update hash mismatch, download rejected".to_string());
         }
     }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
@@ -9222,7 +9222,7 @@ fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: bool) -> Resul
 
 fn csv_cell(s: &str) -> String {
     // CSV formula injection: a cell starting with =, +, -, @ or a tab is read as a
-    // formula by Excel/LibreOffice once reopened — CSV-quoting only protects the
+    // formula by Excel/LibreOffice once reopened, CSV-quoting only protects the
     // CSV syntax, not spreadsheet evaluation. A leading single quote forces text.
     let needs_prefix = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'));
     let s = if needs_prefix { format!("'{s}") } else { s.to_string() };
@@ -9234,10 +9234,10 @@ fn csv_row(cells: &[&str]) -> String {
     cells.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(";")
 }
 
-// Export the prompt library only (incl. images/files) — never app settings,
+// Export the prompt library only (incl. images/files), never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
-    // 83: pdfpage appended at the END, not inserted among the existing columns —
+    // 83: pdfpage appended at the END, not inserted among the existing columns,
     // an older export re-imported here has no such column, and row.get() on a
     // short row already returns None (-> the same default 0), never shifting
     // any OTHER column's fixed index.
@@ -9263,7 +9263,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
             &p.caption_size.to_string(),
             &p.tags.join(","),
             // The CSV writer quotes every cell and doubles inner quotes, so a
-            // multi-line note travels verbatim — no escaping needed here.
+            // multi-line note travels verbatim, no escaping needed here.
             &p.notes,
             &p.pdf_page.to_string(),
         ]));
@@ -9292,7 +9292,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
             block.push_str(&format!("\n@file {}", p.file_path));
         }
         // 83: only a PDF attachment reads this, and 0 (the first page) is by far
-        // the common case — skip the line entirely then, same as every other
+        // the common case, skip the line entirely then, same as every other
         // optional field here.
         if p.pdf_page > 0 {
             block.push_str(&format!("\n@pdfpage {}", p.pdf_page));
@@ -9628,7 +9628,7 @@ fn parse_csv_data(content: &str) -> ImportData {
 }
 
 // The signature a prompt is de-duplicated by, on both the preview and the real
-// import — the two must always agree, or the preview's "new"/"duplicate" label
+// import, the two must always agree, or the preview's "new"/"duplicate" label
 // could lie about what actually happens on confirm.
 fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
     format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
@@ -9648,7 +9648,7 @@ fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
     Ok(data)
 }
 
-// 88: what an import WOULD do, without touching the store — the file is picked
+// 88: what an import WOULD do, without touching the store, the file is picked
 // here, and its path travels back so the confirm step (import_prompts) can
 // re-read the SAME file without a second file dialog.
 #[derive(Serialize)]
@@ -9688,7 +9688,7 @@ async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPr
 }
 
 // Async: parsing + persisting an import stays off the UI thread. `path` comes
-// from a prior preview_import call (88) — never a fresh file dialog here, so
+// from a prior preview_import call (88), never a fresh file dialog here, so
 // confirming a preview can never silently import a DIFFERENT file.
 #[tauri::command]
 async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
@@ -9736,8 +9736,8 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
             tags,
             // A note from a foreign file must not abort the import either.
             notes: sanitize_notes(&item.notes).unwrap_or_default(),
-            // A CSV/TXT file carries prompt content, never machine-local bindings
-            // — nor the per-binding paste choice that belongs to one.
+            // A CSV/TXT file carries prompt content, never machine-local bindings,
+            // nor the per-binding paste choice that belongs to one.
             hotkey: String::new(),
             hotkey_paste: String::new(),
         };
@@ -9765,7 +9765,7 @@ struct Backup {
 // (Argon2id(password + pepper, salt)); 2/3 additionally deflate the JSON before
 // encrypting. Old plaintext .json backups are still read.
 const BACKUP_MAGIC: &[u8; 4] = b"PSB1";
-// Fixed obfuscation key — MUST stay identical across all versions or old fixed-key
+// Fixed obfuscation key, MUST stay identical across all versions or old fixed-key
 // backups become unreadable. Not a secret (open source); it only keeps backups from
 // being plainly readable while staying restorable on any machine.
 const BACKUP_FIXED_KEY: [u8; 32] = [
@@ -9790,7 +9790,7 @@ fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
 }
 
 // A backup is JSON, so deflating it before encryption shrinks the file to a
-// fraction. Compression must happen BEFORE encryption — ciphertext does not
+// fraction. Compression must happen BEFORE encryption, ciphertext does not
 // compress. Modes 2/3 mark a deflated payload; 0/1 stay readable forever.
 fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
     use flate2::{write::DeflateEncoder, Compression};
@@ -9800,7 +9800,7 @@ fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 // Ceiling for anything we decompress. The default backup key ships inside the exe, so
-// a valid-looking .psb is something anyone can craft — without a cap a few KB of
+// a valid-looking .psb is something anyone can craft, without a cap a few KB of
 // deflate expands until the process is killed. Far above any real library.
 const MAX_INFLATED: u64 = 512 * 1024 * 1024;
 
@@ -9963,7 +9963,7 @@ async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
     }
 }
 
-// What a full import restored — the UI names the file in its confirmation.
+// What a full import restored, the UI names the file in its confirmation.
 #[derive(Serialize)]
 struct ImportSummary {
     name: String,
@@ -10016,12 +10016,12 @@ async fn import_all(
         }
         migrate_prompts(&mut store.prompts);
         store.settings = backup.settings;
-        // migrate() fills defaults and guarantees at least one view — without it a
+        // migrate() fills defaults and guarantees at least one view, without it a
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
         store.settings.migrate();
         store.prompts_locked = false; // a full import supersedes any decrypt lock
-        // F20: a colliding or unusable accelerator must not fail the restore — drop
+        // F20: a colliding or unusable accelerator must not fail the restore, drop
         // it and let the summary say so.
         let app_hotkey = store.settings.hotkey.clone();
         let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
@@ -10056,14 +10056,14 @@ fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
 }
 
 // Same point-on-monitor test as above, but over plain (x, y, width, height) tuples
-// instead of tauri::Monitor — that type can't be constructed outside a real window,
+// instead of tauri::Monitor, that type can't be constructed outside a real window,
 // so this is the only form `prune_offscreen_floats` below can actually unit-test.
 fn point_in_monitor_rects(monitors: &[(i32, i32, i32, i32)], x: i32, y: i32) -> bool {
     monitors.iter().any(|&(mx, my, mw, mh)| x >= mx && x < mx + mw && y >= my && y < my + mh)
 }
 
-// P44: a floating pill/folder whose saved anchor point (its stored x/y — no width or
-// height is tracked) sits on NO monitor at all is unreachable forever — drop it. No
+// P44: a floating pill/folder whose saved anchor point (its stored x/y, no width or
+// height is tracked) sits on NO monitor at all is unreachable forever, drop it. No
 // margin: a pill dragged mostly off an edge but with its origin corner still on some
 // monitor counts as "hanging over the edge" and stays, exactly what the request asked
 // for. A folder's members never carry their own `floating` entry while grouped (same
@@ -10098,13 +10098,13 @@ fn prune_offscreen_floats(monitors: &[(i32, i32, i32, i32)], settings: &mut Sett
     !gone_pills.is_empty() || settings.float_folders.len() != before
 }
 
-// NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent) — a
+// NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent), a
 // physically stored size grew by the monitor's scale factor on every start.
 // Position stays physical (global desktop coordinates).
 
 // Keep in sync with tauri.conf.json's main-window minWidth/minHeight. The OS/WebView2
 // minSize constraint only guards interactive resize-dragging, not a programmatic
-// set_size() call — resolve_geometry's first-start branch has to floor itself.
+// set_size() call, resolve_geometry's first-start branch has to floor itself.
 const MAIN_WIN_MIN_W: u32 = 680;
 const MAIN_WIN_MIN_H: u32 = 460;
 
@@ -10162,7 +10162,7 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
     if let Some(state) = handle.try_state::<Db>() {
         // try_lock, never block: this runs on the event-loop thread for every move/
         // resize tick. If the store is busy (e.g. a backup VACUUM holds the lock), skip
-        // this update — the next move/resize event carries the current geometry anyway.
+        // this update, the next move/resize event carries the current geometry anyway.
         let mut store = match state.try_lock() {
             Ok(g) => g,
             Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
@@ -10182,7 +10182,7 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
 // Append one line to a local crash log so a hard failure on a user's machine
 // leaves something diagnosable. Privacy: the message is only the panic location
 // and our own static panic text (never prompt content or other user data), and
-// the file is local — never uploaded. Rotates past 256 KB so it can't grow
+// the file is local, never uploaded. Rotates past 256 KB so it can't grow
 // without bound. Best-effort: every step is ignored on failure.
 fn append_crash_log(msg: &str) {
     let dir = std::env::var_os("APPDATA")
@@ -10224,7 +10224,7 @@ fn ensure_webview2() -> bool {
         // Try a silent download + install of the official Evergreen runtime; if
         // that fails (offline/blocked), fall back to opening the download page.
         if install_webview2_runtime() {
-            // The runtime exists now, but this process started without it —
+            // The runtime exists now, but this process started without it,
             // relaunch so a fresh instance loads the webview.
             if let Ok(exe) = std::env::current_exe() {
                 let _ = std::process::Command::new(exe).spawn();
@@ -10269,14 +10269,14 @@ fn install_webview2_runtime() -> bool {
     }
     // Same two guards the update download uses: a file that exactly hit the cap was
     // almost certainly truncated, and whatever we are about to execute has to at least
-    // be a Windows executable. (Not cryptographic authentication — the bootstrapper
+    // be a Windows executable. (Not cryptographic authentication, the bootstrapper
     // comes from Microsoft's own pinned fwlink over TLS, and only after the user
     // agreed to install it.)
     if bytes.len() as u64 >= CAP || bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return false;
     }
     // Stage into a unique temp subdir so a local attacker can't pre-plant the
-    // installer at a predictable path (TOCTOU) — matching install_update.
+    // installer at a predictable path (TOCTOU), matching install_update.
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -10312,7 +10312,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default();
     // Only one instance app-wide (keyed by app identifier, independent of the exe
     // location) unless the user opted into "Allow multiple instances" (expert menu,
-    // default off) — then this plugin is left out entirely, since it enforces the
+    // default off), then this plugin is left out entirely, since it enforces the
     // limit itself before .setup() ever runs (there is no AppHandle yet to consult
     // the setting the normal way; early_allow_multiple_instances() peeks the DB
     // directly for exactly this reason). A second launch, when the plugin IS
@@ -10331,7 +10331,7 @@ pub fn run() {
                     if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         return;
                     }
-                    // Read the owner out first — the handler must not call back into
+                    // Read the owner out first, the handler must not call back into
                     // the app while the lookup lock is held.
                     let owner = app.try_state::<HotkeyTargets>().and_then(|targets| {
                         let list = targets.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -10375,7 +10375,7 @@ pub fn run() {
                 clipwatch::start(handle.clone());
             }
 
-            // F2: take a backup whenever the newest one is older than the interval —
+            // F2: take a backup whenever the newest one is older than the interval,
             // once at start, then on every tick for as long as the app runs. The
             // settings are re-read each round, so switching auto-backup off or
             // changing the interval takes effect without a restart. Off the UI thread
@@ -10400,7 +10400,7 @@ pub fn run() {
                         let due = newest_backup_age(&h).map_or(true, |age| age >= interval_h.saturating_mul(3600));
                         if on && due {
                             // P60: the manual "backup now" toast fires from the same
-                            // command's own success path in the frontend — the automatic
+                            // command's own success path in the frontend, the automatic
                             // one has no such call site, so it needs its own signal here.
                             if do_backup(&h, keep, gfs_from_settings(&store.settings)).is_ok() {
                                 let _ = h.emit_to("main", "backup-done", ());
@@ -10413,7 +10413,7 @@ pub fn run() {
 
             // Re-arm the app hotkey plus every prompt accelerator (F20). Each
             // registration is a round trip to the main thread, so this runs on a
-            // worker — the first paint never waits for it, however many prompts
+            // worker, the first paint never waits for it, however many prompts
             // carry a hotkey.
             {
                 let h = handle.clone();
@@ -10465,14 +10465,14 @@ pub fn run() {
                     apply_window_bg(&handle, &eff, vars.get("bg").map(|s| s.as_str()));
                 }
                 // The window is revealed by the frontend (show_main_window) once
-                // the first layout pass is done — no visible text re-sizing.
+                // the first layout pass is done, no visible text re-sizing.
                 // Safety net: show after 1.5s even if the frontend never calls.
                 if !start_hidden {
                     let h = handle.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_millis(1500));
                         if let Some(w) = h.get_webview_window("main") {
-                            // Show on uncertainty too — this is the safety net.
+                            // Show on uncertainty too, this is the safety net.
                             if !w.is_visible().unwrap_or(false) {
                                 let _ = w.show();
                             }
@@ -10495,7 +10495,7 @@ pub fn run() {
                     }
                     WindowEvent::Resized(s) => {
                         if s.width > 0 && s.height > 0 {
-                            // Store LOGICAL pixels — physical values re-scaled
+                            // Store LOGICAL pixels, physical values re-scaled
                             // by the monitor factor on every start.
                             let scale = handle2
                                 .get_webview_window("main")
@@ -10536,7 +10536,7 @@ pub fn run() {
                         if minimize {
                             api.prevent_close();
                             // P92: the very first time, explain that the tray menu
-                            // still copies while hidden — JS shows it, then hides
+                            // still copies while hidden, JS shows it, then hides
                             // itself once dismissed. Every later close hides at once.
                             let first_time = handle2
                                 .try_state::<Db>()
@@ -10635,7 +10635,7 @@ pub fn run() {
             sync_float_windows(&handle);
 
             // Pre-warm the snip overlay shortly after launch (off the startup hot
-            // path) so even the FIRST screenshot opens instantly — the WebView2
+            // path) so even the FIRST screenshot opens instantly, the WebView2
             // cold-start is paid here in the background, not on first use.
             let h_pw = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -10994,7 +10994,7 @@ mod tests {
         assert!(!dropped.contains(&names[0]), "third-newest year kept");
         assert_eq!(dropped, vec![names[2].clone(), names[3].clone()], "no tier asks for these");
 
-        // Every tier at zero must not wipe the lot — the newest one stays.
+        // Every tier at zero must not wipe the lot, the newest one stays.
         let empty = GfsConfig { daily: 0, weekly: 0, monthly: 0, yearly: 0 };
         let dropped = backups_to_drop(&names, 1, Some(&empty));
         assert_eq!(dropped.len(), names.len() - 1);
@@ -11255,7 +11255,7 @@ mod tests {
         gzip_to(&raw_a, &folder_a.join("data.db.gz")).unwrap();
         let _ = std::fs::remove_file(&raw_a);
 
-        // B: plain (pre-2.6, ungzipped) snapshot — also has clip_inbox rows.
+        // B: plain (pre-2.6, ungzipped) snapshot, also has clip_inbox rows.
         let folder_b = dir.join("20260102-000000");
         std::fs::create_dir_all(&folder_b).unwrap();
         {
@@ -11263,7 +11263,7 @@ mod tests {
             conn.execute_batch("INSERT INTO clip_inbox(ts, text) VALUES(3, 'secret-c');").unwrap();
         }
 
-        // C: nothing in its clip_inbox — must not be counted as purged.
+        // C: nothing in its clip_inbox, must not be counted as purged.
         let folder_c = dir.join("20260103-000000");
         std::fs::create_dir_all(&folder_c).unwrap();
         let raw_c = dir.join("raw_c.db");
@@ -11332,7 +11332,7 @@ mod tests {
     #[test]
     fn restore_selective_rolls_back_everything_if_one_table_fails() {
         // "prompts" comes first in the copy order and would succeed on its own;
-        // "trash" is made incompatible (extra column) so its INSERT fails — proving
+        // "trash" is made incompatible (extra column) so its INSERT fails, proving
         // the whole thing runs in ONE transaction, not one commit per table.
         let dir = std::env::temp_dir();
         let target = dir.join("prompt-saver-test-restore-rollback-target.db");
@@ -11362,7 +11362,7 @@ mod tests {
 
     #[test]
     fn backup_decrypt_passes_through_legacy_plaintext() {
-        // Old .json backups have no PSB1 header — the caller falls back to plain JSON.
+        // Old .json backups have no PSB1 header, the caller falls back to plain JSON.
         assert!(backup_decrypt(br#"{"prompts":[]}"#, None).expect("no error").is_none());
     }
 
@@ -11456,8 +11456,8 @@ mod tests {
     fn stale_trash_ids_respects_the_retention_window() {
         let mut trash = sample_prompts(); // p1, p2
         let now = 10_000_000u64;
-        trash[0].trashed_at = now - 100; // just trashed — well inside any window
-        trash[1].trashed_at = now - 1_000_000; // trashed long ago — past a 1-day window
+        trash[0].trashed_at = now - 100; // just trashed, well inside any window
+        trash[1].trashed_at = now - 1_000_000; // trashed long ago, past a 1-day window
         let max_age = 86_400; // 1 day
         let stale = stale_trash_ids(&trash, max_age, now);
         assert_eq!(stale, vec!["p2".to_string()], "only the old entry should be stale");
@@ -11466,7 +11466,7 @@ mod tests {
     #[test]
     fn stale_trash_ids_never_touches_a_zero_timestamp() {
         // trashed_at == 0 is the "never trashed" sentinel every non-trashed Prompt
-        // carries — it must never be treated as "trashed an eternity ago".
+        // carries, it must never be treated as "trashed an eternity ago".
         let mut trash = sample_prompts();
         trash[0].trashed_at = 0;
         trash[1].trashed_at = 0;
@@ -11533,7 +11533,7 @@ mod tests {
         for s in ["Super+K", "Super+Shift+S", "Alt+Super+P", "Cmd+Q"] {
             assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
         }
-        // Shift alone is how a capital letter is typed — never a modifier here.
+        // Shift alone is how a capital letter is typed, never a modifier here.
         for s in ["Shift+A", "Shift+1", "Shift+F5"] {
             assert_eq!(reason(s), Some(HK_INVALID), "not refused: {s}");
         }
@@ -11654,7 +11654,7 @@ mod tests {
         assert_eq!(sanitize_hotkey("ctrl+shift+1", "", &others).unwrap(), "ctrl+shift+1");
     }
 
-    // A prompt stored before F20 has no hotkey field at all — it must load with an
+    // A prompt stored before F20 has no hotkey field at all, it must load with an
     // empty binding instead of failing the whole row.
     #[test]
     fn a_prompt_without_a_hotkey_field_still_loads() {
@@ -11665,7 +11665,7 @@ mod tests {
     }
 
     // Settings JSON from an older version: unknown/removed fields (copy_history,
-    // a future field) are ignored and every missing field defaults — never a total
+    // a future field) are ignored and every missing field defaults, never a total
     // parse failure that would wipe the user's settings.
     #[test]
     fn old_settings_json_migrates() {
@@ -11748,7 +11748,7 @@ mod tests {
     }
 
     // F13: a choice variable is plain prompt text, so neither exporter may touch
-    // its `|` or its commas — a mangled token would silently lose the options.
+    // its `|` or its commas, a mangled token would silently lose the options.
     #[test]
     fn choice_variable_survives_txt_and_csv_export() {
         const BODY: &str = "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}.";
@@ -11938,7 +11938,7 @@ mod tests {
         assert!(sanitize_notes(&"x".repeat(MAX_NOTES_LEN + 1)).is_err());
     }
 
-    // F17, the whole point of the feature: a note must never reach the clipboard —
+    // F17, the whole point of the feature: a note must never reach the clipboard,
     // not through a single copy, and not through a chained multi-prompt copy.
     #[test]
     fn notes_never_reach_the_copied_payload() {
@@ -12111,7 +12111,7 @@ mod tests {
             HashMap::from([("a".to_string(), [0, 0])]),
         );
         assert_eq!(first_free_cell(&view), Some([1, 0]));
-        // A folder sits on [1,0] (outside view.layouts) — the scan must skip it, or a
+        // A folder sits on [1,0] (outside view.layouts), the scan must skip it, or a
         // dissolved member handed that cell would save fine but never render.
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0]]), Some([2, 0]));
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0], [2, 0]]), None);
@@ -12391,7 +12391,7 @@ mod tests {
     #[test]
     fn an_imported_view_cannot_exceed_the_grid_ceiling() {
         // A hand-edited backup used to be able to ask for a grid of u32::MAX cells,
-        // which the renderer then tried to build — the window never painted again.
+        // which the renderer then tried to build, the window never painted again.
         let mut s = Settings::default();
         s.views = vec![test_view("v1"), test_view("v2")];
         s.views[0].cols = u32::MAX;
@@ -12671,7 +12671,7 @@ mod tests {
 
     #[test]
     fn a_small_drag_never_merges() {
-        // The pill moved four pixels and touches nothing else — the case that must
+        // The pill moved four pixels and touches nothing else, the case that must
         // never turn a nudge into a folder.
         let others = vec![
             ("a".to_string(), pill_at(600.0, 100.0)),
@@ -12790,7 +12790,7 @@ mod tests {
         assert_eq!(pills, ids(&["c"]));
         assert_eq!(folders, ids(&["f1"]));
 
-        // Off: every member is a plain pill again, no folder — switching the feature
+        // Off: every member is a plain pill again, no folder, switching the feature
         // off must put every pill back.
         settings.ui_flags.insert("pillFolders".into(), false);
         let (pills, folders) = float_window_plan(&settings, &known);
@@ -12849,7 +12849,7 @@ mod tests {
         assert_eq!(l.win.x + l.icon.0, icon.x);
         assert_eq!(l.win.y + l.icon.1, icon.y);
         // The popover hangs under it with the gap in between, aligned with the icon's
-        // left edge — so the window origin IS the icon and nothing shifts sideways
+        // left edge, so the window origin IS the icon and nothing shifts sideways
         // when it opens.
         assert_eq!(l.win.y + l.pop.1, icon.bottom() + 6.0);
         assert_eq!(l.win.x + l.pop.0, icon.x);
@@ -12924,7 +12924,7 @@ mod tests {
         assert_eq!(l.side, FolderSide::Above);
         assert!(l.win.x >= work.x && l.win.right() <= work.right());
         assert!(l.win.y >= work.y && l.win.bottom() <= work.bottom());
-        // A folder in that screen's top-left corner opens below and stays on it —
+        // A folder in that screen's top-left corner opens below and stays on it,
         // the primary monitor to the left is never used as spare room.
         let icon = Rect { x: 1930.0, y: 20.0, w: ICON * 1.5, h: ICON * 1.5 };
         let l = folder_layout(icon, 600.0, 200.0, 9.0, work);
@@ -12944,7 +12944,7 @@ mod tests {
     fn dissolving_a_folder_never_stacks_its_pills() {
         let work = primary_work();
         let pill = |x: f64, y: f64| Rect { x, y, w: 200.0, h: 80.0 };
-        // Two members whose stored position is the SAME spot — exactly what merging
+        // Two members whose stored position is the SAME spot, exactly what merging
         // one pill onto another leaves behind.
         let out = spread_free_positions(&[pill(500.0, 400.0), pill(500.0, 400.0)], &[], work);
         assert_eq!(out[0], (500.0, 400.0), "the first one keeps its wish");
@@ -13055,7 +13055,7 @@ mod tests {
 
     // A stitched frozen desktop for a mixed-DPI pair: a 2560x1440 monitor scaled to
     // 150% sits LEFT of the 1920x1080 primary, so the virtual origin is negative.
-    // Physical pixels are what the capture holds — the scale factor never enters the
+    // Physical pixels are what the capture holds, the scale factor never enters the
     // mapping, which is exactly why the picker stays exact on either monitor.
     fn mixed_dpi_desktop() -> (Vec<MonitorCap>, i64, i64) {
         let (left_x, left_w, left_h) = (-2560i32, 2560u32, 1440u32);
@@ -13095,7 +13095,7 @@ mod tests {
         assert_eq!(sample_frozen(&caps, lx as i32, 0), Some([26, 43, 60]));
         assert_eq!(sample_frozen(&caps, rx as i32, 0), Some([255, 128, 0]));
         assert_eq!(sample_frozen(&caps, rx as i32 + 1919, 1079), Some([1, 2, 3]));
-        // The neighbouring pixel is a different colour — no off-by-one smearing.
+        // The neighbouring pixel is a different colour, no off-by-one smearing.
         assert_eq!(sample_frozen(&caps, rx as i32 - 1, 0), Some([0, 0, 0]));
         // Outside the desktop nothing is sampled at all (never a clamped neighbour).
         assert_eq!(sample_frozen(&caps, -1, 0), None);

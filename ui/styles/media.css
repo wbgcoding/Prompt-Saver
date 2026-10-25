@@ -37,7 +37,7 @@
 }
 .media-sound:hover .media-vol-pop,
 .media-sound.dragging .media-vol-pop { display: flex; }
-/* Generous invisible hitbox so the popup doesn't vanish on small detours —
+/* Generous invisible hitbox so the popup doesn't vanish on small detours,
    top/sides only, so it never covers the sound button below. */
 .media-vol-pop::before {
   content: "";

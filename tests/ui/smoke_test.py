@@ -25,7 +25,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).parent
 
-# The floor is the app's own minimum window size — read it, so this sweep follows
+# The floor is the app's own minimum window size, read it, so this sweep follows
 # tauri.conf.json instead of drifting away from it.
 _WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
 MIN_W, MIN_H = _WIN["minWidth"], _WIN["minHeight"]
@@ -75,7 +75,7 @@ PROBE = """
   // Content parked past the right edge of a SIDEWAYS-scrollable container (the view
   // tab strip) is reachable by scrolling. Behind an overflow-x:hidden ancestor it is
   // gone for good, so that still counts as an escape.
-  // Only the NEAREST ancestor that controls horizontal overflow decides — an outer
+  // Only the NEAREST ancestor that controls horizontal overflow decides, an outer
   // scroller cannot reveal what an inner overflow-x:hidden box already cut off.
   const inScroller = (el) => {
     for (let p = el.parentElement; p; p = p.parentElement) {
@@ -105,7 +105,7 @@ PROBE = """
     if (document.documentElement.scrollWidth > innerWidth + 1) {
       add('the page scrolls horizontally (' + document.documentElement.scrollWidth + ' > ' + innerWidth + ')');
     }
-    // A dialog holding more than it can show must be able to scroll to the rest —
+    // A dialog holding more than it can show must be able to scroll to the rest,
     // on a short window the inner lists keep a height floor, so the dialog is where
     // the overflow ends up.
     for (const box of document.querySelectorAll('.overlay:not(.hidden) > .modal')) {
@@ -116,7 +116,7 @@ PROBE = """
       }
     }
     // Every popover goes through one placement rule and must land fully inside the
-    // window — vertically too. A dropdown opening past the bottom edge is the theme
+    // window, vertically too. A dropdown opening past the bottom edge is the theme
     // editor / value picker defect, and it is invisible to the horizontal scan.
     for (const el of document.querySelectorAll(
         '.num-pop, .color-pop, .tag-suggest, .tag-pop, .mini-menu, .ctx-menu, ' +
@@ -138,7 +138,7 @@ PROBE = """
           Math.round(r.right) + ' of ' + innerWidth + ')');
       }
       // Cut off sideways by a box that cannot scroll to it: the control is gone, not
-      // merely off-view. Only interactive elements — labels legitimately ellipsise.
+      // merely off-view. Only interactive elements, labels legitimately ellipsise.
       if (el.matches('button, input, select, textarea')) {
         for (let p = el.parentElement; p; p = p.parentElement) {
           const ox = getComputedStyle(p).overflowX;
@@ -245,7 +245,7 @@ PROBE = """
     if (getComputedStyle(document.documentElement).getPropertyValue('--lib-preview-lines').trim() !== '2') {
       out.errors.push('the library preview line-count CSS var is not applied');
     }
-    // P32: font/size sit right under the name row, not down by the prompt text —
+    // P32: font/size sit right under the name row, not down by the prompt text,
     // kept, just moved. A pure DOM-order check, no need to open the editor.
     {
       const nameRow = document.querySelector('#modal .modal-name-row');
@@ -313,7 +313,7 @@ PROBE = """
       layoutScan('grid folder');
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
-      // Dissolving must not just remove the folder tile — every member has to land
+      // Dissolving must not just remove the folder tile, every member has to land
       // back on the grid as its own tile, not vanish into the library.
       fTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await sleep(150);
@@ -336,7 +336,7 @@ PROBE = """
       }
     }
     // P50: right-clicking a view tab's "Duplicate" entry creates a new, empty view
-    // with the same name (+ suffix), color and grid size — cleaned up right after
+    // with the same name (+ suffix), color and grid size, cleaned up right after
     // so it doesn't throw off the view-count checks further down.
     {
       const homeTab = document.querySelector('.view-btn[data-view-id="home"]');
@@ -465,9 +465,9 @@ PROBE = """
     await click('library-btn');
     layoutScan('library');
     mustReach('library', '#library .modal-head-actions > button');
-    // 17: "last edited" sort — from the last_edited_map fixture (p3 newest, then
-    // p1, then p9; everything else — including the favorited p0/p5/p10, which
-    // float to the top independently of this sort — has no version row and
+    // 17: "last edited" sort, from the last_edited_map fixture (p3 newest, then
+    // p1, then p9; everything else, including the favorited p0/p5/p10, which
+    // float to the top independently of this sort, has no version row and
     // sorts to the end).
     {
       const sortSel = document.getElementById('library-sort');
@@ -512,7 +512,7 @@ PROBE = """
       } else if (!document.querySelectorAll('#tag-modal-list .tag-manage-row').length) {
         out.errors.push('the tag manager listed no tags');
       } else {
-        // P27: "Colorize" gives every UNcolored tag a palette color, in order —
+        // P27: "Colorize" gives every UNcolored tag a palette color, in order,
         // an already-colored tag ("Work", fixture blue) must stay untouched.
         const rowFor = (name) => [...document.querySelectorAll('#tag-modal-list .tag-manage-row')]
           .find(r => (r.querySelector('.tag-manage-name') || {}).textContent === name);
@@ -544,7 +544,7 @@ PROBE = """
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);
     }
-    // P18: a "-word" term excludes matches instead of narrowing to them —
+    // P18: a "-word" term excludes matches instead of narrowing to them,
     // "work" alone should hit more prompts than "work -draft".
     if (q) {
       q.value = 'work';
@@ -676,14 +676,14 @@ PROBE = """
     if (!document.getElementById('grid-empty').classList.contains('hidden')) {
       out.errors.push('the empty-grid hint shows although the grid has prompts');
     }
-    // Copying the prompt with placeholders must open and close the fill-in dialog —
+    // Copying the prompt with placeholders must open and close the fill-in dialog,
     // and a plain click must NOT paste into the previous app (that is what the
     // double-click / Enter shortcut is for).
     const tiles = [...document.querySelectorAll('#grid .tile')];
     const varTile = tiles.find(el => (el.dataset.id || '') === 'p1');
     if (varTile) {
       // The grid listens for pointer events (it tracks drags), so .click() alone
-      // never reaches the handler — dispatch the real sequence.
+      // never reaches the handler, dispatch the real sequence.
       for (const type of ['pointerdown', 'pointerup', 'click']) {
         varTile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
       }
@@ -746,7 +746,7 @@ PROBE = """
       for (const [name, re] of dynChecks) {
         if (!re.test(copied)) out.errors.push('the ' + name + ' placeholder produced nothing usable: ' + copied);
       }
-      // A second copy must move the counter on — that is the whole point of it.
+      // A second copy must move the counter on, that is the whole point of it.
       window.__LAST_COPY__ = undefined;
       await sleep(2400); // past the per-prompt copy cooldown (2000ms)
       if (await clickTile('p3') && !/no 2[ :]/.test(window.__LAST_COPY__ || '')) {
@@ -823,7 +823,7 @@ PROBE = """
       } else if (chips.some(c => !c.title.trim())) {
         out.errors.push('an automatic placeholder chip has no explanation');
       }
-      // P42: the clipboard placeholder reads live external data, unlike the rest —
+      // P42: the clipboard placeholder reads live external data, unlike the rest,
       // it alone must carry the highlight class.
       const clipChip = chips.find(c => c.textContent === '/clipboard\\\\');
       if (!clipChip || !clipChip.classList.contains('vars-chip-highlight')) {
@@ -872,7 +872,7 @@ PROBE = """
           out.errors.push('the editor did not load the stored note');
         }
         // P35: the note field reads as a different kind of box, not a second
-        // prompt field — its background must not match the main text area's.
+        // prompt field, its background must not match the main text area's.
         const notesBg = getComputedStyle(document.getElementById('modal-notes-text')).backgroundColor;
         const promptBg = getComputedStyle(document.getElementById('modal-text')).backgroundColor;
         if (notesBg === promptBg) out.errors.push('the notes field looks identical to the prompt field');
@@ -903,7 +903,7 @@ PROBE = """
         if (badge.classList.contains('hidden') || !badge.textContent.trim()) {
           out.errors.push('the collapsed hotkey row shows no binding');
         }
-        // The app hotkey is Ctrl+Shift+P — a prompt must not be able to take it.
+        // The app hotkey is Ctrl+Shift+P, a prompt must not be able to take it.
         const before = hField.value;
         await press({ key: 'P', ctrlKey: true, shiftKey: true });
         if (hErr.classList.contains('hidden') || !hErr.textContent.trim()) {
@@ -950,7 +950,7 @@ PROBE = """
           out.errors.push('the copy/paste choice stayed visible without a binding');
         }
       }
-      // Both collapsibles are open now — the state that used to squeeze them to a
+      // Both collapsibles are open now, the state that used to squeeze them to a
       // 6px sliver and push Save out of reach on a short window.
       layoutScan('prompt editor, rows expanded');
       collapseRows('editor');
@@ -981,7 +981,7 @@ PROBE = """
     if (toastEl.style.getPropertyValue('--toast-tint') !== '#1A2B3C') {
       out.errors.push('the picker toast carries no colour');
     }
-    // P60: an automatic backup toasts the same way a manual one already did —
+    // P60: an automatic backup toasts the same way a manual one already did,
     // the backend has no other call site to toast from, so it fires this itself.
     window.__FIRE__('backup-done');
     await sleep(150);
@@ -989,7 +989,7 @@ PROBE = """
       out.errors.push('an automatic backup gave no "Backup created" toast: ' + toastEl.textContent);
     }
 
-    // F20: pressing a prompt hotkey runs the same activation a tile does — the copy
+    // F20: pressing a prompt hotkey runs the same activation a tile does, the copy
     // is recorded, and whether it also pastes follows the expert option alone.
     const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
     calls().length = 0;
@@ -1003,7 +1003,7 @@ PROBE = """
       out.errors.push('a prompt hotkey pasted although the paste option is off');
     }
     // F12: a hotkey copy of a prompt with MANUAL placeholders asks in the small
-    // standalone window — the main window must not be pulled forward for it.
+    // standalone window, the main window must not be pulled forward for it.
     calls().length = 0;
     window.__VAR_PAYLOAD__ = undefined;
     window.__LAST_COPY__ = undefined;
@@ -1047,7 +1047,7 @@ PROBE = """
     if (window.__LAST_COPY__ !== undefined) out.errors.push('a cancelled fill-in copied anyway');
 
     // P92: the first close-to-tray shows a one-time hint before the window actually
-    // hides — dismissing it must still hide the window.
+    // hides, dismissing it must still hide the window.
     {
       const win = window.__TAURI__.window.getCurrentWindow();
       let hidden = false;
@@ -1130,7 +1130,7 @@ PROBE = """
       document.getElementById('settings').classList.add('hidden');
       return !!row;
     };
-    // 11: grid bulk selection — checkbox click must never fall through to the
+    // 11: grid bulk selection, checkbox click must never fall through to the
     // tile's own copy/drag handling (same .tile-select guard as .tile-menu).
     {
       const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
@@ -1189,7 +1189,7 @@ PROBE = """
         }
       }
     }
-    // 91: trash — the dialog opened from the expert menu's Data group. Restore,
+    // 91: trash, the dialog opened from the expert menu's Data group. Restore,
     // single purge and "Clear all" (empty_trash) each get their own target so all
     // three new commands are exercised, not just the happy path of one.
     {
@@ -1263,7 +1263,7 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
-    // 51: prompt in multiple views — off by default. On exposes "Also show in…" on
+    // 51: prompt in multiple views, off by default. On exposes "Also show in…" on
     // the tile menu, which places/unplaces the SAME prompt (shared data, no copy)
     // in another view via addView/removeView.
     {
@@ -1303,7 +1303,7 @@ PROBE = """
                   out.errors.push('the popover did not show Work as placed after adding it');
                 } else {
                   window.__SMOKE_ARGS__ = [];
-                  workRowAfter.click(); // toggle back off — leaves the fixture clean
+                  workRowAfter.click(); // toggle back off, leaves the fixture clean
                   await sleep(150);
                   const removeCall = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'batch_prompts');
                   if (!removeCall || removeCall[1].action !== 'removeView') {
@@ -1333,7 +1333,7 @@ PROBE = """
         }
       }
     }
-    // 24: grid tag filter — the header toolbar button opens a popover of tag chips;
+    // 24: grid tag filter, the header toolbar button opens a popover of tag chips;
     // picking one dims (never hides) tiles that do not match, so the grid geometry
     // and drag targets stay exactly as they were.
     {
@@ -1355,8 +1355,8 @@ PROBE = """
             draftChip.click();
             await sleep(200);
             if (!tagBtn.classList.contains('active')) out.errors.push('picking a tag did not mark the toolbar button active');
-            const t0 = gridTile('p0'); // ["Work"] only — must dim
-            const t1 = gridTile('p1'); // ["Draft", "Work"] — must stay full
+            const t0 = gridTile('p0'); // ["Work"] only, must dim
+            const t1 = gridTile('p1'); // ["Draft", "Work"], must stay full
             if (!t0 || !t0.classList.contains('tile-dimmed')) out.errors.push('a non-matching tile (p0) was not dimmed');
             if (!t1 || t1.classList.contains('tile-dimmed')) out.errors.push('a matching tile (p1) was dimmed');
             if (t0 && getComputedStyle(t0).display === 'none') out.errors.push('a dimmed tile was hidden instead of dimmed');
@@ -1373,7 +1373,7 @@ PROBE = """
         await sleep(100);
       }
     }
-    // 88: import preview — shows new vs. duplicate before anything is imported.
+    // 88: import preview, shows new vs. duplicate before anything is imported.
     // Cancel only here (not confirm): confirming would push fake prompts into
     // the shared fixture and could throw off every check after this one in the
     // same probe run.
@@ -1440,7 +1440,7 @@ PROBE = """
       }
       // P8: the same reorder must offer an undo toast. Click it and prove the tile
       // really lands back on its original cell (not just that a class flips), then
-      // leave the toast the way its own click handler leaves it (hideToast()) — no
+      // leave the toast the way its own click handler leaves it (hideToast()), no
       // stray classList surgery, and nothing lingers into later checks.
       if (cell && origCell) {
         const undoToast = document.getElementById('toast');
@@ -1457,7 +1457,7 @@ PROBE = """
           if (undoToast.classList.contains('show')) out.errors.push('the undo toast is still showing after being clicked');
         }
       }
-      // Modifier drag: armed, and the payload is the raw text — placeholders included,
+      // Modifier drag: armed, and the payload is the raw text, placeholders included,
       // because filling them needs a dialog no drag can open.
       const varTile2 = gridTile('p1');
       press(varTile2, { ctrlKey: true });
@@ -1510,7 +1510,7 @@ PROBE = """
         libRow.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
       }
       await click('library-close');
-      // Switching it off takes the whole behaviour with it — including on a tile that
+      // Switching it off takes the whole behaviour with it, including on a tile that
       // is already wired up, which is the only way a stale drag could still fire.
       await setExpertFlag(DRAG_OUT, false);
       press(varTile2, { ctrlKey: true });
@@ -1522,7 +1522,7 @@ PROBE = """
       await sleep(100);
     }
     // F14/F15: the preview renders every Markdown construct, colours the fenced code
-    // blocks, and — the part that matters — shows injected markup as literal text.
+    // blocks, and, the part that matters, shows injected markup as literal text.
     // Ships off now, so the test has to switch it on itself.
     if (!await setExpertFlag('Markdown preview', true)) {
       out.errors.push('the Markdown preview option is missing from the expert menu');
@@ -1544,7 +1544,7 @@ PROBE = """
       const prev = document.getElementById('modal-md-preview');
       const pwrap = document.getElementById('modal-md-wrap');
       const ta = document.getElementById('modal-text');
-      // With the feature on the prompt opens RENDERED — no switch, no empty pane.
+      // With the feature on the prompt opens RENDERED, no switch, no empty pane.
       if (!prev.innerHTML.trim()) {
         out.errors.push('the preview pane is empty before it is opened');
       }
@@ -1560,7 +1560,7 @@ PROBE = """
           out.errors.push('the preview pane has no visible box: ' + Math.round(box.width) + 'x' + Math.round(box.height));
         }
         if (prev.children.length < 5) {
-          out.errors.push('the preview rendered ' + prev.children.length + ' nodes — it is not showing the prompt');
+          out.errors.push('the preview rendered ' + prev.children.length + ' nodes, it is not showing the prompt');
         }
         for (const pair of [['h1', 'heading 1'], ['h2', 'heading 2'], ['strong', 'bold'],
                             ['em', 'italic'], ['code.md-inline-code', 'inline code'],
@@ -1681,9 +1681,9 @@ PROBE = """
       const cm4 = document.getElementById('confirm-modal');
       if (!cm4.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
-    // 10: the quick-grid header control hides until you point at the header — pure
+    // 10: the quick-grid header control hides until you point at the header, pure
     // CSS :hover, so a synthetic event can't prove the reveal itself; this only
-    // proves the flag actually hides/unhides the control (Ben checks the hover by eye).
+    // proves the flag actually hides/unhides the control (checked by eye).
     const qgEl = document.getElementById('quick-grid');
     if (!await setExpertFlag('Quick grid: hover to reveal', true)) {
       out.errors.push('the quick-grid hover-only option is missing from the expert menu');
@@ -1789,7 +1789,7 @@ PROBE = """
       out.errors.push('the editor did not open for the colour-picker check');
     }
     // Gating: a row whose feature is off must disappear the moment that toggle is
-    // flipped — no reopening the menu — and a whole branch goes with its parent.
+    // flipped, no reopening the menu, and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]
       .find(r => ((r.querySelector('span') || {}).textContent || '').trim().startsWith(label));
     const flip = async (label) => {
@@ -1895,7 +1895,7 @@ PROBE = """
         bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 3, clientX: x, clientY: y }));
       const dragTab = async (from, to) => {
         // .views scrolls horizontally when squeezed (single-line header mode still
-        // leaves it a variable share of the row) — a real user scrolls the strip
+        // leaves it a variable share of the row), a real user scrolls the strip
         // into view before dragging across it too.
         to.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         await sleep(50);
@@ -1914,7 +1914,7 @@ PROBE = """
         out.errors.push('a view tab still selects its text while being dragged');
       }
       // The strip stays hit-testable at every window size the app allows, so the
-      // gesture is testable everywhere — no width may skip this.
+      // gesture is testable everywhere, no width may skip this.
       const loose = viewTabs().filter(b => b.dataset.viewId);
       if (loose.length < 2) {
         out.errors.push('not enough loose view tabs for the merge check');
@@ -1984,7 +1984,7 @@ PROBE = """
         hex.dispatchEvent(new Event('change', { bubbles: true }));
         await sleep(120);
         if (hex.value !== '#123456') out.errors.push('an invalid hex value was not rejected');
-        // D75 part 2: "Revert changes" undoes everything since the editor opened —
+        // D75 part 2: "Revert changes" undoes everything since the editor opened,
         // WITHOUT closing it, the one thing that actually sets it apart from Cancel.
         await click('theme-edit-revert');
         await sleep(120);
@@ -2001,7 +2001,7 @@ PROBE = """
           out.errors.push('reverting did not undo the live preview');
         }
       }
-      // 76: switch to the stored theme (ct1) so it has a real id — the editor
+      // 76: switch to the stored theme (ct1) so it has a real id, the editor
       // opened on a fresh, unsaved draft by default, which correctly has none.
       const targetSel = document.getElementById('theme-edit-target');
       targetSel.value = 'ct1';
@@ -2048,7 +2048,7 @@ PROBE = """
     }
     mustReach('expert menu', '.expert-tab');
     // P69: a default-off feature gets a small dot badge instead of a "(Default
-    // off)" text suffix crowding the label — find the rows across all tabs.
+    // off)" text suffix crowding the label, find the rows across all tabs.
     {
       const rowByLabel = (text) => {
         for (const tb of [...document.querySelectorAll('.expert-tab')]) {
@@ -2098,7 +2098,7 @@ PROBE = """
     }
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
-    // Collapsing must flip a class, not rebuild the list — rebuilding is what made
+    // Collapsing must flip a class, not rebuild the list, rebuilding is what made
     // the menu flicker. Marking the node proves it survived the round trip.
     const grp = document.querySelector('#expert-flags .expert-group');
     const head = grp && grp.querySelector('.expert-group-title.collapsible');
@@ -2146,7 +2146,7 @@ PROBE = """
       if (document.querySelectorAll('#backup-panel .backup-col').length !== 2) {
         out.errors.push('the backup settings are not split in two columns');
       }
-      // 65: opens the snapshot folder — must exist and never throw.
+      // 65: opens the snapshot folder, must exist and never throw.
       const openFolderBtn = [...document.querySelectorAll('#backup-panel .ghost-btn')]
         .find(b => b.textContent === 'Open in Explorer');
       if (!openFolderBtn) {
@@ -2167,7 +2167,7 @@ PROBE = """
       if (!document.querySelector('#stats-panel .stat-overview-split')) {
         out.errors.push('the overview is not split from the per-view list');
       }
-      // A stored password shows as dots — as a placeholder, never as a value.
+      // A stored password shows as dots, as a placeholder, never as a value.
       const pw = document.querySelector('#backup-panel .backup-pw-wrap .modal-input');
       if (!pw || pw.type !== 'password' || pw.value !== '' || !/^•+$/.test(pw.placeholder)) {
         out.errors.push('a stored backup password is not shown as empty dots');
@@ -2183,7 +2183,7 @@ PROBE = """
         heavyTile()?.click();
         await sleep(300);
         if (!heavyTile()?.classList.contains('active')) out.errors.push('picking the "heavy" preset did not mark it active');
-        // Nothing below the grid may move when a tile is picked — the slot holding
+        // Nothing below the grid may move when a tile is picked, the slot holding
         // the empty state and the tier grid keeps one height for both.
         const slotH = () => Math.round(
           (document.querySelector('#backup-panel .backup-retention-slot') || {getBoundingClientRect: () => ({height: -1})})
@@ -2198,7 +2198,7 @@ PROBE = """
           out.errors.push('picking a retention tile moves the rows below it (' + before + ' -> ' + slotH() + ')');
         }
         // Clearing a tier field with its X and leaving it must land on the default,
-        // not the field minimum — checked here, while "Advanced" is still active.
+        // not the field minimum, checked here, while "Advanced" is still active.
         const dailyInput = document.querySelector('#backup-panel .backup-tier-grid input[type=number]');
         const dailyClear = dailyInput && dailyInput.parentElement.querySelector('.clear-btn');
         if (!dailyInput || !dailyClear) {
@@ -2213,7 +2213,7 @@ PROBE = """
           // back it has to reappear, or the field can never be cleared a second time.
           if (!dailyClear.classList.contains('show')) out.errors.push('the clear button stays hidden after the field refilled itself');
         }
-        // Back to a plain preset — the tier grid must disappear again.
+        // Back to a plain preset, the tier grid must disappear again.
         [...document.querySelectorAll('#backup-panel .backup-retention-grid .ghost-btn')]
           .find(b => b.textContent.includes('(10)'))?.click();
         await sleep(400);
@@ -2223,7 +2223,7 @@ PROBE = """
       }
       // 61: the count column doubles as a click-to-expand toggle for the backup's
       // prompt names, when the backend supplied any (the fixture's first entry has
-      // two, the second — an "older build" stand-in — has none).
+      // two, the second, an "older build" stand-in, has none).
       const rows = () => [...document.querySelectorAll('#backup-panel .backup-row')];
       const withNames = rows()[0];
       const withoutNames = rows()[1];
@@ -2265,7 +2265,7 @@ PROBE = """
       }
     }
     // Save on an empty field must do nothing at all, and removing a stored password
-    // must ask first — it puts new backups back on the built-in key.
+    // must ask first, it puts new backups back on the built-in key.
     const pwSave = document.querySelector('#backup-panel .backup-pw-save');
     const pwRemove = document.querySelector('#backup-panel .backup-pw-remove');
     const confirmEl = document.getElementById('confirm-modal');
@@ -2310,14 +2310,14 @@ PROBE = """
       if (document.body.classList.contains('library-front')) out.errors.push('the raised-library state outlives the library');
       if (bm.classList.contains('hidden')) out.errors.push('there is no backups dialog left to jump back to');
     }
-    // P64: restoring a managed backup goes through maybeBackupBeforeWipe() — the
+    // P64: restoring a managed backup goes through maybeBackupBeforeWipe(), the
     // same safety net already used before reset/delete-all. That helper's own
     // gating (the default-off autoBackupBeforeWipe flag) is this app's
     // established, already-relied-on mechanism; here we only prove restoreBackup
     // actually calls it, using the fixture's default (off) state, so a nothing-
     // happens result is the correct one and cheap to verify without walking the
     // expert menu (which a later 130%-zoom layout check turned out to be
-    // sensitive to — not worth touching under this pass's time budget).
+    // sensitive to, not worth touching under this pass's time budget).
     {
       const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
       calls().length = 0;
@@ -2328,7 +2328,7 @@ PROBE = """
       } else {
         restoreBtn.click();
         await sleep(200);
-        // 70: both checkboxes default to checked — confirming as-is restores "all".
+        // 70: both checkboxes default to checked, confirming as-is restores "all".
         const dataCb = document.getElementById('confirm-cb-data');
         const settingsCb = document.getElementById('confirm-cb-settings');
         if (!dataCb || !settingsCb) {
@@ -2356,7 +2356,7 @@ PROBE = """
         window.__SMOKE_ARGS__ = [];
         restoreBtn.click();
         await sleep(200);
-        document.getElementById('confirm-cb-settings').click(); // uncheck — data only
+        document.getElementById('confirm-cb-settings').click(); // uncheck, data only
         await click('confirm-ok');
         await sleep(200);
         const dataArgs = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'restore_backup');
@@ -2365,7 +2365,7 @@ PROBE = """
         }
       }
     }
-    // 70: unchecking both leaves nothing to restore — the confirm button must refuse.
+    // 70: unchecking both leaves nothing to restore, the confirm button must refuse.
     {
       const restoreBtn = [...document.querySelectorAll('#backup-panel button')]
         .find(b => b.textContent.trim() === 'Restore');
@@ -2431,7 +2431,7 @@ PROBE = """
       await click('update-modal-cancel');
     }
     // The appearance scales are user-tunable, so the layout has to survive them being
-    // raised — the same guards once more with modal/icon/composer zoom at 130%.
+    // raised, the same guards once more with modal/icon/composer zoom at 130%.
     const zoomed = document.documentElement.style;
     document.getElementById('settings').classList.add('hidden');
     for (const v of ['--modal-zoom', '--icon-zoom', '--composer-zoom', '--primary-zoom']) {
@@ -2471,7 +2471,7 @@ PROBE = """
     // Leave the theme editor open so the scans below measure its real layout.
     document.getElementById('settings').classList.remove('hidden');
     await click('theme-edit-open');
-    // Every dropdown and swatch in the theme editor is anchored low in the window —
+    // Every dropdown and swatch in the theme editor is anchored low in the window,
     // exactly where a popover used to open past the bottom edge. Open the LAST of
     // each kind, which is the worst case, and let the popover scan judge it.
     const lastVisible = (sel) => [...document.querySelectorAll(sel)]
@@ -2562,7 +2562,7 @@ FLOAT_PROBE = """
     // to run off the first later event that reports no button held.
     // Edge resize. Grabbing the ring snaps the window to the pill box straight away,
     // and THAT call is what this checks: it must carry the exact box, with no monitor
-    // clamp — clamping this path moved the window out from under the cursor on every
+    // clamp, clamping this path moved the window out from under the cursor on every
     // frame near a screen edge. The frames that follow are rAF-driven and a quiet
     // headless frame produces none, so the tracking itself is a manual check.
     args().length = 0;
@@ -2616,7 +2616,7 @@ FLOAT_PROBE = """
       if (!ev.dataTransfer.getData('text/plain')) errs.push('a pill drag-out carried no text');
     }
     up();
-    // 43: "hide for now" — a distinct action from Remove, must never touch the
+    // 43: "hide for now", a distinct action from Remove, must never touch the
     // permanent toggle_floating command.
     calls().length = 0;
     document.getElementById('menu-hide').click();
@@ -2694,7 +2694,7 @@ PICK_PROBE = """
   const main = () => document.getElementById('pick-main').textContent;
   const alt = () => document.getElementById('pick-alt').textContent;
   const bg = () => document.getElementById('snip-bg').getBoundingClientRect();
-  // Aim at the middle of image pixel (px, py) — the same ratio mapping the overlay
+  // Aim at the middle of image pixel (px, py), the same ratio mapping the overlay
   // uses, which is what keeps it exact on a mixed-DPI desktop.
   const moveTo = (px, py) => {
     const r = bg();
@@ -2716,7 +2716,7 @@ PICK_PROBE = """
   try {
     await until(() => called('pick_tile'));
     if (!called('pick_tile')) errs.push('the picker never fetched a frozen patch');
-    // Opening the picker must not pull the whole desktop across — that transfer is
+    // Opening the picker must not pull the whole desktop across, that transfer is
     // what made it slow to start.
     if (called('pick_frame')) errs.push('the picker still transfers the whole frozen desktop');
     if (!document.body.classList.contains('pick')) errs.push('the overlay did not enter pick mode');
@@ -2753,12 +2753,12 @@ PICK_PROBE = """
     await expect('#1A2B3C', 'clamped at the left edge');
     key('ArrowUp');
     await expect('#1A2B3C', 'clamped at the top edge');
-    // The hint has to name the controls, zoom included — the wheel is invisible
+    // The hint has to name the controls, zoom included, the wheel is invisible
     // otherwise and the expert slider is not where anyone looks mid-pick.
     const hintTxt = document.getElementById('snip-hint').textContent;
     if (!hintTxt.includes('+/-')) errs.push('the picker hint never mentions zoom: "' + hintTxt + '"');
 
-    // A shorter or longer value must NEVER resize the loupe — it used to jitter as
+    // A shorter or longer value must NEVER resize the loupe, it used to jitter as
     // the sampled pixel changed. Measured at one zoom, across all three notations.
     const geo = [];
     const box = () => {
@@ -2864,7 +2864,7 @@ PICK_PROBE = """
 """
 
 
-# F25: the folder window is the only place its UI is observable — the closed icon
+# F25: the folder window is the only place its UI is observable, the closed icon
 # (previews + count + label), the grid the window grows into, and Esc collapsing it.
 FOLDER_PROBE = """
 <script>
@@ -2887,7 +2887,7 @@ FOLDER_PROBE = """
     sideScan(errs, 'folder, closed');
     // Free resize from ANY edge, exactly like a pill: nothing is drawn for it, so the
     // ring is what this proves. It must change the size and must NOT open the folder
-    // (the icon's own press is the open gesture), and the centre must stay free —
+    // (the icon's own press is the open gesture), and the centre must stay free,
     // rz-hole covers it, or dragging the middle would resize instead of moving.
     const grip = document.getElementById('rz-catch');
     const hole = document.getElementById('rz-hole');
@@ -2934,7 +2934,7 @@ FOLDER_PROBE = """
       if (!calls().includes('copy_prompt')) errs.push('clicking a member did not copy it');
       if (!calls().includes('record_copy')) errs.push('a copy from a folder was not recorded');
     }
-    // 43: "hide for now" — a distinct action from Dissolve, must never touch the
+    // 43: "hide for now", a distinct action from Dissolve, must never touch the
     // permanent dissolve_float_folder command.
     window.__SMOKE_CALLS__.length = 0;
     document.getElementById('menu-hide').click();
@@ -2980,7 +2980,7 @@ VARS_PROBE = """
     if (!rows[0] || !rows[0].querySelector('input[type=checkbox]')) {
       errs.push('the free-text row has no remember switch');
     }
-    // The choice row must NOT be a native <select> — its OS popup would blur (and
+    // The choice row must NOT be a native <select>, its OS popup would blur (and
     // therefore cancel) this window.
     if (rows[1] && rows[1].querySelector('select')) errs.push('a choice row uses a native select');
     const choice = rows[1] && rows[1].querySelector('.vars-choice-btn');
@@ -3063,7 +3063,7 @@ LAUNCHER_PROBE = """
     if (window.__LAUNCHER_SELECTED__ !== 'p1') {
       errs.push('Enter did not select the highlighted row: ' + window.__LAUNCHER_SELECTED__);
     }
-    // "One action ever" — same guard vars.js uses (see its own SENTINEL check): a
+    // "One action ever", same guard vars.js uses (see its own SENTINEL check): a
     // stray Escape after a real selection must never ALSO fire launcher_close.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await sleep(50);
@@ -3087,7 +3087,7 @@ def unescape(s):
 def main():
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
-        # CI's runner image always ships Chrome (see ci.yml) — a missing browser there
+        # CI's runner image always ships Chrome (see ci.yml), a missing browser there
         # means the whole UI-smoke job silently stopped covering anything, which must
         # fail loudly instead of passing green with zero coverage.
         if os.environ.get("CI"):
@@ -3117,7 +3117,7 @@ def main():
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
                  # The probe walks more UI than it used to; 30s of virtual time ran
-                 # out mid-run on the smallest window and produced no result at all —
+                 # out mid-run on the smallest window and produced no result at all,
                  # raised to 60s, then to 75s once the P10 quick-grid hover-only check
                  # (two more expert-menu round trips) pushed past that too, then to 95s
                  # once 91/51/70's regressions (trash dialog, multi-view popover, three
@@ -3137,7 +3137,7 @@ def main():
                 failed += 1
                 continue
             r = json.loads(unescape(m.group(1)))
-            print(f"-- {w}x{h} — expert tabs: {', '.join(r['tabs']) or 'none'}")
+            print(f"-- {w}x{h}, expert tabs: {', '.join(r['tabs']) or 'none'}")
             for kind, items in (("JS error", r["errors"]),
                                 ("overflow", sorted(set(r["overflow"]))),
                                 ("layout", r.get("layout", [])),
@@ -3148,7 +3148,7 @@ def main():
             if not (r["errors"] or r["overflow"] or r["rawKeys"] or r.get("layout")):
                 print("   ok")
 
-        # Each secondary window carries the only coverage its own UI can get — the
+        # Each secondary window carries the only coverage its own UI can get, the
         # pill drag/merge, the colour picker and the whole folder window live here
         # and nowhere else.
         for name, size, probe, budget in (

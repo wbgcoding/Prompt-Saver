@@ -2,7 +2,7 @@
 
 # Prompt Saver
 
-**Your prompts, one click away — from a grid, from the search, or from a floating button over any app.**
+**Your prompts, one click away, from a grid, from the search, or from a floating button over any app.**
 
 A tiny, fully offline prompt manager for Windows. No account, no cloud, no telemetry.
 
@@ -19,9 +19,9 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 ## Why
 
-- **Faster than a notes file** — click a tile, the text is in your clipboard.
-- **Always within reach** — pin prompts as floating buttons that stay on top of every other window.
-- **Yours alone** — everything lives in a local file. The app only goes online if you let it check for updates.
+- **Faster than a notes file**: click a tile, the text is in your clipboard.
+- **Always within reach**: pin prompts as floating buttons that stay on top of every other window.
+- **Yours alone**: everything lives in a local file. The app only goes online if you let it check for updates.
 
 ## Features
 
@@ -30,11 +30,11 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | | |
 |---|---|
 | **Grid & views** | Free placement on a per-view grid (1×1 up to 20×20), drag tiles anywhere, drop on an occupied cell to swap. Up to 20 named views, each with its own size and layout |
-| **Library** | Every saved prompt in one searchable list — copy, edit, drag onto the grid, filter by color or type |
+| **Library** | Every saved prompt in one searchable list, copy, edit, drag onto the grid, filter by color or type |
 | **Search & sort** | Typo-tolerant search ("promt" still finds "prompt"), sorted by most used or recently used |
 | **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
 | **View groups** | Drag one view tab onto another to collect them into a folder tab with a member popover |
-| **Private notes** | A notes field per prompt for context you keep but never copy — searchable, shown in the tooltip |
+| **Private notes** | A notes field per prompt for context you keep but never copy, searchable, shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
 | **Duplicate finder** | Finds near-identical prompts, shows them side by side, keeps the one you pick |
@@ -43,12 +43,12 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **One click** | Click a tile — the text is copied, a bubble confirms it |
+| **One click** | Click a tile, the text is copied, a bubble confirms it |
 | **Floating buttons** | Pin any prompt as a frameless, always-on-top pill. Drag to move, right-click for size, edit or remove; positions survive restarts |
 | **Auto-paste** | A fast second click (or Enter) copies **and** pastes into the app you were just in |
-| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy — or `{#{tone\|formal,casual}#}` for a dropdown |
+| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy, or `{#{tone\|formal,casual}#}` for a dropdown |
 | **Self-filling** | `date`, `time`, `weekday`, `clipboard` and `uuid` fill themselves in, no dialog, in your language |
-| **Prompt hotkeys** | Give a prompt its own global key combination that copies — and optionally pastes — from any app |
+| **Prompt hotkeys** | Give a prompt its own global key combination that copies, and optionally pastes, from any app |
 | **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
 | **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
@@ -61,11 +61,11 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | | |
 |---|---|
 | **Images, GIFs & videos** | Save a picture from the clipboard or a file and paste it anywhere with one click |
-| **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume — remembered per prompt |
+| **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume, remembered per prompt |
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image |
-| **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager — and turn it into a copy button |
+| **Screenshot tool** | Capture a region or a whole window, even protected ones like the Task Manager, and turn it into a copy button |
 | **Color picker** | A pipette freezes the screen, magnifies the pixel under the cursor and copies it as hex, rgb or hsl |
-| **Markdown preview** | Render a prompt in the editor — headings, lists, quotes and syntax-colored code, toggled or side by side |
+| **Markdown preview** | Render a prompt in the editor, headings, lists, quotes and syntax-colored code, toggled or side by side |
 | **Full-screen viewer** | Click any preview to open it full-screen: scroll to zoom up to 8×, drag to pan |
 
 ### 🎨 Make it yours
@@ -73,10 +73,10 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | | |
 |---|---|
 | **16 themes** | Light, dark and system (live OS detection), plus Programmer, AI, Cyberpunk, Retro, Gradient and more |
-| **Custom themes** | Build your own on top of any built-in one — a color per value, grouped and previewed live |
+| **Custom themes** | Build your own on top of any built-in one, a color per value, grouped and previewed live |
 | **Colors & fonts** | Tint tiles and pills from a palette or a color picker; 20 fonts, per prompt if you like |
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
-| **Scaling** | Separate size control for UI, popups, icons and buttons — from 50 % up |
+| **Scaling** | Separate size control for UI, popups, icons and buttons, from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |
 | **11 languages** | Auto-detected from the system: EN, DE, ES, IT, PT, PL, ZH, JA, NL, TR, RO |
 
@@ -86,7 +86,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 |---|---|
 | **Backups** | Rotating local snapshots, compressed and encrypted, on a schedule you can change or switch off. Diagnostics, a restore list and usage statistics live in their own window |
 | **Smart retention** | Keep a plain number of snapshots, or a number per day, week, month and year |
-| **Backup password** | Optional — protects new backup files with a key derived from your password |
+| **Backup password** | Optional, protects new backup files with a key derived from your password |
 | **Version history** | Every prompt keeps its earlier versions; preview and restore any of them |
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV/TXT export for the texts alone |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
@@ -107,8 +107,8 @@ From the [latest release](../../releases/latest):
 
 | File | What it is |
 |---|---|
-| `Prompt.Saver_<version>_x64-setup.exe` | **Installer** — all users or current user only, optional desktop / start-menu shortcuts, upgrades keep your data |
-| `prompt-saver.exe` | **Portable** — one standalone exe, no installation, keeps its data next to itself |
+| `Prompt.Saver_<version>_x64-setup.exe` | **Installer**: all users or current user only, optional desktop / start-menu shortcuts, upgrades keep your data |
+| `prompt-saver.exe` | **Portable**: one standalone exe, no installation, keeps its data next to itself |
 
 Both need the Microsoft WebView2 runtime (preinstalled on Windows 11 and current Windows 10; the app offers Microsoft's installer if it is missing).
 
@@ -135,7 +135,7 @@ Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs) (MSVC too
 
 PDF previews are rendered by PDFium, which is compiled into the exe. Download
 `pdfium.dll` (x64) from [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases)
-and put it in `src-tauri/` before building — the build fails without it.
+and put it in `src-tauri/` before building, the build fails without it.
 
 ```bat
 build.bat

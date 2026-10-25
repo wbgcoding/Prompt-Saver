@@ -241,7 +241,7 @@ _run = 0
 
 def measure(browser, tmp, page, size):
     # An isolated profile is required or Chrome hands the URL to a running
-    # instance and prints nothing — and a FRESH one per run, or a still-closing
+    # instance and prints nothing, and a FRESH one per run, or a still-closing
     # instance holds the lock and the next run comes back empty.
     global _run
     _run += 1
@@ -264,7 +264,7 @@ def measure(browser, tmp, page, size):
 def main() -> int:
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
-        # CI's runner image always ships Chrome (see ci.yml) — a missing browser there
+        # CI's runner image always ships Chrome (see ci.yml), a missing browser there
         # means this job silently stopped covering anything, which must fail loudly
         # instead of passing green with zero coverage.
         if os.environ.get("CI"):

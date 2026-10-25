@@ -1,4 +1,4 @@
-// Brand generator — stamps the product identity from brands/<slug>.json onto the
+// Brand generator, stamps the product identity from brands/<slug>.json onto the
 // files that carry it, so a rebrand is one command instead of ~100 hand edits.
 //
 //   node tools/brand.js <slug>                 apply in place (working tree)
@@ -35,7 +35,7 @@ function fail(msg) {
 }
 
 // Replace exactly one anchored occurrence. Anything else means the file drifted
-// away from what this generator knows how to stamp — that must be loud, not silent.
+// away from what this generator knows how to stamp, that must be loud, not silent.
 function sub(text, re, replacement, what) {
   const hits = text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"));
   if (!hits || hits.length !== 1) {
@@ -65,7 +65,7 @@ const RULES = {
   icon: { asset: true, req: true },
   installerIcon: { asset: true, req: true },
   // Feature switches this brand ships the other way round than the app does, e.g.
-  // { "mdPreview": false }. Only the shipped default moves — a stored user choice
+  // { "mdPreview": false }. Only the shipped default moves, a stored user choice
   // still wins. Absent means "every feature ships the way the app defines it".
   flagDefaults: { flags: true, req: false },
   // Fork vocabulary. The app's own texts keep saying "prompt"; a brand that calls
@@ -196,12 +196,12 @@ function readCurrentBrand(root) {
 const rs = (v) => JSON.stringify(String(v)); // values are pre-validated; this only quotes
 
 function brandRs(b) {
-  return `// Product identity. GENERATED — run \`node tools/brand.js <brand>\` to change it;
+  return `// Product identity. GENERATED, run \`node tools/brand.js <brand>\` to change it;
 // the values live in brands/<brand>.json. Nothing else in the Rust code may spell
 // the product name.
 //
 // These strings decide where an installation keeps its data and how Windows knows
-// the app. Changing one strands every existing install — brand_values_are_pinned in
+// the app. Changing one strands every existing install, brand_values_are_pinned in
 // lib.rs asserts them for exactly that reason.
 
 pub const DISPLAY_NAME: &str = ${rs(b.displayName)};
@@ -243,7 +243,7 @@ pub const ITEM_PLURAL: &str = ${rs((b.terms && b.terms.itemPlural) || "prompts")
 }
 
 function brandJs(b) {
-  return `// Product name for the webview windows. GENERATED — run \`node tools/brand.js <brand>\`
+  return `// Product name for the webview windows. GENERATED, run \`node tools/brand.js <brand>\`
 // to change it; the values live in brands/<brand>.json.
 //
 // t() substitutes {app} in every translated string with this, and applyI18n fills
@@ -301,7 +301,7 @@ function stampManifests(root, b, current) {
   );
   write(pkgPath, pkg);
 
-  // Cargo.toml — package name, lib name and description.
+  // Cargo.toml, package name, lib name and description.
   const cargoPath = path.join(root, "src-tauri", "Cargo.toml");
   let cargo = read(cargoPath);
   cargo = sub(cargo, /^name = "[a-z0-9-]+"$/m, `name = "${b.slug}"`, "Cargo.toml package name");
@@ -315,7 +315,7 @@ function stampManifests(root, b, current) {
   mainRs = sub(mainRs, /^    [a-z0-9_]+_lib::run\(\);$/m, `    ${b.slug.replace(/-/g, "_")}_lib::run();`, "main.rs");
   write(mainPath, mainRs);
 
-  // tauri.conf.json — product name, identifier, window title, asset-protocol denies.
+  // tauri.conf.json, product name, identifier, window title, asset-protocol denies.
   const confPath = path.join(root, "src-tauri", "tauri.conf.json");
   let conf = read(confPath);
   conf = sub(conf, /^(  "productName": ")[^"]*(")/m, `$1${b.displayName}$2`, "tauri.conf productName");
@@ -359,7 +359,7 @@ function stampBuildFiles(root, b) {
   // The uninstaller wipes the store folder, which is brand-specific.
   const nsiPath = path.join(root, "src-tauri", "installer.nsi");
   let nsi = read(nsiPath);
-  // Only the literal folder line — the sibling `${BUNDLEID}` lines stay untouched.
+  // Only the literal folder line, the sibling `${BUNDLEID}` lines stay untouched.
   nsi = sub(
     nsi,
     /^(    RmDir \/r "\$APPDATA\\)[^"${}]+(")$/m,
@@ -375,7 +375,7 @@ function stampBuildFiles(root, b) {
   write(nsiPath, nsi);
 }
 
-// The pin test duplicates the brand literals on purpose — a refactor that moves a
+// The pin test duplicates the brand literals on purpose, a refactor that moves a
 // user's data must break a test, not an installation.
 function stampPinTest(root, b) {
   const libPath = path.join(root, "src-tauri", "src", "lib.rs");
@@ -414,7 +414,7 @@ function stampPinTest(root, b) {
 // This step is NOT reversible in general: two of a brand's tokens may be the same
 // word (Clipboard-Saver's display name and store folder are), and once both have
 // been written the way back cannot tell them apart. That is why in-place switching
-// leaves prose alone unless --docs is passed — see stampDocs.
+// leaves prose alone unless --docs is passed, see stampDocs.
 function tokenMap(oldB, newB) {
   const pairs = [
     [oldB.identifier, newB.identifier],
@@ -438,7 +438,7 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
     return;
   }
   if (!oldB) {
-    console.warn("brand: no current brand found — leaving the prose files untouched");
+    console.warn("brand: no current brand found, leaving the prose files untouched");
     return;
   }
   const map = tokenMap(oldB, b);
@@ -492,7 +492,7 @@ function copyTree(dst) {
   }
 }
 
-// A product repo carries its own brand only — the other configs stay behind.
+// A product repo carries its own brand only, the other configs stay behind.
 function pruneBrands(dst, b) {
   const dir = path.join(dst, "brands");
   if (!fs.existsSync(dir)) return;
@@ -529,12 +529,12 @@ function stampIcons(root, b, regenerate) {
     console.log("  icons     ui/assets/*.svg swapped (pass --icons to rebuild src-tauri/icons)");
     return;
   }
-  // Always driven from this repo — an --out copy has no node_modules of its own.
+  // Always driven from this repo, an --out copy has no node_modules of its own.
   // The Tauri CLI is invoked through node directly (not `npm run tauri`): no shell
   // is involved, so nothing from the config can be read as a command, and there is
   // no `--` for npm to swallow the path argument with.
   const cli = path.join(ROOT, "node_modules", "@tauri-apps", "cli", "tauri.js");
-  if (!fs.existsSync(cli)) fail("--icons needs the Tauri CLI — run `npm install` first");
+  if (!fs.existsSync(cli)) fail("--icons needs the Tauri CLI, run `npm install` first");
   const icons = path.join(root, "src-tauri", "icons");
   const run = (svg, outDir) =>
     execFileSync(process.execPath, [cli, "icon", path.join(ROOT, svg), "-o", outDir], {
@@ -577,7 +577,7 @@ function main(argv) {
   const b = loadBrand(slug);
   const root = out ? prepareOut(out) : ROOT;
   const current = readCurrentBrand(root);
-  if (current && current.slug === b.slug && !out) console.log(`brand: ${b.displayName} is already applied — re-stamping`);
+  if (current && current.slug === b.slug && !out) console.log(`brand: ${b.displayName} is already applied, re-stamping`);
 
   write(path.join(root, "src-tauri", "src", "brand.rs"), brandRs(b));
   write(path.join(root, "ui", "brand.js"), brandJs(b));

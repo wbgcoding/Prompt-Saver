@@ -1,6 +1,6 @@
 // F25 pill folder window. The collapsed icon shows up to four member previews plus a
 // count; clicking it grows THIS window into a grid of the member pills. There is only
-// ever one window per folder — expanding resizes it, so z-order and focus stay as
+// ever one window per folder, expanding resizes it, so z-order and focus stay as
 // simple as a single pill's. All geometry (side, edge flipping, DPI) is decided in the
 // backend, which is the only place that knows the monitors.
 import { FONTS, fitText } from "./fonts.js";
@@ -47,7 +47,7 @@ let open = null; // "grid" | "menu" | null
 let seq = 0;
 // Separate from `seq`: openPopover()'s own await of closePopover() can outlive a
 // newer openPopover() call that started in the meantime (its close finishes after
-// the newer one already opened something) — this catches that case specifically.
+// the newer one already opened something), this catches that case specifically.
 let openReq = 0;
 let TXT = { copied: "Copied!", size: "Size", edit: "Edit prompt", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
 
@@ -99,7 +99,7 @@ function paintFace(el, p, withName) {
   }
 }
 
-// Ring thickness, in proportion to the icon — the same reasoning as the pill's:
+// Ring thickness, in proportion to the icon, the same reasoning as the pill's:
 // a fixed band is a hairline on a large folder and swallows a small one whole.
 const RING_MIN = 8;
 const RING_MAX = 60;
@@ -120,14 +120,14 @@ function renderIcon() {
   nameEl.textContent = state.name;
   nameEl.classList.toggle("hidden", !state.name);
   // The count needs saying once: a bare number on a folder explains nothing. And the
-  // 2x2 preview only identifies IMAGE members — for text pills it is four coloured
+  // 2x2 preview only identifies IMAGE members, for text pills it is four coloured
   // squares, so the tooltip names the first two and counts the rest.
   const many = TXT.members ? TXT.members.replace("{n}", state.members.length) : "";
   const names = state.members.map((p) => p.name).filter(Boolean);
   const shown = names.slice(0, 2).join(", ");
   const rest = names.length - 2;
   const who = shown && rest > 0 ? `${shown} +${rest}` : shown;
-  iconEl.title = [state.name, who, many].filter(Boolean).join(" — ");
+  iconEl.title = [state.name, who, many].filter(Boolean).join(", ");
   badgeEl.title = many;
 }
 
@@ -165,7 +165,7 @@ function renderGrid() {
     tile.appendChild(ok);
     gridEl.appendChild(tile);
   }
-  // The tiles grow with the folder size, so the names have to as well — a fixed
+  // The tiles grow with the folder size, so the names have to as well, a fixed
   // small font left a large folder full of unreadable labels. Same auto-fit pass
   // the grid tiles and the pills use.
   const cap = Math.max(9, Math.round(t / 3));
@@ -253,7 +253,7 @@ async function closePopover(instant) {
   await invoke("collapse_float_folder", { id: folderId }).catch(() => {});
 }
 
-// Same popover, recomputed — after a member left, and when the monitor's scale factor
+// Same popover, recomputed, after a member left, and when the monitor's scale factor
 // changes (the known DPI trap: the physical box it was computed from is stale).
 async function reflow() {
   if (!open) return;
@@ -297,7 +297,7 @@ async function loadState() {
   state = data;
   renderIcon();
   // The stored scale arrives here, not through applyPrefs, and both run in
-  // parallel — without this the size menu keeps whatever applySettings marked.
+  // parallel, without this the size menu keeps whatever applySettings marked.
   markSelectedSize();
   if (open === "grid") await reflow();
 }
@@ -366,12 +366,12 @@ let iconDrag = null;
 
 // Exactly the pill's mechanic: the whole window is the drag surface (the popover and
 // the menus handle their own presses), and startDragging() hands the window to the OS
-// move loop, which CONSUMES the release — so the drag also ends on the first later
+// move loop, which CONSUMES the release, so the drag also ends on the first later
 // event that reports no button held.
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(".menu") || e.target.closest(".folder-pop")) return;
-  // The edge ring resizes instead of moving/opening — check it FIRST, or the icon's
+  // The edge ring resizes instead of moving/opening, check it FIRST, or the icon's
   // own press would swallow the gesture. rz-hole covers the centre, so only a press
   // on the edge lands here.
   if (e.target.closest("#rz-catch")) {
@@ -430,7 +430,7 @@ function iconReleased(e) {
 window.addEventListener("mouseout", (e) => iconReleased(e));
 
 window.addEventListener("mousemove", async (e) => {
-  // D3: the ring is otherwise invisible until it is grabbed — a thin accent edge on
+  // D3: the ring is otherwise invisible until it is grabbed, a thin accent edge on
   // the icon says "resize starts here" while the pointer sits in the band. e.target can
   // be the window itself for a synthetic event with no real target under the pointer.
   iconEl.classList.toggle("rz-hover", !!e.target?.closest?.("#rz-catch"));
@@ -496,7 +496,7 @@ document.getElementById("menu-close").addEventListener("click", () => closePopov
 
 document.getElementById("menu-rename").addEventListener("click", async () => {
   await closePopover();
-  // The folder window hosts no themed dialog — the main window asks for the name.
+  // The folder window hosts no themed dialog, the main window asks for the name.
   invoke("folder_rename_request", { id: folderId }).catch(() => {});
 });
 
@@ -614,7 +614,7 @@ document.getElementById("mm-out").addEventListener("click", async () => {
 // ---- backend events ----
 
 listen("folder-changed", () => loadState());
-// A pill is being dragged over this folder — show that letting go drops it in.
+// A pill is being dragged over this folder, show that letting go drops it in.
 listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === true));
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings());
@@ -625,7 +625,7 @@ listen("prompt-updated", (e) => {
 });
 
 // Moving onto a monitor with a different DPI invalidates the physical box the
-// expansion was computed from — recompute it (or re-assert the collapsed icon).
+// expansion was computed from, recompute it (or re-assert the collapsed icon).
 appWin.onScaleChanged(() => {
   if (open) reflow();
   else invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});

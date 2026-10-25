@@ -1,6 +1,6 @@
 // Theme mapping for the small always-on-top windows (pills and pill folders).
 // They carry their OWN tokens (floating.css), so a custom theme's colours are mapped
-// onto them — a floating button follows the same palette as the main window instead
+// onto them, a floating button follows the same palette as the main window instead
 // of falling back to the base theme's colours.
 const FLOAT_THEME_MAP = {
   accent: "--pill-bg",

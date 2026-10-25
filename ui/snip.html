@@ -8,7 +8,7 @@
 <body>
   <!-- Sharp frozen capture; four dim rectangles frame the selection so the
        selected area stays fully sharp (no second image / no clip-path on a huge
-       bitmap — that was the lag source). -->
+       bitmap, that was the lag source). -->
   <img id="snip-bg" class="snip-bg" alt="" draggable="false" />
   <div id="snip-mask-top" class="snip-mask"></div>
   <div id="snip-mask-bottom" class="snip-mask"></div>
@@ -17,7 +17,7 @@
   <div id="snip-box" class="snip-box hidden"><span id="snip-size" class="snip-size"></span></div>
   <!-- Colour picker: the OS cursor is hidden in this mode, so the overlay draws its
        own crosshair plus a loupe (zoomed pixel grid + readout) on an opaque surface
-       of its own — the value has to stay legible over any wallpaper. -->
+       of its own, the value has to stay legible over any wallpaper. -->
   <div id="pick-dot" class="pick-dot hidden"></div>
   <div id="pick-loupe" class="pick-loupe hidden">
     <canvas id="pick-grid" class="pick-grid" width="1" height="1"></canvas>

@@ -137,7 +137,7 @@ export function buildMediaBar(video, { onChange } = {}) {
   vol.min = 0;
   vol.max = 100;
   vol.value = 100;
-  // While the slider is held, the popup must not close — even if the cursor
+  // While the slider is held, the popup must not close, even if the cursor
   // leaves it. Released: CSS :hover takes over again (closes unless on it).
   vol.addEventListener("pointerdown", () => {
     soundWrap.classList.add("dragging");
@@ -156,7 +156,7 @@ export function buildMediaBar(video, { onChange } = {}) {
   volPop.appendChild(vol);
   soundWrap.append(volPop, soundBtn);
 
-  // Keep icon, slider and loop button in sync with the video element — also
+  // Keep icon, slider and loop button in sync with the video element, also
   // when a saved state is applied from the outside (applyVideoPrefs).
   const syncSound = () => {
     soundBtn.innerHTML = video.muted ? ICON_MUTED : ICON_SOUND;
