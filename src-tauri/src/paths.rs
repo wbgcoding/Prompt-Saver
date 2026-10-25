@@ -239,13 +239,8 @@ pub(crate) fn write_sealed_json<T: Serialize>(path: &Path, data: &T) -> bool {
 // would see a valid head with a truncated body and import it as truth. Temp-then-rename next
 // to the target. The temp name appends ".tmp-<id>" to the whole file name (path.md ->
 // path.md.tmp-<id>), so a filter on one extension (sync_sweep_orphans' ".md") leaves an
-// interrupted write's temp file alone.
-pub(crate) fn write_file_atomic(path: &Path, content: &str) -> bool {
-    write_bytes_atomic(path, content.as_bytes()).is_ok()
-}
-
-// The same for bytes that are not necessarily text (a conflict copy keeps a file exactly as
-// saved), with the reason on failure. Data is flushed before the rename, the rename replaces
+// interrupted write's temp file alone. Works on bytes that are not necessarily text (a conflict
+// copy keeps a file exactly as saved) and returns the reason on failure. Data is flushed before the rename, the rename replaces
 // the target in one step, and on any error the temp file is removed and the old target stays.
 //
 // A symlink target is followed: the file it points at is replaced, the link stays. Where the

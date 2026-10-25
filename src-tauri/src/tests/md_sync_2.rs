@@ -508,14 +508,14 @@ fn store_json_fallback_is_written_sealed() {
 // machine's own next poll, or a cloud-sync client) must only ever see either the
 // old content or the new content, never a partial body.
 #[test]
-fn write_file_atomic_replaces_without_leaving_a_truncated_body() {
+fn write_bytes_atomic_replaces_without_leaving_a_truncated_body() {
     let dir = std::env::temp_dir().join(format!("ps-atomic-{}", std::process::id()));
     let _ = fs::create_dir_all(&dir);
     let path = dir.join("p1.md");
     fs::write(&path, "---\nname: Old\n---\n\nold body").unwrap();
 
     let new_content = "---\nname: New\n---\n\n".to_string() + &"x".repeat(5000);
-    assert!(write_file_atomic(&path, &new_content));
+    assert!(write_bytes_atomic(&path, new_content.as_bytes()).is_ok());
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
         new_content,
