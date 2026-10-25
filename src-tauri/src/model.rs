@@ -367,6 +367,11 @@ pub(crate) struct Settings {
     // restore made on another machine.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub(crate) sync_trash_marks: HashMap<String, u64>,
+    // When this machine first saw each delete marker in the sync folder, per prompt id: the text
+    // the marker held and the time. Kept across restarts, or a machine that is restarted more
+    // often than the markers live would never let one expire.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub(crate) sync_tomb_seen: HashMap<String, (String, u64)>,
 }
 
 pub(crate) fn default_theme() -> String {
@@ -465,6 +470,7 @@ impl Default for Settings {
             tile_folders: Vec::new(),
             sync_file_cells: HashMap::new(),
             sync_trash_marks: HashMap::new(),
+            sync_tomb_seen: HashMap::new(),
         }
     }
 }

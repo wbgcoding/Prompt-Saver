@@ -2080,6 +2080,16 @@ fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost)
         });
         marks_changed |= marks.len() != before;
         store.settings.sync_trash_marks = marks;
+        // First sightings of the markers that are in the folder now are kept with the settings;
+        // those of markers that are gone are let go.
+        let mut seen: HashMap<String, (String, u64)> = HashMap::new();
+        for (stem, path, content) in &tombs {
+            seen.insert(stem.clone(), (content.clone(), sync_tomb_first_seen(path, content)));
+        }
+        if seen != store.settings.sync_tomb_seen {
+            store.settings.sync_tomb_seen = seen;
+            marks_changed = true;
+        }
         if trashed.is_empty() && !marks_changed {
             return;
         }
@@ -2569,6 +2579,19 @@ pub(crate) fn sync_seed_owed(dir: &Path, prompts: &[Prompt], trash: &[Prompt], s
     any
 }
 
+// Gives this run the first sightings of delete markers an earlier run kept, so the 30 days of a
+// marker are counted across restarts. A time in the future (a clock that was set back) counts as
+// now: a marker never lives shorter than it would have without the memory.
+fn sync_seed_tomb_seen(dir: &Path, settings: &Settings) {
+    let now = sync_now_secs();
+    let mut seen = sync_state().tomb_seen.lock().unwrap_or_else(|e| e.into_inner());
+    for (stem, (content, at)) in &settings.sync_tomb_seen {
+        if sync_safe_id(stem) {
+            seen.entry(sync_seen_key(&sync_tomb_path(dir, stem))).or_insert_with(|| (content.clone(), (*at).min(now)));
+        }
+    }
+}
+
 // The work of a start: learn the folder, settle what an earlier run left unfinished and read
 // the folder once, so a save in the first seconds meets the folder's current text instead of the
 // state the library was closed with. True when a write is due.
@@ -2578,6 +2601,7 @@ pub(crate) fn sync_start_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoun
         (s.prompts.clone(), s.trash.clone(), s.settings.clone())
     };
     sync_seed_seen(dir, &prompts, &settings);
+    sync_seed_tomb_seen(dir, &settings);
     let due = sync_seed_owed(dir, &prompts, &trash, &settings);
     let ready = {
         let s = db.lock().unwrap_or_else(|e| e.into_inner());

@@ -1376,3 +1376,30 @@ fn multi_an_owed_mark_of_a_purged_prompt_with_no_file_left_is_let_go() {
     rig.a.poll(&rig.dir);
     assert!(rig.a.lock().settings.sync_trash_marks.get(&id).is_none(), "an owed mark with nothing to mark stayed");
 }
+
+// ---- a delete marker's first sighting survives restarts ----
+
+#[test]
+fn multi_a_delete_marker_expires_on_a_machine_that_restarts_every_few_weeks() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Old news", "text");
+    rig.settle();
+    rig.b.delete(&id);
+    rig.settle();
+    let marker = rig.dir.join(format!("{id}.deleted"));
+    assert!(marker.exists());
+    // A is restarted every twenty days and saves something each time.
+    for n in 1..=4 {
+        rig.tick(20 * 86400);
+        rig.a.restart();
+        rig.a.start(&rig.dir);
+        rig.a.settings(|_| {});
+        rig.a.step(&rig.dir);
+        rig.tick(3);
+        rig.a.step(&rig.dir);
+        if n == 1 {
+            assert!(marker.exists(), "the marker went before it was thirty days old");
+        }
+    }
+    assert!(!marker.exists(), "a restart every few weeks kept the delete marker for good");
+}
