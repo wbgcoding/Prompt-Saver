@@ -382,8 +382,20 @@ pub(crate) fn refresh_data_dir_lock(dir: &Path) -> bool {
 // again.
 pub(crate) fn reload_after_takeover(app: &AppHandle) {
     swap_in_fresh_store(&app.state::<Db>(), || load_store(app));
-    let _ = app.emit_to("main", "store-synced", ());
+    refresh_after_store_swap(app);
     let _ = app.emit("data-dir-lock-changed", ());
+}
+
+// What has to follow whenever the live store was replaced or changed behind the windows' back
+// (takeover reload, CLI command): the grid refetches, and the armed hotkeys, the tray, the float
+// buttons and their theme and language re-read the new prompts and settings. Without it they keep
+// serving the old texts and the next layout write saves from a stale view.
+pub(crate) fn refresh_after_store_swap(app: &AppHandle) {
+    let _ = app.emit_to("main", "store-synced", ());
+    crate::rearm_hotkeys(app);
+    crate::rebuild_tray(app);
+    crate::sync_float_windows(app);
+    crate::notify_float_settings(app);
 }
 
 // Replaces the live store with what `build` reads. The build runs BEFORE the store lock is

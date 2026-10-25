@@ -1354,3 +1354,20 @@ fn takeover_reload_builds_the_fresh_store_outside_the_store_lock() {
     assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "the reload froze: it built the store while holding the store lock");
     assert_eq!(db.lock().unwrap().prompts.len(), 2, "the fresh store replaces the stale one");
 }
+
+// A unit test has no app handle to run the follow-up on, so this pins the wiring in the source:
+// the takeover reload and the CLI command path both go through the one helper, and the helper
+// carries the full list (grid, hotkeys, tray, float windows, float theme and language).
+#[test]
+fn takeover_reload_and_cli_share_the_refresh_helper() {
+    let store = include_str!("../store.rs");
+    let cli = include_str!("../cli_callers.rs");
+    let reload = store.split("pub(crate) fn reload_after_takeover").nth(1).expect("reload fn").split("\n}").next().unwrap();
+    assert!(reload.contains("refresh_after_store_swap(app)"), "the takeover reload must refresh hotkeys, tray and float windows");
+    assert!(cli.contains("store::refresh_after_store_swap(app)"), "the CLI path shares the helper");
+    assert!(!cli.contains("crate::rearm_hotkeys(app)"), "the list is not copied into the CLI path");
+    let helper = store.split("pub(crate) fn refresh_after_store_swap").nth(1).expect("helper").split("\n}").next().unwrap();
+    for call in ["\"store-synced\"", "rearm_hotkeys(app)", "rebuild_tray(app)", "sync_float_windows(app)", "notify_float_settings(app)"] {
+        assert!(helper.contains(call), "the helper misses {call}");
+    }
+}
