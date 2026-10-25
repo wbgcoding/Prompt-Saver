@@ -1181,14 +1181,23 @@ fn sync_tomb_put(dir: &Path, stem: &str) -> bool {
 // Whether the prompt's file may be written. A tombstone this instance has not acted on yet
 // blocks it (the poll trashes the copy first); one it has acted on is a prompt that came back
 // and is removed here.
-fn sync_tomb_allows_write(dir: &Path, stem: &str) -> bool {
+fn sync_tomb_allows_write(dir: &Path, stem: &str) -> TombWrite {
     let path = sync_tomb_path(dir, stem);
-    let Some(content) = sync_tomb_read(&path) else { return true };
+    let Some(content) = sync_tomb_read(&path) else { return TombWrite::Allowed };
     if sync_tomb_handled(&path, &content) {
-        let _ = fs::remove_file(&path);
-        return true;
+        // A marker that cannot be removed keeps refusing the write; the next round retries.
+        return if fs::remove_file(&path).is_ok() || !path.exists() { TombWrite::Allowed } else { TombWrite::RemovalFailed };
     }
-    false
+    TombWrite::Refused
+}
+
+#[derive(PartialEq)]
+enum TombWrite {
+    Allowed,
+    // Another instance deleted the prompt: the poll moves our copy to the trash.
+    Refused,
+    // The old marker is handled but still in the folder: counted as a failed write.
+    RemovalFailed,
 }
 
 // The tombstones in the folder: (prompt id, path, content).
@@ -1461,8 +1470,15 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
         let on_disk = fs::read(&path).unwrap_or_default();
-        if on_disk.is_empty() && !sync_tomb_allows_write(&dir, &p.id) {
-            continue; // another instance deleted this prompt: the poll moves our copy to the trash
+        if on_disk.is_empty() {
+            match sync_tomb_allows_write(&dir, &p.id) {
+                TombWrite::Allowed => {}
+                TombWrite::Refused => continue,
+                TombWrite::RemovalFailed => {
+                    failed += 1;
+                    continue;
+                }
+            }
         }
         if on_disk == content.as_bytes() {
             sync_file_note_current(&path, hash);

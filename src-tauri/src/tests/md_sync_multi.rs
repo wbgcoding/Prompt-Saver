@@ -1403,3 +1403,30 @@ fn multi_a_delete_marker_expires_on_a_machine_that_restarts_every_few_weeks() {
     }
     assert!(!marker.exists(), "a restart every few weeks kept the delete marker for good");
 }
+
+// ---- a marker that cannot be removed holds the write back ----
+
+#[cfg(windows)]
+#[test]
+fn multi_a_restored_prompt_is_not_written_while_its_old_delete_marker_cannot_be_removed() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let rig = Rig::new();
+    let id = rig.a.add("Back again", "text");
+    rig.settle();
+    rig.b.delete(&id);
+    rig.settle();
+    let marker = rig.dir.join(format!("{id}.deleted"));
+    assert!(marker.exists() && rig.a.in_trash(&id));
+    rig.a.restore(&id);
+    // Something holds the marker open without letting it be deleted (a virus scanner, a sync client).
+    let held = fs::OpenOptions::new().read(true).share_mode(3).open(&marker).unwrap();
+    rig.tick(3);
+    let failed = rig.a.flush(&rig.dir);
+    assert!(failed > 0, "a write that could not clear the marker was counted as done");
+    assert!(!leftover_of(&rig, &id).exists(), "the prompt was written beside a marker that was still there");
+    drop(held);
+    rig.tick(3);
+    assert_eq!(rig.a.flush(&rig.dir), 0);
+    assert!(leftover_of(&rig, &id).exists(), "the write did not go through once the marker could be removed");
+    assert!(!marker.exists());
+}
