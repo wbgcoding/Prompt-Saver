@@ -190,7 +190,7 @@ fn a_media_backfill_only_applies_to_the_entry_state_it_measured() {
 }
 
 #[test]
-fn closing_the_editor_refuses_every_waiting_open_request() {
+fn closing_the_editor_releases_every_waiting_open_request_as_gone() {
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     crate::video_editor::VE_LOAD_ACKS.lock().unwrap().get_or_insert_with(std::collections::HashMap::new).insert(u64::MAX - 7, tx);
     *crate::video_editor::VE_PENDING_REQUEST.lock().unwrap() = Some(("a".into(), "b".into(), "c".into()));
@@ -198,12 +198,58 @@ fn closing_the_editor_refuses_every_waiting_open_request() {
     let waiter = std::thread::spawn(move || crate::video_editor::wait_for_editor_decision(&rx, std::time::Duration::from_secs(5), std::time::Duration::from_secs(3600)));
     crate::video_editor::VE_LOAD_ACKS.lock().unwrap().as_ref().unwrap()[&(u64::MAX - 7)].send("asking".into()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(100));
-    crate::video_editor::refuse_pending_editor_requests();
-    assert_eq!(waiter.join().unwrap(), crate::video_editor::EditorLoadDecision::Refused);
+    crate::video_editor::release_pending_editor_requests();
+    assert_eq!(waiter.join().unwrap(), crate::video_editor::EditorLoadDecision::Gone);
     assert!(crate::video_editor::VE_PENDING_REQUEST.lock().unwrap().is_none(), "a stale offer must not outlive its window");
     let src = source!("../video_editor.rs");
-    let hook = src.find("tauri::WindowEvent::Destroyed").expect("the editor window must watch its own destruction");
-    assert!(src[hook..hook + 200].contains("refuse_pending_editor_requests"));
+    let hook = src.find("tauri::WindowEvent::Destroyed =>").expect("the editor window must watch its own destruction");
+    assert!(src[hook..hook + 300].contains("release_pending_editor_requests"));
+}
+
+// The open-while-closing race: a request that met a window on its way out must build a fresh
+// one instead of being refused or ignored.
+#[test]
+fn a_request_that_met_a_closing_window_falls_through_to_building_one() {
+    use crate::video_editor::{retarget_outcome, EditorLoadDecision as D, RetargetOutcome as O};
+    // Destroyed answered "gone", or the window vanished before it could answer.
+    assert_eq!(retarget_outcome(&D::Gone, true), O::BuildNew);
+    assert_eq!(retarget_outcome(&D::Gone, false), O::BuildNew);
+    assert_eq!(retarget_outcome(&D::NoAnswer, false), O::BuildNew);
+    assert_eq!(retarget_outcome(&D::Accepted, false), O::BuildNew);
+    // A live window keeps the old behaviour: its refusal is final, its acceptance or silence counts as opened.
+    assert_eq!(retarget_outcome(&D::Refused, true), O::Done(false));
+    assert_eq!(retarget_outcome(&D::Accepted, true), O::Done(true));
+    assert_eq!(retarget_outcome(&D::NoAnswer, true), O::Done(true));
+    // The wait itself turns the destroy message into the distinct state.
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    tx.send("gone".into()).unwrap();
+    let short = Duration::from_millis(50);
+    assert_eq!(wait_for_editor_decision(&rx, short, short), D::Gone);
+    // Structural: the open command reaches the build path on that outcome and waits for the label to free up.
+    let src = source!("../video_editor.rs");
+    assert!(src.contains("RetargetOutcome::BuildNew => carried = Some(request)"));
+    assert!(src.contains("carried.unwrap_or((src_path, origin_dir, overlay_path))"));
+}
+
+#[test]
+fn a_close_the_page_cannot_answer_goes_through_and_any_other_is_held_for_it() {
+    use crate::video_editor::{editor_close_action, EditorCloseAction as A};
+    // Page not listening yet (still booting): nobody could answer, so the close goes through.
+    assert_eq!(editor_close_action(false, false), A::Allow);
+    // Alt+F4 / taskbar close on a page that listens: held back and handed to the page.
+    assert_eq!(editor_close_action(true, false), A::AskPage);
+    // The page asked and the person agreed: the one-shot permission lets it through.
+    assert_eq!(editor_close_action(true, true), A::Allow);
+    // Structural: the handler holds the close back and only flags and emits (a close handler must never
+    // create or destroy a window), and a quit asks the editor before the job question.
+    let src = source!("../video_editor.rs");
+    let at = src.find("tauri::WindowEvent::CloseRequested { api, .. } =>").expect("the editor window must watch close requests");
+    let handler = &src[at..at + 700];
+    assert!(handler.contains("api.prevent_close()") && handler.contains("ve-close-requested"));
+    assert!(!handler.contains("WebviewWindowBuilder") && !handler.contains(".destroy()") && !handler.contains(".close()"));
+    let quit = source!("../bg_ops.rs");
+    let at = quit.find("pub(crate) fn request_app_quit").unwrap();
+    assert!(quit[at..at + 400].contains("ask_editor_before_quit"));
 }
 
 // Structural fix, no red unit test: a panic inside the export task cannot be provoked here.

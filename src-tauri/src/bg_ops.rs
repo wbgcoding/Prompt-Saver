@@ -477,6 +477,10 @@ pub(crate) fn with_store_if_free<T>(m: &Mutex<T>, f: impl FnOnce(&T)) -> bool {
 // lives in its webview, so asking while it is hidden (minimized to tray) would leave the
 // question unseen.
 pub(crate) fn request_app_quit(app: &AppHandle) {
+    // An open video editor with unsaved edits is asked first; the quit goes on once it is gone.
+    if crate::video_editor::ask_editor_before_quit(app) {
+        return;
+    }
     // A live recording is lost as an unplayable file when the process just
     // ends, so it counts as a running job and gets the same question.
     let running = quit_blockers(bg_ops_running_count(), recording_active(app) || REC_STARTING.load(Ordering::SeqCst));

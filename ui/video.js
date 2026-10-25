@@ -1850,9 +1850,36 @@ function persistExportSettings() {
 
 // ---------------------------------------------------------------- keyboard
 
-async function closeWindow() {
+// The window may be minimized or behind another one when a close the page did not start (the
+// taskbar entry, the app quitting) needs its question answered.
+async function bringForward() {
+  await appWin.unminimize().catch(() => {});
+  await appWin.show().catch(() => {});
+  await appWin.setFocus().catch(() => {});
+}
+
+// Every close path ends here: the titlebar button, Escape, and (through the backend's
+// "ve-close-requested") Alt+F4, the taskbar entry and the app quitting. `quit` is true when the
+// app itself is on its way out: a running export then needs no extra question (the app's own quit
+// dialog covers running jobs), and an unsaved-edits question still applies. Edits count as
+// unsaved until an export covers them, whether or not the autosave stored them.
+let closeAsking = false;
+async function closeWindow(opts) {
+  const quit = !!(opts && opts.quit);
+  if (closeAsking) return;
+  closeAsking = true;
+  try {
+    await closeWindowAsked(quit);
+  } finally {
+    closeAsking = false;
+  }
+}
+
+async function closeWindowAsked(quit) {
   let discarded = false;
-  if (VE.exporting) {
+  const keepOpen = () => { invoke("video_editor_close_ack", { state: "cancel" }).catch(() => {}); };
+  if (VE.exporting && !quit) {
+    await bringForward();
     // Three-way choice: keep it running in the background (the export is backend-driven and
     // survives this window closing), cancel it and close, or stay put. "Keep running" is the
     // default (Enter). With the edit state not kept, edits made after the export started would be
@@ -1866,11 +1893,12 @@ async function closeWindow() {
       altLabel: t("bgCancelClose"),
       danger: false,
     });
-    if (choice === false) return;
+    if (choice === false) { keepOpen(); return; }
     if (choice === "alt") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
+    await bringForward();
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
-    if (!ok) return;
+    if (!ok) { keepOpen(); return; }
     discarded = true;
   }
   if (discarded) {
@@ -1879,11 +1907,12 @@ async function closeWindow() {
     stopEditStateAutosave();
     if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
   } else {
-    // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety net for a close
-    // this cannot intercept (the native titlebar button skips this function); this just saves the
-    // last few seconds.
+    // Best-effort: this saves the last few seconds the periodic autosave (armEditStateAutosave)
+    // has not stored yet.
     await saveEditStateNow();
   }
+  // The backend holds back every close until the page allows this one.
+  await invoke("video_editor_close_ack", { state: "allow" }).catch(() => {});
   appWin.close().catch(() => {});
 }
 
@@ -2131,6 +2160,12 @@ listen("video-editor-load", async (e) => {
   loadRecording(path, originDir, overlayPath);
   ack("accepted");
 });
+// A close the page did not start (Alt+F4, the taskbar entry, the app quitting) arrives here and
+// takes the same path as the close button. The backend only holds closes back once told that this
+// listener exists.
+listen("ve-close-requested", (e) => { closeWindow({ quit: e.payload === true }); })
+  .then(() => invoke("video_editor_close_ack", { state: "ready" }))
+  .catch(() => {});
 listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (!VE.exporting || !exportRun || exportRun.gen !== VE.loadGen) return;
   const ms = Number(e.payload?.ms ?? e.payload ?? 0);

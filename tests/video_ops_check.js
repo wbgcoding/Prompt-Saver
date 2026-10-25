@@ -91,7 +91,10 @@ function makeSandbox(extra) {
       extractBlock("restoreRemoved", "function restoreRemoved(marker) {"),
       extractLine("rectsEqual", "const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;"),
       extractBlock("endRectDrag", "function endRectDrag() {"),
-      extractBlock("closeWindow", "async function closeWindow() {"),
+      extractBlock("bringForward", "async function bringForward() {"),
+      extractLine("closeAsking", "let closeAsking = false;"),
+      extractBlock("closeWindow", "async function closeWindow(opts) {"),
+      extractBlock("closeWindowAsked", "async function closeWindowAsked(quit) {"),
       extractBlock("addAlignedCameraOverlay", "async function addAlignedCameraOverlay(path, gen) {"),
     ].join("\n"),
     sandbox,
@@ -334,13 +337,68 @@ async function closeChecks() {
     const texts = [];
     const sb = makeSandbox({
       t: (k) => k, confirmDialog: async ({ message }) => { texts.push(message); return false; },
-      invoke: () => Promise.resolve(), saveEditStateNow: async () => {}, appWin: { close: () => Promise.resolve() },
+      invoke: () => Promise.resolve(), saveEditStateNow: async () => {}, appWin: winStub().win,
     });
     sb.VE = baseState([{ tool: "cut", startMs: 0, endMs: 1000 }]);
     Object.assign(sb.VE, { exporting: true, dirty, editStateKeepOn: keep });
     await vm.runInContext("closeWindow()", sb);
     expect(`export close confirm (keep=${keep}, dirty=${dirty}) ${warns ? "warns" : "does not warn"} about unexported edits`, texts.length === 1 && texts[0].includes("veCloseUnsaved") === warns, texts.join("|"));
   }
+}
+
+function winStub() {
+  const log = [];
+  const ok = (name) => () => { log.push(name); return Promise.resolve(); };
+  return { log, win: { close: ok("close"), unminimize: ok("unminimize"), show: ok("show"), setFocus: ok("focus") } };
+}
+
+// Every close path (button, Escape, and the backend's held-back Alt+F4 / taskbar / quit close) asks
+// only when edits exist that no export covered, and lets the backend's close through only after
+// the answer: "allow" before the window closes, "cancel" when the person keeps it open.
+async function closeAskChecks() {
+  const cases = [
+    { name: "no edits closes at once", ops: [], dirty: false, answer: true, asks: false, closes: true },
+    { name: "edits already exported (not dirty) close at once", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: false, answer: true, asks: false, closes: true },
+    { name: "unexported edits ask, Discard closes", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: true, answer: true, asks: true, closes: true },
+    { name: "unexported edits ask, Cancel keeps the window", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: true, answer: false, asks: true, closes: false },
+    { name: "app quit with unexported edits asks", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: true, answer: true, asks: true, closes: true, opts: { quit: true } },
+    { name: "app quit without edits closes silently", ops: [], dirty: false, answer: true, asks: false, closes: true, opts: { quit: true } },
+    { name: "app quit during a clean export closes without the export question", ops: [], dirty: false, answer: true, asks: false, closes: true, opts: { quit: true }, exporting: true },
+  ];
+  for (const c of cases) {
+    const stub = winStub();
+    const acks = [];
+    let asked = 0;
+    const sb = makeSandbox({
+      t: (k) => k, confirmDialog: async () => { asked += 1; return c.answer; },
+      invoke: (cmd, args) => { if (cmd === "video_editor_close_ack") acks.push(args.state); return Promise.resolve(); },
+      saveEditStateNow: async () => {}, stopEditStateAutosave: () => {}, appWin: stub.win,
+    });
+    sb.VE = baseState(c.ops);
+    Object.assign(sb.VE, { exporting: !!c.exporting, dirty: c.dirty, editStateKeepOn: true, src: "C:/a.mp4" });
+    await vm.runInContext("(o) => closeWindow(o)", sb)(c.opts);
+    const closed = stub.log.includes("close");
+    const detail = `asked=${asked} acks=${acks} win=${stub.log}`;
+    expect(`close: ${c.name}`, (asked === 1) === c.asks && closed === c.closes && (c.closes ? acks.join() === "allow" : acks.join() === "cancel"), detail);
+    if (c.closes) expect(`close: ${c.name} allows before closing`, acks[0] === "allow" && stub.log.lastIndexOf("close") === stub.log.length - 1, detail);
+  }
+  // A second request while the question is open is ignored (Alt+F4 pressed twice).
+  const stub = winStub();
+  let asked = 0;
+  let answer;
+  const sb = makeSandbox({
+    t: (k) => k, confirmDialog: () => { asked += 1; return new Promise((r) => { answer = r; }); },
+    invoke: () => Promise.resolve(), saveEditStateNow: async () => {}, stopEditStateAutosave: () => {}, appWin: stub.win,
+  });
+  sb.VE = baseState([{ tool: "cut", startMs: 0, endMs: 1000 }]);
+  Object.assign(sb.VE, { dirty: true, src: "C:/a.mp4" });
+  const closeFn = vm.runInContext("(o) => closeWindow(o)", sb);
+  const first = closeFn();
+  await new Promise((r) => setTimeout(r, 5));
+  await closeFn();
+  expect("close: a second close request while the question is open asks nothing more", asked === 1, String(asked));
+  answer(false);
+  await first;
 }
 
 // A recording opened while the camera overlay of the previous one is still being
@@ -1167,7 +1225,7 @@ const pending = [];
   }
 }
 
-cameraOverlayRaceCheck().then(() => Promise.all(pending)).then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
+cameraOverlayRaceCheck().then(() => Promise.all(pending)).then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(closeAskChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);
