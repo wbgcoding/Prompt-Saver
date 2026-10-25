@@ -1238,3 +1238,22 @@ fn multi_a_file_left_beside_a_delete_marker_is_not_imported_by_a_machine_that_ne
     assert!(rig.b.get(&id).is_none(), "B imported a prompt that was deleted");
     assert_eq!(rig.b.count(), 0);
 }
+
+#[test]
+fn multi_making_a_prompt_confidential_takes_it_off_the_other_machine_and_undoing_it_brings_it_back() {
+    let rig = Rig::new();
+    let id = rig.a.add("Maybe secret", "plain words");
+    rig.settle();
+    assert!(rig.b.get(&id).is_some());
+    rig.a.edit(&id, |p| p.secret = true);
+    rig.settle();
+    assert!(!leftover_of(&rig, &id).exists(), "a confidential prompt has a file in the folder");
+    assert!(rig.b.get(&id).is_none(), "B kept a prompt A made confidential");
+    assert!(rig.b.in_trash(&id), "B dropped the prompt instead of trashing it");
+    assert!(rig.a.get(&id).is_some_and(|p| p.secret));
+    rig.a.edit(&id, |p| p.secret = false);
+    rig.settle();
+    assert!(rig.b.get(&id).is_some(), "B did not get the prompt back after A made it plain again");
+    assert!(!rig.b.in_trash(&id));
+    rig.assert_converged();
+}
