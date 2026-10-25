@@ -39,10 +39,9 @@ ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
 # Ed25519 check of signed updates; already in the tree through rustls.
 ring = "=0.17.14"
-# Encrypted single-file backups: AES-256-GCM + Argon2id password KDF (pure Rust, no
+# Encrypted single-file backups: AES-256-GCM (ring) + Argon2id password KDF (no
 # system/OpenSSL dependency). Default backups use a fixed key (portable); an optional
 # user password derives a stronger key.
-aes-gcm = "=0.11.1"
 argon2 = "=0.6.0"
 zeroize = "=1.9.1"
 # Backups are compressed before they are written (snapshots) or encrypted (.psb).
