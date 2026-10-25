@@ -363,3 +363,45 @@ fn every_native_dialog_call_runs_inside_the_dialog_thread_helper() {
     }
     assert!(checked >= 16, "the scan must actually see the dialog calls, saw {checked}");
 }
+
+#[cfg(windows)]
+#[test]
+fn move_file_never_leaves_a_copy_when_the_source_is_held_open() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = std::env::temp_dir().join(format!("ps-move-held-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec-held.mp4");
+    let dst = dir.join("moved.mp4");
+    fs::write(&src, b"video").unwrap();
+    // Shared for reading only: renaming or deleting the file is a sharing violation.
+    let held = fs::OpenOptions::new().read(true).share_mode(1).open(&src).unwrap();
+    assert!(move_file(&src, &dst).is_err(), "a held file cannot be moved");
+    assert!(!dst.exists(), "no second copy of the take is left behind");
+    drop(held);
+    assert!(move_file(&src, &dst).is_ok());
+    assert_eq!(fs::read(&dst).unwrap(), b"video");
+    assert!(!src.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn move_file_copies_only_after_a_cross_device_rename_error() {
+    let src = source!("../media_files.rs");
+    let body = &src[src.find("pub(crate) fn move_file(").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    assert!(body.contains("raw_os_error() != Some(CROSS_DEVICE_ERROR)"), "other rename errors are returned");
+    assert!(body.contains("let _ = fs::remove_file(dst);"), "a failed source remove undoes the copy");
+}
+
+#[test]
+fn the_discard_sweep_and_restore_commands_run_off_the_main_thread() {
+    let media = source!("../media_files.rs");
+    for name in ["discard_recording_file", "restore_discarded_recording"] {
+        let at = media.find(&format!("pub(crate) fn {name}(")).unwrap();
+        assert!(media[..at].trim_end().ends_with("#[tauri::command(async)]"), "{name} must be an async command");
+    }
+    let prompts = source!("../prompts.rs");
+    let at = prompts.find("pub(crate) fn sweep_discarded_recordings_now(").unwrap();
+    assert!(prompts[..at].trim_end().ends_with("#[tauri::command(async)]"));
+}

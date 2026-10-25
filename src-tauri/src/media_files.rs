@@ -437,14 +437,28 @@ pub(crate) fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &
     }
 }
 
+// ERROR_NOT_SAME_DEVICE: the one rename failure that a copy can cure.
+const CROSS_DEVICE_ERROR: i32 = 17;
+
 // fs::rename fails across drives (recordingDir can be anywhere, unlike the same-drive
-// <data>/recordings), so fall back to copy+remove.
+// <data>/recordings), so a cross-device error falls back to copy+remove. Any other rename
+// error (a file held open, no right) is returned as is: a copy would only duplicate a take
+// whose source cannot be removed. A copy whose source then cannot be removed is undone, so
+// the file never exists twice.
 pub(crate) fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    if fs::rename(src, dst).is_ok() {
-        return Ok(());
+    let err = match fs::rename(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    if err.raw_os_error() != Some(CROSS_DEVICE_ERROR) {
+        return Err(err);
     }
     fs::copy(src, dst)?;
-    fs::remove_file(src)
+    if let Err(e) = fs::remove_file(src) {
+        let _ = fs::remove_file(dst);
+        return Err(e);
+    }
+    Ok(())
 }
 
 // Save/Save As/Copy relocate the video, so its mic sidecar (a dual-audio capture not yet
@@ -960,7 +974,7 @@ pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
 // into a "verworfen" subfolder of whichever it was in rather than deleting, so a wrong click
 // can be undone (see restore_discarded_recording; the sweep in sweep_recordings_now_result
 // eventually clears the subfolder).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> Option<f64> {
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let allowed = [data_dir(&app).join("recordings"), recording_dir(&custom)];
@@ -1029,7 +1043,7 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
     true
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) -> bool {
     restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
 }
