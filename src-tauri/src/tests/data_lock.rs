@@ -1337,6 +1337,7 @@ fn blank_store() -> Store {
 // turn a regression into a failure instead of a hung suite.
 #[test]
 fn takeover_reload_builds_the_fresh_store_outside_the_store_lock() {
+    let _serial = DdlockGuard::capture();
     let db = std::sync::Arc::new(Mutex::new(blank_store()));
     let (tx, rx) = std::sync::mpsc::channel();
     let worker_db = db.clone();
@@ -1353,6 +1354,43 @@ fn takeover_reload_builds_the_fresh_store_outside_the_store_lock() {
     });
     assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "the reload froze: it built the store while holding the store lock");
     assert_eq!(db.lock().unwrap().prompts.len(), 2, "the fresh store replaces the stale one");
+}
+
+// The build lifts the read-only flag (the lock is ours by then) while the live store is still the
+// stale one. A save attempted in that window must be refused, and again after a build that fails.
+#[test]
+fn saves_stay_refused_from_the_lock_claim_until_the_store_is_swapped() {
+    let _serial = DdlockGuard::capture();
+    DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+    let db = std::sync::Arc::new(Mutex::new(blank_store()));
+    let (built_tx, built_rx) = std::sync::mpsc::channel();
+    let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+    let worker_db = db.clone();
+    let worker = std::thread::spawn(move || {
+        swap_in_fresh_store(&worker_db, move || {
+            // What acquire_data_dir_lock does inside load_store: the folder is ours, read-only drops.
+            DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+            built_tx.send(()).unwrap();
+            go_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+            let mut fresh = blank_store();
+            fresh.prompts = numbered_prompts(3);
+            fresh
+        });
+    });
+    built_rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the build started");
+    assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "the claim lifted the read-only flag");
+    assert!(data_dir_write_blocked_quiet(), "a save from the stale store would write old data here");
+    go_tx.send(()).unwrap();
+    worker.join().unwrap();
+    assert!(!data_dir_write_blocked_quiet(), "saves resume once the fresh store is in place");
+    assert_eq!(db.lock().unwrap().prompts.len(), 3);
+
+    // A reload that fails must not leave saves refused for good.
+    let failing = std::panic::catch_unwind(|| {
+        swap_in_fresh_store(&Mutex::new(blank_store()), || -> Store { panic!("the folder could not be read") });
+    });
+    assert!(failing.is_err());
+    assert!(!data_dir_write_blocked_quiet(), "an error during the reload releases the refusal");
 }
 
 // A unit test has no app handle to run the follow-up on, so this pins the wiring in the source:

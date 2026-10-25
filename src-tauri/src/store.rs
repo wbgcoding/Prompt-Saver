@@ -401,12 +401,33 @@ pub(crate) fn refresh_after_store_swap(app: &AppHandle) {
 // Replaces the live store with what `build` reads. The build runs BEFORE the store lock is
 // taken: its startup sweeps (trash retention, orphan attachment files) look at the live store
 // themselves, and the std mutex is not reentrant, so building under the guard froze the app.
-// Only the swap itself is under the lock.
+// Only the swap itself is under the lock. Every save stays refused from before the build until
+// after the swap: the build resolves the folder lock (which lifts the read-only flag) while the
+// live store is still the stale one, and a save from it in that gap would write old data over the
+// other machine's newest changes. The refusal is raised before the read-only flag can drop and
+// released by a drop guard, so a failing or panicking build cannot leave saves blocked for good.
 pub(crate) fn swap_in_fresh_store(db: &Db, build: impl FnOnce() -> Store) {
+    let _refuse_saves = ReloadSaveBlock::raise();
     let fresh = build();
     let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
     crate::vault::end_session_if_vault_changed(&store.settings, &fresh.settings);
     *store = fresh;
+}
+
+// True while a takeover reload replaces the store; the write gates below refuse everything then.
+static STORE_RELOADING: AtomicBool = AtomicBool::new(false);
+
+struct ReloadSaveBlock;
+impl ReloadSaveBlock {
+    fn raise() -> Self {
+        STORE_RELOADING.store(true, Ordering::SeqCst);
+        Self
+    }
+}
+impl Drop for ReloadSaveBlock {
+    fn drop(&mut self) {
+        STORE_RELOADING.store(false, Ordering::SeqCst);
+    }
 }
 
 #[derive(Serialize)]
@@ -428,7 +449,7 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
 // The same gate without the refusal event, for background jobs that would otherwise raise the
 // toast on every round.
 pub(crate) fn data_dir_write_blocked_quiet() -> bool {
-    DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || DATA_DIR_READONLY.load(Ordering::Relaxed)
+    DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || STORE_RELOADING.load(Ordering::SeqCst) || DATA_DIR_READONLY.load(Ordering::Relaxed)
 }
 
 // The single choke point for save_prompts, save_prompts_and_trash, save_trash and
@@ -437,6 +458,11 @@ pub(crate) fn data_dir_write_blocked_quiet() -> bool {
 pub(crate) fn data_dir_write_blocked(app: &AppHandle) -> bool {
     // No event here: the window is already on its way down for app.restart().
     if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+        return true;
+    }
+    // The store is being replaced after a takeover: a save now would come from the stale copy.
+    // Over within moments, so no read-only event.
+    if STORE_RELOADING.load(Ordering::SeqCst) {
         return true;
     }
     if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
