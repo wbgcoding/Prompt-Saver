@@ -55,6 +55,8 @@ use model::*;
 mod paths;
 use paths::*;
 
+mod asset_scope;
+
 mod store;
 use store::*;
 
@@ -474,7 +476,11 @@ pub fn run() {
                     "data-dir-lock",
                     Duration::from_secs(DATA_DIR_LOCK_REFRESH_SECS),
                     Duration::from_secs(DATA_DIR_LOCK_REFRESH_SECS),
-                    move || refresh_data_dir_lock(&data_dir(&h)),
+                    move || {
+                        if refresh_data_dir_lock(&data_dir(&h)) {
+                            reload_after_takeover(&h);
+                        }
+                    },
                 );
             }
 

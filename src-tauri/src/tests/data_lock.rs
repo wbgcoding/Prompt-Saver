@@ -138,6 +138,36 @@ fn refresh_data_dir_lock_never_touches_a_foreign_lock_while_read_only() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn a_read_only_tick_that_wins_the_lock_reports_a_takeover_and_keeps_the_flag_up() {
+    let _g = DdlockGuard::capture();
+    let dir = ddlock_test_dir("takeover-tick");
+    let path = data_dir_lock_path(&dir);
+    write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: now_secs(), id: "other".to_string(), beat: 0 });
+    acquire_data_dir_lock(&dir, true);
+    assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));
+    assert!(!refresh_data_dir_lock(&dir), "a live foreign lock is no takeover");
+    // The old owner is gone: what is left names this machine under another claim.
+    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: 1, seen: now_secs(), id: "crashed-run".to_string(), beat: 0 });
+    assert!(refresh_data_dir_lock(&dir), "winning the lock from the read-only state must be reported");
+    assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "saves stay refused until the store has been replaced");
+    assert!(DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, lock_claim_id());
+    assert!(!refresh_data_dir_lock(&dir), "the next tick is a plain owner refresh, not a second takeover");
+    // The reload resolves the lock again (load_store -> acquire_data_dir_lock): that clears the flag.
+    acquire_data_dir_lock(&dir, true);
+    assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed));
+    assert!(DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_quiet_write_gate_follows_the_read_only_flag_for_background_jobs() {
+    let _g = DdlockGuard::capture();
+    DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+    assert!(data_dir_write_blocked_quiet(), "auto backup, backup rotation and the adopt offer stay out of a folder another machine owns");
+}
+
 // Eight paths: one for each provider's folder-name convention, one OneDrive
 // path recognised only through its environment variable (business tenants
 // rename the visible folder), and two ordinary local paths that must stay

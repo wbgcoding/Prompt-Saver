@@ -126,6 +126,24 @@ fn a_plaintext_trash_row_is_deleted_by_a_purge_and_sealed_by_a_keep() {
 }
 
 #[test]
+fn a_plaintext_prompt_row_loaded_from_the_db_is_deleted_by_a_later_save() {
+    let mut conn = row_test_db();
+    for id in ["gone", "kept"] {
+        conn.execute("INSERT INTO prompts VALUES(?1, 0, ?2)", params![id, serde_json::to_string(&test_prompt(id)).unwrap()]).unwrap();
+    }
+    let mut written = WrittenRows::new();
+    let (prompts, _, plain, failures, _) = db_load(&conn, &mut written);
+    assert_eq!((prompts.len(), plain, failures), (2, true, 0));
+    assert_eq!(written.get(&row_key("prompts", "gone")), Some(&STALE_ROW_HASH), "every loaded row is known to this process");
+    let kept: Vec<Prompt> = prompts.into_iter().filter(|p| p.id == "kept").collect();
+    db_write_prompts(&mut conn, &kept, &mut written).unwrap();
+    let rows = stored_rows(&conn, "prompts");
+    assert_eq!(rows.len(), 1, "the deleted plaintext row must not survive the save");
+    assert_eq!(rows[0].0, "kept");
+    assert!(rows[0].2.starts_with(ENC_PREFIX), "the kept row is sealed by the write");
+}
+
+#[test]
 fn a_busy_store_is_skipped_by_the_event_loop_lock_and_a_poisoned_one_is_taken_over() {
     let m = std::sync::Arc::new(Mutex::new(5));
     {

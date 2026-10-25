@@ -351,8 +351,10 @@ pub(crate) fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
 // Scheduler tick. An owner reads the lock first and gives up the folder when it names
 // another claim (after a long sleep or clock skew), never erasing the taker's lock. A
 // read-only process never writes while the owner is alive and takes over once the lock has
-// stood still for the stale limit.
-pub(crate) fn refresh_data_dir_lock(dir: &Path) {
+// stood still for the stale limit. Returns true on that takeover: the lock is ours, but the
+// store in memory is still the one loaded before the old owner's last changes, so the
+// read-only flag stays up until reload_after_takeover() has replaced the store.
+pub(crate) fn refresh_data_dir_lock(dir: &Path) -> bool {
     let path = data_dir_lock_path(dir);
     if DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed) {
         let host = local_host_name();
@@ -362,8 +364,32 @@ pub(crate) fn refresh_data_dir_lock(dir: &Path) {
             apply_lock_outcome(LockOutcome::ReadOnly(other));
         }
     } else if DATA_DIR_READONLY.load(Ordering::Relaxed) && DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
-        apply_lock_outcome(claim_with_process_state(dir));
+        match claim_with_process_state(dir) {
+            LockOutcome::Owned => {
+                DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);
+                return true;
+            }
+            other => apply_lock_outcome(other),
+        }
     }
+    false
+}
+
+// Second half of a takeover: under the store lock (so no save can interleave), reads the
+// folder again, replaces the stale store and its row bookkeeping, and tells every window to
+// refetch and drop the read-only banner. load_store() re-resolves the lock, which names this
+// process by now, so it is also what clears the read-only flag. Should the claim not hold
+// after all, the flag stays and the next tick tries again.
+pub(crate) fn reload_after_takeover(app: &AppHandle) {
+    {
+        let state = app.state::<Db>();
+        let mut store = lock(&state);
+        let fresh = load_store(app);
+        crate::vault::end_session_if_vault_changed(&store.settings, &fresh.settings);
+        *store = fresh;
+    }
+    let _ = app.emit_to("main", "store-synced", ());
+    let _ = app.emit("data-dir-lock-changed", ());
 }
 
 #[derive(Serialize)]
@@ -380,6 +406,12 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
         read_only: DATA_DIR_READONLY.load(Ordering::Relaxed),
         other_host: DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     }
+}
+
+// The same gate without the refusal event, for background jobs that would otherwise raise the
+// toast on every round.
+pub(crate) fn data_dir_write_blocked_quiet() -> bool {
+    DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || DATA_DIR_READONLY.load(Ordering::Relaxed)
 }
 
 // The single choke point for save_prompts, save_prompts_and_trash, save_trash and
@@ -791,14 +823,14 @@ pub(crate) fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prom
                             }
                             match serde_json::from_str::<Prompt>(&dec_str(&data)) {
                                 Ok(p) => {
-                                    // A legacy plaintext row is left out of the map so it counts as changed and is sealed on
-                                    // the next save.
-                                    if encrypted {
-                                        written.insert(
-                                            row_key("prompts", &p.id),
-                                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
-                                        );
-                                    }
+                                    // A legacy plaintext row carries the stale hash: it counts as changed and is sealed on
+                                    // the next save, and its key still lets a later delete reach it.
+                                    let hash = if encrypted {
+                                        row_hash(&serde_json::to_string(&p).unwrap_or_default())
+                                    } else {
+                                        STALE_ROW_HASH
+                                    };
+                                    written.insert(row_key("prompts", &p.id), hash);
                                     prompts.push(p);
                                 }
                                 // An encrypted row that won't decrypt/parse is present-but-unreadable;
@@ -1202,6 +1234,7 @@ pub(crate) fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a 
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
 pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
+    crate::asset_scope::allow_store_files(app, store);
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -1262,6 +1295,7 @@ pub(crate) fn save_trash(app: &AppHandle, store: &Store) -> bool {
 // The atomic counterpart to save_prompts + save_trash for delete_prompt/restore_prompt
 // (see db_write_prompts_and_trash).
 pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
+    crate::asset_scope::allow_store_files(app, store);
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -1323,6 +1357,7 @@ pub(crate) enum SettingsWrite {
 // path below calls this one so it does not clear its own mark twice.
 pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> SettingsWrite {
     mirror_minimize_to_tray(settings);
+    crate::asset_scope::allow_app_dirs(app, settings);
     if data_dir_write_blocked(app) {
         return SettingsWrite::Refused;
     }
@@ -1723,6 +1758,15 @@ pub(crate) fn remove_locked_backup(dir: &Path) {
 }
 
 pub(crate) fn load_store(app: &AppHandle) -> Store {
+    let store = load_store_inner(app);
+    // The windows read media through the asset protocol, whose static scope allows nothing: the
+    // folders and attachments of the store just loaded are allowed here (startup, folder switch,
+    // restore and lock takeover all load through this).
+    crate::asset_scope::allow_loaded(app, &store);
+    store
+}
+
+fn load_store_inner(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
         // Filled from the rows as they are read, so the first save of the session

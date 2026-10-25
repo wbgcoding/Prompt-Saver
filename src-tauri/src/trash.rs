@@ -897,7 +897,9 @@ pub(crate) fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: 
 // copies or moves anything: see takeover_apply for that, after an answer.
 #[tauri::command]
 pub(crate) fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<TakeoverOffer> {
-    if !is_portable() {
+    // Adopting copies a database over the folder another machine has open: not offered at all.
+    // Quiet, since an offer is not a refused action.
+    if !is_portable() || data_dir_write_blocked_quiet() {
         return None;
     }
     {
@@ -920,6 +922,9 @@ pub(crate) fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<Takeove
 // closing the dialog without ticking "do not ask again" must leave nothing decided.
 #[tauri::command(async)]
 pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, remember: bool) -> Result<(), String> {
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".to_string());
+    }
     let dir = data_dir(&app);
     let src = appdata_store_dir(&app, &dir);
     if adopt {
