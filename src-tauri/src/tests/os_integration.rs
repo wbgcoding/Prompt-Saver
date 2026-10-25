@@ -141,3 +141,16 @@ fn the_pointer_the_screenshot_save_as_and_the_cli_export_are_written_atomically(
     let ex = &ex[..ex.find("\n}\n").unwrap()];
     assert!(ex.contains("write_bytes_atomic(&out_path") && !ex.contains("fs::write(&out_path"));
 }
+
+#[test]
+fn a_forwarded_cli_command_runs_on_a_blocking_worker_and_backup_create_releases_the_lock() {
+    let src = source!("../cli_callers.rs");
+    let live = &src[src.find("async fn run_in_process_inner").unwrap()..];
+    let tail = &live[live.find("// The store lock, the command and its save").unwrap()..];
+    let lock_at = tail.find("lock(&state)").unwrap();
+    assert!(tail[..lock_at].contains("spawn_blocking"), "the store lock is taken inside the blocking worker");
+    let bk = &tail[tail.find("Cmd::BackupCreate").unwrap()..];
+    let bk = &bk[..bk.find("exec_persisted").unwrap()];
+    assert!(bk.contains("flush_settings") && bk.contains("backup_released"));
+    assert!(!bk.contains("do_backup_at"));
+}

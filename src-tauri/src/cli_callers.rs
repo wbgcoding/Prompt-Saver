@@ -254,39 +254,62 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
         };
     }
 
-    let state: tauri::State<Db> = app.state();
-    let dir = data_dir(app);
-    let mut store = lock(&state);
-    // The same refusal the standalone caller gives, up front: a store that is read-only, locked
-    // after a failed decrypt or settings-locked must not even be changed in memory, or the next
-    // save that succeeds would write it. (This also refuses a prompt-only command while only the
-    // settings are locked; the standalone caller does not look at SETTINGS_LOCKED.)
-    if is_mutating(&cmd)
-        && (crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || store.prompts_locked || crate::SETTINGS_LOCKED.load(Ordering::Relaxed))
-    {
-        return (3, String::new(), "the store refused the write (locked or unavailable)
-".to_string());
-    }
-    let outcome = exec_persisted(&mut store, &dir, &cmd, &cwd, |st, o| {
-        let persisted = if o.mutated_trash {
-            crate::save_prompts_and_trash(app, st)
-        } else if o.mutated_prompts {
-            crate::save_prompts(app, st)
-        } else {
-            true
-        };
-        let settings_persisted = if o.mutated_settings { crate::save_settings(app, &st.settings) } else { true };
-        persisted && settings_persisted
-    });
-    // A switch set from here needs the same live effects the settings window gives it
-    // (capture exclusion, the error list, a running auto-advance session).
-    let flag_set = match &cmd {
-        Cmd::SettingsSet { key, .. } if outcome.code == 0 && outcome.mutated_settings => {
-            store.settings.ui_flags.get(key.as_str()).map(|on| (key.clone(), *on))
+    // The store lock, the command and its save all block (file reads, VACUUM, compression), so the
+    // whole run happens on a blocking worker, never on an async one.
+    let worker = app.clone();
+    let ran = tauri::async_runtime::spawn_blocking(move || {
+        let app = &worker;
+        let state: tauri::State<Db> = app.state();
+        let dir = data_dir(app);
+        let mut store = lock(&state);
+        if let Cmd::BackupCreate { keep, json } = &cmd {
+            // Same sequence as the app's own backup: pending counter writes land in data.db
+            // first, and the lock is released after the point-in-time copy, before compression.
+            let keep = keep.unwrap_or_else(|| default_keep(&store.settings));
+            let gfs = gfs_from_settings(&store.settings);
+            crate::flush_settings(app, &store.settings);
+            let done = crate::backup_released(store, &dir, &dir.join("backups"), keep, gfs, || {});
+            return match done {
+                Ok(name) => (Outcome::ok(if *json { format!("{{\"name\":\"{name}\"}}\n") } else { format!("{name}\n") }), None),
+                Err(e) => (Outcome::err(3, format!("{e}\n")), None),
+            };
         }
-        _ => None,
+        // The same refusal the standalone caller gives, up front: a store that is read-only, locked
+        // after a failed decrypt or settings-locked must not even be changed in memory, or the next
+        // save that succeeds would write it. (This also refuses a prompt-only command while only the
+        // settings are locked; the standalone caller does not look at SETTINGS_LOCKED.)
+        if is_mutating(&cmd)
+            && (crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || store.prompts_locked || crate::SETTINGS_LOCKED.load(Ordering::Relaxed))
+        {
+            return (Outcome::err(3, "the store refused the write (locked or unavailable)\n"), None);
+        }
+        let outcome = exec_persisted(&mut store, &dir, &cmd, &cwd, |st, o| {
+            let persisted = if o.mutated_trash {
+                crate::save_prompts_and_trash(app, st)
+            } else if o.mutated_prompts {
+                crate::save_prompts(app, st)
+            } else {
+                true
+            };
+            let settings_persisted = if o.mutated_settings { crate::save_settings(app, &st.settings) } else { true };
+            persisted && settings_persisted
+        });
+        // A switch set from here needs the same live effects the settings window gives it
+        // (capture exclusion, the error list, a running auto-advance session).
+        let flag_set = match &cmd {
+            Cmd::SettingsSet { key, .. } if outcome.code == 0 && outcome.mutated_settings => {
+                store.settings.ui_flags.get(key.as_str()).map(|on| (key.clone(), *on))
+            }
+            _ => None,
+        };
+        drop(store);
+        (outcome, flag_set)
+    })
+    .await;
+    let (outcome, flag_set) = match ran {
+        Ok(v) => v,
+        Err(e) => (Outcome::err(3, format!("{e}\n")), None),
     };
-    drop(store);
     if let Some((key, on)) = flag_set {
         crate::apply_flag_effects(app, &key, on);
     }
