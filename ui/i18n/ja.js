@@ -647,6 +647,7 @@ export default {
     veOvBlock: "ブロックサイズ (px)",
     veOvDim: "暗さ (%)",
     veOvRemove: "このオーバーレイを削除",
+    veKeysSampleHint: "強調表示されたキーは、押されたキーの見た目を示します。",
     veOvImageQuote: "ファイルパスにアポストロフィが含まれているため、ここでは使用できません。ファイル名を変更するか、別のフォルダーへ移動してください。",
     veTickError: "動画プレビューで問題が発生し、更新が停止しました。エクスポート自体には影響ありません。",
     numFieldDecrease: "値を減らす",

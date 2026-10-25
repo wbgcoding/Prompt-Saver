@@ -604,6 +604,8 @@ the introduction tour ship on; the screenshot editor is always on).
   selection, a cut sticking out of the trimmed part is clamped to it, cuts that touch
   merge into one cut (one undo step), the mark-out button comes before mark-in, and
   the trim fields can no longer cross each other.
+- **Keys overlay preview.** The preview now shows the W key as pressed (not Esc or the
+  first key), with a short hint under the settings that explains the highlighted key.
 - **Expert menu cards sit without gaps.** The cards of a tab now fill columns
   from top to bottom, so a short card is followed by the next card instead of
   empty space. The reading order is therefore column by column, not row by row.

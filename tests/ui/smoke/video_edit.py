@@ -185,4 +185,26 @@ def run(browser, tmp):
     $('ve-mark-in').click();
     if (!VE.sel || VE.sel.b !== 60000 || Math.abs(VE.sel.a - VE.playhead) > 1) errs.push('4025: mark in gave ' + JSON.stringify(VE.sel) + ' at ' + VE.playhead);
     """)
+
+    # 4026: the keys preview shows W as the pressed sample key, never Esc, and says so.
+    failed += vprobe('keyssample', 'keys preview highlights W and explains it', r"""
+    // 4026: sample key of the keys preview.
+    const { keysPreviewModel } = await import('./videoKeys.js');
+    const rect = { x: 0, y: 0, w: 900, h: 300 };
+    for (const preset of ['full', 'half', 'game']) {
+      const active = keysPreviewModel({ preset, rect, keys: [] }).cells.filter((c) => c.active);
+      if (active.length !== 1 || active[0].label !== 'W') errs.push('4026: ' + preset + ' layout highlights ' + JSON.stringify(active.map((c) => c.label)));
+    }
+    const custom = keysPreviewModel({ preset: 'custom', rect, keys: [0x41, 0x42] }).cells;
+    if (!custom[0].active || custom[1].active) errs.push('4026: a custom pick without W should highlight its first key');
+    const mixed = keysPreviewModel({ preset: 'custom', rect, keys: [0x41, 0x57] }).cells;
+    if (mixed[0].active || !mixed[1].active) errs.push('4026: a custom pick with W should highlight W');
+    const { addOverlay } = await import('./videoOverlays.js');
+    VE.keySidecar = true;
+    mod.pushOp({ tool: 'overlay', id: 'k1', kind: 'keys', startMs: 0, endMs: 5000, preset: 'full', keys: [], color: '#303030', activeColor: '#e0a000', opacity: 100, rect: { x: 0, y: 0, w: 400, h: 120 } });
+    mod.selectOverlay('k1'); await sleep(150);
+    const hints = [...document.querySelectorAll('#ve-ov-editor .modal-hint')].filter((h) => h.textContent === 'The highlighted key shows how a pressed key looks.');
+    if (hints.length !== 1) errs.push('4026: the sample hint appears ' + hints.length + ' times in the keys editor');
+    """)
+
     return failed

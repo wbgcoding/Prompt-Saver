@@ -647,6 +647,7 @@ export default {
     veOvBlock: "Tamanho do bloco (px)",
     veOvDim: "Escurecimento (%)",
     veOvRemove: "Remover esta sobreposição",
+    veKeysSampleHint: "A tecla destacada mostra como fica uma tecla pressionada.",
     veOvImageQuote: "Não é possível usar um apóstrofo no caminho do arquivo aqui. Renomeie o arquivo ou mova-o para outra pasta.",
     veTickError: "A pré-visualização do vídeo encontrou um problema e parou de atualizar; a exportação em si não é afetada.",
     numFieldDecrease: "Diminuir valor",

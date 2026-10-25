@@ -624,6 +624,7 @@ export default {
     veOvBlock: "Blockgröße (px)",
     veOvDim: "Abdunklung (%)",
     veOvRemove: "Diese Überlagerung entfernen",
+    veKeysSampleHint: "Die hervorgehobene Taste zeigt, wie eine gedrückte Taste aussieht.",
     veOvImageQuote: "Ein Apostroph im Dateipfad ist hier nicht verwendbar. Benenne die Datei um oder verschiebe sie in einen anderen Ordner.",
     veTickError: "Die Video-Vorschau ist auf ein Problem gestoßen und aktualisiert sich nicht mehr; der Export selbst ist davon nicht betroffen.",
     numFieldDecrease: "Wert verringern",

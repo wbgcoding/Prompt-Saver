@@ -673,6 +673,10 @@ export function renderOverlayEditor() {
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
     box.appendChild(fieldRow(t("veOvActiveColor"), colorRow(op.activeColor, (hex) => { commitOverlay(op, { activeColor: hex }); renderOverlayEditor(); })));
     box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }), [25, 50, 75, 100]), (o) => String(o.opacity))));
+    const sample = document.createElement("p");
+    sample.className = "modal-hint";
+    sample.textContent = t("veKeysSampleHint");
+    box.appendChild(sample);
   }
 
   if (op.rect) {

@@ -647,6 +647,7 @@ export default {
     veOvBlock: "Blok boyutu (px)",
     veOvDim: "Karartma (%)",
     veOvRemove: "Bu katmanı kaldır",
+    veKeysSampleHint: "Vurgulanan tuş, basılı bir tuşun nasıl göründüğünü gösterir.",
     veOvImageQuote: "Dosya yolundaki kesme işareti burada kullanılamaz. Dosyayı yeniden adlandırın veya başka bir klasöre taşıyın.",
     veTickError: "Video önizlemesi bir sorunla karşılaştı ve güncellenmeyi durdurdu; dışa aktarmanın kendisi bundan etkilenmez.",
     numFieldDecrease: "Değeri azalt",
