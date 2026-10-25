@@ -492,6 +492,7 @@ pub(crate) fn sweep_trash(app: &AppHandle, store: &mut Store) {
 pub(crate) fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
     // The orphan sweep locks the store itself, so it runs only after this guard is
     // gone (same shape as empty_trash): holding both froze the whole app.
+    let own_dirs = own_storage_dirs(&app, &state);
     let (count, bytes, orphan_scan) = {
         let mut store = lock(&state);
         let Some(max_age) = trash_retention_secs(&store.settings) else {
@@ -507,7 +508,7 @@ pub(crate) fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64
             .filter(|p| stale.contains(&p.id))
             .map(|p| p.file_path.clone())
             .collect();
-        let (_, bytes) = attachments_bytes(&stale_paths);
+        let (_, bytes) = attachments_bytes(&stale_paths, &own_dirs);
         let count = stale.len() as u32;
         let Ok(orphan_scan) = purge_ids(&app, &mut store, &stale) else {
             return (0, 0);

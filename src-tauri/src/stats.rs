@@ -373,13 +373,15 @@ pub(crate) fn file_size_or_zero(path: &std::path::Path) -> u64 {
 
 // (count, bytes) of every distinct, still-existing attachment path: a file shared by two
 // prompts (a rotating entry's variants, say) counts once, and a path that no longer
-// resolves adds nothing instead of failing the readout.
-pub(crate) fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
+// resolves adds nothing instead of failing the readout. A path on another machine (outside
+// the app's own folders) is skipped on its text, so measuring never contacts a host and an
+// offline share cannot stall the window.
+pub(crate) fn attachments_bytes(file_paths: &[String], own_dirs: &[PathBuf]) -> (u64, u64) {
     let mut seen = std::collections::HashSet::new();
     let mut bytes = 0u64;
     let mut count = 0u64;
     for path in file_paths {
-        if path.is_empty() || !seen.insert(path.as_str()) {
+        if path.is_empty() || is_foreign_network_path(path, own_dirs) || !seen.insert(path.as_str()) {
             continue;
         }
         if let Ok(meta) = fs::metadata(path) {
@@ -494,6 +496,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
     let (edit_state_count, edit_state_bytes) = db_conn(&app)
         .map(|c| edit_state_stats(&c))
         .unwrap_or((0, 0));
+    let own_dirs = own_storage_dirs(&app, &state);
     let (file_paths, screenshot_custom, recording_custom) = {
         let store = lock(&state);
         (
@@ -502,87 +505,97 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
             store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default(),
         )
     };
-    let dd = data_dir(&app);
-    let mut items = Vec::new();
+    // Every folder walk and attachment stat is blocking disk work (a share can stall for tens
+    // of seconds), so it runs on a blocking worker, not on the async runtime.
+    let measure_app = app.clone();
+    let fresh = tauri::async_runtime::spawn_blocking(move || {
+        let app = measure_app;
+        let dd = data_dir(&app);
+        let mut items = Vec::new();
 
-    // Database + its write-ahead log (and shared-memory file, when SQLite has
-    // one open right now).
-    {
-        let db = dd.join("data.db");
-        let wal = dd.join("data.db-wal");
-        let shm = dd.join("data.db-shm");
-        let bytes = file_size_or_zero(&db) + file_size_or_zero(&wal) + file_size_or_zero(&shm);
-        let count = [&db, &wal, &shm].iter().filter(|p| p.exists()).count() as u64;
-        items.push(StorageItem { key: "database".into(), path: db.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
-    }
+        // Database + its write-ahead log (and shared-memory file, when SQLite has
+        // one open right now).
+        {
+            let db = dd.join("data.db");
+            let wal = dd.join("data.db-wal");
+            let shm = dd.join("data.db-shm");
+            let bytes = file_size_or_zero(&db) + file_size_or_zero(&wal) + file_size_or_zero(&shm);
+            let count = [&db, &wal, &shm].iter().filter(|p| p.exists()).count() as u64;
+            items.push(StorageItem { key: "database".into(), path: db.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
+        }
 
-    // Attachments: a prompt's file keeps only its original path, so there is no app folder to
-    // scan; this sums whatever those paths currently point to.
-    {
-        let (count, bytes) = attachments_bytes(&file_paths);
-        items.push(StorageItem { key: "attachments".into(), path: String::new(), bytes, count, capped: false, denied: false });
-    }
+        // Attachments: a prompt's file keeps only its original path, so there is no app folder to
+        // scan; this sums whatever those paths currently point to.
+        {
+            let (count, bytes) = attachments_bytes(&file_paths, &own_dirs);
+            items.push(StorageItem { key: "attachments".into(), path: String::new(), bytes, count, capped: false, denied: false });
+        }
 
-    // Screenshots
-    {
-        let target = screenshot_dir(&screenshot_custom);
-        let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
-        items.push(StorageItem { key: "screenshots".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
-    }
+        // Screenshots
+        {
+            let target = screenshot_dir(&screenshot_custom);
+            let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
+            items.push(StorageItem { key: "screenshots".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+        }
 
-    // Recordings, plus the discard trash as a separate row: the same folder the expert menu's
-    // recording-folder readout reads.
-    {
-        let target = recording_dir(&recording_custom);
-        let (count, bytes) = video_folder_stats_in(&target);
-        items.push(StorageItem { key: "recordings".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
-        let discard = target.join(DISCARD_SUBDIR);
-        let (dcount, dbytes) = video_folder_stats_in(&discard);
-        items.push(StorageItem { key: "discarded_recordings".into(), path: discard.to_string_lossy().into_owned(), bytes: dbytes, count: dcount, capped: false, denied: false });
-    }
+        // Recordings, plus the discard trash as a separate row: the same folder the expert menu's
+        // recording-folder readout reads.
+        {
+            let target = recording_dir(&recording_custom);
+            let (count, bytes) = video_folder_stats_in(&target);
+            items.push(StorageItem { key: "recordings".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
+            let discard = target.join(DISCARD_SUBDIR);
+            let (dcount, dbytes) = video_folder_stats_in(&discard);
+            items.push(StorageItem { key: "discarded_recordings".into(), path: discard.to_string_lossy().into_owned(), bytes: dbytes, count: dcount, capped: false, denied: false });
+        }
 
-    // Backups
-    {
-        let target = backups_dir(&app);
-        let (count, bytes, capped, denied) = backup_dir_stats(&target, STORAGE_SCAN_CAP);
-        items.push(StorageItem { key: "backups".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
-    }
+        // Backups
+        {
+            let target = backups_dir(&app);
+            let (count, bytes, capped, denied) = backup_dir_stats(&target, STORAGE_SCAN_CAP);
+            items.push(StorageItem { key: "backups".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+        }
 
-    // Temporary files: the scratch folder OCR, the language-pack install and
-    // the update stager all write into.
-    {
-        let target = std::env::temp_dir().join(brand::TEMP_DIR);
-        let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
-        items.push(StorageItem { key: "temp_files".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
-    }
+        // Temporary files: the scratch folder OCR, the language-pack install and
+        // the update stager all write into.
+        {
+            let target = std::env::temp_dir().join(brand::TEMP_DIR);
+            let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
+            items.push(StorageItem { key: "temp_files".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+        }
 
-    // Edit states: `ops` is the JSON blob actually held in the database; the
-    // row's own `size` column is the edited file's size, not storage cost.
-    items.push(StorageItem {
-        key: "edit_states".into(),
-        path: String::new(),
-        bytes: edit_state_bytes,
-        count: edit_state_count,
-        capped: false,
-        denied: false,
-    });
-
-    // Error log
-    {
-        let path = crash_log_path();
-        let bytes = file_size_or_zero(&path);
+        // Edit states: `ops` is the JSON blob actually held in the database; the
+        // row's own `size` column is the edited file's size, not storage cost.
         items.push(StorageItem {
-            key: "crash_log".into(),
-            path: path.to_string_lossy().into_owned(),
-            bytes,
-            count: u64::from(path.exists()),
+            key: "edit_states".into(),
+            path: String::new(),
+            bytes: edit_state_bytes,
+            count: edit_state_count,
             capped: false,
             denied: false,
         });
-    }
 
-    let total_bytes = items.iter().map(|i| i.bytes).sum();
-    let fresh = StorageBreakdown { items, total_bytes, measured_at: now_secs() };
+        // Error log
+        {
+            let path = crash_log_path();
+            let bytes = file_size_or_zero(&path);
+            items.push(StorageItem {
+                key: "crash_log".into(),
+                path: path.to_string_lossy().into_owned(),
+                bytes,
+                count: u64::from(path.exists()),
+                capped: false,
+                denied: false,
+            });
+        }
+
+        let total_bytes = items.iter().map(|i| i.bytes).sum();
+        let fresh = StorageBreakdown { items, total_bytes, measured_at: now_secs() };
+        *STORAGE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
+        fresh
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     *STORAGE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
     Ok(fresh)
 }
@@ -591,10 +604,14 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
 // re-walk every folder every time; the "measure again" button passes force=true.
 pub(crate) static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(None);
 
-// Opens a storage-breakdown row's own folder: the path travels from
-// storage_breakdown's own computation, never from anything the user typed.
+// Opens a storage-breakdown row's own folder (or the data folder a takeover just moved to).
+// The path comes over IPC, so a network spelling outside the app's own folders is refused on
+// its text before Explorer or any stat sees it.
 #[tauri::command(async)]
-pub(crate) fn open_storage_folder(path: String) -> Result<(), String> {
+pub(crate) fn open_storage_folder(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(), String> {
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &state)) {
+        return Err("folder not found".to_string());
+    }
     open_explorer_at(&path)
 }
 
@@ -627,12 +644,12 @@ pub(crate) async fn retention_overview(app: AppHandle, state: State<'_, Db>, for
         }
     }
     // Only the paths are collected under the lock; measuring them touches the disk.
+    let own_dirs = own_storage_dirs(&app, &state);
     let (trash_count, trash_paths, recording_custom) = {
         let store = lock(&state);
         let trash_paths: Vec<String> = store.trash.iter().map(|p| p.file_path.clone()).collect();
         (store.trash.len() as u64, trash_paths, store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default())
     };
-    let (_, trash_bytes) = attachments_bytes(&trash_paths);
     let (copy_count, copy_bytes) = db_conn(&app)
         .map(|c| {
             c.query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(id)), 0) FROM copy_log", [], |r| {
@@ -649,10 +666,18 @@ pub(crate) async fn retention_overview(app: AppHandle, state: State<'_, Db>, for
             .unwrap_or((0, 0))
         })
         .unwrap_or((0, 0));
+    // The attachment stats and folder walks are blocking disk work, so they run on a blocking
+    // worker, not on the async runtime.
     let rec_dir = recording_dir(&recording_custom);
-    let (rec_count, rec_bytes) = video_folder_stats_in(&rec_dir);
-    let (discarded_count, discarded_bytes) = video_folder_stats_in(&rec_dir.join(DISCARD_SUBDIR));
-    let (temp_count, temp_bytes) = clip_export_temp_stats();
+    let (trash_bytes, rec_count, rec_bytes, discarded_count, discarded_bytes, temp_count, temp_bytes) = tauri::async_runtime::spawn_blocking(move || {
+        let (_, trash_bytes) = attachments_bytes(&trash_paths, &own_dirs);
+        let (rec_count, rec_bytes) = video_folder_stats_in(&rec_dir);
+        let (discarded_count, discarded_bytes) = video_folder_stats_in(&rec_dir.join(DISCARD_SUBDIR));
+        let (temp_count, temp_bytes) = clip_export_temp_stats();
+        (trash_bytes, rec_count, rec_bytes, discarded_count, discarded_bytes, temp_count, temp_bytes)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     let (edit_count, edit_bytes) = db_conn(&app)
         .map(|c| edit_state_stats(&c))
         .unwrap_or((0, 0));
