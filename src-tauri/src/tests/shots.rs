@@ -386,3 +386,12 @@ fn old_pdfium_copies_in_the_shared_temp_folder_are_removed_once_at_start() {
     let snip = source!("../snip.rs");
     assert!(!snip.contains("next to the versioned pdfium cache"), "the comment no longer places the cache in TEMP");
 }
+
+#[test]
+fn the_desktop_freeze_runs_on_a_blocking_worker() {
+    let src = source!("../snip.rs");
+    let body = &src[src.find("let frozen = ").unwrap()..];
+    let line = &body[..body.find(";\n").unwrap()];
+    assert!(line.contains("spawn_blocking(freeze_desktop)"), "{line}");
+    assert!(!src.contains("match freeze_desktop()"));
+}

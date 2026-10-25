@@ -821,7 +821,10 @@ pub(crate) async fn begin_capture(
     if !snip_session_current(gen) {
         return Ok(());
     }
-    let (canvas, min_x, min_y) = match freeze_desktop() {
+    // The grab is a full virtual-desktop copy (tens of MB): it runs on a blocking worker so it
+    // cannot stall the async runtime.
+    let frozen = tauri::async_runtime::spawn_blocking(freeze_desktop).await.map_err(|e| e.to_string()).and_then(|r| r);
+    let (canvas, min_x, min_y) = match frozen {
         Ok(v) => v,
         Err(e) => {
             // The session never got going: hide the parked overlay, clear the
