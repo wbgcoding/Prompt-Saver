@@ -431,6 +431,8 @@ body.video-body {
 .ve-ov-row:hover { border-color: var(--accent); }
 .ve-ov-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ve-ov-row.sel { border-color: var(--accent); background: var(--surface-2); }
+/* Disabled, not inert: the tooltip still says how to get a range. */
+#ve-trim-set:disabled, #ve-cut-add:disabled, .ve-use-sel:disabled { opacity: 0.45; cursor: not-allowed; }
 .ve-ov-item { display: flex; align-items: stretch; gap: 4px; }
 .ve-ov-item .ve-ov-row { flex: 1 1 auto; min-width: 0; }
 .ve-ov-del { flex: 0 0 auto; align-items: center; }
