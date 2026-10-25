@@ -36,7 +36,7 @@ ALLOW = {
         "path does not match the active camera recording",
         "unknown scope {scope:?}, expected all, data or settings",
         "not a folder that can be removed", "the elevated script is too long for a command line",
-        "unexpected PowerShell output shape",
+        "unexpected PowerShell output shape", "invalid camera chunk",
     ],
     "raw reason for the crash log or the technical details row, wrapped in a mapped code": [
         "serialize failed", "write failed ({:?})", "timeout",
