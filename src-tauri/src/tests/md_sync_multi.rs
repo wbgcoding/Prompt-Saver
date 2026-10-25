@@ -831,3 +831,35 @@ fn multi_a_file_saved_with_windows_line_endings_imports_clean_and_stays_put() {
     rig.assert_converged();
     assert!(rig.conflict_copies().is_empty(), "the converted file was taken for a conflicting edit");
 }
+
+#[test]
+fn multi_a_file_cut_inside_its_body_is_never_imported() {
+    let rig = Rig::new();
+    // A writer died after the header and the first words of the body: the closing newline the
+    // app always adds is missing.
+    fs::write(rig.dir.join("cutbody.md"), "---\nname: Cut\ncolor: \ntags: \nnotes: \n---\nHalf a sen").unwrap();
+    rig.settle();
+    assert!(rig.a.get("cutbody").is_none(), "a half-written file was imported on A");
+    assert!(rig.b.get("cutbody").is_none(), "a half-written file was imported on B");
+}
+
+#[cfg(windows)]
+#[test]
+fn multi_a_file_that_cannot_be_swapped_is_not_overwritten_in_place() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let rig = Rig::new();
+    let id = rig.a.add("Held open", "version one");
+    rig.settle();
+    let path = rig.dir.join(format!("{id}.md"));
+    let before = fs::read(&path).unwrap();
+    // A cloud client or a viewer holds the file open without letting it be replaced.
+    let held = fs::OpenOptions::new().read(true).share_mode(1 | 2).open(&path).unwrap();
+    rig.a.edit(&id, |p| p.text = "version two".into());
+    let failed = rig.a.flush(&rig.dir);
+    assert_eq!(fs::read(&path).unwrap(), before, "the file was rewritten in place");
+    assert!(failed >= 1, "the refused write was not counted, so nobody retries it");
+    drop(held);
+    rig.settle();
+    assert_eq!(rig.b.get(&id).unwrap().text, "version two");
+    rig.assert_converged();
+}

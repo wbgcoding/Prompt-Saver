@@ -354,6 +354,11 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
     if !md_is_ours(&fields) {
         return None;
     }
+    // The writer always closes the body with a newline. A body that does not end in one was cut
+    // short (or is still being typed): it is read once the rest has arrived.
+    if !body.is_empty() && !body.ends_with('\n') {
+        return None;
+    }
     let mut p = base.clone();
     if let Some(v) = fields.get("name") {
         p.name.clone_from(v);
@@ -1244,7 +1249,10 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
                     ));
                 }
             }
-            let ok = write_file_atomic(&path, &content);
+            // Never in place: a write cut short there would leave a half file the other instances
+            // take for a newer version. When the swap is refused the file stays as it was and the
+            // write is tried again.
+            let ok = write_bytes_atomic_strict(&path, content.as_bytes()).is_ok();
             sync_lock_release(&path);
             if ok {
                 sync_seen_record_own_write_of(&path, sync_hash(content.as_bytes()));
