@@ -1237,7 +1237,7 @@ fn cmd_add(store: &mut Store, name: &str, text: &str, tags: &[String], favorite:
     };
     let prompt = Prompt {
         id: gen_id(),
-        name: name.to_string(),
+        name: crate::md_sync::sync_clean_name(name),
         text: upgrade_placeholders(text),
         color,
         image: String::new(),
@@ -1298,7 +1298,7 @@ fn cmd_edit(store: &mut Store, id: &str, name: Option<&str>, text: Option<&str>,
         return Outcome::err(1, format!("prompt {id} is confidential and its text can only be changed in the app itself\n"));
     }
     if let Some(n) = name {
-        p.name = n.to_string();
+        p.name = crate::md_sync::sync_clean_name(n);
     }
     if let Some(t) = text {
         p.text = upgrade_placeholders(t);
@@ -1435,7 +1435,7 @@ fn cmd_view_add(store: &mut Store, name: &str, color: Option<&str>, json: bool) 
     }
     let view = crate::View {
         id: gen_id(),
-        name: name.to_string(),
+        name: crate::md_sync::sync_clean_name(name),
         cols: 5,
         rows: 4,
         layouts: std::collections::HashMap::new(),

@@ -149,6 +149,18 @@ pub(crate) fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
+// A name as one header line: stray spaces around it carry no meaning, and a view or folder
+// named "Work " must not become a second near-duplicate of "Work" on another machine.
+pub(crate) fn md_name_line(s: &str) -> String {
+    md_escape_line(s).trim().to_string()
+}
+
+// A name as the app stores it: one line, no stray spaces around it. Every in-app entry point
+// uses this, so what is stored is what the file carries.
+pub(crate) fn sync_clean_name(s: &str) -> String {
+    md_name_line(s)
+}
+
 // Notes come from a multi-line box, so a line break is real content here. A note with one
 // is written escaped (\n, \r, \\) and flagged with a notes_enc line; one without stays as
 // is, so older files and single-line notes (which may hold backslashes) read back
@@ -277,18 +289,18 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
     // md_is_ours() tolerates.
     let mut out = format!(
         "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
-        md_escape_line(&p.name),
+        md_name_line(&p.name),
         md_escape_line(&p.color),
         tags,
         notes,
         notes_enc,
         p.variants.len(),
-        md_escape_line(&placement.view),
+        md_name_line(&placement.view),
         placement.grid,
         placement.cell,
-        md_escape_line(&placement.tile_folder),
+        md_name_line(&placement.tile_folder),
         placement.tile_folder_color,
-        md_escape_line(&placement.float_folder),
+        md_name_line(&placement.float_folder),
         md_escape_line(&p.file_path),
         md_escape_line(&p.icon_path),
         p.pdf_page,
@@ -559,7 +571,7 @@ pub(crate) fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_
 // every other view creation). Ids never travel between machines: the name is the
 // only thing an incoming file and a local view can agree on.
 pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
-    if let Some(v) = settings.views.iter().find(|v| v.name == name) {
+    if let Some(v) = settings.views.iter().find(|v| v.name.trim() == name.trim()) {
         return v.id.clone();
     }
     if settings.views.len() >= MAX_VIEWS {
@@ -568,7 +580,7 @@ pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols
     let id = gen_id();
     settings.views.push(View {
         id: id.clone(),
-        name: name.to_string(),
+        name: name.trim().to_string(),
         cols: cols.clamp(GRID_MIN, GRID_MAX),
         rows: rows.clamp(GRID_MIN, GRID_MAX),
         layouts: HashMap::new(),

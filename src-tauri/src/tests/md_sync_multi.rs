@@ -863,3 +863,28 @@ fn multi_a_file_that_cannot_be_swapped_is_not_overwritten_in_place() {
     assert_eq!(rig.b.get(&id).unwrap().text, "version two");
     rig.assert_converged();
 }
+
+fn views_named(inst: &SyncInst, name: &str) -> usize {
+    inst.lock().settings.views.iter().filter(|v| v.name.trim() == name).count()
+}
+
+#[test]
+fn multi_a_name_with_stray_spaces_does_not_split_into_two_views_or_two_names() {
+    let rig = Rig::new();
+    let id = rig.a.add("  Padded ", "body");
+    rig.a.settings(|s| {
+        let mut v = test_view("padded");
+        v.name = "Work ".to_string();
+        v.layouts.entry(grid_key(v.cols, v.rows)).or_default().insert(id.clone(), [2, 1]);
+        s.views.push(v);
+    });
+    rig.settle();
+    assert_eq!(views_named(&rig.a, "Work"), 1, "A grew a second view");
+    assert_eq!(views_named(&rig.b, "Work"), 1, "B grew a second view");
+    assert_eq!(rig.b.get(&id).unwrap().name, "Padded", "the file carries the name with its stray spaces");
+    let file = fs::read_to_string(rig.dir.join(format!("{id}.md"))).unwrap();
+    assert!(file.contains("name: Padded
+"), "the file keeps stray spaces around the name: {file}");
+    assert!(!file.contains("Work 
+"), "the file keeps stray spaces around the view name: {file}");
+}

@@ -1293,7 +1293,7 @@ pub(crate) async fn update_prompt(
                 // A confidential entry's text/variants must never land in storage
                 // as whatever the editor sent (see edited_text_and_variants).
                 let (text, variants) = edited_text_and_variants(p, text, variants, secret_key)?;
-                p.name = name;
+                p.name = crate::md_sync::sync_clean_name(&name);
                 p.text = text;
                 p.color = color;
                 p.variants = variants;
@@ -1507,7 +1507,7 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             } else {
                 (text, variants)
             };
-            p.name = name;
+            p.name = crate::md_sync::sync_clean_name(&name);
             p.text = text;
             // Re-validate the restored list anyway (a version predating MAX_ROTATE_VARIANTS must not
             // slip a too-long list past the shared floor).
