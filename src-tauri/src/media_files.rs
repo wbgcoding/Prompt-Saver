@@ -604,6 +604,9 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
             append_crash_log(&format!("quit: recording not saved: {e}"));
         }
     }
+    if !wait_for_interim_crops(&REC_INTERIM_CROPS, REC_PARTS_QUIT_WAIT) {
+        append_crash_log("quit: a part crop was still running");
+    }
     let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
     let (_, failed) = place_recording_parts(&mut parts, &allowed, &dest);
     if failed > 0 {
@@ -626,6 +629,8 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     // A part can be many gigabytes and the move copies across drives: the list is taken out so
     // the lock is not held for that, and the worker thread does the copying.
     tauri::async_runtime::spawn_blocking(move || {
+        // A part still being cropped in the background is only moved once that crop ended.
+        wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
         with_parts_outside_lock(&REC_RESULT_PARTS, |parts| place_recording_parts(parts, &allowed, &dest))
     })
     .await
@@ -634,6 +639,9 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
 
 // How long a quit waits for a running parts save before it goes on.
 pub(crate) const REC_PARTS_QUIT_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+// How long a save, discard or quit waits for a part's background crop before it goes on.
+pub(crate) const REC_INTERIM_CROP_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
 
 // Held for as long as a parts save runs: a second Save waits for the first instead of finding an
 // empty list, and the quit path waits on it too.
@@ -697,9 +705,11 @@ pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, all
     moved
 }
 
-#[tauri::command]
+// Runs on the command pool, not the main thread: it may wait for a part's background crop.
+#[tauri::command(async)]
 pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u32 {
     let allowed = recording_source_dirs(&app, &state);
+    wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
     let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
     discard_recording_parts_in(&mut parts, &allowed)
 }

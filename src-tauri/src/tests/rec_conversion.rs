@@ -679,3 +679,30 @@ pub(crate) fn spawn_rec_bar_follow("));
 #[cfg(windows)]
 // Bumped"));
 }
+
+#[test]
+fn waiting_for_interim_crops_returns_only_after_them_and_never_cancels() {
+    let flag = Arc::new(AtomicBool::new(false));
+    let list: Mutex<InterimCrops> = Mutex::new(Vec::new());
+    assert!(wait_for_interim_crops(&list, Duration::from_millis(10)), "an empty list is done at once");
+    let handle = std::thread::spawn(|| std::thread::sleep(Duration::from_millis(300)));
+    list.lock().unwrap().push((flag.clone(), handle));
+    assert!(!wait_for_interim_crops(&list, Duration::from_millis(20)), "a running crop outlasts a short wait");
+    assert!(wait_for_interim_crops(&list, Duration::from_secs(5)), "the wait ends once the crop did");
+    assert!(!flag.load(Ordering::SeqCst), "waiting never signals a cancel");
+    assert_eq!(list.lock().unwrap().len(), 1, "the entries stay for a cancel to find");
+}
+
+#[test]
+fn placing_or_discarding_a_part_waits_for_its_background_crop() {
+    let mf = source!("../media_files.rs");
+    let save = &mf[mf.find("pub(crate) async fn save_recording_parts").unwrap()..];
+    let save = &save[..save.find("with_parts_outside_lock").unwrap()];
+    assert!(save.contains("wait_for_interim_crops"));
+    let disc = &mf[mf.find("pub(crate) fn discard_recording_parts(").unwrap()..];
+    let disc = &disc[..disc.find("discard_recording_parts_in(").unwrap()];
+    assert!(disc.contains("wait_for_interim_crops"));
+    let quit = &mf[mf.find("wait_for_part_saves(REC_PARTS_QUIT_WAIT)").unwrap()..];
+    let quit = &quit[..quit.find("place_recording_parts(&mut parts").unwrap()];
+    assert!(quit.contains("wait_for_interim_crops"));
+}
