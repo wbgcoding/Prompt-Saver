@@ -74,9 +74,34 @@ pub(crate) fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
 
 // Fill `buf` from the operating system's random source. A machine that cannot supply
 // randomness cannot encrypt safely, so this stops instead of continuing with a weak value.
-fn os_random(buf: &mut [u8]) {
-    use rand::TryRng;
-    rand::rngs::SysRng.try_fill_bytes(buf).expect("operating system random source");
+pub(crate) fn os_random(buf: &mut [u8]) {
+    use ring::rand::SecureRandom;
+    ring::rand::SystemRandom::new().fill(buf).expect("operating system random source");
+}
+
+// A uniform value in 0..n from the operating system's random source. Values from the
+// uneven tail of the 32-bit range are redrawn, so no result is favoured by a modulo bias.
+pub(crate) fn random_below(n: usize) -> usize {
+    if n <= 1 {
+        return 0;
+    }
+    let n = n as u64;
+    let limit = (1u64 << 32) / n * n;
+    loop {
+        let mut b = [0u8; 4];
+        os_random(&mut b);
+        let v = u32::from_le_bytes(b) as u64;
+        if v < limit {
+            return (v % n) as usize;
+        }
+    }
+}
+
+// Fisher-Yates over `random_below`: every order of `items` is equally likely.
+pub(crate) fn shuffle_random<T>(items: &mut [T]) {
+    for i in (1..items.len()).rev() {
+        items.swap(i, random_below(i + 1));
+    }
 }
 
 pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {

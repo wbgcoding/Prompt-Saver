@@ -46,7 +46,6 @@ ring = "=0.17.14"
 aes-gcm = "=0.11.1"
 argon2 = "=0.6.0"
 zeroize = "=1.9.1"
-rand = "=0.10.3"
 # Backups are compressed before they are written (snapshots) or encrypted (.psb).
 flate2 = "=1.1.10"
 # Fast snip preview: SIMD JPEG (jpeg-encoder) + rayon to parallelize the BGRA→RGBA
