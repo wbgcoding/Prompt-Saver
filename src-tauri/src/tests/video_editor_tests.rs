@@ -415,3 +415,24 @@ fn the_export_tile_command_takes_only_a_known_export_and_stays_off_the_other_win
     assert!(caps.contains("allow-video-editor-add-tile"));
     assert!(!caps.contains("allow-add-prompt"), "the editor reaches the store only through the one command");
 }
+
+#[test]
+fn export_request_paths_refuse_a_network_destination_or_media_file_on_text() {
+    let none: Vec<PathBuf> = Vec::new();
+    assert!(export_request_paths_refused(&none, r"\\host\share\x.mp4", &[]));
+    assert!(export_request_paths_refused(&none, r"C:\out\x.mp4", &[r"\\host\share\a.png".to_string()]));
+    assert!(export_request_paths_refused(&none, r"C:\out\x.mp4", &["//host/share/a.png".to_string()]));
+    assert!(!export_request_paths_refused(&none, r"C:\out\x.mp4", &[r"D:\media\a.png".to_string()]));
+    let share = vec![PathBuf::from(r"\\nas\rec")];
+    assert!(!export_request_paths_refused(&share, r"\\nas\rec\x.mp4", &[]), "the user's own share folder keeps working");
+}
+
+#[test]
+fn the_batch_export_loop_gates_an_item_on_text_before_any_file_check() {
+    let src = source!("../video_editor.rs");
+    let batch = &src[src.find("pub(crate) async fn export_recordings_batch").unwrap()..];
+    let loop_at = batch.find("for item in items").unwrap();
+    let body = &batch[loop_at..loop_at + 900];
+    assert!(!body.contains("!item_src.is_file() ||"), "is_file must not run ahead of the network gate");
+    assert!(body.contains("export_request_paths_refused(&own_dirs, &item.dest_path"));
+}
