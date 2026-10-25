@@ -833,14 +833,19 @@ fn multi_a_file_saved_with_windows_line_endings_imports_clean_and_stays_put() {
 }
 
 #[test]
-fn multi_a_file_cut_inside_its_body_is_never_imported() {
+fn multi_a_hand_edit_saved_without_a_final_newline_is_imported() {
     let rig = Rig::new();
-    // A writer died after the header and the first words of the body: the closing newline the
-    // app always adds is missing.
-    fs::write(rig.dir.join("cutbody.md"), "---\nname: Cut\ncolor: \ntags: \nnotes: \n---\nHalf a sen").unwrap();
+    let id = rig.a.add("Notepad", "before");
     rig.settle();
-    assert!(rig.a.get("cutbody").is_none(), "a half-written file was imported on A");
-    assert!(rig.b.get("cutbody").is_none(), "a half-written file was imported on B");
+    let path = rig.dir.join(format!("{id}.md"));
+    // Plain editors write the body exactly as typed, with no closing newline.
+    let text = fs::read_to_string(&path).unwrap().replace("before", "typed in an editor");
+    fs::write(&path, text.trim_end_matches('\n')).unwrap();
+    rig.settle();
+    assert_eq!(rig.a.get(&id).unwrap().text, "typed in an editor");
+    assert_eq!(rig.b.get(&id).unwrap().text, "typed in an editor");
+    rig.assert_converged();
+    assert!(rig.conflict_copies().is_empty(), "the hand edit was taken for a conflicting edit");
 }
 
 #[cfg(windows)]

@@ -429,11 +429,6 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
     if !md_is_ours(&fields) {
         return None;
     }
-    // The writer always closes the body with a newline. A body that does not end in one was cut
-    // short (or is still being typed): it is read once the rest has arrived.
-    if !body.is_empty() && !body.ends_with('\n') {
-        return None;
-    }
     let mut p = base.clone();
     if let Some(v) = fields.get("name") {
         p.name.clone_from(v);
