@@ -930,3 +930,53 @@ fn multi_a_cell_outside_the_smaller_grid_on_b_stays_where_a_put_it() {
     rig.settle();
     assert_eq!(cell_of(&rig.a, &id), "2,2", "a real move on B did not reach A");
 }
+
+fn view_names(inst: &SyncInst) -> Vec<String> {
+    let mut v: Vec<String> = inst.lock().settings.views.iter().map(|v| v.name.clone()).collect();
+    v.sort();
+    v
+}
+
+fn put_in_view(inst: &SyncInst, view: &str, id: &str, cell: [u32; 2]) {
+    inst.settings(|s| {
+        let v = s.views.iter_mut().find(|v| v.id == view).unwrap();
+        let key = grid_key(v.cols, v.rows);
+        v.layouts.entry(key).or_default().insert(id.to_string(), cell);
+        v.members.push(id.to_string());
+    });
+}
+
+#[test]
+fn multi_a_renamed_view_is_renamed_on_the_other_side_not_added_again() {
+    let rig = Rig::new();
+    // The two first views have different ids, as on two real machines.
+    rig.b.settings(|s| {
+        s.views[0].id = "bmain".to_string();
+        s.active_view = "bmain".to_string();
+    });
+    let id = rig.a.add("Tile", "text");
+    put_in_view(&rig.a, "main", &id, [1, 1]);
+    rig.settle();
+    assert_eq!(view_names(&rig.b), vec!["Main".to_string()], "B grew a view on the first sync");
+    rig.a.settings(|s| s.views[0].name = "Job".to_string());
+    rig.settle();
+    assert_eq!(view_names(&rig.a), vec!["Job".to_string()], "A's views changed");
+    assert_eq!(view_names(&rig.b), vec!["Job".to_string()], "the rename created a second view on B");
+    assert_eq!(cell_of(&rig.b, &id), "1,1");
+    rig.assert_converged();
+}
+
+#[test]
+fn multi_a_view_made_on_a_is_renamed_on_b_after_it_was_created_there() {
+    let rig = Rig::new();
+    let mut fresh = test_view("fresh");
+    fresh.name = "Fresh".to_string();
+    rig.a.settings(|s| s.views.push(fresh));
+    let id = rig.a.add("Tile", "text");
+    put_in_view(&rig.a, "fresh", &id, [2, 0]);
+    rig.settle();
+    assert_eq!(view_names(&rig.b), vec!["Fresh".to_string(), "Main".to_string()]);
+    rig.a.settings(|s| s.views.iter_mut().find(|v| v.id == "fresh").unwrap().name = "Fresher".to_string());
+    rig.settle();
+    assert_eq!(view_names(&rig.b), vec!["Fresher".to_string(), "Main".to_string()], "B kept the old name or added a view");
+}

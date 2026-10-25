@@ -209,6 +209,8 @@ pub(crate) fn md_unescape_notes(s: &str) -> String {
 #[derive(Default)]
 pub(crate) struct SyncPlacement {
     pub(crate) view: String,
+    /// The id the view is known by across machines (see `sync_view_id_out`).
+    pub(crate) view_id: String,
     pub(crate) grid: String,
     pub(crate) cell: String,
     pub(crate) tile_folder: String,
@@ -253,6 +255,7 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
         let view = settings.views.iter().find(|v| v.id == tf.view_id);
         return SyncPlacement {
             view: view.map(|v| v.name.clone()).unwrap_or_default(),
+            view_id: view.map(|v| sync_view_id_out(settings, &v.id)).unwrap_or_default(),
             grid: view.map(|v| grid_key(v.cols, v.rows)).unwrap_or_default(),
             cell: format!("{},{}", tf.cell[0], tf.cell[1]),
             tile_folder: tf.name.clone(),
@@ -273,6 +276,7 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
             if let Some(r) = kept {
                 return SyncPlacement {
                     view: view.name.clone(),
+                    view_id: sync_view_id_out(settings, &view.id),
                     grid: r.file_grid,
                     cell: r.file_cell,
                     tile_folder: String::new(),
@@ -282,6 +286,7 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
             }
             return SyncPlacement {
                 view: view.name.clone(),
+                view_id: sync_view_id_out(settings, &view.id),
                 grid: key,
                 cell: format!("{},{}", cell[0], cell[1]),
                 tile_folder: String::new(),
@@ -292,6 +297,7 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
     }
     SyncPlacement {
         view: String::new(),
+        view_id: String::new(),
         grid: String::new(),
         cell: String::new(),
         tile_folder: String::new(),
@@ -304,15 +310,35 @@ pub(crate) fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     prompt_to_md_impl(p, placement, false)
 }
 
+// The id a view carries in a file. A view this machine matched by name to another machine's
+// id keeps writing that id, so both machines' files for one prompt read the same; any other
+// view writes its own.
+pub(crate) fn sync_view_id_out(settings: &Settings, local: &str) -> String {
+    let map = sync_state().view_ids.lock().unwrap_or_else(|e| e.into_inner());
+    map.iter()
+        .filter(|(foreign, l)| l.as_str() == local && !settings.views.iter().any(|v| &v.id == *foreign))
+        .map(|(foreign, _)| foreign.clone())
+        .min()
+        .unwrap_or_else(|| local.to_string())
+}
+
 // Whether a file's content is what this machine would write for the prompt, in today's
 // format or the one before notes and a trailing newline round-tripped. Without the second
 // form every file an older version wrote would read as an edit by someone else after the
 // update.
 pub(crate) fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
-    prompt_to_md_impl(p, placement, false) == content || prompt_to_md_impl(p, placement, true) == content
+    prompt_to_md_form(p, placement, false, true) == content
+        || prompt_to_md_form(p, placement, true, false) == content
+        || prompt_to_md_form(p, placement, false, false) == content
 }
 
 pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> String {
+    prompt_to_md_form(p, placement, legacy, !legacy)
+}
+
+// `view_id_line`: files written before the view id existed have no such line.
+pub(crate) fn prompt_to_md_form(p: &Prompt, placement: &SyncPlacement, legacy: bool, view_id_line: bool) -> String {
+    let view_id = if view_id_line && !placement.view_id.is_empty() { format!("view_id: {}\n", md_escape_line(&placement.view_id)) } else { String::new() };
     let (notes, notes_enc) = match (legacy, md_escape_notes(&p.notes)) {
         (false, Some(escaped)) => (escaped, "notes_enc: escaped\n"),
         _ => (md_escape_line(&p.notes), ""),
@@ -323,7 +349,7 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
     // md_is_ours()) are fixed; variants and the six placement fields are additive, which
     // md_is_ours() tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\n{}grid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
         md_name_line(&p.name),
         md_escape_line(&p.color),
         tags,
@@ -331,6 +357,7 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
         notes_enc,
         p.variants.len(),
         md_name_line(&placement.view),
+        view_id,
         placement.grid,
         placement.cell,
         md_name_line(&placement.tile_folder),
@@ -487,6 +514,8 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
         }
     }
     let (view_name, cols, rows, cell) = sync_parse_view_grid_cell(fields);
+    let file_view_id = fields.get("view_id").map(|s| s.trim()).unwrap_or("");
+    let mut renamed = false;
     if let Some(raw) = fields.get("tile_folder") {
         let name = raw.trim();
         if name.is_empty() {
@@ -498,7 +527,9 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
             let view_id = if view_name.trim().is_empty() {
                 settings.active_view.clone()
             } else {
-                sync_find_or_create_view(settings, view_name, cols, rows)
+                let (id, r) = sync_resolve_view(settings, file_view_id, view_name, cols, rows);
+                renamed |= r;
+                id
             };
             if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell) {
                 folders_touched = true;
@@ -517,9 +548,13 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
         }
     }
     if view_name.trim().is_empty() || cell.is_none() {
-        return (false, folders_touched);
+        if !view_name.trim().is_empty() && !file_view_id.is_empty() {
+            // No tile to seat, but the file may still carry the view's new name.
+            renamed |= sync_rename_known_view(settings, file_view_id, view_name);
+        }
+        return (renamed, folders_touched);
     }
-    let view_id = sync_find_or_create_view(settings, view_name, cols, rows);
+    let (view_id, _) = sync_resolve_view(settings, file_view_id, view_name, cols, rows);
     let wanted = cell.unwrap();
     sync_place_in_view(settings, prompt_id, &view_id, wanted);
     sync_note_file_cell(settings, prompt_id, &view_id, fields, wanted);
@@ -626,9 +661,62 @@ pub(crate) fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_
     }
 }
 
+// The local view a file's view id stands for: a view with that very id, or the one an earlier
+// file's name matched it to.
+fn sync_known_view(settings: &Settings, file_view_id: &str) -> Option<String> {
+    if settings.views.iter().any(|v| v.id == file_view_id) {
+        return Some(file_view_id.to_string());
+    }
+    let local = sync_state().view_ids.lock().unwrap_or_else(|e| e.into_inner()).get(file_view_id).cloned()?;
+    settings.views.iter().any(|v| v.id == local).then_some(local)
+}
+
+// A view whose id is known here takes the name the file carries (a rename on the other
+// machine). Not when another view already has that name: two views of one name would be
+// matched wrongly from then on.
+fn sync_rename_known_view(settings: &mut Settings, file_view_id: &str, name: &str) -> bool {
+    let name = name.trim();
+    let Some(local) = sync_known_view(settings, file_view_id) else { return false };
+    if name.is_empty() || settings.views.iter().any(|v| v.id != local && v.name.trim() == name) {
+        return false;
+    }
+    match settings.views.iter_mut().find(|v| v.id == local) {
+        Some(v) if v.name.trim() != name => {
+            v.name = name.to_string();
+            true
+        }
+        _ => false,
+    }
+}
+
+// The local view for an incoming file's view: by id first (renaming it when the name moved),
+// by name for a file without an id or an id this machine has not met, else a new view that
+// takes the file's id so a later rename finds it. The flag says a rename happened.
+pub(crate) fn sync_resolve_view(settings: &mut Settings, file_view_id: &str, name: &str, cols: u32, rows: u32) -> (String, bool) {
+    if !file_view_id.is_empty() && sync_safe_id(file_view_id) {
+        if let Some(local) = sync_known_view(settings, file_view_id) {
+            let renamed = sync_rename_known_view(settings, file_view_id, name);
+            return (local, renamed);
+        }
+        if let Some(v) = settings.views.iter().find(|v| v.name.trim() == name.trim()) {
+            let local = v.id.clone();
+            sync_state().view_ids.lock().unwrap_or_else(|e| e.into_inner()).insert(file_view_id.to_string(), local.clone());
+            return (local, false);
+        }
+        if settings.views.len() < MAX_VIEWS {
+            let id = sync_find_or_create_view(settings, name, cols, rows);
+            if let Some(v) = settings.views.iter_mut().find(|v| v.id == id) {
+                v.id = file_view_id.to_string();
+            }
+            return (file_view_id.to_string(), false);
+        }
+    }
+    (sync_find_or_create_view(settings, name, cols, rows), false)
+}
+
 // Finds a view by NAME or creates one at the incoming grid size (clamped like
-// every other view creation). Ids never travel between machines: the name is the
-// only thing an incoming file and a local view can agree on.
+// every other view creation). Used for a file without a view id; with one,
+// `sync_resolve_view` goes by id first.
 pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
     if let Some(v) = settings.views.iter().find(|v| v.name.trim() == name.trim()) {
         return v.id.clone();
@@ -841,6 +929,9 @@ pub(crate) struct SyncState {
     /// Per prompt id: the grid size and cell its file named while this machine could not hold
     /// them as written (its view is smaller, or the cell was taken). See `SyncFileCell`.
     pub(crate) file_cells: Mutex<HashMap<String, SyncFileCell>>,
+    /// View ids other machines wrote -> the local view they were matched to by name. A view
+    /// this machine created from a file takes the file's id and needs no entry.
+    pub(crate) view_ids: Mutex<HashMap<String, String>>,
     pub(crate) health: Mutex<SyncHealth>,
     /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
     /// test sets it, to play the role of a machine with a skewed clock.

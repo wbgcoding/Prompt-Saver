@@ -1109,6 +1109,7 @@ fn sync_join_adopts_the_cell_and_colour_of_an_existing_grid_folder() {
     let grid = grid_key(settings.views[0].cols, settings.views[0].rows);
     let incoming_placement = SyncPlacement {
         view: "V1".into(),
+        view_id: "v1".into(),
         grid,
         cell: "3,1".into(),
         tile_folder: "F".into(),
