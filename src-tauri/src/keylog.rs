@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::mpsc::{channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -507,10 +507,21 @@ const RAW_CHANNEL_CAP: usize = 4_096;
 
 // The hook callback is a bare extern "system" fn and cannot capture, so its channel is
 // process-global. Cloned at once, never held across the send.
-static RAW_TX: OnceLock<Mutex<Option<SyncSender<RawKey>>>> = OnceLock::new();
+// The slot is tagged with the id of the capture that filled it, so a stop only clears its own.
+static RAW_TX: OnceLock<Mutex<Option<(u64, SyncSender<RawKey>)>>> = OnceLock::new();
+static CAPTURE_SEQ: AtomicU64 = AtomicU64::new(0);
 
-fn raw_tx_slot() -> &'static Mutex<Option<SyncSender<RawKey>>> {
+fn raw_tx_slot() -> &'static Mutex<Option<(u64, SyncSender<RawKey>)>> {
     RAW_TX.get_or_init(|| Mutex::new(None))
+}
+
+// Empties the slot only while it still holds this capture's sender: a capture started in the
+// meantime (its hook installed during this one's teardown) keeps its own.
+fn clear_raw_tx_if_owner(id: u64) {
+    let mut slot = raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner());
+    if slot.as_ref().is_some_and(|(owner, _)| *owner == id) {
+        *slot = None;
+    }
 }
 
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -544,7 +555,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             let alt = confirm_modifier(tracked_alt, GetAsyncKeyState(VK_MENU as i32) < 0);
             let win = confirm_modifier(tracked_win, GetAsyncKeyState(VK_LWIN as i32) < 0 || GetAsyncKeyState(VK_RWIN as i32) < 0);
             if let Ok(guard) = raw_tx_slot().lock() {
-                if let Some(tx) = guard.as_ref() {
+                if let Some((_, tx)) = guard.as_ref() {
                     // Never block here: a full channel drops the newest event.
                     let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, extended, down, t_ms, injected, ctrl, alt, win, forced_gap: false });
                 }
@@ -1089,17 +1100,19 @@ pub struct KeyCapture {
     hold_ms: u32,
     clock: Arc<Mutex<ActiveClock>>,
     cutoff: Arc<Mutex<Option<u64>>>,
+    id: u64,
 }
 
 fn start(hold_ms: u32, start_abs_ms: u64, shortcuts_only: bool) -> Option<KeyCapture> {
     let (raw_tx, raw_rx) = sync_channel::<RawKey>(RAW_CHANNEL_CAP);
-    *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(raw_tx);
+    let id = CAPTURE_SEQ.fetch_add(1, Ordering::SeqCst) + 1;
+    *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some((id, raw_tx));
     let clock = Arc::new(Mutex::new(ActiveClock::new(start_abs_ms)));
     let cutoff = Arc::new(Mutex::new(None));
     let hook = match install_hook() {
         Some(h) => h,
         None => {
-            *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+            clear_raw_tx_if_owner(id);
             return None;
         }
     };
@@ -1111,11 +1124,11 @@ fn start(hold_ms: u32, start_abs_ms: u64, shortcuts_only: bool) -> Option<KeyCap
         Ok(t) => t,
         Err(_) => {
             uninstall_hook(hook);
-            *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+            clear_raw_tx_if_owner(id);
             return None;
         }
     };
-    Some(KeyCapture { hook: Some(hook), consumer_thread, hold_ms, clock, cutoff })
+    Some(KeyCapture { hook: Some(hook), consumer_thread, hold_ms, clock, cutoff, id })
 }
 
 // How long stop() waits for the consumer thread: generous for a real UIA round trip, but
@@ -1144,7 +1157,7 @@ fn stop(mut capture: KeyCapture) -> KeySidecar {
     }
     // Dropping the sender closes the channel and ends the consumer's recv() loop, unless it is
     // stuck outside it, which is what the bound below is for.
-    *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+    clear_raw_tx_if_owner(capture.id);
     let mut sidecar = match join_bounded(capture.consumer_thread, Duration::from_millis(STOP_JOIN_BOUND_MS)) {
         Some(sidecar) => sidecar,
         None => {

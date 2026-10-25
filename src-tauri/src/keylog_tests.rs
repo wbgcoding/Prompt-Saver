@@ -1017,3 +1017,16 @@ fn active_clock_a_pause_called_twice_in_a_row_does_not_open_a_second_span() {
     assert_eq!(clock.pauses.len(), 1);
     assert_eq!(clock.active_ms(400), 200);
 }
+
+#[test]
+fn a_stopping_capture_leaves_the_sender_of_a_newer_capture_alone() {
+    let (old_tx, _old_rx) = sync_channel::<RawKey>(1);
+    let (new_tx, _new_rx) = sync_channel::<RawKey>(1);
+    // The old capture (id 9001) was replaced by a newer one (id 9002) before its stop ran.
+    *raw_tx_slot().lock().unwrap() = Some((9001, old_tx));
+    *raw_tx_slot().lock().unwrap() = Some((9002, new_tx));
+    clear_raw_tx_if_owner(9001);
+    assert!(raw_tx_slot().lock().unwrap().as_ref().is_some_and(|(id, _)| *id == 9002), "the newer capture keeps its sender");
+    clear_raw_tx_if_owner(9002);
+    assert!(raw_tx_slot().lock().unwrap().is_none(), "the owner clears its own sender");
+}
