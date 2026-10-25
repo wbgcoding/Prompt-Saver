@@ -1229,7 +1229,7 @@ pub(crate) fn try_write_sidecar(output_path: &Path, sidecar: &KeySidecar) -> Res
     let json = serde_json::to_string(sidecar).map_err(|_| "serialize failed".to_string())?;
     // Sealed like the rest of the local store: the events are the keys
     // typed during the recording. Readers pass old plain files through.
-    fs::write(super::sidecar_path(output_path, super::KEYS_SIDECAR_EXT), super::enc_str(&json))
+    super::write_bytes_atomic(&super::sidecar_path(output_path, super::KEYS_SIDECAR_EXT), super::enc_str(&json).as_bytes())
         .map_err(|e| format!("write failed ({:?})", e.kind()))
 }
 
