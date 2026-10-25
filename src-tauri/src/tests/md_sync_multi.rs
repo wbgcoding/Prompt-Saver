@@ -1187,3 +1187,31 @@ fn multi_nothing_is_written_to_the_folder_before_its_first_read_is_done() {
     assert_eq!(rig.a.flush(&rig.dir), 0);
     assert!(leftover_of(&rig, &id).exists());
 }
+
+#[test]
+fn multi_a_writer_whose_clock_is_far_behind_still_deletes_on_the_other_machine() {
+    let rig = Rig::new();
+    let id = rig.a.add("Clocked", "x");
+    rig.settle();
+    // B's clock was reset: its delete marker is dated forty days before A's now.
+    rig.b.skew(-40 * 86400);
+    rig.b.delete(&id);
+    rig.settle();
+    assert!(rig.a.in_trash(&id), "A ignored a delete marker from a slow clock");
+    assert!(rig.b.in_trash(&id), "B got the prompt back from a slow clock");
+    assert!(rig.a.get(&id).is_none() && rig.b.get(&id).is_none());
+    assert!(!leftover_of(&rig, &id).exists(), "the file of the deleted prompt came back");
+}
+
+#[test]
+fn multi_a_reader_whose_clock_is_far_ahead_does_not_sweep_a_fresh_delete_marker() {
+    let rig = Rig::new();
+    let id = rig.a.add("Clocked", "x");
+    rig.settle();
+    rig.a.skew(40 * 86400);
+    rig.b.delete(&id);
+    rig.settle();
+    assert!(rig.a.in_trash(&id), "A ignored a fresh delete marker because its own clock runs ahead");
+    assert!(rig.dir.join(format!("{id}.deleted")).exists(), "A swept a fresh delete marker");
+    assert!(!leftover_of(&rig, &id).exists());
+}

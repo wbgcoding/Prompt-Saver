@@ -920,6 +920,9 @@ pub(crate) struct SyncState {
     pub(crate) synced: Mutex<SyncSyncedMap>,
     /// Tombstones this instance has acted on, per file: path -> the text the file held.
     pub(crate) tombs: Mutex<HashMap<String, String>>,
+    /// When this instance first saw each tombstone text, by its own clock: path -> (text, time).
+    /// A tombstone expires only when this agrees with the time written in it.
+    pub(crate) tomb_seen: Mutex<HashMap<String, (String, u64)>>,
     /// The lock files this instance holds right now: lock path -> the text it wrote into it.
     pub(crate) locks: Mutex<HashMap<String, String>>,
     pub(crate) health: Mutex<SyncHealth>,
@@ -1118,6 +1121,17 @@ fn sync_tomb_handled(path: &Path, content: &str) -> bool {
 
 fn sync_tomb_note(path: &Path, content: &str) {
     sync_state().tombs.lock().unwrap_or_else(|e| e.into_inner()).insert(sync_seen_key(path), content.to_string());
+    sync_tomb_first_seen(path, content);
+}
+
+// When this instance first saw this text in this tombstone file (now, if it just did).
+fn sync_tomb_first_seen(path: &Path, content: &str) -> u64 {
+    let mut seen = sync_state().tomb_seen.lock().unwrap_or_else(|e| e.into_inner());
+    let entry = seen.entry(sync_seen_key(path)).or_insert_with(|| (content.to_string(), sync_now_secs()));
+    if entry.0 != content {
+        *entry = (content.to_string(), sync_now_secs());
+    }
+    entry.1
 }
 
 // Leaves the tombstone of a prompt this instance is about to remove from the folder. False
@@ -1164,9 +1178,15 @@ fn sync_tombs_in(dir: &Path) -> Vec<(String, PathBuf, String)> {
 }
 
 // An old tombstone goes; so does one nobody can read the time from, once its file is as old.
+// The time written in it is the writer's clock, which may be off by any amount: it counts only
+// together with this instance's own sighting, so a clock that runs behind or ahead cannot make
+// a fresh delete look expired.
 fn sync_tomb_expired(path: &Path, content: &str) -> bool {
     match content.parse::<u64>() {
-        Ok(at) => sync_now_secs().saturating_sub(at) > SYNC_TOMB_SECS,
+        Ok(at) => {
+            let now = sync_now_secs();
+            now.saturating_sub(at) > SYNC_TOMB_SECS && now.saturating_sub(sync_tomb_first_seen(path, content)) > SYNC_TOMB_SECS
+        }
         Err(_) => fs::metadata(path)
             .and_then(|m| m.modified())
             .ok()
