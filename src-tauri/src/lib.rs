@@ -841,6 +841,7 @@ pub fn run() {
             drafts::stat_file,
             drafts::save_edit_state,
             drafts::load_edit_state,
+            drafts::allow_edit_state_files,
             drafts::discard_edit_state,
             drafts::save_editor_draft,
             drafts::load_editor_draft,

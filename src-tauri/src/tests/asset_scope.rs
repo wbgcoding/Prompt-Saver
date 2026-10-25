@@ -163,3 +163,44 @@ fn attachment_commands_vet_sources_and_pickers_record_grants() {
     assert_eq!(images.matches("asset_scope::grant_picked_file").count(), 3, "both pickers and the clipboard file record the pick");
     assert!(include_str!("../main_window.rs").contains("DragDropEvent::Drop"), "a file dropped on the main window is recorded as picked");
 }
+
+// A saved editor state re-allows exactly the media files its overlays and clips name.
+#[test]
+fn edit_state_asset_paths_lists_only_existing_media_files_of_overlays_and_clips() {
+    let base = scratch_dir("editstate");
+    let logo = touch(&base.join("Branding").join("logo.png"));
+    let take = touch(&base.join("Branding").join("take.MP4"));
+    let secret = touch(&base.join("Documents").join("secret.pdf"));
+    let missing = base.join("Branding").join("gone.png").to_string_lossy().to_string();
+    let ops = serde_json::json!({
+        "v": 1,
+        "ops": [
+            { "tool": "overlay", "kind": "image", "path": logo },
+            { "tool": "clip", "path": take },
+            { "tool": "overlay", "kind": "image", "path": logo },
+            { "tool": "overlay", "kind": "image", "path": secret },
+            { "tool": "overlay", "kind": "image", "path": missing },
+            { "tool": "overlay", "kind": "image", "path": "//host/share/x.png" },
+            { "tool": "overlay", "kind": "image", "path": base.join("Branding").to_string_lossy() },
+            { "tool": "trim", "path": logo, "start": 0 },
+            { "tool": "overlay", "kind": "image" }
+        ]
+    })
+    .to_string();
+    let got = crate::drafts::edit_state_asset_paths(&ops, &[]);
+    assert_eq!(got, vec![logo.clone(), take.clone()]);
+    assert!(crate::drafts::edit_state_asset_paths("not json", &[]).is_empty());
+    assert!(crate::drafts::edit_state_asset_paths("{\"v\":1}", &[]).is_empty());
+    let _ = fs::remove_dir_all(&base);
+}
+
+// The editor asks for the re-allow only after the user continued with the saved state.
+#[test]
+fn restoring_a_saved_editor_state_re_allows_its_files_first() {
+    let src = include_str!("../../../ui/videoLoad.js");
+    let ask = src.find("askRestoreEditState(parsed.ops.length)").expect("the restore question");
+    let allow = src.find("allow_edit_state_files").expect("the re-allow call");
+    let apply = src.find("VE.ops = parsed.ops").expect("the restore");
+    assert!(ask < allow && allow < apply, "the files are allowed after the answer and before the ops are applied");
+    assert!(include_str!("../lib.rs").contains("drafts::allow_edit_state_files"), "the command is registered");
+}
