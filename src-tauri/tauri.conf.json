@@ -24,7 +24,7 @@
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost; media-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'",
-      "assetProtocol": { "enable": true, "scope": { "allow": ["**"], "deny": ["**/data.db*", "**/settings.json", "**/settings.tmp", "**/settings.json.tmp-*", "**/prompts.json", "**/prompts.tmp", "**/prompts.json.tmp-*", "**/*.psb", "**/*.psb.tmp-*", "**/backups/**", "**/error.log"] } }
+      "assetProtocol": { "enable": true, "scope": { "allow": [], "deny": ["**/data.db*", "**/settings.json", "**/settings.tmp", "**/settings.json.tmp-*", "**/prompts.json", "**/prompts.tmp", "**/prompts.json.tmp-*", "**/*.psb", "**/*.psb.tmp-*", "**/backups/**", "**/error.log", "**/keys.json", "**/cam.json", "**/*.keys.json", "**/*.cam.json"] } }
     }
   },
   "bundle": {

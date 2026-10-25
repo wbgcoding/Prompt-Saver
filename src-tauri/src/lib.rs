@@ -55,6 +55,8 @@ use model::*;
 mod paths;
 use paths::*;
 
+mod asset_scope;
+
 mod store;
 use store::*;
 
@@ -474,7 +476,11 @@ pub fn run() {
                     "data-dir-lock",
                     Duration::from_secs(DATA_DIR_LOCK_REFRESH_SECS),
                     Duration::from_secs(DATA_DIR_LOCK_REFRESH_SECS),
-                    move || refresh_data_dir_lock(&data_dir(&h)),
+                    move || {
+                        if refresh_data_dir_lock(&data_dir(&h)) {
+                            reload_after_takeover(&h);
+                        }
+                    },
                 );
             }
 
@@ -673,10 +679,10 @@ pub fn run() {
             let demo = data_dir_is_demo(&handle, &data_dir(&handle));
             reconcile_windows_state(autostart, start_min, demo);
             remove_legacy_protocol_key();
-            // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
-            cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
             // A read-only instance never writes into the folder another machine owns.
             if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
+                // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
+                cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
                 remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
                 // Temp files of an interrupted atomic write, in the data folder and in the markdown sync
                 // folder (which other computers would otherwise get).
@@ -835,6 +841,7 @@ pub fn run() {
             drafts::stat_file,
             drafts::save_edit_state,
             drafts::load_edit_state,
+            drafts::allow_edit_state_files,
             drafts::discard_edit_state,
             drafts::save_editor_draft,
             drafts::load_editor_draft,

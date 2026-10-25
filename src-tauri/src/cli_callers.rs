@@ -293,11 +293,7 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
     if outcome.code == 0 && (outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
         // The windows, armed hotkeys and tray still hold what they read before this command: tell
         // them, or a stale grid keeps a deleted tile and its next layout write restores the cell.
-        let _ = tauri::Emitter::emit_to(app, "main", "store-synced", ());
-        crate::rearm_hotkeys(app);
-        crate::rebuild_tray(app);
-        crate::sync_float_windows(app);
-        crate::notify_float_settings(app);
+        crate::store::refresh_after_store_swap(app);
     }
     (outcome.code, outcome.stdout, outcome.stderr)
 }

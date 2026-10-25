@@ -350,6 +350,11 @@ pub(crate) fn backup_is_due(newest_age_secs: Option<u64>, interval_h: u64) -> bo
 // disk, never a counter this process keeps, so a restart neither skips a due backup nor
 // takes an extra one.
 pub(crate) fn auto_backup_tick(app: &AppHandle) {
+    // A snapshot and its rotation would land in a folder another machine owns. Quiet: this runs
+    // every few minutes and the banner already says the folder is read-only.
+    if data_dir_write_blocked_quiet() {
+        return;
+    }
     // The lock is held across the point-in-time copy, like the manual "backup now" command, so no
     // write races with the VACUUM read.
     let state = app.state::<Db>();
@@ -693,6 +698,9 @@ pub(crate) fn open_backups_folder(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub(crate) async fn create_backup(app: AppHandle, keep: usize) -> Result<String, String> {
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
+    }
     // Off the async runtime: the lock wait, the VACUUM and the compression all block. The store
     // lock is held only across the point-in-time copy.
     tauri::async_runtime::spawn_blocking(move || {
@@ -711,6 +719,9 @@ pub(crate) async fn create_backup(app: AppHandle, keep: usize) -> Result<String,
 pub(crate) async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
         return Err("bad-name".into());
+    }
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
     }
     fs::remove_dir_all(backups_dir(&app).join(&name)).map_err(|e| e.to_string())
 }

@@ -161,6 +161,13 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                 request_app_quit(&handle2);
             }
         }
+        // The operating system, not the page, names a dropped file: it is recorded here as the
+        // user's pick, so the create dialog the drop opens may attach it.
+        WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+            for path in paths {
+                crate::asset_scope::grant_picked_file(&path.to_string_lossy());
+            }
+        }
         WindowEvent::Destroyed => {
             // No process without a main window: exit right away, with a watchdog in case exit() never
             // completes (a stuck shutdown handler). The watchdog starts before anything that can wait

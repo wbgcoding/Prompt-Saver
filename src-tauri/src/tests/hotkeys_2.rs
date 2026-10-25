@@ -537,6 +537,17 @@ fn tag_input_is_validated() {
     assert!(valid_tag_color("#abc").is_err());
 }
 
+// The prompt colour (add, edit, batch colour) goes through the same check as the tag colours: a
+// value that is not #rrggbb never reaches a CSS property in any window.
+#[test]
+fn a_prompt_colour_that_is_not_a_hex_triplet_is_refused() {
+    for bad in ["url(https://example.invalid/x)", "red; background: url(x)", "#12345g", "#1234567", "rgb(0,0,0)"] {
+        assert!(valid_tag_color(bad).is_err(), "{bad} must be refused");
+    }
+    assert_eq!(valid_tag_color(" #0A1B2C ").unwrap(), "#0a1b2c");
+    assert_eq!(valid_tag_color("").unwrap(), "");
+}
+
 #[test]
 fn custom_theme_input_is_validated() {
     assert!(valid_theme_name("  ").is_err());

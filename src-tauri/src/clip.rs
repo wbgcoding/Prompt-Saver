@@ -146,7 +146,7 @@ pub(crate) fn db_count_clips(conn: &Connection) -> u64 {
 pub(crate) async fn clip_inbox_dismiss(app: AppHandle, id: i64) -> Result<(), String> {
     // Privacy-sensitive rows: report a failed delete instead of answering Ok while the entry
     // stays on disk.
-    let ok = db_conn(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]).is_ok());
+    let ok = db_conn_write(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]).is_ok());
     if !ok {
         append_crash_log(&format!("clip_inbox_dismiss: row {id} could not be removed"));
         return Err("delete-incomplete".into());
@@ -155,7 +155,7 @@ pub(crate) async fn clip_inbox_dismiss(app: AppHandle, id: i64) -> Result<(), St
 }
 #[tauri::command]
 pub(crate) async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
-    let ok = db_conn(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox", []).is_ok());
+    let ok = db_conn_write(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox", []).is_ok());
     if !ok {
         append_crash_log("clip_inbox_clear: clip_inbox could not be cleared");
         return Err("delete-incomplete".into());
@@ -182,7 +182,7 @@ pub(crate) struct ClipRestoreItem {
 #[tauri::command]
 pub(crate) async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, items: Vec<ClipRestoreItem>) -> Result<(), String> {
     let cap = clip_inbox_cap(&lock(&state).settings);
-    let Some(conn) = db_conn(&app) else {
+    let Some(conn) = db_conn_write(&app) else {
         return Err("history-failed".into());
     };
     if db_restore_clips(&conn, &items, cap).is_err() {

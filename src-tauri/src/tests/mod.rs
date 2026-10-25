@@ -7,6 +7,7 @@ use std::time::Instant;
 pub(super) static OCR_EPOCH_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 mod shots;
+mod asset_scope;
 mod ffmpeg_jobs;
 mod rec_conversion;
 mod video;

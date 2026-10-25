@@ -76,6 +76,7 @@
     "allow-stat-file",
     "allow-save-edit-state",
     "allow-load-edit-state",
+    "allow-allow-edit-state-files",
     "allow-discard-edit-state",
     "allow-save-editor-draft",
     "allow-load-editor-draft",

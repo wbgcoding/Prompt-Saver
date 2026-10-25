@@ -549,6 +549,7 @@ pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win:
         Some(p) => {
             move_tracked_export_output(&src, &p).map_err(|e| e.to_string())?;
             move_mic_sidecar_alongside(&src, &p);
+            crate::asset_scope::allow_file(&app, &p.to_string_lossy());
             *LAST_SAVE_AS_DIR.lock().unwrap_or_else(|e| e.into_inner()) = p.parent().map(Path::to_path_buf);
             Ok(Some(p.to_string_lossy().to_string()))
         }

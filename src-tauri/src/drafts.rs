@@ -132,7 +132,7 @@ pub(crate) fn edit_state_discard(conn: &Connection, kind: &str, target: &str) ->
 
 #[tauri::command]
 pub(crate) async fn save_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64, ops: String) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
     edit_state_write(&conn, &kind, &target, size, mtime, &ops, updated_at)
 }
@@ -154,6 +154,52 @@ pub(crate) async fn load_edit_state(app: AppHandle, kind: String, target: String
     }
     Ok(Some(ops))
 }
+// File types an editor overlay or section clip can reference. A saved state naming anything else
+// is never re-allowed for the asset protocol.
+const EDIT_STATE_MEDIA_EXT: [&str; 20] = [
+    "png", "jpg", "jpeg", "jfif", "gif", "bmp", "webp", "tif", "tiff", "apng", "ico", "svg", "mp4", "m4v", "webm", "avi", "mov", "mkv", "mpg", "mpeg",
+];
+
+// The files a saved editor state points at through its overlays and section clips: each one must
+// still exist as a regular file, have a media extension and not name another machine (checked on
+// the text first, so a share is never touched). Nothing else the state mentions is returned.
+pub(crate) fn edit_state_asset_paths(ops: &str, own_dirs: &[PathBuf]) -> Vec<String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(ops) else { return Vec::new() };
+    let Some(list) = value.get("ops").and_then(|o| o.as_array()) else { return Vec::new() };
+    let mut out: Vec<String> = Vec::new();
+    for op in list {
+        let tool = op.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+        if tool != "clip" && tool != "overlay" {
+            continue;
+        }
+        let Some(raw) = op.get("path").and_then(|v| v.as_str()) else { continue };
+        if raw.trim().is_empty() || out.iter().any(|p| p == raw) || is_foreign_network_path(raw, own_dirs) {
+            continue;
+        }
+        let path = Path::new(raw);
+        let media = path.extension().and_then(|e| e.to_str()).is_some_and(|e| EDIT_STATE_MEDIA_EXT.contains(&e.to_ascii_lowercase().as_str()));
+        if media && fs::metadata(path).is_ok_and(|m| m.is_file()) {
+            out.push(raw.to_string());
+        }
+    }
+    out
+}
+
+// Called by the editor once the user chose to continue with a saved state: the overlay and clip
+// files it names are allowed for the asset protocol again (an earlier session's pick is gone).
+// The paths come from the stored state, never from the call, and only vetted ones are allowed.
+#[tauri::command]
+pub(crate) async fn allow_edit_state_files(app: AppHandle, state: State<'_, Db>, kind: String, target: String, size: i64, mtime: i64) -> Result<u32, String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let Some((_, ops)) = edit_state_read(&conn, &kind, &target, size, mtime) else { return Ok(0) };
+    let own_dirs = own_storage_dirs(&app, &state);
+    let paths = edit_state_asset_paths(&ops, &own_dirs);
+    for p in &paths {
+        crate::asset_scope::allow_file(&app, p);
+    }
+    Ok(paths.len() as u32)
+}
+
 // A minimal sniff, not a full parse of every op inside: this table's whole point
 // is staying opaque to the individual op shapes JS invents, it only ever needs to
 // know "can any of this be understood at all".
@@ -165,7 +211,7 @@ pub(crate) fn edit_state_ops_version(ops: &str) -> Option<i64> {
 }
 #[tauri::command]
 pub(crate) async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     edit_state_discard(&conn, &kind, &target)
 }
 
@@ -221,7 +267,7 @@ pub(crate) fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
 
 #[tauri::command]
 pub(crate) async fn save_editor_draft(app: AppHandle, prompt_id: String, name: String, text: String, variants: String) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
     editor_draft_write(&conn, &prompt_id, &name, &text, &variants, updated_at)
 }
@@ -234,7 +280,7 @@ pub(crate) async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDra
 
 #[tauri::command]
 pub(crate) async fn discard_editor_draft(app: AppHandle) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []).map_err(|e| e.to_string())?;
     Ok(())
 }

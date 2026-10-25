@@ -103,6 +103,10 @@ async function checkEditState(path, myGen) {
   const ok = await askRestoreEditState(parsed.ops.length);
   if (VE.loadGen !== myGen) return;
   if (ok) {
+    // The files its overlays and clips name were allowed by a pick in an earlier session; the
+    // backend re-allows exactly those from the stored state before the previews ask for them.
+    await invoke("allow_edit_state_files", { kind: "video", target: path, size, mtime }).catch(() => {});
+    if (VE.loadGen !== myGen) return;
     VE.ops = parsed.ops;
     VE.floor = 0;
     VE.redo = [];

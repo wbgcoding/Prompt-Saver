@@ -189,19 +189,24 @@ pub(crate) fn set_clipboard_file(path: &str, own_dirs: &[PathBuf]) -> bool {
 
 // First file currently on the clipboard (copied in Explorer), if any.
 #[tauri::command]
-pub(crate) async fn get_clipboard_file_path() -> Option<String> {
+pub(crate) async fn get_clipboard_file_path(app: AppHandle) -> Option<String> {
     #[cfg(windows)]
     {
-        clipboard_win::get_clipboard::<Vec<String>, _>(clipboard_win::formats::FileList)
+        let first = clipboard_win::get_clipboard::<Vec<String>, _>(clipboard_win::formats::FileList)
             .ok()?
             .into_iter()
-            .next()
+            .next()?;
+        // The editor previews it before anything is saved.
+        crate::asset_scope::grant_picked_file(&first);
+        crate::asset_scope::allow_file(&app, &first);
+        Some(first)
     }
 }
 
 #[tauri::command]
 pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
+    let app_for_scope = app.clone();
     // The dialog is modal: it waits on a blocking thread, not on an async worker.
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
@@ -213,6 +218,10 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
     .ok()
     .flatten();
     let _ = win.set_focus();
+    if let Some(p) = &result {
+        crate::asset_scope::grant_picked_file(p);
+        crate::asset_scope::allow_file(&app_for_scope, p);
+    }
     result
 }
 
@@ -222,6 +231,7 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option
 #[tauri::command]
 pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     let label = win.label().to_string();
+    let app_for_scope = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
         file_dialog_for(&app, &label)
@@ -238,6 +248,10 @@ pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> 
     .ok()
     .flatten();
     let _ = win.set_focus();
+    if let Some(p) = &result {
+        crate::asset_scope::grant_picked_file(p);
+        crate::asset_scope::allow_file(&app_for_scope, p);
+    }
     result
 }
 

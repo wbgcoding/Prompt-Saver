@@ -138,6 +138,36 @@ fn refresh_data_dir_lock_never_touches_a_foreign_lock_while_read_only() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn a_read_only_tick_that_wins_the_lock_reports_a_takeover_and_keeps_the_flag_up() {
+    let _g = DdlockGuard::capture();
+    let dir = ddlock_test_dir("takeover-tick");
+    let path = data_dir_lock_path(&dir);
+    write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: now_secs(), id: "other".to_string(), beat: 0 });
+    acquire_data_dir_lock(&dir, true);
+    assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));
+    assert!(!refresh_data_dir_lock(&dir), "a live foreign lock is no takeover");
+    // The old owner is gone: what is left names this machine under another claim.
+    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: 1, seen: now_secs(), id: "crashed-run".to_string(), beat: 0 });
+    assert!(refresh_data_dir_lock(&dir), "winning the lock from the read-only state must be reported");
+    assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "saves stay refused until the store has been replaced");
+    assert!(DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, lock_claim_id());
+    assert!(!refresh_data_dir_lock(&dir), "the next tick is a plain owner refresh, not a second takeover");
+    // The reload resolves the lock again (load_store -> acquire_data_dir_lock): that clears the flag.
+    acquire_data_dir_lock(&dir, true);
+    assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed));
+    assert!(DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_quiet_write_gate_follows_the_read_only_flag_for_background_jobs() {
+    let _g = DdlockGuard::capture();
+    DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+    assert!(data_dir_write_blocked_quiet(), "auto backup, backup rotation and the adopt offer stay out of a folder another machine owns");
+}
+
 // Eight paths: one for each provider's folder-name convention, one OneDrive
 // path recognised only through its environment variable (business tenants
 // rename the visible folder), and two ordinary local paths that must stay
@@ -815,14 +845,15 @@ fn demo_transition_locked_flag_round_trips() {
     DEMO_TRANSITION_LOCKED.store(before, Ordering::Relaxed);
 }
 
-// Kept alive a few seconds and spawned only as this same test binary re-
-// invoking itself (see other_instance_running_detects_a_live_pid_and_prunes_a_dead_one
-// below), so instance_pid_is_this_exe's image-path check has something
-// genuinely matching current_exe() to find, not an unrelated process.
+// Kept alive well past any scheduling stall of the parent test (it is killed by the parent as
+// soon as the check is done) and spawned only as this same test binary re-invoking itself
+// (see other_instance_running_detects_a_live_pid_and_prunes_a_dead_one below), so
+// instance_pid_is_this_exe's image-path check has something genuinely matching current_exe()
+// to find, not an unrelated process.
 #[test]
 #[ignore]
 fn __sleep_helper_for_instance_test() {
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    std::thread::sleep(std::time::Duration::from_secs(60));
 }
 
 // other_instance_running must tell a real second live process apart from
@@ -856,7 +887,15 @@ fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
         .unwrap();
     let other_pid = child.id();
     std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
-    assert!(other_instance_running(&canonical), "a different LIVE copy of this exe must be detected");
+    // A process that was just created has no image path to query for a moment, longer on a
+    // loaded machine: wait for the detection instead of assuming it is instant.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut detected = other_instance_running(&canonical);
+    while !detected && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        detected = other_instance_running(&canonical);
+    }
+    assert!(detected, "a different LIVE copy of this exe must be detected");
 
     // An obviously stale entry (not a real pid on this machine) must be
     // pruned rather than perma-blocking every future enable/disable.
@@ -1286,4 +1325,199 @@ fn a_half_copied_takeover_reports_what_already_landed() {
 
     drop(conn);
     let _ = std::fs::remove_dir_all(&root);
+}
+
+fn blank_store() -> Store {
+    Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: std::cell::RefCell::new(WrittenRows::new()) }
+}
+
+// The takeover reload's build runs the trash and orphan-file sweeps, and the orphan sweep asks
+// the live store what it still references (a second lock on the same std mutex). Built under
+// the guard that froze the app; the swap alone may hold the lock. The thread and the timeout
+// turn a regression into a failure instead of a hung suite.
+#[test]
+fn takeover_reload_builds_the_fresh_store_outside_the_store_lock() {
+    let _serial = DdlockGuard::capture();
+    let db = std::sync::Arc::new(Mutex::new(blank_store()));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker_db = db.clone();
+    std::thread::spawn(move || {
+        let sweep_db = worker_db.clone();
+        swap_in_fresh_store(&worker_db, move || {
+            // What sweep_orphan_files_in's live check does while load_store is still running.
+            let _live = sweep_db.lock().unwrap_or_else(|e| e.into_inner());
+            let mut fresh = blank_store();
+            fresh.prompts = numbered_prompts(2);
+            fresh
+        });
+        let _ = tx.send(());
+    });
+    assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "the reload froze: it built the store while holding the store lock");
+    assert_eq!(db.lock().unwrap().prompts.len(), 2, "the fresh store replaces the stale one");
+}
+
+// The build lifts the read-only flag (the lock is ours by then) while the live store is still the
+// stale one. A save attempted in that window must be refused, and again after a build that fails.
+#[test]
+fn saves_stay_refused_from_the_lock_claim_until_the_store_is_swapped() {
+    let _serial = DdlockGuard::capture();
+    DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+    let db = std::sync::Arc::new(Mutex::new(blank_store()));
+    let (built_tx, built_rx) = std::sync::mpsc::channel();
+    let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+    let worker_db = db.clone();
+    let worker = std::thread::spawn(move || {
+        swap_in_fresh_store(&worker_db, move || {
+            // What acquire_data_dir_lock does inside load_store: the folder is ours, read-only drops.
+            DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+            built_tx.send(()).unwrap();
+            go_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+            let mut fresh = blank_store();
+            fresh.prompts = numbered_prompts(3);
+            fresh
+        });
+    });
+    built_rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the build started");
+    assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "the claim lifted the read-only flag");
+    assert!(data_dir_write_blocked_quiet(), "a save from the stale store would write old data here");
+    go_tx.send(()).unwrap();
+    worker.join().unwrap();
+    assert!(!data_dir_write_blocked_quiet(), "saves resume once the fresh store is in place");
+    assert_eq!(db.lock().unwrap().prompts.len(), 3);
+
+    // A reload that fails must not leave saves refused for good.
+    let failing = std::panic::catch_unwind(|| {
+        swap_in_fresh_store(&Mutex::new(blank_store()), || -> Store { panic!("the folder could not be read") });
+    });
+    assert!(failing.is_err());
+    assert!(!data_dir_write_blocked_quiet(), "an error during the reload releases the refusal");
+}
+
+// A unit test has no app handle to run the follow-up on, so this pins the wiring in the source:
+// the takeover reload and the CLI command path both go through the one helper, and the helper
+// carries the full list (grid, hotkeys, tray, float windows, float theme and language).
+#[test]
+fn takeover_reload_and_cli_share_the_refresh_helper() {
+    let store = include_str!("../store.rs");
+    let cli = include_str!("../cli_callers.rs");
+    let reload = store.split("pub(crate) fn reload_after_takeover").nth(1).expect("reload fn").split("\n}").next().unwrap();
+    assert!(reload.contains("refresh_after_store_swap(app)"), "the takeover reload must refresh hotkeys, tray and float windows");
+    assert!(cli.contains("store::refresh_after_store_swap(app)"), "the CLI path shares the helper");
+    assert!(!cli.contains("crate::rearm_hotkeys(app)"), "the list is not copied into the CLI path");
+    let helper = store.split("pub(crate) fn refresh_after_store_swap").nth(1).expect("helper").split("\n}").next().unwrap();
+    for call in ["\"store-synced\"", "rearm_hotkeys(app)", "rebuild_tray(app)", "sync_float_windows(app)", "notify_float_settings(app)"] {
+        assert!(helper.contains(call), "the helper misses {call}");
+    }
+}
+
+// ---- Writes while another machine owns the folder ---------------------------
+
+fn prompt_rows(conn: &Connection) -> i64 {
+    conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get(0)).unwrap()
+}
+
+fn fallback_plan(dir: &Path) -> StartupWrites {
+    assert!(write_sealed_json(&dir.join("prompts.json"), &numbered_prompts(2)));
+    assert!(write_sealed_json(&dir.join("settings.json"), &Settings::default()));
+    StartupWrites {
+        legacy_import: None,
+        prompts_fallback: Some(numbered_prompts(2)),
+        settings_fallback: Some(Settings::default()),
+    }
+}
+
+// The fallback files are the only copy of an edit the database never took. A read-only load
+// must neither write them into the owner's database nor delete them.
+#[test]
+fn startup_fallback_retry_leaves_files_and_rows_alone_while_read_only() {
+    let dir = ddlock_test_dir("startup-ro");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let written = std::cell::RefCell::new(WrittenRows::new());
+    apply_startup_writes(&dir, &mut conn, &written, fallback_plan(&dir), false);
+    assert!(dir.join("prompts.json").is_file() && dir.join("settings.json").is_file(), "a skipped write must keep the fallback files");
+    assert_eq!(prompt_rows(&conn), 0, "nothing reaches the folder's database");
+    // The owning load then takes them in and drops the files.
+    apply_startup_writes(&dir, &mut conn, &written, fallback_plan(&dir), true);
+    assert_eq!(prompt_rows(&conn), 2);
+    assert!(!dir.join("prompts.json").exists() && !dir.join("settings.json").exists());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn startup_legacy_import_waits_for_the_lock() {
+    let dir = ddlock_test_dir("startup-import");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let written = std::cell::RefCell::new(WrittenRows::new());
+    let plan = || StartupWrites { legacy_import: Some((numbered_prompts(3), Settings::default())), ..Default::default() };
+    assert!(write_sealed_json(&dir.join("prompts.json"), &numbered_prompts(3)));
+    apply_startup_writes(&dir, &mut conn, &written, plan(), false);
+    assert_eq!(prompt_rows(&conn), 0);
+    assert!(dir.join("prompts.json").is_file(), "the legacy file stays until the import really ran");
+    apply_startup_writes(&dir, &mut conn, &written, plan(), true);
+    assert_eq!(prompt_rows(&conn), 3);
+    assert!(!dir.join("prompts.json").exists());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn copy_log_migration_writes_nothing_while_read_only() {
+    let dir = ddlock_test_dir("migrate-ro");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let legacy = || {
+        Settings { copy_log: vec![CopyEntry { id: "b".into(), ts: 20 }, CopyEntry { id: "a".into(), ts: 10 }], ..Default::default() }
+    };
+    let rows = |c: &Connection| -> i64 { c.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap() };
+    let marker = |c: &Connection| c.query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(())).is_ok();
+
+    let mut ro = legacy();
+    assert!(!migrate_copy_log_once(&mut conn, &mut ro, false));
+    assert_eq!(rows(&conn), 0, "no history row into a folder another machine owns");
+    assert!(!marker(&conn), "no marker either, so the owner's next load still migrates");
+    assert_eq!(ro.last_used.get("b"), Some(&20), "the in-memory backfill still runs");
+
+    let mut owner = legacy();
+    assert!(migrate_copy_log_once(&mut conn, &mut owner, true));
+    assert_eq!(rows(&conn), 2);
+    assert!(marker(&conn) && owner.copy_log.is_empty());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A unit test cannot run a command (no app handle), so the gate is pinned in the source: each
+// writer opens its connection through db_conn_write, which refuses while the folder is
+// another machine's, and none of them is allowed back onto the plain connection.
+#[test]
+fn every_read_only_gated_writer_uses_the_write_connection() {
+    fn body<'a>(src: &'a str, name: &str) -> &'a str {
+        let at = src.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("{name} missing"));
+        let rest = &src[at..];
+        let end = rest[3..].find("\nfn ").or_else(|| rest[3..].find("\npub(crate) ")).map(|e| e + 3).unwrap_or(rest.len());
+        &rest[..end]
+    }
+    let copy = include_str!("../copy.rs");
+    let drafts = include_str!("../drafts.rs");
+    let clip = include_str!("../clip.rs");
+    let watch = include_str!("../clipwatch.rs");
+    let gated = [
+        ("copy.rs", copy, "record_copy"),
+        ("copy.rs", copy, "trim_copy_history_now"),
+        ("copy.rs", copy, "clear_copy_history"),
+        ("copy.rs", copy, "restore_copy_history"),
+        ("copy.rs", copy, "delete_copy_entry"),
+        ("drafts.rs", drafts, "save_edit_state"),
+        ("drafts.rs", drafts, "discard_edit_state"),
+        ("drafts.rs", drafts, "save_editor_draft"),
+        ("drafts.rs", drafts, "discard_editor_draft"),
+        ("clip.rs", clip, "restore_clip_inbox"),
+    ];
+    for (file, src, name) in gated {
+        let b = body(src, name);
+        assert!(b.contains("db_conn_write(") && !b.contains("db_conn(&app)"), "{file}::{name} must write through db_conn_write");
+    }
+    assert!(body(watch, "on_clipboard_update").contains("db_conn_write("), "the clipboard watcher writes through db_conn_write");
+    let lib = include_str!("../lib.rs");
+    let guard = lib.find("if !DATA_DIR_READONLY.load(Ordering::Relaxed) {").expect("read-only guard in setup");
+    assert!(lib.find("cleanup_incomplete_backups(&backups_dir").unwrap() > guard, "backup cleanup runs inside the read-only guard");
 }

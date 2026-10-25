@@ -799,7 +799,7 @@ pub(crate) async fn add_prompt(
     let store_dir = data_dir(&app);
     let own_dirs = own_storage_dirs(&app, &state);
     for p in [file_path.as_deref(), icon_path.as_deref()].into_iter().flatten() {
-        if attachment_path_refused(&own_dirs, &store_dir, p) {
+        if attachment_path_refused(&own_dirs, &store_dir, p) || !crate::asset_scope::source_trusted_now(&app, &state, p) {
             return Err("source-not-allowed".to_string());
         }
     }
@@ -839,6 +839,7 @@ pub(crate) async fn add_prompt(
         } else {
             sanitize_hotkey_mode(&hotkey_paste.unwrap_or_default())
         };
+        let color = valid_tag_color(&color)?;
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
@@ -1225,6 +1226,10 @@ pub(crate) async fn update_prompt(
                 return Err("source-not-allowed".to_string());
             }
             keep_as_is[i] = true;
+        } else if held != Some(p) && !crate::asset_scope::source_trusted_now(&app, &state, p) {
+            // A new source must be an app folder or a file the user picked; the value the prompt
+            // already holds is never asked again.
+            return Err("source-not-allowed".to_string());
         }
     }
     let mut staged_copies = StagedCopies::new();
@@ -1282,6 +1287,8 @@ pub(crate) async fn update_prompt(
         // Read before the mutable prompt borrow too: needed to re-encrypt a confidential entry's
         // edited text instead of overwriting its ciphertext.
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
+        // The colour lands in a CSS property in every window: only #rrggbb (or empty) is stored.
+        let color = valid_tag_color(&color)?;
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
@@ -1866,7 +1873,7 @@ pub(crate) async fn batch_prompts(
             }
         }
         "color" => {
-            let c = color.unwrap_or_default();
+            let c = valid_tag_color(&color.unwrap_or_default())?;
             let previous: Vec<(String, String)> = store
                 .prompts
                 .iter()

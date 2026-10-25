@@ -848,6 +848,7 @@ pub(crate) async fn begin_capture(
     }];
     let slot = preview.0.clone();
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let scope_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         // A newer session already owns the slot (and the preview file): nothing to do.
         if SNIP_GEN.load(Ordering::SeqCst) != gen {
@@ -856,7 +857,11 @@ pub(crate) async fn begin_capture(
         // Encode the capture at NATIVE resolution: pixel-sharp overlay, no downscale.
         let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { SNIP_PREVIEW_Q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j, gen) {
-                Some(path) => (path, true),
+                Some(path) => {
+                    // The overlay shows it through an asset URL.
+                    crate::asset_scope::allow_file(&scope_app, &path);
+                    (path, true)
+                }
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
             };
             SnipBg {

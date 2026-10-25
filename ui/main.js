@@ -316,6 +316,10 @@ function bind() {
   listen("data-dir-readonly-write-blocked", (e) => {
     toast(t("dataDirReadOnlyToast").replace("{host}", () => e.payload || dataDirLockStatus.otherHost || "?"));
   });
+  // This process took the data folder over from a machine that went away, and the backend
+  // reloaded the library from disk: drop the read-only banner (the grid itself refetches on the
+  // store-synced event sent along).
+  listen("data-dir-lock-changed", () => refreshDataDirLock());
   // The disk problem that caused the above went away and a later settings write
   // reached it again: the notice does not need to survive that, so it comes
   // straight back down (the dialog itself still stays told-once for the session).

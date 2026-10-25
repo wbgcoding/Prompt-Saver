@@ -513,7 +513,7 @@ pub(crate) fn prune_history(settings: &mut Settings) {
 // honest "size" figure (copy_log holds only a prompt id and a timestamp).
 #[tauri::command(async)]
 pub(crate) fn trim_copy_history_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
-    let Some(conn) = db_conn(&app) else { return (0, 0) };
+    let Some(conn) = db_conn_write(&app) else { return (0, 0) };
     let (cap, cutoff) = { history_cap_and_cutoff(&lock(&state).settings) };
     let before: (i64, i64) = conn
         .query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(id)), 0) FROM copy_log", [], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -574,7 +574,12 @@ pub(crate) async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String
     // No connection (a data-folder switch or a blocked folder) means no journal row either: said
     // so, not reported as written. The callers fire this after the clipboard write and ignore
     // the answer, so the copy itself is never held back.
-    let Some(conn) = db_conn(&app) else {
+    // Another machine owns the folder: the copy goes through, its journal row is skipped
+    // quietly (no error toast, no log line per copy).
+    if data_dir_write_blocked_quiet() {
+        return Ok(());
+    }
+    let Some(conn) = db_conn_write(&app) else {
         append_crash_log("copy history append failed: no database connection");
         return Err("history-failed".into());
     };
@@ -615,7 +620,7 @@ pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> 
     let (cleared, saved) = {
         let mut store = lock(&state);
         let cleared = clear_history_core(
-            || match db_conn(&app) {
+            || match db_conn_write(&app) {
                 Some(conn) => conn.execute("DELETE FROM copy_log", []).is_ok(),
                 None => false,
             },
@@ -669,7 +674,7 @@ pub(crate) async fn restore_copy_history(
     usage: HashMap<String, u32>,
     last_used: HashMap<String, u64>,
 ) -> Result<(), String> {
-    let Some(conn) = db_conn(&app) else {
+    let Some(conn) = db_conn_write(&app) else {
         return Err("history-failed".into());
     };
     if db_restore_copy_log(&conn, &entries).is_err() {
@@ -702,7 +707,7 @@ pub(crate) async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -
 // prompt", so it behaves the same in grouped and ungrouped view.
 #[tauri::command]
 pub(crate) async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
-    db_conn(&app)
+    db_conn_write(&app)
         .map(|c| c.execute("DELETE FROM copy_log WHERE rowid = ?1", params![rowid]).is_ok())
         .unwrap_or(false)
 }

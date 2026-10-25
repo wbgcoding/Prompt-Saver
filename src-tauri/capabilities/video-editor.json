@@ -40,6 +40,7 @@
     "allow-get-settings",
     "allow-ink-prefs",
     "allow-load-edit-state",
+    "allow-allow-edit-state-files",
     "allow-log-error",
     "allow-mux-mic-track",
     "allow-pick-export-folder",

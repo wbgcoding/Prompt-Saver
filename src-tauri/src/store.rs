@@ -351,8 +351,10 @@ pub(crate) fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
 // Scheduler tick. An owner reads the lock first and gives up the folder when it names
 // another claim (after a long sleep or clock skew), never erasing the taker's lock. A
 // read-only process never writes while the owner is alive and takes over once the lock has
-// stood still for the stale limit.
-pub(crate) fn refresh_data_dir_lock(dir: &Path) {
+// stood still for the stale limit. Returns true on that takeover: the lock is ours, but the
+// store in memory is still the one loaded before the old owner's last changes, so the
+// read-only flag stays up until reload_after_takeover() has replaced the store.
+pub(crate) fn refresh_data_dir_lock(dir: &Path) -> bool {
     let path = data_dir_lock_path(dir);
     if DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed) {
         let host = local_host_name();
@@ -362,7 +364,69 @@ pub(crate) fn refresh_data_dir_lock(dir: &Path) {
             apply_lock_outcome(LockOutcome::ReadOnly(other));
         }
     } else if DATA_DIR_READONLY.load(Ordering::Relaxed) && DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
-        apply_lock_outcome(claim_with_process_state(dir));
+        match claim_with_process_state(dir) {
+            LockOutcome::Owned => {
+                DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);
+                return true;
+            }
+            other => apply_lock_outcome(other),
+        }
+    }
+    false
+}
+
+// Second half of a takeover: reads the folder again, replaces the stale store and its row
+// bookkeeping, and tells every window to refetch and drop the read-only banner. load_store()
+// re-resolves the lock, which names this process by now, so it is also what clears the
+// read-only flag. Should the claim not hold after all, the flag stays and the next tick tries
+// again.
+pub(crate) fn reload_after_takeover(app: &AppHandle) {
+    swap_in_fresh_store(&app.state::<Db>(), || load_store(app));
+    refresh_after_store_swap(app);
+    let _ = app.emit("data-dir-lock-changed", ());
+}
+
+// What has to follow whenever the live store was replaced or changed behind the windows' back
+// (takeover reload, CLI command): the grid refetches, and the armed hotkeys, the tray, the float
+// buttons and their theme and language re-read the new prompts and settings. Without it they keep
+// serving the old texts and the next layout write saves from a stale view.
+pub(crate) fn refresh_after_store_swap(app: &AppHandle) {
+    let _ = app.emit_to("main", "store-synced", ());
+    crate::rearm_hotkeys(app);
+    crate::rebuild_tray(app);
+    crate::sync_float_windows(app);
+    crate::notify_float_settings(app);
+}
+
+// Replaces the live store with what `build` reads. The build runs BEFORE the store lock is
+// taken: its startup sweeps (trash retention, orphan attachment files) look at the live store
+// themselves, and the std mutex is not reentrant, so building under the guard froze the app.
+// Only the swap itself is under the lock. Every save stays refused from before the build until
+// after the swap: the build resolves the folder lock (which lifts the read-only flag) while the
+// live store is still the stale one, and a save from it in that gap would write old data over the
+// other machine's newest changes. The refusal is raised before the read-only flag can drop and
+// released by a drop guard, so a failing or panicking build cannot leave saves blocked for good.
+pub(crate) fn swap_in_fresh_store(db: &Db, build: impl FnOnce() -> Store) {
+    let _refuse_saves = ReloadSaveBlock::raise();
+    let fresh = build();
+    let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
+    crate::vault::end_session_if_vault_changed(&store.settings, &fresh.settings);
+    *store = fresh;
+}
+
+// True while a takeover reload replaces the store; the write gates below refuse everything then.
+static STORE_RELOADING: AtomicBool = AtomicBool::new(false);
+
+struct ReloadSaveBlock;
+impl ReloadSaveBlock {
+    fn raise() -> Self {
+        STORE_RELOADING.store(true, Ordering::SeqCst);
+        Self
+    }
+}
+impl Drop for ReloadSaveBlock {
+    fn drop(&mut self) {
+        STORE_RELOADING.store(false, Ordering::SeqCst);
     }
 }
 
@@ -382,12 +446,23 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
     }
 }
 
+// The same gate without the refusal event, for background jobs that would otherwise raise the
+// toast on every round.
+pub(crate) fn data_dir_write_blocked_quiet() -> bool {
+    DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || STORE_RELOADING.load(Ordering::SeqCst) || DATA_DIR_READONLY.load(Ordering::Relaxed)
+}
+
 // The single choke point for save_prompts, save_prompts_and_trash, save_trash and
 // write_settings_outcome: a real refusal that emits the same event with the same host name,
 // whichever action triggered it.
 pub(crate) fn data_dir_write_blocked(app: &AppHandle) -> bool {
     // No event here: the window is already on its way down for app.restart().
     if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+        return true;
+    }
+    // The store is being replaced after a takeover: a save now would come from the stale copy.
+    // Over within moments, so no read-only event.
+    if STORE_RELOADING.load(Ordering::SeqCst) {
         return true;
     }
     if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
@@ -511,6 +586,18 @@ pub(crate) fn db_conn(app: &AppHandle) -> Option<Connection> {
         return None;
     }
     db_conn_at(&data_dir(app))
+}
+
+// db_conn() for a caller that is about to WRITE. While another machine owns the data folder this
+// instance is read-only, and a copy-log row, a draft or an edit state written through the plain
+// connection would land in the owner's data.db. None reads as "DB unavailable", which every
+// writer already handles; a caller that wants no error for this case checks
+// data_dir_write_blocked_quiet() itself first.
+pub(crate) fn db_conn_write(app: &AppHandle) -> Option<Connection> {
+    if data_dir_write_blocked_quiet() {
+        return None;
+    }
+    db_conn(app)
 }
 
 // Split out of db_conn() so the command line's headless path (no AppHandle) opens the same
@@ -791,14 +878,14 @@ pub(crate) fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prom
                             }
                             match serde_json::from_str::<Prompt>(&dec_str(&data)) {
                                 Ok(p) => {
-                                    // A legacy plaintext row is left out of the map so it counts as changed and is sealed on
-                                    // the next save.
-                                    if encrypted {
-                                        written.insert(
-                                            row_key("prompts", &p.id),
-                                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
-                                        );
-                                    }
+                                    // A legacy plaintext row carries the stale hash: it counts as changed and is sealed on
+                                    // the next save, and its key still lets a later delete reach it.
+                                    let hash = if encrypted {
+                                        row_hash(&serde_json::to_string(&p).unwrap_or_default())
+                                    } else {
+                                        STALE_ROW_HASH
+                                    };
+                                    written.insert(row_key("prompts", &p.id), hash);
                                     prompts.push(p);
                                 }
                                 // An encrypted row that won't decrypt/parse is present-but-unreadable;
@@ -1222,6 +1309,7 @@ pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         };
         if ok {
             drop_stale_fallback(&dir, "prompts.json");
+            crate::asset_scope::allow_store_files(app, store);
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
             return true;
         }
@@ -1233,6 +1321,7 @@ pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         let _ = app.emit("persist-failed", "prompts");
         return false;
     }
+    crate::asset_scope::allow_store_files(app, store);
     spawn_sync_write_all(app, store);
     true
 }
@@ -1279,6 +1368,7 @@ pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
         };
         if ok {
             drop_stale_fallback(&dir, "prompts.json");
+            crate::asset_scope::allow_store_files(app, store);
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
             return true;
         }
@@ -1334,6 +1424,7 @@ pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> Se
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
             drop_stale_fallback(&data_dir(app), "settings.json");
+            crate::asset_scope::allow_app_dirs(app, settings);
             // Announced only on the true to false transition (swap), not on every successful write.
             if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
                 let _ = app.emit("settings-write-recovered", ());
@@ -1350,6 +1441,7 @@ pub(crate) fn write_settings_outcome(app: &AppHandle, settings: &Settings) -> Se
     if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
         let _ = app.emit("settings-write-recovered", ());
     }
+    crate::asset_scope::allow_app_dirs(app, settings);
     SettingsWrite::Written
 }
 
@@ -1722,12 +1814,110 @@ pub(crate) fn remove_locked_backup(dir: &Path) {
     }
 }
 
+// The writes a load defers until the data-folder lock is resolved (see load_store_inner).
+#[derive(Default)]
+pub(crate) struct StartupWrites {
+    // Legacy prompts.json + settings.json found next to an empty database.
+    pub(crate) legacy_import: Option<(Vec<Prompt>, Settings)>,
+    // A prompts.json / settings.json left by a failed database write: the file is the truth and
+    // goes back into the database.
+    pub(crate) prompts_fallback: Option<Vec<Prompt>>,
+    pub(crate) settings_fallback: Option<Settings>,
+}
+
+// Performs the deferred writes, and only when this process may write into the folder. While
+// another machine owns it nothing is written and no file is removed, so the owner's data and the
+// fallback files stay exactly as they were; the next load that owns the folder retries.
+pub(crate) fn apply_startup_writes(dir: &Path, conn: &mut Connection, written: &std::cell::RefCell<WrittenRows>, plan: StartupWrites, may_write: bool) {
+    if !may_write {
+        return;
+    }
+    let mut written = written.borrow_mut();
+    if let Some((j_prompts, j_settings)) = plan.legacy_import {
+        let prompts_ok = db_write_prompts(conn, &j_prompts, &mut written).is_ok();
+        let settings_ok = db_write_settings(conn, &j_settings).is_ok();
+        // Once the data is in the DB, drop the legacy JSON files so the import never reruns.
+        if prompts_ok && settings_ok {
+            let _ = fs::remove_file(dir.join("prompts.json"));
+            let _ = fs::remove_file(dir.join("settings.json"));
+        }
+    }
+    if let Some(prompts) = plan.prompts_fallback {
+        if db_write_prompts(conn, &prompts, &mut written).is_ok() {
+            let _ = fs::remove_file(dir.join("prompts.json"));
+        }
+    }
+    if let Some(settings) = plan.settings_fallback {
+        if db_write_settings(conn, &settings).is_ok() {
+            let _ = fs::remove_file(dir.join("settings.json"));
+        }
+    }
+}
+
+// One-time: move any legacy in-blob copy history into the copy_log table. Gated on a persistent
+// meta marker written in the same transaction as the rows, so a failed resave cannot duplicate
+// the history on the next launch. The last_used backfill always runs in memory; the table rows,
+// the marker and emptying the blob list happen only when `may_write`, so a read-only process
+// leaves the folder's history alone and the owner's next load migrates it. Returns true when the
+// rows were moved and the settings need a resave.
+pub(crate) fn migrate_copy_log_once(conn: &mut Connection, settings: &mut Settings, may_write: bool) -> bool {
+    let already_migrated = conn.query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(())).is_ok();
+    if already_migrated {
+        return false;
+    }
+    let mut migrated_log = false;
+    if !settings.copy_log.is_empty() {
+        // copy_log is newest-first: insert oldest-first so rowid order stays chronological;
+        // backfill last_used with each id's newest ts.
+        for e in settings.copy_log.iter().rev() {
+            if e.ts > 0 {
+                settings.last_used.insert(e.id.clone(), e.ts);
+            }
+        }
+        if may_write {
+            if let Ok(tx) = conn.transaction() {
+                {
+                    if let Ok(mut stmt) = tx.prepare("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)") {
+                        for e in settings.copy_log.iter().rev() {
+                            let _ = stmt.execute(params![e.ts as i64, e.id]);
+                        }
+                    }
+                    let _ = tx.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", []);
+                }
+                if tx.commit().is_ok() {
+                    migrated_log = true;
+                }
+            }
+        }
+    } else if may_write {
+        // No legacy history to move: mark done so we never re-check.
+        let _ = conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", []);
+    }
+    if may_write {
+        settings.copy_log.clear();
+    }
+    migrated_log
+}
+
 pub(crate) fn load_store(app: &AppHandle) -> Store {
+    let store = load_store_inner(app);
+    // The windows read media through the asset protocol, whose static scope allows nothing: the
+    // folders and attachments of the store just loaded are allowed here (startup, folder switch,
+    // restore and lock takeover all load through this).
+    crate::asset_scope::allow_loaded(app, &store);
+    store
+}
+
+fn load_store_inner(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
         // Filled from the rows as they are read, so the first save of the session
         // already only writes what changed (see WrittenRows).
         let mut written = WrittenRows::new();
+        // Every write this load would make is collected here and applied after the data-folder
+        // lock was resolved: before that this process cannot tell whether another machine owns
+        // the folder, and a skipped write has to leave the stored file exactly as it was.
+        let mut startup = StartupWrites::default();
         let (mut prompts, settings_opt, needs_mig, prompt_fails, settings_unreadable) =
             db_load(&conn, &mut written);
         let (mut trash, trash_fails) = db_load_trash(&conn, &mut written);
@@ -1776,15 +1966,8 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
                     _ => Settings::default(),
                 };
                 if !j_prompts.is_empty() || dir.join("settings.json").exists() {
-                    let prompts_ok = db_conn(app)
-                        .map(|mut c2| db_write_prompts(&mut c2, &j_prompts, &mut written).is_ok())
-                        .unwrap_or(false);
-                    let settings_ok = db_write_settings(&conn, &j_settings).is_ok();
-                    // Once the data is in the DB, drop the legacy JSON files so the import never reruns.
-                    if prompts_ok && settings_ok {
-                        let _ = fs::remove_file(dir.join("prompts.json"));
-                        let _ = fs::remove_file(dir.join("settings.json"));
-                    }
+                    // Written once the lock is resolved: this folder may belong to another machine.
+                    startup.legacy_import = Some((j_prompts.clone(), j_settings.clone()));
                 }
                 prompts = j_prompts;
                 settings = j_settings;
@@ -1802,9 +1985,7 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
                     match read_sealed_json::<Vec<Prompt>>(&pj) {
                         SealedRead::Loaded(fallback) => {
                             prompts = fallback;
-                            if db_write_prompts(&mut conn, &prompts, &mut written).is_ok() {
-                                let _ = fs::remove_file(&pj);
-                            }
+                            startup.prompts_fallback = Some(prompts.clone());
                         }
                         SealedRead::Unreadable => append_crash_log(
                             "prompts.json fallback present but could not be decrypted/parsed; \
@@ -1819,9 +2000,7 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
                         SealedRead::Loaded(s) => {
                             settings = s;
                             settings_defaulted = false;
-                            if db_write_settings(&conn, &settings).is_ok() {
-                                let _ = fs::remove_file(&sj);
-                            }
+                            startup.settings_fallback = Some(settings.clone());
                         }
                         SealedRead::Unreadable => append_crash_log(
                             "settings.json fallback present but could not be decrypted/parsed; \
@@ -1847,49 +2026,6 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
         let pin_retention = !settings.retention_defaults_v2;
         settings.migrate();
         load_pick_history(&settings); // restore the colour-pick history mirror
-        // One-time: move any legacy in-blob copy history into the copy_log table. Gated on a
-        // persistent meta marker written in the same transaction as the rows, so a failed resave
-        // cannot duplicate the history on the next launch.
-        let already_migrated = conn
-            .query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(()))
-            .is_ok();
-        let mut migrated_log = false;
-        if !already_migrated {
-            if !settings.copy_log.is_empty() {
-                if let Ok(tx) = conn.transaction() {
-                    {
-                        // copy_log is newest-first: insert oldest-first so rowid order
-                        // stays chronological; backfill last_used with each id's newest ts.
-                        if let Ok(mut stmt) = tx.prepare("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)") {
-                            for e in settings.copy_log.iter().rev() {
-                                let _ = stmt.execute(params![e.ts as i64, e.id]);
-                                if e.ts > 0 {
-                                    settings.last_used.insert(e.id.clone(), e.ts);
-                                }
-                            }
-                        }
-                        let _ = tx.execute(
-                            "INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')",
-                            [],
-                        );
-                    }
-                    if tx.commit().is_ok() {
-                        migrated_log = true;
-                    }
-                }
-            } else {
-                // No legacy history to move: mark done so we never re-check.
-                let _ = conn.execute(
-                    "INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')",
-                    [],
-                );
-            }
-            settings.copy_log.clear();
-        }
-        // Enforce the cap + retention window on the table at startup (e.g. after
-        // the cap was lowered, or right after a large legacy import).
-        let (cap, cutoff) = history_cap_and_cutoff(&settings);
-        let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
         // A relative file_path (produced only by demo_prompts(), never by the attachment picker)
         // is resolved against the live data dir here instead of being stored absolute.
@@ -1903,6 +2039,16 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
             written: std::cell::RefCell::new(written),
         };
         acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
+        // Only now is it known whether this process may write into the folder.
+        let may_write = !DATA_DIR_READONLY.load(Ordering::Relaxed);
+        apply_startup_writes(&dir, &mut conn, &store.written, startup, may_write);
+        let migrated_log = migrate_copy_log_once(&mut conn, &mut store.settings, may_write);
+        if may_write {
+            // Enforce the cap + retention window on the table at startup (e.g. after
+            // the cap was lowered, or right after a large legacy import).
+            let (cap, cutoff) = history_cap_and_cutoff(&store.settings);
+            let _ = db_trim_copy(&conn, cap, cutoff);
+        }
         // An existing install never sees the first-run tour; the tour's own Finish/Skip would never
         // write the flag for a store discovered this way.
         if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
@@ -1919,7 +2065,7 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
         {
             let app = app.clone();
             std::thread::spawn(move || {
-                if let Some(conn) = db_conn(&app) {
+                if let Some(conn) = db_conn_write(&app) {
                     edit_state_seal_all(&conn);
                 }
             });
@@ -1929,7 +2075,7 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
         // Data upgrades that rewrite stored content, once per step. Each later step
         // adds its own `data_version < N` block under this one.
         let mut data_upgraded = false;
-        let may_upgrade = !DATA_DIR_READONLY.load(Ordering::Relaxed);
+        let may_upgrade = may_write;
         if may_upgrade && store.settings.data_version < 1 && upgrade_stored_placeholders(app, &mut store) {
             store.settings.data_version = DATA_VERSION;
             data_upgraded = true;
