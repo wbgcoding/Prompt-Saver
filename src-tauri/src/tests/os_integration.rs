@@ -123,7 +123,7 @@ fn a_key_sidecar_overwrite_goes_through_the_atomic_helper_and_leaves_no_temp_fil
     let src = source!("../keylog.rs");
     let body = &src[src.find("pub(crate) fn try_write_sidecar").unwrap()..];
     let body = &body[..body.find("\n}\n").unwrap()];
-    assert!(body.contains("write_bytes_atomic") && !body.contains("fs::write("));
+    assert!(body.contains("write_bytes_atomic_strict") && !body.contains("fs::write("));
     let _ = std::fs::remove_dir_all(&root);
 }
 
