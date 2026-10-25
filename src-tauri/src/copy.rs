@@ -81,8 +81,15 @@ pub(crate) fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
 // around in random mode. Order mode: `idx + 1`. Random mode: `total - bag.len() + 1`, since
 // a fresh bag holds exactly `total` entries.
 pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
+    let (idx, pos) = rotation_position(p, settings);
+    (idx, pos, rotation_entry_text(p, idx))
+}
+
+// The entry index and 1-based position rotation_next() would serve right now, without
+// building the text.
+pub(crate) fn rotation_position(p: &Prompt, settings: &Settings) -> (usize, usize) {
     let total = rotation_total(p);
-    let (idx, pos) = if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
+    if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
         (0, 1)
     } else if p.rotate_mode == "random" {
         match settings.rotate_bag.get(&p.id) {
@@ -94,8 +101,18 @@ pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, S
     } else {
         let idx = settings.rotate_pos.get(&p.id).copied().unwrap_or(0) as usize % total;
         (idx, idx + 1)
-    };
-    (idx, pos, rotation_entry_text(p, idx))
+    }
+}
+
+// Advances the pointer only while it still points at the entry this copy served. Two copies
+// of one prompt that overlap both serve the same entry; the second one finds the pointer
+// already moved and leaves it, so the next entry is not skipped. True when it advanced.
+pub(crate) fn rotation_advance_if_served(p: &Prompt, settings: &mut Settings, served: usize) -> bool {
+    if rotation_position(p, settings).0 != served {
+        return false;
+    }
+    rotation_advance(p, settings);
+    true
 }
 
 // Advances the pointer past the entry rotation_next() just reported; call it only once the
@@ -175,7 +192,8 @@ pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool 
 pub(crate) enum CopyPayload {
     Image(String),
     File(String),
-    Text(String),
+    // The text and the rotation entry index it came from.
+    Text(String, usize),
     Missing,
 }
 
@@ -202,29 +220,36 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
             Some(p) => {
                 let key = secret_session_key(secret_timeout_min(&store.settings));
                 let plain = reveal_rotation(p, key)?;
-                CopyPayload::Text(rotation_next(&plain, &store.settings).2)
+                let (idx, _, text) = rotation_next(&plain, &store.settings);
+                CopyPayload::Text(text, idx)
             }
             None => CopyPayload::Missing,
         }
     };
-    let is_text = matches!(&payload, CopyPayload::Text(_));
+    let served = match &payload {
+        CopyPayload::Text(_, idx) => Some(*idx),
+        _ => None,
+    };
     let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
         CopyPayload::File(path) => set_clipboard_file(&path, &own_dirs),
-        CopyPayload::Text(text) => put_text(&state, Some(&id), &text),
+        CopyPayload::Text(text, _) => put_text(&state, Some(&id), &text),
         CopyPayload::Missing => false,
     };
     // Only a successful text copy may consume a rotation entry: a failed copy leaves the
     // pointer where it was, and an Image/File payload showed no entry at all.
-    if ok && is_text {
+    if let (true, Some(served)) = (ok, served) {
         let mut store = lock(&state);
         if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
             let p = rotation_core(&store.prompts[pos]);
-            rotation_advance(&p, &mut store.settings);
-            // The pointer survives a restart. Collected rather than written per
-            // copy: it is already correct in memory for the next copy.
-            save_settings_soon();
-            emit_rotation_changed(&app, &p, &store.settings);
+            // The pointer is read and moved here under one lock, so an overlapping copy that
+            // served the same entry does not advance it a second time.
+            if rotation_advance_if_served(&p, &mut store.settings, served) {
+                // The pointer survives a restart. Collected rather than written per
+                // copy: it is already correct in memory for the next copy.
+                save_settings_soon();
+                emit_rotation_changed(&app, &p, &store.settings);
+            }
         }
     }
     Ok(ok)

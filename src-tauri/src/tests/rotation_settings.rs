@@ -975,3 +975,26 @@ fn set_sync_dir_core_writes_without_holding_the_store_lock() {
     assert_eq!(old, PathBuf::new());
     assert_eq!(new_dir, PathBuf::from("C:/sync-new"));
 }
+
+#[test]
+fn an_overlapping_copy_of_the_same_entry_does_not_advance_the_rotation_twice() {
+    let mut p = sample_prompts().remove(0);
+    p.variants = vec!["b".into(), "c".into()];
+    let mut settings = Settings::default();
+    // Two copies both read the pointer before either one advances it.
+    let first = rotation_position(&p, &settings).0;
+    let second = rotation_position(&p, &settings).0;
+    assert_eq!((first, second), (0, 0));
+    assert!(rotation_advance_if_served(&p, &mut settings, first));
+    assert!(!rotation_advance_if_served(&p, &mut settings, second), "the second copy leaves the pointer");
+    assert_eq!(rotation_next(&p, &settings).0, 1, "the next entry is served, not skipped");
+}
+
+#[test]
+fn copy_prompt_advances_only_if_the_pointer_still_sits_on_the_served_entry() {
+    let src = include_str!("../copy.rs").replace("\r\n", "\n");
+    let body = &src[src.find("pub(crate) async fn copy_prompt").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    assert!(body.contains("rotation_advance_if_served("));
+    assert!(!body.contains("rotation_advance(&p"));
+}
