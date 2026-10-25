@@ -61,7 +61,7 @@ rusqlite = { version = "=0.40.2", features = ["bundled"] }
 pdfium-render = "=0.9.4"
 # Extract ffmpeg.exe from its downloaded release zip. Deflate only:
 # gyan.dev's archive needs no other compression method.
-zip = { version = "=9.0.5", default-features = false, features = ["deflate"] }
+zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2"] }
 # Decodes the camera window's recorded chunks -- sent as base64 over IPC
 # instead of a JSON array of numbers, about a third bigger than raw instead
 # of three to four times bigger.

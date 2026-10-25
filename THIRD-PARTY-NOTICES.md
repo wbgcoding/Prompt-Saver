@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-237 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
+234 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 
 | Name | Version | License |
 |---|---|---|
@@ -23,7 +23,6 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | brotli | 9.0.0 | BSD-3-Clause AND MIT |
 | brotli-decompressor | 6.0.1 | BSD-3-Clause/MIT |
-| bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | bytemuck | 1.25.2 | Zlib OR Apache-2.0 OR MIT |
 | byteorder | 1.5.0 | Unlicense OR MIT |
 | byteorder-lite | 0.1.0 | Unlicense OR MIT |
@@ -235,9 +234,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | zerotrie | 0.2.5 | Unicode-3.0 |
 | zerovec | 0.11.9 | Unicode-3.0 |
 | zip | 9.0.5 | MIT |
-| zlib-rs | 0.6.8 | Zlib |
 | zmij | 1.0.23 | MIT |
-| zopfli | 0.8.4 | Apache-2.0 |
 | zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib |
 | PDFium | bblanchon/pdfium-binaries (pinned) | BSD-3-Clause |
