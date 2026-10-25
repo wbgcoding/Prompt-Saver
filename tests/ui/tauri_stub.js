@@ -958,12 +958,9 @@ const RESULTS = {
   // 404: nothing new by default, so an unrelated probe boot never gets a
   // surprise startup toast sitting over its own buttons.
   // window.__WHATS_NEW_FIXTURE__ lets one probe supply a real range.
-  whats_new_check: () => window.__WHATS_NEW_FIXTURE__ || { since: null, sections: [] },
+  whats_new_check: () => window.__WHATS_NEW_FIXTURE__ || { sections: [] },
   whats_new_current: () => ([
     { version: "1.2.0", markdown: "## Prompt Saver 1.2.0\n\nCurrent version only." },
-  ]),
-  whats_new_refresh: () => ([
-    { version: "1.2.0", markdown: "## Prompt Saver 1.2.0\n\nRefreshed from GitHub." },
   ]),
   // 451: a small stand-in for the real, build-time generated list (src-tauri/build.rs) --
   // one crate resolved to a bundled license text, one manual entry with a note and a

@@ -2382,7 +2382,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    that puts the topic list's scrollbar flush against the window edge instead of
    floating 20px inside it, while the text column still ends where the head, the
    search field and the tab bar end. */
-#help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; padding-right: 0; }
+#help .modal { width: min(1000px, 96vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; padding-right: 0; }
 /* By child rather than by id: wireClear() moves the search field into a .clear-wrap
    span at runtime, so the direct child there is not #help-search itself. */
 #help .modal > *:not(.help-body):not(.modal-head) { margin-right: 20px; }
@@ -2455,10 +2455,10 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    actual instructions, not secondary detail. */
 .help-steps { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
 .help-steps li { margin-bottom: 2px; }
-/* "What happens" is detail (storage, side effects, limits), not the lead sentence:
-   muted like a settings row so the two paragraphs don't read as equally important. */
-.help-happens { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
-.help-settings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--fg); }
+/* "What happens" is detail (storage, side effects, limits) but still body text: full
+   contrast, set apart from the lead sentence by a thin rule at its left edge. */
+.help-happens { margin: 0; padding-left: 8px; border-left: 2px solid var(--border); font-size: 13px; line-height: 1.5; color: var(--fg); }
+.help-settings { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
 .help-settings li { margin-bottom: 2px; }
 .help-tip {
   display: flex;
@@ -2469,7 +2469,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   border-radius: 8px;
   background: var(--surface-2);
   font-size: 12px;
-  color: var(--muted);
+  color: var(--fg);
 }
 .help-tip-ico { flex: 0 0 auto; color: var(--accent); }
 /* Inline copy of a real button's icon, dropped in place of {icon:key} in
@@ -2518,28 +2518,26 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   cursor: pointer;
 }
 .expert-tab:hover { border-color: var(--accent); }
-/* The expert and help dialogs' tabs stay on one line; a window too narrow for all six scrolls the bar sideways. */
-#expert-tabs-bar .expert-tabs,
-#help-tabs-bar .expert-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-#expert-tabs-bar .expert-tab,
-#help-tabs-bar .expert-tab { flex: 0 0 auto; white-space: nowrap; }
+/* The expert dialog's tabs stay on one line; a window too narrow for all six scrolls the bar sideways.
+   The help dialog's tabs wrap onto a second row instead, so every section stays visible. */
+#expert-tabs-bar .expert-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#expert-tabs-bar .expert-tab { flex: 0 0 auto; white-space: nowrap; }
+#help-tabs-bar .expert-tabs { row-gap: 4px; }
+#help-tabs-bar .expert-tab { white-space: nowrap; }
 /* A soft fade on the edge that still has tabs behind it (expert tabs, header view
    tabs); syncEdgeFade in core.js keeps data-fade (start, end, both) in step with the
    scroll position. */
 #expert-tabs-bar .expert-tabs[data-fade="end"],
-#help-tabs-bar .expert-tabs[data-fade="end"],
 .views[data-fade="end"] {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 #expert-tabs-bar .expert-tabs[data-fade="start"],
-#help-tabs-bar .expert-tabs[data-fade="start"],
 .views[data-fade="start"] {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
   mask-image: linear-gradient(to right, transparent, #000 28px);
 }
 #expert-tabs-bar .expert-tabs[data-fade="both"],
-#help-tabs-bar .expert-tabs[data-fade="both"],
 .views[data-fade="both"] {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
@@ -3683,8 +3681,12 @@ input[type="password"]::-ms-clear { display: none; }
 .confirm-checkbox-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .confirm-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
-.stats-head-row { display: flex; align-items: center; }
-.stats-head-row > .switch-field { min-width: 0; }
+/* Compact export row: the format select and the button share one small height. */
+.stats-export-row { align-items: center; }
+#stats-panel .stats-export-row .ghost-btn { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
+.stats-export-row .batch-view-select { padding: 4px 28px 4px 10px; font-size: 12px; }
+/* Statistics off: the hint and its jump button, left aligned. */
+#stats-panel > .stats-panel-body > #stats-off-open { align-self: flex-start; }
 /* "Most used" heading with the list length choice at its right end. */
 .stats-top-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stats-top-head > .stat-section { flex: 1 1 auto; min-width: 0; }

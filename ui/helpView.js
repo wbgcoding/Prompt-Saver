@@ -1,6 +1,6 @@
 // The help view: search, tabs, collapsed sections and deep links.
 import { HELP_CONTENT } from "./help.js";
-import { $, debounced, LANG, showActiveTab, syncEdgeFade, t, txt } from "./core.js";
+import { $, debounced, LANG, t, txt } from "./core.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
 
 // In-app documentation. EN + DE only (ui/help.js): every other language
@@ -111,16 +111,11 @@ export function setHelpText(el, text, terms, highlight) {
   appendHelpText(el, text, highlight ? terms : []);
 }
 
-// The tab bar is rebuilt on every render; one observer follows the current bar.
-let tabBarObserver = null;
-
 export function renderHelp() {
   const box = $("help-body");
   const tabBar = $("help-tabs-bar");
-  const keepTabScroll = tabBar.querySelector(".expert-tabs")?.scrollLeft || 0;
   box.innerHTML = "";
   tabBar.innerHTML = "";
-  if (tabBarObserver) { tabBarObserver.disconnect(); tabBarObserver = null; }
   const terms = helpNorm(helpQuery).trim().split(/\s+/).filter(Boolean);
   const searching = terms.length > 0;
   const cats = helpCategories();
@@ -140,14 +135,6 @@ export function renderHelp() {
       bar.appendChild(b);
     });
     tabBar.appendChild(bar);
-    bar.scrollLeft = keepTabScroll;
-    showActiveTab(bar);
-    syncEdgeFade(bar);
-    bar.addEventListener("scroll", () => syncEdgeFade(bar), { passive: true });
-    if (typeof ResizeObserver === "function") {
-      tabBarObserver = new ResizeObserver(() => { showActiveTab(bar); syncEdgeFade(bar); });
-      tabBarObserver.observe(bar);
-    }
   }
   const activeSection = searching ? null : sections[helpTab];
   // Fields carry a search weight (title matters far more than a settings line); a
@@ -193,7 +180,11 @@ export function renderHelp() {
   for (const cat of list) {
     // Reuses the expert menu's group/collapse styling (arrow, spacing, hover); no new CSS
     // for the mechanic.
-    const collapsedNow = searching ? shown > 1 : helpCollapsed.has(cat.title);
+    // A search with several hits folds each article, except one whose match sits below the
+    // title and overview (steps, outcome, settings, tip): it opens so the marked word shows.
+    const headNorm = helpNorm(cat.title + " " + cat.whatItIs);
+    const hitBelowOverview = searching && terms.some((term) => !headNorm.includes(term));
+    const collapsedNow = searching ? shown > 1 && !hitBelowOverview : helpCollapsed.has(cat.title);
     const sec = document.createElement("div");
     sec.className = "expert-group help-group" + (collapsedNow ? " collapsed" : "");
     const head = document.createElement("div");
@@ -254,7 +245,7 @@ export function renderHelp() {
     if (cat.whatHappens) {
       const wh = document.createElement("p");
       wh.className = "help-happens";
-      setHelpText(wh, cat.whatHappens, [], false);
+      setHelpText(wh, cat.whatHappens, terms, searching);
       body.appendChild(wh);
     }
     if (cat.settings.length) {
@@ -262,7 +253,7 @@ export function renderHelp() {
       ul.className = "help-settings";
       for (const s of cat.settings) {
         const li = document.createElement("li");
-        setHelpText(li, s, [], false);
+        setHelpText(li, s, terms, searching);
         ul.appendChild(li);
       }
       body.appendChild(ul);
@@ -275,7 +266,7 @@ export function renderHelp() {
       ico.setAttribute("aria-hidden", "true");
       ico.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 0 0-3 9v1.5a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10a5 5 0 0 0-3-9zm-1.5 13h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z"/></svg>';
       const txt = document.createElement("span");
-      setHelpText(txt, cat.tip, [], false);
+      setHelpText(txt, cat.tip, terms, searching);
       tip.appendChild(ico);
       tip.appendChild(txt);
       body.appendChild(tip);

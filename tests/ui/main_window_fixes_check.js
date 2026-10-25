@@ -797,7 +797,7 @@ section(() => {
   const cfg = read("expertConfig.js");
   const labels = /SETTINGS_AREA_LABEL = \{([^}]*)\}/.exec(cfg)[1];
   const missing = [...areas].filter((a) => !new RegExp("\\b" + a + ":").test(labels));
-  check(areas.size >= 5 && !missing.length, "area badge labels missing for: " + missing.join(","));
+  check(areas.size >= 4 && !missing.length, "area badge labels missing for: " + missing.join(","));
 });
 
 // 36. A backup hit from settings search opens the dialog through the shared path and waits for every panel.

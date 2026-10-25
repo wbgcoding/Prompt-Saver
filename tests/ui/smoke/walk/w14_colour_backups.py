@@ -109,16 +109,17 @@ SECTION = """\
         if (Number(getComputedStyle(sm).zIndex) <= Number(getComputedStyle(document.getElementById('settings')).zIndex)) {
           out.errors.push('903: the statistics dialog sits behind the settings it was opened from');
         }
-        // 45: toggling the stats switch used to re-render into the inner panel from
-        // the previous render instead of the real container, nesting one deeper each
-        // time. Re-query fresh each click: a re-render replaces the whole subtree.
-        for (let i = 0; i < 2; i++) {
-          const sw = document.querySelector('#stats-panel .stats-head-row .switch');
-          if (!sw) break;
-          sw.click();
-          await sleep(100);
+        // 45: a re-render used to render into the inner panel from the previous render
+        // instead of the real container, nesting one deeper each time. The top-N picker
+        // re-renders the panel; re-query fresh each time, a re-render replaces the subtree.
+        const topStart = document.getElementById('stats-topn')?.value;
+        for (const v of ['20', topStart]) {
+          const sel = document.getElementById('stats-topn');
+          if (!sel || !v) break;
+          sel.value = v;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(150);
         }
-        if (!document.querySelector('#stats-panel .stats-head-row .switch')?.checked) out.errors.push('two stats-switch toggles did not end back on');
         const bodies = document.querySelectorAll('#stats-panel .stats-panel-body');
         if (bodies.length !== 1) out.errors.push('toggling stats twice left ' + bodies.length + ' stats-panel-body elements instead of 1');
         const cardEls = document.querySelectorAll('#stats-panel .stat-cards .stat-card');

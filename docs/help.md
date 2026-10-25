@@ -19,8 +19,8 @@ The gear button in the header opens the settings window with the everyday
 choices; everything optional lives in the expert menu, opened from the same
 window. It holds the language, the theme, the text size and font of the tiles,
 whether the window stays on top, starts with Windows, starts in the background
-and goes to the background instead of quitting when closed (on by default for a
-new install; a portable copy always quits), the global hotkey,
+and goes to the background instead of quitting when closed (a portable copy
+always quits), the global hotkey,
 auto-paste on double-click, and whether screenshots always go to the screenshots
 folder (section Capture). Every change applies at once, with no save button. "Automatic" as the
 language follows Windows and falls back to English. Reset puts every setting
@@ -55,7 +55,7 @@ screen color.
 ### The editor
 
 The editor is a plain text box at heart; a few features (**Markdown preview**,
-**private notes**: both on by default, switchable in the expert menu) add structure and versions to it:
+**private notes**) add structure and versions to it:
 a rendered Markdown preview with syntax-highlighted code blocks, a full list of
 versions, and a private note field never copied or exported with the text.
 
@@ -159,7 +159,7 @@ automatically.
   the chip buttons under the editor's text box rather than typing them by hand
 - Choice placeholders: a dropdown of preset values instead of free text
 - Remember choices: the popup pre-fills the last answer for that tile
-- Fixed values (off by default, expert menu): a maintained list of name and
+- Fixed values (expert menu): a maintained list of name and
   value pairs the popup suggests for a matching placeholder, one step below a
   remembered last input and above the text's own default. Shown only as the
   field's placeholder text, marked with a small pin, never inserted until it
@@ -248,8 +248,7 @@ Windows popup; the expert menu can switch back to the plain system menu if the
 custom one ever misbehaves on your setup.
 
 Typing in the tray menu's search field opens the quick launcher with what you
-typed. Arrow keys and Enter on the menu's own entries work as before. The field
-ships on.
+typed. Arrow keys and Enter on the menu's own entries work as before.
 
 ### Quick launcher
 
@@ -265,10 +264,10 @@ several views.
 
 ### Voice dictation
 
-On by default. A microphone button on the composer and in the edit dialog turns
+A microphone button on the composer and in the edit dialog turns
 speech into text using Windows' own on-device recognizer; nothing is uploaded
-unless online recognition is explicitly allowed (off by default; a one-time
-dialog asks the first time it's actually needed). Click to start: the button
+unless online recognition is explicitly allowed (a one-time dialog asks the
+first time it's actually needed). Click to start: the button
 turns the accent color and pulses while listening, and its title switches from
 "Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
 prompt, or closing the window all end the session the same way. Text lands at
@@ -288,7 +287,7 @@ command words (in the app's own language) are recognized; anything else is
 just dictated as plain text.
 
 Like OCR, it needs a Windows language pack: see "Language packs" below, same
-dialog either way. A global hotkey (off by default, in the expert menu) can
+dialog either way. A global hotkey (in the expert menu) can
 start or stop a session from anywhere without bringing the window forward;
 the finished text goes to the clipboard, is pasted into whatever app was
 active, or lands in the composer, whichever the setting picks.
@@ -312,7 +311,7 @@ switched off entirely.
 
 ### Markdown folder sync (beta)
 
-An optional, off-by-default mirror that writes every text tile as its own
+An optional mirror that writes every text tile as its own
 readable `.md` file in a chosen folder, alongside the encrypted database,
 including which view, grid cell, and folder it sits in. A view or folder named in
 an incoming file that does not exist yet on this machine is created
@@ -360,7 +359,7 @@ Manager. The app's own windows are hidden for the moment of capture so they neve
 end up in the shot; the confirmation dialog then offers saving it as a tile, saving
 it as a file, or leaving it on the clipboard.
 
-Before that dialog, an editor opens on the capture (on by default): crop, a
+Before that dialog, an editor opens on the capture: crop, a
 freehand pen and highlighter marker, straight lines and arrows, rectangles and
 ellipses, text labels, numbered step markers, a pixelate tool for blurring out
 sensitive details, and a focus area that dims everything outside a chosen area,
@@ -389,8 +388,8 @@ can switch it off or change its color. MP4 (H.264) is always what gets written
 while recording; three quality steps trade file size for detail before you
 start:
 
-- **Small**: a compact bitrate (4000 kbps by default), for quick clips.
-- **High** (the default): a higher bitrate (12000 kbps by default), for a
+- **Small**: a compact bitrate (4000 kbps), for quick clips.
+- **High** (the default): a higher bitrate (12000 kbps), for a
   sharper picture.
 - **Lossless**: recorded at the same native bitrate as your current step,
   then automatically re-encoded losslessly once the recording stops. This can
@@ -410,13 +409,13 @@ only ever with your consent); an installed build already carries it and never
 needs to download anything. A failed or cancelled conversion always leaves
 the original MP4 recording untouched. A failure names the actual reason in
 plain language (the file was incomplete, there was no space left, and so on)
-instead of a raw ffmpeg log line; a "Technical details" row underneath, closed
-by default, holds that log line with a copy button for anyone who wants it.
+instead of a raw ffmpeg log line; a "Technical details" row underneath, closed,
+holds that log line with a copy button for anyone who wants it.
 
 Clicking the record button opens the same frozen-desktop overlay a screenshot
 uses: click a window, drag a region, or click empty desktop for the whole
 screen. An optional countdown toast then counts down before capture actually
-starts (3 seconds by default, adjustable in the expert menu, 0 turns it off).
+starts (3 seconds, adjustable in the expert menu, 0 turns it off).
 A small floating control bar then follows the recording: a red dot, elapsed
 time, live file size, two audio buttons, Pause/Resume, Stop and a discard
 (cancel) button. It follows a moved recorded window and is itself excluded
@@ -427,7 +426,7 @@ stops following the recorded window and stays exactly where you put it for
 the rest of that one recording. The next recording starts following again.
 
 System audio and microphone audio (pick a device in the expert menu) both
-record on by default, each into its own track. The microphone track is
+record, each into its own track. The microphone track is
 captured but not mixed in audibly; it only becomes part of what you hear
 once you bring it in yourself, from the video editor below. Turn microphone
 capture off in the expert menu if you would rather it never records at all.
@@ -477,11 +476,11 @@ selected" opens a small dialog for format, quality and a destination folder,
 then encodes every checked recording and reports how many finished and how
 many failed.
 
-An optional keys overlay (off by default, in the expert menu) records which
+An optional keys overlay (in the expert menu) records which
 keys are pressed anywhere on the screen while a recording runs, so a tutorial
 can show them afterward with the video editor's own "Keys" overlay. Only key
-identifiers and their timestamps are ever recorded, never any text. By
-default every key is shown, including typed text; a focused password field is
+identifiers and their timestamps are ever recorded, never any text. Every
+key is shown, including typed text; a focused password field is
 skipped for as long as it stays focused and shows as a gap instead, though
 this is not guaranteed, since it relies on Windows correctly reporting the
 field as a password field. A "Shortcuts only" switch (in the expert menu,
@@ -490,7 +489,7 @@ Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows,
 Home, End, Page Up, Page Down and F keys, letters and digits never included,
 for a recording with confidential input.
 
-An optional camera recording (off by default, in the expert menu) adds a
+An optional camera recording (in the expert menu) adds a
 "Record camera" entry to the record button's right-click menu. It opens its
 own small window with a live preview, its own Start/Pause/Stop, an audio
 source, a resolution choice and a target folder: the same controls the
@@ -507,7 +506,7 @@ expert menu.
 
 ### Video editor
 
-On by default, reachable from a recording's own result dialog (More, then
+Reachable from a recording's own result dialog (More, then
 Video editor) or from any video prompt's right-click menu ("Edit video"). It
 opens the clip in its own window with a live preview and no processing until
 you actually export: trim and cut (the original quality is kept when
@@ -541,10 +540,10 @@ actual reason in plain language, with the raw ffmpeg log reachable underneath
 in a closed "Technical details" row, never the log itself as the message. A
 second video can be added too: "Add
 a video" offers it either as another overlay (its own rectangle, time range
-and volume, muted by default) or as a whole extra section spliced in at the
+and volume, starting muted) or as a whole extra section spliced in at the
 start, the end or the current position; each extra source is checked once
 when picked and stays visibly marked as missing if it later moves or is
-deleted, up to a limit per project (eight by default, adjustable in the
+deleted, up to a limit per project (eight, adjustable in the
 expert menu).
 
 Both editors work the same way for their shared tools: Ctrl+Plus, Ctrl+Minus
@@ -607,7 +606,7 @@ None of it touches the export.
 
 ### Text recognition (OCR)
 
-On by default. A button on the composer and in the screenshot editor pulls the
+A button on the composer and in the screenshot editor pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
 own text recognizer; nothing is uploaded or sent anywhere. The composer button
 opens a small menu: from an image file, or from a screenshot you take right now.
@@ -636,7 +635,7 @@ shadow off or dial its strength.
 
 ### Media
 
-Video controls, autoplay and loop (both off by default), mute, plus a blur-until-hovered look for
+Video controls, autoplay and loop, mute, plus a blur-until-hovered look for
 privacy-leaning media tiles. The library and copy history also show a video's
 length on its thumbnail and its resolution and file size in the tooltip; older
 attachments pick this up in the background the first time they are shown. The
@@ -698,8 +697,7 @@ each in its own group with up to eight hits and a "Show … more". Arrow keys
 move the highlight across group boundaries; Enter runs the fitting action for
 whatever is highlighted: copies a prompt or copy history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
-matching help topic. The field remembers your recent searches (eight by
-default; the expert menu sets one number for every search list) and shows them when it
+matching help topic. The field remembers your recent searches (eight; the expert menu sets one number for every search list) and shows them when it
 is empty. Escape, a click outside the card, or the icon again
 all close it. A flag in the expert menu turns it off.
 
@@ -723,7 +721,7 @@ The copy history is one list; the sort field switches between Recently copied an
 
 ### Copies from other apps
 
-Off by default. When switched on, text copied anywhere on the system (not just
+When switched on, text copied anywhere on the system (not just
 from this app) is also recorded in the copy history, marked as copied elsewhere;
 the source filter in Library → Copy history shows only those, and a useful one
 can be saved as a tile. A minimum-length filter and a cap keep the list from
@@ -750,13 +748,13 @@ gear or the top bar.
 
 ### Privacy
 
-Excludes the window from screen capture (on by default), blurs media until
+Excludes the window from screen capture, blurs media until
 hovered, dims unhovered tiles. "Allow screenshots of Prompt
 Saver" lets every capture program, the app's own screenshot tool included,
 record its windows; the recording bar and the outline around a recorded region
 never appear in a recording either way.
 
-An optional, off-by-default setting reads text out of an attached picture so
+An optional setting reads text out of an attached picture so
 the library search can find it too, and a hit found only there carries a
 "found in image" badge. The recognized text is kept only for that search: it never
 appears anywhere in the app, is never exported and never synchronized, and is
@@ -778,7 +776,7 @@ now, not a tip. Repair the Windows profile (or sign in on a healthy account) and
 the next save that succeeds seals everything again by itself; nothing needs to be
 re-entered.
 
-A single prompt can be marked confidential from its editor (off by default).
+A single prompt can be marked confidential from its editor.
 Its text and any variants are then encrypted with a vault password, asked
 once per session the first time a confidential prompt is opened or copied,
 and forgotten again on quit or after an idle timeout set in the expert menu
@@ -824,7 +822,7 @@ language pack (see below) has Windows itself fetch that pack online.
 
 After an update, the update dialog shows once what
 changed since the version you last saw; its list ships with the app, so
-opening it needs no network, only its own "Update from GitHub" button does.
+opening it needs no network. Its "View on GitHub" button opens the releases page in your browser.
 Reopen the current version's list any time from the About dialog.
 
 ### Where your data lives
@@ -880,7 +878,7 @@ A small window opened from Settings → Usage statistics, with four things: the
 number of prompts, the copies of the last 7 days, the most used prompts by
 name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
 which you can click to find them in the library. The "Show statistics" switch
-turns the display on; the numbers themselves are collected by the copy
+in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
 history. Everything stays on this computer. The export button saves the full
 numbers, including daily counts and tool use, as CSV, TXT or JSON.
 
@@ -1011,8 +1009,8 @@ ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klic
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das
 sich im selben Fenster öffnet. Dort stehen Sprache, Design, Textgröße und Schriftart
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
-Hintergrund startet und sich beim Schließen in den Hintergrund legt (bei einer
-neuen Installation ab Werk an; eine portable Kopie beendet sich immer), der globale
+Hintergrund startet und sich beim Schließen in den Hintergrund legt (eine
+portable Kopie beendet sich immer), der globale
 Tastenkürzel, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
 Screenshots-Ordner (Abschnitt „Aufnehmen“). Jede Änderung gilt sofort, ohne Speichern-Button.
 „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.
@@ -1024,7 +1022,7 @@ Beispielkacheln; sie ändert keine Einstellung. Escape oder „Überspringen" sc
 sofort; nach Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit
 erneut aufrufbar über das Expertenmenü.
 
-**Das Raster**: freie Platzierung, standardmäßig bis 20×20 Zellen (im
+**Das Raster**: freie Platzierung, bis 20×20 Zellen (im
 Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
 auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
 Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
@@ -1036,7 +1034,7 @@ Raster unter Rastergröße.
 Ziehen & Ablegen.
 
 **Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private
-Notizen (Markdown-Vorschau und Notizen ab Werk an, im Expertenmenü abschaltbar). Bei einer Datei-Kachel
+Notizen. Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
 Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt
@@ -1044,8 +1042,8 @@ unter der Dateizeile (im Expertenmenü abschaltbar, dort auch einstellbar, wie
 viele Kilobyte gelesen werden). Immer als reiner Text, nie ausgeführt, also
 zeigt eine Markdown-Datei mit echter Formatierung trotzdem ihren rohen Quelltext.
 
-Der offene Editor sichert seinen Text alle paar Sekunden als Entwurf (standardmäßig
-an, der Abstand im Expertenmenü einstellbar), damit ein Absturz oder ein
+Der offene Editor sichert seinen Text alle paar Sekunden als Entwurf (der
+Abstand im Expertenmenü einstellbar), damit ein Absturz oder ein
 geschlossenes Fenster nie ungesicherte Arbeit verliert. Gesichert wird nur der
 Text, nie ein angehängtes Bild, und Speichern oder Abbrechen entfernt den
 Entwurf sofort wieder. Ist beim nächsten Start noch ein Entwurf vorhanden, wird
@@ -1079,7 +1077,7 @@ Rotation oben; auch direkt über Kette hier starten: Rechtsklick auf eine Textka
 abschaltbar unter Kette im Expertenmenü). Eine Kette bleibt beim Wechsel in ein
 anderes Programm bestehen. Der Ketten-Button oben startet
 und beendet eine Kette. Auch Strg+V im App-Fenster beendet sie. Was zwischen zwei verketteten
-Kacheln steht, legt das Expertenmenü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
+Kacheln steht, legt das Expertenmenü fest (eine Leerzeile, wenn nicht geändert). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
@@ -1131,7 +1129,7 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 | mehrere verschiedene Prompts hintereinander | Kette |
 
 **Rotation**: eine Kachel trägt eine Liste von Texten, jede Kopie
-liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig an; der
+liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Der
 Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“. Ein Badge auf
 Kachel/schwebender Button/Mitglied eines Desktop-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
@@ -1166,11 +1164,11 @@ zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
 lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Tippen ins Suchfeld des
 Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
 
-**Schneller Launcher.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8). Eine Zeile unten nennt die Tasten.
+**Schneller Launcher.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein. Eine Zeile unten nennt die Tasten.
 
 **Mehrere Ansichten.** Mehrere Rasterseiten.
 
-**Spracheingabe**: standardmäßig an; der Mikrofon-Button neben der Eingabeleiste
+**Spracheingabe**: der Mikrofon-Button neben der Eingabeleiste
 und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
 eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
 „neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
@@ -1234,7 +1232,7 @@ geschieht nie stillschweigend:
 ### Aufnehmen
 
 **Screenshot-Werkzeug**: Bereich oder ganzes Fenster (auch geschützte wie den
-Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein
+Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich ein
 Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
 nummerierte Schritte, Pixelieren und ein Fokusbereich, der alles außerhalb eines
 Bereichs abdunkelt, mit Rückgängig/Wiederholen. Zum Heranzoomen für
@@ -1269,7 +1267,7 @@ Ein Klick auf den Aufnahme-Button öffnet
 dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
 ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
 Countdown zählt danach herunter, bevor die Aufnahme wirklich startet
-(3 Sekunden Standard, im Expertenmenü einstellbar, `0` schaltet ihn ab). Eine
+(3 Sekunden, im Expertenmenü einstellbar, `0` schaltet ihn ab). Eine
 kleine Bedienleiste begleitet die Aufnahme (roter Punkt, Laufzeit,
 Dateigröße, zwei Ton-Buttons, Pause/Fortsetzen, Stopp, Verwerfen), folgt einem
 verschobenen Aufnahmefenster und ist selbst niemals im Video zu sehen. Zieht
@@ -1278,7 +1276,7 @@ auch auf einen anderen Monitor; ab dem ersten Ziehen folgt sie dem
 Aufnahmefenster nicht mehr, sondern bleibt dort stehen, wo man sie
 hingezogen hat, für den Rest dieser einen Aufnahme. Die nächste Aufnahme
 folgt wieder von vorn. Systemton
-(Standard an) und Mikrofon (Standard aus, Gerät wählbar im Expertenmenü)
+und Mikrofon (Gerät wählbar im Expertenmenü)
 werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der
 Aufnahme ab, laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur
 „verloren". Die beiden Ton-Buttons in der Leiste schalten Systemton und
@@ -1302,11 +1300,11 @@ wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
 bestätigen. Gelöscht wird nie im Hintergrund, immer nur hier und nur nach
 Bestätigung. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90
 Tagen (Expertenmenü, 0 = für immer). Eine Tastenanzeige
-(Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
+(im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
 die „Tasten“-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
-nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt. Ab Werk wird jede
-Taste angezeigt, auch getippter Text; ein fokussiertes Passwortfeld wird für
+nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt. Jede
+Taste wird angezeigt, auch getippter Text; ein fokussiertes Passwortfeld wird für
 diese Zeit ausgelassen und erscheint als Lücke, ohne dass das garantiert ist,
 da es davon abhängt, dass Windows das Feld richtig als Passwortfeld meldet.
 Ein Schalter „Nur Tastenkürzel" (im Expertenmenü, direkt neben der
@@ -1347,11 +1345,11 @@ Wiederholen und Zoom links in der unteren Leiste. Im Video-Editor lässt sich
 außerdem ein zweites
 Video einfügen: „Video hinzufügen" bietet es entweder als weitere
 Überlagerung (eigenes Rechteck, eigener Zeitbereich, eigene Lautstärke,
-standardmäßig stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am
+zunächst stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am
 Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
 Auswählen einmal geprüft und bleibt sichtbar als fehlend markiert, falls sie
 später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
-(ab Werk acht, einstellbar im Expertenmenü). Das Exportziel ist ein
+(acht, einstellbar im Expertenmenü). Das Exportziel ist ein
 Eingabefeld, kein fester Name mehr: direkt hineintippen, oder „Exportieren nach…", um
 nur den Ordner zu ändern und den Dateinamen zu behalten; nach einem fertigen
 Export verschiebt „Speichern unter…" das fertige Video an einen anderen Ort.
@@ -1412,7 +1410,7 @@ Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt
 bleibt dabei bestehen, weil ein Sprung an eine herausgeschnittene Stelle nur
 verwirren würde. Der Export bleibt davon unberührt.
 
-**Texterkennung (OCR)**: standardmäßig an; liest per Button in der Leiste und
+**Texterkennung (OCR)**: liest per Button in der Leiste und
 im Screenshot-Editor Text aus einem Screenshot oder einer Bilddatei, komplett
 offline über die eigene Texterkennung von Windows. Der Button in der Leiste öffnet
 ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
@@ -1421,7 +1419,7 @@ werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
 „Sprachpakete" unten).
 
 **Farbpipette & Auswahlverlauf**: Pixel als Hex/RGB/HSL kopieren; die letzten
-Auswahlen überstehen einen Neustart. Standardmäßig aus.
+Auswahlen überstehen einen Neustart.
 
 ### Kacheln
 
@@ -1432,7 +1430,7 @@ die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer helle
 Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
 lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
-**Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Unschärfe bis zum Überfahren. Bibliothek und Kopierverlauf
+**Medien**: Video-Steuerung, Autoplay und Schleife, Unschärfe bis zum Überfahren. Bibliothek und Kopierverlauf
 zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
@@ -1456,8 +1454,8 @@ im Expertenmenü → Aussehen → Visuell.
 **Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Typfilter,
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
-bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
-höchstens fünf. Ein Umschalter neben dem
+bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Es sind
+höchstens fünf möglich. Ein Umschalter neben dem
 Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
 darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
@@ -1470,7 +1468,7 @@ Gruppe mit bis zu acht Treffern und „… weitere anzeigen“. Pfeiltasten bewe
 die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
 Aktion aus: kopiert einen Prompt oder Eintrag im Kopierverlauf, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
-passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht ab Werk; das
+passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht; das
 Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
@@ -1500,10 +1498,10 @@ Schalter an ist; „Automatische Updates“ auszuschalten schaltet die automatis
 **Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen. Obere Leiste
 ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile.
 
-**Datenschutz**: Bildschirmaufnahme-Ausschluss (an; "Screenshots von Prompt
+**Datenschutz**: Bildschirmaufnahme-Ausschluss ("Screenshots von Prompt
 Saver erlauben" gilt für jedes Aufnahmeprogramm, auch das eigene, nur die
 Aufnahmeleiste und der Rahmen um den aufgenommenen Bereich bleiben immer
-ausgenommen), Weichzeichnen, Namen verbergen, Abdunkeln. Eine optionale, standardmäßig ausgeschaltete Einstellung
+ausgenommen), Weichzeichnen, Namen verbergen, Abdunkeln. Eine optionale Einstellung
 liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch
 findet, und ein Treffer nur dort trägt die Kennzeichnung "im Bild gefunden". Der
 erkannte Text dient ausschließlich dieser Suche: Er erscheint nirgends in der
@@ -1525,8 +1523,8 @@ Festplatte liegt. Ist das Windows-Profil repariert, verschlüsselt der nächste
 erfolgreiche Speichervorgang wieder alles von selbst; nichts muss neu erfasst
 werden.
 
-Ein einzelner Prompt lässt sich im Editor als vertraulich markieren
-(standardmäßig aus). Sein Text und seine Varianten werden dann mit einem
+Ein einzelner Prompt lässt sich im Editor als vertraulich markieren.
+Sein Text und seine Varianten werden dann mit einem
 Tresor-Passwort verschlüsselt, das einmal je Sitzung abgefragt wird, sobald
 zum ersten Mal ein vertraulicher Prompt geöffnet oder kopiert wird, und beim
 Beenden oder nach einer im Expertenmenü einstellbaren Ruhezeit wieder
@@ -1575,8 +1573,8 @@ unten) lässt Windows selbst dieses Paket herunterladen.
 
 **Was ist neu**: nach einem Update zeigt das Update-Fenster einmal, was sich seit
 der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
-Programm, nur ihr Button „Von GitHub aktualisieren" braucht Netz. Über den
-Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
+Programm, sie braucht kein Netz. Der Button „Auf GitHub ansehen“ öffnet die
+Releases-Seite im Browser. Über den Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
 **Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
 WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
@@ -1593,7 +1591,7 @@ ein zweiter Computer eine frische Sperre eines anderen Rechners, öffnet er
 alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
 still verloren geht, während eine länger nicht aufgefrischte Sperre (der
 andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
-übernommen wird. Der zugehörige Schalter, standardmäßig an, liegt im
+übernommen wird. Der zugehörige Schalter liegt im
 Expertenmenü, Reiter System, Gruppe Fehlersuche. Das ist ein Sicherheitsnetz, kein
 Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
 Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
@@ -1625,7 +1623,7 @@ ganzen Sicherung.
 Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
 (eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und den nie genutzten
 Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
-Schalter „Statistik anzeigen“ schaltet die Anzeige ein; die Zahlen selbst
+Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
 sammelt der Kopierverlauf. Alles bleibt auf diesem Rechner. Der Export-Button
 speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
 TXT oder JSON.

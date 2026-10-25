@@ -46,7 +46,7 @@ export function bindAbout() {
     cancel: $("update-modal-cancel"),
     skip: $("update-modal-skip"),
     install: $("update-modal-install"),
-    refresh: $("update-modal-refresh"),
+    github: $("update-modal-github"),
     close: $("update-modal-close"),
   };
   // The release body arrives as Markdown. Render the part release notes actually use
@@ -113,14 +113,13 @@ export function bindAbout() {
   };
 
   // The same dialog also shows the shipped changelog ("what's new"): no install or
-  // skip then, a refresh from GitHub instead, and Close returns to About when About
-  // was where it came from.
-  let notesSince = null; // version boundary the open list was computed from (null: current version only)
+  // skip then, a link to the releases page instead, and Close returns to About when
+  // About was where it came from.
   let notesFromAbout = false;
   const setUpdateButtons = (notes) => {
     updateModal.skip.classList.toggle("hidden", notes);
     updateModal.install.classList.toggle("hidden", notes);
-    updateModal.refresh.classList.toggle("hidden", !notes);
+    updateModal.github.classList.toggle("hidden", !notes);
     updateModal.cancel.dataset.i18n = notes ? "close" : "cancel";
     updateModal.cancel.textContent = t(notes ? "close" : "cancel");
   };
@@ -133,8 +132,7 @@ export function bindAbout() {
     updateModal.warn.classList.toggle("hidden", !info.skipped);
     updateModal.root.classList.remove("hidden");
   };
-  const openNotesInUpdateModal = (sections, since, fromAbout) => {
-    notesSince = since ?? null;
+  const openNotesInUpdateModal = (sections, fromAbout) => {
     notesFromAbout = !!fromAbout;
     setUpdateButtons(true);
     updateModal.title.textContent = t("whatsNewTitle");
@@ -239,22 +237,14 @@ export function bindAbout() {
   });
 
   // ---------- what's new ----------
-  updateModal.refresh.addEventListener("click", async () => {
-    updateModal.refresh.disabled = true;
-    try {
-      const sections = await invoke("whats_new_refresh", { since: notesSince });
-      const combined = (sections || []).map((s) => s.markdown).join("\n\n").trim();
-      renderNotes(updateModal.notes, combined || t("noChangelog"), "");
-    } catch (err) {
-      toast(t("whatsNewRefreshFailed"));
-    }
-    updateModal.refresh.disabled = false;
+  updateModal.github.addEventListener("click", () => {
+    invoke("open_repo", { page: "releases" }).catch((e) => errToast(e));
   });
   $("about-whats-new").addEventListener("click", async () => {
     try {
       const sections = await invoke("whats_new_current");
       closeAbout();
-      openNotesInUpdateModal(sections, null, true);
+      openNotesInUpdateModal(sections, true);
     } catch (err) {
       errToast(err);
     }
@@ -266,7 +256,7 @@ export function bindAbout() {
       if (!result?.sections?.length) return;
       toast(t("whatsNewToast"), {
         label: t("whatsNewBtn"),
-        onClick: () => openNotesInUpdateModal(result.sections, result.since ?? null, false),
+        onClick: () => openNotesInUpdateModal(result.sections, false),
       });
     })
     .catch(() => {});

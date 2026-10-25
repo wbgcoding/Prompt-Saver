@@ -88,6 +88,11 @@ ACTS = {
                     "if (gt) hb.scrollTop = gt.offsetTop - hb.offsetTop; await sleep(300);",
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
     "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
+    "stats_off": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);"
+                 "const sw = () => document.querySelector('#settings-expert [data-setting-row=usageStats] input');"
+                 "for (const tab of document.querySelectorAll('#expert-tabs-bar .expert-tab')) { if (sw()) break; tab.click(); await sleep(150); }"
+                 "sw().click(); await sleep(300);"
+                 "$('expert-back').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
     "tagpop": "$('grid-tag-btn').click(); await sleep(300);",
     "tagpop1": "$('grid-tag-btn').click(); await sleep(300);",
     "tagpop3": "$('grid-tag-btn').click(); await sleep(300);",
@@ -104,7 +109,7 @@ ACTS = {
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
-    "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "help", "help_capture", "stats", "backup"],
+    "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
     "@recording": ["recresult"],

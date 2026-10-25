@@ -190,7 +190,7 @@ export const OPT_FLAG_LABELS = {
   // Favorites view: the header star that opens a live grid of favorites.
   favViewButton: "flagFavViewButton",
   // Statistics: counts tool use only once switched on (the backend has always
-  // read it that way). Only ever rendered in the backups dialog.
+  // read it that way). The switch lives in the expert menu; the statistics dialog links to it.
   usageStats: "statsEnable",
   // Save every screenshot into the Screenshots folder: the Settings switch and
   // the snip dialog switch are the two places it is shown.
@@ -548,7 +548,7 @@ export const EXPERT_TABS = [
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "taskbarProgress", "firstRunTour"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }, { id: "tour-open", label: "tourOpenAction" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "usageStats", "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // Switches and caps for finding a fault, not for everyday use: folded until opened.
     { title: "expGroupDiagnostics", flags: ["allowMultipleInstances", "dataDirLock", "demoMode", "mediaMetaBackfill", { key: "recSweepBroken", gate: "screenRecord" }], values: ["errorLogKeepKb", "bgDoneKeepMin"],
@@ -660,4 +660,4 @@ export const TILE_DOM_FLAGS = new Set(["captions", "promptNotes", "notesInToolti
 // flash through the translucent settings overlay. Only these change tile DOM.
 export const GRID_DOM_VALUES = new Set(["gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
 
-export const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup", stats: "settingsAreaStats" };
+export const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup" };

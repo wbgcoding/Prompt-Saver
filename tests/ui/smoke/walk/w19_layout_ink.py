@@ -129,30 +129,28 @@ SECTION = """\
       await sleep(3600);
       if (shown()) out.errors.push('977: the toast stayed after the header was released');
     }
-    // 996: at the narrowest main window the help tab bar stays one row (the height of one tab),
-    // shows its edge fade when it overflows, and the last tab is fully visible once chosen.
-    if (innerWidth <= 700) {
+    // 999: the help tab bar wraps onto further rows instead of scrolling, so every section tab
+    // sits fully inside the bar and the dialog is wider than the old 760px.
+    if (innerWidth <= 1000) {
       document.getElementById('help-open').click();
       await sleep(200);
       const bar = document.querySelector('#help-tabs-bar .expert-tabs');
       const tabs = bar ? [...bar.querySelectorAll('.expert-tab')] : [];
       if (tabs.length < 2) {
-        out.errors.push('996: the help tab bar has fewer than two tabs');
+        out.errors.push('999: the help tab bar has fewer than two tabs');
       } else {
-        const oneRow = tabs[0].getBoundingClientRect().height;
-        if (bar.getBoundingClientRect().height > oneRow + 2) {
-          out.errors.push('996: the help tab bar wraps to ' + Math.round(bar.getBoundingClientRect().height) + 'px, one tab is ' + Math.round(oneRow) + 'px');
-        }
-        tabs[tabs.length - 1].click();
-        await sleep(300);
-        const bar2 = document.querySelector('#help-tabs-bar .expert-tabs');
-        const act = bar2.querySelector('.expert-tab.active');
-        const ar = act.getBoundingClientRect(), br = bar2.getBoundingClientRect();
-        if (ar.left < br.left - 1 || ar.right > br.right + 1) {
-          out.errors.push('996: the active last help tab is cut off (' + Math.round(ar.left) + '..' + Math.round(ar.right) + ' in ' + Math.round(br.left) + '..' + Math.round(br.right) + ')');
-        }
-        if (innerWidth <= 680 && !bar2.dataset.fade) {
-          out.errors.push('996: the help tab bar has no edge fade at ' + innerWidth + 'px (scroll ' + bar2.scrollWidth + ', client ' + bar2.clientWidth + ')');
+        const br = bar.getBoundingClientRect();
+        if (getComputedStyle(bar).flexWrap !== 'wrap') out.errors.push('999: the help tab bar does not wrap');
+        tabs.forEach((tb, i) => {
+          const r = tb.getBoundingClientRect();
+          if (r.left < br.left - 1 || r.right > br.right + 1) {
+            out.errors.push('999: help tab ' + i + ' is cut off (' + Math.round(r.left) + '..' + Math.round(r.right) + ' in ' + Math.round(br.left) + '..' + Math.round(br.right) + ')');
+          }
+        });
+        if (bar.scrollWidth > bar.clientWidth + 1) out.errors.push('999: the help tab bar scrolls sideways');
+        const dlg = document.querySelector('#help .modal').getBoundingClientRect();
+        if (innerWidth >= 900 && dlg.width < Math.min(innerWidth * 0.9, 960)) {
+          out.errors.push('999: the help dialog is only ' + Math.round(dlg.width) + 'px wide at ' + innerWidth + 'px');
         }
       }
       document.getElementById('help-close').click();

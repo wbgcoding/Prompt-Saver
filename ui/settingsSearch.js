@@ -4,7 +4,6 @@ import { $, assignLibraryTab, DICT, gateOpen, settings, settingsEl } from "./cor
 import { EXPERT_TIP_SET } from "./expertConfig.js";
 import { hideSettings } from "./settingsPanel.js";
 import EN from "./i18n/en.js";
-import { openStats } from "./management.js";
 import { openBackups } from "./backups.js";
 import { showExpertPage } from "./expertMenu.js";
 
@@ -60,7 +59,6 @@ export const SETTINGS_DIRECTORY = [
   { key: "backup-monthly", area: "backup", label: "valBackupMonthly" },
   { key: "backup-yearly", area: "backup", label: "valBackupYearly" },
   { key: "backup-password", area: "backup", label: "backupPasswordLabel" },
-  { key: "usage-stats", area: "stats", label: "statsEnable", tip: "tipUsageStats" },
 ];
 
 export function settingsDirectoryHit(entry, q) {
@@ -73,7 +71,6 @@ export function settingsDirectoryHit(entry, q) {
 // once that entry's own area is already open (see openSettingsDirectoryEntry).
 export function settingsDirectoryTarget(entry) {
   if (entry.area === "backup") return document.querySelector(`#backup-modal [data-setting-row="${entry.key}"]`);
-  if (entry.area === "stats") return document.querySelector(`#stats-modal [data-setting-row="${entry.key}"]`);
   const el = $(entry.key);
   return el ? (el.closest(".field") || el) : null;
 }
@@ -101,9 +98,6 @@ export async function openSettingsDirectoryEntry(entry) {
   } else if (entry.area === "backup") {
     hideSettings();
     await openBackups();
-  } else if (entry.area === "stats") {
-    hideSettings();
-    await openStats();
   }
   flashSettingsRow(settingsDirectoryTarget(entry));
 }

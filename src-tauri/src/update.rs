@@ -537,7 +537,6 @@ pub(crate) fn add_skipped_version(list: &mut Vec<String>, version: String) -> bo
 // The shipped changelog, baked into the binary at compile time: the "what's
 // new" window needs nothing from the network to show the current version.
 pub(crate) const EMBEDDED_RELEASE_NOTES: &str = include_str!("../../docs/release-notes.md");
-pub(crate) const RELEASE_NOTES_MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Serialize, Clone)]
 pub(crate) struct WhatsNewSection {
@@ -550,10 +549,6 @@ pub(crate) struct WhatsNewSection {
 #[derive(Serialize, Clone)]
 pub(crate) struct WhatsNewResult {
     pub(crate) sections: Vec<WhatsNewSection>,
-    // The version boundary the sections were computed from; None for a fresh install or
-    // "current version only". Echoed back to whats_new_refresh so a GitHub refresh reproduces
-    // the same range.
-    pub(crate) since: Option<String>,
 }
 
 // Split a release-notes document on its "## " version headings. A heading's
@@ -619,11 +614,10 @@ pub(crate) fn whats_new_check_impl(all: &[WhatsNewSection], last_seen: &str, cur
 pub(crate) fn whats_new_check(app: AppHandle, state: State<Db>) -> WhatsNewResult {
     let all = parse_release_notes(EMBEDDED_RELEASE_NOTES);
     let mut store = lock(&state);
-    let since = (!store.settings.last_seen_version.is_empty()).then(|| store.settings.last_seen_version.clone());
     let sections = whats_new_check_impl(&all, &store.settings.last_seen_version, APP_VERSION);
     store.settings.last_seen_version = APP_VERSION.to_string();
     save_settings(&app, &store.settings);
-    WhatsNewResult { sections, since }
+    WhatsNewResult { sections }
 }
 
 // About dialog: always just the current version's own section, from the
@@ -632,39 +626,6 @@ pub(crate) fn whats_new_check(app: AppHandle, state: State<Db>) -> WhatsNewResul
 pub(crate) fn whats_new_current() -> Vec<WhatsNewSection> {
     let all = parse_release_notes(EMBEDDED_RELEASE_NOTES);
     sections_for_update(&all, None, APP_VERSION)
-}
-
-// "Update from GitHub": re-fetch release-notes.md and apply the same filter
-// the open window used (`since`, exactly as passed to whats_new_check or
-// None for the About-triggered view). Only the display changes, never the
-// shipped file.
-#[tauri::command]
-pub(crate) async fn whats_new_refresh(since: Option<String>) -> Result<Vec<WhatsNewSection>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let url = format!("https://raw.githubusercontent.com/{}/main/docs/release-notes.md", brand::REPO);
-        let resp = crate::ffmpeg::request_agent().get(&url)
-            .header("User-Agent", brand::USER_AGENT)
-            .config()
-            .timeout_global(Some(std::time::Duration::from_secs(10)))
-            .build()
-            .call()
-            .map_err(|e| format!("download: {}", e))?;
-        let mut bytes = Vec::new();
-        use std::io::Read;
-        resp.into_body()
-            .into_reader()
-            .take(RELEASE_NOTES_MAX_BYTES)
-            .read_to_end(&mut bytes)
-            .map_err(|e| format!("read: {}", e))?;
-        if bytes.len() as u64 >= RELEASE_NOTES_MAX_BYTES {
-            return Err("release notes too large / truncated".to_string());
-        }
-        let text = String::from_utf8_lossy(&bytes).into_owned();
-        let all = parse_release_notes(&text);
-        Ok(sections_for_update(&all, since.as_deref(), APP_VERSION))
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 // Strictly pin an update download URL to `<repo>/releases/download/<tag>/<asset>.exe`.

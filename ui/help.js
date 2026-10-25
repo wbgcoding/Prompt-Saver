@@ -34,7 +34,7 @@ export const HELP_CONTENT = {
         "Click the gear button in the header to open it.",
         "Pick the language, the theme, and the text size and font of the tiles.",
         "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background when closed.",
-        "Going to the background on close is on for a new install; a portable copy always quits.",
+        "A portable copy always quits when closed instead of going to the background.",
         "Set the global hotkey, auto-paste on double-click, and whether screenshots always go to the screenshots folder (section Capture).",
       ],
       whatHappens:
@@ -86,7 +86,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "The editor",
-      whatItIs: "The editor is a plain text box at heart; a few features (Markdown preview and private notes are on by default, switchable in the expert menu) add structure and versions to it.",
+      whatItIs: "The editor is a plain text box at heart; a few features such as Markdown preview and private notes add structure and versions to it.",
       howTo: [
         "Open a tile's editor: double-click the tile, or Edit from its menu.",
         "Adjust Markdown preview, syntax highlighting, versions, or private notes in the expert menu.",
@@ -94,7 +94,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "Versions keep every saved change so an earlier version can be restored. Markdown preview renders next to, or instead of, the text box without altering what is actually stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers the draft back once. A confidential tile never gets a draft. Saving a new tile that closely matches an existing one shows a quiet hint instead of blocking the save. For a text with Markdown in it, \"Copy formatted\" in the editor and the tile menu puts the rendered version on the clipboard as well, so Word or a mail program shows the formatting. In the list of versions, a second button next to Restore keeps the chosen version as a new tile and leaves the current one untouched.",
       settings: ["Markdown preview, syntax highlighting, versions, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
-      tip: "Markdown preview and private notes both ship on.",
     },
     {
       section: "basics",
@@ -114,7 +113,6 @@ export const HELP_CONTENT = {
       title: "Keyboard-only use",
       whatItIs: "Arrow keys move a focus ring across the grid for keyboard-only copying.",
       howTo: [
-        "Keyboard navigation is on out of the box; turn it off in Expert menu → System & data.",
         "Use the arrow keys to move the focus ring, Enter or Space to copy.",
         "Tab still moves through buttons and fields everywhere else in the app, as usual.",
       ],
@@ -190,7 +188,6 @@ export const HELP_CONTENT = {
       title: "Rotation",
       whatItIs: "A tile can hold a list of texts instead of one; each copy serves the next rotation text.",
       howTo: [
-        "Rotation is on by default; turn it off in the expert menu if unused.",
         "In a tile's editor, turn on \"Rotation\" above the text area.",
         "The list of rotation texts then replaces the plain text field.",
         "Add more rotation texts with \"+ Rotation text\"; icons beside each one reorder or remove it.",
@@ -199,7 +196,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A small badge counts up on a grid tile, a floating button, and a desktop folder member, like \"2/5\"; a grid folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
-      settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself is in the editor under Advanced options."],
+      settings: ["Rotation, default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself is in the editor under Advanced options."],
     },
     {
       section: "features",
@@ -224,7 +221,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "A folder lives where it was made, in the grid or on the desktop. A desktop folder shows up to four member previews and a count; a grid folder shows how many tiles it holds and one colour dot per tile. Dragging a member out frees it, and the folder dissolves once one member is left; a tile belongs to only one grid folder at a time.",
       settings: ["Folders: Expert menu → Features → Floating buttons & folders"],
-      tip: "Folders are on out of the box; switch them off in the expert menu if items are never grouped that way.",
       sketches: ["folderTypes"],
     },
     {
@@ -254,7 +250,7 @@ export const HELP_CONTENT = {
         "Right-click a tab to rename, resize, recolor, or delete it.",
         "Move a tab with \"move further left\" or \"move further right\" in its menu, or drag it onto another tab.",
       ],
-      whatHappens: "A tile normally sits in exactly one view (adding it elsewhere moves it there) unless \"Prompt in multiple views\" is on, which ships off. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
+      whatHappens: "A tile normally sits in exactly one view (adding it elsewhere moves it there) unless \"Prompt in multiple views\" is on. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
       settings: ["Multiple views, tile in several views, maximum views: Expert menu → Features → Views and quick grid"],
     },
     {
@@ -359,7 +355,7 @@ export const HELP_CONTENT = {
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
       ],
       whatHappens:
-        "MP4 (H.264) is always what gets written while recording. Three quality steps (Small, High, Lossless) trade file size for detail. A format setting can turn the result into WebM, GIF or AVI afterward: WebM and AVI are converted from the MP4, and GIF is capped at 30 seconds and has no sound. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record by default, each into its own track. The microphone track is captured but stays silent until you mix it in yourself in the video editor. Unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself, not its buttons, moves it anywhere, including onto another monitor. It then stops following the recorded window for the rest of that recording; the next recording follows again. The bar is never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched. The recording folder's row in the expert menu shows how many videos it holds and how much space they use. Its \"Clean up…\" button lists files older than 7, 30 or 90 days and the space they would free, and nothing is deleted without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text. By default it shows every key, including typed text. It skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch limits capture to combinations with Ctrl, Alt or Win, plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys. Use it for a recording with confidential input. The same cleanup dialog has a checkbox per file: \"Export selected\" converts every checked recording in one go, to a chosen format, quality and folder, and reports how many finished. A new install deletes unused recordings after 90 days (expert menu, 0 = keep forever).",
+        "MP4 (H.264) is always what gets written while recording. Three quality steps (Small, High, Lossless) trade file size for detail. A format setting can turn the result into WebM, GIF or AVI afterward: WebM and AVI are converted from the MP4, and GIF is capped at 30 seconds and has no sound. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record, each into its own track. The microphone track is captured but stays silent until you mix it in yourself in the video editor. Unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself, not its buttons, moves it anywhere, including onto another monitor. It then stops following the recorded window for the rest of that recording; the next recording follows again. The bar is never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched. The recording folder's row in the expert menu shows how many videos it holds and how much space they use. Its \"Clean up…\" button lists files older than 7, 30 or 90 days and the space they would free, and nothing is deleted without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text. It shows every key, including typed text. It skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch limits capture to combinations with Ctrl, Alt or Win, plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys. Use it for a recording with confidential input. The same cleanup dialog has a checkbox per file: \"Export selected\" converts every checked recording in one go, to a chosen format, quality and folder, and reports how many finished. A new install deletes unused recordings after 90 days (expert menu, 0 = keep forever).",
       settings: ["Screen recording, countdown, bitrate, quality, format, recording folder and cleanup: Expert menu → Capture → Screen recording", "Cursor, audio sources and device, stop/pause hotkeys, tray entries, keys overlay, frame around a recorded region and its color: Expert menu → Capture → While recording", "Auto-remove broken recordings, clean up now: Expert menu → System & data → Troubleshooting"],
     },
     {
@@ -374,7 +370,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "The camera window, or its status dot in the recording bar, stays visible the whole time, so the camera never runs unnoticed. The camera goes into its own file and is never burned into a screen recording. Started during a screen recording, both share one start point, and the video editor then opens the screen recording with the camera laid on top as an overlay that can still be moved.",
       settings: ["Camera recording, default camera, resolution, frame rate: Expert menu → Capture → Camera recording"],
-      tip: "Off by default.",
     },
     {
       section: "capture",
@@ -448,7 +443,7 @@ export const HELP_CONTENT = {
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
       whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; blurring only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
-      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → System & data → Troubleshooting"],
+      settings: ["Video controls, autoplay and loop, mute: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → System & data → Troubleshooting"],
     },
     {
       section: "tiles",
@@ -476,7 +471,7 @@ export const HELP_CONTENT = {
       howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colors and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately; the built-in it was based on stays untouched.",
       settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Visual", "Accent-colored header, frosted dialogs, hidden scrollbars: Expert menu → Appearance → Visual"],
-      tip: "Custom themes are on out of the box; switching them off in the expert menu also removes the “Custom theme…” entry from the theme list.",
+      tip: "Switching custom themes off also removes the “Custom theme…” entry from the theme list.",
     },
     {
       section: "appearance",
@@ -484,7 +479,7 @@ export const HELP_CONTENT = {
       whatItIs: "The theme editor adjusts any built-in theme's colors and saves the result as a new theme.",
       howTo: [
         "Open the theme editor: Expert menu → Appearance → Visual.",
-        "Custom themes must be on, which they are by default.",
+        "Custom themes must be on.",
         "Pick a base theme, adjust colors, and save under a new name.",
       ],
       whatHappens: "A custom theme appears in the regular theme dropdown alongside the built-ins; deleting it does not affect the theme it was based on.",
@@ -512,7 +507,7 @@ export const HELP_CONTENT = {
         "The Tiles button next to Sort switches to large preview tiles.",
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
-      whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
+      whatHappens: "Search is typo-tolerant and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
       settings: ["Fuzzy search, type filter, saved searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
     },
     {
@@ -565,7 +560,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "Nothing is watched until it is turned on. Copies shorter than the minimum length are ignored, and the oldest of these entries drop once they pass their cap. With \"Skip likely passwords\" on, a copy that looks like a password (one line, no spaces, mixed letters, digits and symbols) is never added; it is a best guess, so it skips rather than risks keeping one. Switching the watcher off asks whether to keep or delete what was collected; closing that question keeps it. Clearing the inbox offers an undo button on its message.",
       settings: ["Skip likely passwords, minimum length, cap: Expert menu → Library & copy history → Copy history"],
-      tip: "Off by default: nothing is watched until it is turned on.",
     },
     {
       section: "system",
@@ -573,7 +567,7 @@ export const HELP_CONTENT = {
       whatItIs: "System settings cover app-level behavior that is not about any single tile.",
       howTo: ["Open the expert menu's System group for updates, navigation, instances, and the data folder."],
       whatHappens:
-        "Update checks are on by default and never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database. A second computer that finds a fresh lock from another one opens everything read-only and says so in a banner. A lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
+        "Update checks never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database. A second computer that finds a fresh lock from another one opens everything read-only and says so in a banner. A lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
       settings: ["Keyboard navigation, data folder, taskbar progress, video tools download: Expert menu → System & data → System", "Allow multiple instances, data folder lock: Expert menu → System & data → Troubleshooting"],
     },
     {
@@ -589,13 +583,11 @@ export const HELP_CONTENT = {
       title: "Privacy",
       whatItIs: "These settings keep this window's contents out of screenshots, screen shares, and passers-by.",
       howTo: [
-        "Screen-capture exclusion is on from the start.",
         "Turn on media blur in the expert menu, as needed.",
       ],
       whatHappens:
-        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential prompts\" below.",
+        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential prompts\" below.",
       settings: ["Exclude from screen capture, blur media: Expert menu → System & data → Privacy", "Index text inside attached pictures for search: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
-      tip: "Screen-capture exclusion ships on: turn it off for normal screenshots or recordings of this window.",
     },
     {
       section: "system",
@@ -658,8 +650,8 @@ export const HELP_CONTENT = {
       title: "Usage statistics",
       whatItIs: "A small window with the number of prompts, the copies of the last 7 days, the most used and the never used prompts.",
       howTo: [
+        "Switch on \"Show statistics\" in the expert menu under \"Data & maintenance\".",
         "Open Settings and click \"Usage statistics\".",
-        "Switch on \"Show statistics\".",
         "Pick how many prompts the most used list shows: 5, 10 or 20.",
         "Click a never used prompt to find it in the library.",
       ],
@@ -777,7 +769,7 @@ export const HELP_CONTENT = {
         "Auf das Zahnrad in der Kopfzeile klicken, um es zu öffnen.",
         "Sprache, Design sowie Textgröße und Schriftart der Kacheln wählen.",
         "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt.",
-        "Das Schließen in den Hintergrund ist bei einer neuen Installation an; eine portable Kopie beendet sich immer.",
+        "Eine portable Kopie beendet sich beim Schließen immer, statt in den Hintergrund zu gehen.",
         "Das globale Tastenkürzel, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im Screenshots-Ordner (Abschnitt „Aufnehmen“) einstellen.",
       ],
       whatHappens:
@@ -830,7 +822,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Der Editor",
-      whatItIs: "Der Editor ist im Kern ein einfaches Textfeld; einige Funktionen (Markdown-Vorschau und private Notizen sind ab Werk an, im Expertenmenü abschaltbar) verleihen ihm Struktur und Versionen.",
+      whatItIs: "Der Editor ist im Kern ein einfaches Textfeld; einige Funktionen wie Markdown-Vorschau und private Notizen verleihen ihm Struktur und Versionen.",
       howTo: [
         "Editor einer Kachel öffnen: Doppelklick auf die Kachel oder Bearbeiten in ihrem Menü.",
         "Markdown-Vorschau, Syntax-Hervorhebung, Versionen oder private Notizen im Expertenmenü anpassen.",
@@ -838,7 +830,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "Die Versionen speichern jede Änderung, sodass eine frühere wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt „Formatiert kopieren“ im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. In der Liste der Versionen behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
       settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
-      tip: "Markdown-Vorschau und private Notizen sind ab Werk aktiviert.",
     },
     {
       section: "basics",
@@ -858,7 +849,6 @@ export const HELP_CONTENT = {
       title: "Tastaturnavigation",
       whatItIs: "Pfeiltasten bewegen einen Fokusring über das Raster für rein tastaturbasiertes Kopieren.",
       howTo: [
-        "Die Tastaturnavigation ist ab Werk an; abschaltbar in Expertenmenü → System & Daten.",
         "Die Pfeiltasten bewegen den Fokusring, Enter oder Leertaste kopiert.",
         "Tab springt wie gewohnt weiterhin durch Buttons und Felder überall sonst in der App.",
       ],
@@ -935,7 +925,6 @@ export const HELP_CONTENT = {
       title: "Rotation",
       whatItIs: "Eine Kachel kann eine Liste von Texten statt nur einem tragen; jede Kopie liefert den nächsten Eintrag.",
       howTo: [
-        "Die Rotation ist standardmäßig an; die Funktion im Expertenmenü ausschalten, falls nie genutzt.",
         "Im Editor einer Kachel „Rotation“ über dem Textbereich einschalten.",
         "Die Liste der Rotationstexte ersetzt dann das normale Textfeld.",
         "Mit „+ Rotationstext“ weitere Rotationstexte hinzufügen; Symbole daneben sortieren um oder entfernen sie.",
@@ -944,7 +933,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Desktop-Ordners hoch, wie „2/5“; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Symbol, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position. Im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam. Der Zählerstand übersteht Neustarts und vollständige Sicherungen. Ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger; übernommen werden nur die Textliste und ihr Reihenfolge- oder Misch-Modus, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
-      settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“."],
+      settings: ["Rotation, Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“."],
     },
     {
       section: "features",
@@ -969,7 +958,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "Ein Ordner liegt dort, wo er angelegt wurde, im Raster oder auf dem Desktop. Ein Desktop-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Raster-Ordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.",
       settings: ["Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
-      tip: "Ordner sind ab Werk an; im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],
     },
     {
@@ -999,7 +987,7 @@ export const HELP_CONTENT = {
         "Rechtsklick auf einen Tab zum Umbenennen, Größenändern, Umfärben oder Löschen.",
         "Einen Tab mit „weiter nach links“ oder „weiter nach rechts“ aus seinem Menü verschieben, oder ihn auf einen anderen Tab ziehen.",
       ],
-      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer „Prompt in mehreren Ansichten“ ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
+      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer „Prompt in mehreren Ansichten“ ist aktiv. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
       settings: ["Mehrere Ansichten, Kachel in mehreren Ansichten, höchste Zahl an Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
     {
@@ -1106,7 +1094,7 @@ export const HELP_CONTENT = {
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
       ],
       whatHappens:
-        "Aufgenommen wird immer MP4 (H.264). Drei Qualitätsstufen (Klein, Hoch, Verlustfrei) tauschen Dateigröße gegen Bildschärfe. Ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln: WebM und AVI entstehen aus dem MP4, GIF ist auf 30 Sekunden begrenzt und hat keinen Ton. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg, einen separaten Download, der direkt angeboten wird, wenn er fehlt. Eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden ab Werk beide aufgenommen, je als eigene Spur. Die Mikrofonspur wird aufgezeichnet, aber erst hörbar, wenn man sie selbst im Video-Editor dazumischt. Zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Buttons in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner. Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden. Schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst, nicht ihre Buttons, bleibt sie frei beweglich stehen, auch auf einem anderen Monitor, und folgt für den Rest dieser Aufnahme nicht mehr dem Fenster. Die nächste Aufnahme folgt wieder, und die Leiste ist nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde, etwa nach einem Absturz oder erzwungenen Beenden, wird nach einer Schonfrist automatisch entfernt. Eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos. Ihr „Aufräumen…“-Button listet Dateien älter als 7, 30 oder 90 Tage samt frei werdender Größe zur Bestätigung auf, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt. Ab Werk zeigt sie jede Taste, auch getippten Text. Ein Passwortfeld lässt sie aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten. Das passt für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: „Auswahl exportieren“ wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
+        "Aufgenommen wird immer MP4 (H.264). Drei Qualitätsstufen (Klein, Hoch, Verlustfrei) tauschen Dateigröße gegen Bildschärfe. Ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln: WebM und AVI entstehen aus dem MP4, GIF ist auf 30 Sekunden begrenzt und hat keinen Ton. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg, einen separaten Download, der direkt angeboten wird, wenn er fehlt. Eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide aufgenommen, je als eigene Spur. Die Mikrofonspur wird aufgezeichnet, aber erst hörbar, wenn man sie selbst im Video-Editor dazumischt. Zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Buttons in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner. Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden. Schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst, nicht ihre Buttons, bleibt sie frei beweglich stehen, auch auf einem anderen Monitor, und folgt für den Rest dieser Aufnahme nicht mehr dem Fenster. Die nächste Aufnahme folgt wieder, und die Leiste ist nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde, etwa nach einem Absturz oder erzwungenen Beenden, wird nach einer Schonfrist automatisch entfernt. Eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos. Ihr „Aufräumen…“-Button listet Dateien älter als 7, 30 oder 90 Tage samt frei werdender Größe zur Bestätigung auf, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt. Sie zeigt jede Taste, auch getippten Text. Ein Passwortfeld lässt sie aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten. Das passt für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: „Auswahl exportieren“ wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
       settings: ["Bildschirmaufnahme, Countdown, Bitrate, Qualität, Format, Aufnahme-Ordner: Expertenmenü → Aufnehmen → Bildschirmaufnahme", "Mauszeiger, Tonquellen und -gerät, Stopp-/Pause-Tastenkürzel, Tray-Einträge, Tastenanzeige, Rahmen um einen aufgenommenen Bereich und seine Farbe: Expertenmenü → Aufnehmen → Während der Aufnahme", "Defekte Aufnahmen automatisch entfernen, jetzt aufräumen: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
@@ -1121,7 +1109,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "Das Kamerafenster oder sein Statuspunkt in der Aufnahmeleiste bleibt die ganze Zeit sichtbar, die Kamera läuft also nie unbemerkt. Die Kamera landet in einer eigenen Datei und wird nie in eine Bildschirmaufnahme eingebrannt. Während einer Bildschirmaufnahme gestartet, teilen beide einen Startpunkt, und der Video-Editor öffnet dann die Bildschirmaufnahme mit der Kamera als verschiebbarer Überlagerung darüber.",
       settings: ["Kameraaufnahme, Standardkamera, Auflösung, Bildrate: Expertenmenü → Aufnehmen → Kameraaufnahme"],
-      tip: "Ab Werk aus.",
     },
     {
       section: "capture",
@@ -1195,7 +1182,7 @@ export const HELP_CONTENT = {
         "Wiedergabe und privatsphärefreundliche Optiken im Expertenmenü anpassen.",
       ],
       whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Unschärfe ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
-      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → System & Daten → Fehlersuche"],
+      settings: ["Video-Steuerung, Autoplay und Schleife, Stumm: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
       section: "tiles",
@@ -1223,7 +1210,7 @@ export const HELP_CONTENT = {
       howTo: ["Ein Design in den Einstellungen wählen.", "Den Design-Editor, sobald aktiviert, öffnen, um Farben eines Designs anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Design wird separat gespeichert; das integrierte, auf dem es basierte, bleibt unangetastet.",
       settings: ["Design-Wahl: Einstellungen", "Design-Editor: Expertenmenü → Aussehen → Visuell", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte Scrollbalken: Expertenmenü → Aussehen → Visuell"],
-      tip: "Benutzerdefinierte Designs sind ab Werk an; werden sie im Expertenmenü ausgeschaltet, verschwindet auch der Eintrag „Eigenes Design…“ aus der Design-Auswahl.",
+      tip: "Ausgeschaltete benutzerdefinierte Designs entfernen auch den Eintrag „Eigenes Design…“ aus der Design-Auswahl.",
     },
     {
       section: "appearance",
@@ -1231,7 +1218,7 @@ export const HELP_CONTENT = {
       whatItIs: "Der Design-Editor passt die Farben eines beliebigen integrierten Designs an und speichert das Ergebnis als neues Design.",
       howTo: [
         "Den Design-Editor öffnen: Expertenmenü → Aussehen → Visuell.",
-        "Benutzerdefinierte Designs müssen an sein, was ab Werk der Fall ist.",
+        "Benutzerdefinierte Designs müssen an sein.",
         "Ein Basis-Design wählen, Farben anpassen und unter neuem Namen speichern.",
       ],
       whatHappens: "Ein benutzerdefiniertes Design erscheint im regulären Design-Auswahl neben den integrierten; sein Löschen betrifft nicht das Design, auf dem es basierte.",
@@ -1259,7 +1246,7 @@ export const HELP_CONTENT = {
         "Der Knopf „Kacheln“ neben dem Sortieren wechselt zu großen Vorschaukacheln.",
         "Zwei Zeilen auswählen und in der Auswahlleiste „Vergleichen“ klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
-      whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
+      whatHappens: "Die Suche ist fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
       settings: ["Unscharfe Suche, Typfilter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
     },
     {
@@ -1313,7 +1300,6 @@ export const HELP_CONTENT = {
       whatHappens:
         "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit „Vermutete Passwörter überspringen“ landet eine Kopie, die wie ein Passwort aussieht, nie im Eingang. Als Passwort gilt eine Zeile ohne Leerzeichen mit gemischten Buchstaben, Ziffern und Zeichen; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
       settings: ["Vermutete Passwörter überspringen, Mindestlänge, Obergrenze: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf"],
-      tip: "Standardmäßig aus: es wird nichts überwacht, bis die Funktion eingeschaltet ist.",
     },
     {
       section: "system",
@@ -1321,7 +1307,7 @@ export const HELP_CONTENT = {
       whatItIs: "System-Einstellungen betreffen app-weites Verhalten, das nicht eine einzelne Kachel betrifft.",
       howTo: ["Die System-Gruppe des Expertenmenüs für Update-Checks, Tastaturnavigation, mehrere Instanzen und den Daten-Ordner öffnen."],
       whatHappens:
-        "Update-Checks sind standardmäßig aktiv und installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt. Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner. Eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
+        "Update-Checks installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt. Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner. Eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
       settings: ["Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System", "Mehrere Instanzen erlauben, Sperre des Daten-Ordners: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
@@ -1337,13 +1323,11 @@ export const HELP_CONTENT = {
       title: "Datenschutz",
       whatItIs: "Diese Einstellungen halten den Inhalt dieses Fensters aus Screenshots, Screen-Shares und dem Blick von Passanten heraus.",
       howTo: [
-        "Der Ausschluss von Bildschirmaufnahmen ist von Anfang an aktiv.",
         "Bei Bedarf Unschärfe für Medien im Expertenmenü aktivieren.",
       ],
       whatHappens:
-        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, ab Werk ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet. Ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Prompts“ weiter unten.",
+        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet. Ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Prompts“ weiter unten.",
       settings: ["Von Bildschirmaufnahmen ausschließen, Medien unscharf machen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
-      tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
     {
       section: "system",
@@ -1407,8 +1391,8 @@ export const HELP_CONTENT = {
       title: "Nutzungsstatistik",
       whatItIs: "Ein kleines Fenster mit der Zahl der Prompts, den Kopien der letzten 7 Tage, den meistgenutzten und den nie genutzten Prompts.",
       howTo: [
+        "Im Expertenmenü unter „Daten & Wartung“ „Statistik anzeigen“ einschalten.",
         "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",
-        "„Statistik anzeigen“ einschalten.",
         "Wählen, wie viele Prompts die Liste der meistgenutzten zeigt: 5, 10 oder 20.",
         "Einen nie genutzten Prompt anklicken, um ihn in der Bibliothek zu finden.",
       ],
