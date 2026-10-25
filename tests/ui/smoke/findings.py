@@ -2153,5 +2153,37 @@ def run(browser, tmp):
     document.getElementById('snip-edit-undo').click(); await sleepMs(120);
     if (shot() !== blank) errs.push('tx19: the edit left a second text op behind');
 """)
+    # The editor bar carries minimize and maximize/restore buttons in front of the close button.
+    failed += ar_probe('wb20', 'the editor bar has minimize and maximize buttons that follow the window state', 'index', '880x600', '', snip_common + r"""
+    const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    await snipOpen(300, 200);
+    await sleepMs(100);
+    const bar = document.querySelector('.snip-edit-titlebar');
+    const mn = document.getElementById('snip-edit-minimize');
+    const mx = document.getElementById('snip-edit-maximize');
+    const cl = document.getElementById('snip-edit-close');
+    if (bar.getAttribute('data-tauri-drag-region') !== 'deep') errs.push('wb20: the bar drag region is "' + bar.getAttribute('data-tauri-drag-region') + '", want deep');
+    if (!mn || !mx) { errs.push('wb20: a window button is missing'); }
+    else {
+      for (const b of [mn, mx]) {
+        if (b.getAttribute('data-tauri-drag-region') !== 'false') errs.push('wb20: ' + b.id + ' does not opt out of the drag region');
+        const sv = b.querySelector('svg');
+        if (!sv || sv.getAttribute('width') !== '18' || sv.getAttribute('stroke-width') !== '1.5') errs.push('wb20: ' + b.id + ' icon is not 18px with stroke 1.5');
+        if (!b.title || !b.getAttribute('aria-label')) errs.push('wb20: ' + b.id + ' has no label');
+      }
+      const r = (e) => e.getBoundingClientRect();
+      if (!(r(mn).right <= r(mx).left + 1 && r(mx).right <= r(cl).left + 1)) errs.push('wb20: the buttons are not in the order minimize, maximize, close');
+      if (Math.abs(r(mn).height - r(cl).height) > 1) errs.push('wb20: the minimize button is not as tall as the close button');
+      const maxTitle = mx.title;
+      if (mx.dataset.maximized !== '0') errs.push('wb20: the maximize button starts in the maximized state');
+      const iconBefore = mx.innerHTML;
+      mx.click(); await sleepMs(150);
+      if (mx.dataset.maximized !== '1' || mx.innerHTML === iconBefore) errs.push('wb20: a click did not switch to the restore icon');
+      if (mx.title === maxTitle) errs.push('wb20: the title did not change to Restore');
+      mx.click(); await sleepMs(150);
+      if (mx.dataset.maximized !== '0' || mx.innerHTML !== iconBefore) errs.push('wb20: a second click did not switch back');
+      if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('wb20: a window button closed the editor');
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

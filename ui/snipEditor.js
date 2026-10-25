@@ -9,6 +9,7 @@ import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
 import { buildSwatches } from "./editor.js";
 import { createSnipDraw, snipEditNormRect } from "./snipDraw.js";
+import { insertWinButtons, wireWinButtons } from "./winButtons.js";
 
 // The expert switch for the mouse wheel on number fields, read when a field is built.
 const snipWheelOn = () => settings.ui_flags?.numFieldWheel !== false;
@@ -1800,6 +1801,7 @@ export function initSnipEditor() {
       snipEditSyncCropFromOps(); // a default tool of crop starts with the full-image box
       snipEditUpdateUndoRedoButtons();
       snipEdit.classList.remove("hidden");
+      snipSyncWinButtons();
       snipEditFit();
       snipEditWrap.scrollLeft = 0;
       snipEditWrap.scrollTop = 0;
@@ -1892,6 +1894,10 @@ export function initSnipEditor() {
     fn(snipEditExportDataUrl(), ...extra);
   }
   $("snip-edit-close").addEventListener("click", () => snipEditApply());
+  // The bar is the window's only title bar while the editor is open, so it carries
+  // the minimize and maximize buttons too; they act on the main window.
+  const snipWinButtons = insertWinButtons($("snip-edit-close"), "snip-edit");
+  const snipSyncWinButtons = wireWinButtons({ win: getCurrentWindow(), ...snipWinButtons, translate: t });
   $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
   $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
   $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
