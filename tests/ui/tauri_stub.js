@@ -609,6 +609,8 @@ const RESULTS = {
     if (destPath.includes("FAILCLASSIFY")) {
       return Promise.reject(JSON.stringify({ key: "ffErrNoSpace", code: null, raw: "out.mp4: No space left on device" }));
     }
+    // A destination containing "CANCELLED" ends the way a user cancel does.
+    if (destPath.includes("CANCELLED")) return Promise.reject("cancelled");
     if (destPath.includes("REFUSEDEST") && !window.__EXPORT_DEST_REFUSED_ONCE__) {
       window.__EXPORT_DEST_REFUSED_ONCE__ = true;
       return Promise.reject("export destination not recognized");
@@ -1583,7 +1585,7 @@ const noopWindow = {
   minimize: async () => {}, maximize: async () => {}, unmaximize: async () => {},
   toggleMaximize: async () => { window.__MAXIMIZED__ = !window.__MAXIMIZED__; },
   isMaximized: async () => !!window.__MAXIMIZED__, close: async () => {}, hide: async () => {},
-  show: async () => {}, setFocus: async () => {},
+  show: async () => {}, setFocus: async () => {}, unminimize: async () => {},
   innerSize: async () => ({ width: innerWidth, height: innerHeight }),
   scaleFactor: async () => 1, setZoom: async () => {},
 };

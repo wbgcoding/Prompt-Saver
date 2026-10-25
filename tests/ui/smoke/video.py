@@ -1395,18 +1395,16 @@ VIDEO_PROBE = """
         }
       }
 
-      // The Export tab mirrors the same target as a read-only summary, and
-      // its "Change..." button jumps back to the Edit tab.
+      // The Export tab mirrors the same target as a read-only summary (no Change button) and
+      // shows the resulting size as plain text.
       document.getElementById('ve-export-open').click();
       await sleep(80);
       const summary = document.getElementById('ve-export-scale-summary').textContent;
-      if (!summary.includes('480') || !summary.includes('270')) {
-        errs.push('366: the export-tab scale summary does not show 480x270: ' + summary);
+      if (summary.trim() !== '480 × 270 px') {
+        errs.push('366: the export-tab scale summary is not the scaled size 480 x 270: ' + summary);
       }
-      document.getElementById('ve-export-scale-edit').click();
-      await sleep(80);
-      if (document.getElementById('ve-panel-edit').classList.contains('hidden')) {
-        errs.push('366: the export-tab "Change..." button did not jump back to the Edit tab');
+      if (document.getElementById('ve-export-scale-edit')) {
+        errs.push('366: the export tab still has a Change button next to the scale summary');
       }
 
       // A fixed-height preset at or above the source size leaves the frame
@@ -2319,6 +2317,45 @@ def run_expert(browser, tmp):
     const callsBefore = addTileCalls().length;
     await exportOnce();
     if (addTileCalls().length !== callsBefore) errs.push('742: a tile was filed with the box off');
+
+    // 743: the quality options read Small, High, Lossless with High still the default.
+    {
+      const q = document.getElementById('ve-export-quality');
+      const order = [...q.options].map((o) => o.value).join(',');
+      if (order !== 'small,high,lossless') errs.push('743: the quality order is ' + order);
+    }
+    // 744: a cancelled export hides the progress row and keeps the message.
+    {
+      const destField = document.getElementById('ve-export-dest');
+      destField.value = 'C:/Custom/CANCELLED-clip.mp4';
+      destField.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(40);
+      const n = exportCalls().length;
+      document.getElementById('ve-export-start').click();
+      await until(() => exportCalls().length > n, 100);
+      await until(() => !document.getElementById('ve-export-start').disabled, 100);
+      await sleep(80);
+      if (!document.getElementById('ve-export-progress-row').classList.contains('hidden')) errs.push('744: the progress row stayed visible after a cancel');
+      if (document.getElementById('ve-export-status').textContent !== 'Export cancelled.') errs.push('744: the cancel message was ' + document.getElementById('ve-export-status').textContent);
+    }
+    // 745: a typed ".mp4" on an mp4 export is not doubled, in any letter case.
+    {
+      const f = document.getElementById('ve-export-format');
+      f.value = 'mp4';
+      f.dispatchEvent(new Event('change', { bubbles: true }));
+      const nm = document.getElementById('ve-export-name');
+      nm.value = 'clip.MP4';
+      nm.dispatchEvent(new Event('input', { bubbles: true }));
+      nm.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(40);
+      if (nm.value !== 'clip') errs.push('745: the name field kept the extension: ' + nm.value);
+      const n = exportCalls().length;
+      document.getElementById('ve-export-start').click();
+      await until(() => exportCalls().length > n, 100);
+      const req2 = exportCalls().pop()[1].req;
+      if (!/[\\/]clip[.]mp4$/.test(String(req2.dest_path))) errs.push('745: the export path was ' + req2.dest_path);
+      await until(() => !document.getElementById('ve-export-start').disabled, 100);
+    }
 
     // A new overlay of each kind starts from the remembered values, or the fixed defaults.
     document.getElementById('ve-tab-overlays').click();

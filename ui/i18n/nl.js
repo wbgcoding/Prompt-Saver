@@ -667,7 +667,6 @@ export default {
     veQualityHigh: "Hoog",
     veQualitySmall: "Klein",
     veQualityLossless: "Zonder kwaliteitsverlies",
-    veExportScaleEdit: "Wijzigen…",
     veExportScaleSummary: "{w} × {h} px",
     veExportTarget: "Doelbestand",
     veExportDestTip: "Het bestand dat deze export aanmaakt; typ een pad of gebruik de knoppen hieronder.",

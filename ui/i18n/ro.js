@@ -667,7 +667,6 @@ export default {
     veQualityHigh: "Înaltă",
     veQualitySmall: "Mică",
     veQualityLossless: "Fără pierderi",
-    veExportScaleEdit: "Modificare…",
     veExportScaleSummary: "{w} × {h} px",
     veExportTarget: "Fișier destinație",
     veExportDestTip: "Fișierul pe care îl va crea acest export. Scrie o cale sau folosește butoanele de mai jos.",

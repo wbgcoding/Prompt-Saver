@@ -667,7 +667,6 @@ export default {
     veQualityHigh: "高",
     veQualitySmall: "小",
     veQualityLossless: "无损",
-    veExportScaleEdit: "更改…",
     veExportScaleSummary: "{w} × {h} px",
     veExportTarget: "目标文件",
     veExportDestTip: "本次导出将生成的文件；可直接输入路径，或使用下方按钮选择。",

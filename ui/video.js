@@ -16,6 +16,7 @@ import { createColorPop } from "./colorpop.js";
 import { insertWinButtons, wireWinButtons } from "./winButtons.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
+import { stripFormatExt } from "./exportName.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
@@ -1371,9 +1372,9 @@ function updateScaleCurrent() {
   for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
-  $("ve-export-scale-summary").textContent = scale
-    ? t("veExportScaleSummary").replace("{w}", () => scale.w).replace("{h}", () => scale.h)
-    : t("veScaleOff");
+  // The size the file will have: the chosen target, or the (cropped) source size when unchanged.
+  const outSize = scale || eff;
+  $("ve-export-scale-summary").textContent = t("veExportScaleSummary").replace("{w}", () => outSize.w).replace("{h}", () => outSize.h);
 }
 
 // ---------------------------------------------------------------- panels + wiring
@@ -1678,7 +1679,6 @@ $("ve-scale-lock").addEventListener("change", () => {
   setScaleOp(scale.w, Math.round((scale.w * eff.h) / eff.w));
   persistExportSettings();
 });
-$("ve-export-scale-edit").addEventListener("click", () => showPanel("ve-panel-edit"));
 
 $("ve-ov-add-image").addEventListener("click", () => addOverlay("image"));
 $("ve-ov-add-frame").addEventListener("click", () => addOverlay("frame"));
@@ -1780,6 +1780,15 @@ for (const id of ["ve-export-format", "ve-export-quality"]) {
 $("ve-export-name").addEventListener("input", () => {
   VE.exportNameOverride = $("ve-export-name").value;
   VE.destOverride = null;
+  $("ve-export-dest").value = destPath();
+  $("ve-export-dest").title = destPath();
+  applyExportGate();
+});
+// Leaving the field drops a typed ".<ext>" of the chosen format, so the shown name is the stem.
+$("ve-export-name").addEventListener("change", () => {
+  const stem = stripFormatExt($("ve-export-name").value, formatExt(exportFormat()));
+  $("ve-export-name").value = stem;
+  VE.exportNameOverride = stem;
   $("ve-export-dest").value = destPath();
   $("ve-export-dest").title = destPath();
   applyExportGate();

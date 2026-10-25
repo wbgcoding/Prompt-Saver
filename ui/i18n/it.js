@@ -667,7 +667,6 @@ export default {
     veQualityHigh: "Alta",
     veQualitySmall: "Piccola",
     veQualityLossless: "Senza perdita",
-    veExportScaleEdit: "Modifica…",
     veExportScaleSummary: "{w} × {h} px",
     veExportTarget: "File di destinazione",
     veExportDestTip: "Il file che questa esportazione creerà; digita un percorso o usa i pulsanti sottostanti.",

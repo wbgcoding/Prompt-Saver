@@ -667,7 +667,6 @@ export default {
     veQualityHigh: "高",
     veQualitySmall: "小容量",
     veQualityLossless: "ロスレス",
-    veExportScaleEdit: "変更…",
     veExportScaleSummary: "{w} × {h} px",
     veExportTarget: "保存先ファイル",
     veExportDestTip: "このエクスポートで作成されるファイルです。パスを直接入力するか、下のボタンを使ってください。",

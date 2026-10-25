@@ -667,7 +667,6 @@ export default {
     veQualityHigh: "Yüksek",
     veQualitySmall: "Küçük",
     veQualityLossless: "Kayıpsız",
-    veExportScaleEdit: "Değiştir…",
     veExportScaleSummary: "{w} × {h} px",
     veExportTarget: "Hedef dosya",
     veExportDestTip: "Bu dışa aktarmanın oluşturacağı dosya; bir yol yazabilir veya aşağıdaki düğmeleri kullanabilirsiniz.",
