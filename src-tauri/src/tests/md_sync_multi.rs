@@ -1362,7 +1362,7 @@ fn multi_a_prompt_purged_before_its_delete_marker_was_written_stays_gone_after_a
     assert!(rig.b.get(&id).is_none(), "the purged prompt came back on B");
     assert!(!leftover_of(&rig, &id).exists(), "the file of a purged prompt stayed in the folder");
     assert!(rig.dir.join(format!("{id}.deleted")).exists(), "the delete marker of a purged prompt was never written");
-    assert!(rig.a.lock().settings.sync_trash_marks.get(&id).is_none(), "an owed mark outlived its marker");
+    assert!(!rig.a.lock().settings.sync_trash_marks.contains_key(&id), "an owed mark outlived its marker");
 }
 
 #[test]
@@ -1374,7 +1374,7 @@ fn multi_an_owed_mark_of_a_purged_prompt_with_no_file_left_is_let_go() {
     assert_eq!(rig.a.lock().settings.sync_trash_marks.get(&id), Some(&0));
     rig.tick(3);
     rig.a.poll(&rig.dir);
-    assert!(rig.a.lock().settings.sync_trash_marks.get(&id).is_none(), "an owed mark with nothing to mark stayed");
+    assert!(!rig.a.lock().settings.sync_trash_marks.contains_key(&id), "an owed mark with nothing to mark stayed");
 }
 
 // ---- a delete marker's first sighting survives restarts ----
