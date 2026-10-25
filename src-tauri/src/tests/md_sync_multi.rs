@@ -1334,3 +1334,99 @@ fn multi_delete_markers_that_did_not_change_are_not_read_again_every_round() {
     assert_eq!(reads(&rig.a), a0, "A read unchanged delete markers again");
     assert_eq!(reads(&rig.b), b0, "B read unchanged delete markers again");
 }
+
+// ---- an owed delete marker outlives the prompt's purge ----
+
+// What purging the trashed prompt does to the library (see purge_ids): the row goes, the settings
+// keep what they hold.
+fn purge_from_trash(inst: &SyncInst, id: &str) {
+    inst.lock().trash.retain(|p| p.id != id);
+}
+
+#[test]
+fn multi_a_prompt_purged_before_its_delete_marker_was_written_stays_gone_after_a_restart() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Doomed", "gone for good");
+    rig.settle();
+    assert!(leftover_of(&rig, &id).exists());
+    // Deleted and purged while no folder write ran (the folder was away), then a poll round.
+    rig.a.delete(&id);
+    purge_from_trash(&rig.a, &id);
+    rig.tick(3);
+    rig.a.poll(&rig.dir);
+    // Closed and opened again, folder back.
+    rig.a.restart();
+    rig.a.start(&rig.dir);
+    rig.settle();
+    assert!(rig.a.get(&id).is_none(), "the purged prompt came back on A as a new prompt");
+    assert!(rig.b.get(&id).is_none(), "the purged prompt came back on B");
+    assert!(!leftover_of(&rig, &id).exists(), "the file of a purged prompt stayed in the folder");
+    assert!(rig.dir.join(format!("{id}.deleted")).exists(), "the delete marker of a purged prompt was never written");
+    assert!(!rig.a.lock().settings.sync_trash_marks.contains_key(&id), "an owed mark outlived its marker");
+}
+
+#[test]
+fn multi_an_owed_mark_of_a_purged_prompt_with_no_file_left_is_let_go() {
+    let rig = Rig::new();
+    let id = rig.a.add("Short lived", "never written");
+    rig.a.delete(&id);
+    purge_from_trash(&rig.a, &id);
+    assert_eq!(rig.a.lock().settings.sync_trash_marks.get(&id), Some(&0));
+    rig.tick(3);
+    rig.a.poll(&rig.dir);
+    assert!(!rig.a.lock().settings.sync_trash_marks.contains_key(&id), "an owed mark with nothing to mark stayed");
+}
+
+// ---- a delete marker's first sighting survives restarts ----
+
+#[test]
+fn multi_a_delete_marker_expires_on_a_machine_that_restarts_every_few_weeks() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Old news", "text");
+    rig.settle();
+    rig.b.delete(&id);
+    rig.settle();
+    let marker = rig.dir.join(format!("{id}.deleted"));
+    assert!(marker.exists());
+    // A is restarted every twenty days and saves something each time.
+    for n in 1..=4 {
+        rig.tick(20 * 86400);
+        rig.a.restart();
+        rig.a.start(&rig.dir);
+        rig.a.settings(|_| {});
+        rig.a.step(&rig.dir);
+        rig.tick(3);
+        rig.a.step(&rig.dir);
+        if n == 1 {
+            assert!(marker.exists(), "the marker went before it was thirty days old");
+        }
+    }
+    assert!(!marker.exists(), "a restart every few weeks kept the delete marker for good");
+}
+
+// ---- a marker that cannot be removed holds the write back ----
+
+#[cfg(windows)]
+#[test]
+fn multi_a_restored_prompt_is_not_written_while_its_old_delete_marker_cannot_be_removed() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let rig = Rig::new();
+    let id = rig.a.add("Back again", "text");
+    rig.settle();
+    rig.b.delete(&id);
+    rig.settle();
+    let marker = rig.dir.join(format!("{id}.deleted"));
+    assert!(marker.exists() && rig.a.in_trash(&id));
+    rig.a.restore(&id);
+    // Something holds the marker open without letting it be deleted (a virus scanner, a sync client).
+    let held = fs::OpenOptions::new().read(true).share_mode(3).open(&marker).unwrap();
+    rig.tick(3);
+    let failed = rig.a.flush(&rig.dir);
+    assert!(failed > 0, "a write that could not clear the marker was counted as done");
+    assert!(!leftover_of(&rig, &id).exists(), "the prompt was written beside a marker that was still there");
+    drop(held);
+    rig.tick(3);
+    assert_eq!(rig.a.flush(&rig.dir), 0);
+    assert!(leftover_of(&rig, &id).exists(), "the write did not go through once the marker could be removed");
+    assert!(!marker.exists());
+}

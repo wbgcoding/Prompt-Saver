@@ -28,6 +28,9 @@ pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
 /// the folder's sharing delay can disagree with ours by a good deal.
 /// How often a failed background write is tried again before it waits for the next save.
 pub(crate) const SYNC_WRITE_RETRIES: u32 = 3;
+/// How long a queued write waits for the first read of the folder (SyncState.booting) before it
+/// counts its refusals as failures like any other.
+pub(crate) const SYNC_BOOT_WAIT_SECS: u64 = 120;
 pub(crate) const SYNC_LOCK_FOREIGN_STALE_SECS: u64 = 60;
 
 // After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
@@ -1178,14 +1181,23 @@ fn sync_tomb_put(dir: &Path, stem: &str) -> bool {
 // Whether the prompt's file may be written. A tombstone this instance has not acted on yet
 // blocks it (the poll trashes the copy first); one it has acted on is a prompt that came back
 // and is removed here.
-fn sync_tomb_allows_write(dir: &Path, stem: &str) -> bool {
+fn sync_tomb_allows_write(dir: &Path, stem: &str) -> TombWrite {
     let path = sync_tomb_path(dir, stem);
-    let Some(content) = sync_tomb_read(&path) else { return true };
+    let Some(content) = sync_tomb_read(&path) else { return TombWrite::Allowed };
     if sync_tomb_handled(&path, &content) {
-        let _ = fs::remove_file(&path);
-        return true;
+        // A marker that cannot be removed keeps refusing the write; the next round retries.
+        return if fs::remove_file(&path).is_ok() || !path.exists() { TombWrite::Allowed } else { TombWrite::RemovalFailed };
     }
-    false
+    TombWrite::Refused
+}
+
+#[derive(PartialEq)]
+enum TombWrite {
+    Allowed,
+    // Another instance deleted the prompt: the poll moves our copy to the trash.
+    Refused,
+    // The old marker is handled but still in the folder: counted as a failed write.
+    RemovalFailed,
 }
 
 // The tombstones in the folder: (prompt id, path, content).
@@ -1458,8 +1470,15 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
         let on_disk = fs::read(&path).unwrap_or_default();
-        if on_disk.is_empty() && !sync_tomb_allows_write(&dir, &p.id) {
-            continue; // another instance deleted this prompt: the poll moves our copy to the trash
+        if on_disk.is_empty() {
+            match sync_tomb_allows_write(&dir, &p.id) {
+                TombWrite::Allowed => {}
+                TombWrite::Refused => continue,
+                TombWrite::RemovalFailed => {
+                    failed += 1;
+                    continue;
+                }
+            }
         }
         if on_disk == content.as_bytes() {
             sync_file_note_current(&path, hash);
@@ -1571,6 +1590,7 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
         // purpose.
         let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
         let mut retries = 0u32;
+        let mut boot_waited = 0u64;
         loop {
             {
                 // Check-and-clear (or go inactive) in one critical section, or a deposit between "queue
@@ -1603,16 +1623,35 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
                 // A file that could not be written (locked by another writer, a busy folder) is
                 // tried again after a poll interval, a few times, instead of waiting for the next
                 // save to come along.
-                if failed > 0 && retries < SYNC_WRITE_RETRIES {
-                    retries += 1;
+                let booting = sync_state().booting.load(Ordering::SeqCst);
+                if sync_write_again(failed, booting, &mut retries, &mut boot_waited) {
                     tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
                     q.0.lock().unwrap_or_else(|e| e.into_inner()).pending = true;
-                } else if failed == 0 {
-                    retries = 0;
                 }
             }
         }
     });
+}
+
+// Whether a background write that just ended is tried again after a poll interval. A write the
+// first read of the folder held back (`booting`) is waited for without using up a retry, for
+// SYNC_BOOT_WAIT_SECS at most, however long that read takes; any other failure gets
+// SYNC_WRITE_RETRIES tries. A write that went through starts the counts over.
+pub(crate) fn sync_write_again(failed: usize, booting: bool, retries: &mut u32, boot_waited: &mut u64) -> bool {
+    if failed == 0 {
+        *retries = 0;
+        *boot_waited = 0;
+        return false;
+    }
+    if booting && *boot_waited < SYNC_BOOT_WAIT_SECS {
+        *boot_waited += SYNC_POLL_SECS;
+        return true;
+    }
+    if *retries < SYNC_WRITE_RETRIES {
+        *retries += 1;
+        return true;
+    }
+    false
 }
 
 // The app is closing with a folder write still queued (a delete made a moment ago, say): it runs
@@ -2041,13 +2080,32 @@ fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost)
                 trashed.push(stem.clone());
             }
         }
-        // Marks of prompts that left the trash (restored, purged) are let go.
+        // Marks of prompts that left the trash (restored, purged) are let go, except an owed one
+        // (0) of a prompt that is gone from the library: its marker is still not in the folder,
+        // and without the debt the next start would import the leftover file as a new prompt.
+        // That debt ends when the marker is in the folder, or when there is no file left to
+        // mark.
         let in_trash: std::collections::HashSet<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+        let live: std::collections::HashSet<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        let marked: std::collections::HashSet<&str> = tombs.iter().map(|(stem, _, _)| stem.as_str()).collect();
         let before = store.settings.sync_trash_marks.len();
         let mut marks = std::mem::take(&mut store.settings.sync_trash_marks);
-        marks.retain(|id, _| in_trash.contains(id));
+        marks.retain(|id, &mut m| {
+            in_trash.contains(id)
+                || (m == 0 && !live.contains(id) && !marked.contains(id.as_str()) && path_of(dir, id).exists())
+        });
         marks_changed |= marks.len() != before;
         store.settings.sync_trash_marks = marks;
+        // First sightings of the markers that are in the folder now are kept with the settings;
+        // those of markers that are gone are let go.
+        let mut seen: HashMap<String, (String, u64)> = HashMap::new();
+        for (stem, path, content) in &tombs {
+            seen.insert(stem.clone(), (content.clone(), sync_tomb_first_seen(path, content)));
+        }
+        if seen != store.settings.sync_tomb_seen {
+            store.settings.sync_tomb_seen = seen;
+            marks_changed = true;
+        }
         if trashed.is_empty() && !marks_changed {
             return;
         }
@@ -2501,28 +2559,53 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
 // write is needed.
 pub(crate) fn sync_seed_owed(dir: &Path, prompts: &[Prompt], trash: &[Prompt], settings: &Settings) -> bool {
     let mut any = false;
-    for row in trash.iter().filter(|p| !p.secret && sync_safe_id(&p.id)) {
-        let Some(&mark) = settings.sync_trash_marks.get(&row.id) else { continue };
-        let path = dir.join(format!("{}.md", row.id));
+    let mut seed = |id: &str, row: Option<&Prompt>| {
+        let Some(&mark) = settings.sync_trash_marks.get(id) else { return };
+        let path = dir.join(format!("{id}.md"));
         if !path.is_file() {
-            continue;
+            return;
         }
-        if mark > 0 && sync_tomb_read(&sync_tomb_path(dir, &row.id)).is_none() {
-            continue;
+        if mark > 0 && sync_tomb_read(&sync_tomb_path(dir, id)).is_none() {
+            return;
         }
-        let Some(stamp) = sync_stamp_of(&path) else { continue };
-        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { continue };
+        let Some(stamp) = sync_stamp_of(&path) else { return };
+        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { return };
         let hash = sync_hash(&bytes);
-        let Some(content) = sync_decode_text(bytes) else { continue };
+        let Some(content) = sync_decode_text(bytes) else { return };
         let ours = parse_frontmatter(&content).is_some_and(|(fields, _)| md_is_ours(&fields));
-        if !ours || sync_file_differs_from_row(row, &content, prompts) {
-            continue;
+        if !ours || row.is_some_and(|row| sync_file_differs_from_row(row, &content, prompts)) {
+            return;
         }
         sync_known_note(&path);
         sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash });
         any = true;
+    };
+    for row in trash.iter().filter(|p| !p.secret && sync_safe_id(&p.id)) {
+        seed(&row.id, Some(row));
+    }
+    // A purged prompt has no row to compare the file with. Only an owed mark counts: a prompt
+    // that was purged while its marker was still owed. A file somebody edited meanwhile is swept
+    // along with a marker, and the other machine finds it in its trash.
+    let gone = |id: &String| {
+        sync_safe_id(id) && !prompts.iter().any(|p| &p.id == id) && !trash.iter().any(|p| &p.id == id)
+    };
+    for id in settings.sync_trash_marks.iter().filter(|(id, &m)| m == 0 && gone(id)).map(|(id, _)| id) {
+        seed(id, None);
     }
     any
+}
+
+// Gives this run the first sightings of delete markers an earlier run kept, so the 30 days of a
+// marker are counted across restarts. A time in the future (a clock that was set back) counts as
+// now: a marker never lives shorter than it would have without the memory.
+fn sync_seed_tomb_seen(dir: &Path, settings: &Settings) {
+    let now = sync_now_secs();
+    let mut seen = sync_state().tomb_seen.lock().unwrap_or_else(|e| e.into_inner());
+    for (stem, (content, at)) in &settings.sync_tomb_seen {
+        if sync_safe_id(stem) {
+            seen.entry(sync_seen_key(&sync_tomb_path(dir, stem))).or_insert_with(|| (content.clone(), (*at).min(now)));
+        }
+    }
 }
 
 // The work of a start: learn the folder, settle what an earlier run left unfinished and read
@@ -2534,6 +2617,7 @@ pub(crate) fn sync_start_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoun
         (s.prompts.clone(), s.trash.clone(), s.settings.clone())
     };
     sync_seed_seen(dir, &prompts, &settings);
+    sync_seed_tomb_seen(dir, &settings);
     let due = sync_seed_owed(dir, &prompts, &trash, &settings);
     let ready = {
         let s = db.lock().unwrap_or_else(|e| e.into_inner());

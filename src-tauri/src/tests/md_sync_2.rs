@@ -1215,3 +1215,39 @@ fn a_file_written_before_the_view_id_existed_does_not_read_as_an_outside_edit() 
     assert!(prompt_to_md(&p, &placement).contains("view_id: v1\n"));
     assert!(sync_md_matches(&p, &placement, &old_form));
 }
+
+// ---- a queued write waits out a long first read of the folder ----
+
+#[test]
+fn a_write_held_back_by_a_long_boot_read_is_not_given_up() {
+    let (mut retries, mut waited) = (0u32, 0u64);
+    // Twenty-three refused rounds in a row, far more than SYNC_WRITE_RETRIES.
+    for round in 0..23 {
+        assert!(sync_write_again(1, true, &mut retries, &mut waited), "gave up after {round} refused rounds");
+    }
+    assert_eq!(retries, 0, "waiting for the boot read used up retries");
+    // The read ends and the write goes through.
+    assert!(!sync_write_again(0, false, &mut retries, &mut waited));
+    assert_eq!((retries, waited), (0, 0));
+}
+
+#[test]
+fn the_wait_for_the_boot_read_is_bounded_and_then_the_normal_retries_apply() {
+    let (mut retries, mut waited) = (0u32, 0u64);
+    let mut rounds = 0;
+    while sync_write_again(1, true, &mut retries, &mut waited) {
+        rounds += 1;
+        assert!(rounds < 1000, "the wait never ends");
+    }
+    assert_eq!(rounds as u64, SYNC_BOOT_WAIT_SECS / SYNC_POLL_SECS + SYNC_WRITE_RETRIES as u64);
+}
+
+#[test]
+fn a_failed_write_outside_the_boot_window_still_gets_only_the_normal_retries() {
+    let (mut retries, mut waited) = (0u32, 0u64);
+    for _ in 0..SYNC_WRITE_RETRIES {
+        assert!(sync_write_again(2, false, &mut retries, &mut waited));
+    }
+    assert!(!sync_write_again(2, false, &mut retries, &mut waited));
+    assert_eq!(waited, 0);
+}
