@@ -13,14 +13,8 @@ pub(crate) struct SyncHealth {
     pub(crate) reason: String,
 }
 
-pub(crate) static SYNC_HEALTH: std::sync::OnceLock<Mutex<SyncHealth>> = std::sync::OnceLock::new();
-
-pub(crate) fn sync_health() -> &'static Mutex<SyncHealth> {
-    SYNC_HEALTH.get_or_init(|| Mutex::new(SyncHealth::default()))
-}
-
 pub(crate) fn sync_health_lock() -> std::sync::MutexGuard<'static, SyncHealth> {
-    sync_health().lock().unwrap_or_else(|e| e.into_inner())
+    sync_state().health.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // Returns true exactly on the round that flips the pause on, so the log line is

@@ -14,6 +14,7 @@ mod recording_audio;
 mod prompts_voice;
 mod md_sync_1;
 mod md_sync_2;
+mod md_sync_multi;
 mod storage_1;
 mod storage_2;
 mod diff_writes;
@@ -59,6 +60,8 @@ pub(super) use prompts_voice::*;
 pub(super) use md_sync_1::*;
 #[allow(unused_imports)]
 pub(super) use md_sync_2::*;
+#[allow(unused_imports)]
+pub(super) use md_sync_multi::*;
 #[allow(unused_imports)]
 pub(super) use storage_1::*;
 #[allow(unused_imports)]

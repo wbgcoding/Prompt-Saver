@@ -738,6 +738,55 @@ pub(crate) fn sync_write_agents_md(dir: &Path) {
     }
 }
 
+// Everything one running instance remembers about the folder it syncs. A process has exactly
+// one (`sync_state`); the test rig hosts two in one process by pointing a thread at its own,
+// so two instances can share a folder without sharing their memory of it.
+#[derive(Default)]
+pub(crate) struct SyncState {
+    pub(crate) seen: Mutex<SyncSeenMap>,
+    pub(crate) known: Mutex<std::collections::HashSet<String>>,
+    pub(crate) written: Mutex<SyncWrittenMap>,
+    pub(crate) health: Mutex<SyncHealth>,
+    /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
+    /// test sets it, to play the role of a machine with a skewed clock.
+    #[cfg(test)]
+    pub(crate) clock_skew: std::sync::atomic::AtomicI64,
+}
+
+static SYNC_STATE: std::sync::OnceLock<SyncState> = std::sync::OnceLock::new();
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static SYNC_STATE_TEST: std::cell::Cell<Option<&'static SyncState>> = const { std::cell::Cell::new(None) };
+}
+
+pub(crate) fn sync_state() -> &'static SyncState {
+    #[cfg(test)]
+    if let Some(s) = SYNC_STATE_TEST.with(|c| c.get()) {
+        return s;
+    }
+    SYNC_STATE.get_or_init(SyncState::default)
+}
+
+// The clock every sync decision reads (lock age, settled stamps, tombstone age, copy names).
+#[cfg(test)]
+fn sync_clock_skew_secs() -> i64 {
+    sync_state().clock_skew.load(Ordering::SeqCst)
+}
+#[cfg(not(test))]
+fn sync_clock_skew_secs() -> i64 {
+    0
+}
+
+pub(crate) fn sync_now_secs() -> u64 {
+    now_secs().saturating_add_signed(sync_clock_skew_secs())
+}
+
+pub(crate) fn sync_now_ns() -> u128 {
+    let real = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    real.saturating_add_signed(sync_clock_skew_secs() as i128 * 1_000_000_000)
+}
+
 // What each file in the folder looked like when last seen. A file is read only when its
 // modification time or size differs from the last round, so a thousand-entry folder is not
 // read end to end every few seconds. A file whose stamp changed since the last round is
@@ -802,14 +851,10 @@ pub(crate) fn sync_stamp_of(path: &Path) -> Option<SyncStamp> {
 }
 
 pub(crate) type SyncSeenMap = HashMap<String, SyncSeen>;
-pub(crate) static SYNC_SEEN: std::sync::OnceLock<Mutex<SyncSeenMap>> = std::sync::OnceLock::new();
 
-pub(crate) fn sync_seen() -> &'static Mutex<SyncSeenMap> {
-    SYNC_SEEN.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
+// What each file looked like when the app last wrote or read it, keyed by whole path.
 pub(crate) fn sync_seen_lock() -> std::sync::MutexGuard<'static, SyncSeenMap> {
-    sync_seen().lock().unwrap_or_else(|e| e.into_inner())
+    sync_state().seen.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // Keyed by the whole path, never by the file name alone: the same `<id>.md` exists
@@ -835,13 +880,8 @@ pub(crate) fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
 // back as one). Only these may be swept as orphans: a file whose id the app never knew
 // (another machine's folder, a hand-made or just-arrived file) is not ours to delete even
 // with our header; the poll must import it first.
-pub(crate) static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-
 pub(crate) fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
-    SYNC_KNOWN
-        .get_or_init(|| Mutex::new(std::collections::HashSet::new()))
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+    sync_state().known.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 pub(crate) fn sync_known_note(path: &Path) {
@@ -852,10 +892,9 @@ pub(crate) fn sync_known_note(path: &Path) {
 // file's stamp then. When the next render hashes the same and the stamp is unchanged, the
 // file is not read back; an outside edit changes the stamp.
 pub(crate) type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
-pub(crate) static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
 
 pub(crate) fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
-    SYNC_WRITTEN.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(|e| e.into_inner())
+    sync_state().written.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 pub(crate) fn sync_content_hash(content: &str) -> u64 {
@@ -877,8 +916,7 @@ pub(crate) fn sync_file_known_current(path: &Path, hash: u64) -> bool {
 pub(crate) const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
 
 pub(crate) fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
-    let now_ns = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    now_ns.saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
+    sync_now_ns().saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
 }
 
 // Remember that `path` holds the content with this hash (call after a write, or after a
@@ -913,7 +951,7 @@ pub(crate) fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
 // claimed with create_new first, so two conflicts in the same second (or an earlier copy)
 // never overwrite each other.
 pub(crate) fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Option<PathBuf> {
-    let secs = now_secs();
+    let secs = sync_now_secs();
     for n in 0..1000u32 {
         let suffix = if n == 0 { String::new() } else { format!("-{n}") };
         let copy = dir.join(format!("{id}.conflict-{secs}{suffix}{tag}.md"));
@@ -988,15 +1026,24 @@ pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings:
     // it meanwhile). A store that is busy right now counts as "maybe", which only
     // postpones the sweep to the next write.
     let live = |id: &str| match app.try_state::<Db>() {
-        Some(state) => match state.try_lock() {
-            Ok(store) => sync_id_is_live(&store.prompts, id),
-            Err(std::sync::TryLockError::Poisoned(e)) => sync_id_is_live(&e.into_inner().prompts, id),
-            Err(std::sync::TryLockError::WouldBlock) => true,
-        },
+        Some(state) => sync_live_in(&state, id),
         None => true,
     };
+    sync_write_all_core(&dir, prompts, settings, &live)
+}
+
+pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {
+    match db.try_lock() {
+        Ok(store) => sync_id_is_live(&store.prompts, id),
+        Err(std::sync::TryLockError::Poisoned(e)) => sync_id_is_live(&e.into_inner().prompts, id),
+        Err(std::sync::TryLockError::WouldBlock) => true,
+    }
+}
+
+// The window-free half of sync_write_all_impl: what the background flush runs.
+pub(crate) fn sync_write_all_core(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
     let _run = sync_run_lock();
-    sync_write_dir_checked(&dir, prompts, settings, &live)
+    sync_write_dir_checked(dir, prompts, settings, is_live)
 }
 
 // A library entry that still owns its file. A confidential one does not: its
@@ -1410,6 +1457,64 @@ pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
 // discard a UI edit made meanwhile. Only the cheap "does this file differ from the
 // snapshot" check and the file-level lock happen unlocked; the merge runs under the store
 // lock against each prompt's current state.
+// What the round needs from the app around it. The round itself (scan, read, apply) is
+// window-free so a test can run two instances against one folder; this is the part that
+// keeps restore points, saves what changed and tells the open windows.
+pub(crate) trait SyncRoundHost {
+    /// A prompt is about to be replaced by the file's version.
+    fn on_replace(&self, settings: &Settings, old: &Prompt, updated: &Prompt);
+    /// Persist what the round changed (settings first, as `save_settings` and
+    /// `save_prompts` are separate writes).
+    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool);
+    /// Every open window still holds what it fetched last.
+    fn notify(&self);
+}
+
+struct AppRoundHost<'a>(&'a AppHandle);
+
+impl SyncRoundHost for AppRoundHost<'_> {
+    fn on_replace(&self, settings: &Settings, old: &Prompt, updated: &Prompt) {
+        // The file wins this round, so whatever the prompt said before is about to
+        // be gone. If both sides changed since the last sync this is the losing
+        // side of a conflict, so keep it as a restore point instead of dropping it,
+        // the same way an edit in the app keeps one.
+        if !history_enabled(settings)
+            || (old.name == updated.name && old.text == updated.text && old.variants == updated.variants)
+        {
+            return;
+        }
+        let cap = history_cap(settings);
+        match db_conn(self.0) {
+            Some(c) => {
+                if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
+                    append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
+                }
+            }
+            None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
+        }
+    }
+
+    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool) {
+        // Prompts and Settings are saved separately (save_prompts never touches settings): without
+        // this a placement-only change would be echoed back out by save_prompts'
+        // spawn_sync_write_all and then lost on restart while the file kept claiming the new
+        // placement.
+        if settings_changed {
+            save_settings(self.0, &store.settings);
+        }
+        if prompts_changed {
+            save_prompts(self.0, store);
+        }
+    }
+
+    fn notify(&self) {
+        let app = self.0;
+        let _ = app.emit_to("main", "store-synced", ());
+        notify_float_settings(app);
+        rebuild_tray(app);
+    }
+}
+
 pub(crate) fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
     let dir = {
@@ -1419,6 +1524,12 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
         }
         sync_dir_path(app, &store.settings)
     };
+    sync_poll_core(&state, &dir, &AppRoundHost(app));
+}
+
+pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
+    let store_lock = || db.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = dir.to_path_buf();
     let run = sync_run_lock();
     let (to_read, files, all) = match sync_scan_folder(&dir) {
         Ok(r) => r,
@@ -1442,13 +1553,13 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     };
     {
         let mut h = sync_health_lock();
-        sync_health_note_ok(&mut h, files, now_secs());
+        sync_health_note_ok(&mut h, files, sync_now_secs());
     }
     {
         // The files of known prompts count as known (SYNC_KNOWN) every round, changed or not,
         // taken against the library's ids. The scan is stat-only with no snapshot, so the step
         // lives here; the guards are rechecked under the same lock.
-        let store = lock(&state);
+        let store = store_lock();
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
@@ -1466,7 +1577,7 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     // Only now, with at least one file to read, is the library copied for the
     // comparison against what each file would be written as.
     let (snapshot, settings_snapshot) = {
-        let store = lock(&state);
+        let store = store_lock();
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
@@ -1518,51 +1629,18 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     if candidates.is_empty() {
         return;
     }
-    let mut store = lock(&state);
+    let mut store = store_lock();
     if store.prompts_locked || !sync_enabled(&store.settings) {
         // Not applied, so not dealt with: the files are read again once the library is
         // free, instead of being dropped and later overwritten without a copy.
         sync_requeue_candidates(&dir, &candidates);
         return;
     }
-    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| {
-        // The file wins this round, so whatever the prompt said before is about to
-        // be gone. If both sides changed since the last sync this is the losing
-        // side of a conflict, so keep it as a restore point instead of dropping it,
-        // the same way an edit in the app keeps one.
-        if !history_enabled(settings)
-            || (old.name == updated.name && old.text == updated.text && old.variants == updated.variants)
-        {
-            return;
-        }
-        let cap = history_cap(settings);
-        match db_conn(app) {
-            Some(c) => {
-                if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
-                    append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
-                }
-            }
-            None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
-        }
-    });
-    // Prompts and Settings are saved separately (save_prompts never touches settings): without
-    // this a placement-only change would be echoed back out by save_prompts'
-    // spawn_sync_write_all and then lost on restart while the file kept claiming the new
-    // placement.
-    if settings_changed {
-        save_settings(app, &store.settings);
-    }
-    if changed {
-        save_prompts(app, &store);
-    }
+    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| host.on_replace(settings, old, updated));
+    host.save(&store, changed, settings_changed);
     drop(store);
     if changed || settings_changed {
-        // Every open window still holds what it fetched last. Tell them, or a stale
-        // grid shows old names and a later drag in it would write its old layout
-        // back over what the other machine just moved.
-        let _ = app.emit_to("main", "store-synced", ());
-        notify_float_settings(app);
-        rebuild_tray(app);
+        host.notify();
     }
 }
 

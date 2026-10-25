@@ -407,18 +407,13 @@ fn sync_normalize_float_folders_tolerates_a_still_forming_one_member_folder() {
 
 // ---- Multi-instance crash simulation ----
 //
-// sync_poll_once itself needs a live AppHandle (Tauri window/state), which this
-// test module has no harness for - every existing sync test works the same
-// way, exercising the pure building blocks sync_poll_once is made of instead of
-// the function itself. This helper replays exactly sync_poll_once's own
-// per-file sequence (parse -> apply content -> apply placement -> normalize)
-// against a real temp directory, so interleaving it under two independent
-// (Vec<Prompt>, Settings) pairs stands in for two real instances syncing
-// through the same cloud folder. Normalizing after every single file (finer
-// grain than sync_poll_once's real once-per-batch) makes this the STRICTER
-// case - since sync_normalize_* now tolerates a 1-member folder, that no
-// longer breaks anything, and proves the fix holds at the worst-case
-// granularity too.
+// The whole round, driven against two instances sharing a folder, lives in
+// md_sync_multi.rs. This helper is the cheaper per-file variant: it replays the poll's own
+// per-file sequence (parse -> apply content -> apply placement -> normalize) against a real
+// temp directory, so interleaving it under two independent (Vec<Prompt>, Settings) pairs
+// stands in for two instances syncing through the same cloud folder. Normalizing after
+// every single file (finer grain than the real once-per-batch) makes this the STRICTER
+// case.
 pub(super) fn poll_apply(prompts: &mut Vec<Prompt>, settings: &mut Settings, content: &str, stem: &str) {
     let fields = parse_frontmatter(content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
     match prompts.iter().position(|p| p.id == stem) {
