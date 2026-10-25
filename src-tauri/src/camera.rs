@@ -203,12 +203,18 @@ pub(crate) fn decode_camera_chunk(b64: &str) -> Result<Vec<u8>, String> {
 pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
     // Decoded before the lock is taken: the synchronous finish commands wait on it.
     let bytes = decode_camera_chunk(&bytes_b64)?;
-    let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
-    let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
-    if session.output_path != Path::new(&path) {
-        return Err("path does not match the active camera recording".to_string());
-    }
-    let mut f = OpenOptions::new().append(true).open(&session.output_path).map_err(|e| e.to_string())?;
+    // The lock covers the session check only, not the disk write: a slow target (a share, a
+    // sleeping disk) must not hold up the finish commands that wait on this lock. Opening
+    // without `create` fails cleanly when a racing discard already removed the file.
+    let output_path = {
+        let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
+        let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
+        if session.output_path != Path::new(&path) {
+            return Err("path does not match the active camera recording".to_string());
+        }
+        session.output_path.clone()
+    };
+    let mut f = OpenOptions::new().append(true).open(&output_path).map_err(|e| e.to_string())?;
     f.write_all(&bytes).map_err(|e| e.to_string())
 }
 

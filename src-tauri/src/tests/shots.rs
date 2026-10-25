@@ -395,3 +395,14 @@ fn the_desktop_freeze_runs_on_a_blocking_worker() {
     assert!(line.contains("spawn_blocking(freeze_desktop)"), "{line}");
     assert!(!src.contains("match freeze_desktop()"));
 }
+
+#[test]
+fn a_camera_chunk_is_written_after_the_session_lock_is_released() {
+    let src = source!("../camera.rs");
+    let body = &src[src.find("pub async fn camera_append_chunk").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let write_at = body.find("write_all").unwrap();
+    let open_at = body.find("OpenOptions::new()").unwrap();
+    let lock_end = body.find("session.output_path.clone()").unwrap();
+    assert!(lock_end < open_at && open_at < write_at, "the lock scope ends before the file is opened");
+}
