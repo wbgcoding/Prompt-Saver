@@ -638,13 +638,13 @@ pub(crate) fn accel_is_free(app: &AppHandle, sc: Accel) -> bool {
     }
 }
 
-// Whether a combination is already bound inside the app. The recording stop and
-// pause keys only count while recording and their own switch are on, the same gate
-// the arming side applies.
+// Whether a combination is already bound inside the app. The voice hotkey and the
+// recording stop and pause keys only count while their feature and own switch are on,
+// the same gate the arming side applies.
 pub(crate) fn hotkey_in_use(settings: &Settings, prompts: &[Prompt], editing: Option<&str>, sc: Accel) -> bool {
     let flags = &settings.ui_flags;
     parse_accel(&settings.hotkey) == Some(sc)
-        || parse_accel(&settings.voice_hotkey) == Some(sc)
+        || parse_accel(active_voice_hotkey(&settings.voice_hotkey, flags)) == Some(sc)
         || parse_accel(active_rec_hotkey(&settings.rec_stop_hotkey, "recStopHotkey", flags)) == Some(sc)
         || parse_accel(active_rec_hotkey(&settings.rec_pause_hotkey, "recPauseHotkey", flags)) == Some(sc)
         || prompts.iter().any(|p| Some(p.id.as_str()) != editing && parse_accel(&p.hotkey) == Some(sc))
