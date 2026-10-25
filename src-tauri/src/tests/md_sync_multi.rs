@@ -980,3 +980,23 @@ fn multi_a_view_made_on_a_is_renamed_on_b_after_it_was_created_there() {
     rig.settle();
     assert_eq!(view_names(&rig.b), vec!["Fresher".to_string(), "Main".to_string()], "B kept the old name or added a view");
 }
+
+#[test]
+fn multi_a_hand_typed_colour_that_is_not_a_hex_value_is_not_stored() {
+    let rig = Rig::new();
+    let id = rig.a.add("Tinted", "text");
+    rig.a.edit(&id, |p| p.color = "#112233".into());
+    rig.settle();
+    let path = rig.dir.join(format!("{id}.md"));
+    let file = fs::read_to_string(&path).unwrap();
+    fs::write(&path, file.replace("color: #112233", "color: not-a-colour")).unwrap();
+    rig.settle();
+    assert_eq!(rig.a.get(&id).unwrap().color, "#112233");
+    assert_eq!(rig.b.get(&id).unwrap().color, "#112233");
+    let file = fs::read_to_string(&path).unwrap();
+    fs::write(&path, file.replace("color: not-a-colour", "color: #ABCDEF")).unwrap();
+    rig.settle();
+    assert_eq!(rig.a.get(&id).unwrap().color, "#abcdef");
+    assert_eq!(rig.b.get(&id).unwrap().color, "#abcdef");
+    rig.assert_converged();
+}

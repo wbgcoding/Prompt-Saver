@@ -438,7 +438,11 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
         p.name.clone_from(v);
     }
     if let Some(v) = fields.get("color") {
-        p.color.clone_from(v);
+        // Same rule as every in-app entry point: #rrggbb or empty. A hand-typed colour that is
+        // neither leaves the prompt's colour as it was instead of storing junk.
+        if let Ok(c) = valid_tag_color(v) {
+            p.color = c;
+        }
     }
     if let Some(v) = fields.get("tags") {
         // A hand-written file is an entry point like any other: a bad tag is dropped,

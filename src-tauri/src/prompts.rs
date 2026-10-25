@@ -1295,7 +1295,7 @@ pub(crate) async fn update_prompt(
                 let (text, variants) = edited_text_and_variants(p, text, variants, secret_key)?;
                 p.name = crate::md_sync::sync_clean_name(&name);
                 p.text = text;
-                p.color = color;
+                p.color = valid_tag_color(&color).unwrap_or_else(|_| original.color.clone());
                 p.variants = variants;
                 p.rotate_mode = sanitize_rotate_mode(rotate_mode, &p.variants);
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
