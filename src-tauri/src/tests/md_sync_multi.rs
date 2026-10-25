@@ -813,3 +813,21 @@ fn multi_a_process_that_cannot_be_opened_still_counts_as_alive() {
     // The System process (id 4) is refused to an ordinary user and is certainly running.
     assert!(pid_is_alive(4));
 }
+
+
+// ---- line endings, names, cells, views ----
+
+#[test]
+fn multi_a_file_saved_with_windows_line_endings_imports_clean_and_stays_put() {
+    let rig = Rig::new();
+    let id = rig.a.add("Crlf", "first\nsecond");
+    rig.settle();
+    let path = rig.dir.join(format!("{id}.md"));
+    let text = fs::read_to_string(&path).unwrap().replace('\n', "\r\n");
+    fs::write(&path, text).unwrap();
+    rig.settle();
+    assert_eq!(rig.a.get(&id).unwrap().text, "first\nsecond");
+    assert_eq!(rig.b.get(&id).unwrap().text, "first\nsecond");
+    rig.assert_converged();
+    assert!(rig.conflict_copies().is_empty(), "the converted file was taken for a conflicting edit");
+}

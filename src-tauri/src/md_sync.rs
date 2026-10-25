@@ -307,8 +307,10 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
 // caller leaves such files alone rather than guessing at a malformed one.
 pub(crate) fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
     let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    // An editor or Git may have converted the line endings: the text is read as if it had not.
+    let content = content.replace("\r\n", "\n");
     let mut lines = content.split('\n');
-    if lines.next()?.trim_end_matches('\r') != "---" {
+    if lines.next()? != "---" {
         return None;
     }
     let mut fields = HashMap::new();
@@ -316,7 +318,7 @@ pub(crate) fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String
     let mut in_header = true;
     for line in lines {
         if in_header {
-            if line.trim_end_matches('\r') == "---" {
+            if line == "---" {
                 in_header = false;
                 continue;
             }
