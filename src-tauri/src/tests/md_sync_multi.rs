@@ -541,7 +541,7 @@ fn multi_a_folder_that_vanishes_is_rewritten_by_an_edit_and_the_other_side_follo
 
 #[test]
 fn multi_a_save_on_b_does_not_push_back_a_file_that_is_still_arriving() {
-    let mut rig = Rig::new();
+    let rig = Rig::new();
     let p1 = rig.a.add("One", "one");
     let p2 = rig.a.add("Two", "two");
     let p3 = rig.a.add("Three", "three");
@@ -708,4 +708,108 @@ fn multi_leaving_a_folder_removes_the_delete_markers_it_holds_and_names_a_strang
     let scan = sync_dir_scan(&rig.dir);
     assert_eq!(scan.foreign, vec!["abc.deleted".to_string()]);
     assert!(scan.ours.iter().any(|p| p.file_name().is_some_and(|n| n.to_string_lossy() == format!("{id}.deleted"))));
+}
+
+
+// ---- the lock file ----
+
+fn lock_text(host: &str, pid: u32, start_ns: u128) -> String {
+    format!("{host}\n{pid}\n{start_ns}")
+}
+
+fn unix_ns_now() -> u128 {
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos()
+}
+
+#[test]
+fn multi_the_lock_of_a_dead_process_is_taken_over_after_the_stale_age() {
+    let rig = Rig::new();
+    let id = rig.a.add("Locked", "text");
+    let lock = sync_lock_path(&rig.dir.join(format!("{id}.md")));
+    fs::create_dir_all(&rig.dir).unwrap();
+    // No process has this id.
+    fs::write(&lock, lock_text(&local_host_name(), 4294967290, unix_ns_now())).unwrap();
+    rig.a.step(&rig.dir);
+    assert!(!rig.dir.join(format!("{id}.md")).exists(), "a young lock must keep the file out for now");
+    age_file(&lock, SYNC_LOCK_STALE_SECS + 5);
+    rig.settle();
+    assert!(rig.b.get(&id).is_some(), "the stale lock was never taken over");
+    rig.assert_converged();
+}
+
+#[test]
+fn multi_a_write_that_met_a_lock_is_counted_as_failed_and_retried() {
+    let rig = Rig::new();
+    let id = rig.a.add("Held", "text");
+    fs::create_dir_all(&rig.dir).unwrap();
+    // The prompt's file exists with other text, so the write has to take the lock.
+    let md = rig.dir.join(format!("{id}.md"));
+    fs::write(&md, "---\nname: Held\n---\nold\n").unwrap();
+    let lock = sync_lock_path(&md);
+    fs::write(&lock, lock_text(&local_host_name(), std::process::id(), unix_ns_now())).unwrap();
+    assert!(rig.a.flush(&rig.dir) >= 1, "a skipped file must be counted, or nobody retries it");
+    fs::remove_file(&lock).unwrap();
+}
+
+#[test]
+fn multi_a_lock_from_another_computer_waits_a_full_minute() {
+    let rig = Rig::new();
+    let id = rig.a.add("Remote lock", "text");
+    let md = rig.dir.join(format!("{id}.md"));
+    fs::create_dir_all(&rig.dir).unwrap();
+    let lock = sync_lock_path(&md);
+    // This computer has no process with that id, but the holder is somewhere else.
+    fs::write(&lock, lock_text("SOME-OTHER-PC", 4294967290, unix_ns_now())).unwrap();
+    age_file(&lock, SYNC_LOCK_STALE_SECS + 30);
+    assert!(!sync_lock_is_stale(&lock), "a lock of another computer was judged by this computer's process table");
+    age_file(&lock, 70);
+    assert!(sync_lock_is_stale(&lock), "a lock of another computer never expires");
+}
+
+#[test]
+fn multi_a_lock_dated_in_the_future_is_not_old() {
+    let dir = sync_tmp_dir("lock-future");
+    let lock = dir.join("p.md.lock");
+    fs::write(&lock, lock_text(&local_host_name(), 4294967290, unix_ns_now())).unwrap();
+    let f = fs::OpenOptions::new().write(true).open(&lock).unwrap();
+    f.set_modified(SystemTime::now() + Duration::from_secs(120)).unwrap();
+    drop(f);
+    assert!(!sync_lock_is_stale(&lock), "a lock from a clock that runs ahead was taken as old");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn multi_releasing_removes_only_the_lock_this_instance_took() {
+    let dir = sync_tmp_dir("lock-own");
+    let md = dir.join("p.md");
+    assert!(sync_lock_acquire(&md));
+    let lock = sync_lock_path(&md);
+    // Somebody else took the file over meanwhile.
+    fs::write(&lock, lock_text("SOME-OTHER-PC", 1, 1)).unwrap();
+    sync_lock_release(&md);
+    assert!(lock.exists(), "release deleted a lock that another writer holds");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn multi_a_lock_whose_process_id_was_taken_by_a_newer_process_is_stale() {
+    let dir = sync_tmp_dir("lock-reuse");
+    let lock = dir.join("p.md.lock");
+    // This very process holds the id, but it started long after the lock was written.
+    fs::write(&lock, lock_text(&local_host_name(), std::process::id(), 1)).unwrap();
+    age_file(&lock, SYNC_LOCK_STALE_SECS + 5);
+    assert!(sync_lock_is_stale(&lock), "a reused process id keeps a dead writer's lock alive for good");
+    // The lock this process writes itself is never stale.
+    let md = dir.join("q.md");
+    assert!(sync_lock_acquire(&md));
+    age_file(&sync_lock_path(&md), SYNC_LOCK_STALE_SECS * 20);
+    assert!(!sync_lock_is_stale(&sync_lock_path(&md)));
+    sync_lock_release(&md);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn multi_a_process_that_cannot_be_opened_still_counts_as_alive() {
+    // The System process (id 4) is refused to an ordinary user and is certainly running.
+    assert!(pid_is_alive(4));
 }

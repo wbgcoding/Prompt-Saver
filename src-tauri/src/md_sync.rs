@@ -23,6 +23,11 @@ pub(crate) const SYNC_POLL_SECS: u64 = 5;
 // is alive, so a slow write by a running instance is never stolen, and a crashed
 // instance's lock is picked up as soon as the age passes.
 pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
+/// A lock written by another computer is judged by time alone, and given longer: its clock and
+/// the folder's sharing delay can disagree with ours by a good deal.
+/// How often a failed background write is tried again before it waits for the next save.
+pub(crate) const SYNC_WRITE_RETRIES: u32 = 3;
+pub(crate) const SYNC_LOCK_FOREIGN_STALE_SECS: u64 = 60;
 
 // After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
 // pauses, says so once, and retries only every SYNC_PAUSED_FACTOR intervals.
@@ -753,6 +758,8 @@ pub(crate) struct SyncState {
     pub(crate) synced: Mutex<SyncSyncedMap>,
     /// Tombstones this instance has acted on, per file: path -> the text the file held.
     pub(crate) tombs: Mutex<HashMap<String, String>>,
+    /// The lock files this instance holds right now: lock path -> the text it wrote into it.
+    pub(crate) locks: Mutex<HashMap<String, String>>,
     pub(crate) health: Mutex<SyncHealth>,
     /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
     /// test sets it, to play the role of a machine with a skewed clock.
@@ -1245,6 +1252,10 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
             }
+        } else {
+            // Another writer holds the file's lock. Counted, so the write is tried again.
+            failed += 1;
+            append_crash_log(&format!("prompt-sync: {filename} is locked by another writer, trying again"));
         }
         sync_known_note(&path);
         wanted.insert(filename);
@@ -1305,6 +1316,7 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
         // Markdown sync writes for the rest of the process. Db state is refetched per iteration on
         // purpose.
         let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
+        let mut retries = 0u32;
         loop {
             {
                 // Check-and-clear (or go inactive) in one critical section, or a deposit between "queue
@@ -1327,12 +1339,23 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
             };
             if let Some((prompts, settings)) = job {
                 let app2 = app.clone();
-                let _ = tauri::async_runtime::spawn_blocking(move || {
+                let failed = tauri::async_runtime::spawn_blocking(move || {
                     // Background flush: no one is waiting on it, so a failure goes
-                    // to the crash log inside and the next save tries again.
-                    let _ = sync_write_all_impl(&app2, &prompts, &settings);
+                    // to the crash log inside.
+                    sync_write_all_impl(&app2, &prompts, &settings)
                 })
-                .await;
+                .await
+                .unwrap_or(0);
+                // A file that could not be written (locked by another writer, a busy folder) is
+                // tried again after a poll interval, a few times, instead of waiting for the next
+                // save to come along.
+                if failed > 0 && retries < SYNC_WRITE_RETRIES {
+                    retries += 1;
+                    tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
+                    q.0.lock().unwrap_or_else(|e| e.into_inner()).pending = true;
+                } else if failed == 0 {
+                    retries = 0;
+                }
             }
         }
     });
