@@ -19,7 +19,7 @@ import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
-import { centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
+import { markedRange, centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
 import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
@@ -233,6 +233,7 @@ function applyI18n() {
   updateVolumeValueText("ve-vol-mic");
   renderPlayhead();
   if (syncWinButtons) syncWinButtons();
+  syncSelectionButtons();
 }
 
 export async function loadTexts(settings) {
@@ -389,6 +390,18 @@ export function removeOps(match) {
   pushOp({ tool: "removal", removed, floor });
 }
 
+// Swaps the matching ops for one new op as a single undo step: the marker records what went and
+// what came, so one undo brings every old op back and takes the new one out again.
+export function replaceOps(match, op) {
+  const removed = [];
+  VE.ops.forEach((o, at) => { if (o.tool !== "removal" && match(o)) removed.push({ op: o, at }); });
+  const floor = VE.floor;
+  VE.ops = VE.ops.filter((o) => !removed.some((r) => r.op === o));
+  VE.floor = Math.max(0, VE.floor - removed.filter((r) => r.at < VE.floor).length);
+  VE.ops.push(op);
+  pushOp({ tool: "removal", removed, floor, added: op });
+}
+
 function restoreRemoved(marker) {
   for (const { op, at } of marker.removed) VE.ops.splice(Math.min(at, VE.ops.length), 0, op);
 }
@@ -399,6 +412,7 @@ export function undo() {
   const cur = VE.ops[idx];
   if (cur.tool === "removal") {
     VE.ops.pop();
+    if (cur.added) VE.ops = VE.ops.filter((o) => o !== cur.added);
     restoreRemoved(cur);
     // The removal lowered the floor for every locked op it took out; they are back, so is it.
     if (Number.isFinite(cur.floor)) VE.floor = Math.max(VE.floor, Math.min(cur.floor, VE.ops.length));
@@ -421,6 +435,7 @@ export function redo() {
   if (next.tool === "removal") {
     VE.floor = Math.max(0, VE.floor - next.removed.filter((r) => r.at < VE.floor).length);
     VE.ops = VE.ops.filter((o) => !next.removed.some((r) => r.op === o));
+    if (next.added) VE.ops.push(next.added);
     VE.ops.push(next);
   } else if (next._prev) {
     // The matching undo left this slot holding next._prev: put the newer
@@ -837,7 +852,21 @@ export function renderRegions() {
   // renderRegions() is called on every VE.sel mutation (mark in/out, timeline drag, clear), so
   // syncing the overlay editor's "Use selection" button here enables it immediately while that
   // panel is open, without rebuilding the panel on every pointermove.
-  document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
+  syncSelectionButtons();
+}
+
+// Trim, cut and "use selection" need a range that spans something. While there is none they
+// are disabled and their tooltip says how to get one.
+export function syncSelectionButtons() {
+  const ready = !!markedRange();
+  for (const btn of [$("ve-trim-set"), $("ve-cut-add"), ...document.querySelectorAll(".ve-use-sel")]) {
+    btn.disabled = !ready;
+    const own = btn.dataset.i18nTitle;
+    if (!ready) btn.title = t("veNeedSelectionTip");
+    else if (btn.dataset.shortcut) withShortcut(btn, btn.dataset.shortcut);
+    else if (own) btn.title = t(own);
+    else btn.removeAttribute("title");
+  }
 }
 
 // The two trim handles are sliders: a screen reader gets the plain time it would otherwise have
@@ -1064,24 +1093,27 @@ function timelineMs(clientX) {
   return clamp(pxToMs(clientX - rect.left), 0, VE.dur);
 }
 
+// A press on the ruler band scrubs; a press anywhere lower on the track starts a selection that
+// only counts once the pointer moved a few pixels, so a plain click just sets the playhead.
+const DRAG_SLOP_PX = 4;
 regionsEl.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return;
   const handle = e.target.closest(".ve-handle");
-  regionsEl.setPointerCapture(e.pointerId);
+  // A press the page did not start as a real pointer (a synthetic one) has nothing to capture.
+  try { regionsEl.setPointerCapture(e.pointerId); } catch { /* the move and up events still reach the track */ }
   const ms = timelineMs(e.clientX);
   if (handle) {
     const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
     VE.drag = { kind: "trim", edge: handle.id === "ve-trim-a" ? "a" : "b", live: { startMs: trim.startMs, endMs: trim.endMs } };
     return;
   }
-  if (e.shiftKey) {
-    VE.drag = { kind: "select", anchor: ms };
-    VE.sel = { a: ms, b: ms };
-    renderRegions();
+  const rulerH = $("ve-ruler").offsetHeight || 18;
+  if (e.clientY - $("ve-track").getBoundingClientRect().top < rulerH) {
+    VE.drag = { kind: "scrub" };
+    seek(ms);
     return;
   }
-  VE.drag = { kind: "scrub" };
-  seek(ms);
+  VE.drag = { kind: "select", anchor: ms, startX: e.clientX, moved: false };
 });
 
 regionsEl.addEventListener("pointermove", (e) => {
@@ -1090,6 +1122,8 @@ regionsEl.addEventListener("pointermove", (e) => {
   const ms = timelineMs(e.clientX);
   if (drag.kind === "scrub") { seek(ms); return; }
   if (drag.kind === "select") {
+    if (!drag.moved && Math.abs(e.clientX - drag.startX) < DRAG_SLOP_PX) return;
+    drag.moved = true;
     VE.sel = { a: Math.min(drag.anchor, ms), b: Math.max(drag.anchor, ms) };
     renderRegions();
     return;
@@ -1111,6 +1145,11 @@ function endTimelineDrag() {
   const drag = VE.drag;
   if (!drag) return;
   VE.drag = null;
+  if (drag.kind === "select") {
+    if (!drag.moved) seek(drag.anchor);
+    else if (VE.sel && VE.sel.b - VE.sel.a < MIN_CLIP_MS) { VE.sel = null; renderRegions(); }
+    return;
+  }
   if (drag.kind === "trim") {
     // A click on a handle that did not move it is no edit: no undo step, no dirty mark.
     const cur = opOf("trim");
@@ -1403,29 +1442,44 @@ function playheadInKept() {
 }
 $("ve-mark-in").addEventListener("click", () => {
   if (!playheadInKept()) return;
-  const b = VE.sel && VE.sel.b > VE.playhead ? VE.sel.b : VE.dur;
+  const b = VE.sel && VE.sel.b > VE.playhead ? VE.sel.b : trimBounds().b;
   VE.sel = { a: VE.playhead, b };
   renderRegions();
 });
 $("ve-mark-out").addEventListener("click", () => {
   if (!playheadInKept()) return;
-  const a = VE.sel && VE.sel.a < VE.playhead ? VE.sel.a : 0;
+  const a = VE.sel && VE.sel.a < VE.playhead ? VE.sel.a : trimBounds().a;
   VE.sel = { a, b: VE.playhead };
   renderRegions();
 });
 $("ve-sel-clear").addEventListener("click", () => { VE.sel = null; renderRegions(); renderOverlayEditor(); });
 $("ve-trim-set").addEventListener("click", () => {
-  if (!VE.sel) { toast(t("veNeedSelection")); return; }
-  setTrim(VE.sel.a, VE.sel.b);
+  const range = markedRange();
+  if (!range) { toast(t("veNeedSelection")); return; }
+  // Cleared before the push, like a cut: the band must not outlive the edit it produced.
+  VE.sel = null;
+  setTrim(range.startMs, range.endMs);
 });
-$("ve-cut-add").addEventListener("click", () => {
-  if (!VE.sel || Math.abs(VE.sel.b - VE.sel.a) < MIN_CLIP_MS) { toast(t("veNeedSelection")); return; }
-  const startMs = Math.min(VE.sel.a, VE.sel.b);
-  const endMs = Math.max(VE.sel.a, VE.sel.b);
+// Cuts the marked range out of the kept part. A range sticking out of the trim is clamped to it,
+// one entirely outside says so, and a cut touching earlier cuts becomes one cut with them.
+export function cutSelection() {
+  const range = markedRange();
+  if (!range) { toast(t("veNeedSelection")); return; }
+  const bounds = trimBounds();
+  let startMs = Math.max(range.startMs, bounds.a);
+  let endMs = Math.min(range.endMs, bounds.b);
+  if (endMs - startMs < MIN_CLIP_MS) { toast(t("veCutOutside")); return; }
+  const touching = opsOf("cut").filter((c) => Math.min(c.startMs, c.endMs) <= endMs && Math.max(c.startMs, c.endMs) >= startMs);
+  for (const c of touching) {
+    startMs = Math.min(startMs, c.startMs, c.endMs);
+    endMs = Math.max(endMs, c.startMs, c.endMs);
+  }
   // Cleared before the push: pushOp redraws the timeline, and the band must not outlive the cut.
   VE.sel = null;
-  pushOp({ tool: "cut", startMs, endMs });
-});
+  if (touching.length) replaceOps((o) => touching.includes(o), { tool: "cut", startMs, endMs });
+  else pushOp({ tool: "cut", startMs, endMs });
+}
+$("ve-cut-add").addEventListener("click", cutSelection);
 $("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut"));
 
 $("ve-still").addEventListener("click", async () => {
@@ -1465,13 +1519,15 @@ $("ve-trim-start-val").addEventListener("change", () => {
   const ms = parseTime($("ve-trim-start-val").value);
   const trim = opOf("trim");
   if (ms == null) { renderEditFields(); return; }
-  setTrim(ms, trim ? trim.endMs : VE.dur);
+  const end = trim ? trim.endMs : VE.dur;
+  setTrim(clamp(ms, 0, end - MIN_CLIP_MS), end);
 });
 $("ve-trim-end-val").addEventListener("change", () => {
   const ms = parseTime($("ve-trim-end-val").value);
   const trim = opOf("trim");
   if (ms == null) { renderEditFields(); return; }
-  setTrim(trim ? trim.startMs : 0, ms);
+  const start = trim ? trim.startMs : 0;
+  setTrim(start, clamp(ms, start + MIN_CLIP_MS, VE.dur));
 });
 
 // Decorate the static crop/speed/fade fields with the shared mouse-only stepper before wiring
@@ -1957,7 +2013,7 @@ document.addEventListener("keydown", (e) => {
     case "End": e.preventDefault(); seek(e.shiftKey ? VE.dur : keptEnd()); break;
     case "i": case "I": e.preventDefault(); $("ve-mark-in").click(); break;
     case "o": case "O": e.preventDefault(); $("ve-mark-out").click(); break;
-    case "c": case "C": e.preventDefault(); $("ve-cut-add").click(); break;
+    case "c": case "C": e.preventDefault(); cutSelection(); break;
     case "+": case "=": e.preventDefault(); setZoom(VE.zoom * TIMELINE_ZOOM_STEP); break;
     case "-": e.preventDefault(); setZoom(VE.zoom / TIMELINE_ZOOM_STEP); break;
     case "v": case "V": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;

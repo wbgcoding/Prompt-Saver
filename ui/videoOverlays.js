@@ -16,7 +16,7 @@ const OV_MIN_MS = 100;
 
 // The marked range, when it spans something. A click that left a collapsed mark behind does not
 // count: an overlay born from it would be zero seconds long.
-function markedRange() {
+export function markedRange() {
   if (!VE.sel) return null;
   const startMs = Math.min(VE.sel.a, VE.sel.b), endMs = Math.max(VE.sel.a, VE.sel.b);
   return endMs - startMs >= OV_MIN_MS ? { startMs, endMs } : null;
@@ -552,6 +552,7 @@ export function renderOverlayEditor() {
   useSel.className = "ghost-btn ve-wide ve-use-sel";
   useSel.textContent = t("veOvUseSelection");
   useSel.disabled = !markedRange();
+  if (useSel.disabled) useSel.title = t("veNeedSelectionTip");
   useSel.addEventListener("click", () => {
     const marked = markedRange();
     if (marked) commitOverlay(op, marked);

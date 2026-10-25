@@ -100,4 +100,89 @@ def run(browser, tmp):
       if (mx.dataset.maximized !== '0' || mx.innerHTML !== iconBefore) errs.push('4022: a second click did not switch back');
     }
     """)
+
+    # 4023: a plain drag on the region track selects, a click only moves the playhead, the ruler scrubs.
+    failed += vprobe('drag', 'drag selects, click seeks, ruler scrubs', r"""
+    // 4023: timeline pointer input.
+    const reg = document.getElementById('ve-regions');
+    const rr = reg.getBoundingClientRect();
+    const X = (ms) => rr.left + (ms / VE.dur) * rr.width;
+    const tol = (VE.dur / rr.width) * 1.5 + 1;
+    const near = (a, b) => Math.abs(a - b) <= tol;
+    const yBody = rr.top + 40, yRuler = rr.top + 6;
+    // The stub clip is ten minutes long, so a few pixels are seconds: use ranges well past the 4 px slop.
+    ptr('pointerdown', X(20000), yBody, reg); ptr('pointermove', X(120000), yBody, reg); ptr('pointerup', X(120000), yBody, reg);
+    if (!VE.sel || !near(VE.sel.a, 20000) || !near(VE.sel.b, 120000)) errs.push('4023: a drag from 20 s to 120 s selected ' + JSON.stringify(VE.sel));
+    VE.sel = null; mod.renderRegions();
+    ptr('pointerdown', X(70000), yBody, reg); ptr('pointerup', X(70000), yBody, reg);
+    await sleep(100);
+    if (VE.sel) errs.push('4023: a click left a selection ' + JSON.stringify(VE.sel));
+    if (!near(VE.playhead, 70000)) errs.push('4023: a click did not move the playhead (' + VE.playhead + ')');
+    ptr('pointerdown', X(80000), yBody, reg); ptr('pointermove', X(80000) + 2, yBody, reg); ptr('pointerup', X(80000) + 2, yBody, reg);
+    if (VE.sel) errs.push('4023: a 2 px wobble made a selection ' + JSON.stringify(VE.sel));
+    ptr('pointerdown', X(30000), yRuler, reg); ptr('pointermove', X(40000), yRuler, reg); ptr('pointerup', X(40000), yRuler, reg);
+    await sleep(100);
+    if (!near(VE.playhead, 40000)) errs.push('4023: a drag on the ruler did not scrub (' + VE.playhead + ')');
+    if (VE.sel) errs.push('4023: scrubbing on the ruler made a selection');
+    // A selection shorter than the minimum is dropped on release: on a one-second clip a few pixels are milliseconds.
+    const longDur = VE.dur;
+    VE.dur = 1000; mod.renderRegions();
+    const r2 = reg.getBoundingClientRect();
+    ptr('pointerdown', r2.left + 100, yBody, reg); ptr('pointermove', r2.left + 106, yBody, reg); ptr('pointerup', r2.left + 106, yBody, reg);
+    if (VE.sel) errs.push('4023: a selection shorter than the minimum survived the release ' + JSON.stringify(VE.sel));
+    VE.dur = longDur; mod.renderRegions();
+    if (!document.getElementById('ve-timeline').title) errs.push('4023: the timeline has no hint tooltip');
+    """)
+
+    # 4024: buttons follow the selection; trim and cut act on it; marks default to the trim range.
+    failed += vprobe('selbtn', 'selection buttons: disabled without a range, trim and cut, merge', r"""
+    // 4024: selection tools.
+    const $ = (id) => document.getElementById(id);
+    const cuts = () => VE.ops.filter((o) => o.tool === 'cut').map((o) => [o.startMs, o.endMs]);
+    const trimOp = () => VE.ops.filter((o) => o.tool === 'trim').pop() || null;
+    const press = (key) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    mod.renderRegions();
+    if (!$('ve-trim-set').disabled || !$('ve-cut-add').disabled) errs.push('4024: trim or cut is enabled without a selection');
+    if ($('ve-trim-set').title !== 'Select a range first: drag on the timeline or use the selection buttons.') errs.push('4024: the disabled trim button has the tooltip "' + $('ve-trim-set').title + '"');
+    if (!($('ve-mark-out').compareDocumentPosition($('ve-mark-in')) & Node.DOCUMENT_POSITION_FOLLOWING)) errs.push('4024: mark out does not come before mark in');
+    press('c');
+    if ($('ve-toast').textContent !== 'Select a range on the timeline first.') errs.push('4024: C without a selection did not toast, got "' + $('ve-toast').textContent + '"');
+    VE.sel = { a: 3000, b: 3000 }; mod.renderRegions();
+    if (!$('ve-trim-set').disabled) errs.push('4024: a collapsed selection enables trim');
+    VE.sel = { a: 2000, b: 5000 }; mod.renderRegions();
+    if ($('ve-trim-set').disabled || $('ve-cut-add').disabled) errs.push('4024: a real selection leaves trim or cut disabled');
+    if ($('ve-trim-set').title === 'Select a range first: drag on the timeline or use the selection buttons.') errs.push('4024: the enabled trim button keeps the need-selection tooltip');
+    $('ve-trim-set').click();
+    const tr = trimOp();
+    if (!tr || tr.startMs !== 2000 || tr.endMs !== 5000) errs.push('4024: trim to selection gave ' + JSON.stringify(tr));
+    if (VE.sel) errs.push('4024: trim kept the selection');
+    VE.sel = { a: 3000, b: 4000 }; mod.renderRegions(); $('ve-cut-add').click();
+    if (JSON.stringify(cuts()) !== '[[3000,4000]]') errs.push('4024: a valid cut gave ' + JSON.stringify(cuts()));
+    VE.sel = { a: 3500, b: 4800 }; mod.renderRegions(); $('ve-cut-add').click();
+    if (JSON.stringify(cuts()) !== '[[3000,4800]]') errs.push('4024: overlapping cuts did not merge: ' + JSON.stringify(cuts()));
+    mod.undo();
+    if (JSON.stringify(cuts()) !== '[[3000,4000]]') errs.push('4024: one undo did not restore the earlier cut: ' + JSON.stringify(cuts()));
+    mod.redo();
+    if (JSON.stringify(cuts()) !== '[[3000,4800]]') errs.push('4024: redo did not restore the merged cut: ' + JSON.stringify(cuts()));
+    VE.sel = { a: 4500, b: 9000 }; mod.renderRegions(); $('ve-cut-add').click();
+    if (JSON.stringify(cuts()) !== '[[3000,5000]]') errs.push('4024: a cut running past the trim end was not clamped: ' + JSON.stringify(cuts()));
+    VE.sel = { a: 6000, b: 7000 }; mod.renderRegions(); $('ve-cut-add').click();
+    if ($('ve-toast').textContent !== 'The selection is outside the trimmed part.') errs.push('4024: a cut outside the trim did not toast, got "' + $('ve-toast').textContent + '"');
+    if (JSON.stringify(cuts()) !== '[[3000,5000]]') errs.push('4024: a cut outside the trim was accepted: ' + JSON.stringify(cuts()));
+    """)
+
+    # 4025: mark in/out fall back to the trim range, not the recording.
+    failed += vprobe('marks', 'mark in and out default to the trim range', r"""
+    // 4025: marks against a trimmed clip.
+    const $ = (id) => document.getElementById(id);
+    mod.pushOp({ tool: 'trim', startMs: 10000, endMs: 60000 });
+    await sleep(100);
+    mod.seek(30000); await sleep(150);
+    $('ve-mark-out').click();
+    if (!VE.sel || VE.sel.a !== 10000 || Math.abs(VE.sel.b - VE.playhead) > 1) errs.push('4025: mark out gave ' + JSON.stringify(VE.sel) + ' at ' + VE.playhead);
+    VE.sel = null;
+    mod.seek(40000); await sleep(150);
+    $('ve-mark-in').click();
+    if (!VE.sel || VE.sel.b !== 60000 || Math.abs(VE.sel.a - VE.playhead) > 1) errs.push('4025: mark in gave ' + JSON.stringify(VE.sel) + ' at ' + VE.playhead);
+    """)
     return failed
