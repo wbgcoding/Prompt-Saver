@@ -407,6 +407,21 @@ fn the_last_folder_member_takes_the_folder_cell() {
 }
 
 #[test]
+fn the_last_folder_member_joins_the_view_member_list() {
+    let mut view = test_view("v");
+    view.cols = 3;
+    view.rows = 1;
+    view.members = vec!["other".to_string()];
+    let folders = vec![test_tile_folder("f", "v", [1, 0], &["rest"])];
+    let mut views = vec![view];
+    settle_lone_folder_members(&mut views, &folders);
+    assert!(views[0].members.contains(&"rest".to_string()), "the seated member must be listed");
+    assert_eq!(views[0].members.iter().filter(|m| *m == "rest").count(), 1);
+    settle_lone_folder_members(&mut views, &folders);
+    assert_eq!(views[0].members.iter().filter(|m| *m == "rest").count(), 1, "no duplicate on a repeat");
+}
+
+#[test]
 fn the_last_folder_member_moves_aside_when_its_cell_was_taken() {
     let mut view = test_view("v");
     view.cols = 3;
