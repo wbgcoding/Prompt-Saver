@@ -1,4 +1,5 @@
 use super::*;
+use std::fs;
 // Only used by the Pane/Custom test below; imported here so a non-test build has no
 // unused-import warning.
 use windows::Win32::UI::Accessibility::{UIA_CustomControlTypeId, UIA_PaneControlTypeId};

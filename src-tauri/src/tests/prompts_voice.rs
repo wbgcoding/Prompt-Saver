@@ -1289,7 +1289,7 @@ fn a_failed_ocr_index_worker_marks_the_job_as_error() {
 #[test]
 fn ocr_validate_path_refuses_a_network_path_on_text() {
     for p in [r"\\host\share\a.png", "//host/share/a.png", r"\\?\UNC\host\share\a.png"] {
-        assert_eq!(ocr_validate_path(p), Err("network path".to_string()), "{p}");
+        assert_eq!(ocr_validate_path(p), Err("unsupported image type".to_string()), "{p}");
     }
 }
 

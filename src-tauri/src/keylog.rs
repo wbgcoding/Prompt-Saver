@@ -1,7 +1,6 @@
 use super::append_crash_log;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::fs;
 use std::path::Path;
 use std::sync::mpsc::{channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::sync::atomic::{AtomicU8, Ordering};
