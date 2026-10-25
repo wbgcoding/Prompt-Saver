@@ -1647,6 +1647,11 @@ export function renderExpert() {
   }
   const tabs = globalView ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
   const collapsed = expertCollapsedSet();
+  // Cards flow down CSS columns inside this auto-height wrapper, so a short card never
+  // leaves a hole under it; the box itself stays the one scroll container.
+  const stack = document.createElement("div");
+  stack.className = "expert-masonry";
+  box.appendChild(stack);
   let shown = 0;
   for (const tab of tabs) {
     for (const group of tab.groups) {
@@ -1777,7 +1782,7 @@ export function renderExpert() {
         if (varFixedList) sec.appendChild(varFixedListRow());
         for (const key of colors) sec.appendChild(colorRow(key));
       }
-      box.appendChild(sec);
+      stack.appendChild(sec);
     }
   }
   // Hits outside the expert menu: normal settings, the toolbar, the library
@@ -1797,7 +1802,7 @@ export function renderExpert() {
       head.appendChild(titleSpan);
       sec.appendChild(head);
       for (const entry of hits) sec.appendChild(foreignHitRow(entry));
-      box.appendChild(sec);
+      stack.appendChild(sec);
     }
   }
   if (globalView && !shown && !foreignShown) {
@@ -1806,6 +1811,7 @@ export function renderExpert() {
     empty.textContent = t(!searching && expertOnlyChanged ? "expertNothingChanged" : searching ? "expertSearchNoHits" : "libraryNoResults");
     box.appendChild(empty);
   }
+  if (!stack.firstChild) stack.remove();
   box.scrollTop = keepScroll;
 }
 

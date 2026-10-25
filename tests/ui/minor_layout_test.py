@@ -289,8 +289,9 @@ TAG_MANAGER = """
 </script>
 """
 
-# Expert menu cards: the group grid has two tracks at the default window and one at the
-# 680 px minimum, and each group renders as a card.
+# Expert menu cards: the cards flow down CSS columns (two at the default window, one at the
+# 680 px minimum), each group renders as a card, and no column holds a gap taller than the
+# 14 px card spacing.
 EXPERT_CARDS = """
 <script>
 (async () => {""" + COMMON + """
@@ -299,15 +300,32 @@ EXPERT_CARDS = """
     await sleep(500);
     await openExpert();
     const flags = $('expert-flags');
-    const tracks = getComputedStyle(flags).gridTemplateColumns.split(' ').filter(Boolean).length;
-    if (tracks !== __TRACKS__) errs.push('cards: ' + tracks + ' grid tracks at ' + innerWidth + 'px, expected __TRACKS__');
-    const g = flags.querySelector('.expert-group');
+    const stack = flags.querySelector('.expert-masonry');
+    if (!stack) errs.push('cards: no .expert-masonry wrapper');
+    const groups = [...flags.querySelectorAll('.expert-masonry > .expert-group')];
+    const tracks = new Set(groups.map((x) => Math.round(x.getBoundingClientRect().left))).size;
+    if (tracks !== __TRACKS__) errs.push('cards: ' + tracks + ' columns at ' + innerWidth + 'px, expected __TRACKS__');
+    const g = groups[0];
     if (!g) { errs.push('cards: no expert group rendered'); }
     else {
       const cs = getComputedStyle(g);
       if (cs.borderTopWidth !== '1px') errs.push('cards: the group has no border');
       if (cs.backgroundColor === 'rgba(0, 0, 0, 0)') errs.push('cards: the group has no card background');
-      info.push('cards tracks=' + tracks + ' columns=' + getComputedStyle(flags).gridTemplateColumns);
+      const byLeft = new Map();
+      for (const x of groups) {
+        const r = x.getBoundingClientRect();
+        const k = Math.round(r.left);
+        if (!byLeft.has(k)) byLeft.set(k, []);
+        byLeft.get(k).push(r);
+      }
+      for (const [k, list] of byLeft) {
+        list.sort((p, q) => p.top - q.top);
+        for (let i = 1; i < list.length; i++) {
+          const gap = list[i].top - list[i - 1].bottom;
+          if (gap > 15) errs.push('cards: ' + Math.round(gap) + 'px gap in the column at ' + k);
+        }
+      }
+      info.push('cards columns=' + tracks);
     }
   } catch (e) { errs.push('probe: ' + e.message); }
   finish();

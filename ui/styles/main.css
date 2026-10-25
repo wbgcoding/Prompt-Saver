@@ -2956,28 +2956,24 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
    left the option list as a 20px sliver. The modal (overflow-y:auto) scrolls instead. */
 #expert-flags { flex: 1 1 auto; min-height: 140px; }
-/* Groups are cards in an auto-fill grid; they sit side by side as soon as two 340px
-   columns fit, and each card keeps its own height. */
-#expert-flags {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 14px;
-  align-content: start;
-  align-items: start;
-}
-#expert-flags > .expert-group {
-  margin-top: 0;
+/* Groups are cards flowing down CSS columns (340px wide at least) inside .expert-masonry,
+   so a short card is followed by the next card, not by a hole. The box is a height-limited
+   scroll container, which is why the columns live on an auto-height child. */
+#expert-flags { display: block; }
+.expert-masonry { column-width: 340px; column-gap: 14px; }
+.expert-masonry > .expert-group {
+  break-inside: avoid;
+  margin: 0 0 14px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px 12px;
 }
-#expert-flags > .expert-group > .expert-group-title { border-bottom: 0; padding-bottom: 0; }
+.expert-masonry > .expert-group > .expert-group-title { border-bottom: 0; padding-bottom: 0; }
 /* Rows inside a card: padded, with a hover tint so the eye follows label to control. */
-#expert-flags > .expert-group > .field { padding: 6px 8px; border-radius: 8px; }
-#expert-flags > .expert-group > .field:hover { background: var(--surface); }
-#expert-flags > .expert-foreign-group,
-#expert-flags > .hint { grid-column: 1 / -1; }
+.expert-masonry > .expert-group > .field { padding: 6px 8px; border-radius: 8px; }
+.expert-masonry > .expert-group > .field:hover { background: var(--surface); }
+.expert-masonry > .expert-foreign-group { column-span: all; }
 /* The scroll areas reach the modal's right + bottom edges (negative margin, inset
    re-added as padding) so the scrollbar hugs the far-right edge with no surface
    band left beside or below it. */

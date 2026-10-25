@@ -588,6 +588,9 @@ the introduction tour ship on; the screenshot editor is always on).
 
 ### Improved
 
+- **Expert menu cards sit without gaps.** The cards of a tab now fill columns
+  from top to bottom, so a short card is followed by the next card instead of
+  empty space. The reading order is therefore column by column, not row by row.
 - **One list of recent searches.** The library, the copy history and the
   global search now share one list of recent searches with one look, so a
   term you searched in one place is offered in the others. The separate lists

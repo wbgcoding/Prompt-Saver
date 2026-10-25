@@ -286,16 +286,14 @@ LAYOUT_PROBE = """
     const tabBarEl = document.querySelector('#expert-tabs-bar .expert-tabs');
     if (__WIDE__ && tabBarEl.scrollWidth > tabBarEl.clientWidth) errs.push('wide window: a tab is clipped');
     const modal = document.querySelector('#settings .modal');
-    const groups = [...document.querySelectorAll('#expert-flags > .expert-group')];
+    const groups = [...document.querySelectorAll('#expert-flags .expert-masonry > .expert-group')];
     if (groups.length < 2) errs.push('fewer than two groups in the first tab');
     else {
       const lefts = new Set(groups.map((g) => Math.round(g.getBoundingClientRect().left)));
       const w = Math.round(modal.getBoundingClientRect().width);
       if (__WIDE__) {
         if (w < 1200) errs.push('wide window: dialog is ' + w + 'px, expected at least 1200');
-        const l0 = Math.round(groups[0].getBoundingClientRect().left);
-        const l1 = Math.round(groups[1].getBoundingClientRect().left);
-        if (l0 === l1) errs.push('wide window: the first two groups share the left edge ' + l0);
+        if (lefts.size < 2) errs.push('wide window: the groups fill one column only (left edge ' + [...lefts][0] + ')');
       } else if (lefts.size !== 1) {
         errs.push('narrow window: groups have ' + lefts.size + ' different left edges');
       }
