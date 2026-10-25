@@ -270,6 +270,24 @@ fn discard_recording_file_in_moves_into_verworfen_instead_of_deleting() {
 }
 
 #[test]
+fn a_discarded_recording_starts_its_keep_window_at_the_discard() {
+    let dir = std::env::temp_dir().join(format!("ps-discard-clock-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec-2026-01-01-00-00-02.mp4");
+    fs::write(&src, b"video").unwrap();
+    let two_days = Duration::from_secs(48 * 3600);
+    fs::OpenOptions::new().write(true).open(&src).unwrap().set_modified(SystemTime::now() - two_days).unwrap();
+    let moved = discard_recording_file_in(std::slice::from_ref(&dir), &src).expect("must move");
+    let age = SystemTime::now().duration_since(fs::metadata(&moved).unwrap().modified().unwrap()).unwrap_or_default();
+    assert!(age < Duration::from_secs(300), "the move must not carry the old write time over");
+    let (count, _) = discarded_stale_in(&dir.join("verworfen"), Duration::from_secs(24 * 3600));
+    assert_eq!(count, 0, "a take discarded just now is not stale");
+    assert!(moved.is_file());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn discard_or_remove_take_keeps_a_cancelled_take_restorable() {
     let dir = std::env::temp_dir().join(format!("ps-cancel-take-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();

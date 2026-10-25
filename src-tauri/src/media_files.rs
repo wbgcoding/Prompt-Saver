@@ -901,6 +901,11 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     fs::create_dir_all(&trash).ok()?;
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
+    // A move keeps the last-write time, and the holding-area sweep ages a file by it: stamp the
+    // moment of the discard so time spent open before it does not count against the keep window.
+    if let Ok(f) = fs::OpenOptions::new().write(true).open(&dest) {
+        let _ = f.set_modified(SystemTime::now());
+    }
     // A discarded recording takes its mic and key-overlay sidecars (if any) with it, best-effort
     // since most recordings have neither. Both exist only next to an mp4.
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
