@@ -1,4 +1,4 @@
-use super::{append_crash_log, clip_inbox_cap, db_add_clip, db_conn, lock, now_secs, text_hash, Db};
+use super::{append_crash_log, clip_inbox_cap, db_add_clip, db_conn_write, lock, now_secs, text_hash, Db};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -282,7 +282,7 @@ fn on_clipboard_update() {
         return;
     }
     LAST_INSERTED.store(h, Ordering::Relaxed);
-    if let Some(conn) = db_conn(&app) {
+    if let Some(conn) = db_conn_write(&app) {
         let _ = db_add_clip(&conn, now_secs(), trimmed, cap);
     }
     let _ = app.emit("clip-inbox-changed", ());

@@ -679,10 +679,10 @@ pub fn run() {
             let demo = data_dir_is_demo(&handle, &data_dir(&handle));
             reconcile_windows_state(autostart, start_min, demo);
             remove_legacy_protocol_key();
-            // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
-            cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
             // A read-only instance never writes into the folder another machine owns.
             if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
+                // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
+                cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
                 remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
                 // Temp files of an interrupted atomic write, in the data folder and in the markdown sync
                 // folder (which other computers would otherwise get).

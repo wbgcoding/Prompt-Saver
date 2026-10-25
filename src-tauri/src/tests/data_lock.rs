@@ -1371,3 +1371,117 @@ fn takeover_reload_and_cli_share_the_refresh_helper() {
         assert!(helper.contains(call), "the helper misses {call}");
     }
 }
+
+// ---- Writes while another machine owns the folder ---------------------------
+
+fn prompt_rows(conn: &Connection) -> i64 {
+    conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get(0)).unwrap()
+}
+
+fn fallback_plan(dir: &Path) -> StartupWrites {
+    assert!(write_sealed_json(&dir.join("prompts.json"), &numbered_prompts(2)));
+    assert!(write_sealed_json(&dir.join("settings.json"), &Settings::default()));
+    StartupWrites {
+        legacy_import: None,
+        prompts_fallback: Some(numbered_prompts(2)),
+        settings_fallback: Some(Settings::default()),
+    }
+}
+
+// The fallback files are the only copy of an edit the database never took. A read-only load
+// must neither write them into the owner's database nor delete them.
+#[test]
+fn startup_fallback_retry_leaves_files_and_rows_alone_while_read_only() {
+    let dir = ddlock_test_dir("startup-ro");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let written = std::cell::RefCell::new(WrittenRows::new());
+    apply_startup_writes(&dir, &mut conn, &written, fallback_plan(&dir), false);
+    assert!(dir.join("prompts.json").is_file() && dir.join("settings.json").is_file(), "a skipped write must keep the fallback files");
+    assert_eq!(prompt_rows(&conn), 0, "nothing reaches the folder's database");
+    // The owning load then takes them in and drops the files.
+    apply_startup_writes(&dir, &mut conn, &written, fallback_plan(&dir), true);
+    assert_eq!(prompt_rows(&conn), 2);
+    assert!(!dir.join("prompts.json").exists() && !dir.join("settings.json").exists());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn startup_legacy_import_waits_for_the_lock() {
+    let dir = ddlock_test_dir("startup-import");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let written = std::cell::RefCell::new(WrittenRows::new());
+    let plan = || StartupWrites { legacy_import: Some((numbered_prompts(3), Settings::default())), ..Default::default() };
+    assert!(write_sealed_json(&dir.join("prompts.json"), &numbered_prompts(3)));
+    apply_startup_writes(&dir, &mut conn, &written, plan(), false);
+    assert_eq!(prompt_rows(&conn), 0);
+    assert!(dir.join("prompts.json").is_file(), "the legacy file stays until the import really ran");
+    apply_startup_writes(&dir, &mut conn, &written, plan(), true);
+    assert_eq!(prompt_rows(&conn), 3);
+    assert!(!dir.join("prompts.json").exists());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn copy_log_migration_writes_nothing_while_read_only() {
+    let dir = ddlock_test_dir("migrate-ro");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let legacy = || {
+        let mut s = Settings::default();
+        s.copy_log = vec![CopyEntry { id: "b".into(), ts: 20 }, CopyEntry { id: "a".into(), ts: 10 }];
+        s
+    };
+    let rows = |c: &Connection| -> i64 { c.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap() };
+    let marker = |c: &Connection| c.query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(())).is_ok();
+
+    let mut ro = legacy();
+    assert!(!migrate_copy_log_once(&mut conn, &mut ro, false));
+    assert_eq!(rows(&conn), 0, "no history row into a folder another machine owns");
+    assert!(!marker(&conn), "no marker either, so the owner's next load still migrates");
+    assert_eq!(ro.last_used.get("b"), Some(&20), "the in-memory backfill still runs");
+
+    let mut owner = legacy();
+    assert!(migrate_copy_log_once(&mut conn, &mut owner, true));
+    assert_eq!(rows(&conn), 2);
+    assert!(marker(&conn) && owner.copy_log.is_empty());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A unit test cannot run a command (no app handle), so the gate is pinned in the source: each
+// writer opens its connection through db_conn_write, which refuses while the folder is
+// another machine's, and none of them is allowed back onto the plain connection.
+#[test]
+fn every_read_only_gated_writer_uses_the_write_connection() {
+    fn body<'a>(src: &'a str, name: &str) -> &'a str {
+        let at = src.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("{name} missing"));
+        let rest = &src[at..];
+        let end = rest[3..].find("\nfn ").or_else(|| rest[3..].find("\npub(crate) ")).map(|e| e + 3).unwrap_or(rest.len());
+        &rest[..end]
+    }
+    let copy = include_str!("../copy.rs");
+    let drafts = include_str!("../drafts.rs");
+    let clip = include_str!("../clip.rs");
+    let watch = include_str!("../clipwatch.rs");
+    let gated = [
+        ("copy.rs", copy, "record_copy"),
+        ("copy.rs", copy, "trim_copy_history_now"),
+        ("copy.rs", copy, "clear_copy_history"),
+        ("copy.rs", copy, "restore_copy_history"),
+        ("copy.rs", copy, "delete_copy_entry"),
+        ("drafts.rs", drafts, "save_edit_state"),
+        ("drafts.rs", drafts, "discard_edit_state"),
+        ("drafts.rs", drafts, "save_editor_draft"),
+        ("drafts.rs", drafts, "discard_editor_draft"),
+        ("clip.rs", clip, "restore_clip_inbox"),
+    ];
+    for (file, src, name) in gated {
+        let b = body(src, name);
+        assert!(b.contains("db_conn_write(") && !b.contains("db_conn(&app)"), "{file}::{name} must write through db_conn_write");
+    }
+    assert!(body(watch, "on_clipboard_update").contains("db_conn_write("), "the clipboard watcher writes through db_conn_write");
+    let lib = include_str!("../lib.rs");
+    let guard = lib.find("if !DATA_DIR_READONLY.load(Ordering::Relaxed) {").expect("read-only guard in setup");
+    assert!(lib.find("cleanup_incomplete_backups(&backups_dir").unwrap() > guard, "backup cleanup runs inside the read-only guard");
+}

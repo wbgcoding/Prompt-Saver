@@ -562,6 +562,18 @@ pub(crate) fn db_conn(app: &AppHandle) -> Option<Connection> {
     db_conn_at(&data_dir(app))
 }
 
+// db_conn() for a caller that is about to WRITE. While another machine owns the data folder this
+// instance is read-only, and a copy-log row, a draft or an edit state written through the plain
+// connection would land in the owner's data.db. None reads as "DB unavailable", which every
+// writer already handles; a caller that wants no error for this case checks
+// data_dir_write_blocked_quiet() itself first.
+pub(crate) fn db_conn_write(app: &AppHandle) -> Option<Connection> {
+    if data_dir_write_blocked_quiet() {
+        return None;
+    }
+    db_conn(app)
+}
+
 // Split out of db_conn() so the command line's headless path (no AppHandle) opens the same
 // connection with the same pragmas and schema init.
 pub(crate) fn db_conn_at(dir: &Path) -> Option<Connection> {
@@ -1774,6 +1786,91 @@ pub(crate) fn remove_locked_backup(dir: &Path) {
     }
 }
 
+// The writes a load defers until the data-folder lock is resolved (see load_store_inner).
+#[derive(Default)]
+pub(crate) struct StartupWrites {
+    // Legacy prompts.json + settings.json found next to an empty database.
+    pub(crate) legacy_import: Option<(Vec<Prompt>, Settings)>,
+    // A prompts.json / settings.json left by a failed database write: the file is the truth and
+    // goes back into the database.
+    pub(crate) prompts_fallback: Option<Vec<Prompt>>,
+    pub(crate) settings_fallback: Option<Settings>,
+}
+
+// Performs the deferred writes, and only when this process may write into the folder. While
+// another machine owns it nothing is written and no file is removed, so the owner's data and the
+// fallback files stay exactly as they were; the next load that owns the folder retries.
+pub(crate) fn apply_startup_writes(dir: &Path, conn: &mut Connection, written: &std::cell::RefCell<WrittenRows>, plan: StartupWrites, may_write: bool) {
+    if !may_write {
+        return;
+    }
+    let mut written = written.borrow_mut();
+    if let Some((j_prompts, j_settings)) = plan.legacy_import {
+        let prompts_ok = db_write_prompts(conn, &j_prompts, &mut written).is_ok();
+        let settings_ok = db_write_settings(conn, &j_settings).is_ok();
+        // Once the data is in the DB, drop the legacy JSON files so the import never reruns.
+        if prompts_ok && settings_ok {
+            let _ = fs::remove_file(dir.join("prompts.json"));
+            let _ = fs::remove_file(dir.join("settings.json"));
+        }
+    }
+    if let Some(prompts) = plan.prompts_fallback {
+        if db_write_prompts(conn, &prompts, &mut written).is_ok() {
+            let _ = fs::remove_file(dir.join("prompts.json"));
+        }
+    }
+    if let Some(settings) = plan.settings_fallback {
+        if db_write_settings(conn, &settings).is_ok() {
+            let _ = fs::remove_file(dir.join("settings.json"));
+        }
+    }
+}
+
+// One-time: move any legacy in-blob copy history into the copy_log table. Gated on a persistent
+// meta marker written in the same transaction as the rows, so a failed resave cannot duplicate
+// the history on the next launch. The last_used backfill always runs in memory; the table rows,
+// the marker and emptying the blob list happen only when `may_write`, so a read-only process
+// leaves the folder's history alone and the owner's next load migrates it. Returns true when the
+// rows were moved and the settings need a resave.
+pub(crate) fn migrate_copy_log_once(conn: &mut Connection, settings: &mut Settings, may_write: bool) -> bool {
+    let already_migrated = conn.query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(())).is_ok();
+    if already_migrated {
+        return false;
+    }
+    let mut migrated_log = false;
+    if !settings.copy_log.is_empty() {
+        // copy_log is newest-first: insert oldest-first so rowid order stays chronological;
+        // backfill last_used with each id's newest ts.
+        for e in settings.copy_log.iter().rev() {
+            if e.ts > 0 {
+                settings.last_used.insert(e.id.clone(), e.ts);
+            }
+        }
+        if may_write {
+            if let Ok(tx) = conn.transaction() {
+                {
+                    if let Ok(mut stmt) = tx.prepare("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)") {
+                        for e in settings.copy_log.iter().rev() {
+                            let _ = stmt.execute(params![e.ts as i64, e.id]);
+                        }
+                    }
+                    let _ = tx.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", []);
+                }
+                if tx.commit().is_ok() {
+                    migrated_log = true;
+                }
+            }
+        }
+    } else if may_write {
+        // No legacy history to move: mark done so we never re-check.
+        let _ = conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", []);
+    }
+    if may_write {
+        settings.copy_log.clear();
+    }
+    migrated_log
+}
+
 pub(crate) fn load_store(app: &AppHandle) -> Store {
     let store = load_store_inner(app);
     // The windows read media through the asset protocol, whose static scope allows nothing: the
@@ -1789,6 +1886,10 @@ fn load_store_inner(app: &AppHandle) -> Store {
         // Filled from the rows as they are read, so the first save of the session
         // already only writes what changed (see WrittenRows).
         let mut written = WrittenRows::new();
+        // Every write this load would make is collected here and applied after the data-folder
+        // lock was resolved: before that this process cannot tell whether another machine owns
+        // the folder, and a skipped write has to leave the stored file exactly as it was.
+        let mut startup = StartupWrites::default();
         let (mut prompts, settings_opt, needs_mig, prompt_fails, settings_unreadable) =
             db_load(&conn, &mut written);
         let (mut trash, trash_fails) = db_load_trash(&conn, &mut written);
@@ -1837,15 +1938,8 @@ fn load_store_inner(app: &AppHandle) -> Store {
                     _ => Settings::default(),
                 };
                 if !j_prompts.is_empty() || dir.join("settings.json").exists() {
-                    let prompts_ok = db_conn(app)
-                        .map(|mut c2| db_write_prompts(&mut c2, &j_prompts, &mut written).is_ok())
-                        .unwrap_or(false);
-                    let settings_ok = db_write_settings(&conn, &j_settings).is_ok();
-                    // Once the data is in the DB, drop the legacy JSON files so the import never reruns.
-                    if prompts_ok && settings_ok {
-                        let _ = fs::remove_file(dir.join("prompts.json"));
-                        let _ = fs::remove_file(dir.join("settings.json"));
-                    }
+                    // Written once the lock is resolved: this folder may belong to another machine.
+                    startup.legacy_import = Some((j_prompts.clone(), j_settings.clone()));
                 }
                 prompts = j_prompts;
                 settings = j_settings;
@@ -1863,9 +1957,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
                     match read_sealed_json::<Vec<Prompt>>(&pj) {
                         SealedRead::Loaded(fallback) => {
                             prompts = fallback;
-                            if db_write_prompts(&mut conn, &prompts, &mut written).is_ok() {
-                                let _ = fs::remove_file(&pj);
-                            }
+                            startup.prompts_fallback = Some(prompts.clone());
                         }
                         SealedRead::Unreadable => append_crash_log(
                             "prompts.json fallback present but could not be decrypted/parsed; \
@@ -1880,9 +1972,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
                         SealedRead::Loaded(s) => {
                             settings = s;
                             settings_defaulted = false;
-                            if db_write_settings(&conn, &settings).is_ok() {
-                                let _ = fs::remove_file(&sj);
-                            }
+                            startup.settings_fallback = Some(settings.clone());
                         }
                         SealedRead::Unreadable => append_crash_log(
                             "settings.json fallback present but could not be decrypted/parsed; \
@@ -1908,49 +1998,6 @@ fn load_store_inner(app: &AppHandle) -> Store {
         let pin_retention = !settings.retention_defaults_v2;
         settings.migrate();
         load_pick_history(&settings); // restore the colour-pick history mirror
-        // One-time: move any legacy in-blob copy history into the copy_log table. Gated on a
-        // persistent meta marker written in the same transaction as the rows, so a failed resave
-        // cannot duplicate the history on the next launch.
-        let already_migrated = conn
-            .query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(()))
-            .is_ok();
-        let mut migrated_log = false;
-        if !already_migrated {
-            if !settings.copy_log.is_empty() {
-                if let Ok(tx) = conn.transaction() {
-                    {
-                        // copy_log is newest-first: insert oldest-first so rowid order
-                        // stays chronological; backfill last_used with each id's newest ts.
-                        if let Ok(mut stmt) = tx.prepare("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)") {
-                            for e in settings.copy_log.iter().rev() {
-                                let _ = stmt.execute(params![e.ts as i64, e.id]);
-                                if e.ts > 0 {
-                                    settings.last_used.insert(e.id.clone(), e.ts);
-                                }
-                            }
-                        }
-                        let _ = tx.execute(
-                            "INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')",
-                            [],
-                        );
-                    }
-                    if tx.commit().is_ok() {
-                        migrated_log = true;
-                    }
-                }
-            } else {
-                // No legacy history to move: mark done so we never re-check.
-                let _ = conn.execute(
-                    "INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')",
-                    [],
-                );
-            }
-            settings.copy_log.clear();
-        }
-        // Enforce the cap + retention window on the table at startup (e.g. after
-        // the cap was lowered, or right after a large legacy import).
-        let (cap, cutoff) = history_cap_and_cutoff(&settings);
-        let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
         // A relative file_path (produced only by demo_prompts(), never by the attachment picker)
         // is resolved against the live data dir here instead of being stored absolute.
@@ -1964,6 +2011,16 @@ fn load_store_inner(app: &AppHandle) -> Store {
             written: std::cell::RefCell::new(written),
         };
         acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
+        // Only now is it known whether this process may write into the folder.
+        let may_write = !DATA_DIR_READONLY.load(Ordering::Relaxed);
+        apply_startup_writes(&dir, &mut conn, &store.written, startup, may_write);
+        let migrated_log = migrate_copy_log_once(&mut conn, &mut store.settings, may_write);
+        if may_write {
+            // Enforce the cap + retention window on the table at startup (e.g. after
+            // the cap was lowered, or right after a large legacy import).
+            let (cap, cutoff) = history_cap_and_cutoff(&store.settings);
+            let _ = db_trim_copy(&conn, cap, cutoff);
+        }
         // An existing install never sees the first-run tour; the tour's own Finish/Skip would never
         // write the flag for a store discovered this way.
         if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
@@ -1980,7 +2037,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
         {
             let app = app.clone();
             std::thread::spawn(move || {
-                if let Some(conn) = db_conn(&app) {
+                if let Some(conn) = db_conn_write(&app) {
                     edit_state_seal_all(&conn);
                 }
             });
@@ -1990,7 +2047,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
         // Data upgrades that rewrite stored content, once per step. Each later step
         // adds its own `data_version < N` block under this one.
         let mut data_upgraded = false;
-        let may_upgrade = !DATA_DIR_READONLY.load(Ordering::Relaxed);
+        let may_upgrade = may_write;
         if may_upgrade && store.settings.data_version < 1 && upgrade_stored_placeholders(app, &mut store) {
             store.settings.data_version = DATA_VERSION;
             data_upgraded = true;

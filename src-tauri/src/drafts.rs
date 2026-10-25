@@ -132,7 +132,7 @@ pub(crate) fn edit_state_discard(conn: &Connection, kind: &str, target: &str) ->
 
 #[tauri::command]
 pub(crate) async fn save_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64, ops: String) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
     edit_state_write(&conn, &kind, &target, size, mtime, &ops, updated_at)
 }
@@ -165,7 +165,7 @@ pub(crate) fn edit_state_ops_version(ops: &str) -> Option<i64> {
 }
 #[tauri::command]
 pub(crate) async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     edit_state_discard(&conn, &kind, &target)
 }
 
@@ -221,7 +221,7 @@ pub(crate) fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
 
 #[tauri::command]
 pub(crate) async fn save_editor_draft(app: AppHandle, prompt_id: String, name: String, text: String, variants: String) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
     editor_draft_write(&conn, &prompt_id, &name, &text, &variants, updated_at)
 }
@@ -234,7 +234,7 @@ pub(crate) async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDra
 
 #[tauri::command]
 pub(crate) async fn discard_editor_draft(app: AppHandle) -> Result<(), String> {
-    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []).map_err(|e| e.to_string())?;
     Ok(())
 }
