@@ -845,14 +845,15 @@ fn demo_transition_locked_flag_round_trips() {
     DEMO_TRANSITION_LOCKED.store(before, Ordering::Relaxed);
 }
 
-// Kept alive a few seconds and spawned only as this same test binary re-
-// invoking itself (see other_instance_running_detects_a_live_pid_and_prunes_a_dead_one
-// below), so instance_pid_is_this_exe's image-path check has something
-// genuinely matching current_exe() to find, not an unrelated process.
+// Kept alive well past any scheduling stall of the parent test (it is killed by the parent as
+// soon as the check is done) and spawned only as this same test binary re-invoking itself
+// (see other_instance_running_detects_a_live_pid_and_prunes_a_dead_one below), so
+// instance_pid_is_this_exe's image-path check has something genuinely matching current_exe()
+// to find, not an unrelated process.
 #[test]
 #[ignore]
 fn __sleep_helper_for_instance_test() {
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    std::thread::sleep(std::time::Duration::from_secs(60));
 }
 
 // other_instance_running must tell a real second live process apart from
@@ -886,7 +887,15 @@ fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
         .unwrap();
     let other_pid = child.id();
     std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
-    assert!(other_instance_running(&canonical), "a different LIVE copy of this exe must be detected");
+    // A process that was just created has no image path to query for a moment, longer on a
+    // loaded machine: wait for the detection instead of assuming it is instant.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut detected = other_instance_running(&canonical);
+    while !detected && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        detected = other_instance_running(&canonical);
+    }
+    assert!(detected, "a different LIVE copy of this exe must be detected");
 
     // An obviously stale entry (not a real pid on this machine) must be
     // pruned rather than perma-blocking every future enable/disable.
