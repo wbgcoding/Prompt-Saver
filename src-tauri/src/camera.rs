@@ -233,7 +233,12 @@ pub struct CamFinishResult {
 pub(crate) fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) -> Result<(), String> {
     let sidecar = CamSidecar { start_ms: cam_start_ms, overlay_start_ms: screen_elapsed_ms };
     let json = serde_json::to_string(&sidecar).map_err(|e| e.to_string())?;
-    fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json).map_err(|e| e.to_string())
+    fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json).map_err(|e| {
+        // The take is out of its slot and now unreferenced: the abandoned marker keeps the
+        // recordings sweep from deleting a finished recording the user was told is kept.
+        let _ = fs::write(abandoned_marker_path(&session.output_path), b"");
+        e.to_string()
+    })
 }
 
 #[tauri::command]

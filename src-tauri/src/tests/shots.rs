@@ -323,6 +323,21 @@ fn a_failed_camera_sidecar_write_is_reported() {
 }
 
 #[test]
+fn a_failed_camera_finish_leaves_the_take_protected_from_the_sweep() {
+    let root = std::env::temp_dir().join(format!("ps-camside-keep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let video = root.join("cam-1.webm");
+    std::fs::write(&video, b"take").unwrap();
+    // A folder where the sidecar belongs makes the sidecar write fail with the folder writable.
+    std::fs::create_dir_all(crate::media_files::sidecar_path(&video, crate::media_files::CAM_SIDECAR_EXT)).unwrap();
+    let session = crate::camera::CamSession { output_path: video.clone(), companion_path: None, finishing: None };
+    assert!(crate::camera::finalize_session(&session, 5, None).is_err());
+    assert!(crate::camera::is_kept_abandoned(&video), "the unreferenced take must not age out");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn the_verified_pdfium_copy_is_held_open_so_it_cannot_be_swapped() {
     let dir = std::env::temp_dir().join(format!("ps-pdfhold-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
