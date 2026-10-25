@@ -925,6 +925,9 @@ pub(crate) struct SyncState {
     /// When this instance first saw each tombstone text, by its own clock: path -> (text, time).
     /// A tombstone expires only when this agrees with the time written in it.
     pub(crate) tomb_seen: Mutex<HashMap<String, (String, u64)>>,
+    /// What each delete marker file held when it was last read, with the stamp it had then: an
+    /// unchanged, settled file is not read again every round.
+    pub(crate) tomb_text: Mutex<HashMap<String, (SyncStamp, String)>>,
     /// The lock files this instance holds right now: lock path -> the text it wrote into it.
     pub(crate) locks: Mutex<HashMap<String, String>>,
     pub(crate) health: Mutex<SyncHealth>,
@@ -935,6 +938,9 @@ pub(crate) struct SyncState {
     /// test sets it, to play the role of a machine with a skewed clock.
     #[cfg(test)]
     pub(crate) clock_skew: std::sync::atomic::AtomicI64,
+    /// How many delete marker files this instance has read from disk (a test counts them).
+    #[cfg(test)]
+    pub(crate) tomb_reads: std::sync::atomic::AtomicUsize,
 }
 
 static SYNC_STATE: std::sync::OnceLock<SyncState> = std::sync::OnceLock::new();
@@ -1113,8 +1119,28 @@ pub(crate) fn sync_tomb_path(dir: &Path, stem: &str) -> PathBuf {
 }
 
 fn sync_tomb_read(path: &Path) -> Option<String> {
+    let key = sync_seen_key(path);
+    let stamp = sync_stamp_of(path);
+    let Some(stamp) = stamp else {
+        sync_state().tomb_text.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
+        return None;
+    };
+    // A stamp that is still within the trust window may be a rewrite in the same tick, so
+    // only a settled one stands in for the file's text.
+    if sync_stamp_is_settled(&stamp) {
+        let cache = sync_state().tomb_text.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((cached, text)) = cache.get(&key) {
+            if *cached == stamp {
+                return Some(text.clone());
+            }
+        }
+    }
+    #[cfg(test)]
+    sync_state().tomb_reads.fetch_add(1, Ordering::SeqCst);
     let bytes = read_file_capped(path, 256).ok()?;
-    Some(String::from_utf8_lossy(&bytes).trim().to_string())
+    let text = String::from_utf8_lossy(&bytes).trim().to_string();
+    sync_state().tomb_text.lock().unwrap_or_else(|e| e.into_inner()).insert(key, (stamp, text.clone()));
+    Some(text)
 }
 
 fn sync_tomb_handled(path: &Path, content: &str) -> bool {

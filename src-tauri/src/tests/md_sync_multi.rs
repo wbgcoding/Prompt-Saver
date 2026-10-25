@@ -1313,3 +1313,24 @@ fn multi_two_machines_switching_the_feature_on_at_the_same_moment_end_up_with_bo
     assert!(rig.a.get(&y).is_some() && rig.b.get(&x).is_some(), "a library did not arrive on the other machine");
     rig.assert_converged();
 }
+
+#[test]
+fn multi_delete_markers_that_did_not_change_are_not_read_again_every_round() {
+    let rig = Rig::new();
+    let ids: Vec<String> = (0..5).map(|n| rig.a.add(&format!("Prompt {n}"), "text")).collect();
+    rig.settle();
+    for id in &ids {
+        rig.a.delete(id);
+    }
+    rig.settle();
+    for id in &ids {
+        assert!(rig.b.in_trash(id), "B did not follow the delete");
+    }
+    let reads = |inst: &SyncInst| inst.run(|| sync_state().tomb_reads.load(Ordering::SeqCst));
+    let (a0, b0) = (reads(&rig.a), reads(&rig.b));
+    for _ in 0..3 {
+        rig.cycle();
+    }
+    assert_eq!(reads(&rig.a), a0, "A read unchanged delete markers again");
+    assert_eq!(reads(&rig.b), b0, "B read unchanged delete markers again");
+}
