@@ -3204,7 +3204,6 @@ dependencies = [
  "image",
  "jpeg-encoder",
  "pdfium-render",
- "rayon",
  "rfd",
  "ring",
  "rusqlite",

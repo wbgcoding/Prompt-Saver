@@ -204,6 +204,8 @@ use export_graph::*;
 mod media_files;
 use media_files::*;
 
+mod parallel;
+
 mod autostart;
 use autostart::*;
 

@@ -753,11 +753,10 @@ pub(crate) fn view_names_by_prompt(views: &[View]) -> std::collections::HashMap<
     out
 }
 
-// Find near-duplicate prompts by trigram/Dice similarity. Rayon-parallel over the
+// Find near-duplicate prompts by trigram/Dice similarity. Thread-parallel over the
 // upper-triangle of pairs; 1000 prompts finish well under a second.
 #[tauri::command]
 pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<DupGroup>, String> {
-    use rayon::prelude::*;
     use std::collections::{HashMap as Map, HashSet as Set};
     // Clone the few fields this scan needs and drop the lock before the O(n^2) comparison,
     // which would otherwise block every command needing the store mutex for as long as
@@ -794,26 +793,26 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
     if n < 2 {
         return Ok(Vec::new());
     }
-    let grams: Vec<Set<[char; 3]>> = items.par_iter().map(|(_, s)| dup_trigrams(s)).collect();
+    let grams: Vec<Set<[char; 3]>> = crate::parallel::par_map(&items, |(_, s)| dup_trigrams(s));
     // Normalized lengths, so a pair that cannot reach the threshold is skipped before any set work.
     let lens: Vec<usize> = items.iter().map(|(_, s)| s.chars().count()).collect();
-    let edges: Vec<(usize, usize, f64)> = (0..n)
-        .into_par_iter()
-        .flat_map(|i| {
-            let gi = &grams[i];
-            let mut local = Vec::new();
-            for j in (i + 1)..n {
-                if !dup_length_could_match(lens[i], lens[j], thr) {
-                    continue;
-                }
-                let d = dup_dice(gi, &grams[j]);
-                if d >= thr && !dup_pair_is_ignored(&dup_ignored, &items[i].0.id, &items[j].0.id) {
-                    local.push((i, j, d));
-                }
+    let edges: Vec<(usize, usize, f64)> = crate::parallel::par_map_indexed(n, |i| {
+        let gi = &grams[i];
+        let mut local = Vec::new();
+        for j in (i + 1)..n {
+            if !dup_length_could_match(lens[i], lens[j], thr) {
+                continue;
             }
-            local
-        })
-        .collect();
+            let d = dup_dice(gi, &grams[j]);
+            if d >= thr && !dup_pair_is_ignored(&dup_ignored, &items[i].0.id, &items[j].0.id) {
+                local.push((i, j, d));
+            }
+        }
+        local
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     // Union-find into connected components; track the strongest edge per group.
     let mut parent: Vec<usize> = (0..n).collect();
     let mut best: Map<usize, f64> = Map::new();
