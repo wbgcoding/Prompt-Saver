@@ -216,6 +216,27 @@ pub(crate) struct SyncPlacement {
     pub(crate) float_folder: String,
 }
 
+// Views have their own size on every machine, so a file can name a cell this machine does not
+// have (or one that is taken here), and the tile lands on a stand-in cell. Writing the prompt
+// back would then send the stand-in to the machine that chose the real cell and move its tile.
+// This record keeps what the file said next to what this machine did with it: as long as the
+// local tile still sits on the stand-in it was given, the file keeps the original grid and
+// cell. A tile moved here, or a view resized here, ends the record, and the local placement is
+// what travels from then on. The record lives in memory only: after a restart the first
+// write of such a prompt sends the local placement.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SyncFileCell {
+    pub(crate) view: String,
+    pub(crate) file_grid: String,
+    pub(crate) file_cell: String,
+    pub(crate) local_grid: String,
+    pub(crate) local_cell: [u32; 2],
+}
+
+fn sync_file_cells_lock() -> std::sync::MutexGuard<'static, HashMap<String, SyncFileCell>> {
+    sync_state().file_cells.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 // A grid-folder member has no view.layouts entry (save_tile_folder drops it on joining),
 // so its view/grid/cell describe the folder's placement and every member's file says the
 // same; they are all rewritten when the folder moves. Float-folder membership is a
@@ -245,6 +266,20 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
     for view in &settings.views {
         let key = grid_key(view.cols, view.rows);
         if let Some(cell) = view.layouts.get(&key).and_then(|m| m.get(&p.id)) {
+            let kept = sync_file_cells_lock()
+                .get(&p.id)
+                .filter(|r| r.view == view.name.trim() && r.local_grid == key && r.local_cell == *cell)
+                .cloned();
+            if let Some(r) = kept {
+                return SyncPlacement {
+                    view: view.name.clone(),
+                    grid: r.file_grid,
+                    cell: r.file_cell,
+                    tile_folder: String::new(),
+                    tile_folder_color: String::new(),
+                    float_folder,
+                };
+            }
             return SyncPlacement {
                 view: view.name.clone(),
                 grid: key,
@@ -438,6 +473,7 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
 // stale membership would be re-asserted by this machine's next write and re-joined by the
 // other on the next poll.
 pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
+    sync_file_cells_lock().remove(prompt_id);
     let mut folders_touched = false;
     if let Some(raw) = fields.get("float_folder") {
         let name = raw.trim();
@@ -484,8 +520,31 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
         return (false, folders_touched);
     }
     let view_id = sync_find_or_create_view(settings, view_name, cols, rows);
-    sync_place_in_view(settings, prompt_id, &view_id, cell.unwrap());
+    let wanted = cell.unwrap();
+    sync_place_in_view(settings, prompt_id, &view_id, wanted);
+    sync_note_file_cell(settings, prompt_id, &view_id, fields, wanted);
     (true, folders_touched)
+}
+
+// Keeps the file's grid and cell when this machine could not use them as written.
+fn sync_note_file_cell(settings: &Settings, prompt_id: &str, view_id: &str, fields: &HashMap<String, String>, wanted: [u32; 2]) {
+    let Some(view) = settings.views.iter().find(|v| v.id == view_id) else { return };
+    let key = grid_key(view.cols, view.rows);
+    let Some(local) = view.layouts.get(&key).and_then(|m| m.get(prompt_id)).copied() else { return };
+    let file_grid = fields.get("grid").map(|g| g.trim().to_string()).filter(|g| !g.is_empty()).unwrap_or_else(|| key.clone());
+    if file_grid == key && local == wanted {
+        return;
+    }
+    sync_file_cells_lock().insert(
+        prompt_id.to_string(),
+        SyncFileCell {
+            view: view.name.trim().to_string(),
+            file_grid,
+            file_cell: format!("{},{}", wanted[0], wanted[1]),
+            local_grid: key,
+            local_cell: local,
+        },
+    );
 }
 
 // Parses the "view" / "grid" / "cell" trio out of an incoming file's header. An
@@ -779,6 +838,9 @@ pub(crate) struct SyncState {
     pub(crate) tombs: Mutex<HashMap<String, String>>,
     /// The lock files this instance holds right now: lock path -> the text it wrote into it.
     pub(crate) locks: Mutex<HashMap<String, String>>,
+    /// Per prompt id: the grid size and cell its file named while this machine could not hold
+    /// them as written (its view is smaller, or the cell was taken). See `SyncFileCell`.
+    pub(crate) file_cells: Mutex<HashMap<String, SyncFileCell>>,
     pub(crate) health: Mutex<SyncHealth>,
     /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
     /// test sets it, to play the role of a machine with a skewed clock.

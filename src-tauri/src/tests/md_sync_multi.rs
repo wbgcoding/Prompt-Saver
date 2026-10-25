@@ -888,3 +888,45 @@ fn multi_a_name_with_stray_spaces_does_not_split_into_two_views_or_two_names() {
     assert!(!file.contains("Work 
 "), "the file keeps stray spaces around the view name: {file}");
 }
+
+fn cell_of(inst: &SyncInst, id: &str) -> String {
+    let s = inst.lock();
+    let p = s.prompts.iter().find(|p| p.id == id).unwrap();
+    sync_placement_for(p, &s.settings).cell
+}
+
+#[test]
+fn multi_a_cell_outside_the_smaller_grid_on_b_stays_where_a_put_it() {
+    let rig = Rig::new();
+    // B's first view is smaller than A's: the cell A picked does not exist there.
+    rig.b.settings(|s| {
+        s.views[0].cols = 3;
+        s.views[0].rows = 3;
+    });
+    let id = rig.a.add("Far away", "text");
+    rig.a.settings(|s| {
+        let key = grid_key(s.views[0].cols, s.views[0].rows);
+        s.views[0].layouts.entry(key).or_default().insert(id.clone(), [4, 3]);
+        s.views[0].members.push(id.clone());
+    });
+    rig.settle();
+    let on_b = cell_of(&rig.b, &id);
+    assert_ne!(on_b, "4,3", "B cannot hold that cell");
+    // B edits the text: its write must not carry B's stand-in cell back to A.
+    rig.b.edit(&id, |p| p.text = "text, edited on B".to_string());
+    rig.settle();
+    assert_eq!(rig.a.get(&id).unwrap().text, "text, edited on B");
+    assert_eq!(cell_of(&rig.a, &id), "4,3", "A's tile was moved by B's write");
+    assert_eq!(cell_of(&rig.b, &id), on_b, "B's own stand-in cell changed");
+    let file = fs::read_to_string(rig.dir.join(format!("{id}.md"))).unwrap();
+    assert!(file.contains("cell: 4,3\n"), "the file lost A's cell: {file}");
+    assert!(file.contains("grid: 5x4\n"), "the file lost A's grid size: {file}");
+    // Moving the tile on B is a real move and does travel.
+    rig.b.settings(|s| {
+        let key = grid_key(s.views[0].cols, s.views[0].rows);
+        s.views[0].layouts.get_mut(&key).unwrap().insert(id.clone(), [2, 2]);
+    });
+    rig.b.edit(&id, |p| p.text = "moved on B".to_string());
+    rig.settle();
+    assert_eq!(cell_of(&rig.a, &id), "2,2", "a real move on B did not reach A");
+}
