@@ -375,21 +375,26 @@ pub(crate) fn refresh_data_dir_lock(dir: &Path) -> bool {
     false
 }
 
-// Second half of a takeover: under the store lock (so no save can interleave), reads the
-// folder again, replaces the stale store and its row bookkeeping, and tells every window to
-// refetch and drop the read-only banner. load_store() re-resolves the lock, which names this
-// process by now, so it is also what clears the read-only flag. Should the claim not hold
-// after all, the flag stays and the next tick tries again.
+// Second half of a takeover: reads the folder again, replaces the stale store and its row
+// bookkeeping, and tells every window to refetch and drop the read-only banner. load_store()
+// re-resolves the lock, which names this process by now, so it is also what clears the
+// read-only flag. Should the claim not hold after all, the flag stays and the next tick tries
+// again.
 pub(crate) fn reload_after_takeover(app: &AppHandle) {
-    {
-        let state = app.state::<Db>();
-        let mut store = lock(&state);
-        let fresh = load_store(app);
-        crate::vault::end_session_if_vault_changed(&store.settings, &fresh.settings);
-        *store = fresh;
-    }
+    swap_in_fresh_store(&app.state::<Db>(), || load_store(app));
     let _ = app.emit_to("main", "store-synced", ());
     let _ = app.emit("data-dir-lock-changed", ());
+}
+
+// Replaces the live store with what `build` reads. The build runs BEFORE the store lock is
+// taken: its startup sweeps (trash retention, orphan attachment files) look at the live store
+// themselves, and the std mutex is not reentrant, so building under the guard froze the app.
+// Only the swap itself is under the lock.
+pub(crate) fn swap_in_fresh_store(db: &Db, build: impl FnOnce() -> Store) {
+    let fresh = build();
+    let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
+    crate::vault::end_session_if_vault_changed(&store.settings, &fresh.settings);
+    *store = fresh;
 }
 
 #[derive(Serialize)]

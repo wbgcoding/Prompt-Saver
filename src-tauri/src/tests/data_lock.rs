@@ -1326,3 +1326,31 @@ fn a_half_copied_takeover_reports_what_already_landed() {
     drop(conn);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+fn blank_store() -> Store {
+    Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: std::cell::RefCell::new(WrittenRows::new()) }
+}
+
+// The takeover reload's build runs the trash and orphan-file sweeps, and the orphan sweep asks
+// the live store what it still references (a second lock on the same std mutex). Built under
+// the guard that froze the app; the swap alone may hold the lock. The thread and the timeout
+// turn a regression into a failure instead of a hung suite.
+#[test]
+fn takeover_reload_builds_the_fresh_store_outside_the_store_lock() {
+    let db = std::sync::Arc::new(Mutex::new(blank_store()));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker_db = db.clone();
+    std::thread::spawn(move || {
+        let sweep_db = worker_db.clone();
+        swap_in_fresh_store(&worker_db, move || {
+            // What sweep_orphan_files_in's live check does while load_store is still running.
+            let _live = sweep_db.lock().unwrap_or_else(|e| e.into_inner());
+            let mut fresh = blank_store();
+            fresh.prompts = numbered_prompts(2);
+            fresh
+        });
+        let _ = tx.send(());
+    });
+    assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "the reload froze: it built the store while holding the store lock");
+    assert_eq!(db.lock().unwrap().prompts.len(), 2, "the fresh store replaces the stale one");
+}
