@@ -13,9 +13,9 @@
 </head>
 <body class="video-body">
   <!-- The window has no OS titlebar, so this row is both the title and the drag
-       surface (data-tauri-drag-region alone moves the window, same as the main
+       surface (a deep drag region moves the window from any part of the bar, same as the main
        window's header). -->
-  <div class="ve-titlebar" data-tauri-drag-region>
+  <div class="ve-titlebar" data-tauri-drag-region="deep">
     <span class="ve-titlebar-label" data-i18n="veTitle">Video editor</span>
     <span id="ve-file" class="ve-file"></span>
     <button id="ve-export-open" class="primary-btn ve-export-open" type="button" data-tauri-drag-region="false" data-i18n="veExportOpen" data-i18n-title="veExportOpenTip">Export…</button>
