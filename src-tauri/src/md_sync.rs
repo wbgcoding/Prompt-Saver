@@ -2041,11 +2041,20 @@ fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost)
                 trashed.push(stem.clone());
             }
         }
-        // Marks of prompts that left the trash (restored, purged) are let go.
+        // Marks of prompts that left the trash (restored, purged) are let go, except an owed one
+        // (0) of a prompt that is gone from the library: its marker is still not in the folder,
+        // and without the debt the next start would import the leftover file as a new prompt.
+        // That debt ends when the marker is in the folder, or when there is no file left to
+        // mark.
         let in_trash: std::collections::HashSet<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+        let live: std::collections::HashSet<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        let marked: std::collections::HashSet<&str> = tombs.iter().map(|(stem, _, _)| stem.as_str()).collect();
         let before = store.settings.sync_trash_marks.len();
         let mut marks = std::mem::take(&mut store.settings.sync_trash_marks);
-        marks.retain(|id, _| in_trash.contains(id));
+        marks.retain(|id, &mut m| {
+            in_trash.contains(id)
+                || (m == 0 && !live.contains(id) && !marked.contains(id.as_str()) && path_of(dir, id).exists())
+        });
         marks_changed |= marks.len() != before;
         store.settings.sync_trash_marks = marks;
         if trashed.is_empty() && !marks_changed {
@@ -2501,26 +2510,38 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
 // write is needed.
 pub(crate) fn sync_seed_owed(dir: &Path, prompts: &[Prompt], trash: &[Prompt], settings: &Settings) -> bool {
     let mut any = false;
-    for row in trash.iter().filter(|p| !p.secret && sync_safe_id(&p.id)) {
-        let Some(&mark) = settings.sync_trash_marks.get(&row.id) else { continue };
-        let path = dir.join(format!("{}.md", row.id));
+    let mut seed = |id: &str, row: Option<&Prompt>| {
+        let Some(&mark) = settings.sync_trash_marks.get(id) else { return };
+        let path = dir.join(format!("{id}.md"));
         if !path.is_file() {
-            continue;
+            return;
         }
-        if mark > 0 && sync_tomb_read(&sync_tomb_path(dir, &row.id)).is_none() {
-            continue;
+        if mark > 0 && sync_tomb_read(&sync_tomb_path(dir, id)).is_none() {
+            return;
         }
-        let Some(stamp) = sync_stamp_of(&path) else { continue };
-        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { continue };
+        let Some(stamp) = sync_stamp_of(&path) else { return };
+        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { return };
         let hash = sync_hash(&bytes);
-        let Some(content) = sync_decode_text(bytes) else { continue };
+        let Some(content) = sync_decode_text(bytes) else { return };
         let ours = parse_frontmatter(&content).is_some_and(|(fields, _)| md_is_ours(&fields));
-        if !ours || sync_file_differs_from_row(row, &content, prompts) {
-            continue;
+        if !ours || row.is_some_and(|row| sync_file_differs_from_row(row, &content, prompts)) {
+            return;
         }
         sync_known_note(&path);
         sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash });
         any = true;
+    };
+    for row in trash.iter().filter(|p| !p.secret && sync_safe_id(&p.id)) {
+        seed(&row.id, Some(row));
+    }
+    // A purged prompt has no row to compare the file with. Only an owed mark counts: a prompt
+    // that was purged while its marker was still owed. A file somebody edited meanwhile is swept
+    // along with a marker, and the other machine finds it in its trash.
+    let gone = |id: &String| {
+        sync_safe_id(id) && !prompts.iter().any(|p| &p.id == id) && !trash.iter().any(|p| &p.id == id)
+    };
+    for id in settings.sync_trash_marks.iter().filter(|(id, &m)| m == 0 && gone(id)).map(|(id, _)| id) {
+        seed(id, None);
     }
     any
 }

@@ -1334,3 +1334,45 @@ fn multi_delete_markers_that_did_not_change_are_not_read_again_every_round() {
     assert_eq!(reads(&rig.a), a0, "A read unchanged delete markers again");
     assert_eq!(reads(&rig.b), b0, "B read unchanged delete markers again");
 }
+
+// ---- an owed delete marker outlives the prompt's purge ----
+
+// What purging the trashed prompt does to the library (see purge_ids): the row goes, the settings
+// keep what they hold.
+fn purge_from_trash(inst: &SyncInst, id: &str) {
+    inst.lock().trash.retain(|p| p.id != id);
+}
+
+#[test]
+fn multi_a_prompt_purged_before_its_delete_marker_was_written_stays_gone_after_a_restart() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Doomed", "gone for good");
+    rig.settle();
+    assert!(leftover_of(&rig, &id).exists());
+    // Deleted and purged while no folder write ran (the folder was away), then a poll round.
+    rig.a.delete(&id);
+    purge_from_trash(&rig.a, &id);
+    rig.tick(3);
+    rig.a.poll(&rig.dir);
+    // Closed and opened again, folder back.
+    rig.a.restart();
+    rig.a.start(&rig.dir);
+    rig.settle();
+    assert!(rig.a.get(&id).is_none(), "the purged prompt came back on A as a new prompt");
+    assert!(rig.b.get(&id).is_none(), "the purged prompt came back on B");
+    assert!(!leftover_of(&rig, &id).exists(), "the file of a purged prompt stayed in the folder");
+    assert!(rig.dir.join(format!("{id}.deleted")).exists(), "the delete marker of a purged prompt was never written");
+    assert!(rig.a.lock().settings.sync_trash_marks.get(&id).is_none(), "an owed mark outlived its marker");
+}
+
+#[test]
+fn multi_an_owed_mark_of_a_purged_prompt_with_no_file_left_is_let_go() {
+    let rig = Rig::new();
+    let id = rig.a.add("Short lived", "never written");
+    rig.a.delete(&id);
+    purge_from_trash(&rig.a, &id);
+    assert_eq!(rig.a.lock().settings.sync_trash_marks.get(&id), Some(&0));
+    rig.tick(3);
+    rig.a.poll(&rig.dir);
+    assert!(rig.a.lock().settings.sync_trash_marks.get(&id).is_none(), "an owed mark with nothing to mark stayed");
+}
