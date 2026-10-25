@@ -1200,7 +1200,8 @@ fn cmd_search(store: &Store, query: &str, tag: Option<&str>, json: bool) -> Outc
         .filter(|p| {
             q.is_empty()
                 || p.name.to_lowercase().contains(&q)
-                || p.text.to_lowercase().contains(&q)
+                // A confidential prompt's stored text is ciphertext: matching it is noise.
+                || (!p.secret && p.text.to_lowercase().contains(&q))
                 || p.notes.to_lowercase().contains(&q)
                 || p.tags.iter().any(|t| t.to_lowercase().contains(&q))
         })
@@ -1492,7 +1493,7 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
         // it is the only spot that needs confirmation.
         return Outcome::err(4, format!("refused: \"{}\" already exists. Pass --yes to overwrite it.\n", out_path.display()));
     }
-    match std::fs::write(&out_path, content) {
+    match crate::write_bytes_atomic(&out_path, content.as_bytes()) {
         Ok(()) => Outcome::ok(format!("exported {} prompt(s) to {}\n", resolved.len(), out_path.display())),
         Err(e) => Outcome::err(3, format!("could not write {}: {e}\n", out_path.display())),
     }

@@ -243,6 +243,19 @@ fn check_hotkey_ignores_recording_hotkeys_that_are_switched_off() {
 }
 
 #[test]
+fn check_hotkey_ignores_a_voice_hotkey_that_is_switched_off() {
+    let mut settings = Settings { voice_hotkey: "Ctrl+Alt+V".to_string(), ..Default::default() };
+    let voice = parse_accel("Ctrl+Alt+V").unwrap();
+    settings.ui_flags.insert("voiceHotkey".to_string(), true);
+    assert!(hotkey_in_use(&settings, &[], None, voice));
+    settings.ui_flags.insert("voiceHotkey".to_string(), false);
+    assert!(!hotkey_in_use(&settings, &[], None, voice), "an inactive voice key is not taken");
+    settings.ui_flags.insert("voiceHotkey".to_string(), true);
+    settings.ui_flags.insert("voice".to_string(), false);
+    assert!(!hotkey_in_use(&settings, &[], None, voice), "voice off frees its key too");
+}
+
+#[test]
 fn setting_a_slot_ignores_a_stored_rec_key_whose_switch_is_off() {
     let mut settings = Settings { rec_stop_hotkey: "Ctrl+Alt+S".to_string(), ..Default::default() };
     let sc = parse_accel("Ctrl+Alt+S").unwrap();

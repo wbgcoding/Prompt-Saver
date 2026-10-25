@@ -612,7 +612,7 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
 // The discarded-recordings row's on-demand trigger. sweep_recordings_now answers for the
 // recordings row and also runs this sweep in its combined total, so a dedicated command
 // keeps the two rows from double-reporting.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn sweep_discarded_recordings_now(app: AppHandle) -> (u32, u64) {
     sweep_discarded_recordings(&app)
 }

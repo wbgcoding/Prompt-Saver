@@ -94,6 +94,15 @@ pub(crate) fn restore_app_windows_after_snip(app: &AppHandle) {
     }
 }
 
+// Add the labels a hide pass just put away to the restore set, without duplicates.
+pub(crate) fn merge_hidden_labels(set: &mut Vec<String>, hid: Vec<String>) {
+    for label in hid {
+        if !set.contains(&label) {
+            set.push(label);
+        }
+    }
+}
+
 // The hidden windows a snip session put away, as the restore set: only what was
 // visible before the hide pass.
 pub(crate) fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
@@ -125,6 +134,13 @@ pub(crate) fn close_all_snip(app: &AppHandle) {
         }
     }
     restore_app_windows_after_snip(app);
+    reset_snip_session_state(app);
+}
+
+// The state half of a session end, shared by close_all_snip and the overlay's Destroyed
+// handler, so a torn-down overlay (WebView2 crash) leaves no armed mode, stale flag or frozen
+// desktop behind for the next session.
+fn reset_snip_session_state(app: &AppHandle) {
     // Ending a session invalidates every capture still running for it. Done before the preview
     // is removed: an encode finishing between the two would pass its generation check and
     // register a file nobody removes.
@@ -671,9 +687,8 @@ pub(crate) fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow,
     let app_evt = app.clone();
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) && SNIP_ACTIVE.load(Ordering::SeqCst) {
-            SNIP_GEN.fetch_add(1, Ordering::SeqCst);
-            SNIP_ACTIVE.store(false, Ordering::SeqCst);
             restore_app_windows_after_snip(&app_evt);
+            reset_snip_session_state(&app_evt);
         }
     });
     Ok(win)
@@ -804,7 +819,9 @@ pub(crate) async fn begin_capture(
     // With screenshots of the app allowed, nothing is hidden at all.
     let hid = if hide_app { hide_app_windows(&app) } else { Vec::new() };
     let had_visible = !hid.is_empty();
-    *SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()) = hid;
+    // Merged, never replaced: a second session that starts before the first one's overlay
+    // exists finds the first one's windows already hidden and would record an empty set.
+    merge_hidden_labels(&mut SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()), hid);
     // Nothing was on screen to hide, so there is nothing the freeze could catch
     // mid-hide either: the settle delay only matters when we just hid something.
     if had_visible {
@@ -821,7 +838,10 @@ pub(crate) async fn begin_capture(
     if !snip_session_current(gen) {
         return Ok(());
     }
-    let (canvas, min_x, min_y) = match freeze_desktop() {
+    // The grab is a full virtual-desktop copy (tens of MB): it runs on a blocking worker so it
+    // cannot stall the async runtime.
+    let frozen = tauri::async_runtime::spawn_blocking(freeze_desktop).await.map_err(|e| e.to_string()).and_then(|r| r);
+    let (canvas, min_x, min_y) = match frozen {
         Ok(v) => v,
         Err(e) => {
             // The session never got going: hide the parked overlay, clear the
@@ -1379,7 +1399,7 @@ pub(crate) async fn save_screenshot_as(
     let _ = win.set_focus();
     match picked {
         Some(p) => {
-            fs::write(&p, &out_bytes).map_err(|e| e.to_string())?;
+            write_bytes_atomic(&p, &out_bytes).map_err(|e| e.to_string())?;
             Ok(Some(p.to_string_lossy().to_string()))
         }
         None => Ok(None),
@@ -1805,7 +1825,7 @@ pub(crate) fn move_store_dir(
     }
     rebind();
     // Point future launches at the new folder (pointer lives in the canonical dir).
-    fs::write(pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
+    write_bytes_atomic(&pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
         .map_err(|e| e.to_string())?;
     // Everything the move consists of has landed, so the folder we came from is now
     // a redundant copy: and the only one delete_data_dir is allowed to clean.

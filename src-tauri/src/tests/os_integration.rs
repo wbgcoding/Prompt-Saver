@@ -108,3 +108,49 @@ fn maximized_main_window_is_restored_after_the_show() {
     assert!(reveal.find(".maximized)").unwrap() < shown, "the flag is read before the show resets it");
     assert!(show.find("g.maximized").unwrap() < show.find("win.show()").unwrap(), "same in show_main");
 }
+
+#[test]
+fn a_key_sidecar_overwrite_goes_through_the_atomic_helper_and_leaves_no_temp_file() {
+    let root = std::env::temp_dir().join(format!("ps-keyside-atomic-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let out = root.join("rec-1.mp4");
+    for _ in 0..2 {
+        crate::keylog::try_write_sidecar(&out, &Default::default()).unwrap();
+    }
+    let names: Vec<String> = std::fs::read_dir(&root).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    assert_eq!(names.len(), 1, "only the sidecar remains: {names:?}");
+    let src = source!("../keylog.rs");
+    let body = &src[src.find("pub(crate) fn try_write_sidecar").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    assert!(body.contains("write_bytes_atomic_strict") && !body.contains("fs::write("));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_pointer_the_screenshot_save_as_and_the_cli_export_are_written_atomically() {
+    let snip = source!("../snip.rs");
+    let mv = &snip[snip.find("fn move_store_dir").unwrap()..];
+    let mv = &mv[..mv.find("\n}\n").unwrap()];
+    assert!(mv.contains("write_bytes_atomic(&pointer_dir.join(\"datapath\")") && !mv.contains("fs::write(pointer_dir"));
+    let sa = &snip[snip.find("fn save_screenshot_as").unwrap()..];
+    let sa = &sa[..sa.find("\n}\n").unwrap()];
+    assert!(sa.contains("write_bytes_atomic(&p, &out_bytes)") && !sa.contains("fs::write(&p"));
+    let cli = source!("../cli.rs");
+    let ex = &cli[cli.find("fn cmd_export").unwrap()..];
+    let ex = &ex[..ex.find("\n}\n").unwrap()];
+    assert!(ex.contains("write_bytes_atomic(&out_path") && !ex.contains("fs::write(&out_path"));
+}
+
+#[test]
+fn a_forwarded_cli_command_runs_on_a_blocking_worker_and_backup_create_releases_the_lock() {
+    let src = source!("../cli_callers.rs");
+    let live = &src[src.find("async fn run_in_process_inner").unwrap()..];
+    let tail = &live[live.find("// The store lock, the command and its save").unwrap()..];
+    let lock_at = tail.find("lock(&state)").unwrap();
+    assert!(tail[..lock_at].contains("spawn_blocking"), "the store lock is taken inside the blocking worker");
+    let bk = &tail[tail.find("Cmd::BackupCreate").unwrap()..];
+    let bk = &bk[..bk.find("exec_persisted").unwrap()];
+    assert!(bk.contains("flush_settings") && bk.contains("backup_released"));
+    assert!(!bk.contains("do_backup_at"));
+}

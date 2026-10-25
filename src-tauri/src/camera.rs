@@ -203,12 +203,18 @@ pub(crate) fn decode_camera_chunk(b64: &str) -> Result<Vec<u8>, String> {
 pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
     // Decoded before the lock is taken: the synchronous finish commands wait on it.
     let bytes = decode_camera_chunk(&bytes_b64)?;
-    let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
-    let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
-    if session.output_path != Path::new(&path) {
-        return Err("path does not match the active camera recording".to_string());
-    }
-    let mut f = OpenOptions::new().append(true).open(&session.output_path).map_err(|e| e.to_string())?;
+    // The lock covers the session check only, not the disk write: a slow target (a share, a
+    // sleeping disk) must not hold up the finish commands that wait on this lock. Opening
+    // without `create` fails cleanly when a racing discard already removed the file.
+    let output_path = {
+        let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
+        let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
+        if session.output_path != Path::new(&path) {
+            return Err("path does not match the active camera recording".to_string());
+        }
+        session.output_path.clone()
+    };
+    let mut f = OpenOptions::new().append(true).open(&output_path).map_err(|e| e.to_string())?;
     f.write_all(&bytes).map_err(|e| e.to_string())
 }
 
@@ -233,7 +239,12 @@ pub struct CamFinishResult {
 pub(crate) fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) -> Result<(), String> {
     let sidecar = CamSidecar { start_ms: cam_start_ms, overlay_start_ms: screen_elapsed_ms };
     let json = serde_json::to_string(&sidecar).map_err(|e| e.to_string())?;
-    fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json).map_err(|e| e.to_string())
+    fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json).map_err(|e| {
+        // The take is out of its slot and now unreferenced: the abandoned marker keeps the
+        // recordings sweep from deleting a finished recording the user was told is kept.
+        let _ = fs::write(abandoned_marker_path(&session.output_path), b"");
+        e.to_string()
+    })
 }
 
 #[tauri::command]

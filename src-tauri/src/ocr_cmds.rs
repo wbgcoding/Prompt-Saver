@@ -186,6 +186,10 @@ pub(crate) fn winrt_file_path(path: &str) -> String {
 }
 
 pub(crate) fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
+    // Text gate first: a UNC spelling is refused before the file system is asked anything.
+    if is_network_path(path) {
+        return Err("unsupported image type".to_string());
+    }
     let p = Path::new(path);
     let meta = fs::metadata(p).map_err(|e| e.to_string())?;
     if !meta.is_file() {

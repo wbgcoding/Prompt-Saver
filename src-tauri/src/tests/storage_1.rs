@@ -246,7 +246,7 @@ fn attachments_bytes_counts_a_shared_file_once_and_skips_missing_ones() {
     fs::write(&f, b"1234567").unwrap();
     let path = f.to_string_lossy().to_string();
     let paths = vec![path.clone(), path, String::new(), "Z:/does-not-exist.pdf".to_string()];
-    let (count, bytes) = attachments_bytes(&paths);
+    let (count, bytes) = attachments_bytes(&paths, &[]);
     assert_eq!(count, 1, "the same attachment referenced twice must be counted once");
     assert_eq!(bytes, 7);
     let _ = fs::remove_dir_all(&dir);
@@ -266,6 +266,24 @@ fn discard_recording_file_in_moves_into_verworfen_instead_of_deleting() {
     assert_eq!(moved, want);
     assert!(!src.exists(), "the original spot must be empty afterwards");
     assert!(moved.is_file(), "the file must really be at the new spot, not just claimed to be");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_discarded_recording_starts_its_keep_window_at_the_discard() {
+    let dir = std::env::temp_dir().join(format!("ps-discard-clock-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec-2026-01-01-00-00-02.mp4");
+    fs::write(&src, b"video").unwrap();
+    let two_days = Duration::from_secs(48 * 3600);
+    fs::OpenOptions::new().write(true).open(&src).unwrap().set_modified(SystemTime::now() - two_days).unwrap();
+    let moved = discard_recording_file_in(std::slice::from_ref(&dir), &src).expect("must move");
+    let age = SystemTime::now().duration_since(fs::metadata(&moved).unwrap().modified().unwrap()).unwrap_or_default();
+    assert!(age < Duration::from_secs(300), "the move must not carry the old write time over");
+    let (count, _) = discarded_stale_in(&dir.join("verworfen"), Duration::from_secs(24 * 3600));
+    assert_eq!(count, 0, "a take discarded just now is not stale");
+    assert!(moved.is_file());
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -1212,4 +1230,29 @@ fn sweep_stale_recordings_in_never_touches_editor_source_or_any_mic_sidecar() {
     }
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn attachments_bytes_skips_a_network_path_on_text_but_keeps_one_inside_an_own_share() {
+    let dir = std::env::temp_dir().join(format!("ps-storage-attach-net-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("local.pdf");
+    fs::write(&f, b"123").unwrap();
+    let paths = vec![r"\\host\share\spec.pdf".to_string(), f.to_string_lossy().to_string()];
+    assert_eq!(attachments_bytes(&paths, &[]), (1, 3), "the share path adds nothing and is never stat-ed");
+    let share = vec![PathBuf::from(r"\\nas\data")];
+    let own = vec![r"\\nas\data\files\a.pdf".to_string()];
+    assert_eq!(attachments_bytes(&own, &share), (0, 0), "inside the own share it is measured (missing here, so zero)");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_storage_commands_measure_off_the_async_worker_and_gate_the_folder_open() {
+    let src = include_str!("../stats.rs").replace("\r\n", "\n");
+    let sb = &src[src.find("pub(crate) async fn storage_breakdown").unwrap()..];
+    assert!(sb[..sb.find("\n}\n").unwrap()].contains("spawn_blocking"));
+    let ro = &src[src.find("pub(crate) async fn retention_overview").unwrap()..];
+    assert!(ro[..ro.find("\n}\n").unwrap()].contains("spawn_blocking"));
+    let of = &src[src.find("pub(crate) fn open_storage_folder").unwrap()..];
+    assert!(of[..of.find("open_explorer_at").unwrap()].contains("is_foreign_network_path"));
 }

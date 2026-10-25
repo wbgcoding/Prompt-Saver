@@ -996,7 +996,8 @@ pub(crate) fn take_out_of_tile_folder(
 
 // A folder left with one member is about to be dropped; that member lives outside
 // view.layouts, so it gets the folder's own cell (or the first free one when the
-// taken-out prompt was put there) instead of vanishing from the grid.
+// taken-out prompt was put there) instead of vanishing from the grid. A member the
+// view's own `members` list does not name yet joins it, as when a folder dissolves.
 pub(crate) fn settle_lone_folder_members(views: &mut [View], folders: &[TileFolder]) {
     for folder in folders.iter().filter(|f| f.members.len() == 1) {
         let Some(view) = views.iter_mut().find(|v| v.id == folder.view_id) else { continue };
@@ -1011,6 +1012,9 @@ pub(crate) fn settle_lone_folder_members(views: &mut [View], folders: &[TileFold
         let cell = if in_grid && !taken { Some(folder.cell) } else { first_free_cell_excluding(view, &other_cells) };
         if let Some(cell) = cell {
             view.layouts.entry(key).or_default().insert(folder.members[0].clone(), cell);
+            if !view.members.contains(&folder.members[0]) {
+                view.members.push(folder.members[0].clone());
+            }
         }
     }
 }

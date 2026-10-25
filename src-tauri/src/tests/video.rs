@@ -1129,6 +1129,20 @@ fn cancel_all_exports_cancels_every_running_generation_not_just_the_latest() {
     ops.remove(&id_b);
 }
 
+#[test]
+fn cancel_all_exports_stops_a_batch_from_queuing_its_next_item() {
+    let before = EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst);
+    cancel_all_exports();
+    assert_ne!(EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst), before, "a cancel-all moves the epoch");
+    let src = include_str!("../video_editor.rs").replace("\r\n", "\n");
+    let body = &src[src.find("pub(crate) async fn export_recordings_batch").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let check = body.find("EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst) != cancel_epoch").unwrap();
+    let reserve = body.find("VIDEO_EXPORT_GEN.fetch_add").unwrap();
+    assert!(check < reserve, "the epoch is checked before a generation is reserved");
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
 // Three recordings selected for a batch export, run one by one through
 // run_batch_job_blocking exactly as export_recordings_batch itself does
 // per item: all three destination files must exist.

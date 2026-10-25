@@ -1285,3 +1285,22 @@ fn a_failed_ocr_index_worker_marks_the_job_as_error() {
     let arm = &body[at..at + 200];
     assert!(arm.contains("push_bg_op(&app, \"ocr-index\", \"ocr-index\", \"error\""), "{arm}");
 }
+
+#[test]
+fn ocr_validate_path_refuses_a_network_path_on_text() {
+    for p in [r"\\host\share\a.png", "//host/share/a.png", r"\\?\UNC\host\share\a.png"] {
+        assert_eq!(ocr_validate_path(p), Err("unsupported image type".to_string()), "{p}");
+    }
+}
+
+#[test]
+fn the_import_confirm_step_spends_the_picked_file_grant_once() {
+    let picked = std::env::temp_dir().join("import_grant_probe_once.json");
+    let other = std::env::temp_dir().join("import_grant_probe_other.json");
+    assert!(take_import_file_grant(&picked).is_err(), "never picked");
+    grant_picked_dir(&picked, "importFile");
+    assert!(take_import_file_grant(&other).is_err(), "another file is not covered");
+    assert!(take_import_file_grant(&picked).is_ok());
+    assert!(take_import_file_grant(&picked).is_err(), "a grant is spent once");
+    assert!(take_import_file_grant(Path::new(r"\\host\share\x.json")).is_err());
+}

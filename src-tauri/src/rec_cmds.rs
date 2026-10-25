@@ -750,6 +750,23 @@ pub(crate) fn stop_and_join_interim_crops(crops: &Mutex<InterimCrops>) {
     }
 }
 
+/// Waits (without signalling a cancel) until every running interim crop has finished or
+/// `timeout` passes; true when none is left. A crop ends by renaming its staged file over the
+/// part, so a part must not be moved or deleted while one runs. The entries stay in the list:
+/// each thread removes its own, and a cancel arriving meanwhile still finds them.
+pub(crate) fn wait_for_interim_crops(crops: &Mutex<InterimCrops>, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if crops.lock().unwrap_or_else(|e| e.into_inner()).iter().all(|(_, h)| h.is_finished()) {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {

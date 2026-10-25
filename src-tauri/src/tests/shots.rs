@@ -323,6 +323,21 @@ fn a_failed_camera_sidecar_write_is_reported() {
 }
 
 #[test]
+fn a_failed_camera_finish_leaves_the_take_protected_from_the_sweep() {
+    let root = std::env::temp_dir().join(format!("ps-camside-keep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let video = root.join("cam-1.webm");
+    std::fs::write(&video, b"take").unwrap();
+    // A folder where the sidecar belongs makes the sidecar write fail with the folder writable.
+    std::fs::create_dir_all(crate::media_files::sidecar_path(&video, crate::media_files::CAM_SIDECAR_EXT)).unwrap();
+    let session = crate::camera::CamSession { output_path: video.clone(), companion_path: None, finishing: None };
+    assert!(crate::camera::finalize_session(&session, 5, None).is_err());
+    assert!(crate::camera::is_kept_abandoned(&video), "the unreferenced take must not age out");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn the_verified_pdfium_copy_is_held_open_so_it_cannot_be_swapped() {
     let dir = std::env::temp_dir().join(format!("ps-pdfhold-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
@@ -370,4 +385,60 @@ fn old_pdfium_copies_in_the_shared_temp_folder_are_removed_once_at_start() {
     assert!(lib.contains("remove_old_temp_pdfium()"));
     let snip = source!("../snip.rs");
     assert!(!snip.contains("next to the versioned pdfium cache"), "the comment no longer places the cache in TEMP");
+}
+
+#[test]
+fn the_desktop_freeze_runs_on_a_blocking_worker() {
+    let src = source!("../snip.rs");
+    let body = &src[src.find("let frozen = ").unwrap()..];
+    let line = &body[..body.find(";\n").unwrap()];
+    assert!(line.contains("spawn_blocking(freeze_desktop)"), "{line}");
+    assert!(!src.contains("match freeze_desktop()"));
+}
+
+#[test]
+fn a_camera_chunk_is_written_after_the_session_lock_is_released() {
+    let src = source!("../camera.rs");
+    let body = &src[src.find("pub async fn camera_append_chunk").unwrap()..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let write_at = body.find("write_all").unwrap();
+    let open_at = body.find("OpenOptions::new()").unwrap();
+    let lock_end = body.find("session.output_path.clone()").unwrap();
+    assert!(lock_end < open_at && open_at < write_at, "the lock scope ends before the file is opened");
+}
+
+#[test]
+fn an_overlapping_snip_session_adds_to_the_restore_set_instead_of_replacing_it() {
+    let mut set = vec!["main".to_string()];
+    crate::snip::merge_hidden_labels(&mut set, Vec::new());
+    assert_eq!(set, ["main"], "a second hide pass that found nothing visible keeps the first session's windows");
+    crate::snip::merge_hidden_labels(&mut set, vec!["main".to_string(), "float".to_string()]);
+    assert_eq!(set, ["main", "float"], "no duplicates, new labels appended");
+    let src = source!("../snip.rs");
+    let body = &src[src.find("pub(crate) async fn begin_capture").unwrap()..];
+    let body = &body[..body.find("
+}
+").unwrap()];
+    assert!(body.contains("merge_hidden_labels(&mut SNIP_HID_APP"));
+    assert!(!body.contains("*SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()) = hid"));
+}
+
+#[test]
+fn a_destroyed_overlay_resets_the_whole_session_state() {
+    let src = source!("../snip.rs");
+    let at = src.find("WindowEvent::Destroyed").unwrap();
+    let handler = &src[at..at + src[at..].find("});").unwrap()];
+    assert!(handler.contains("reset_snip_session_state(&app_evt)"), "{handler}");
+    let a = src.find("fn reset_snip_session_state").unwrap();
+    let reset = &src[a..a + src[a..].find("
+}
+").unwrap()];
+    for needle in ["SNIP_GEN.fetch_add", "remove_snip_preview()", "SNIP_ACTIVE.store(false", "SNIP_PRESENTED.store(false", "PICK_ACTIVE.store(false", ".clear()", "SnipMode::Capture"] {
+        assert!(reset.contains(needle), "the shared reset must cover {needle}");
+    }
+    let c = src.find("pub(crate) fn close_all_snip").unwrap();
+    let close = &src[c..c + src[c..].find("
+}
+").unwrap()];
+    assert!(close.contains("reset_snip_session_state(app)"));
 }

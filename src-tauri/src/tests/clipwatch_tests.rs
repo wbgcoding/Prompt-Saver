@@ -83,3 +83,48 @@ fn a_refused_clipboard_promise_ends_the_session() {
     assert!(src.contains("end_session_with_plain_write(is_first, true);"));
     assert!(src.contains("if AddClipboardFormatListener(hwnd) == 0 {"));
 }
+
+#[cfg(windows)]
+#[test]
+fn a_busy_clipboard_is_retried_a_bounded_number_of_times() {
+    assert_eq!(clipwatch::open_retry_delay(0), Some(15));
+    assert_eq!(clipwatch::open_retry_delay(9), Some(15));
+    assert_eq!(clipwatch::open_retry_delay(10), None);
+}
+
+// The retry loop and the render timing need a clipboard held by another app, so the wiring is
+// pinned in the source.
+#[test]
+fn a_rearm_retries_and_the_render_answer_leaves_the_judging_to_a_posted_message() {
+    let src = source!("../clipwatch.rs");
+    let open = &src[src.find("fn open_and_promise").unwrap()..];
+    let open = &open[..open.find("\n}\n").unwrap()];
+    assert!(open.contains("open_retry_delay(attempt)"), "a failed re-arm open must retry first");
+    assert!(open.find("open_retry_delay").unwrap() < open.find("end_session_with_plain_write").unwrap());
+    let render = &src[src.find("fn handle_render_format").unwrap()..];
+    let render = &render[..render.find("\n}\n").unwrap()];
+    assert!(render.contains("WM_APP_JUDGE"), "the judgement runs from a posted message");
+    assert!(!render.contains("lock(&state)"), "the render answer takes no Db lock");
+    assert!(!render.contains("emit_rotation_changed"));
+}
+
+#[test]
+fn a_force_end_with_a_busy_clipboard_keeps_the_text_for_the_next_render() {
+    let src = source!("../clipwatch.rs");
+    let end = &src[src.find("fn handle_app_end").unwrap()..];
+    let end = &end[..end.find("\n}\n").unwrap()];
+    // The session is not taken before the open: it stays, marked as ending, until delivered.
+    assert!(!end.contains(".take()"));
+    assert!(end.contains("session.ending = true;"));
+    assert!(end.contains("open_retry_delay(attempt)"));
+    let render = &src[src.find("fn handle_render_format").unwrap()..];
+    let render = &render[..render.find("\n}\n").unwrap()];
+    assert!(render.contains("session.ending"), "a render delivers the text of an ending session");
+}
+
+#[test]
+fn a_failed_message_window_is_logged() {
+    let src = source!("../clipwatch.rs");
+    let at = src.find("if hwnd == 0 {\n            append_crash_log(").expect("log before the early return");
+    assert!(src[at..at + 260].contains("could not create the message window"));
+}

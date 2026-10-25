@@ -1,5 +1,5 @@
 use super::{append_crash_log, clip_inbox_cap, db_add_clip, db_conn_write, lock, now_secs, text_hash, Db};
-use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -19,6 +19,20 @@ static LAST_INSERTED: AtomicU64 = AtomicU64::new(0);
 static SELF_READ: AtomicBool = AtomicBool::new(false);
 static OWN_EMPTY: AtomicBool = AtomicBool::new(false);
 static SESSION: Mutex<Option<AutoSession>> = Mutex::new(None);
+// Identifies one armed session, so a queued judgement or retry never lands on a newer one.
+static SESSION_EPOCH: AtomicU64 = AtomicU64::new(0);
+// What a render observed, kept for the posted judgement (see handle_judge).
+static PENDING_JUDGE: Mutex<Option<PasteJudge>> = Mutex::new(None);
+// Attempt counters for the timer driven retries of a busy clipboard.
+static REARM_ATTEMPT: AtomicU32 = AtomicU32::new(0);
+static END_ATTEMPT: AtomicU32 = AtomicU32::new(0);
+
+struct PasteJudge {
+    epoch: u64,
+    now: u32,
+    self_read: bool,
+    last_input: u32,
+}
 
 struct AutoSession {
     id: String,
@@ -33,6 +47,10 @@ struct AutoSession {
     session_start: u32,
     last_paste: u32,
     uncounted_rearms: u32,
+    epoch: u64,
+    // The session was force-ended while the clipboard was busy: its promise may still be
+    // outstanding, so a render (or a later retry) delivers the text and finishes the end.
+    ending: bool,
 }
 
 const WM_DESTROY: u32 = 0x0002;
@@ -44,6 +62,14 @@ const WM_APP_ARM: u32 = 0x8001;
 const WM_APP_REARM: u32 = 0x8002;
 // Force-end the active session (e.g. the tile's Auto switch flipped off) and deliver real data.
 const WM_APP_END: u32 = 0x8003;
+// The posted counts-as-paste judgement of a render, run off the paster's clock.
+const WM_APP_JUDGE: u32 = 0x8004;
+const WM_TIMER: u32 = 0x0113;
+const TIMER_REARM: usize = 1;
+const TIMER_END: usize = 2;
+// A busy clipboard is retried this often, this many times, before the attempt is given up.
+const OPEN_RETRY_MS: u32 = 15;
+const OPEN_RETRY_MAX: u32 = 10;
 const CF_UNICODETEXT: u32 = 13;
 // A copied text past this many characters never reaches the inbox: it would sit
 // in the database for good. UTF-8 needs at most four bytes a character, so a text
@@ -98,6 +124,8 @@ extern "system" {
     fn SetClipboardData(format: u32, hmem: isize) -> isize;
     fn GetClipboardData(format: u32) -> isize;
     fn GetClipboardOwner() -> isize;
+    fn SetTimer(hwnd: isize, id: usize, ms: u32, proc_: isize) -> usize;
+    fn KillTimer(hwnd: isize, id: usize) -> i32;
 }
 
 #[repr(C)]
@@ -404,6 +432,12 @@ pub(crate) fn read_text_self() -> String {
     read.unwrap_or_default()
 }
 
+// Delay before the next try of a clipboard open that found the clipboard busy; None once the
+// attempts are used up.
+pub(crate) fn open_retry_delay(attempt: u32) -> Option<u32> {
+    (attempt < OPEN_RETRY_MAX).then_some(OPEN_RETRY_MS)
+}
+
 // Ends the running session when its promise cannot be made. With `rewrite` the text goes to the
 // clipboard as a plain copy (private when the session was secret); a failed re-arm also tells
 // the UI the session is gone, or the tile badge stays "active". The first arm never reached the UI.
@@ -426,14 +460,23 @@ fn end_session_with_plain_write(is_first: bool, rewrite: bool) {
 // (Re-)claim ownership and promise CF_UNICODETEXT without delivering data yet; used for the
 // first arm (is_first) and every re-arm after a render. Must run on the window thread (posted
 // here, never called directly).
-fn open_and_promise(hwnd: isize, is_first: bool) {
+fn open_and_promise(hwnd: isize, is_first: bool, attempt: u32) {
     // A session that ended while this message was queued (a foreign copy, the
     // end message, the timeout) must not empty the clipboard it no longer owns.
-    if SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+    if SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_none_or(|s| s.ending) {
         return;
     }
     let opened = unsafe { OpenClipboard(hwnd) != 0 };
     if !opened {
+        // A re-arm runs right after the pasting app's own render returned, while that app
+        // may still hold the clipboard open: give it a moment before giving up.
+        if !is_first {
+            if let Some(delay) = open_retry_delay(attempt) {
+                REARM_ATTEMPT.store(attempt + 1, Ordering::Release);
+                unsafe { SetTimer(hwnd, TIMER_REARM, delay, 0) };
+                return;
+            }
+        }
         // Another app has the clipboard open: do not spin, end the session. On the first arm nothing
         // has reached the real clipboard yet, so fall back to a plain untracked write (as arm() does
         // when the watcher is not running). A failed re-arm keeps the text already delivered, but
@@ -475,13 +518,14 @@ fn open_and_promise(hwnd: isize, is_first: bool) {
 }
 
 // Answers WM_RENDERFORMAT: the pasting app already has the clipboard open,
-// so this delivers directly (no Open/CloseClipboard) then judges, off the clock,
-// whether that render was a real paste and whether to keep tracking.
+// so this delivers directly (no Open/CloseClipboard) and returns at once. Whether that render
+// was a real paste, and whether to keep tracking, is judged in a posted message (handle_judge),
+// so the Db lock and the UI emit never run on the pasting app's clock.
 fn handle_render_format() {
     let now = tick();
     let self_read = SELF_READ.load(Ordering::Acquire);
     let last_input = last_input_tick();
-    let app = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let has_app = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).is_some();
 
     let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
     let Some(session) = g.as_mut() else {
@@ -489,42 +533,68 @@ fn handle_render_format() {
         unsafe { set_unicode_text("") };
         return;
     };
-    if session.secret {
-        let live = app.as_ref().is_some_and(|app| {
-            let state = app.state::<Db>();
-            let store = lock(&state);
-            super::secret_session_key(super::secret_timeout_min(&store.settings)).is_some()
-        });
-        if !live {
-            // The vault timed out since this text was decrypted: hand the paste
-            // nothing, and end the session so no later render can leak it either.
-            let id = session.id.clone();
-            *g = None;
-            drop(g);
-            unsafe { set_unicode_text("") };
-            emit_active(&id, false);
-            return;
-        }
+    if session.secret && !vault_is_live() {
+        // The vault timed out since this text was decrypted: hand the paste
+        // nothing, and end the session so no later render can leak it either.
+        let id = session.id.clone();
+        *g = None;
+        drop(g);
+        unsafe { set_unicode_text("") };
+        emit_active(&id, false);
+        return;
     }
     unsafe { set_unicode_text(&session.text) }; // must answer before anything else
 
-    let Some(app) = app else {
+    if session.ending || !has_app {
+        // A force-ended session whose open failed: this render was the delivery it waited for.
         *g = None;
         return;
+    }
+    let epoch = session.epoch;
+    let id = session.id.clone();
+    drop(g);
+    *PENDING_JUDGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(PasteJudge { epoch, now, self_read, last_input });
+    let hwnd = WATCHER_HWND.load(Ordering::Acquire);
+    if hwnd == 0 || unsafe { PostMessageW(hwnd, WM_APP_JUDGE, 0, 0) } == 0 {
+        let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        if g.as_ref().is_some_and(|s| s.epoch == epoch) {
+            *g = None;
+            drop(g);
+            emit_active(&id, false);
+        }
+    }
+}
+
+// The judgement of the last render: was it a real paste, and does the rotation go on. Runs
+// from its own posted message. The session lock is not held across the Db work, so the next
+// render never waits on it.
+fn handle_judge() {
+    let Some(j) = PENDING_JUDGE.lock().unwrap_or_else(|e| e.into_inner()).take() else { return };
+    let Some(app) = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone() else { return };
+    let (id, resolved, session_start, armed_at, last_paste, uncounted) = {
+        let g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(s) = g.as_ref() else { return };
+        if s.epoch != j.epoch || s.ending {
+            return;
+        }
+        (s.id.clone(), s.resolved.clone(), s.session_start, s.armed_at, s.last_paste, s.uncounted_rearms)
     };
-    let (rearm, blocked, id) = {
+    let now = j.now;
+    let mut next_text: Option<String> = None;
+    let mut new_uncounted = uncounted;
+    let mut rearm = false;
+    let mut blocked = false;
+    {
         let state = app.state::<Db>();
         let mut store = lock(&state);
         let cfg = super::auto_cfg();
         let timed_out = cfg.timeout_min != 0
-            && now.wrapping_sub(session.session_start) >= cfg.timeout_min.saturating_mul(60_000);
+            && now.wrapping_sub(session_start) >= cfg.timeout_min.saturating_mul(60_000);
         let counted = !timed_out
-            && super::counts_as_paste(now, session.armed_at, session.last_paste, last_input, self_read, &cfg);
-        let mut rearm = false;
-        let mut blocked = false;
+            && super::counts_as_paste(now, armed_at, last_paste, j.last_input, j.self_read, &cfg);
         if counted {
             // Only the rotation fields are cloned (a tile with a picture is large).
-            let eligible = store.prompts.iter().find(|p| p.id == session.id)
+            let eligible = store.prompts.iter().find(|p| p.id == id)
                 .filter(|p| super::auto_eligible(p, &store.settings))
                 .map(super::rotation_core);
             // A prompt gone or turned off mid-session ends the session quietly.
@@ -535,31 +605,41 @@ fn handle_render_format() {
                 let key = super::secret_session_key(super::secret_timeout_min(&store.settings));
                 if let Some(plain) = super::revealed_prompt(&p, key) {
                     let (idx, _, raw) = super::rotation_next(&plain, &store.settings);
-                    let next = session.resolved.get(idx).cloned().unwrap_or(raw);
+                    let next = resolved.get(idx).cloned().unwrap_or(raw);
                     super::rotation_advance(&p, &mut store.settings);
                     // Once per paste: collected, never a disk write per Ctrl+V.
                     super::save_settings_soon();
                     super::emit_rotation_changed(&app, &p, &store.settings);
-                    session.text = next;
-                    session.last_paste = now;
-                    session.uncounted_rearms = 0;
+                    next_text = Some(next);
+                    new_uncounted = 0;
                     rearm = true;
                 }
             }
         } else if !timed_out {
-            session.uncounted_rearms += 1;
-            if session.uncounted_rearms <= cfg.rearm_max {
+            new_uncounted += 1;
+            if new_uncounted <= cfg.rearm_max {
                 rearm = true;
             } else {
                 blocked = true;
             }
         }
-        (rearm, blocked, session.id.clone())
-    };
+    }
 
+    let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(session) = g.as_mut() else { return };
+    if session.epoch != j.epoch || session.ending {
+        return; // a newer session or a force-end took over meanwhile
+    }
     if rearm {
+        if let Some(text) = next_text {
+            session.text = text;
+            session.last_paste = now;
+        }
+        session.uncounted_rearms = new_uncounted;
+        drop(g);
         let hwnd = WATCHER_HWND.load(Ordering::Acquire);
         if hwnd != 0 {
+            REARM_ATTEMPT.store(0, Ordering::Release);
             unsafe { PostMessageW(hwnd, WM_APP_REARM, 0, 0) };
         }
     } else {
@@ -610,25 +690,49 @@ fn handle_destroy_clipboard() {
 
 // Force-end the session for `id` (the tile's Auto switch flipped off, or
 // the prompt was deleted/edited out of eligibility) without waiting for a paste.
-// Delivers the last armed text as real data: never leaves a dangling promise.
-fn handle_app_end() {
-    let ended = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
-    let Some(session) = ended else { return };
-    let hwnd = WATCHER_HWND.load(Ordering::Acquire);
-    unsafe {
+// Delivers the last armed text as real data. When the clipboard is busy the session stays,
+// marked as ending, and the open is retried; a paste render arriving meanwhile delivers the
+// text itself, so the promise already on the clipboard never answers with nothing.
+fn handle_app_end(hwnd: isize, attempt: u32) {
+    let (text, secret, id, epoch) = {
+        let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(session) = g.as_mut() else { return };
+        if attempt == 0 {
+            session.ending = true;
+        } else if !session.ending {
+            return; // a newer session replaced the one this retry belonged to
+        }
+        (session.text.clone(), session.secret, session.id.clone(), session.epoch)
+    };
+    if attempt == 0 {
+        emit_active(&id, false);
+    }
+    let delivered = unsafe {
         if hwnd != 0 && OpenClipboard(hwnd) != 0 {
             OWN_EMPTY.store(true, Ordering::Release);
             EmptyClipboard();
             OWN_EMPTY.store(false, Ordering::Release);
-            let live = !session.secret || vault_is_live();
-            set_unicode_text(deliverable_text(session.secret, live, &session.text));
-            if session.secret {
+            let live = !secret || vault_is_live();
+            set_unicode_text(deliverable_text(secret, live, &text));
+            if secret {
                 set_private_markers();
             }
             CloseClipboard();
+            true
+        } else {
+            false
         }
+    };
+    if delivered {
+        let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        if g.as_ref().is_some_and(|s| s.epoch == epoch) {
+            *g = None;
+        }
+    } else if let Some(delay) = open_retry_delay(attempt) {
+        END_ATTEMPT.store(attempt + 1, Ordering::Release);
+        unsafe { SetTimer(hwnd, TIMER_END, delay, 0) };
     }
-    emit_active(&session.id, false);
+    // Out of attempts: the session stays marked as ending, so a render still delivers its text.
 }
 
 // Called from the normal copy path (put_text) once a prompt is judged auto-eligible.
@@ -648,6 +752,8 @@ pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool) {
             session_start: 0,
             last_paste: 0,
             uncounted_rearms: 0,
+            epoch: SESSION_EPOCH.fetch_add(1, Ordering::SeqCst) + 1,
+            ending: false,
         });
         old
     };
@@ -717,15 +823,34 @@ unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> 
             0
         }
         WM_APP_ARM => {
-            let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, true));
+            // A retry still pending for the session this one replaces must not fire on it.
+            KillTimer(hwnd, TIMER_REARM);
+            KillTimer(hwnd, TIMER_END);
+            let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, true, 0));
             0
         }
         WM_APP_REARM => {
-            let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, false));
+            let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, false, REARM_ATTEMPT.load(Ordering::Acquire)));
+            0
+        }
+        WM_APP_JUDGE => {
+            let _ = std::panic::catch_unwind(handle_judge);
             0
         }
         WM_APP_END => {
-            let _ = std::panic::catch_unwind(handle_app_end);
+            KillTimer(hwnd, TIMER_REARM);
+            KillTimer(hwnd, TIMER_END);
+            let _ = std::panic::catch_unwind(|| handle_app_end(hwnd, 0));
+            0
+        }
+        WM_TIMER => {
+            if w == TIMER_REARM {
+                KillTimer(hwnd, TIMER_REARM);
+                let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, false, REARM_ATTEMPT.load(Ordering::Acquire)));
+            } else if w == TIMER_END {
+                KillTimer(hwnd, TIMER_END);
+                let _ = std::panic::catch_unwind(|| handle_app_end(hwnd, END_ATTEMPT.load(Ordering::Acquire)));
+            }
             0
         }
         WM_DESTROY => {
@@ -763,6 +888,7 @@ pub fn start(app: AppHandle) {
         RegisterClassW(&wc); // ok if already registered from a previous cycle
         let hwnd = CreateWindowExW(0, class.as_ptr(), name.as_ptr(), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, std::ptr::null());
         if hwnd == 0 {
+            append_crash_log("clipboard inbox: could not create the message window, nothing is recorded and rotating copies stay plain this run");
             return;
         }
         if AddClipboardFormatListener(hwnd) == 0 {

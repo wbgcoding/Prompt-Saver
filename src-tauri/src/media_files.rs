@@ -437,14 +437,28 @@ pub(crate) fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &
     }
 }
 
+// ERROR_NOT_SAME_DEVICE: the one rename failure that a copy can cure.
+const CROSS_DEVICE_ERROR: i32 = 17;
+
 // fs::rename fails across drives (recordingDir can be anywhere, unlike the same-drive
-// <data>/recordings), so fall back to copy+remove.
+// <data>/recordings), so a cross-device error falls back to copy+remove. Any other rename
+// error (a file held open, no right) is returned as is: a copy would only duplicate a take
+// whose source cannot be removed. A copy whose source then cannot be removed is undone, so
+// the file never exists twice.
 pub(crate) fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    if fs::rename(src, dst).is_ok() {
-        return Ok(());
+    let err = match fs::rename(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    if err.raw_os_error() != Some(CROSS_DEVICE_ERROR) {
+        return Err(err);
     }
     fs::copy(src, dst)?;
-    fs::remove_file(src)
+    if let Err(e) = fs::remove_file(src) {
+        let _ = fs::remove_file(dst);
+        return Err(e);
+    }
+    Ok(())
 }
 
 // Save/Save As/Copy relocate the video, so its mic sidecar (a dual-audio capture not yet
@@ -605,6 +619,9 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
             append_crash_log(&format!("quit: recording not saved: {e}"));
         }
     }
+    if !wait_for_interim_crops(&REC_INTERIM_CROPS, REC_PARTS_QUIT_WAIT) {
+        append_crash_log("quit: a part crop was still running");
+    }
     let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
     let (_, failed) = place_recording_parts(&mut parts, &allowed, &dest);
     if failed > 0 {
@@ -627,6 +644,8 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
     // A part can be many gigabytes and the move copies across drives: the list is taken out so
     // the lock is not held for that, and the worker thread does the copying.
     tauri::async_runtime::spawn_blocking(move || {
+        // A part still being cropped in the background is only moved once that crop ended.
+        wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
         with_parts_outside_lock(&REC_RESULT_PARTS, |parts| place_recording_parts(parts, &allowed, &dest))
     })
     .await
@@ -635,6 +654,9 @@ pub(crate) async fn save_recording_parts(app: AppHandle, state: State<'_, Db>, b
 
 // How long a quit waits for a running parts save before it goes on.
 pub(crate) const REC_PARTS_QUIT_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+// How long a save, discard or quit waits for a part's background crop before it goes on.
+pub(crate) const REC_INTERIM_CROP_WAIT: std::time::Duration = std::time::Duration::from_secs(120);
 
 // Held for as long as a parts save runs: a second Save waits for the first instead of finding an
 // empty list, and the quit path waits on it too.
@@ -698,9 +720,11 @@ pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, all
     moved
 }
 
-#[tauri::command]
+// Runs on the command pool, not the main thread: it may wait for a part's background crop.
+#[tauri::command(async)]
 pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u32 {
     let allowed = recording_source_dirs(&app, &state);
+    wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
     let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
     discard_recording_parts_in(&mut parts, &allowed)
 }
@@ -902,6 +926,11 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     fs::create_dir_all(&trash).ok()?;
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
+    // A move keeps the last-write time, and the holding-area sweep ages a file by it: stamp the
+    // moment of the discard so time spent open before it does not count against the keep window.
+    if let Ok(f) = fs::OpenOptions::new().write(true).open(&dest) {
+        let _ = f.set_modified(SystemTime::now());
+    }
     // A discarded recording takes its mic and key-overlay sidecars (if any) with it, best-effort
     // since most recordings have neither. Both exist only next to an mp4.
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -946,7 +975,7 @@ pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
 // into a "verworfen" subfolder of whichever it was in rather than deleting, so a wrong click
 // can be undone (see restore_discarded_recording; the sweep in sweep_recordings_now_result
 // eventually clears the subfolder).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> Option<f64> {
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let allowed = [data_dir(&app).join("recordings"), recording_dir(&custom)];
@@ -1015,7 +1044,7 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
     true
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) -> bool {
     restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
 }

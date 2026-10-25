@@ -718,6 +718,9 @@ pub(crate) fn copy_plan(req: &ExportRequest) -> CopyPlan {
 // several generations at once, so cancellation is a set of cancelled generations rather than
 // one slot; a finished job removes its own entry so the set stays small.
 pub(crate) static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+// Bumped by every cancel-all (quit with running jobs). A batch notes it when it starts and
+// stops queuing items once it changed, so no export begins after the cancel went out.
+pub(crate) static EXPORTS_CANCEL_EPOCH: AtomicU64 = AtomicU64::new(0);
 // The generation of the export the video editor itself has in flight (0 = none), so its
 // Cancel hits exactly that one and not a batch export's.
 pub(crate) static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
@@ -822,6 +825,13 @@ pub(crate) fn export_file_name_from(name: &str, fallback: &str) -> String {
 // Exporting a file over itself would have ffmpeg read and overwrite one file, so it is
 // refused rather than left to reserve_unique_dest_path. dest need not exist, so only its
 // parent is canonicalized; names compare case-insensitively, as Windows does.
+// The text gate for the paths of an export request other than its source: the destination and
+// every media file. Decided on text alone and before any fs call, so a refused UNC spelling
+// never makes this machine contact a host.
+pub(crate) fn export_request_paths_refused(own_dirs: &[PathBuf], dest_path: &str, media_paths: &[String]) -> bool {
+    is_foreign_network_path(dest_path, own_dirs) || media_paths.iter().any(|m| is_foreign_network_path(m, own_dirs))
+}
+
 pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     let Ok(src_canon) = fs::canonicalize(src) else { return false };
     let dest_parent = dest.parent().unwrap_or_else(|| Path::new("."));
@@ -928,6 +938,7 @@ pub(crate) fn cancel_export_job(generation: u64) {
 // registry for running "export" rows. The current generation is added directly in case its
 // row is not written yet.
 pub(crate) fn cancel_all_exports() {
+    EXPORTS_CANCEL_EPOCH.fetch_add(1, Ordering::SeqCst);
     let running_gens: Vec<u64> = bg_ops()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -1025,6 +1036,9 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     let own_dirs = own_storage_dirs(&app, &state);
     if is_foreign_network_path(&req.src_path, &own_dirs) {
         return Err("source-not-allowed".to_string());
+    }
+    if export_request_paths_refused(&own_dirs, &req.dest_path, &req.media_paths) {
+        return Err("export destination not recognized".to_string());
     }
     let src = PathBuf::from(&req.src_path);
     if !src.is_file() {
@@ -1187,14 +1201,21 @@ pub(crate) async fn export_recordings_batch(
     // The batch dialog lists only this app's own recordings, so nothing else may
     // be handed to ffmpeg through it.
     let allowed_sources = recording_source_dirs(&app, &state);
+    let own_dirs = own_storage_dirs(&app, &state);
+    let cancel_epoch = EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst);
 
     for item in items {
         if in_flight.len() >= parallel {
             let (handle, id, generation, job_app) = in_flight.pop_front().unwrap();
             if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
         }
+        // A quit that cancelled the running jobs must not see the next item start.
+        if EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst) != cancel_epoch {
+            break;
+        }
         let item_src = PathBuf::from(&item.src_path);
-        if !item_src.is_file() || !is_own_recording_source(&allowed_sources, &item_src) {
+        // is_own_recording_source decides on the text before it touches the file system.
+        if !is_own_recording_source(&allowed_sources, &item_src) || export_request_paths_refused(&own_dirs, &item.dest_path, &[]) {
             failed += 1;
             continue;
         }
