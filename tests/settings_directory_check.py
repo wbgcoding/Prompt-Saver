@@ -1,12 +1,11 @@
 """Consistency check for SETTINGS_DIRECTORY (ui/main.js), the hand-maintained
 list that lets the expert-menu search also find a hit in the normal settings
-page, the always-visible toolbar, the library dialog, the backup manager or the
-statistics dialog.
+page, the always-visible toolbar, the library dialog or the backup manager.
 
 Catches the mistakes that are invisible until someone actually searches:
   * a directory entry whose target element does not exist in the markup
     (area "normal"/"toolbar"/"library": no matching `id="..."` in
-    ui/index.html; areas "backup" and "stats": no matching `dataset.settingRow = "..."`
+    ui/index.html; area "backup": no matching `dataset.settingRow = "..."`
     assignment in ui/main.js) -- a stale entry that would silently 404 on
     click,
   * a directory entry whose `label` (or `tip`) is not a real i18n key,
@@ -112,14 +111,14 @@ def main():
         if e["area"] in ("normal", "toolbar", "library"):
             if f'id="{e["key"]}"' not in INDEX_SRC:
                 problems.append(f"{e['key']}: no element with this id in ui/index.html ({e['area']})")
-        elif e["area"] in ("backup", "stats"):
+        elif e["area"] == "backup":
             # Most rows set dataset.settingRow directly with the literal key;
             # the four tier rows go through a small tierRow(..., dataKey)
             # helper instead, so a direct-assignment match would miss them --
             # checking that the literal key string appears anywhere near a
             # dataset.settingRow use covers both without hardcoding the helper.
             if f'"{e["key"]}"' not in MAIN_NC or "dataset.settingRow" not in MAIN_NC:
-                problems.append(f"{e['key']}: no matching dataset.settingRow assignment in the backup or statistics panel")
+                problems.append(f"{e['key']}: no matching dataset.settingRow assignment in the backup panel")
         else:
             problems.append(f"{e['key']}: unknown area '{e['area']}'")
 

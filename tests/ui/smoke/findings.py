@@ -1104,25 +1104,36 @@ def run(browser, tmp):
       if (sel.value !== '1') errs.push('646: a stored 0 hours should show the 1 hour the backend uses, got ' + sel.value);
     }
 """)
-    failed += ar_probe('bm654', 'usage statistics: a fresh install shows the switch off and no counts, switching it on stores true and shows them', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { ui_flags: { usageStats: undefined } };</script>
+    failed += ar_probe('bm654', 'usage statistics: a fresh install shows the off hint and a jump button, no switch and no counts; the button opens the expert menu on the statistics switch', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { ui_flags: { usageStats: undefined } };</script>
 """, r"""
     await bootReady();
     document.getElementById('gear').click();
     await sleep(200);
     document.getElementById('settings-stats-btn').click();
     await sleep(600);
-    const swi = () => document.querySelector('#stats-panel .stats-head-row .switch');
-    if (!swi()) errs.push('654: the statistics switch is missing');
+    const panel = document.getElementById('stats-panel');
+    if (panel.querySelector('.switch')) errs.push('654: the statistics panel still holds a switch');
+    if (panel.querySelector('.stat-cards')) errs.push('654: statistics cards show while statistics are off');
+    if (!panel.querySelector('.hint')) errs.push('654: the off hint is missing');
+    const exportBtn = document.getElementById('stats-export-btn');
+    if (exportBtn) errs.push('654: the export row shows while statistics are off');
+    const go = document.getElementById('stats-off-open');
+    if (!go) errs.push('654: the jump button is missing');
     else {
-      if (swi().checked) errs.push('654: a fresh install shows the statistics switch on');
-      if (document.querySelector('#stats-panel .stat-cards')) errs.push('654: statistics cards show while the switch is off');
-      window.__SMOKE_ARGS__ = [];
-      swi().click();
-      await sleep(600);
-      const calls = (window.__SMOKE_ARGS__ || []).filter(([cmd, a]) => cmd === 'set_ui_flag' && a && a.key === 'usageStats');
-      if (!calls.length || calls[calls.length - 1][1].enabled !== true) errs.push('654: switching statistics on did not store usageStats true');
-      if (!swi() || !swi().checked) errs.push('654: the switch is not on after switching it on');
-      if (!document.querySelector('#stats-panel .stat-cards')) errs.push('654: no statistics cards after switching on');
+      go.click();
+      await sleep(500);
+      if (!visible(document.getElementById('settings-expert'))) errs.push('654: the expert menu did not open');
+      if (visible(document.getElementById('stats-modal'))) errs.push('654: the statistics dialog stayed open');
+      const row = document.querySelector('#settings-expert [data-setting-row="usageStats"]');
+      if (!row) errs.push('654: the usageStats row is not in the expert menu');
+      else {
+        if (!row.classList.contains('settings-search-hit')) errs.push('654: the usageStats row is not highlighted');
+        window.__SMOKE_ARGS__ = [];
+        row.querySelector('input.switch').click();
+        await sleep(400);
+        const calls = (window.__SMOKE_ARGS__ || []).filter(([cmd, a]) => cmd === 'set_ui_flag' && a && a.key === 'usageStats');
+        if (!calls.length || calls[calls.length - 1][1].enabled !== true) errs.push('654: switching statistics on did not store usageStats true');
+      }
     }
 """)
     failed += ar_probe('bm908', 'hotkey fields: a small X inside the field removes the shortcut, no Clear button', 'index', '880x600', '', r"""
@@ -1556,14 +1567,11 @@ def run(browser, tmp):
     await sleep(200);
     document.getElementById('settings-stats-btn').click();
     await sleep(600);
-    const head = document.querySelector('#stats-panel .stats-head-row');
     const exp = document.querySelector('#stats-panel .stats-export-row');
     const cards = document.querySelector('#stats-panel .stat-cards');
-    if (!head || !exp || !cards) errs.push('823: a block of the statistics panel is missing (fixture)');
+    if (!exp || !cards) errs.push('823: a block of the statistics panel is missing (fixture)');
     else {
-      const g1 = exp.getBoundingClientRect().top - head.getBoundingClientRect().bottom;
       const g2 = cards.getBoundingClientRect().top - exp.getBoundingClientRect().bottom;
-      if (g1 < 10) errs.push('823: the switch row and the export row are ' + g1 + ' px apart');
       if (g2 < 10) errs.push('823: the export row and the cards are ' + g2 + ' px apart');
     }
 """

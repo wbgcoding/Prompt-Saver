@@ -1,7 +1,7 @@
 // Statistics, duplicate finder, compare view, trash, error log.
 import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
-import { applyFlags, applyValues, renderExpert, rowResetBtn, withTip } from "./expertMenu.js";
+import { applyFlags, applyValues, jumpToExpertSetting, renderExpert, rowResetBtn } from "./expertMenu.js";
 import { loadPalette, refreshColorUI } from "./theme.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { runStatsExport, syncSettingsControls } from "./settingsPanel.js";
@@ -80,7 +80,7 @@ export function recordToolUsage(tool) {
   invoke("record_tool_usage", { tool }).catch(() => {});
 }
 
-// The usage statistics dialog: the switch, the export row, two figures, the most
+// The usage statistics dialog: the export row, two figures, the most
 // used prompts by name and the never used ones. The full numbers stay in the export.
 const STATS_TOP_CHOICES = [5, 10, 20];
 export async function renderStatsPanel(body) {
@@ -100,15 +100,20 @@ export async function renderStatsPanel(body) {
   panel.className = "stats-panel-body";
   root.appendChild(panel);
   body = panel;
-  const headRow = document.createElement("div"); headRow.className = "stats-head-row";
-  const sw = document.createElement("label"); sw.className = "field switch-field";
-  sw.dataset.settingRow = "usage-stats";
-  const swl = document.createElement("span"); swl.textContent = t("statsEnable");
-  const swi = document.createElement("input"); swi.type = "checkbox"; swi.className = "switch"; swi.checked = on;
-  swi.addEventListener("change", async () => { await saveBackupSetting("flag", "usageStats", swi.checked); renderStatsPanel(root); });
-  sw.append(swl, swi); headRow.appendChild(withTip(sw, "usageStats"));
-  body.appendChild(headRow);
-  if (!on) return;
+  if (!on) {
+    // Off: one hint and a jump to the switch, which lives in the expert menu only.
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = t("statsOffHint");
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.id = "stats-off-open";
+    openBtn.className = "ghost-btn";
+    openBtn.textContent = t("statsOffOpen");
+    openBtn.addEventListener("click", () => { closeStats(); jumpToExpertSetting("usageStats", "flags"); });
+    body.append(hint, openBtn);
+    return;
+  }
   const exportRow = document.createElement("div");
   exportRow.className = "export-row stats-export-row";
   const exportSelect = document.createElement("select");

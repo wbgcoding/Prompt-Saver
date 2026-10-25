@@ -658,8 +658,8 @@ export const HELP_CONTENT = {
       title: "Usage statistics",
       whatItIs: "A small window with the number of prompts, the copies of the last 7 days, the most used and the never used prompts.",
       howTo: [
+        "Switch on \"Show statistics\" in the expert menu under \"Data & maintenance\".",
         "Open Settings and click \"Usage statistics\".",
-        "Switch on \"Show statistics\".",
         "Pick how many prompts the most used list shows: 5, 10 or 20.",
         "Click a never used prompt to find it in the library.",
       ],
@@ -1407,8 +1407,8 @@ export const HELP_CONTENT = {
       title: "Nutzungsstatistik",
       whatItIs: "Ein kleines Fenster mit der Zahl der Prompts, den Kopien der letzten 7 Tage, den meistgenutzten und den nie genutzten Prompts.",
       howTo: [
+        "Im Expertenmenü unter „Daten & Wartung“ „Statistik anzeigen“ einschalten.",
         "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",
-        "„Statistik anzeigen“ einschalten.",
         "Wählen, wie viele Prompts die Liste der meistgenutzten zeigt: 5, 10 oder 20.",
         "Einen nie genutzten Prompt anklicken, um ihn in der Bibliothek zu finden.",
       ],

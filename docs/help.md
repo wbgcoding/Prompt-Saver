@@ -880,7 +880,7 @@ A small window opened from Settings → Usage statistics, with four things: the
 number of prompts, the copies of the last 7 days, the most used prompts by
 name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
 which you can click to find them in the library. The "Show statistics" switch
-turns the display on; the numbers themselves are collected by the copy
+in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
 history. Everything stays on this computer. The export button saves the full
 numbers, including daily counts and tool use, as CSV, TXT or JSON.
 
@@ -1625,7 +1625,7 @@ ganzen Sicherung.
 Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
 (eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und den nie genutzten
 Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
-Schalter „Statistik anzeigen“ schaltet die Anzeige ein; die Zahlen selbst
+Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
 sammelt der Kopierverlauf. Alles bleibt auf diesem Rechner. Der Export-Button
 speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
 TXT oder JSON.

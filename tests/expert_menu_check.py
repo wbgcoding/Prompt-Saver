@@ -36,8 +36,8 @@ NOT_IN_EXPERT = {
     # Backup settings, rendered by renderBackupPanel.
     "autoBackup", "backupGfs", "backupKeep", "backupIntervalH", "backupStartDelayS",
     "backupDaily", "backupWeekly", "backupMonthly", "backupYearly",
-    # Statistics, rendered by renderStatsPanel.
-    "usageStats", "statsTopN",
+    # The statistics list length, rendered by renderStatsPanel.
+    "statsTopN",
     # Screenshot folder save: Settings page and the screenshot dialog.
     "screenshotSave",
     # Interface size, set by the select on the normal settings page.

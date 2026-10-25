@@ -3683,8 +3683,12 @@ input[type="password"]::-ms-clear { display: none; }
 .confirm-checkbox-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .confirm-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
-.stats-head-row { display: flex; align-items: center; }
-.stats-head-row > .switch-field { min-width: 0; }
+/* Compact export row: the format select and the button share one small height. */
+.stats-export-row { align-items: center; }
+#stats-panel .stats-export-row .ghost-btn { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
+.stats-export-row .batch-view-select { padding: 4px 28px 4px 10px; font-size: 12px; }
+/* Statistics off: the hint and its jump button, left aligned. */
+#stats-panel > .stats-panel-body > #stats-off-open { align-self: flex-start; }
 /* "Most used" heading with the list length choice at its right end. */
 .stats-top-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stats-top-head > .stat-section { flex: 1 1 auto; min-width: 0; }
