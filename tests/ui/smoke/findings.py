@@ -1760,14 +1760,14 @@ def run(browser, tmp):
       await sleep(400);
     };
 """
-    # The help button sits right beside the close button, not in the middle of the title bar.
+    # The help button sits right beside the window buttons, not in the middle of the title bar.
     for size_828 in ('880x600', '680x460'):
-        failed += ar_probe('bq828-' + size_828, '828: the editor help button sits beside the close button at ' + size_828, 'index', size_828, '', snip_common + r"""
+        failed += ar_probe('bq828-' + size_828, '828: the editor help button sits beside the window buttons at ' + size_828, 'index', size_828, '', snip_common + r"""
     await snipOpen(300, 200);
     const help = document.getElementById('snip-edit-shortcuts').getBoundingClientRect();
-    const close = document.getElementById('snip-edit-close').getBoundingClientRect();
-    const gap = close.left - help.right;
-    if (!(gap >= 0 && gap <= 8)) errs.push('828: the help button is ' + gap + ' px left of the close button, want 0 to 8');
+    const nextBtn = document.getElementById('snip-edit-minimize').getBoundingClientRect();
+    const gap = nextBtn.left - help.right;
+    if (!(gap >= 0 && gap <= 8)) errs.push('828: the help button is ' + gap + ' px left of the window buttons, want 0 to 8');
 """)
     # Tool options open in a panel under the tool button, not in the toolbar row.
     snip_panel_common = snip_common + r"""
