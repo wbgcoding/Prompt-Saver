@@ -508,10 +508,11 @@ const RAW_CHANNEL_CAP: usize = 4_096;
 // The hook callback is a bare extern "system" fn and cannot capture, so its channel is
 // process-global. Cloned at once, never held across the send.
 // The slot is tagged with the id of the capture that filled it, so a stop only clears its own.
-static RAW_TX: OnceLock<Mutex<Option<(u64, SyncSender<RawKey>)>>> = OnceLock::new();
+type RawSlot = Mutex<Option<(u64, SyncSender<RawKey>)>>;
+static RAW_TX: OnceLock<RawSlot> = OnceLock::new();
 static CAPTURE_SEQ: AtomicU64 = AtomicU64::new(0);
 
-fn raw_tx_slot() -> &'static Mutex<Option<(u64, SyncSender<RawKey>)>> {
+fn raw_tx_slot() -> &'static RawSlot {
     RAW_TX.get_or_init(|| Mutex::new(None))
 }
 
