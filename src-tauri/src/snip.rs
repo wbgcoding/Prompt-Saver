@@ -1374,7 +1374,7 @@ pub(crate) async fn save_screenshot_as(
     let _ = win.set_focus();
     match picked {
         Some(p) => {
-            fs::write(&p, &out_bytes).map_err(|e| e.to_string())?;
+            write_bytes_atomic(&p, &out_bytes).map_err(|e| e.to_string())?;
             Ok(Some(p.to_string_lossy().to_string()))
         }
         None => Ok(None),
@@ -1800,7 +1800,7 @@ pub(crate) fn move_store_dir(
     }
     rebind();
     // Point future launches at the new folder (pointer lives in the canonical dir).
-    fs::write(pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
+    write_bytes_atomic(&pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
         .map_err(|e| e.to_string())?;
     // Everything the move consists of has landed, so the folder we came from is now
     // a redundant copy: and the only one delete_data_dir is allowed to clean.
