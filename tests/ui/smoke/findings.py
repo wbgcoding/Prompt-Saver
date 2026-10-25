@@ -2099,5 +2099,59 @@ def run(browser, tmp):
       if (r.left < -0.5 || r.right > window.innerWidth + 0.5) errs.push('932-de: ' + (el.id || el.className) + ' leaves the window (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ' of ' + window.innerWidth + ')');
     }
 """)
+    # A placed text box opens again on a double-click or F2; one undo step brings the old text back.
+    for how_tx19 in ('dblclick', 'f2'):
+        failed += ar_probe('tx19-' + how_tx19, 'a placed text box is edited again by ' + how_tx19, 'index', '880x600', '', snip_common + r"""
+    const how = '""" + how_tx19 + r"""';
+    const live = document.getElementById('snip-edit-live');
+    const base = document.getElementById('snip-edit-base');
+    const stage = document.getElementById('snip-edit-stage');
+    const input = document.getElementById('snip-edit-text-input');
+    const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    const firePtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y,
+    }));
+    const at = (ix, iy) => { const sr = stage.getBoundingClientRect(); const z = sr.width / live.width; return [sr.left + ix * z, sr.top + iy * z]; };
+    const shot = () => base.toDataURL();
+    const key = (k, ctrl) => { document.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: !!ctrl, bubbles: true, cancelable: true })); };
+    const typeInto = (text, k) => {
+      input.value = text; input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: k || 'Enter', bubbles: true, cancelable: true }));
+    };
+    await snipOpen(400, 200);
+    const blank = shot();
+    document.querySelector('#snip-edit-tools button[data-tool="text"]').click(); await sleepMs(150);
+    const [px, py] = at(40, 60);
+    firePtr('pointerdown', px, py, live); firePtr('pointerup', px, py, window); await sleepMs(120);
+    if (input.classList.contains('hidden')) throw new Error('tx19: a click with the text tool opened no input');
+    typeInto('Totla'); await sleepMs(120);
+    const totla = shot();
+    if (totla === blank) errs.push('tx19: the first text was not drawn');
+    // The pair of presses a double-click is made of, then the dblclick itself.
+    const [hx, hy] = at(50, 70);
+    if (how === 'dblclick') {
+      // Any tool opens the box again, not only the text tool.
+      document.querySelector('#snip-edit-tools button[data-tool="rect"]').click(); await sleepMs(100);
+      firePtr('pointerdown', hx, hy, live); firePtr('pointerup', hx, hy, window);
+      firePtr('pointerdown', hx, hy, live); firePtr('pointerup', hx, hy, window);
+      live.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: hx, clientY: hy }));
+    } else {
+      key('F2');
+    }
+    await sleepMs(150);
+    if (input.classList.contains('hidden')) throw new Error('tx19: ' + how + ' did not open the text again');
+    if (input.value !== 'Totla') errs.push('tx19: the input shows "' + input.value + '", want Totla');
+    if (shot() === totla) errs.push('tx19: the box is still drawn on the canvas while its input is open');
+    typeInto('Total'); await sleepMs(150);
+    const total = shot();
+    if (total === totla || total === blank) errs.push('tx19: the corrected text did not replace the old one');
+    document.getElementById('snip-edit-undo').click(); await sleepMs(120);
+    if (shot() !== totla) errs.push('tx19: one undo did not bring back Totla');
+    document.getElementById('snip-edit-redo').click(); await sleepMs(120);
+    if (shot() !== total) errs.push('tx19: redo did not bring back Total');
+    document.getElementById('snip-edit-undo').click(); await sleepMs(80);
+    document.getElementById('snip-edit-undo').click(); await sleepMs(120);
+    if (shot() !== blank) errs.push('tx19: the edit left a second text op behind');
+""")
     # ---- main window findings: generated block end ----
     return failed

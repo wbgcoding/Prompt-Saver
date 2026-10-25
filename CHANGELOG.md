@@ -588,6 +588,10 @@ the introduction tour ship on; the screenshot editor is always on).
 
 ### Improved
 
+- **A placed text box opens again.** Double-click a text box in the screenshot
+  editor (with any tool) or press F2 on the one you just placed to correct it.
+  Size and colour can change while it is open, and one undo brings back the old
+  text.
 - **Expert menu cards sit without gaps.** The cards of a tab now fill columns
   from top to bottom, so a short card is followed by the next card instead of
   empty space. The reading order is therefore column by column, not row by row.
