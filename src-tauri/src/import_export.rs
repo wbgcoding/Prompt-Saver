@@ -883,6 +883,9 @@ pub(crate) async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Resu
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
+    // The pick is the user's consent to read this file: the confirm step spends it, so it
+    // cannot be pointed at a file nobody picked (a share included).
+    grant_picked_dir(&path, "importFile");
     let bytes = read_file_capped(&path, MAX_IMPORT_BYTES)?;
     let hash = import_file_hash(&bytes);
     let data = parse_import_bytes(&bytes, &path)?;
@@ -1023,12 +1026,24 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
     count
 }
 
+// Spends the grant preview_import recorded for this file. Decided before the path is opened,
+// so a renderer-made path (a UNC spelling included) never reaches the file system; the error
+// is the one a changed file gets, which the page already words.
+pub(crate) fn take_import_file_grant(path: &std::path::Path) -> Result<(), String> {
+    if consume_granted_dir(path, "importFile") {
+        Ok(())
+    } else {
+        Err("import-changed".to_string())
+    }
+}
+
 // Async: parsing + persisting stays off the UI thread. `path` comes from a prior
 // preview_import call, never a fresh dialog, so confirming cannot import a different file.
 // `hash` is that preview's digest of the file; a mismatch means it changed after the
 // preview and the import is refused.
 #[tauri::command]
 pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<usize, String> {
+    take_import_file_grant(std::path::Path::new(&path))?;
     let bytes = read_file_capped(std::path::Path::new(&path), MAX_IMPORT_BYTES)?;
     if import_file_hash(&bytes) != hash {
         return Err("import-changed".to_string());
