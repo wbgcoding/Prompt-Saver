@@ -135,7 +135,7 @@ fn attachment_source_trust_compares_resolved_paths() {
 // The scope is widened after the write went through, never for a refused or failed one.
 #[test]
 fn the_scope_widens_only_after_a_write_succeeded() {
-    let src = include_str!("../store.rs");
+    let src = include_str!("../store.rs").replace("\r\n", "\n");
     for name in ["pub(crate) fn save_prompts(", "pub(crate) fn save_prompts_and_trash(", "pub(crate) fn write_settings_outcome("] {
         let start = src.find(name).unwrap_or_else(|| panic!("{name} exists"));
         let body = &src[start..];
@@ -152,14 +152,14 @@ fn the_scope_widens_only_after_a_write_succeeded() {
 // one vet it, and every backend door that hands a path to the user records it as picked.
 #[test]
 fn attachment_commands_vet_sources_and_pickers_record_grants() {
-    let prompts = include_str!("../prompts.rs");
+    let prompts = include_str!("../prompts.rs").replace("\r\n", "\n");
     for name in ["pub(crate) async fn add_prompt(", "pub(crate) async fn update_prompt("] {
         let start = prompts.find(name).unwrap_or_else(|| panic!("{name} exists"));
         let body = &prompts[start..];
         let body = &body[..body.find("\n}\n").expect("function end")];
         assert!(body.contains("source_trusted_now"), "{name} must vet attachment sources");
     }
-    let images = include_str!("../images.rs");
+    let images = include_str!("../images.rs").replace("\r\n", "\n");
     assert_eq!(images.matches("asset_scope::grant_picked_file").count(), 3, "both pickers and the clipboard file record the pick");
     assert!(include_str!("../main_window.rs").contains("DragDropEvent::Drop"), "a file dropped on the main window is recorded as picked");
 }
@@ -197,7 +197,7 @@ fn edit_state_asset_paths_lists_only_existing_media_files_of_overlays_and_clips(
 // The editor asks for the re-allow only after the user continued with the saved state.
 #[test]
 fn restoring_a_saved_editor_state_re_allows_its_files_first() {
-    let src = include_str!("../../../ui/videoLoad.js");
+    let src = include_str!("../../../ui/videoLoad.js").replace("\r\n", "\n");
     let ask = src.find("askRestoreEditState(parsed.ops.length)").expect("the restore question");
     let allow = src.find("allow_edit_state_files").expect("the re-allow call");
     let apply = src.find("VE.ops = parsed.ops").expect("the restore");
