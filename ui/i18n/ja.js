@@ -679,6 +679,8 @@ export default {
     veExportStart: "書き出す",
     veExporting: "書き出し中…",
     veExportDone: "書き出しました: {path}",
+    veExportTile: "保存後にタイルへ追加",
+    veExportTileDone: "タイルに追加しました。",
     veExportCancelled: "書き出しをキャンセルしました。",
     veNothingToExport: "書き出す内容がありません。カットによってクリップ全体が削除されています。",
     veGifNote: "GIFに音声は含まれません。",

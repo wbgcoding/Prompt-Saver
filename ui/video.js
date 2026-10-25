@@ -1793,6 +1793,8 @@ $("ve-export-dest").addEventListener("change", () => {
   $("ve-export-dest").value = destPath();
   updateExportNote();
 });
+$("ve-export-tile").addEventListener("change", persistExportSettings);
+
 $("ve-export-choose-folder").addEventListener("click", async () => {
   const folder = await invoke("pick_export_folder").catch(() => null);
   if (!folder) return;
@@ -1843,6 +1845,7 @@ $("ve-export-saveas").addEventListener("click", async () => {
 function persistExportSettings() {
   invoke("set_ui_text", { key: "videoExportFormat", value: exportFormat() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportQuality", value: exportQuality() }).catch(() => {});
+  invoke("set_ui_value", { key: "veExportTile", value: $("ve-export-tile").checked ? 1 : 0 }).catch(() => {});
   // A custom free-typed size has no preset to remember; it falls back to "keep original" next session.
   invoke("set_ui_text", { key: "videoExportScale", value: currentScalePresetKey() || "" }).catch(() => {});
   // videoExportDir is not resent here; the choose-folder handler above is the only place VE.destDir changes.
@@ -2181,6 +2184,7 @@ export function applySettings(settings) {
   // The export dialog opens on the user's own last choice.
   $("ve-export-format").value = normRecFormat(texts.videoExportFormat);
   $("ve-export-quality").value = texts.videoExportQuality || "high";
+  $("ve-export-tile").checked = values.veExportTile === 1;
   // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed), and a scale
   // preset needs the source size to become pixels, so it is deferred to VE.pendingScaleKey and
   // consumed once they are known. A scale op the user (or an earlier default) already set is

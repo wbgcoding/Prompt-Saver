@@ -272,6 +272,7 @@ export async function startExport(toClipboard) {
             $("ve-export-saveas").classList.remove("hidden");
           }
           toast(t("veExportDone").replace("{path}", () => outPath));
+          if ($("ve-export-tile").checked) await addExportTile(outPath);
         }
         return;
       } catch (err) {
@@ -321,6 +322,18 @@ export async function startExport(toClipboard) {
     $("ve-export-eta").textContent = "";
     // The editor moved on to another recording: its progress row is not ours to leave showing.
     if (!stillHere()) $("ve-export-progress-row").classList.add("hidden");
+  }
+}
+
+// "Add to a tile after saving": the finished file becomes a tile in the main window's active
+// view. A full grid is told to the person and nothing is created. A failed tile never turns a
+// finished export into an error.
+async function addExportTile(path) {
+  try {
+    await invoke("video_editor_add_tile", { path });
+    toast(t("veExportTileDone"));
+  } catch (err) {
+    toast(String(err).includes("view-full") ? t("gridFull") : errMessageLogged(err, t, "video"));
   }
 }
 

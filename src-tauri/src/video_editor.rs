@@ -1610,6 +1610,71 @@ pub(crate) fn video_editor_close_ack(app: AppHandle, state: String) {
     }
 }
 
+// The title of the tile an export is filed under: the file name without its extension.
+pub(crate) fn export_tile_name(path: &Path) -> String {
+    let stem = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    if stem.is_empty() {
+        path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+    } else {
+        stem
+    }
+}
+
+// Whether the active view has a cell for one more tile. A grid folder owns its cell outside the
+// layout, so those cells count as taken.
+pub(crate) fn export_tile_has_room(settings: &Settings) -> bool {
+    let Some(view) = settings.views.get(settings.active_index()) else { return false };
+    first_free_cell_excluding(view, &active_view_folder_cells(settings)).is_some()
+}
+
+// "Add to a tile after saving": files the finished export as a new tile in the active view's
+// first free cell, holding the file the way a dropped file does. Only a file this session's
+// export wrote is accepted. A full grid answers "view-full" and creates nothing.
+#[tauri::command]
+pub(crate) async fn video_editor_add_tile(app: AppHandle, state: State<'_, Db>, path: String) -> Result<String, String> {
+    let file = PathBuf::from(&path);
+    if !is_known_export_output(&file) || !file.is_file() {
+        return Err("source-not-allowed".to_string());
+    }
+    {
+        let store = lock(&state);
+        if !export_tile_has_room(&store.settings) {
+            return Err("view-full".to_string());
+        }
+    }
+    let name = export_tile_name(&file);
+    let prompt = crate::prompts::add_prompt(
+        app.clone(),
+        state.clone(),
+        name.clone(),
+        name,
+        String::new(),
+        None,
+        Some(false),
+        Some(false),
+        Some(path),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    // The main window holds its own copy of the grid.
+    let _ = app.emit_to("main", "store-synced", ());
+    Ok(prompt.id)
+}
+
 // Opens the editor for one recording; a second call re-targets the open window instead of
 // stacking another. origin_dir is Some only for a copy of an externally opened file (see
 // open_file_in_editor).

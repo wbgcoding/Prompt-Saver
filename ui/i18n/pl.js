@@ -679,6 +679,8 @@ export default {
     veExportStart: "Eksportuj",
     veExporting: "Eksportowanie…",
     veExportDone: "Wyeksportowano: {path}",
+    veExportTile: "Dodaj do kafelka po zapisaniu",
+    veExportTileDone: "Dodano do kafelka.",
     veExportCancelled: "Anulowano eksport.",
     veNothingToExport: "Nie pozostało nic do wyeksportowania, cięcia usuwają cały klip.",
     veGifNote: "Format GIF nie zawiera dźwięku.",

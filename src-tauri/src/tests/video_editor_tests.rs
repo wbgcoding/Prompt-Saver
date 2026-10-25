@@ -381,3 +381,37 @@ fn still_frame_at_clip_end_falls_back_to_last_frame() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_export_tile_is_titled_with_the_file_name_without_its_extension() {
+    assert_eq!(export_tile_name(Path::new("C:/clips/Summer trip-edit.mp4")), "Summer trip-edit");
+    assert_eq!(export_tile_name(Path::new("D:/a/clip.v2.webm")), "clip.v2");
+    assert_eq!(export_tile_name(Path::new("D:/a/.hidden")), ".hidden");
+}
+
+#[test]
+fn an_export_tile_needs_a_free_cell_in_the_active_view() {
+    let mut s = Settings::default();
+    let mut v = test_view("a");
+    v.cols = 2;
+    v.rows = 1;
+    v.layouts.insert(grid_key(2, 1), HashMap::from([("p1".to_string(), [0, 0])]));
+    s.views = vec![v];
+    s.active_view = "a".to_string();
+    assert!(export_tile_has_room(&s), "one cell is still free");
+    s.views[0].layouts.get_mut(&grid_key(2, 1)).unwrap().insert("p2".to_string(), [1, 0]);
+    assert!(!export_tile_has_room(&s), "a full grid takes no tile");
+    s.views.clear();
+    assert!(!export_tile_has_room(&s), "no view, no room");
+}
+
+#[test]
+fn the_export_tile_command_takes_only_a_known_export_and_stays_off_the_other_windows() {
+    let src = source!("../video_editor.rs");
+    let body = &src[src.find("pub(crate) async fn video_editor_add_tile").unwrap()..];
+    assert!(body.contains("is_known_export_output(&file)"), "only a file this session exported");
+    assert!(body.find("export_tile_has_room").unwrap() < body.find("add_prompt(").unwrap(), "the room check comes first");
+    let caps = source!("../../capabilities/video-editor.json");
+    assert!(caps.contains("allow-video-editor-add-tile"));
+    assert!(!caps.contains("allow-add-prompt"), "the editor reaches the store only through the one command");
+}

@@ -2287,6 +2287,39 @@ def run_expert(browser, tmp):
       errs.push('537: the high-tier bitrate was ' + (req && req.video_kbps) + ', expected 12000 scaled to 8000');
     }
 
+    // 742: "Add to a tile after saving" opens on its remembered choice, files the finished export
+    // as a tile, tells a full grid, and stays quiet once switched off.
+    const tileBox = document.getElementById('ve-export-tile');
+    const addTileCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'video_editor_add_tile');
+    const toastText = () => document.getElementById('ve-toast').textContent;
+    const exportOnce = async () => {
+      const n = exportCalls().length;
+      document.getElementById('ve-export-start').click();
+      await until(() => exportCalls().length > n, 100);
+      await until(() => !document.getElementById('ve-export-start').disabled, 100);
+      await sleep(120);
+    };
+    if (!tileBox || !tileBox.checked) errs.push('742: the remembered tile checkbox was not on');
+    const tilesBefore = addTileCalls().length;
+    await exportOnce();
+    const added = addTileCalls().slice(tilesBefore);
+    if (added.length !== 1 || !added[0][1] || !/[.]webm$/.test(String(added[0][1].path))) {
+      errs.push('742: the export did not file one tile for the exported file: ' + JSON.stringify(added));
+    }
+    if (toastText() !== 'Added to a tile.') errs.push('742: the tile toast was ' + toastText());
+    window.__TILE_FULL__ = true;
+    await exportOnce();
+    if (toastText() !== 'Grid is full. Drag onto a tile to swap') errs.push('742: a full grid was not told, toast: ' + toastText());
+    window.__TILE_FULL__ = false;
+    tileBox.checked = false;
+    tileBox.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(80);
+    const saved = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_ui_value' && c[1].key === 'veExportTile').pop();
+    if (!saved || saved[1].value !== 0) errs.push('742: switching the tile box off was not remembered: ' + JSON.stringify(saved));
+    const callsBefore = addTileCalls().length;
+    await exportOnce();
+    if (addTileCalls().length !== callsBefore) errs.push('742: a tile was filed with the box off');
+
     // A new overlay of each kind starts from the remembered values, or the fixed defaults.
     document.getElementById('ve-tab-overlays').click();
     await sleep(60);
@@ -2331,7 +2364,7 @@ def run_expert(browser, tmp):
 </script>
 """
     seed = (
-        '<script>window.__SEED_UI_VALUES__ = {"veOvLastPixelateBlock": 24, "veOvLastSpotlightDim": 70, '
+        '<script>window.__SEED_UI_VALUES__ = {"veExportTile": 1, "veOvLastPixelateBlock": 24, "veOvLastSpotlightDim": 70, '
         '"veOvLastImageOpacity": 40};'
         'window.__SEED_UI_TEXTS__ = {"videoExportFormat": "webm", "videoExportQuality": "small", '
         '"videoExportScale": "720", "veOvLastTextColor": "#ef4444"};</script>\n')

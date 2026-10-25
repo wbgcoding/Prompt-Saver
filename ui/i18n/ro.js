@@ -679,6 +679,8 @@ export default {
     veExportStart: "Exportă",
     veExporting: "Se exportă…",
     veExportDone: "Exportat: {path}",
+    veExportTile: "Adaugă într-o dală după salvare",
+    veExportTileDone: "Adăugat într-o dală.",
     veExportCancelled: "Export anulat.",
     veNothingToExport: "Nu a mai rămas nimic de exportat: tăierile elimină întregul clip.",
     veGifNote: "Formatul GIF nu conține sunet.",

@@ -656,6 +656,8 @@ export default {
     veExportStart: "Exportieren",
     veExporting: "Wird exportiert…",
     veExportDone: "Exportiert: {path}",
+    veExportTile: "Nach dem Speichern als Kachel ablegen",
+    veExportTileDone: "Als Kachel abgelegt.",
     veExportCancelled: "Export abgebrochen.",
     veNothingToExport: "Es bleibt nichts zu exportieren, weil die Schnitte den gesamten Clip entfernen.",
     veGifNote: "GIF enthält keinen Ton.",

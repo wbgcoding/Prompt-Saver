@@ -679,6 +679,8 @@ export default {
     veExportStart: "导出",
     veExporting: "正在导出…",
     veExportDone: "已导出：{path}",
+    veExportTile: "保存后添加到磁贴",
+    veExportTileDone: "已添加到磁贴。",
     veExportCancelled: "导出已取消。",
     veNothingToExport: "没有可导出的内容，剪切操作移除了整个剪辑。",
     veGifNote: "GIF 不包含声音。",

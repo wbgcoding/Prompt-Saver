@@ -679,6 +679,8 @@ export default {
     veExportStart: "Dışa aktar",
     veExporting: "Dışa aktarılıyor…",
     veExportDone: "Dışa aktarıldı: {path}",
+    veExportTile: "Kaydettikten sonra bir kutucuğa ekle",
+    veExportTileDone: "Bir kutucuğa eklendi.",
     veExportCancelled: "Dışa aktarma iptal edildi.",
     veNothingToExport: "Dışa aktarılacak bir şey kalmadı: kesimler klibin tamamını kaldırıyor.",
     veGifNote: "GIF ses içermez.",

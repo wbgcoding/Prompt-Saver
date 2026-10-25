@@ -656,6 +656,8 @@ export default {
     veExportStart: "Export",
     veExporting: "Exporting…",
     veExportDone: "Exported: {path}",
+    veExportTile: "Add to a tile after saving",
+    veExportTileDone: "Added to a tile.",
     veExportCancelled: "Export cancelled.",
     veNothingToExport: "Nothing is left to export, since the cuts remove the whole clip.",
     veGifNote: "GIF carries no sound.",

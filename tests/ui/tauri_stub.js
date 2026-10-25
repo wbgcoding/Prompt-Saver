@@ -629,6 +629,12 @@ const RESULTS = {
     return { bytes: Math.round((kbps * 1000) / 8 * secs), low_bytes: null, high_bytes: null };
   },
   set_taskbar_progress: () => null,
+  // "Add to a tile after saving": a probe flips window.__TILE_FULL__ to get the full-grid answer.
+  video_editor_add_tile: (a) => {
+    if (window.__TILE_FULL__) return Promise.reject("view-full");
+    window.__TILE_ADDED__ = a && a.path;
+    return "tile-1";
+  },
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
   // A number back (the retention hours), not a bare true/false, since
   // discard now moves the file into "verworfen" instead of deleting it.

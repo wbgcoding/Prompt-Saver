@@ -679,6 +679,8 @@ export default {
     veExportStart: "Exporteren",
     veExporting: "Exporteren…",
     veExportDone: "Geëxporteerd: {path}",
+    veExportTile: "Na het opslaan aan een tegel toevoegen",
+    veExportTileDone: "Aan een tegel toegevoegd.",
     veExportCancelled: "Exporteren geannuleerd.",
     veNothingToExport: "Er is niets meer om te exporteren: door de knipbewerkingen wordt de hele clip verwijderd.",
     veGifNote: "GIF bevat geen geluid.",
