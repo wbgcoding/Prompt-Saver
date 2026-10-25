@@ -28,6 +28,9 @@ pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
 /// the folder's sharing delay can disagree with ours by a good deal.
 /// How often a failed background write is tried again before it waits for the next save.
 pub(crate) const SYNC_WRITE_RETRIES: u32 = 3;
+/// How long a queued write waits for the first read of the folder (SyncState.booting) before it
+/// counts its refusals as failures like any other.
+pub(crate) const SYNC_BOOT_WAIT_SECS: u64 = 120;
 pub(crate) const SYNC_LOCK_FOREIGN_STALE_SECS: u64 = 60;
 
 // After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
@@ -1571,6 +1574,7 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
         // purpose.
         let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
         let mut retries = 0u32;
+        let mut boot_waited = 0u64;
         loop {
             {
                 // Check-and-clear (or go inactive) in one critical section, or a deposit between "queue
@@ -1603,16 +1607,35 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
                 // A file that could not be written (locked by another writer, a busy folder) is
                 // tried again after a poll interval, a few times, instead of waiting for the next
                 // save to come along.
-                if failed > 0 && retries < SYNC_WRITE_RETRIES {
-                    retries += 1;
+                let booting = sync_state().booting.load(Ordering::SeqCst);
+                if sync_write_again(failed, booting, &mut retries, &mut boot_waited) {
                     tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
                     q.0.lock().unwrap_or_else(|e| e.into_inner()).pending = true;
-                } else if failed == 0 {
-                    retries = 0;
                 }
             }
         }
     });
+}
+
+// Whether a background write that just ended is tried again after a poll interval. A write the
+// first read of the folder held back (`booting`) is waited for without using up a retry, for
+// SYNC_BOOT_WAIT_SECS at most, however long that read takes; any other failure gets
+// SYNC_WRITE_RETRIES tries. A write that went through starts the counts over.
+pub(crate) fn sync_write_again(failed: usize, booting: bool, retries: &mut u32, boot_waited: &mut u64) -> bool {
+    if failed == 0 {
+        *retries = 0;
+        *boot_waited = 0;
+        return false;
+    }
+    if booting && *boot_waited < SYNC_BOOT_WAIT_SECS {
+        *boot_waited += SYNC_POLL_SECS;
+        return true;
+    }
+    if *retries < SYNC_WRITE_RETRIES {
+        *retries += 1;
+        return true;
+    }
+    false
 }
 
 // The app is closing with a folder write still queued (a delete made a moment ago, say): it runs
