@@ -295,7 +295,7 @@ SECTION = """\
           out.errors.push('help search results with more than one hit are not collapsed by default');
         }
         // 998: a word that only the tip contains is marked there, and the article opens.
-        search.value = 'eyes';
+        search.value = 'somewhere';
         search.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(200);
         const tipMark = document.querySelector('#help-body .help-tip mark.help-mark');
