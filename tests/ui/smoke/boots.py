@@ -1385,11 +1385,10 @@ FLOAT_RECALL_PROBE = """
 
 # 404: the "whats new" toast on startup, the window it opens (with an
 # injected script tag that must render as text, never run), the same window
-# reopened current-version-only from the About dialog, and its GitHub refresh.
+# reopened current-version-only from the About dialog, and its GitHub button.
 WHATS_NEW_PROBE = """
 <script>
 window.__WHATS_NEW_FIXTURE__ = {
-  since: "1.0.0",
   sections: [
     { version: "1.1.0", markdown: "## Prompt Saver 1.1.0\\n\\nFirst new thing." },
     { version: "1.2.0", markdown: "## Prompt Saver 1.2.0\\n\\n<script>window.__SMOKE_XSS__ = true;<" + "/script> Second new thing." },
@@ -1429,8 +1428,8 @@ window.__WHATS_NEW_FIXTURE__ = {
             || !document.getElementById('update-modal-skip').classList.contains('hidden')) {
           errs.push('404: the notes view of the update dialog still offers install or skip');
         }
-        if (document.getElementById('update-modal-refresh').classList.contains('hidden')) {
-          errs.push('404: the notes view of the update dialog has no refresh button');
+        if (document.getElementById('update-modal-github').classList.contains('hidden')) {
+          errs.push('404: the notes view of the update dialog has no GitHub button');
         }
         const text = notes.textContent || '';
         if (!text.includes('First new thing')) errs.push('404: the window is missing the older of the two new sections');
@@ -1476,12 +1475,19 @@ window.__WHATS_NEW_FIXTURE__ = {
         if (text.includes('First new thing')) {
           errs.push('404: the About-triggered window shows the startup range instead of the current version only');
         }
-        const refreshBtn = document.getElementById('update-modal-refresh');
-        refreshBtn.click();
+        const githubBtn = document.getElementById('update-modal-github');
+        if (githubBtn.textContent.trim() !== 'View on GitHub') {
+          errs.push('404: the whats-new GitHub button reads ' + githubBtn.textContent.trim());
+        }
+        const repoCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'open_repo' && c[1] && c[1].page === 'releases').length;
+        const repoBefore = repoCalls();
+        githubBtn.click();
         await sleep(150);
-        const refreshed = (notes && notes.textContent) || '';
-        if (!refreshed.includes('Refreshed from GitHub')) {
-          errs.push('404: the Update-from-GitHub button did not replace the list with the fetched one');
+        if (repoCalls() !== repoBefore + 1) {
+          errs.push('404: the View on GitHub button did not open the releases page');
+        }
+        if (!(notes.textContent || '').includes('Current version only')) {
+          errs.push('404: the View on GitHub button replaced the shipped list');
         }
         document.getElementById('update-modal-cancel').click();
         await sleep(150);
@@ -2409,7 +2415,7 @@ def run(browser, tmp):
     proc = run_chrome(browser, tmp / 'profile-whats-new', "1000,780", 45000, side.as_uri(), 180)
     m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
     errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
-    print("-- whats new: toast, window, About entry, GitHub refresh")
+    print("-- whats new: toast, window, About entry, GitHub button")
     for e in errs:
         print(f"   FAIL: {e}")
     failed += len(errs)

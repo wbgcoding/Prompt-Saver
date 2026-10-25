@@ -953,7 +953,6 @@ pub fn run() {
             update::skip_version,
             update::whats_new_check,
             update::whats_new_current,
-            update::whats_new_refresh,
             snip::open_snip,
             snip::open_picker,
             snip::open_recorder,

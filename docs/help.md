@@ -824,7 +824,7 @@ language pack (see below) has Windows itself fetch that pack online.
 
 After an update, the update dialog shows once what
 changed since the version you last saw; its list ships with the app, so
-opening it needs no network, only its own "Update from GitHub" button does.
+opening it needs no network. Its "View on GitHub" button opens the releases page in your browser.
 Reopen the current version's list any time from the About dialog.
 
 ### Where your data lives
@@ -1575,8 +1575,8 @@ unten) lässt Windows selbst dieses Paket herunterladen.
 
 **Was ist neu**: nach einem Update zeigt das Update-Fenster einmal, was sich seit
 der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
-Programm, nur ihr Button „Von GitHub aktualisieren" braucht Netz. Über den
-Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
+Programm, sie braucht kein Netz. Der Button „Auf GitHub ansehen“ öffnet die
+Releases-Seite im Browser. Über den Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
 **Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
 WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
