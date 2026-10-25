@@ -158,8 +158,12 @@ HEAD = """
       if (st.display === 'flex' && st.flexDirection.startsWith('row')) continue;
       const kids = [...box.children].filter((e) => e instanceof HTMLElement &&
         e.getClientRects().length && getComputedStyle(e).position === 'static');
+      // In a multi-column box the next child may start a new column at the top, which
+      // is not an overlap; only children in the same column are compared.
+      const multicol = st.columnWidth !== 'auto' || st.columnCount !== 'auto';
       for (let i = 1; i < kids.length; i++) {
         const a = kids[i - 1].getBoundingClientRect(), b = kids[i].getBoundingClientRect();
+        if (multicol && b.left > a.left + 1) continue;
         if (a.height > 0 && b.height > 0 && b.top < a.bottom - 1) {
           add(sig(kids[i - 1]) + ' and ' + sig(kids[i]) + ' overlap by ' +
             Math.round(a.bottom - b.top) + 'px');
