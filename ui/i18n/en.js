@@ -1224,7 +1224,7 @@ export default {
     flagPromptSync: "Sync prompts as Markdown files",
     syncBackupFailed: "The safety backup before the first sync failed, so sync stays off. Fix the backup folder and try again.",
     syncWriteFailed: "The sync folder could not be written, so sync stays off. Check the folder and try again.",
-    tipPromptSync: "Mirrors every text-only prompt as a .md file you can edit by hand, including its view, grid position and folder. Beta: a backup is taken automatically the moment you turn this on.",
+    tipPromptSync: "Mirrors every text-only prompt as a .md file you can edit by hand, including its view, grid position and folder. A backup runs automatically when you turn it on.",
     syncPlaintextConfirm: "Unlike the database, the .md files this creates are plain text, so anyone with access to the sync folder can read your prompts. Avoid a synced or shared folder for anything sensitive.",
     syncPlaintextConfirmOk: "Turn on anyway",
     valSyncDir: "Sync folder",

@@ -14,8 +14,9 @@ pub(crate) use health::*;
 // position sync (an imported prompt lands in the first free cell of the active view); no
 // hotkey sync (it has its own conflict invariants); conflicts resolve as "whichever side
 // changed since the last successful sync wins this cycle, the other is retried next".
-// Worst case a change waits one poll interval. Beta: there is no multi-instance
-// crash-simulation stress test yet.
+// Worst case a change waits one poll interval. Several instances sharing one folder are
+// exercised by the two-instance rig in tests/md_sync_multi.rs (crashes, clock skew, locks,
+// deletes, renames).
 pub(crate) const SYNC_POLL_SECS: u64 = 5;
 
 // A lock is held only around one small file write, so 15 s is far past any real one. The
@@ -23,10 +24,19 @@ pub(crate) const SYNC_POLL_SECS: u64 = 5;
 // is alive, so a slow write by a running instance is never stolen, and a crashed
 // instance's lock is picked up as soon as the age passes.
 pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
+/// A lock written by another computer is judged by time alone, and given longer: its clock and
+/// the folder's sharing delay can disagree with ours by a good deal.
+/// How often a failed background write is tried again before it waits for the next save.
+pub(crate) const SYNC_WRITE_RETRIES: u32 = 3;
+pub(crate) const SYNC_LOCK_FOREIGN_STALE_SECS: u64 = 60;
 
 // After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
 // pauses, says so once, and retries only every SYNC_PAUSED_FACTOR intervals.
 pub(crate) const SYNC_FAIL_MAX: u32 = 5;
+/// A tombstone (`<id>.deleted`, the delete time as text) stays this long. Every instance that
+/// opens the folder within that time learns about the delete; one that comes back later than
+/// that finds the file gone and, holding a copy, writes it again.
+pub(crate) const SYNC_TOMB_SECS: u64 = 30 * 86400;
 pub(crate) const SYNC_PAUSED_FACTOR: u64 = 10;
 
 pub(crate) fn sync_enabled(settings: &Settings) -> bool {
@@ -140,6 +150,18 @@ pub(crate) fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
+// A name as one header line: stray spaces around it carry no meaning, and a view or folder
+// named "Work " must not become a second near-duplicate of "Work" on another machine.
+pub(crate) fn md_name_line(s: &str) -> String {
+    md_escape_line(s).trim().to_string()
+}
+
+// A name as the app stores it: one line, no stray spaces around it. Every in-app entry point
+// uses this, so what is stored is what the file carries.
+pub(crate) fn sync_clean_name(s: &str) -> String {
+    md_name_line(s)
+}
+
 // Notes come from a multi-line box, so a line break is real content here. A note with one
 // is written escaped (\n, \r, \\) and flagged with a notes_enc line; one without stays as
 // is, so older files and single-line notes (which may hold backslashes) read back
@@ -188,11 +210,30 @@ pub(crate) fn md_unescape_notes(s: &str) -> String {
 #[derive(Default)]
 pub(crate) struct SyncPlacement {
     pub(crate) view: String,
+    /// The id the view is known by across machines (see `sync_view_id_out`).
+    pub(crate) view_id: String,
     pub(crate) grid: String,
     pub(crate) cell: String,
     pub(crate) tile_folder: String,
     pub(crate) tile_folder_color: String,
     pub(crate) float_folder: String,
+}
+
+// Views have their own size on every machine, so a file can name a cell this machine does not
+// have (or one that is taken here), and the tile lands on a stand-in cell. Writing the prompt
+// back would then send the stand-in to the machine that chose the real cell and move its tile.
+// This record keeps what the file said next to what this machine did with it: as long as the
+// local tile still sits on the stand-in it was given, the file keeps the original grid and
+// cell. A tile moved here, or a view resized here, ends the record, and the local placement is
+// what travels from then on. The record lives in the settings (`sync_file_cells`), so it
+// survives a restart.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SyncFileCell {
+    pub(crate) view: String,
+    pub(crate) file_grid: String,
+    pub(crate) file_cell: String,
+    pub(crate) local_grid: String,
+    pub(crate) local_cell: [u32; 2],
 }
 
 // A grid-folder member has no view.layouts entry (save_tile_folder drops it on joining),
@@ -211,6 +252,7 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
         let view = settings.views.iter().find(|v| v.id == tf.view_id);
         return SyncPlacement {
             view: view.map(|v| v.name.clone()).unwrap_or_default(),
+            view_id: view.map(|v| sync_view_id_out(settings, &v.id)).unwrap_or_default(),
             grid: view.map(|v| grid_key(v.cols, v.rows)).unwrap_or_default(),
             cell: format!("{},{}", tf.cell[0], tf.cell[1]),
             tile_folder: tf.name.clone(),
@@ -224,8 +266,25 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
     for view in &settings.views {
         let key = grid_key(view.cols, view.rows);
         if let Some(cell) = view.layouts.get(&key).and_then(|m| m.get(&p.id)) {
+            let kept = settings
+                .sync_file_cells
+                .get(&p.id)
+                .filter(|r| r.view == view.name.trim() && r.local_grid == key && r.local_cell == *cell)
+                .cloned();
+            if let Some(r) = kept {
+                return SyncPlacement {
+                    view: view.name.clone(),
+                    view_id: sync_view_id_out(settings, &view.id),
+                    grid: r.file_grid,
+                    cell: r.file_cell,
+                    tile_folder: String::new(),
+                    tile_folder_color: String::new(),
+                    float_folder,
+                };
+            }
             return SyncPlacement {
                 view: view.name.clone(),
+                view_id: sync_view_id_out(settings, &view.id),
                 grid: key,
                 cell: format!("{},{}", cell[0], cell[1]),
                 tile_folder: String::new(),
@@ -236,6 +295,7 @@ pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlaceme
     }
     SyncPlacement {
         view: String::new(),
+        view_id: String::new(),
         grid: String::new(),
         cell: String::new(),
         tile_folder: String::new(),
@@ -248,15 +308,37 @@ pub(crate) fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     prompt_to_md_impl(p, placement, false)
 }
 
+// The id a view carries in a file. A view this machine matched by name to another machine's
+// id writes the smallest of the two, so both machines settle on the same one instead of each
+// adopting the other's; any other view writes its own.
+pub(crate) fn sync_view_id_out(settings: &Settings, local: &str) -> String {
+    settings
+        .views
+        .iter()
+        .find(|v| v.id == local)
+        .and_then(|v| {
+            v.sync_ids.iter().filter(|foreign| !settings.views.iter().any(|o| &o.id == *foreign)).chain(std::iter::once(&v.id)).min().cloned()
+        })
+        .unwrap_or_else(|| local.to_string())
+}
+
 // Whether a file's content is what this machine would write for the prompt, in today's
 // format or the one before notes and a trailing newline round-tripped. Without the second
 // form every file an older version wrote would read as an edit by someone else after the
 // update.
 pub(crate) fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
-    prompt_to_md_impl(p, placement, false) == content || prompt_to_md_impl(p, placement, true) == content
+    prompt_to_md_form(p, placement, false, true) == content
+        || prompt_to_md_form(p, placement, true, false) == content
+        || prompt_to_md_form(p, placement, false, false) == content
 }
 
 pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> String {
+    prompt_to_md_form(p, placement, legacy, !legacy)
+}
+
+// `view_id_line`: files written before the view id existed have no such line.
+pub(crate) fn prompt_to_md_form(p: &Prompt, placement: &SyncPlacement, legacy: bool, view_id_line: bool) -> String {
+    let view_id = if view_id_line && !placement.view_id.is_empty() { format!("view_id: {}\n", md_escape_line(&placement.view_id)) } else { String::new() };
     let (notes, notes_enc) = match (legacy, md_escape_notes(&p.notes)) {
         (false, Some(escaped)) => (escaped, "notes_enc: escaped\n"),
         _ => (md_escape_line(&p.notes), ""),
@@ -267,19 +349,20 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
     // md_is_ours()) are fixed; variants and the six placement fields are additive, which
     // md_is_ours() tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
-        md_escape_line(&p.name),
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\n{}grid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
+        md_name_line(&p.name),
         md_escape_line(&p.color),
         tags,
         notes,
         notes_enc,
         p.variants.len(),
-        md_escape_line(&placement.view),
+        md_name_line(&placement.view),
+        view_id,
         placement.grid,
         placement.cell,
-        md_escape_line(&placement.tile_folder),
+        md_name_line(&placement.tile_folder),
         placement.tile_folder_color,
-        md_escape_line(&placement.float_folder),
+        md_name_line(&placement.float_folder),
         md_escape_line(&p.file_path),
         md_escape_line(&p.icon_path),
         p.pdf_page,
@@ -298,8 +381,10 @@ pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: b
 // caller leaves such files alone rather than guessing at a malformed one.
 pub(crate) fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
     let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    // An editor or Git may have converted the line endings: the text is read as if it had not.
+    let content = content.replace("\r\n", "\n");
     let mut lines = content.split('\n');
-    if lines.next()?.trim_end_matches('\r') != "---" {
+    if lines.next()? != "---" {
         return None;
     }
     let mut fields = HashMap::new();
@@ -307,7 +392,7 @@ pub(crate) fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String
     let mut in_header = true;
     for line in lines {
         if in_header {
-            if line.trim_end_matches('\r') == "---" {
+            if line == "---" {
                 in_header = false;
                 continue;
             }
@@ -348,7 +433,11 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
         p.name.clone_from(v);
     }
     if let Some(v) = fields.get("color") {
-        p.color.clone_from(v);
+        // Same rule as every in-app entry point: #rrggbb or empty. A hand-typed colour that is
+        // neither leaves the prompt's colour as it was instead of storing junk.
+        if let Ok(c) = valid_tag_color(v) {
+            p.color = c;
+        }
     }
     if let Some(v) = fields.get("tags") {
         // A hand-written file is an entry point like any other: a bad tag is dropped,
@@ -410,6 +499,7 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
 // stale membership would be re-asserted by this machine's next write and re-joined by the
 // other on the next poll.
 pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
+    settings.sync_file_cells.remove(prompt_id);
     let mut folders_touched = false;
     if let Some(raw) = fields.get("float_folder") {
         let name = raw.trim();
@@ -423,6 +513,8 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
         }
     }
     let (view_name, cols, rows, cell) = sync_parse_view_grid_cell(fields);
+    let file_view_id = fields.get("view_id").map(|s| s.trim()).unwrap_or("");
+    let mut renamed = false;
     if let Some(raw) = fields.get("tile_folder") {
         let name = raw.trim();
         if name.is_empty() {
@@ -434,7 +526,9 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
             let view_id = if view_name.trim().is_empty() {
                 settings.active_view.clone()
             } else {
-                sync_find_or_create_view(settings, view_name, cols, rows)
+                let (id, r) = sync_resolve_view(settings, file_view_id, view_name, cols, rows);
+                renamed |= r;
+                id
             };
             if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell) {
                 folders_touched = true;
@@ -453,11 +547,36 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
         }
     }
     if view_name.trim().is_empty() || cell.is_none() {
-        return (false, folders_touched);
+        if !view_name.trim().is_empty() && !file_view_id.is_empty() {
+            // No tile to seat, but the file may still carry the view's new name.
+            renamed |= sync_rename_known_view(settings, file_view_id, view_name);
+        }
+        return (renamed, folders_touched);
     }
-    let view_id = sync_find_or_create_view(settings, view_name, cols, rows);
-    sync_place_in_view(settings, prompt_id, &view_id, cell.unwrap());
+    let (view_id, _) = sync_resolve_view(settings, file_view_id, view_name, cols, rows);
+    let wanted = cell.unwrap();
+    sync_place_in_view(settings, prompt_id, &view_id, wanted);
+    sync_note_file_cell(settings, prompt_id, &view_id, fields, wanted);
     (true, folders_touched)
+}
+
+// Keeps the file's grid and cell when this machine could not use them as written.
+fn sync_note_file_cell(settings: &mut Settings, prompt_id: &str, view_id: &str, fields: &HashMap<String, String>, wanted: [u32; 2]) {
+    let Some(view) = settings.views.iter().find(|v| v.id == view_id) else { return };
+    let key = grid_key(view.cols, view.rows);
+    let Some(local) = view.layouts.get(&key).and_then(|m| m.get(prompt_id)).copied() else { return };
+    let file_grid = fields.get("grid").map(|g| g.trim().to_string()).filter(|g| !g.is_empty()).unwrap_or_else(|| key.clone());
+    if file_grid == key && local == wanted {
+        return;
+    }
+    let record = SyncFileCell {
+        view: view.name.trim().to_string(),
+        file_grid,
+        file_cell: format!("{},{}", wanted[0], wanted[1]),
+        local_grid: key,
+        local_cell: local,
+    };
+    settings.sync_file_cells.insert(prompt_id.to_string(), record);
 }
 
 // Parses the "view" / "grid" / "cell" trio out of an incoming file's header. An
@@ -539,11 +658,64 @@ pub(crate) fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_
     }
 }
 
+// The local view a file's view id stands for: a view with that very id, or the one an earlier
+// file's name matched it to.
+fn sync_known_view(settings: &Settings, file_view_id: &str) -> Option<String> {
+    if settings.views.iter().any(|v| v.id == file_view_id) {
+        return Some(file_view_id.to_string());
+    }
+    settings.views.iter().find(|v| v.sync_ids.iter().any(|s| s == file_view_id)).map(|v| v.id.clone())
+}
+
+// A view whose id is known here takes the name the file carries (a rename on the other
+// machine). Not when another view already has that name: two views of one name would be
+// matched wrongly from then on.
+fn sync_rename_known_view(settings: &mut Settings, file_view_id: &str, name: &str) -> bool {
+    let name = name.trim();
+    let Some(local) = sync_known_view(settings, file_view_id) else { return false };
+    if name.is_empty() || settings.views.iter().any(|v| v.id != local && v.name.trim() == name) {
+        return false;
+    }
+    match settings.views.iter_mut().find(|v| v.id == local) {
+        Some(v) if v.name.trim() != name => {
+            v.name = name.to_string();
+            true
+        }
+        _ => false,
+    }
+}
+
+// The local view for an incoming file's view: by id first (renaming it when the name moved),
+// by name for a file without an id or an id this machine has not met, else a new view that
+// takes the file's id so a later rename finds it. The flag says a rename happened.
+pub(crate) fn sync_resolve_view(settings: &mut Settings, file_view_id: &str, name: &str, cols: u32, rows: u32) -> (String, bool) {
+    if !file_view_id.is_empty() && sync_safe_id(file_view_id) {
+        if let Some(local) = sync_known_view(settings, file_view_id) {
+            let renamed = sync_rename_known_view(settings, file_view_id, name);
+            return (local, renamed);
+        }
+        if let Some(v) = settings.views.iter_mut().find(|v| v.name.trim() == name.trim()) {
+            if v.sync_ids.len() < 16 {
+                v.sync_ids.push(file_view_id.to_string());
+            }
+            return (v.id.clone(), false);
+        }
+        if settings.views.len() < MAX_VIEWS {
+            let id = sync_find_or_create_view(settings, name, cols, rows);
+            if let Some(v) = settings.views.iter_mut().find(|v| v.id == id) {
+                v.id = file_view_id.to_string();
+            }
+            return (file_view_id.to_string(), false);
+        }
+    }
+    (sync_find_or_create_view(settings, name, cols, rows), false)
+}
+
 // Finds a view by NAME or creates one at the incoming grid size (clamped like
-// every other view creation). Ids never travel between machines: the name is the
-// only thing an incoming file and a local view can agree on.
+// every other view creation). Used for a file without a view id; with one,
+// `sync_resolve_view` goes by id first.
 pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
-    if let Some(v) = settings.views.iter().find(|v| v.name == name) {
+    if let Some(v) = settings.views.iter().find(|v| v.name.trim() == name.trim()) {
         return v.id.clone();
     }
     if settings.views.len() >= MAX_VIEWS {
@@ -552,12 +724,13 @@ pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols
     let id = gen_id();
     settings.views.push(View {
         id: id.clone(),
-        name: name.to_string(),
+        name: name.trim().to_string(),
         cols: cols.clamp(GRID_MIN, GRID_MAX),
         rows: rows.clamp(GRID_MIN, GRID_MAX),
         layouts: HashMap::new(),
         color: String::new(),
         members: Vec::new(),
+        sync_ids: Vec::new(),
     });
     id
 }
@@ -738,6 +911,72 @@ pub(crate) fn sync_write_agents_md(dir: &Path) {
     }
 }
 
+// Everything one running instance remembers about the folder it syncs. A process has exactly
+// one (`sync_state`); the test rig hosts two in one process by pointing a thread at its own,
+// so two instances can share a folder without sharing their memory of it.
+#[derive(Default)]
+pub(crate) struct SyncState {
+    pub(crate) seen: Mutex<SyncSeenMap>,
+    pub(crate) known: Mutex<std::collections::HashSet<String>>,
+    pub(crate) written: Mutex<SyncWrittenMap>,
+    pub(crate) synced: Mutex<SyncSyncedMap>,
+    /// Tombstones this instance has acted on, per file: path -> the text the file held.
+    pub(crate) tombs: Mutex<HashMap<String, String>>,
+    /// When this instance first saw each tombstone text, by its own clock: path -> (text, time).
+    /// A tombstone expires only when this agrees with the time written in it.
+    pub(crate) tomb_seen: Mutex<HashMap<String, (String, u64)>>,
+    /// What each delete marker file held when it was last read, with the stamp it had then: an
+    /// unchanged, settled file is not read again every round.
+    pub(crate) tomb_text: Mutex<HashMap<String, (SyncStamp, String)>>,
+    /// The lock files this instance holds right now: lock path -> the text it wrote into it.
+    pub(crate) locks: Mutex<HashMap<String, String>>,
+    pub(crate) health: Mutex<SyncHealth>,
+    /// True from the start of the app until the first poll has read the folder: a write before
+    /// that would put a library that may be older than the folder over the folder's text.
+    pub(crate) booting: std::sync::atomic::AtomicBool,
+    /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
+    /// test sets it, to play the role of a machine with a skewed clock.
+    #[cfg(test)]
+    pub(crate) clock_skew: std::sync::atomic::AtomicI64,
+    /// How many delete marker files this instance has read from disk (a test counts them).
+    #[cfg(test)]
+    pub(crate) tomb_reads: std::sync::atomic::AtomicUsize,
+}
+
+static SYNC_STATE: std::sync::OnceLock<SyncState> = std::sync::OnceLock::new();
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static SYNC_STATE_TEST: std::cell::Cell<Option<&'static SyncState>> = const { std::cell::Cell::new(None) };
+}
+
+pub(crate) fn sync_state() -> &'static SyncState {
+    #[cfg(test)]
+    if let Some(s) = SYNC_STATE_TEST.with(|c| c.get()) {
+        return s;
+    }
+    SYNC_STATE.get_or_init(SyncState::default)
+}
+
+// The clock every sync decision reads (lock age, settled stamps, tombstone age, copy names).
+#[cfg(test)]
+fn sync_clock_skew_secs() -> i64 {
+    sync_state().clock_skew.load(Ordering::SeqCst)
+}
+#[cfg(not(test))]
+fn sync_clock_skew_secs() -> i64 {
+    0
+}
+
+pub(crate) fn sync_now_secs() -> u64 {
+    now_secs().saturating_add_signed(sync_clock_skew_secs())
+}
+
+pub(crate) fn sync_now_ns() -> u128 {
+    let real = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    real.saturating_add_signed(sync_clock_skew_secs() as i128 * 1_000_000_000)
+}
+
 // What each file in the folder looked like when last seen. A file is read only when its
 // modification time or size differs from the last round, so a thousand-entry folder is not
 // read end to end every few seconds. A file whose stamp changed since the last round is
@@ -802,14 +1041,10 @@ pub(crate) fn sync_stamp_of(path: &Path) -> Option<SyncStamp> {
 }
 
 pub(crate) type SyncSeenMap = HashMap<String, SyncSeen>;
-pub(crate) static SYNC_SEEN: std::sync::OnceLock<Mutex<SyncSeenMap>> = std::sync::OnceLock::new();
 
-pub(crate) fn sync_seen() -> &'static Mutex<SyncSeenMap> {
-    SYNC_SEEN.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
+// What each file looked like when the app last wrote or read it, keyed by whole path.
 pub(crate) fn sync_seen_lock() -> std::sync::MutexGuard<'static, SyncSeenMap> {
-    sync_seen().lock().unwrap_or_else(|e| e.into_inner())
+    sync_state().seen.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // Keyed by the whole path, never by the file name alone: the same `<id>.md` exists
@@ -835,13 +1070,8 @@ pub(crate) fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
 // back as one). Only these may be swept as orphans: a file whose id the app never knew
 // (another machine's folder, a hand-made or just-arrived file) is not ours to delete even
 // with our header; the poll must import it first.
-pub(crate) static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-
 pub(crate) fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
-    SYNC_KNOWN
-        .get_or_init(|| Mutex::new(std::collections::HashSet::new()))
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+    sync_state().known.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 pub(crate) fn sync_known_note(path: &Path) {
@@ -852,10 +1082,183 @@ pub(crate) fn sync_known_note(path: &Path) {
 // file's stamp then. When the next render hashes the same and the stamp is unchanged, the
 // file is not read back; an outside edit changes the stamp.
 pub(crate) type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
-pub(crate) static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
 
 pub(crate) fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
-    SYNC_WRITTEN.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(|e| e.into_inner())
+    sync_state().written.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// Per file: the hash of the render of the library's prompt as it was when the file and the
+// library last agreed (the app wrote the file, or imported it). A save whose render still
+// hashes the same changed nothing in this library since then, so a file that differs from it
+// holds somebody else's newer version and must not be written over.
+pub(crate) type SyncSyncedMap = HashMap<String, u64>;
+
+pub(crate) fn sync_synced_lock() -> std::sync::MutexGuard<'static, SyncSyncedMap> {
+    sync_state().synced.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+pub(crate) fn sync_synced_note(path: &Path, render_hash: u64) {
+    sync_synced_lock().insert(sync_seen_key(path), render_hash);
+}
+
+pub(crate) fn sync_synced_is(path: &Path, render_hash: u64) -> bool {
+    sync_synced_lock().get(&sync_seen_key(path)) == Some(&render_hash)
+}
+
+// ---- Tombstones ----
+//
+// A file that simply vanishes tells another instance nothing: it still holds the prompt and
+// writes the file again, and the delete is undone. So the delete leaves `<id>.deleted` behind
+// (the time as text), written before the prompt's file is removed. An instance that sees one
+// for a prompt it holds moves its copy to its own trash and does not write the file; one that
+// has acted on a tombstone and later holds the prompt again (a restore from the trash) removes
+// it with its next write.
+
+pub(crate) fn sync_tomb_path(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.deleted"))
+}
+
+fn sync_tomb_read(path: &Path) -> Option<String> {
+    let key = sync_seen_key(path);
+    let stamp = sync_stamp_of(path);
+    let Some(stamp) = stamp else {
+        sync_state().tomb_text.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
+        return None;
+    };
+    // A stamp that is still within the trust window may be a rewrite in the same tick, so
+    // only a settled one stands in for the file's text.
+    if sync_stamp_is_settled(&stamp) {
+        let cache = sync_state().tomb_text.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((cached, text)) = cache.get(&key) {
+            if *cached == stamp {
+                return Some(text.clone());
+            }
+        }
+    }
+    #[cfg(test)]
+    sync_state().tomb_reads.fetch_add(1, Ordering::SeqCst);
+    let bytes = read_file_capped(path, 256).ok()?;
+    let text = String::from_utf8_lossy(&bytes).trim().to_string();
+    sync_state().tomb_text.lock().unwrap_or_else(|e| e.into_inner()).insert(key, (stamp, text.clone()));
+    Some(text)
+}
+
+fn sync_tomb_handled(path: &Path, content: &str) -> bool {
+    sync_state().tombs.lock().unwrap_or_else(|e| e.into_inner()).get(&sync_seen_key(path)).is_some_and(|c| c == content)
+}
+
+fn sync_tomb_note(path: &Path, content: &str) {
+    sync_state().tombs.lock().unwrap_or_else(|e| e.into_inner()).insert(sync_seen_key(path), content.to_string());
+    sync_tomb_first_seen(path, content);
+}
+
+// When this instance first saw this text in this tombstone file (now, if it just did).
+fn sync_tomb_first_seen(path: &Path, content: &str) -> u64 {
+    let mut seen = sync_state().tomb_seen.lock().unwrap_or_else(|e| e.into_inner());
+    let entry = seen.entry(sync_seen_key(path)).or_insert_with(|| (content.to_string(), sync_now_secs()));
+    if entry.0 != content {
+        *entry = (content.to_string(), sync_now_secs());
+    }
+    entry.1
+}
+
+// Leaves the tombstone of a prompt this instance is about to remove from the folder. False
+// when it could not be written: the file then stays, and the next sweep tries again.
+fn sync_tomb_put(dir: &Path, stem: &str) -> bool {
+    let path = sync_tomb_path(dir, stem);
+    let content = sync_now_secs().to_string();
+    if write_bytes_atomic_strict(&path, content.as_bytes()).is_err() {
+        append_crash_log(&format!("prompt-sync: the delete marker of {stem} could not be written"));
+        return false;
+    }
+    sync_tomb_note(&path, &content);
+    true
+}
+
+// Whether the prompt's file may be written. A tombstone this instance has not acted on yet
+// blocks it (the poll trashes the copy first); one it has acted on is a prompt that came back
+// and is removed here.
+fn sync_tomb_allows_write(dir: &Path, stem: &str) -> bool {
+    let path = sync_tomb_path(dir, stem);
+    let Some(content) = sync_tomb_read(&path) else { return true };
+    if sync_tomb_handled(&path, &content) {
+        let _ = fs::remove_file(&path);
+        return true;
+    }
+    false
+}
+
+// The tombstones in the folder: (prompt id, path, content).
+fn sync_tombs_in(dir: &Path) -> Vec<(String, PathBuf, String)> {
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.extension().and_then(|x| x.to_str()) != Some("deleted") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|x| x.to_str()).filter(|s| sync_safe_id(s)).map(str::to_string) else { continue };
+        if let Some(content) = sync_tomb_read(&path) {
+            out.push((stem, path, content));
+        }
+    }
+    out
+}
+
+// An old tombstone goes; so does one nobody can read the time from, once its file is as old.
+// The time written in it is the writer's clock, which may be off by any amount: it counts only
+// together with this instance's own sighting, so a clock that runs behind or ahead cannot make
+// a fresh delete look expired.
+fn sync_tomb_expired(path: &Path, content: &str) -> bool {
+    match content.parse::<u64>() {
+        Ok(at) => {
+            let now = sync_now_secs();
+            now.saturating_sub(at) > SYNC_TOMB_SECS && now.saturating_sub(sync_tomb_first_seen(path, content)) > SYNC_TOMB_SECS
+        }
+        Err(_) => fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|d| d.as_secs() > SYNC_TOMB_SECS),
+    }
+}
+
+// A prompt that goes to the trash while the feature is on owes the folder a delete marker. The
+// sweep writes it later and in the background, so the debt is kept with the settings: a restart
+// before the sweep ran must still know the file left in the folder is this delete's leftover.
+pub(crate) fn sync_owe_marker(settings: &mut Settings, p: &Prompt) {
+    if sync_enabled(settings) && !p.secret && sync_safe_id(&p.id) {
+        settings.sync_trash_marks.insert(p.id.clone(), 0);
+    }
+}
+
+// Whether a file's text is a different prompt from the trashed row it shares an id with
+// (someone edited it), as against a copy of what the row already says.
+fn sync_file_differs_from_row(row: &Prompt, content: &str, prompts: &[Prompt]) -> bool {
+    let blank = SyncPlacement::default();
+    match apply_md_with_tags(row, content, &canonical_tags(prompts)) {
+        Some(updated) => prompt_to_md(row, &blank) != prompt_to_md(&updated, &blank),
+        None => false,
+    }
+}
+
+// Whether a file that shows up for an id sitting in this library's trash is a newer state than
+// the delete (a restore or an edit made elsewhere) and not the delete's own leftover or a stale
+// copy. The evidence: this machine saw the delete marker and it has since gone, or the text
+// differs from the trashed prompt.
+fn sync_restore_evidence(store: &Store, stem: &str, content: &str) -> bool {
+    // A marker seen long ago and gone now is as likely to have expired as to have been removed
+    // by a restore, so only a recent sighting counts.
+    let now = sync_now_secs();
+    if store.settings.sync_trash_marks.get(stem).is_some_and(|&seen| seen > 0 && now.saturating_sub(seen) <= SYNC_TOMB_SECS) {
+        return true;
+    }
+    store.trash.iter().find(|p| p.id == stem).is_some_and(|row| sync_file_differs_from_row(row, content, &store.prompts))
+}
+
+// What the app would write for `p` right now, as the hash `sync_synced_note` keeps.
+pub(crate) fn sync_render_hash(p: &Prompt, settings: &Settings) -> u64 {
+    sync_content_hash(&prompt_to_md(p, &sync_placement_for(p, settings)))
 }
 
 pub(crate) fn sync_content_hash(content: &str) -> u64 {
@@ -877,8 +1280,7 @@ pub(crate) fn sync_file_known_current(path: &Path, hash: u64) -> bool {
 pub(crate) const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
 
 pub(crate) fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
-    let now_ns = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    now_ns.saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
+    sync_now_ns().saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
 }
 
 // Remember that `path` holds the content with this hash (call after a write, or after a
@@ -913,7 +1315,7 @@ pub(crate) fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
 // claimed with create_new first, so two conflicts in the same second (or an earlier copy)
 // never overwrite each other.
 pub(crate) fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Option<PathBuf> {
-    let secs = now_secs();
+    let secs = sync_now_secs();
     for n in 0..1000u32 {
         let suffix = if n == 0 { String::new() } else { format!("-{n}") };
         let copy = dir.join(format!("{id}.conflict-{secs}{suffix}{tag}.md"));
@@ -948,8 +1350,9 @@ pub(crate) fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placeme
     if !sync_seen_lock().contains_key(&sync_seen_key(path)) {
         return !sync_md_matches(p, placement, &text);
     }
-    // Seen but never known as a live prompt's file (it arrived while the prompt sat in
-    // the trash and was only skipped): a restore must not overwrite it silently.
+    // Seen but never known as a live prompt's file (it arrived beside a delete marker
+    // while the prompt sat in the trash and was only skipped): a restore must not
+    // overwrite it silently.
     if !sync_known_lock().contains(&sync_seen_key(path)) {
         return true;
     }
@@ -988,15 +1391,28 @@ pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings:
     // it meanwhile). A store that is busy right now counts as "maybe", which only
     // postpones the sweep to the next write.
     let live = |id: &str| match app.try_state::<Db>() {
-        Some(state) => match state.try_lock() {
-            Ok(store) => sync_id_is_live(&store.prompts, id),
-            Err(std::sync::TryLockError::Poisoned(e)) => sync_id_is_live(&e.into_inner().prompts, id),
-            Err(std::sync::TryLockError::WouldBlock) => true,
-        },
+        Some(state) => sync_live_in(&state, id),
         None => true,
     };
+    sync_write_all_core(&dir, prompts, settings, &live)
+}
+
+pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {
+    match db.try_lock() {
+        Ok(store) => sync_id_is_live(&store.prompts, id),
+        Err(std::sync::TryLockError::Poisoned(e)) => sync_id_is_live(&e.into_inner().prompts, id),
+        Err(std::sync::TryLockError::WouldBlock) => true,
+    }
+}
+
+// The window-free half of sync_write_all_impl: what the background flush runs.
+pub(crate) fn sync_write_all_core(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
+    // Counted as a failed write, so the queue tries again after a poll interval.
+    if sync_state().booting.load(Ordering::SeqCst) {
+        return 1;
+    }
     let _run = sync_run_lock();
-    sync_write_dir_checked(&dir, prompts, settings, &live)
+    sync_write_dir_checked(dir, prompts, settings, is_live)
 }
 
 // A library entry that still owns its file. A confidential one does not: its
@@ -1034,6 +1450,7 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         let content = prompt_to_md(p, &placement);
         let hash = sync_content_hash(&content);
         if sync_file_known_current(&path, hash) {
+            sync_synced_note(&path, hash);
             sync_known_note(&path);
             wanted.insert(filename);
             continue; // unchanged since it was last written: no read, no compare
@@ -1041,8 +1458,16 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
         let on_disk = fs::read(&path).unwrap_or_default();
+        if on_disk.is_empty() && !sync_tomb_allows_write(&dir, &p.id) {
+            continue; // another instance deleted this prompt: the poll moves our copy to the trash
+        }
         if on_disk == content.as_bytes() {
             sync_file_note_current(&path, hash);
+            sync_synced_note(&path, hash);
+        } else if sync_synced_is(&path, hash) && sync_disk_is_one_of_ours(&on_disk) {
+            // This library has not changed since the file and it agreed; the file did, so it holds
+            // another instance's newer version that the poll has not imported yet. Writing the old
+            // render over it would undo that edit.
         } else if sync_lock_acquire(&path) {
             // Both sides changed: the file was edited outside the app and the prompt in the app changed
             // too. The app's version wins the file, and the replaced one is kept beside it. The copy's
@@ -1068,15 +1493,23 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
                     ));
                 }
             }
-            let ok = write_file_atomic(&path, &content);
+            // Never in place: a write cut short there would leave a half file the other instances
+            // take for a newer version. When the swap is refused the file stays as it was and the
+            // write is tried again.
+            let ok = write_bytes_atomic_strict(&path, content.as_bytes()).is_ok();
             sync_lock_release(&path);
             if ok {
                 sync_seen_record_own_write_of(&path, sync_hash(content.as_bytes()));
                 sync_file_note_current(&path, hash);
+                sync_synced_note(&path, hash);
             } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
             }
+        } else {
+            // Another writer holds the file's lock. Counted, so the write is tried again.
+            failed += 1;
+            append_crash_log(&format!("prompt-sync: {filename} is locked by another writer, trying again"));
         }
         sync_known_note(&path);
         wanted.insert(filename);
@@ -1084,7 +1517,17 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
     sync_sweep_orphans_checked(&dir, &wanted, is_live);
     // Entries for files that are gone (deleted prompts, swept orphans) go too.
     sync_written_lock().retain(|key, _| Path::new(key).exists());
+    sync_synced_lock().retain(|key, _| Path::new(key).exists());
     failed
+}
+
+// A file holding a prompt of this feature (our header), whatever its text says. Anything else
+// in a prompt's file name (cut off, empty, another program's text) is not somebody's newer
+// version and is repaired by the next write.
+fn sync_disk_is_one_of_ours(bytes: &[u8]) -> bool {
+    sync_decode_text(bytes.to_vec())
+        .and_then(|c| parse_frontmatter(&c))
+        .is_some_and(|(fields, _)| md_is_ours(&fields))
 }
 
 // A queue instead of one spawn_blocking task per call: two rapid saves raced as unrelated
@@ -1127,6 +1570,7 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
         // Markdown sync writes for the rest of the process. Db state is refetched per iteration on
         // purpose.
         let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
+        let mut retries = 0u32;
         loop {
             {
                 // Check-and-clear (or go inactive) in one critical section, or a deposit between "queue
@@ -1149,15 +1593,51 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
             };
             if let Some((prompts, settings)) = job {
                 let app2 = app.clone();
-                let _ = tauri::async_runtime::spawn_blocking(move || {
+                let failed = tauri::async_runtime::spawn_blocking(move || {
                     // Background flush: no one is waiting on it, so a failure goes
-                    // to the crash log inside and the next save tries again.
-                    let _ = sync_write_all_impl(&app2, &prompts, &settings);
+                    // to the crash log inside.
+                    sync_write_all_impl(&app2, &prompts, &settings)
                 })
-                .await;
+                .await
+                .unwrap_or(0);
+                // A file that could not be written (locked by another writer, a busy folder) is
+                // tried again after a poll interval, a few times, instead of waiting for the next
+                // save to come along.
+                if failed > 0 && retries < SYNC_WRITE_RETRIES {
+                    retries += 1;
+                    tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
+                    q.0.lock().unwrap_or_else(|e| e.into_inner()).pending = true;
+                } else if failed == 0 {
+                    retries = 0;
+                }
             }
         }
     });
+}
+
+// The app is closing with a folder write still queued (a delete made a moment ago, say): it runs
+// once more here, on its own thread and for a few seconds at most, so the folder does not keep
+// what the library no longer has. Whatever it cannot finish is picked up by the next start.
+pub(crate) fn sync_flush_on_exit(app: &AppHandle) {
+    let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
+    if !q.0.lock().unwrap_or_else(|e| e.into_inner()).pending {
+        return;
+    }
+    let Some(state) = app.try_state::<Db>() else { return };
+    let (prompts, settings) = {
+        let store = lock(&state);
+        if !sync_enabled(&store.settings) {
+            return;
+        }
+        (store.prompts.clone(), store.settings.clone())
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        sync_write_all_impl(&app2, &prompts, &settings);
+        let _ = tx.send(());
+    });
+    let _ = rx.recv_timeout(std::time::Duration::from_secs(3));
 }
 
 // A prompt that left the library (deleted, trashed, or given an id this feature refuses)
@@ -1174,6 +1654,13 @@ pub(crate) fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::
     let Ok(entries) = fs::read_dir(dir) else { return };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
+        if name.strip_suffix(".deleted").is_some_and(sync_safe_id) {
+            let path = e.path();
+            if sync_tomb_read(&path).is_some_and(|c| sync_tomb_expired(&path, &c)) {
+                let _ = fs::remove_file(&path);
+            }
+            continue;
+        }
         if !name.ends_with(".md") || name == "AGENTS.md" || wanted.contains(&name) {
             continue;
         }
@@ -1201,6 +1688,9 @@ pub(crate) fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::
             .is_some_and(|(fields, _)| md_is_ours(&fields));
         let stem = name.trim_end_matches(".md");
         if ours && !is_live(stem) {
+            if !sync_tomb_put(dir, stem) {
+                continue;
+            }
             let _ = fs::remove_file(&path);
             sync_known_lock().remove(&sync_seen_key(&path));
         }
@@ -1260,15 +1750,29 @@ pub(crate) fn sync_poll_apply(
         // parse_frontmatter is cheap string splitting and apply_md_to_prompt re-parses itself, so
         // threading one shared HashMap through it is not worth the signature change.
         let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
+        let mut is_new = is_new;
+        if is_new && !store.prompts.iter().any(|p| p.id == stem) && store.trash.iter().any(|p| p.id == stem && !p.secret) {
+            // Trashed here, and its file is written again with no delete marker beside it: the
+            // other machine restored it (or edited it after the delete), which is newer than the
+            // delete this machine acted on. It comes back out of the trash with the file's text;
+            // a second row with the same id would break restore, delete and purge. A file with
+            // no such evidence is the delete's own leftover and stays out.
+            if !sync_restore_evidence(store, &stem, &content) {
+                continue;
+            }
+            if crate::trash::restore_trashed_core(store, &stem, |_| true).is_err() {
+                continue;
+            }
+            is_new = false;
+            changed = true;
+            settings_changed = true;
+        }
         if is_new {
             if store.prompts.iter().any(|p| p.id == stem) {
                 continue; // added by something else in the meantime
             }
             if store.trash.iter().any(|p| p.id == stem) {
-                // Trashed here, written again by a machine that does not know: a second row with the same
-                // id would break restore, delete and purge. The file stays (the sweep takes only files this
-                // process wrote or read for a live prompt), and a later restore keeps it as a copy.
-                continue;
+                continue; // a confidential entry in the trash: never imported
             }
             let Some(np) = apply_md_with_tags(&sync_blank_prompt(stem), &content, &canonical_tags(&store.prompts)) else { continue };
             let id = np.id.clone();
@@ -1397,6 +1901,9 @@ pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
     // folder's entries: the map also holds other folders' files (the previous folder
     // after a switch), whose records a scan of this one has no business dropping.
     sync_seen_lock().retain(|key, _| Path::new(key).parent() != Some(dir) || present.contains(key));
+    // A file that vanished is not known any more: if it comes back it is somebody's new file,
+    // not one this instance may sweep.
+    sync_known_lock().retain(|key| Path::new(key).parent() != Some(dir) || present.contains(key));
     Ok((to_read, files, all))
 }
 
@@ -1410,6 +1917,79 @@ pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
 // discard a UI edit made meanwhile. Only the cheap "does this file differ from the
 // snapshot" check and the file-level lock happen unlocked; the merge runs under the store
 // lock against each prompt's current state.
+// What the round needs from the app around it. The round itself (scan, read, apply) is
+// window-free so a test can run two instances against one folder; this is the part that
+// keeps restore points, saves what changed and tells the open windows.
+pub(crate) trait SyncRoundHost {
+    /// A prompt is about to be replaced by the file's version.
+    fn on_replace(&self, settings: &Settings, old: &Prompt, updated: &Prompt);
+    /// Persist what the round changed (settings first, as `save_settings` and
+    /// `save_prompts` are separate writes).
+    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool, trash_changed: bool);
+    /// Prompts the round moved to the trash (their pills, hotkeys and windows let go).
+    fn on_trashed(&self, ids: &[String]);
+    /// Every open window still holds what it fetched last.
+    fn notify(&self);
+}
+
+struct AppRoundHost<'a>(&'a AppHandle);
+
+impl SyncRoundHost for AppRoundHost<'_> {
+    fn on_replace(&self, settings: &Settings, old: &Prompt, updated: &Prompt) {
+        // The file wins this round, so whatever the prompt said before is about to
+        // be gone. If both sides changed since the last sync this is the losing
+        // side of a conflict, so keep it as a restore point instead of dropping it,
+        // the same way an edit in the app keeps one.
+        if !history_enabled(settings)
+            || (old.name == updated.name && old.text == updated.text && old.variants == updated.variants)
+        {
+            return;
+        }
+        let cap = history_cap(settings);
+        match db_conn(self.0) {
+            Some(c) => {
+                if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
+                    append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
+                }
+            }
+            None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
+        }
+    }
+
+    fn on_trashed(&self, ids: &[String]) {
+        for id in ids {
+            close_floating_window(self.0, id);
+            if let Some(conn) = db_conn(self.0) {
+                discard_editor_draft_if(&conn, |t| t == id);
+            }
+        }
+        rearm_hotkeys(self.0);
+        sync_float_windows(self.0);
+    }
+
+    fn save(&self, store: &Store, prompts_changed: bool, settings_changed: bool, trash_changed: bool) {
+        // Prompts and Settings are saved separately (save_prompts never touches settings): without
+        // this a placement-only change would be echoed back out by save_prompts'
+        // spawn_sync_write_all and then lost on restart while the file kept claiming the new
+        // placement.
+        if settings_changed {
+            save_settings(self.0, &store.settings);
+        }
+        if trash_changed {
+            save_prompts_and_trash(self.0, store);
+        } else if prompts_changed {
+            save_prompts(self.0, store);
+        }
+    }
+
+    fn notify(&self) {
+        let app = self.0;
+        let _ = app.emit_to("main", "store-synced", ());
+        notify_float_settings(app);
+        rebuild_tray(app);
+    }
+}
+
 pub(crate) fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
     let dir = {
@@ -1419,6 +1999,71 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
         }
         sync_dir_path(app, &store.settings)
     };
+    sync_poll_core(&state, &dir, &AppRoundHost(app));
+}
+
+fn path_of(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.md"))
+}
+
+// Acts on the folder's delete markers: a prompt the library still holds is moved to its trash
+// (never dropped, so a local edit made meanwhile stays recoverable). Called with the folder
+// lock held.
+fn sync_poll_tombstones(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
+    let tombs = sync_tombs_in(dir);
+    let mut trashed: Vec<String> = Vec::new();
+    let mut marks_changed = false;
+    {
+        let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        let now = sync_now_secs().max(1);
+        for (stem, path, content) in &tombs {
+            // A marker seen beside a trashed prompt: from here on its disappearance is evidence
+            // that another machine restored the prompt.
+            if store.trash.iter().any(|p| &p.id == stem && !p.secret) && store.settings.sync_trash_marks.get(stem).is_none_or(|&m| m == 0) {
+                store.settings.sync_trash_marks.insert(stem.clone(), now);
+                marks_changed = true;
+            }
+            if sync_tomb_handled(path, content) {
+                continue;
+            }
+            sync_tomb_note(path, content);
+            if sync_tomb_expired(path, content) {
+                continue;
+            }
+            // A confidential prompt is not part of the folder, so a delete there is not its.
+            if store.prompts.iter().any(|p| &p.id == stem && !p.secret)
+                && matches!(crate::prompts::delete_prompt_core(&mut store, stem, now_secs(), |_, _| true), Ok(true))
+            {
+                store.settings.sync_trash_marks.insert(stem.clone(), now);
+                trashed.push(stem.clone());
+            }
+        }
+        // Marks of prompts that left the trash (restored, purged) are let go.
+        let in_trash: std::collections::HashSet<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+        let before = store.settings.sync_trash_marks.len();
+        let mut marks = std::mem::take(&mut store.settings.sync_trash_marks);
+        marks.retain(|id, _| in_trash.contains(id));
+        marks_changed |= marks.len() != before;
+        store.settings.sync_trash_marks = marks;
+        if trashed.is_empty() && !marks_changed {
+            return;
+        }
+        let moved = !trashed.is_empty();
+        host.save(&store, moved, true, moved);
+    }
+    if trashed.is_empty() {
+        return;
+    }
+    host.on_trashed(&trashed);
+    host.notify();
+}
+
+pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
+    let store_lock = || db.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = dir.to_path_buf();
     let run = sync_run_lock();
     let (to_read, files, all) = match sync_scan_folder(&dir) {
         Ok(r) => r,
@@ -1442,13 +2087,13 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     };
     {
         let mut h = sync_health_lock();
-        sync_health_note_ok(&mut h, files, now_secs());
+        sync_health_note_ok(&mut h, files, sync_now_secs());
     }
     {
         // The files of known prompts count as known (SYNC_KNOWN) every round, changed or not,
         // taken against the library's ids. The scan is stat-only with no snapshot, so the step
         // lives here; the guards are rechecked under the same lock.
-        let store = lock(&state);
+        let store = store_lock();
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
@@ -1460,13 +2105,14 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
             }
         }
     }
+    sync_poll_tombstones(db, &dir, host);
     if to_read.is_empty() {
         return; // nothing changed: no prompt or settings copy is made
     }
     // Only now, with at least one file to read, is the library copied for the
     // comparison against what each file would be written as.
     let (snapshot, settings_snapshot) = {
-        let store = lock(&state);
+        let store = store_lock();
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
@@ -1506,9 +2152,14 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
             }
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
             if sync_md_matches(&snapshot[idx], &placement, &content) {
+                sync_synced_note(&path_of(&dir, &stem), sync_render_hash(&snapshot[idx], &settings_snapshot));
                 continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
+        } else if sync_tomb_read(&sync_tomb_path(&dir, &stem)).is_some_and(|t| !sync_tomb_expired(&sync_tomb_path(&dir, &stem), &t)) {
+            // A file beside a live delete marker is the delete's own leftover, not a newer
+            // state: a machine that never had the prompt must not import it either.
+            continue;
         } else {
             candidates.push((stem, content, true));
         }
@@ -1518,51 +2169,28 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     if candidates.is_empty() {
         return;
     }
-    let mut store = lock(&state);
+    let mut store = store_lock();
     if store.prompts_locked || !sync_enabled(&store.settings) {
         // Not applied, so not dealt with: the files are read again once the library is
         // free, instead of being dropped and later overwritten without a copy.
         sync_requeue_candidates(&dir, &candidates);
         return;
     }
-    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| {
-        // The file wins this round, so whatever the prompt said before is about to
-        // be gone. If both sides changed since the last sync this is the losing
-        // side of a conflict, so keep it as a restore point instead of dropping it,
-        // the same way an edit in the app keeps one.
-        if !history_enabled(settings)
-            || (old.name == updated.name && old.text == updated.text && old.variants == updated.variants)
-        {
-            return;
+    let stems: Vec<String> = candidates.iter().map(|(stem, _, _)| stem.clone()).collect();
+    let trash_before = store.trash.len();
+    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| host.on_replace(settings, old, updated));
+    // The library now agrees with these files (or the file was refused): from here on a save
+    // that renders the same is not a newer state than the file's.
+    for stem in &stems {
+        if let Some(p) = store.prompts.iter().find(|p| &p.id == stem && sync_eligible(p)) {
+            sync_synced_note(&path_of(&dir, stem), sync_render_hash(p, &store.settings));
         }
-        let cap = history_cap(settings);
-        match db_conn(app) {
-            Some(c) => {
-                if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
-                    append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
-                }
-            }
-            None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
-        }
-    });
-    // Prompts and Settings are saved separately (save_prompts never touches settings): without
-    // this a placement-only change would be echoed back out by save_prompts'
-    // spawn_sync_write_all and then lost on restart while the file kept claiming the new
-    // placement.
-    if settings_changed {
-        save_settings(app, &store.settings);
     }
-    if changed {
-        save_prompts(app, &store);
-    }
+    let trash_changed = store.trash.len() != trash_before;
+    host.save(&store, changed, settings_changed, trash_changed);
     drop(store);
     if changed || settings_changed {
-        // Every open window still holds what it fetched last. Tell them, or a stale
-        // grid shows old names and a later drag in it would write its old layout
-        // back over what the other machine just moved.
-        let _ = app.emit_to("main", "store-synced", ());
-        notify_float_settings(app);
-        rebuild_tray(app);
+        host.notify();
     }
 }
 
@@ -1606,6 +2234,8 @@ pub(crate) fn sync_dir_scan(dir: &Path) -> SyncDirScan {
                     .is_some_and(|(fields, _)| md_is_ours(&fields))
         } else if let Some(rest) = name.strip_suffix(".md.lock") {
             sync_safe_id(rest) // our own write lock, cleared by whoever holds it
+        } else if let Some(rest) = name.strip_suffix(".deleted") {
+            sync_safe_id(rest) && sync_tomb_read(&path).is_some_and(|c| c.parse::<u64>().is_ok()) // a delete marker: only a time
         } else {
             // Deliberately NOT the `.tmp` half of an interrupted write of ours: a
             // file called "notes.tmp" could just as easily be the user's own, and
@@ -1779,7 +2409,7 @@ pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete
             save_settings(&app, settings);
         },
         &|settings| sync_dir_path(&app, settings),
-        |prompts, settings| sync_write_all_impl(&app, prompts, settings),
+        |_, _| sync_activate_impl(&app),
     );
     // Whenever the folder just took a full write (also when the same folder is picked
     // again after its drive came back) it demonstrably works: the pause and its old
@@ -1842,6 +2472,9 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
             .is_some_and(|c| sync_md_matches(p, &sync_placement_for(p, settings), &c));
         // A file that differs stays unhandled with no hash, so it counts as changed.
         let hash = if handled { hash } else { 0 };
+        if handled {
+            sync_synced_note(&path, sync_render_hash(p, settings));
+        }
         sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled, hash });
     }
     // A prompt made confidential while sync was off (or while its sweep was postponed) left a
@@ -1860,20 +2493,118 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
     }
 }
 
+// A delete whose marker never reached the folder (the app closed, or the folder was away, before
+// the sweep ran) left its file behind. The file is this machine's own and unchanged, so it is
+// noted like any file of the library: the next write's sweep then leaves the marker and removes
+// it, and the poll does not mistake it for a restore. A file somebody edited, and one whose
+// marker was seen and has vanished (a restore elsewhere), is left to the poll. True when a
+// write is needed.
+pub(crate) fn sync_seed_owed(dir: &Path, prompts: &[Prompt], trash: &[Prompt], settings: &Settings) -> bool {
+    let mut any = false;
+    for row in trash.iter().filter(|p| !p.secret && sync_safe_id(&p.id)) {
+        let Some(&mark) = settings.sync_trash_marks.get(&row.id) else { continue };
+        let path = dir.join(format!("{}.md", row.id));
+        if !path.is_file() {
+            continue;
+        }
+        if mark > 0 && sync_tomb_read(&sync_tomb_path(dir, &row.id)).is_none() {
+            continue;
+        }
+        let Some(stamp) = sync_stamp_of(&path) else { continue };
+        let Some(bytes) = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok() else { continue };
+        let hash = sync_hash(&bytes);
+        let Some(content) = sync_decode_text(bytes) else { continue };
+        let ours = parse_frontmatter(&content).is_some_and(|(fields, _)| md_is_ours(&fields));
+        if !ours || sync_file_differs_from_row(row, &content, prompts) {
+            continue;
+        }
+        sync_known_note(&path);
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash });
+        any = true;
+    }
+    any
+}
+
+// The work of a start: learn the folder, settle what an earlier run left unfinished and read
+// the folder once, so a save in the first seconds meets the folder's current text instead of the
+// state the library was closed with. True when a write is due.
+pub(crate) fn sync_start_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) -> bool {
+    let (prompts, trash, settings) = {
+        let s = db.lock().unwrap_or_else(|e| e.into_inner());
+        (s.prompts.clone(), s.trash.clone(), s.settings.clone())
+    };
+    sync_seed_seen(dir, &prompts, &settings);
+    let due = sync_seed_owed(dir, &prompts, &trash, &settings);
+    let ready = {
+        let s = db.lock().unwrap_or_else(|e| e.into_inner());
+        !s.prompts_locked && sync_enabled(&s.settings)
+    };
+    if ready {
+        sync_poll_core(db, dir, host);
+    }
+    due
+}
+
+// Switching the feature on, or pointing it at another folder, with a library that may be
+// older than what the folder holds (another machine has been writing there). The folder is
+// learned and imported first, and only then is the library written: a write first would put
+// this library's older prompts over the folder's newer ones.
+pub(crate) fn sync_activate_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost, write: &dyn Fn(&[Prompt], &Settings) -> usize) -> usize {
+    let snapshot = |db: &Mutex<Store>| {
+        let s = db.lock().unwrap_or_else(|e| e.into_inner());
+        (s.prompts.clone(), s.settings.clone())
+    };
+    sync_start_core(db, dir, host);
+    let (prompts, settings) = snapshot(db);
+    write(&prompts, &settings)
+}
+
+pub(crate) fn sync_activate_impl(app: &AppHandle) -> usize {
+    let Some(state) = app.try_state::<Db>() else { return 0 };
+    let dir = {
+        let s = lock(&state);
+        sync_dir_path(app, &s.settings)
+    };
+    sync_activate_core(&state, &dir, &AppRoundHost(app), &|prompts, settings| sync_write_all_impl(app, prompts, settings))
+}
+
+// Holds the folder writes back (SyncState.booting) until the first read of the folder is done,
+// however that ends.
+struct SyncBootGuard(&'static SyncState);
+
+impl Drop for SyncBootGuard {
+    fn drop(&mut self) {
+        self.0.booting.store(false, Ordering::SeqCst);
+    }
+}
+
 pub(crate) fn start_sync_poll(app: AppHandle) {
     if !sync_poll_try_claim() {
         return; // already running - set_ui_flag calls this again on every activation
     }
+    sync_state().booting.store(true, Ordering::SeqCst);
     tauri::async_runtime::spawn(async move {
         // Learn which files on disk belong to prompts we already have before the
         // first save can sweep anything: a prompt deleted in the first seconds of a
         // session must still take its file along.
         if let Some(state) = app.try_state::<Db>() {
-            let (dir, prompts, settings) = {
+            let dir = {
                 let s = lock(&state);
-                (sync_dir_path(&app, &s.settings), s.prompts.clone(), s.settings.clone())
+                sync_dir_path(&app, &s.settings)
             };
-            let _ = tauri::async_runtime::spawn_blocking(move || sync_seed_seen(&dir, &prompts, &settings)).await;
+            let app2 = app.clone();
+            let due = tauri::async_runtime::spawn_blocking(move || {
+                let state = app2.state::<Db>();
+                let _open = SyncBootGuard(sync_state());
+                sync_start_core(&state, &dir, &AppRoundHost(&app2))
+            })
+            .await
+            .unwrap_or(false);
+            if due {
+                spawn_sync_write_all(&app, &lock(&state));
+            }
+        } else {
+            sync_state().booting.store(false, Ordering::SeqCst);
         }
         loop {
             let Some(state) = app.try_state::<Db>() else {

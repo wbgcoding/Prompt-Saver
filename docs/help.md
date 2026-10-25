@@ -309,13 +309,14 @@ Windows update silently removed, without asking to reinstall right away:
 the notice's "Cancel" button dismisses it for a while, or the background check can be
 switched off entirely.
 
-### Markdown folder sync (beta)
+### Markdown folder sync
 
 An optional mirror that writes every text tile as its own
 readable `.md` file in a chosen folder, alongside the encrypted database,
 including which view, grid cell, and folder it sits in. A view or folder named in
 an incoming file that does not exist yet on this machine is created
-automatically, matched by name.
+automatically, matched by name; a view renamed on another machine is renamed
+here too.
 **The `.md` files are plain text**: unlike the database, anyone with access to
 that folder can read the content, so a synced or shared folder should be avoided
 for anything sensitive. A tile with an attached file, image, or PDF syncs as a
@@ -329,7 +330,8 @@ to arrive. What happens in either direction is fixed and never silent:
 
 - **A file deleted in the folder does not delete the tile.** It is written again
   from the app on the next round. Delete the tile in the app and its file goes
-  with it.
+  with it; on every other computer using the same folder the tile moves to the
+  trash.
 - **Renaming a file makes a second tile.** The file name is the tile's permanent
   id, so the renamed file arrives as a new tile and the original is written back
   out under its own name. Rename in the app instead.
@@ -1190,13 +1192,14 @@ dessen Version sich geändert hat oder das ein Windows-Update entfernt hat, ohne
 gleich zur Neuinstallation aufzufordern: „Abbrechen“ im Hinweis blendet ihn
 vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
 
-**Markdown-Ordner-Sync (Beta)**: spiegelt jede Text-Kachel als lesbare
+**Markdown-Ordner-Sync**: spiegelt jede Text-Kachel als lesbare
 `.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
 Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
 PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
 keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
 genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
-wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext**:
+wird automatisch angelegt, per Namensabgleich; eine auf einem anderen Rechner
+umbenannte Ansicht wird hier mit umbenannt. **Die Dateien sind Klartext**:
 anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
 Sensibles.
 
@@ -1208,7 +1211,8 @@ geschieht nie stillschweigend:
 
 - **Eine im Ordner gelöschte Datei löscht die Kachel nicht.** Sie wird im
   nächsten Durchlauf neu geschrieben. Wer die Kachel in der App löscht, löscht
-  auch die Datei.
+  auch die Datei; auf jedem anderen Rechner mit demselben Ordner wandert die
+  Kachel in den Papierkorb.
 - **Umbenennen erzeugt eine zweite Kachel.** Der Dateiname ist die feste Kennung
   der Kachel; die umbenannte Datei kommt als neue Kachel an, das Original wird
   unter seinem eigenen Namen neu geschrieben. Also in der App umbenennen.

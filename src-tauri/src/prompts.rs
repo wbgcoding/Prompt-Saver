@@ -1293,9 +1293,9 @@ pub(crate) async fn update_prompt(
                 // A confidential entry's text/variants must never land in storage
                 // as whatever the editor sent (see edited_text_and_variants).
                 let (text, variants) = edited_text_and_variants(p, text, variants, secret_key)?;
-                p.name = name;
+                p.name = crate::md_sync::sync_clean_name(&name);
                 p.text = text;
-                p.color = color;
+                p.color = valid_tag_color(&color).unwrap_or_else(|_| original.color.clone());
                 p.variants = variants;
                 p.rotate_mode = sanitize_rotate_mode(rotate_mode, &p.variants);
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
@@ -1507,7 +1507,7 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             } else {
                 (text, variants)
             };
-            p.name = name;
+            p.name = crate::md_sync::sync_clean_name(&name);
             p.text = text;
             // Re-validate the restored list anyway (a version predating MAX_ROTATE_VARIANTS must not
             // slip a too-long list past the shared floor).
@@ -1716,6 +1716,7 @@ pub(crate) fn delete_prompt_core(store: &mut Store, id: &str, now: u64, save: im
         Some(pos) => {
             let mut p = store.prompts.remove(pos);
             p.trashed_at = now;
+            crate::md_sync::sync_owe_marker(&mut store.settings, &p);
             store.trash.insert(0, p); // newest-deleted first
             Some(pos)
         }
@@ -1768,6 +1769,7 @@ pub(crate) fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -
     // (trashed_at: 0) originals if the save fails.
     for mut p in moved.iter().cloned().rev() {
         p.trashed_at = now;
+        crate::md_sync::sync_owe_marker(&mut store.settings, &p);
         store.trash.insert(0, p);
     }
     for view in &mut store.settings.views {

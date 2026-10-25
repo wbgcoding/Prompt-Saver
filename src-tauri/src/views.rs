@@ -575,6 +575,7 @@ pub(crate) fn add_view(app: AppHandle, state: State<Db>, name: String, color: St
         layouts: HashMap::new(),
         color: color.trim().to_string(),
         members: Vec::new(),
+        sync_ids: Vec::new(),
     };
     store.settings.active_view.clone_from(&view.id);
     store.settings.views.push(view);
@@ -592,6 +593,9 @@ pub(crate) fn rename_view(app: AppHandle, state: State<Db>, id: String, name: St
         }
     }
     save_settings(&app, &store.settings);
+    // The view's name is part of every file in it: write them now, or the other machines only
+    // see the new name once some prompt in the view is next saved.
+    spawn_sync_write_all(&app, &store);
     webview_settings(&store.settings)
 }
 

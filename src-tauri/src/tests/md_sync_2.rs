@@ -508,14 +508,14 @@ fn store_json_fallback_is_written_sealed() {
 // machine's own next poll, or a cloud-sync client) must only ever see either the
 // old content or the new content, never a partial body.
 #[test]
-fn write_file_atomic_replaces_without_leaving_a_truncated_body() {
+fn write_bytes_atomic_replaces_without_leaving_a_truncated_body() {
     let dir = std::env::temp_dir().join(format!("ps-atomic-{}", std::process::id()));
     let _ = fs::create_dir_all(&dir);
     let path = dir.join("p1.md");
     fs::write(&path, "---\nname: Old\n---\n\nold body").unwrap();
 
     let new_content = "---\nname: New\n---\n\n".to_string() + &"x".repeat(5000);
-    assert!(write_file_atomic(&path, &new_content));
+    assert!(write_bytes_atomic(&path, new_content.as_bytes()).is_ok());
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
         new_content,
@@ -1203,4 +1203,15 @@ fn video_folder_stats_on_a_missing_folder_is_empty_not_an_error() {
     let dir = std::env::temp_dir().join(format!("ps-video-folder-missing-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir); // guarantee it really does not exist
     assert_eq!(video_folder_stats_impl(&dir.to_string_lossy(), &dir), (0, 0));
+}
+
+#[test]
+fn a_file_written_before_the_view_id_existed_does_not_read_as_an_outside_edit() {
+    let p = sync_test_prompt();
+    let placement = SyncPlacement { view: "Main".into(), view_id: "v1".into(), grid: "5x4".into(), cell: "1,1".into(), ..Default::default() };
+    let old_form = prompt_to_md_form(&p, &placement, false, false);
+    assert!(!old_form.contains("view_id"));
+    assert_ne!(old_form, prompt_to_md(&p, &placement));
+    assert!(prompt_to_md(&p, &placement).contains("view_id: v1\n"));
+    assert!(sync_md_matches(&p, &placement, &old_form));
 }

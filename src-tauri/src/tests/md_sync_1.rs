@@ -407,18 +407,13 @@ fn sync_normalize_float_folders_tolerates_a_still_forming_one_member_folder() {
 
 // ---- Multi-instance crash simulation ----
 //
-// sync_poll_once itself needs a live AppHandle (Tauri window/state), which this
-// test module has no harness for - every existing sync test works the same
-// way, exercising the pure building blocks sync_poll_once is made of instead of
-// the function itself. This helper replays exactly sync_poll_once's own
-// per-file sequence (parse -> apply content -> apply placement -> normalize)
-// against a real temp directory, so interleaving it under two independent
-// (Vec<Prompt>, Settings) pairs stands in for two real instances syncing
-// through the same cloud folder. Normalizing after every single file (finer
-// grain than sync_poll_once's real once-per-batch) makes this the STRICTER
-// case - since sync_normalize_* now tolerates a 1-member folder, that no
-// longer breaks anything, and proves the fix holds at the worst-case
-// granularity too.
+// The whole round, driven against two instances sharing a folder, lives in
+// md_sync_multi.rs. This helper is the cheaper per-file variant: it replays the poll's own
+// per-file sequence (parse -> apply content -> apply placement -> normalize) against a real
+// temp directory, so interleaving it under two independent (Vec<Prompt>, Settings) pairs
+// stands in for two instances syncing through the same cloud folder. Normalizing after
+// every single file (finer grain than the real once-per-batch) makes this the STRICTER
+// case.
 pub(super) fn poll_apply(prompts: &mut Vec<Prompt>, settings: &mut Settings, content: &str, stem: &str) {
     let fields = parse_frontmatter(content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
     match prompts.iter().position(|p| p.id == stem) {
@@ -1073,13 +1068,48 @@ fn sync_same_dir_compares_by_identity_not_spelling() {
 }
 
 #[test]
-fn sync_poll_does_not_import_a_file_whose_id_sits_in_the_trash() {
-    let trashed = sync_test_prompt();
+fn sync_poll_takes_a_trashed_id_out_of_the_trash_instead_of_adding_a_second_row() {
+    let mut trashed = sync_test_prompt();
+    trashed.trashed_at = 5;
+    let content = prompt_to_md(&trashed, &SyncPlacement::default());
+    let mut store = sync_apply_store(Vec::new(), vec![trashed]);
+    store.settings.views.push(super::hotkeys_2::test_view("v1"));
+    store.settings.active_view = "v1".to_string();
+    // The delete marker was seen here and is gone now: another machine restored the prompt.
+    store.settings.sync_trash_marks.insert("p1".to_string(), sync_now_secs());
+    let (changed, _) = sync_apply(&mut store, "p1", content, true);
+    assert!(changed);
+    assert_eq!(store.prompts.len(), 1, "the file brings the one prompt back, not a second row");
+    assert!(store.trash.is_empty());
+    assert_eq!(store.prompts[0].trashed_at, 0);
+}
+
+#[test]
+fn sync_poll_leaves_a_trashed_prompt_alone_when_its_file_is_only_the_deletes_leftover() {
+    let mut trashed = sync_test_prompt();
+    trashed.trashed_at = 5;
+    let content = prompt_to_md(&trashed, &SyncPlacement::default());
+    let mut store = sync_apply_store(Vec::new(), vec![trashed]);
+    let (changed, _) = sync_apply(&mut store, "p1", content.clone(), true);
+    assert!(!changed, "an unchanged file with no sign of a restore must not undo a delete");
+    assert!(store.prompts.is_empty());
+    assert_eq!(store.trash.len(), 1);
+    // A marker seen a long time ago that has gone since is expiry, not a restore.
+    store.settings.sync_trash_marks.insert("p1".to_string(), sync_now_secs().saturating_sub(SYNC_TOMB_SECS + 10));
+    let (changed, _) = sync_apply(&mut store, "p1", content, true);
+    assert!(!changed);
+    assert_eq!(store.trash.len(), 1);
+}
+
+#[test]
+fn sync_poll_does_not_import_a_file_whose_id_is_a_confidential_entry_in_the_trash() {
+    let mut trashed = sync_test_prompt();
+    trashed.secret = true;
     let content = prompt_to_md(&trashed, &SyncPlacement::default());
     let mut store = sync_apply_store(Vec::new(), vec![trashed]);
     let (changed, _) = sync_apply(&mut store, "p1", content, true);
     assert!(!changed);
-    assert!(store.prompts.is_empty(), "a trashed id must not come back as a second, live prompt");
+    assert!(store.prompts.is_empty(), "a confidential trash entry must not come back from a file");
     assert_eq!(store.trash.len(), 1);
 }
 
@@ -1114,6 +1144,7 @@ fn sync_join_adopts_the_cell_and_colour_of_an_existing_grid_folder() {
     let grid = grid_key(settings.views[0].cols, settings.views[0].rows);
     let incoming_placement = SyncPlacement {
         view: "V1".into(),
+        view_id: "v1".into(),
         grid,
         cell: "3,1".into(),
         tile_folder: "F".into(),

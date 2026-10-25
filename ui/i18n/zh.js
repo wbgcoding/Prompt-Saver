@@ -1253,7 +1253,7 @@ export default {
     flagPromptSync: "将提示词同步为 Markdown 文件",
     syncBackupFailed: "首次同步前的安全备份失败，同步保持关闭。请检查备份文件夹后重试。",
     syncWriteFailed: "无法写入同步文件夹，同步保持关闭。请检查该文件夹后重试。",
-    tipPromptSync: "将每个纯文本提示词映射为可手动编辑的 .md 文件，包含其视图、网格位置和文件夹。测试版：开启时会自动创建备份。",
+    tipPromptSync: "将每个纯文本提示词映射为可手动编辑的 .md 文件，包含其视图、网格位置和文件夹。开启时会自动创建备份。",
     syncPlaintextConfirm: "与数据库不同，由此创建的 .md 文件是纯文本，任何有权访问同步文件夹的人都能读取你的提示词。请避免为敏感内容使用同步或共享文件夹。",
     syncPlaintextConfirmOk: "仍然开启",
     valSyncDir: "同步文件夹",

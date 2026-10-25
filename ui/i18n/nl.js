@@ -1253,7 +1253,7 @@ export default {
     flagPromptSync: "Prompts synchroniseren als Markdown-bestanden",
     syncBackupFailed: "De back-up vóór de eerste synchronisatie is mislukt: synchronisatie blijft uit. Controleer de back-upmap en probeer het opnieuw.",
     syncWriteFailed: "Er kon niet naar de synchronisatiemap worden geschreven: synchronisatie blijft uit. Controleer de map en probeer het opnieuw.",
-    tipPromptSync: "Weerspiegelt elke platte-tekstprompt als een handmatig bewerkbaar .md-bestand, inclusief de weergave, rasterpositie en map. Bèta: bij het inschakelen wordt automatisch een back-up gemaakt.",
+    tipPromptSync: "Weerspiegelt elke platte-tekstprompt als een handmatig bewerkbaar .md-bestand, inclusief de weergave, rasterpositie en map. Bij het inschakelen wordt automatisch een back-up gemaakt.",
     syncPlaintextConfirm: "In tegenstelling tot de database zijn de hierbij aangemaakte .md-bestanden platte tekst: iedereen met toegang tot de synchronisatiemap kan je prompts lezen. Vermijd een gesynchroniseerde of gedeelde map voor gevoelige inhoud.",
     syncPlaintextConfirmOk: "Toch inschakelen",
     valSyncDir: "Synchronisatiemap",

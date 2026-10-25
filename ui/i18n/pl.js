@@ -1253,7 +1253,7 @@ export default {
     flagPromptSync: "Synchronizuj prompty jako pliki Markdown",
     syncBackupFailed: "Kopia zapasowa przed pierwszą synchronizacją nie powiodła się, więc synchronizacja pozostaje wyłączona. Sprawdź folder kopii i spróbuj ponownie.",
     syncWriteFailed: "Nie udało się zapisać w folderze synchronizacji, więc synchronizacja pozostaje wyłączona. Sprawdź folder i spróbuj ponownie.",
-    tipPromptSync: "Odzwierciedla każdy czysto tekstowy prompt jako plik .md edytowalny ręcznie, łącznie z jego widokiem, pozycją na siatce i folderem. Beta: włączenie tworzy automatyczną kopię zapasową.",
+    tipPromptSync: "Odzwierciedla każdy czysto tekstowy prompt jako plik .md edytowalny ręcznie, łącznie z jego widokiem, pozycją na siatce i folderem. Włączenie tworzy automatyczną kopię zapasową.",
     syncPlaintextConfirm: "W przeciwieństwie do bazy danych, tworzone pliki .md są zwykłym tekstem, więc każdy z dostępem do folderu synchronizacji może odczytać Twoje prompty. Unikaj synchronizowanego lub udostępnionego folderu dla wrażliwych treści.",
     syncPlaintextConfirmOk: "Włącz mimo to",
     valSyncDir: "Folder synchronizacji",

@@ -149,6 +149,11 @@ pub(crate) struct View {
     // current size's layout is an overflow entry.
     #[serde(default)]
     pub(crate) members: Vec<String>,
+    // Ids other machines' files use for this view when it was matched to them by name (it keeps
+    // its own id here). Kept with the view so the match survives a restart; the smallest one
+    // that is not a local view's id is what this view's files carry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) sync_ids: Vec<String>,
 }
 
 // An Android-style folder inside the grid. It occupies one cell of one view and holds
@@ -353,6 +358,15 @@ pub(crate) struct Settings {
     // Grid folders. Kept while the feature is off: members show as their own tiles again.
     #[serde(default)]
     pub(crate) tile_folders: Vec<TileFolder>,
+    // Where a synced file put a tile that this machine had to seat elsewhere, per prompt id.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub(crate) sync_file_cells: HashMap<String, crate::md_sync::SyncFileCell>,
+    // What the folder sync knows about the delete marker of a trashed prompt, per id: 0 while
+    // the marker is still owed to the folder (the delete was made here), otherwise the time it
+    // was first seen there. Lets a restart tell a delete that never reached the folder from a
+    // restore made on another machine.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub(crate) sync_trash_marks: HashMap<String, u64>,
 }
 
 pub(crate) fn default_theme() -> String {
@@ -449,6 +463,8 @@ impl Default for Settings {
             active_view: String::new(),
             views: Vec::new(),
             tile_folders: Vec::new(),
+            sync_file_cells: HashMap::new(),
+            sync_trash_marks: HashMap::new(),
         }
     }
 }
@@ -1206,6 +1222,7 @@ impl Settings {
                 layouts: HashMap::new(),
                 color: String::new(),
                 members: Vec::new(),
+                sync_ids: Vec::new(),
             });
         }
         // Every view arrives through here, including from an imported backup, so this is where the
@@ -1215,6 +1232,7 @@ impl Settings {
         for v in self.views.iter_mut() {
             v.cols = v.cols.clamp(GRID_MIN, GRID_MAX);
             v.rows = v.rows.clamp(GRID_MIN, GRID_MAX);
+            v.sync_ids.truncate(16);
             // One-time backfill for a view saved before membership tracking: derive membership from the
             // union of every saved grid size (current size first) instead of leaving it empty, which
             // would make every entry look hidden. Never runs once `members` is populated.
@@ -1234,6 +1252,9 @@ impl Settings {
                 }
             }
         }
+        // A record whose tile is no longer in any view is stale.
+        let views = &self.views;
+        self.sync_file_cells.retain(|id, _| views.iter().any(|v| v.layouts.values().any(|m| m.contains_key(id))));
         if !self.views.iter().any(|v| v.id == self.active_view) {
             if let Some(first) = self.views.first() {
                 self.active_view = first.id.clone();

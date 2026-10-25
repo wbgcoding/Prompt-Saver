@@ -13,14 +13,8 @@ pub(crate) struct SyncHealth {
     pub(crate) reason: String,
 }
 
-pub(crate) static SYNC_HEALTH: std::sync::OnceLock<Mutex<SyncHealth>> = std::sync::OnceLock::new();
-
-pub(crate) fn sync_health() -> &'static Mutex<SyncHealth> {
-    SYNC_HEALTH.get_or_init(|| Mutex::new(SyncHealth::default()))
-}
-
 pub(crate) fn sync_health_lock() -> std::sync::MutexGuard<'static, SyncHealth> {
-    sync_health().lock().unwrap_or_else(|e| e.into_inner())
+    sync_state().health.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // Returns true exactly on the round that flips the pause on, so the log line is
@@ -70,65 +64,142 @@ pub(crate) fn sync_lock_path(md_path: &Path) -> PathBuf {
     PathBuf::from(s)
 }
 
-pub(crate) fn pid_from_lock(lock_path: &Path) -> Option<u32> {
-    fs::read_to_string(lock_path).ok()?.trim().parse().ok()
+// What a lock file says about its holder: the computer, the process and when it took the lock.
+// A bare number is the older format (a process id only), read as a holder on another computer
+// because nothing says which computer it was.
+#[derive(Debug, PartialEq)]
+pub(crate) enum SyncLockHolder {
+    Here { pid: u32, since_ns: u128 },
+    Elsewhere,
+    Unreadable,
+}
+
+pub(crate) fn sync_lock_holder(text: &str) -> SyncLockHolder {
+    let mut lines = text.lines().map(str::trim);
+    let Some(first) = lines.next() else { return SyncLockHolder::Unreadable };
+    if first.parse::<u32>().is_ok() && lines.next().is_none() {
+        return SyncLockHolder::Elsewhere;
+    }
+    let (Some(pid), Some(since)) = (lines.next().and_then(|l| l.parse::<u32>().ok()), lines.next().and_then(|l| l.parse::<u128>().ok())) else {
+        return SyncLockHolder::Unreadable;
+    };
+    if first.is_empty() {
+        return SyncLockHolder::Unreadable;
+    }
+    if first.eq_ignore_ascii_case(&local_host_name()) {
+        SyncLockHolder::Here { pid, since_ns: since }
+    } else {
+        SyncLockHolder::Elsewhere
+    }
 }
 
 #[cfg(windows)]
-pub(crate) fn pid_is_alive(pid: u32) -> bool {
+mod winproc {
+    #[repr(C)]
+    #[derive(Default)]
+    pub(super) struct FileTime {
+        pub lo: u32,
+        pub hi: u32,
+    }
     #[link(name = "kernel32")]
     extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
-        fn CloseHandle(h: isize) -> i32;
+        pub(super) fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        pub(super) fn CloseHandle(h: isize) -> i32;
+        pub(super) fn GetLastError() -> u32;
+        pub(super) fn GetProcessTimes(h: isize, creation: *mut FileTime, exit: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> i32;
     }
-    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    pub(super) const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    pub(super) const ERROR_ACCESS_DENIED: u32 = 5;
+}
+
+// Whether a process with this id exists. A process this user may not open (another account's,
+// or a protected one) exists all the same.
+#[cfg(windows)]
+pub(crate) fn pid_is_alive(pid: u32) -> bool {
+    use winproc::*;
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if h == 0 {
-            false
-        } else {
-            CloseHandle(h);
-            true
+            return GetLastError() == ERROR_ACCESS_DENIED;
         }
+        CloseHandle(h);
+        true
+    }
+}
+
+// When the process with this id started, as unix nanoseconds. None when it cannot be told.
+#[cfg(windows)]
+pub(crate) fn pid_started_ns(pid: u32) -> Option<u128> {
+    use winproc::*;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h == 0 {
+            return None;
+        }
+        let (mut c, mut e, mut k, mut u) = (FileTime::default(), FileTime::default(), FileTime::default(), FileTime::default());
+        let ok = GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u);
+        CloseHandle(h);
+        if ok == 0 {
+            return None;
+        }
+        let ticks = ((c.hi as u128) << 32) | c.lo as u128; // 100 ns since 1601
+        ticks.checked_sub(116_444_736_000_000_000).map(|t| t * 100)
     }
 }
 
 pub(crate) fn sync_lock_is_stale(lock_path: &Path) -> bool {
     let Ok(meta) = fs::metadata(lock_path) else { return true }; // gone already
-    let old_enough = meta
-        .modified()
-        .and_then(|m| m.elapsed().map_err(std::io::Error::other))
-        .map(|d| d.as_secs() >= SYNC_LOCK_STALE_SECS)
-        .unwrap_or(true);
-    if !old_enough {
-        return false;
-    }
-    match pid_from_lock(lock_path) {
-        Some(pid) => !pid_is_alive(pid),
-        None => true, // unreadable/garbage lock content: treat as abandoned
+    // A lock dated in the future (the other computer's clock runs ahead) is not old.
+    let Some(age) = meta.modified().ok().and_then(|m| m.elapsed().ok()).map(|d| d.as_secs()) else { return false };
+    let text = fs::read(lock_path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    match sync_lock_holder(&text) {
+        SyncLockHolder::Here { pid, since_ns } => {
+            if age < SYNC_LOCK_STALE_SECS {
+                return false;
+            }
+            if !pid_is_alive(pid) {
+                return true;
+            }
+            // The id may have gone to a newer process since the holder died.
+            pid_started_ns(pid).is_some_and(|started| started > since_ns.saturating_add(2_000_000_000))
+        }
+        // Whether a process on another computer lives cannot be asked; only time tells.
+        SyncLockHolder::Elsewhere => age >= SYNC_LOCK_FOREIGN_STALE_SECS,
+        SyncLockHolder::Unreadable => age >= SYNC_LOCK_STALE_SECS,
     }
 }
 
 // Atomic create (never check then create, which races between instances). A held,
 // non-stale lock means "leave this file for the next poll", not a blocking wait: this runs
-// in a background task with no UI.
+// in a background task with no UI. The lock names this computer, process and moment, and
+// that text is what `sync_lock_release` checks before it deletes.
 pub(crate) fn sync_lock_acquire(md_path: &Path) -> bool {
     let lock_path = sync_lock_path(md_path);
+    let since = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let token = format!("{}
+{}
+{}", local_host_name(), std::process::id(), since);
     let try_create = |p: &Path| {
-        fs::OpenOptions::new().write(true).create_new(true).open(p).map(|mut f| {
-            let _ = std::io::Write::write_all(&mut f, std::process::id().to_string().as_bytes());
-        })
+        fs::OpenOptions::new().write(true).create_new(true).open(p).and_then(|mut f| std::io::Write::write_all(&mut f, token.as_bytes()))
     };
-    if try_create(&lock_path).is_ok() {
-        return true;
-    }
-    if sync_lock_is_stale(&lock_path) {
+    let mut taken = try_create(&lock_path).is_ok();
+    if !taken && sync_lock_is_stale(&lock_path) {
         let _ = fs::remove_file(&lock_path);
-        return try_create(&lock_path).is_ok();
+        taken = try_create(&lock_path).is_ok();
     }
-    false
+    if taken {
+        sync_state().locks.lock().unwrap_or_else(|e| e.into_inner()).insert(sync_seen_key(&lock_path), token);
+    }
+    taken
 }
 
+// Removes the lock only if it is still the one this instance took: a lock taken over after
+// ours went stale belongs to someone else by now.
 pub(crate) fn sync_lock_release(md_path: &Path) {
-    let _ = fs::remove_file(sync_lock_path(md_path));
+    let lock_path = sync_lock_path(md_path);
+    let Some(mine) = sync_state().locks.lock().unwrap_or_else(|e| e.into_inner()).remove(&sync_seen_key(&lock_path)) else { return };
+    let now = fs::read(&lock_path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    if now == mine {
+        let _ = fs::remove_file(&lock_path);
+    }
 }

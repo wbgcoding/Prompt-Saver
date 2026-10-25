@@ -110,6 +110,7 @@ pub(crate) fn demo_settings(has_video: bool, lang: &str) -> Settings {
         rows: default_rows(),
         layouts: HashMap::new(),
         color: String::new(),
+        sync_ids: Vec::new(),
         members: {
             let mut m = vec![
                 "demo-welcome".to_string(),
@@ -146,6 +147,7 @@ pub(crate) fn demo_settings(has_video: bool, lang: &str) -> Settings {
         rows: default_rows(),
         layouts: HashMap::new(),
         color: "#ef4444".to_string(),
+        sync_ids: Vec::new(),
         members: vec!["demo-attachment".to_string()],
     };
     rebuild_view_layout(&mut team, &std::collections::HashSet::new(), &std::collections::HashSet::new());

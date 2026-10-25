@@ -1253,7 +1253,7 @@ export default {
     flagPromptSync: "Sincronizar prompts como arquivos Markdown",
     syncBackupFailed: "O backup de segurança antes da primeira sincronização falhou: a sincronização continua desligada. Verifique a pasta de backups e tente novamente.",
     syncWriteFailed: "Não foi possível gravar na pasta de sincronização: a sincronização continua desligada. Verifique a pasta e tente novamente.",
-    tipPromptSync: "Espelha cada prompt somente texto como um arquivo .md editável manualmente, incluindo sua visualização, posição na grade e pasta. Beta: um backup automático é feito ao ativar.",
+    tipPromptSync: "Espelha cada prompt somente texto como um arquivo .md editável manualmente, incluindo sua visualização, posição na grade e pasta. Um backup automático é feito ao ativar.",
     syncPlaintextConfirm: "Ao contrário do banco de dados, os arquivos .md criados são texto simples, então qualquer pessoa com acesso à pasta de sincronização pode ler seus prompts. Evite uma pasta sincronizada ou compartilhada para conteúdo sensível.",
     syncPlaintextConfirmOk: "Ativar mesmo assim",
     valSyncDir: "Pasta de sincronização",

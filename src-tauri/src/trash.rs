@@ -67,6 +67,7 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
     let mut p = store.trash.remove(pos);
     let original_trashed_at = p.trashed_at;
     p.trashed_at = 0;
+    store.settings.sync_trash_marks.remove(id);
     // A trash entry from before the placeholder spelling changed comes back readable.
     upgrade_prompt_placeholders(&mut p);
     seat_restored_in_active_view(&mut store.settings, &p.id);
