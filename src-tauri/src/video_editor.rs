@@ -718,6 +718,9 @@ pub(crate) fn copy_plan(req: &ExportRequest) -> CopyPlan {
 // several generations at once, so cancellation is a set of cancelled generations rather than
 // one slot; a finished job removes its own entry so the set stays small.
 pub(crate) static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+// Bumped by every cancel-all (quit with running jobs). A batch notes it when it starts and
+// stops queuing items once it changed, so no export begins after the cancel went out.
+pub(crate) static EXPORTS_CANCEL_EPOCH: AtomicU64 = AtomicU64::new(0);
 // The generation of the export the video editor itself has in flight (0 = none), so its
 // Cancel hits exactly that one and not a batch export's.
 pub(crate) static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
@@ -935,6 +938,7 @@ pub(crate) fn cancel_export_job(generation: u64) {
 // registry for running "export" rows. The current generation is added directly in case its
 // row is not written yet.
 pub(crate) fn cancel_all_exports() {
+    EXPORTS_CANCEL_EPOCH.fetch_add(1, Ordering::SeqCst);
     let running_gens: Vec<u64> = bg_ops()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -1198,11 +1202,16 @@ pub(crate) async fn export_recordings_batch(
     // be handed to ffmpeg through it.
     let allowed_sources = recording_source_dirs(&app, &state);
     let own_dirs = own_storage_dirs(&app, &state);
+    let cancel_epoch = EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst);
 
     for item in items {
         if in_flight.len() >= parallel {
             let (handle, id, generation, job_app) = in_flight.pop_front().unwrap();
             if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
+        }
+        // A quit that cancelled the running jobs must not see the next item start.
+        if EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst) != cancel_epoch {
+            break;
         }
         let item_src = PathBuf::from(&item.src_path);
         // is_own_recording_source decides on the text before it touches the file system.
