@@ -37,6 +37,7 @@ mod vault_tests;
 mod parallel_tests;
 #[cfg(windows)]
 mod registry_tests;
+mod crypto_fixtures;
 mod media_files_tests;
 mod video_editor_tests;
 mod views_tests;
