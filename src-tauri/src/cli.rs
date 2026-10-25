@@ -1200,7 +1200,8 @@ fn cmd_search(store: &Store, query: &str, tag: Option<&str>, json: bool) -> Outc
         .filter(|p| {
             q.is_empty()
                 || p.name.to_lowercase().contains(&q)
-                || p.text.to_lowercase().contains(&q)
+                // A confidential prompt's stored text is ciphertext: matching it is noise.
+                || (!p.secret && p.text.to_lowercase().contains(&q))
                 || p.notes.to_lowercase().contains(&q)
                 || p.tags.iter().any(|t| t.to_lowercase().contains(&q))
         })

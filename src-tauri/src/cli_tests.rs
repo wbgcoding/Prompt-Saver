@@ -349,6 +349,19 @@ fn search_matches_name_text_and_tags_case_insensitively() {
     assert!(none.stdout.is_empty());
 }
 
+#[test]
+fn search_never_matches_the_ciphertext_of_a_confidential_prompt() {
+    let mut store = fixture_store();
+    let dir = std::env::temp_dir();
+    store.prompts[0].secret = true;
+    store.prompts[0].text = "zzsealedblobzz".to_string();
+    let name = store.prompts[0].name.to_lowercase();
+    let by_text = run_cmd(&mut store, &dir, &["search", "sealedblob"]);
+    assert!(by_text.stdout.is_empty(), "the stored text of a confidential prompt is not searchable");
+    let by_name = run_cmd(&mut store, &dir, &["search", &name]);
+    assert!(by_name.stdout.contains("p1"), "its name still is");
+}
+
 // ---- mutating commands: refused without --yes, applied with it ----
 
 #[test]
