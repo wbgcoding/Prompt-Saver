@@ -406,3 +406,39 @@ fn a_camera_chunk_is_written_after_the_session_lock_is_released() {
     let lock_end = body.find("session.output_path.clone()").unwrap();
     assert!(lock_end < open_at && open_at < write_at, "the lock scope ends before the file is opened");
 }
+
+#[test]
+fn an_overlapping_snip_session_adds_to_the_restore_set_instead_of_replacing_it() {
+    let mut set = vec!["main".to_string()];
+    crate::snip::merge_hidden_labels(&mut set, Vec::new());
+    assert_eq!(set, ["main"], "a second hide pass that found nothing visible keeps the first session's windows");
+    crate::snip::merge_hidden_labels(&mut set, vec!["main".to_string(), "float".to_string()]);
+    assert_eq!(set, ["main", "float"], "no duplicates, new labels appended");
+    let src = source!("../snip.rs");
+    let body = &src[src.find("pub(crate) async fn begin_capture").unwrap()..];
+    let body = &body[..body.find("
+}
+").unwrap()];
+    assert!(body.contains("merge_hidden_labels(&mut SNIP_HID_APP"));
+    assert!(!body.contains("*SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()) = hid"));
+}
+
+#[test]
+fn a_destroyed_overlay_resets_the_whole_session_state() {
+    let src = source!("../snip.rs");
+    let at = src.find("WindowEvent::Destroyed").unwrap();
+    let handler = &src[at..at + src[at..].find("});").unwrap()];
+    assert!(handler.contains("reset_snip_session_state(&app_evt)"), "{handler}");
+    let a = src.find("fn reset_snip_session_state").unwrap();
+    let reset = &src[a..a + src[a..].find("
+}
+").unwrap()];
+    for needle in ["SNIP_GEN.fetch_add", "remove_snip_preview()", "SNIP_ACTIVE.store(false", "SNIP_PRESENTED.store(false", "PICK_ACTIVE.store(false", ".clear()", "SnipMode::Capture"] {
+        assert!(reset.contains(needle), "the shared reset must cover {needle}");
+    }
+    let c = src.find("pub(crate) fn close_all_snip").unwrap();
+    let close = &src[c..c + src[c..].find("
+}
+").unwrap()];
+    assert!(close.contains("reset_snip_session_state(app)"));
+}
