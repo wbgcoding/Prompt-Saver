@@ -87,6 +87,24 @@ impl SyncInst {
         self.run(|| sync_seed_seen(dir, &prompts, &settings));
     }
 
+    // The app is closed and opened again: the library stays, what the instance remembered
+    // about the folder does not.
+    pub(super) fn restart(&mut self) {
+        let fresh = SyncState::default();
+        fresh.clock_skew.store(self.state.clock_skew.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.state = Box::leak(Box::new(fresh));
+    }
+
+    // The user switches the feature on (see set_ui_flag): the folder is written, then the
+    // poll starts.
+    pub(super) fn activate(&self, dir: &Path) -> usize {
+        self.run(|| {
+            sync_activate_core(&self.db, dir, &RigHost(self), &|prompts, settings| {
+                sync_write_all_core(dir, prompts, settings, &|id| sync_live_in(&self.db, id))
+            })
+        })
+    }
+
     pub(super) fn poll(&self, dir: &Path) {
         self.run(|| sync_poll_core(&self.db, dir, &RigHost(self)));
     }
@@ -506,5 +524,54 @@ fn multi_a_folder_that_vanishes_is_rewritten_by_an_edit_and_the_other_side_follo
     rig.settle();
     assert_eq!(rig.b.get(&x).unwrap().text, "first, edited");
     assert!(rig.a.get(&y).is_some() && rig.b.get(&y).is_some());
+    rig.assert_converged();
+}
+
+#[test]
+fn multi_a_save_on_b_does_not_push_back_a_file_that_is_still_arriving() {
+    let mut rig = Rig::new();
+    let p1 = rig.a.add("One", "one");
+    let p2 = rig.a.add("Two", "two");
+    let p3 = rig.a.add("Three", "three");
+    rig.settle();
+    // A edits three prompts; over a cloud folder p3 lands and settles on B before p1 does.
+    rig.a.edit(&p3, |p| p.text = "three from A".into());
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    rig.tick(3);
+    rig.b.poll(&rig.dir);
+    rig.tick(3);
+    rig.a.edit(&p1, |p| p.text = "one from A".into());
+    rig.a.step(&rig.dir);
+    // An unrelated save on B while p1 has not been read yet.
+    rig.b.edit(&p2, |p| p.text = "two from B".into());
+    rig.tick(3);
+    rig.b.step(&rig.dir);
+    rig.settle();
+    assert_eq!(rig.b.get(&p1).unwrap().text, "one from A", "B reverted A's edit");
+    assert_eq!(rig.a.get(&p1).unwrap().text, "one from A");
+    assert_eq!(rig.a.get(&p3).unwrap().text, "three from A");
+    assert_eq!(rig.a.get(&p2).unwrap().text, "two from B", "B's own change was lost");
+    assert!(rig.conflict_copies().is_empty(), "a conflict copy appeared: {:?}", rig.conflict_copies());
+    rig.assert_converged();
+}
+
+#[test]
+fn multi_activating_with_an_older_library_does_not_push_it_back_into_the_folder() {
+    let mut rig = Rig::new();
+    let id = rig.a.add("Shared", "old text");
+    rig.settle();
+    // B's copy of the app is restored from an older state and switches the feature on
+    // against a folder that already moved on.
+    rig.b.restart();
+    rig.a.edit(&id, |p| p.text = "new text".into());
+    rig.tick(3);
+    rig.a.step(&rig.dir);
+    rig.tick(3);
+    assert_eq!(rig.b.activate(&rig.dir), 0);
+    rig.settle();
+    assert_eq!(rig.b.get(&id).unwrap().text, "new text", "the folder's newer text was overwritten");
+    assert_eq!(rig.a.get(&id).unwrap().text, "new text");
+    assert!(rig.conflict_copies().is_empty(), "a conflict copy appeared: {:?}", rig.conflict_copies());
     rig.assert_converged();
 }

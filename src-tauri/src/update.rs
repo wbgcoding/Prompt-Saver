@@ -290,9 +290,9 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
                 write_ocr_wipe(&app, &store, "index switch-off");
             }
         }
-        is_sync_enable.then(|| (store.prompts.clone(), store.settings.clone()))
+        is_sync_enable.then(|| store.settings.clone())
     };
-    if let Some((prompts, settings)) = snapshot {
+    if let Some(settings) = snapshot {
         // Switching the feature back off has to happen under its own lock, and
         // must not clobber whatever else was written in the meantime.
         let abort = |app: &AppHandle, state: &State<Db>| {
@@ -314,7 +314,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         // user-initiated activation and the folder must really exist before the command returns
         // "on". If it does not, the activation fails visibly instead of leaving the switch on over
         // an empty folder.
-        let failed = sync_write_all_impl(&app, &prompts, &settings);
+        let failed = sync_activate_impl(&app);
         if failed > 0 {
             abort(&app, &state);
             return Err(format!("sync-write-failed: {failed}"));

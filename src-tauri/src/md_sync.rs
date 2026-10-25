@@ -746,6 +746,7 @@ pub(crate) struct SyncState {
     pub(crate) seen: Mutex<SyncSeenMap>,
     pub(crate) known: Mutex<std::collections::HashSet<String>>,
     pub(crate) written: Mutex<SyncWrittenMap>,
+    pub(crate) synced: Mutex<SyncSyncedMap>,
     pub(crate) health: Mutex<SyncHealth>,
     /// Seconds this instance's clock runs ahead of the real one (negative: behind). Only a
     /// test sets it, to play the role of a machine with a skewed clock.
@@ -895,6 +896,29 @@ pub(crate) type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
 
 pub(crate) fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
     sync_state().written.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// Per file: the hash of the render of the library's prompt as it was when the file and the
+// library last agreed (the app wrote the file, or imported it). A save whose render still
+// hashes the same changed nothing in this library since then, so a file that differs from it
+// holds somebody else's newer version and must not be written over.
+pub(crate) type SyncSyncedMap = HashMap<String, u64>;
+
+pub(crate) fn sync_synced_lock() -> std::sync::MutexGuard<'static, SyncSyncedMap> {
+    sync_state().synced.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+pub(crate) fn sync_synced_note(path: &Path, render_hash: u64) {
+    sync_synced_lock().insert(sync_seen_key(path), render_hash);
+}
+
+pub(crate) fn sync_synced_is(path: &Path, render_hash: u64) -> bool {
+    sync_synced_lock().get(&sync_seen_key(path)) == Some(&render_hash)
+}
+
+// What the app would write for `p` right now, as the hash `sync_synced_note` keeps.
+pub(crate) fn sync_render_hash(p: &Prompt, settings: &Settings) -> u64 {
+    sync_content_hash(&prompt_to_md(p, &sync_placement_for(p, settings)))
 }
 
 pub(crate) fn sync_content_hash(content: &str) -> u64 {
@@ -1081,6 +1105,7 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         let content = prompt_to_md(p, &placement);
         let hash = sync_content_hash(&content);
         if sync_file_known_current(&path, hash) {
+            sync_synced_note(&path, hash);
             sync_known_note(&path);
             wanted.insert(filename);
             continue; // unchanged since it was last written: no read, no compare
@@ -1090,6 +1115,11 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         let on_disk = fs::read(&path).unwrap_or_default();
         if on_disk == content.as_bytes() {
             sync_file_note_current(&path, hash);
+            sync_synced_note(&path, hash);
+        } else if sync_synced_is(&path, hash) && sync_disk_is_one_of_ours(&on_disk) {
+            // This library has not changed since the file and it agreed; the file did, so it holds
+            // another instance's newer version that the poll has not imported yet. Writing the old
+            // render over it would undo that edit.
         } else if sync_lock_acquire(&path) {
             // Both sides changed: the file was edited outside the app and the prompt in the app changed
             // too. The app's version wins the file, and the replaced one is kept beside it. The copy's
@@ -1120,6 +1150,7 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
             if ok {
                 sync_seen_record_own_write_of(&path, sync_hash(content.as_bytes()));
                 sync_file_note_current(&path, hash);
+                sync_synced_note(&path, hash);
             } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
@@ -1131,7 +1162,17 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
     sync_sweep_orphans_checked(&dir, &wanted, is_live);
     // Entries for files that are gone (deleted prompts, swept orphans) go too.
     sync_written_lock().retain(|key, _| Path::new(key).exists());
+    sync_synced_lock().retain(|key, _| Path::new(key).exists());
     failed
+}
+
+// A file holding a prompt of this feature (our header), whatever its text says. Anything else
+// in a prompt's file name (cut off, empty, another program's text) is not somebody's newer
+// version and is repaired by the next write.
+fn sync_disk_is_one_of_ours(bytes: &[u8]) -> bool {
+    sync_decode_text(bytes.to_vec())
+        .and_then(|c| parse_frontmatter(&c))
+        .is_some_and(|(fields, _)| md_is_ours(&fields))
 }
 
 // A queue instead of one spawn_blocking task per call: two rapid saves raced as unrelated
@@ -1527,6 +1568,10 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
     sync_poll_core(&state, &dir, &AppRoundHost(app));
 }
 
+fn path_of(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.md"))
+}
+
 pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost) {
     let store_lock = || db.lock().unwrap_or_else(|e| e.into_inner());
     let dir = dir.to_path_buf();
@@ -1617,6 +1662,7 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
             }
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
             if sync_md_matches(&snapshot[idx], &placement, &content) {
+                sync_synced_note(&path_of(&dir, &stem), sync_render_hash(&snapshot[idx], &settings_snapshot));
                 continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
@@ -1636,7 +1682,15 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
         sync_requeue_candidates(&dir, &candidates);
         return;
     }
+    let stems: Vec<String> = candidates.iter().map(|(stem, _, _)| stem.clone()).collect();
     let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| host.on_replace(settings, old, updated));
+    // The library now agrees with these files (or the file was refused): from here on a save
+    // that renders the same is not a newer state than the file's.
+    for stem in &stems {
+        if let Some(p) = store.prompts.iter().find(|p| &p.id == stem && sync_eligible(p)) {
+            sync_synced_note(&path_of(&dir, stem), sync_render_hash(p, &store.settings));
+        }
+    }
     host.save(&store, changed, settings_changed);
     drop(store);
     if changed || settings_changed {
@@ -1857,7 +1911,7 @@ pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete
             save_settings(&app, settings);
         },
         &|settings| sync_dir_path(&app, settings),
-        |prompts, settings| sync_write_all_impl(&app, prompts, settings),
+        |_, _| sync_activate_impl(&app),
     );
     // Whenever the folder just took a full write (also when the same folder is picked
     // again after its drive came back) it demonstrably works: the pause and its old
@@ -1920,6 +1974,9 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
             .is_some_and(|c| sync_md_matches(p, &sync_placement_for(p, settings), &c));
         // A file that differs stays unhandled with no hash, so it counts as changed.
         let hash = if handled { hash } else { 0 };
+        if handled {
+            sync_synced_note(&path, sync_render_hash(p, settings));
+        }
         sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled, hash });
     }
     // A prompt made confidential while sync was off (or while its sweep was postponed) left a
@@ -1936,6 +1993,31 @@ pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings
             let _ = fs::remove_file(&path);
         }
     }
+}
+
+// Switching the feature on, or pointing it at another folder, with a library that may be
+// older than what the folder holds (another machine has been writing there). The folder is
+// learned and imported first, and only then is the library written: a write first would put
+// this library's older prompts over the folder's newer ones.
+pub(crate) fn sync_activate_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRoundHost, write: &dyn Fn(&[Prompt], &Settings) -> usize) -> usize {
+    let snapshot = |db: &Mutex<Store>| {
+        let s = db.lock().unwrap_or_else(|e| e.into_inner());
+        (s.prompts.clone(), s.settings.clone())
+    };
+    let (prompts, settings) = snapshot(db);
+    sync_seed_seen(dir, &prompts, &settings);
+    sync_poll_core(db, dir, host);
+    let (prompts, settings) = snapshot(db);
+    write(&prompts, &settings)
+}
+
+pub(crate) fn sync_activate_impl(app: &AppHandle) -> usize {
+    let Some(state) = app.try_state::<Db>() else { return 0 };
+    let dir = {
+        let s = lock(&state);
+        sync_dir_path(app, &s.settings)
+    };
+    sync_activate_core(&state, &dir, &AppRoundHost(app), &|prompts, settings| sync_write_all_impl(app, prompts, settings))
 }
 
 pub(crate) fn start_sync_poll(app: AppHandle) {
