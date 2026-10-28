@@ -1,8 +1,5 @@
 # Contributing
 
-Thanks for helping to make Prompt Saver better. Bug reports and ideas are welcome, and so are
-pull requests.
-
 ## Before you start
 
 - **Bugs and ideas:** open an issue with the matching template first, so we can agree on the
