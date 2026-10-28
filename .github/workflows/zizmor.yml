@@ -3,7 +3,7 @@ name: Workflow audit
 # Audits the workflow files with zizmor and reports findings in code scanning.
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - ".github/workflows/**"
   pull_request:
