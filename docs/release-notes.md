@@ -99,4 +99,4 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - **Custom themes**: build your own on top of any of the 16 built-ins: a color input per themable value, grouped and previewed live, saved into the theme dropdown. The floating buttons follow along.
 - **Color picker**: a pipette beside the screenshot button freezes the screen and shows a magnified pixel grid with a live readout. Click to copy the color as hex, rgb or hsl; nothing is ever saved.
 
-The complete list is in the [changelog](../../blob/master/CHANGELOG.md).
+The complete list is in the [changelog](../../blob/main/CHANGELOG.md).
