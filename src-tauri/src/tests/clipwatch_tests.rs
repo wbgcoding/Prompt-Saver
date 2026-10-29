@@ -79,7 +79,10 @@ fn a_locked_vault_delivers_no_confidential_text() {
 #[test]
 fn a_refused_clipboard_promise_ends_the_session() {
     let src = source!("../clipwatch.rs");
-    assert!(src.contains("promised = SetClipboardData(CF_UNICODETEXT, 0) != 0;"));
+    // A delayed-render SetClipboardData returns NULL on success too, so its return value
+    // must never decide whether the promise stands.
+    assert!(!src.contains("SetClipboardData(CF_UNICODETEXT, 0) != 0"));
+    assert!(src.contains("promised = IsClipboardFormatAvailable(CF_UNICODETEXT) != 0;"));
     assert!(src.contains("end_session_with_plain_write(is_first, true);"));
     assert!(src.contains("if AddClipboardFormatListener(hwnd) == 0 {"));
 }

@@ -490,7 +490,10 @@ fn open_and_promise(hwnd: isize, is_first: bool, attempt: u32) {
         OWN_EMPTY.store(true, Ordering::Release);
         EmptyClipboard();
         OWN_EMPTY.store(false, Ordering::Release);
-        promised = SetClipboardData(CF_UNICODETEXT, 0) != 0;
+        // A delayed-render promise has no data handle, so SetClipboardData returns NULL even when
+        // it worked; whether the format is now listed on the just-emptied clipboard is the answer.
+        SetClipboardData(CF_UNICODETEXT, 0);
+        promised = IsClipboardFormatAvailable(CF_UNICODETEXT) != 0;
         if promised && secret {
             set_private_markers();
         }
