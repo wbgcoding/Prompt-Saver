@@ -7,7 +7,7 @@
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
 import { orderedInvoke, runFfmpegDownload, resolveLang, fillVideoFormatSelect, normRecFormat, numberField, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, numPopClosedByEscape } from "./floatShared.js";
-import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, buildShortcutRows, openShortcutsOverlay, closeShortcutsOverlay } from "./shortcuts.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, buildShortcutRows, openShortcutsOverlay, closeShortcutsOverlay, letterCode } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { errMessageLogged } from "./errors.js";
@@ -2174,13 +2174,15 @@ document.addEventListener("keydown", (e) => {
   }
   if (typing) return;
 
-  // Letter shortcuts follow the physical key (e.code), so they work under any keyboard layout.
-  if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
+  // Letter shortcuts follow the letter printed on the key (e.key), so Ctrl+Z undoes on a
+  // German keyboard too; letterCode() falls back to the physical key on a non-Latin layout.
+  const letter = letterCode(e);
+  if ((e.ctrlKey || e.metaKey) && letter === "KeyZ") {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") { e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && letter === "KeyY") { e.preventDefault(); redo(); return; }
   // Preview zoom: Ctrl+Plus/Minus/0, like the screenshot editor's canvas zoom; plain +/- stay the
   // timeline zoom below.
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
@@ -2245,7 +2247,7 @@ document.addEventListener("keydown", (e) => {
     case "-": e.preventDefault(); setZoom(VE.zoom / TIMELINE_ZOOM_STEP); break;
     default: break;
   }
-  switch (e.code) {
+  switch (letterCode(e)) {
     case "KeyI": e.preventDefault(); $("ve-mark-in").click(); break;
     case "KeyO": e.preventDefault(); $("ve-mark-out").click(); break;
     case "KeyC": e.preventDefault(); cutSelection(); break;
@@ -2254,7 +2256,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 document.addEventListener("keyup", (e) => {
-  if (e.code === "KeyV") veOriginalToggle.release();
+  if (letterCode(e) === "KeyV") veOriginalToggle.release();
 });
 
 // ---------------------------------------------------------------- loading

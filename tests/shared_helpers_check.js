@@ -1,7 +1,7 @@
 // Helpers the windows share instead of keeping their own copies (ui/floatShared.js,
 // ui/shortcuts.js): the ffmpeg download button of the expert menu and the video editor,
 // the hex colour reader of the tray and the screenshot overlay, and the shortcuts overlay
-// open/close with its focus hand-back.
+// open/close with its focus hand-back, and the layout-aware letter of a key event.
 // Run:  node tests/shared_helpers_check.js      Exit: 0 = clean, 1 = problems.
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -141,6 +141,13 @@ async function main() {
   shortcuts.closeShortcutsOverlay(modal);
   expect("overlay: focus falls back to the body", body.focused, 1);
   expect("overlay: a removed opener is not focused", opener.focused, 1);
+
+  // ---- letterCode: the printed letter wins over the physical key, non-Latin falls back
+  expect("letterCode German Z key", shortcuts.letterCode({ key: "z", code: "KeyY" }), "KeyZ");
+  expect("letterCode German Y key", shortcuts.letterCode({ key: "y", code: "KeyZ" }), "KeyY");
+  expect("letterCode shifted", shortcuts.letterCode({ key: "Z", code: "KeyZ" }), "KeyZ");
+  expect("letterCode Cyrillic", shortcuts.letterCode({ key: "я", code: "KeyZ" }), "KeyZ");
+  expect("letterCode non-letter", shortcuts.letterCode({ key: "Enter", code: "Enter" }), "Enter");
 
   if (problems.length) {
     console.error("shared_helpers_check: FAILED\n  " + problems.join("\n  "));

@@ -3,10 +3,11 @@
 // against it by tests/shortcut_check.py); a tooltip that mentions one gets the
 // text through withShortcut() below instead of spelling the key itself.
 //
-// A key is described from KeyboardEvent.code, never e.key or a literal character, so the
-// label stays correct on a non-US layout (a German keyboard swaps "Z" and "Y", but
-// KeyZ/KeyY do not move). Modifier names are never translated except "Ctrl", which
-// becomes "Strg" in German.
+// A key is described in KeyboardEvent.code form ("KeyZ", "Digit1", "Enter"). For a letter
+// that is the letter printed on the key, not its physical position: a German keyboard has
+// Z where a US one has Y, and Ctrl+Z must still undo there. Handlers match letters through
+// letterCode() below for that reason. Modifier names are never translated except "Ctrl",
+// which becomes "Strg" in German.
 //
 // scopes: "snipEditor" (the screenshot editor overlay in the main window),
 // "videoEditor" (the video editor window), "mainWindow" (the main window
@@ -88,6 +89,15 @@ export const SHORTCUTS = [
   { action: "cameraPauseKey", code: "Space", mods: [], scopes: ["camera"], descKey: "shortcutPauseResume" },
   { action: "cameraEscKey", code: "Escape", mods: [], scopes: ["camera"], descKey: "shortcutCameraEsc" },
 ];
+
+// The "KeyX" code of the letter a key event types: e.key when that is a Latin letter (the
+// layout's own letter, so Ctrl+Z is the key labelled Z), else the physical e.code, so the
+// shortcuts still work on a Cyrillic or Greek layout.
+export function letterCode(e) {
+  const k = e.key;
+  if (typeof k === "string" && k.length === 1 && /[a-z]/i.test(k)) return "Key" + k.toUpperCase();
+  return e.code;
+}
 
 // KeyboardEvent.code -> the character shown to the user. Only the codes this
 // app actually binds are listed; an unlisted code falls back to itself.
