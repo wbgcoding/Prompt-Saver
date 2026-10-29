@@ -50,3 +50,15 @@ test-data/
 # Parked features, kept locally only
 parked/
 !src-tauri/src/tests/fixtures/*.psb
+
+!.env.example
+*.bak
+*.tmp
+*.orig
+*.pyc
+.venv/
+venv/
+coverage/
+*.user
+.signing/
+.DS_Store
