@@ -1065,6 +1065,47 @@ def run(browser, tmp):
       }
     }
 """)
+    failed += ar_probe('livecopy1', 'screenshot editor: edits reach the clipboard after a quiet half second, one copy per burst, none for an untouched capture, and Close cancels a pending one', 'index', '1000x780', ba_seed, ba_common + r'''
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('livecopy1: the editor did not open'); }
+    else {
+      const copies = () => callsFor('copy_image_data');
+      window.__SMOKE_ARGS__.length = 0;
+      await sleep(800);
+      if (copies().length) errs.push('livecopy1: an untouched capture was copied again');
+      // one edit: nothing before the quiet period, one copy after it
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      await sleep(250);
+      if (copies().length) errs.push('livecopy1: the copy ran before the quiet period was over');
+      await sleep(600);
+      if (copies().length !== 1) errs.push('livecopy1: one edit made ' + copies().length + ' copies, expected 1');
+      else {
+        const im = await pixelsOf(copies()[0].dataUrl);
+        if (![0, 1, 2, 3, 4, 5].some((k) => !near(im.px(20 + k * 12, 20 + k * 8), BGC, 6))) errs.push('livecopy1: the live copy lacks the stroke');
+      }
+      if (document.getElementById('toast').classList.contains('show')) errs.push('livecopy1: the live copy showed a notice');
+      // two edits inside the quiet period: still one copy
+      window.__SMOKE_ARGS__.length = 0;
+      await baDrag(20, 90, 90, 110);
+      await sleep(200);
+      await baDrag(100, 20, 160, 70);
+      await sleep(800);
+      if (copies().length !== 1) errs.push('livecopy1: two quick edits made ' + copies().length + ' copies, expected 1');
+      // undo copies too: the clipboard follows what the editor shows
+      window.__SMOKE_ARGS__.length = 0;
+      await baUndo();
+      await sleep(800);
+      if (copies().length !== 1) errs.push('livecopy1: undo made ' + copies().length + ' copies, expected 1');
+      await baRedo();
+      await sleep(800);
+      if (copies().length !== 2) errs.push('livecopy1: redo did not copy once more, total ' + copies().length);
+      // Close with a copy pending: only the final copy of Close runs
+      window.__SMOKE_ARGS__.length = 0;
+      await baDrag(20, 20, 40, 40);
+      document.getElementById('snip-edit-apply').click();
+      await sleep(900);
+      if (copies().length !== 1) errs.push('livecopy1: Close with a pending copy made ' + copies().length + ' copies, expected the final 1');
+    }
+''')
     failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>
 """, r"""
     await bootReady();

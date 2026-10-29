@@ -320,6 +320,36 @@ export function initSnipEditor() {
     $("snip-edit-undo").disabled = SE.ops.length <= SE.floor;
     $("snip-edit-redo").disabled = !SE.redo.length;
   }
+  // Live clipboard copy: every change of the image (an op added, edited, removed, undone, redone,
+  // a crop or a resize) puts the edited result on the clipboard once editing has been quiet for a
+  // moment, so a paste elsewhere always matches what the editor shows. Closing makes the final
+  // copy itself (see the onClose of the caller), so this only cancels on close.
+  const SNIP_LIVE_COPY_MS = 500;
+  let snipLiveCopyTimer = 0;
+  let snipLiveCopyFailed = false;
+  function snipEditCancelLiveCopy() {
+    clearTimeout(snipLiveCopyTimer);
+    snipLiveCopyTimer = 0;
+  }
+  function snipEditNoteChange() {
+    snipEditCancelLiveCopy();
+    if (!SE.active) return;
+    snipLiveCopyTimer = setTimeout(snipEditLiveCopy, SNIP_LIVE_COPY_MS);
+  }
+  async function snipEditLiveCopy() {
+    snipLiveCopyTimer = 0;
+    if (!SE.active) return;
+    // A drag, an open text box or the held "show original" means the image is mid-change: look
+    // again after another quiet period instead of copying a half state.
+    if (SE.drag || SE.textEdit || SE.showRaw) { snipEditNoteChange(); return; }
+    try {
+      await invoke("copy_image_data", { dataUrl: snipEditExportDataUrl(false) });
+      snipLiveCopyFailed = false;
+    } catch (err) {
+      if (!snipLiveCopyFailed) errToast(err);
+      snipLiveCopyFailed = true;
+    }
+  }
   // A resize keeps the image, raw capture and op list from before it so Undo can swap them
   // back. Once undo cannot reach the resize any more, those are released.
   function snipEditReleaseResize(op) {
@@ -363,6 +393,7 @@ export function initSnipEditor() {
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
+    snipEditNoteChange();
   }
   // Moving, resizing, re-pointing or deleting a finished shape or text gets an undo entry of
   // its own: a {tool: "edit"} record that is never drawn, only applied backwards by undo and
@@ -533,6 +564,7 @@ export function initSnipEditor() {
     snipEditSyncCropFromOps();
     if (SE.tool === "crop") snipEditFitToCrop();
     snipEditUpdateUndoRedoButtons();
+    snipEditNoteChange();
   }
   function snipEditRedo() {
     if (!SE.redo.length) return;
@@ -558,6 +590,7 @@ export function initSnipEditor() {
     snipEditSyncCropFromOps();
     if (SE.tool === "crop") snipEditFitToCrop();
     snipEditUpdateUndoRedoButtons();
+    snipEditNoteChange();
   }
   // Shown only while something is nudgeable. The arrow keys have no other job in this editor,
   // but a short line always says what they currently do.
@@ -591,6 +624,7 @@ export function initSnipEditor() {
       // A new edit ends the redo branch, like every pushed op does.
       if (SE.redo.length) { SE.redo.length = 0; snipEditUpdateUndoRedoButtons(); }
       snipEditRedrawBase();
+      snipEditNoteChange();
     } else {
       const after = snipEditGeom(op);
       if (JSON.stringify(before) === JSON.stringify(after)) { snipEditRedrawBase(); }
@@ -788,6 +822,7 @@ export function initSnipEditor() {
       snipEditUpdateNudgeHint();
     }
     snipEditUpdateUndoRedoButtons();
+    snipEditNoteChange();
     snipEditClearLive();
     snipEditRedrawBase();
     snipEditFit();
@@ -1761,6 +1796,8 @@ export function initSnipEditor() {
     };
     img.onload = () => {
       recordToolUsage("screenshot_editor");
+      snipEditCancelLiveCopy();
+      snipLiveCopyFailed = false;
       SE.img = img;
       SE.w = img.naturalWidth;
       SE.h = img.naturalHeight;
@@ -1810,6 +1847,8 @@ export function initSnipEditor() {
   }
   function snipEditClose() {
     SE.active = false;
+    snipEditCancelLiveCopy();
+    snipLiveCopyFailed = false;
     snipEdit.classList.add("hidden");
     SE.drag = null;
     SE.panState = null;
@@ -1844,12 +1883,14 @@ export function initSnipEditor() {
   }
   // Applies the crop (if any) only now; everything else stays undoable until export. The output
   // is never larger than the source (no upscaling) and is built in one synchronous pass.
-  function snipEditExportDataUrl() {
+  // `commitCrop` is false for the live clipboard copy, which only mirrors what is committed and
+  // must not turn a box the user is still adjusting into an edit.
+  function snipEditExportDataUrl(commitCrop = true) {
     // A drawn crop rectangle reaches SE.ops only via Enter; export must not depend on that hidden
     // step or it would export uncropped or stale. Only while the crop tool is active (the same
     // guard as the Enter handler): SE.cropRect is kept in sync with SE.ops only then (see
     // snipEditSetTool), so a crop undone while parked on another tool is not resurrected.
-    if (SE.tool === "crop") snipEditCropCommit();
+    if (commitCrop && SE.tool === "crop") snipEditCropCommit();
     snipOriginalToggle.reset();
     const crop = SE.ops.find((o) => o.tool === "crop");
     let sx = 0, sy = 0, sw = SE.w, sh = SE.h;
