@@ -1027,6 +1027,13 @@ fn is_mutating(cmd: &Cmd) -> bool {
     )
 }
 
+// Every command that writes into the data folder, so a read-only instance refuses it. Wider than
+// is_mutating: a backup create needs no confirmation and no store snapshot, but it still adds a
+// backup and prunes older ones in the folder another machine owns.
+fn writes_data_folder(cmd: &Cmd) -> bool {
+    is_mutating(cmd) || matches!(cmd, Cmd::BackupCreate { .. })
+}
+
 fn confirmed_of(cmd: &Cmd) -> bool {
     match cmd {
         Cmd::Add { confirmed, .. }

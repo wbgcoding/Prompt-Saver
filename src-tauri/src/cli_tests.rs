@@ -794,6 +794,21 @@ fn backup_restore_is_refused_without_yes_at_the_launch_dispatch_level() {
     assert!(is_mutating(&cmd));
 }
 
+#[test]
+fn backup_create_counts_as_a_data_folder_write_without_needing_confirmation() {
+    let cmd = match parse(&args(&["backup", "create"])) {
+        Ok(Parsed::Run(c)) => c,
+        _ => unreachable!(),
+    };
+    assert!(writes_data_folder(&cmd), "a read-only instance must refuse a backup create");
+    assert!(!is_mutating(&cmd), "it still needs no --yes");
+    let list = match parse(&args(&["list"])) {
+        Ok(Parsed::Run(c)) => c,
+        _ => unreachable!(),
+    };
+    assert!(!writes_data_folder(&list));
+}
+
 // ---- standalone round trip: a real store on disk, via run_standalone ----
 
 // Exercises exactly what run_standalone() does around exec(): load,

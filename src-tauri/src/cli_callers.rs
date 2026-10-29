@@ -52,7 +52,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
 
     // Before the restore arm: a restore replaces the whole database, so a store another machine
     // holds locked must be refused for it like for every other change.
-    if is_mutating(&cmd) && crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
+    if writes_data_folder(&cmd) && crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
         eprintln!("the data folder is locked by another machine right now\n");
         return 3;
     }
@@ -263,6 +263,9 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
         let dir = data_dir(app);
         let mut store = lock(&state);
         if let Cmd::BackupCreate { keep, json } = &cmd {
+            if crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
+                return (Outcome::err(3, "the store refused the write (locked or unavailable)\n"), None);
+            }
             // Same sequence as the app's own backup: pending counter writes land in data.db
             // first, and the lock is released after the point-in-time copy, before compression.
             let keep = keep.unwrap_or_else(|| default_keep(&store.settings));
