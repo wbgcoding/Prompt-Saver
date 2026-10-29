@@ -112,17 +112,16 @@ pub(crate) fn decode_image_file(path: &str) -> Option<image::DynamicImage> {
 }
 
 pub(crate) fn copy_image_to_clipboard(data_url: &str) -> bool {
-    copy_image_to_clipboard_as(data_url, false)
+    copy_image_to_clipboard_as(data_url, false).is_ok()
 }
 
 // `transient`: an in-between state (the screenshot editor's live copy) that stays out of the
 // Windows clipboard history and cloud clipboard, so editing does not fill them with every step.
-pub(crate) fn copy_image_to_clipboard_as(data_url: &str, transient: bool) -> bool {
+// The error is one of the strings the UI maps to a message.
+pub(crate) fn copy_image_to_clipboard_as(data_url: &str, transient: bool) -> Result<(), &'static str> {
     let bytes = data_url_bytes(data_url);
-    if bytes.is_empty() { return false; }
-    let img = match decode_image_mem(&bytes) {
-        Some(img) => img.to_rgba8(),
-        None => return false,
+    let Some(img) = decode_image_mem(&bytes).map(|img| img.to_rgba8()) else {
+        return Err("could not decode image");
     };
     let (w, h) = img.dimensions();
     let img_data = arboard::ImageData {
@@ -141,7 +140,7 @@ pub(crate) fn copy_image_to_clipboard_as(data_url: &str, transient: bool) -> boo
             let _ = transient;
             c.set_image(img_data)
         })
-        .is_ok()
+        .map_err(|_| "clipboard write failed")
 }
 
 pub(crate) fn scale_and_encode(img: image::DynamicImage) -> String {

@@ -685,7 +685,7 @@ export function bindCapture() {
 
   // Switching to another program never touches a chain, locked or not: it ends only through
   // the chain button or Ctrl+V pressed inside this window.
-  const { snipEditOpen, snipEdit, snipEditState, snipEditCancel } = initSnipEditor();
+  const { snipEditOpen, snipEdit, snipEditState, snipEditCancel, snipCopyImage } = initSnipEditor();
 
   let pendingSnipPath = ""; // disk path if this shot was saved to the folder
   // Bumped by every new capture: an async save finishing after a newer shot arrived must not
@@ -771,7 +771,7 @@ export function bindCapture() {
       // leaves them as they are.
       onClose: async (editedDataUrl) => {
         if (!editedDataUrl) return;
-        invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
+        snipCopyImage(editedDataUrl, false).catch((err) => errToast(err));
         if (optFlag("screenshotSave")) await saveSnipToFolder(editedDataUrl);
       },
       onCancel: () => {
@@ -795,7 +795,7 @@ export function bindCapture() {
     snipEditOpen(res.data_url, {
       onClose: (editedDataUrl) => {
         if (!editedDataUrl) return;
-        invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
+        snipCopyImage(editedDataUrl, false).catch((err) => errToast(err));
         toast(t("openedCopyNote"));
       },
       onCancel: () => {},

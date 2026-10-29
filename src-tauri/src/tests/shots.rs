@@ -442,3 +442,10 @@ fn a_destroyed_overlay_resets_the_whole_session_state() {
 ").unwrap()];
     assert!(close.contains("reset_snip_session_state(app)"));
 }
+
+#[test]
+fn a_clipboard_copy_that_cannot_happen_is_an_error_not_a_silent_false() {
+    let undecodable = Err("could not decode image".to_string());
+    assert_eq!(crate::snip::copy_image_data("data:image/png;base64,AAAA".into(), Some(true)), undecodable);
+    assert_eq!(crate::snip::copy_image_data(String::new(), None), undecodable);
+}

@@ -1308,11 +1308,7 @@ pub(crate) fn data_url_bytes(data_url: &str) -> Vec<u8> {
 #[tauri::command]
 pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>, stem: Option<String>) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
-        return Err(format!(
-            "image is too large ({} MB); the limit is {} MB",
-            data_url.len() as u64 / (1024 * 1024),
-            MAX_IMAGE_DATA_URL_BYTES / (1024 * 1024)
-        ));
+        return Err(image_data_too_large(&data_url));
     }
     let bytes = data_url_bytes(&data_url);
     if bytes.is_empty() {
@@ -1351,11 +1347,7 @@ pub(crate) async fn save_screenshot_as(
     default_name: Option<String>,
 ) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
-        return Err(format!(
-            "image is too large ({} MB); the limit is {} MB",
-            data_url.len() as u64 / (1024 * 1024),
-            MAX_IMAGE_DATA_URL_BYTES / (1024 * 1024)
-        ));
+        return Err(image_data_too_large(&data_url));
     }
     let bytes = data_url_bytes(&data_url);
     if bytes.is_empty() {
@@ -1442,15 +1434,25 @@ pub(crate) async fn delete_screenshot_file(state: State<'_, Db>, path: String) -
     Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
+fn image_data_too_large(data_url: &str) -> String {
+    format!(
+        "image is too large ({} MB); the limit is {} MB",
+        data_url.len() as u64 / (1024 * 1024),
+        MAX_IMAGE_DATA_URL_BYTES / (1024 * 1024)
+    )
+}
+
 // Screenshot editor: the live copy while editing (`transient`, kept out of the clipboard history)
 // and the final copy on close. The edited image never goes through finalize_capture, so it has
-// its own thin path onto the clipboard.
-#[tauri::command]
-pub(crate) fn copy_image_data(data_url: String, transient: Option<bool>) -> bool {
+// its own thin path onto the clipboard. Async: decoding a large image and waiting for a busy
+// clipboard must not freeze every window. A failure is an error, so the editor can say the
+// clipboard still holds the old content.
+#[tauri::command(async)]
+pub(crate) fn copy_image_data(data_url: String, transient: Option<bool>) -> Result<(), String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
-        return false;
+        return Err(image_data_too_large(&data_url));
     }
-    crate::images::copy_image_to_clipboard_as(&data_url, transient.unwrap_or(false))
+    crate::images::copy_image_to_clipboard_as(&data_url, transient.unwrap_or(false)).map_err(str::to_string)
 }
 
 // Default screenshot folder path (shown greyed in the expert menu when no custom

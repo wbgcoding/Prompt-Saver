@@ -1108,6 +1108,33 @@ def run(browser, tmp):
       else if (copies()[0].transient) errs.push('livecopy1: the final copy on Close is kept out of the clipboard history');
     }
 ''')
+    failed += ar_probe('livecopy2', 'screenshot editor: a failed clipboard copy says so, and the copy on Close waits for a live copy still running', 'index', '1000x780', ba_seed, ba_common + r'''
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('livecopy2: the editor did not open'); }
+    else {
+      const copies = () => callsFor('copy_image_data');
+      const toastText = () => document.getElementById('toast').textContent;
+      RESULTS.copy_image_data = () => { throw 'clipboard write failed'; };
+      document.getElementById('toast').textContent = '';
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      await sleep(900);
+      if (!/clipboard could not be written/i.test(toastText())) errs.push('livecopy2: a failed live copy showed no notice, toast is ' + JSON.stringify(toastText()));
+      RESULTS.copy_image_data = () => null;
+      // A live copy whose answer is slow: Close must not start its copy before that answer,
+      // or the older live image could land on the clipboard last.
+      window.__STUB_DELAY_MS__ = { copy_image_data: 700 };
+      window.__SMOKE_ARGS__.length = 0;
+      await baDrag(20, 90, 90, 110);
+      await sleep(650);
+      if (copies().length !== 1) errs.push('livecopy2: fixture: expected the live copy to be running, calls ' + copies().length);
+      document.getElementById('snip-edit-apply').click();
+      await sleep(200);
+      if (copies().length !== 1) errs.push('livecopy2: the copy on Close started while the live copy was still running');
+      await sleep(1200);
+      window.__STUB_DELAY_MS__ = {};
+      const c = copies();
+      if (c.length !== 2 || c[1].transient) errs.push('livecopy2: expected the live copy then the final copy, got ' + JSON.stringify(c.map((x) => x.transient)));
+    }
+''')
     failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>
 """, r"""
     await bootReady();

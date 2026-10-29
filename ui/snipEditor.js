@@ -336,6 +336,14 @@ export function initSnipEditor() {
     if (!SE.active) return;
     snipLiveCopyTimer = setTimeout(snipEditLiveCopy, SNIP_LIVE_COPY_MS);
   }
+  // Every editor copy waits for the one before it, so a live copy still running can never land
+  // on the clipboard after the copy made on close.
+  let snipCopyChain = Promise.resolve();
+  function snipCopyImage(dataUrl, transient) {
+    const run = snipCopyChain.then(() => invoke("copy_image_data", { dataUrl, transient }));
+    snipCopyChain = run.catch(() => {});
+    return run;
+  }
   async function snipEditLiveCopy() {
     snipLiveCopyTimer = 0;
     if (!SE.active) return;
@@ -344,7 +352,7 @@ export function initSnipEditor() {
     if (SE.drag || SE.textEdit || SE.showRaw) { snipEditNoteChange(); return; }
     try {
       // Transient: in-between states stay out of the Windows clipboard history.
-      await invoke("copy_image_data", { dataUrl: snipEditExportDataUrl(false), transient: true });
+      await snipCopyImage(snipEditExportDataUrl(false), true);
       snipLiveCopyFailed = false;
     } catch (err) {
       if (!snipLiveCopyFailed) errToast(err);
@@ -2116,5 +2124,5 @@ export function initSnipEditor() {
     };
     return { resizes: heldResizes([...SE.ops, ...SE.redo]), ops: SE.ops.length, redo: SE.redo.length, img: !!SE.img, raw: !!SE.rawCanvas };
   };
-  return { snipEditOpen, snipEdit, snipEditState, snipEditCancel };
+  return { snipEditOpen, snipEdit, snipEditState, snipEditCancel, snipCopyImage };
 }
