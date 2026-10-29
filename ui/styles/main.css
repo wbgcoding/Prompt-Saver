@@ -1614,10 +1614,8 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
 .noflag-dupFinder #library-dupes { display: none; }
-/* OCR ships on: a default-on flag only ever sets noflag-<key>, never flag-<key>,
-   so both entry points hide via noflag-ocr. */
-.noflag-ocr #ocr-btn,
-.noflag-ocr #snip-edit-ocr { display: none; }
+/* OCR ships on: a default-on flag only ever sets noflag-<key>, never flag-<key>. */
+.noflag-ocr #ocr-btn { display: none; }
 /* Voice ships on too, same noflag-<key> pattern; a Windows build with no
    speech engine at all hides the button regardless of the flag's own value. */
 .noflag-voice #voice-btn,

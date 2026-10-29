@@ -583,9 +583,9 @@ def run(browser, tmp):
     const baKey = (key, extra) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra || {})));
     const baExport = async () => {
       window.__SMOKE_ARGS__.length = 0;
-      document.getElementById('snip-edit-copy').click();
+      document.getElementById('snip-edit-saveas').click();
       await sleep(200);
-      const c = callsFor('copy_image_data');
+      const c = callsFor('save_screenshot_as');
       return c.length ? pixelsOf(c[c.length - 1].dataUrl) : null;
     };
     const baScale50 = async () => {
@@ -973,17 +973,18 @@ def run(browser, tmp):
     }
 """)
     failed += ar_probe('bz980a', 'screenshot editor: Close keeps the edited image on the clipboard, Escape, Enter and the header X do the same, and nothing asks', 'index', '1000x780', ba_seed, ba_common + r"""
-    // 980: the bar is Copy, Save, format + Save as, Save as button, Recognize text, New screenshot, Close.
+    // 980: the bar is format + Save as, Keep as tile, New screenshot, Close.
     if (!(await baOpen('C:/shots/first.png'))) { errs.push('980: the editor did not open'); }
     else {
       RESULTS.save_screenshot_now = () => 'C:/shots/saved.png';
       RESULTS.delete_screenshot_file = () => true;
-      const bar = document.getElementById('snip-edit-copy').parentElement;
+      const bar = document.getElementById('snip-edit-saveas').parentElement;
       const ids = [...bar.querySelectorAll('[id]')].map((e) => e.id);
-      const want = ['snip-edit-copy', 'snip-edit-save', 'snip-edit-saveas-format', 'snip-edit-saveas', 'snip-edit-keep', 'snip-edit-ocr', 'snip-edit-retry', 'snip-edit-apply'];
+      const want = ['snip-edit-saveas-format', 'snip-edit-saveas', 'snip-edit-keep', 'snip-edit-retry', 'snip-edit-apply'];
       const got = want.map((id) => ids.indexOf(id));
       if (got.some((i, k) => i < 0 || (k && i <= got[k - 1]))) errs.push('980: the bar reads ' + ids.join() + ', expected ' + want.join());
       if (document.getElementById('snip-edit-cancel')) errs.push('980: the Cancel button is still there');
+      for (const gone of ['snip-edit-copy', 'snip-edit-save', 'snip-edit-ocr']) if (document.getElementById(gone)) errs.push('980: ' + gone + ' is still in the bar');
       if (document.getElementById('snip-modal')) errs.push('980: the screenshot dialog is still in the page');
       const apply = document.getElementById('snip-edit-apply');
       if (apply.textContent.trim() !== 'Close' || !apply.classList.contains('primary-btn')) errs.push('980: the primary button reads ' + JSON.stringify(apply.textContent));
@@ -1016,7 +1017,7 @@ def run(browser, tmp):
       }
     }
 """)
-    failed += ar_probe('bz980b', 'screenshot editor: each bar action works on the edited image and keeps the editor open, except Save as button', 'index', '1000x780', ba_seed, ba_common + r"""
+    failed += ar_probe('bz980b', 'screenshot editor: each bar action works on the edited image and keeps the editor open, except Keep as tile', 'index', '1000x780', ba_seed, ba_common + r"""
     if (!(await baOpen('C:/shots/first.png'))) { errs.push('980: the editor did not open'); }
     else {
       const el = (id) => document.getElementById(id);
@@ -1024,21 +1025,7 @@ def run(browser, tmp):
       RESULTS.save_screenshot_now = () => 'C:/shots/saved.png';
       RESULTS.delete_screenshot_file = () => true;
       RESULTS.save_screenshot_as = () => 'D:/x/out.jpg';
-      RESULTS.ocr_image_data = () => ({ text: 'Hello', lang: 'en' });
       await baTool('pen'); await baDrag(20, 20, 90, 70);
-      // Copy
-      window.__SMOKE_ARGS__.length = 0;
-      el('snip-edit-copy').click(); await sleep(300);
-      if (callsFor('copy_image_data').length !== 1 || !open()) errs.push('980: Copy did not copy once and stay open');
-      // Save: into the folder now, the capture's own unedited file goes
-      window.__SMOKE_ARGS__.length = 0;
-      el('toast').textContent = '';
-      el('snip-edit-save').click(); await sleep(400);
-      if (callsFor('save_screenshot_now').length !== 1) errs.push('980: Save did not save into the folder once');
-      const del = callsFor('delete_screenshot_file').map((a) => a.path);
-      if (del.join() !== 'C:/shots/first.png') errs.push('980: Save removed ' + JSON.stringify(del) + ' instead of the unedited capture');
-      if (!/saved\.png/.test(el('toast').textContent)) errs.push('980: Save gave no notice with the path, toast is ' + JSON.stringify(el('toast').textContent));
-      if (!open()) errs.push('980: Save closed the editor');
       // Save as with the chosen format
       window.__SMOKE_ARGS__.length = 0;
       el('snip-edit-saveas-format').value = 'jpeg';
@@ -1046,18 +1033,6 @@ def run(browser, tmp):
       const sa = callsFor('save_screenshot_as');
       if (sa.length !== 1 || sa[0].format !== 'jpeg' || !/^data:image\//.test(sa[0].dataUrl)) errs.push('980: Save as sent ' + JSON.stringify(sa.map((a) => a.format)));
       if (!open()) errs.push('980: Save as closed the editor');
-      // Recognize text: the editor stays under the result and the keys belong to the dialog
-      window.__SMOKE_ARGS__.length = 0;
-      el('snip-edit-ocr').click(); await sleep(400);
-      if (callsFor('ocr_image_data').length !== 1) errs.push('980: Recognize text did not run once');
-      if (el('ocr-modal').classList.contains('hidden')) errs.push('980: the text result did not open');
-      else {
-        const zo = Number(getComputedStyle(el('ocr-modal')).zIndex), ze = Number(getComputedStyle(el('snip-edit')).zIndex);
-        if (!(zo > ze)) errs.push('980: the text result sits behind the editor (' + zo + ' vs ' + ze + ')');
-        baKey('Escape'); await sleep(300);
-        if (!el('ocr-modal').classList.contains('hidden')) errs.push('980: Escape did not close the text result');
-        if (!open()) errs.push('980: Escape closed the editor behind the text result');
-      }
       // New screenshot
       window.__SMOKE_ARGS__.length = 0;
       el('snip-edit-retry').click(); await sleep(200);
@@ -1920,9 +1895,9 @@ def run(browser, tmp):
     };
     const exportSize = async () => {
       window.__SMOKE_ARGS__.length = 0;
-      document.getElementById('snip-edit-copy').click();
+      document.getElementById('snip-edit-saveas').click();
       await sleepMs(250);
-      const c = callsFor('copy_image_data');
+      const c = callsFor('save_screenshot_as');
       if (!c.length) return null;
       return await new Promise((res) => { const i = new Image(); i.onload = () => res(i.width + 'x' + i.height); i.src = c[c.length - 1].dataUrl; });
     };
@@ -2014,9 +1989,9 @@ def run(browser, tmp):
     fire('pointerup', sr.right, sr.bottom, window);
     await sleep(150);
     window.__SMOKE_ARGS__.length = 0;
-    document.getElementById('snip-edit-copy').click();
+    document.getElementById('snip-edit-saveas').click();
     await sleep(300);
-    const calls = callsFor('copy_image_data');
+    const calls = callsFor('save_screenshot_as');
     if (!calls.length) { errs.push('831: the export did not run'); }
     else {
       const img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = calls[calls.length - 1].dataUrl; });

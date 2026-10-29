@@ -149,8 +149,7 @@ SECTION = """\
             out.errors.push('928-de: ' + vid + ' tooltip "' + vtip + '" lacks name or key');
           }
         }
-        // 929-de: the finish button is called Close (Schließen in German) and a click
-        // on Copy answers with a short notice.
+        // 929-de: the finish button is called Close (Schließen in German).
         {
           const doneBtn = document.getElementById('snip-edit-apply');
           const isDe = document.documentElement.lang === 'de';
@@ -161,19 +160,6 @@ SECTION = """\
           if (/^(Apply|Übernehmen|Done|Fertig)$/.test(doneTxt)) {
             out.errors.push('929-de: finish button still reads "' + doneTxt + '"');
           }
-          const toastBox = document.getElementById('toast');
-          toastBox.classList.remove('show');
-          toastBox.textContent = '';
-          document.getElementById('snip-edit-copy').click();
-          await sleep(300);
-          const toastTxt = (toastBox.textContent || '').trim();
-          const wantToast = isDe ? 'Kopiert!' : 'Copied!';
-          if (!toastTxt.includes(wantToast)) {
-            out.errors.push('929-de: Copy gave no confirmation, notice reads "' + toastTxt + '"');
-          }
-          // Let the notice run out completely so its delayed hide cannot land on
-          // a toast a later probe expects to see.
-          await sleep(1800);
         }
         // 930-de: the stroke width has the three presets and the plain number
         // field only (no minus, plus or preset list); other number fields keep

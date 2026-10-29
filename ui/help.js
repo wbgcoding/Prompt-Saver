@@ -319,7 +319,7 @@ export const HELP_CONTENT = {
         "Arrow keys move the selected shape, Ctrl+arrow resizes it, Shift takes bigger steps, Escape deselects.",
         "\"Resize\" changes the image's real pixel size; \"Show original\" (or V) shows the untouched capture while held, a tap locks it.",
         "Undo/redo steps back through edits.",
-        "The bottom bar copies, saves, saves as, turns the shot into a button, recognizes its text or starts a new screenshot.",
+        "The bottom bar saves the shot as a file in the format you pick, turns it into a button or starts a new screenshot.",
         "\"Close\" (also Esc and Enter) keeps the result.",
       ],
       whatHappens:
@@ -393,7 +393,6 @@ export const HELP_CONTENT = {
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer. It runs fully offline and nothing leaves the machine.",
       howTo: [
         "From the composer: the OCR button {icon:ocr} offers a screenshot or an existing image file.",
-        "From a screenshot already taken: the snip dialog's \"Recognize text\" button.",
         "Review the result, then copy it or insert it directly.",
       ],
       whatHappens:
@@ -1057,7 +1056,7 @@ export const HELP_CONTENT = {
         "Pfeiltasten verschieben die gewählte Form, Strg+Pfeil ändert ihre Größe, Umschalt macht größere Schritte, Escape hebt die Auswahl auf.",
         "„Größe ändern“ ändert die echte Pixelgröße des Bildes; „Original zeigen“ (oder V) zeigt die unbearbeitete Aufnahme, solange gedrückt, ein Tippen hält sie fest.",
         "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen.",
-        "Die untere Leiste kopiert, speichert, speichert unter, macht den Screenshot zum Button, erkennt Text oder startet einen neuen Screenshot.",
+        "Die untere Leiste speichert den Screenshot als Datei im gewählten Format, macht ihn zum Button oder startet einen neuen Screenshot.",
         "„Schließen“ (auch Esc und Enter) übernimmt das Ergebnis.",
       ],
       whatHappens:
@@ -1131,7 +1130,6 @@ export const HELP_CONTENT = {
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei. Das läuft vollständig offline und nichts verlässt das Gerät.",
       howTo: [
         "Über die Eingabeleiste: der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
-        "Bei einem bereits aufgenommenen Screenshot: über den Button „Text erkennen“ im Aufnahme-Dialog.",
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
       whatHappens:

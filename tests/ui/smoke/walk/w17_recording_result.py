@@ -266,15 +266,14 @@ SECTION = """\
       langSel3.dispatchEvent(new Event('change'));
       await sleep(100);
     }
-    // OCR ships on (flag "ocr"). Gate check first (both entry points visible,
+    // OCR ships on (flag "ocr"). Gate check first (the button visible,
     // and gone once the flag is switched off), then switch it back on via the
     // real expert-menu checkbox and exercise the menu plus the result dialog.
     {
       const ocrBtn = document.getElementById('ocr-btn');
-      const snipModalOcrBtn = document.getElementById('snip-edit-ocr');
       const hiddenNow = (el) => !el || getComputedStyle(el).display === 'none';
-      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
-        out.errors.push('OCR entry points are hidden while the ocr flag is on');
+      if (hiddenNow(ocrBtn)) {
+        out.errors.push('The OCR button is hidden while the ocr flag is on');
       }
       const rowByLabel = (text) => {
         for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
@@ -357,14 +356,14 @@ SECTION = """\
         await sleep(250);
       }
       await toggleOcrFlag(false);
-      if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
-        out.errors.push('OCR entry points stayed visible after switching the flag off');
+      if (!hiddenNow(ocrBtn)) {
+        out.errors.push('The OCR button stayed visible after switching the flag off');
       }
       // Back to the shipped state -- later probes (the tour's step 5) read the
       // live flags and would otherwise see a value this probe left behind.
       await toggleOcrFlag(true);
-      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
-        out.errors.push('OCR entry points stayed hidden after switching the flag back on');
+      if (hiddenNow(ocrBtn)) {
+        out.errors.push('The OCR button stayed hidden after switching the flag back on');
       }
     }
     // OCR language-pack management dialog: list renders, size sits inside the

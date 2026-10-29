@@ -716,10 +716,6 @@ export function bindCapture() {
   }
   // The actions of the editor's bottom bar. Each gets the image as edited so far.
   const snipEditActions = {
-    save: async (dataUrl) => {
-      const saved = await saveSnipToFolder(dataUrl);
-      if (saved) toast(t("snipEditSavedTo").replace("{path}", () => saved));
-    },
     saveAs: async (dataUrl, format) => {
       try {
         const path = await invoke("save_screenshot_as", {
@@ -741,13 +737,6 @@ export function bindCapture() {
         showImage: true,
         copyImage: true,
       });
-    },
-    // Runs on the image as edited so far; the editor stays open under the result dialog.
-    ocr: async (dataUrl) => {
-      try {
-        showOcrResult(await invoke("ocr_image_data", { dataUrl, ...ocrSettings() }));
-        recordToolUsage("ocr");
-      } catch (err) { ocrErrToast(err); }
     },
     // A new capture arrives through "snip-captured", which asks before it replaces an editor that
     // holds edits; cancelling the capture leaves this editor as it is.

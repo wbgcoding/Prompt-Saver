@@ -608,7 +608,7 @@ None of it touches the export.
 
 ### Text recognition (OCR)
 
-A button on the composer and in the screenshot editor pulls the
+A button on the composer pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
 own text recognizer; nothing is uploaded or sent anywhere. The composer button
 opens a small menu: from an image file, or from a screenshot you take right now.

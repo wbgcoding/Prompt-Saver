@@ -1902,23 +1902,12 @@ export function initSnipEditor() {
   $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
   $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
   $("snip-edit-apply").addEventListener("click", () => snipEditApply());
-  $("snip-edit-save").addEventListener("click", () => snipEditAction("save"));
   $("snip-edit-keep").addEventListener("click", () => {
     const keep = SE.actions?.keep;
     snipEditApply((url) => keep?.(url));
   });
-  $("snip-edit-ocr").addEventListener("click", () => snipEditAction("ocr"));
   $("snip-edit-retry").addEventListener("click", () => SE.actions?.retry?.());
   attachSelectPicker($("snip-edit-saveas-format"));
-  $("snip-edit-copy").addEventListener("click", async () => {
-    const dataUrl = snipEditExportDataUrl();
-    try {
-      await invoke("copy_image_data", { dataUrl });
-      toast(t("copied"));
-    } catch (err) {
-      errToast(err);
-    }
-  });
   $("snip-edit-undo").addEventListener("click", snipEditUndo);
   $("snip-edit-redo").addEventListener("click", snipEditRedo);
   $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(snipZoomStepFactor));
