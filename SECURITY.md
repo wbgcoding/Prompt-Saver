@@ -7,7 +7,8 @@ Only the latest release receives security fixes.
 ## Reporting a vulnerability
 
 Please do not open a public issue for a security problem. Report it privately through GitHub
-instead: open the **Security** tab of this repository and choose **Report a vulnerability**.
+instead: open the **Security** tab of this repository and choose **Report a vulnerability**,
+or go straight to https://github.com/wbgcoding/Prompt-Saver/security/advisories/new.
 
 Helpful details:
 
