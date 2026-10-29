@@ -411,6 +411,8 @@ fn the_export_tile_command_takes_only_a_known_export_and_stays_off_the_other_win
     let body = &src[src.find("pub(crate) async fn video_editor_add_tile").unwrap()..];
     assert!(body.contains("is_known_export_output(&file)"), "only a file this session exported");
     assert!(body.find("export_tile_has_room").unwrap() < body.find("add_prompt(").unwrap(), "the room check comes first");
+    let call = &body[body.find("add_prompt(").unwrap()..];
+    assert!(call.contains("None,\n        // Shows the clip's player on the tile, as a dropped video does.\n        Some(true),"), "the tile shows the player");
     let caps = source!("../../capabilities/video-editor.json");
     assert!(caps.contains("allow-video-editor-add-tile"));
     assert!(!caps.contains("allow-add-prompt"), "the editor reaches the store only through the one command");
