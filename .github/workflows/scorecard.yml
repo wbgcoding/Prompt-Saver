@@ -37,7 +37,8 @@ jobs:
           publish_results: true
 
       # Checks that need several maintainers or outside services never pass on a solo repository:
-      # their findings are dropped before the upload so they raise no alerts.
+      # their findings are dropped before the upload so they raise no alerts. The analysis output
+      # belongs to the container user, so the filtered copy goes to a new file.
       - name: Drop single-maintainer findings
         id: solo-filter
         shell: python
@@ -48,17 +49,17 @@ jobs:
               sarif = json.load(f)
           for run in sarif.get("runs", []):
               run["results"] = [r for r in run.get("results", []) if r.get("ruleId") not in skip]
-          with open("results.sarif", "w", encoding="utf-8") as f:
+          with open("filtered.sarif", "w", encoding="utf-8") as f:
               json.dump(sarif, f)
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: SARIF file
-          path: results.sarif
+          path: filtered.sarif
           retention-days: 5
 
       - name: Upload to code scanning
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
-          sarif_file: results.sarif
+          sarif_file: filtered.sarif
