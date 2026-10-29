@@ -1975,7 +1975,7 @@ pub(crate) fn is_app_data_file(name: &str, keep_pointer: bool) -> bool {
         return true;
     }
     let known = ["data.db", "data.db-wal", "data.db-shm", "prompts.json", "settings.json", "export-staging.txt", DATA_DIR_LOCK_FILE];
-    if known.iter().any(|k| lower == *k) {
+    if known.iter().any(|k| lower == *k) || crate::store::is_takeover_marker_name(&lower) {
         return true;
     }
     if lower == "data.db.locked.bak" || (lower.starts_with("data.db.locked.") && lower.ends_with(".bak")) {

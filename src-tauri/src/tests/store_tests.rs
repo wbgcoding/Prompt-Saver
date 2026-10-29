@@ -240,9 +240,61 @@ fn two_takeovers_of_one_dead_lock_leave_one_owner() {
         let (a, b) = (spawn("A", "ida"), spawn("B", "idb"));
         let (a, b) = (a.join().unwrap(), b.join().unwrap());
         let owners = [&a, &b].iter().filter(|o| matches!(o, LockOutcome::Owned)).count();
-        assert_eq!(owners, 1, "the read-back after the takeover settles it (round {round})");
+        assert_eq!(owners, 1, "only the claimant that creates the takeover marker owns it (round {round})");
         let _ = fs::remove_dir_all(&dir);
     }
+}
+
+// The slow-writer case the read-back alone could not settle: another claimant has won the
+// marker for this dead lock but its lock write has not landed yet.
+#[test]
+fn a_takeover_marker_held_by_another_claimant_keeps_the_folder_read_only() {
+    let dir = lock_test_dir("marker-held");
+    let path = data_dir_lock_path(&dir);
+    let old = lock_info("OLD", "old", 7, 1);
+    write_data_dir_lock(&path, &old);
+    fs::write(takeover_marker_path(&path, &lock_content_key(&old)), b"").unwrap();
+    let t0 = Instant::now();
+    let mut obs = LockObserver::new(t0);
+    let me = LockMe { host: "B", pid: 1, id: "idb" };
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, Duration::ZERO), LockOutcome::ReadOnly(_)));
+    let later = t0 + Duration::from_secs(DATA_DIR_LOCK_STALE_SECS + 1);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, later, Duration::ZERO), LockOutcome::ReadOnly(h) if h == "OLD"));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, "old", "the lock was not written over");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_marker_left_by_a_claimant_that_died_mid_takeover_is_cleared_after_another_stale_limit() {
+    let dir = lock_test_dir("marker-dead");
+    let path = data_dir_lock_path(&dir);
+    let old = lock_info("OLD", "old", 7, 1);
+    write_data_dir_lock(&path, &old);
+    let marker = takeover_marker_path(&path, &lock_content_key(&old));
+    fs::write(&marker, b"").unwrap();
+    let t0 = Instant::now();
+    let mut obs = LockObserver::new(t0);
+    let me = LockMe { host: "B", pid: 1, id: "idb" };
+    let stale = Duration::from_secs(DATA_DIR_LOCK_STALE_SECS);
+    let _ = claim_data_dir_lock(&path, &me, &mut obs, t0, Duration::ZERO);
+    let lost_at = t0 + stale + Duration::from_secs(1);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, lost_at, Duration::ZERO), LockOutcome::ReadOnly(_)));
+    let almost = lost_at + stale - Duration::from_secs(1);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, almost, Duration::ZERO), LockOutcome::ReadOnly(_)));
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, lost_at + stale, Duration::ZERO), LockOutcome::Owned));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, "idb");
+    remove_takeover_markers(&path);
+    assert!(!marker.exists(), "the owner clears the markers");
+    assert!(path.exists(), "the lock itself stays");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn takeover_markers_count_as_app_data_files() {
+    let path = data_dir_lock_path(Path::new("C:\\data"));
+    let name = takeover_marker_path(&path, "OLD|1|old|7|1").file_name().unwrap().to_string_lossy().to_string();
+    assert!(crate::snip::is_app_data_file(&name, false));
+    assert!(!crate::snip::is_app_data_file("datadir.lock.json.notes.txt", false));
 }
 
 #[test]

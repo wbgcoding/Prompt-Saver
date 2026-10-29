@@ -184,32 +184,89 @@ pub(crate) struct LockMe<'a> {
 pub(crate) struct LockObserver {
     key: Option<String>,
     since: Instant,
+    // When this process first lost the takeover of the current dead lock to another claimant.
+    lost_since: Option<Instant>,
 }
 
 impl LockObserver {
     pub(crate) fn new(now: Instant) -> Self {
-        Self { key: None, since: now }
+        Self { key: None, since: now, lost_since: None }
     }
 
     pub(crate) fn is_dead(&mut self, key: &str, now: Instant) -> bool {
         if self.key.as_deref() != Some(key) {
             self.key = Some(key.to_string());
             self.since = now;
+            self.lost_since = None;
             return false;
         }
         now.saturating_duration_since(self.since) >= Duration::from_secs(DATA_DIR_LOCK_STALE_SECS)
     }
 }
 
-fn lock_content_key(e: &DataDirLockInfo) -> String {
+const TAKEOVER_MARKER_PREFIX: &str = "datadir.lock.json.claim-";
+
+// One marker per dead lock content, the same name on every machine, so create_new on it lets
+// exactly one claimant take that lock over (an exclusive create holds on SMB shares too).
+pub(crate) fn takeover_marker_path(lock: &Path, dead_key: &str) -> PathBuf {
+    let hash = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(dead_key.as_bytes())[..8]);
+    lock.with_file_name(format!("{TAKEOVER_MARKER_PREFIX}{hash}"))
+}
+
+pub(crate) fn is_takeover_marker_name(lower_name: &str) -> bool {
+    lower_name.starts_with(TAKEOVER_MARKER_PREFIX)
+}
+
+fn create_marker(marker: &Path) -> std::io::Result<()> {
+    fs::OpenOptions::new().write(true).create_new(true).open(marker).map(drop)
+}
+
+// Wins the right to take over the dead lock, or not. A marker left by a claimant that died
+// mid-takeover is cleared once the lock has stood still for another stale limit after the
+// loss; the rename lets only one process clear it.
+fn win_takeover(lock: &Path, dead_key: &str, me: &LockMe, obs: &mut LockObserver, now: Instant) -> bool {
+    let marker = takeover_marker_path(lock, dead_key);
+    match create_marker(&marker) {
+        Ok(()) => return true,
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return false,
+        Err(_) => {}
+    }
+    let lost = *obs.lost_since.get_or_insert(now);
+    if now.saturating_duration_since(lost) < Duration::from_secs(DATA_DIR_LOCK_STALE_SECS) {
+        return false;
+    }
+    let name = marker.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let aside = marker.with_file_name(format!("{name}.stale-{}", me.id));
+    if fs::rename(&marker, &aside).is_err() {
+        return false;
+    }
+    let _ = fs::remove_file(&aside);
+    obs.lost_since = None;
+    create_marker(&marker).is_ok()
+}
+
+// Clears takeover markers once a claim has held for a while, so no late claimant of the old
+// content is still between its read and its marker create.
+pub(crate) fn remove_takeover_markers(lock: &Path) {
+    let Some(dir) = lock.parent() else { return };
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        if entry.file_name().to_str().is_some_and(|n| is_takeover_marker_name(&n.to_lowercase())) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+pub(crate) fn lock_content_key(e: &DataDirLockInfo) -> String {
     format!("{}|{}|{}|{}|{}", e.host, e.pid, e.id, e.beat, e.seen)
 }
 
 // The claim itself, free of statics so tests can race it. With no lock file the claim uses
 // create_new, which only one starter wins. Any other failure is not ownership: the lock is
 // judged like a foreign one, and an unreadable folder counts as busy. A takeover happens
-// only after the stale limit, then the file is read back and the claim holds only if it
-// carries our id.
+// only after the stale limit and only by the one claimant that creates the takeover marker
+// for that dead content; the file is then read back and the claim holds only if it carries
+// our id.
 pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserver, now: Instant, settle: Duration) -> LockOutcome {
     use std::io::Write;
     let unknown = || LockOutcome::ReadOnly("unknown".to_string());
@@ -230,22 +287,34 @@ pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserv
         text = fs::read_to_string(path);
     }
     let Ok(text) = text else { return unknown() };
-    match serde_json::from_str::<DataDirLockInfo>(&text) {
+    let dead_key = match serde_json::from_str::<DataDirLockInfo>(&text) {
         Ok(e) => {
             if e.id == me.id {
                 return LockOutcome::Owned;
             }
+            let key = lock_content_key(&e);
             // A lock naming this machine is never foreign, whatever its age (crash and restart on one
             // computer).
-            if e.host != me.host && !obs.is_dead(&lock_content_key(&e), now) {
+            if e.host != me.host && !obs.is_dead(&key, now) {
                 return LockOutcome::ReadOnly(e.host);
             }
+            key
         }
         Err(_) => {
-            if !obs.is_dead(&format!("raw|{text}"), now) {
+            let key = format!("raw|{text}");
+            if !obs.is_dead(&key, now) {
                 return unknown();
             }
+            key
         }
+    };
+    if !win_takeover(path, &dead_key, me, obs, now) {
+        std::thread::sleep(settle);
+        return match read_data_dir_lock(path) {
+            Some(e) if e.id == me.id => LockOutcome::Owned,
+            Some(e) => LockOutcome::ReadOnly(e.host),
+            None => unknown(),
+        };
     }
     if write_bytes_atomic_strict(path, json.as_bytes()).is_err() {
         return unknown();
@@ -360,8 +429,10 @@ pub(crate) fn refresh_data_dir_lock(dir: &Path) -> bool {
         let host = local_host_name();
         let me = LockMe { host: &host, pid: std::process::id(), id: lock_claim_id() };
         let beat = DATA_DIR_LOCK_BEAT.fetch_add(1, Ordering::Relaxed) + 1;
-        if let RefreshOutcome::Lost(other) = refresh_owned_lock(&path, &me, beat) {
-            apply_lock_outcome(LockOutcome::ReadOnly(other));
+        match refresh_owned_lock(&path, &me, beat) {
+            RefreshOutcome::Lost(other) => apply_lock_outcome(LockOutcome::ReadOnly(other)),
+            RefreshOutcome::Kept if beat == 2 => remove_takeover_markers(&path),
+            _ => {}
         }
     } else if DATA_DIR_READONLY.load(Ordering::Relaxed) && DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
         match claim_with_process_state(dir) {
