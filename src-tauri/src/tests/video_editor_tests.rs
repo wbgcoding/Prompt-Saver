@@ -359,10 +359,7 @@ fn opening_the_editor_vets_the_source_by_text_first_and_off_the_async_worker() {
 // checkout has it (it is a build input) and skips otherwise.
 #[test]
 fn still_frame_at_clip_end_falls_back_to_last_frame() {
-    let ffmpeg = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffmpeg.exe");
-    if !ffmpeg.is_file() {
-        return;
-    }
+    let Some(ffmpeg) = super::rec_conversion::test_ffmpeg() else { return };
     let dir = std::env::temp_dir().join(format!("ps-still-end-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let clip = dir.join("clip.mp4");

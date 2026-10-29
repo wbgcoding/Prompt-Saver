@@ -29,7 +29,8 @@ fn convert_is_noop_allows_a_genuine_format_change() {
 
 pub(super) fn test_ffmpeg() -> Option<PathBuf> {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg.exe");
-    p.is_file().then_some(p)
+    // An empty file is the CI placeholder that only satisfies the bundle check.
+    p.metadata().is_ok_and(|m| m.is_file() && m.len() > 0).then_some(p)
 }
 
 // A tiny synthetic clip, generated entirely by ffmpeg's own test-pattern
