@@ -1442,14 +1442,15 @@ pub(crate) async fn delete_screenshot_file(state: State<'_, Db>, path: String) -
     Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
-// Screenshot editor "Copy" / re-apply to clipboard after "Apply": the edited image never
-// goes through finalize_capture, so it has its own thin path onto copy_image_to_clipboard.
+// Screenshot editor: the live copy while editing (`transient`, kept out of the clipboard history)
+// and the final copy on close. The edited image never goes through finalize_capture, so it has
+// its own thin path onto the clipboard.
 #[tauri::command]
-pub(crate) fn copy_image_data(data_url: String) -> bool {
+pub(crate) fn copy_image_data(data_url: String, transient: Option<bool>) -> bool {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return false;
     }
-    copy_image_to_clipboard(&data_url)
+    crate::images::copy_image_to_clipboard_as(&data_url, transient.unwrap_or(false))
 }
 
 // Default screenshot folder path (shown greyed in the expert menu when no custom

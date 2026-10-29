@@ -1079,6 +1079,7 @@ def run(browser, tmp):
       await sleep(600);
       if (copies().length !== 1) errs.push('livecopy1: one edit made ' + copies().length + ' copies, expected 1');
       else {
+        if (copies()[0].transient !== true) errs.push('livecopy1: the live copy is not marked transient (it would fill the clipboard history)');
         const im = await pixelsOf(copies()[0].dataUrl);
         if (![0, 1, 2, 3, 4, 5].some((k) => !near(im.px(20 + k * 12, 20 + k * 8), BGC, 6))) errs.push('livecopy1: the live copy lacks the stroke');
       }
@@ -1104,6 +1105,7 @@ def run(browser, tmp):
       document.getElementById('snip-edit-apply').click();
       await sleep(900);
       if (copies().length !== 1) errs.push('livecopy1: Close with a pending copy made ' + copies().length + ' copies, expected the final 1');
+      else if (copies()[0].transient) errs.push('livecopy1: the final copy on Close is kept out of the clipboard history');
     }
 ''')
     failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>

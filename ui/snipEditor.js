@@ -343,7 +343,8 @@ export function initSnipEditor() {
     // again after another quiet period instead of copying a half state.
     if (SE.drag || SE.textEdit || SE.showRaw) { snipEditNoteChange(); return; }
     try {
-      await invoke("copy_image_data", { dataUrl: snipEditExportDataUrl(false) });
+      // Transient: in-between states stay out of the Windows clipboard history.
+      await invoke("copy_image_data", { dataUrl: snipEditExportDataUrl(false), transient: true });
       snipLiveCopyFailed = false;
     } catch (err) {
       if (!snipLiveCopyFailed) errToast(err);

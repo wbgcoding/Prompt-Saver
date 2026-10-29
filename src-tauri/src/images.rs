@@ -112,6 +112,12 @@ pub(crate) fn decode_image_file(path: &str) -> Option<image::DynamicImage> {
 }
 
 pub(crate) fn copy_image_to_clipboard(data_url: &str) -> bool {
+    copy_image_to_clipboard_as(data_url, false)
+}
+
+// `transient`: an in-between state (the screenshot editor's live copy) that stays out of the
+// Windows clipboard history and cloud clipboard, so editing does not fill them with every step.
+pub(crate) fn copy_image_to_clipboard_as(data_url: &str, transient: bool) -> bool {
     let bytes = data_url_bytes(data_url);
     if bytes.is_empty() { return false; }
     let img = match decode_image_mem(&bytes) {
@@ -124,7 +130,18 @@ pub(crate) fn copy_image_to_clipboard(data_url: &str) -> bool {
         height: h as usize,
         bytes: img.into_raw().into(),
     };
-    arboard::Clipboard::new().and_then(|mut c| c.set_image(img_data)).is_ok()
+    arboard::Clipboard::new()
+        .and_then(|mut c| {
+            #[cfg(windows)]
+            if transient {
+                use arboard::SetExtWindows;
+                return c.set().exclude_from_history().exclude_from_cloud().image(img_data);
+            }
+            #[cfg(not(windows))]
+            let _ = transient;
+            c.set_image(img_data)
+        })
+        .is_ok()
 }
 
 pub(crate) fn scale_and_encode(img: image::DynamicImage) -> String {
