@@ -6,16 +6,16 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 3.1.0 (unreleased)
 
-Twenty-four new features: tags, custom themes, folders for
+New in 3.1: tags, custom themes, folders for grid tiles, view tabs and
 floating buttons, self-filling and choice placeholders, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
-prompts with rotation, a screenshot editor, offline text recognition (OCR), offline
-voice dictation, screen recording, a video editor, and a first-run
-introduction tour.
-Everything new is an expert-menu switch, most of it off until you turn it on
+prompts with rotation, a command line, a screenshot editor, offline text
+recognition (OCR), offline voice dictation, screen recording, a video editor,
+and a first-run introduction tour.
+Almost everything new is an expert-menu switch, most of it off until you turn it on
 (text recognition, voice dictation, screen recording, the video editor and
 the introduction tour ship on; the screenshot editor is always on).
 
