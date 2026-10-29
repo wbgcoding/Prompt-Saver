@@ -35,7 +35,7 @@ sha2 = "0.10"
 # user password derives a stronger key.
 aes-gcm = "0.10"
 argon2 = "0.5"
-rand = "0.8"
+rand = "0.9"
 # Backups are compressed before they are written (snapshots) or encrypted (.psb).
 flate2 = "1"
 # Screen capture for the built-in snipping tool (pure Rust, no external dll).
