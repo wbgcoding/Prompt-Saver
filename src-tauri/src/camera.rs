@@ -247,7 +247,7 @@ pub(crate) fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_e
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_finish_recording(
     cam: State<'_, CameraState>,
     rstate: State<'_, RecordingState>,
@@ -312,7 +312,7 @@ pub fn is_kept_abandoned(path: &Path) -> bool {
 // Releases the session WITHOUT touching the file: used when the page knows a
 // take is damaged (a chunk write failed) but the partial file may still be the
 // only copy of the recording. No delete, no sidecar.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_abandon_recording(cam: State<'_, CameraState>, path: String) -> Result<(), String> {
     let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
     // The marker tells the recordings sweep to leave this damaged take alone

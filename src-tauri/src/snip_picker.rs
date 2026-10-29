@@ -259,7 +259,7 @@ pub(crate) fn pick_history(app: AppHandle) -> Vec<String> {
 }
 
 // Re-copy one entry from that popover in the currently configured notation.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<String, String> {
     let rgb = hex_to_rgb(&hex).ok_or("not a hex color")?;
     let fmt = app

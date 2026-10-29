@@ -108,7 +108,7 @@ pub(crate) fn export_disk_warning(drive: String, free_bytes: u64, needed_bytes: 
 }
 
 #[cfg(windows)]
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> Option<ExportDiskWarning> {
     let dest = std::path::Path::new(&dest_path);
     let free = free_space_bytes(dest).ok()?;
@@ -124,7 +124,7 @@ pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_k
 // over every selected recording, because a batch's real risk is running out of space partway
 // through a later file, not the first.
 #[cfg(windows)]
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, durations_ms: Vec<u64>) -> Option<ExportDiskWarning> {
     let dest = std::path::Path::new(&dest_dir);
     let free = free_space_bytes(dest).ok()?;
