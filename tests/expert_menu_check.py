@@ -5,11 +5,11 @@ Catches the mistakes that are invisible until a user opens the menu:
   * the same setting listed in two groups (renders twice),
   * a `gate:` that points at a flag that does not exist,
   * a setting that exists but is not reachable from any tab,
-  * a setting that depends on another feature but carries no gate — the rule is
+  * a setting that depends on another feature but carries no gate: the rule is
     absolute: nothing dependent may stay on screen while its parent is off,
   * a gate whose parent flag lives in a different group (it would render far away
     from the toggle it belongs to, or not at all).
-  * a notice that no group shows, or that also exists as a flag — a notice
+  * a notice that no group shows, or that also exists as a flag: a notice
     reports a state and must never become something the user can switch off.
 
 Run:  python tests/expert_menu_check.py
@@ -329,7 +329,7 @@ for key, gate in sorted(declared.items()):
           # their gates stay where they were.
           and group_of[key] != "expGroupDiagnostics"):
         problems.append(f"gate: '{key}' sits in {group_of[key]} but its parent "
-                        f"'{parent}' is in {group_of[parent]} — keep them together")
+                        f"'{parent}' is in {group_of[parent]}: keep them together")
     if key == parent:
         problems.append(f"gate: '{key}' gates itself")
 
@@ -401,7 +401,7 @@ for key in top_keys(dropdowns_src):
     entry = balanced(dropdowns_src, m.end() - 1, "{", "}")
     def_m = re.search(r'def:\s*-?\d+(\.\d+)?\s*,', entry)
     if def_m and "String(" in entry:
-        problems.append(f"dropdowns: '{key}' has a numeric def but get() returns a String — "
+        problems.append(f"dropdowns: '{key}' has a numeric def but get() returns a String: "
                          "isRowChanged will always see it as changed")
 
 # ---- 99: every dropdown needs a `def`, or isRowChanged() can never flag it ----
@@ -415,7 +415,7 @@ for key in top_keys(dropdowns_src):
         continue  # an enumDropdown() entry, checked above
     entry = balanced(dropdowns_src, m.end() - 1, "{", "}")
     if "def:" not in entry:
-        problems.append(f"dropdowns: '{key}' has no def — its reset button can never appear")
+        problems.append(f"dropdowns: '{key}' has no def: its reset button can never appear")
 
 # Same requirement for plain values/selects (a missing `def` would crash isRowChanged
 # with "cannot read .def of undefined" before it could ever show a wrong result, but
@@ -425,7 +425,7 @@ for kind_name, src in (("values", values_src), ("selects", selects_src)):
         m = re.search(r'\b' + re.escape(key) + r'\s*:\s*\{', src)
         entry = balanced(src, m.end() - 1, "{", "}") if m else ""
         if "def:" not in entry:
-            problems.append(f"{kind_name}: '{key}' has no def — its reset button can never appear")
+            problems.append(f"{kind_name}: '{key}' has no def: its reset button can never appear")
 
 # The backup/statistics panels (their own top-level window, not the expert menu,
 # see NOT_IN_EXPERT above) reuse rowResetBtn()/resetOneExpertValue() through numRow()
@@ -463,12 +463,12 @@ for key in placed:
     if placed.count(key) > 1:
         problems.append(f"notices: '{key}' is listed by more than one group")
     if key in all_flags:
-        problems.append(f"notices: '{key}' also exists as a flag — a notice must not be switchable off")
+        problems.append(f"notices: '{key}' also exists as a flag: a notice must not be switchable off")
 for key in sorted(declared):
     m = re.search(r'\b' + re.escape(key) + r'\s*:\s*\{', notices_src)
     entry = balanced(notices_src, m.end() - 1, "{", "}") if m else ""
     if "when:" not in entry:
-        problems.append(f"notices: '{key}' has no when() — it would show unconditionally")
+        problems.append(f"notices: '{key}' has no when(): it would show unconditionally")
     for field in ("title", "body"):
         s = re.search(field + r':\s*"([^"]+)"', entry)
         if not s:

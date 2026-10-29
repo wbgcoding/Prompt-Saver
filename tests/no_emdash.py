@@ -15,8 +15,9 @@ space) inside a Rust or UI string literal, and any dash character anywhere in
 the NSIS installer script and its language files (strings and comments alike).
 
 Shipped release text is checked too, with no exceptions: docs/release-notes.md
-in full, and CHANGELOG.md above its first dated version heading (the unreleased
-section; published sections are history and stay as they are).
+and CHANGELOG.md in full. The test suites and the Rust unit tests allow no dash
+character at all, strings included (only this file and source_hygiene.py, which
+must name the characters, are left out).
 
 Range display keeps a plain ASCII hyphen with no spaces (e.g. `00:12-00:34`,
 `{low}-{high}`, `(A-Z)`) -- that is not a dash character this guard looks
@@ -310,18 +311,34 @@ def check_nsis(rel_path, text):
     return out
 
 
-# Shipped release text: the whole release-notes page, and the part of the
-# changelog above the first dated version heading (the unreleased section).
-# Published sections are history and are never touched, so they are not scanned.
+# Test suites and Rust unit tests are published with the repo: no dash character
+# anywhere in them, strings included. The two checkers that must name the
+# characters they look for are the only files left out.
+STRICT_TEST_PREFIXES = ("tests/", "src-tauri/src/tests/")
+STRICT_TEST_SKIP = ("tests/no_emdash.py", "tests/source_hygiene.py")
+
+
+def is_strict_test_file(rel_path):
+    return rel_path.startswith(STRICT_TEST_PREFIXES) and rel_path not in STRICT_TEST_SKIP
+
+
+def check_strict(rel_path, text):
+    out = []
+    for lineno, raw in enumerate(text.split("\n"), start=1):
+        m = DASH_RE.search(raw)
+        if m:
+            out.append((lineno, "dash character %r" % m.group(0), raw.strip()))
+    return out
+
+
+# Shipped release text: the whole release-notes page and the whole changelog,
+# published sections included (they were cleaned once and stay clean).
 RELEASE_TEXT_FILES = ("docs/release-notes.md", "CHANGELOG.md")
-DATED_HEADING = re.compile(r"^## \d+\.\d+\.\d+ \(\d{4}-\d{2}-\d{2}\)\s*$")
 
 
 def check_release_text(rel_path, text):
     out = []
     for lineno, raw in enumerate(text.split("\n"), start=1):
-        if rel_path == "CHANGELOG.md" and DATED_HEADING.match(raw):
-            break
         m = DASH_RE.search(raw)
         if m:
             out.append((lineno, "dash character %r" % m.group(0), raw.strip()))
@@ -349,6 +366,8 @@ def main():
             continue
         if rel_path.endswith((".nsi", ".nsh")):
             violations = sorted(check_nsis(rel_path, text))
+        elif is_strict_test_file(rel_path):
+            violations = sorted(check_strict(rel_path, text))
         else:
             violations = sorted(check_file(rel_path, text) + check_pseudo_dash(rel_path, text))
         for lineno, kind, snippet in violations:

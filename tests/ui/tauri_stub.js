@@ -101,7 +101,7 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // F17: exactly one prompt carries a private note, so the tooltip section and the
   // library search can be checked against a prompt that has none. "Moonshot" appears
   // in no name or body, so a search hit can only have come from the note.
-  notes: i === 0 ? "Moonshot idea — ask legal first.\nRewrite the ending." : "",
+  notes: i === 0 ? "Moonshot idea: ask legal first.\nRewrite the ending." : "",
   // F20: one prompt ships with a bound accelerator so the editor row has something
   // to display; the rest are free, so a capture can be checked against them.
   hotkey: i === 0 ? "CommandOrControl+Shift+9" : "",
@@ -959,7 +959,7 @@ const RESULTS = {
       "",
       "### Highlights",
       "",
-      "- **Bold lead** — followed by ordinary text.",
+      "- **Bold lead**: followed by ordinary text.",
       "- A bullet with `code` and a [link](https://example.invalid).",
     ].join("\n"),
   }),

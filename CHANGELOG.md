@@ -2292,19 +2292,19 @@ rebuilt in two columns. The statistics were trimmed to the numbers that actually
 say something, and fourteen tooltips finally describe the setting they sit on.
 
 ### Added
-- **Automatic backups have an off switch**, right in the backups window — and they
+- **Automatic backups have an off switch**, right in the backups window, and they
   keep running while the app is open instead of only at launch. Switching them off
   or changing the interval takes effect straight away, without a restart.
-- **Yearly retention** — smart retention (formerly "retention by period") keeps a
+- **Yearly retention**: smart retention (formerly "retention by period") keeps a
   number of backups per day, week, month **and year**, as a compact block of four
   fields.
-- **Remove password** — a button of its own next to Save, with a confirmation, so
+- **Remove password**: a button of its own next to Save, with a confirmation, so
   the backup password can no longer be dropped by an absent-minded click on Save.
 
 ### Improved
 - **The Backups button became "Backup manager"** and moved down to the other backup
   buttons in the settings, where you would look for it.
-- **Backups window in two columns** — taking a backup, the automatic schedule and
+- **Backups window in two columns**: taking a backup, the automatic schedule and
   the password on the left, retention on the right.
 - **Backup diagnostics trimmed to the eight figures that matter**: count, total
   size, largest and smallest, the period covered, and the next, newest and oldest
@@ -2313,10 +2313,10 @@ say something, and fourteen tooltips finally describe the setting they sit on.
   overview and the per-view breakdown side by side instead of stacked. Numbers that
   only repeated what a chart already showed are gone.
 - **A backup password you are still typing survives** changing another setting in
-  the same window — it used to be thrown away when the page rebuilt itself.
+  the same window, it used to be thrown away when the page rebuilt itself.
 - **A stored password shows as dots**, so you can see that one is set without it
   ever being readable.
-- **The update row got the same two-column shape as the toggles above it** — check
+- **The update row got the same two-column shape as the toggles above it**: check
   button and version on the left, the auto-update switch on the right.
 - Jumping from a statistics chart into the library raises the library over the
   backups window instead of closing it, so closing the library lands you back on
@@ -2324,13 +2324,13 @@ say something, and fourteen tooltips finally describe the setting they sit on.
 
 ### Fixed
 - **Fourteen tooltips described the wrong thing** and were rewritten in all 20
-  languages — among them the backup button (it never opened a page in the expert
+  languages, among them the backup button (it never opened a page in the expert
   menu), the duplicate finder (it offers no merge), the usage-statistics switch (it
   shows the dashboard, the copy history does the counting), the variable-defaults
   option (it remembers your last value), the view-tab border, the tile-name and
   preview-length options, and the update-check-at-launch switch (it needs
   auto-update on).
-- **"Never used" means never used** — the cleanup list no longer mixes in prompts
+- **"Never used" means never used**: the cleanup list no longer mixes in prompts
   that were merely untouched for a month.
 - **Switching smart retention on no longer overwrites the plain keep count**, so
   the number you set is still there when you switch it back off.
@@ -2348,26 +2348,26 @@ expert menu was re-sorted from scratch, the portable version is now a single fil
 and a long list of rough edges is gone.
 
 ### Added
-- **Backups window** — the Backups button in the settings opens a page of its own:
+- **Backups window**: the Backups button in the settings opens a page of its own:
   interval and retention, diagnostics, the restore list and the usage statistics,
   all in one place instead of buried in the expert menu.
-- **Encrypted backups** — exported backups are AES-256-GCM encrypted. By default a
+- **Encrypted backups**: exported backups are AES-256-GCM encrypted. By default a
   built-in key is used, so a backup still restores on any PC. Set an optional
   **backup password** to protect new backups with a key derived from it; older
   backups keep whatever protected them.
-- **Password prompt when restoring** — if a backup file needs a different password
+- **Password prompt when restoring**: if a backup file needs a different password
   than the stored one, the app asks for it (with a reveal toggle) and lets you retry
   without picking the file again.
-- **Compressed backups** — snapshots and exported files are compressed, which takes
+- **Compressed backups**: snapshots and exported files are compressed, which takes
   a backup down to a fraction of its former size. Ten snapshots are kept by default,
   so it adds up. Older, uncompressed backups still restore.
-- **Portable start asks about your data** — starting the portable version next to an
+- **Portable start asks about your data**: starting the portable version next to an
   existing installation offers to take those prompts along or to start empty.
   Nothing is moved or deleted either way.
-- **Split reset buttons** — "Delete all data" and "Reset settings" are separate
+- **Split reset buttons**: "Delete all data" and "Reset settings" are separate
   actions now, so you can clear one without losing the other, optionally with a
   safety backup first.
-- **Pause the clipboard watcher from the inbox** — a switch in the inbox window
+- **Pause the clipboard watcher from the inbox**: a switch in the inbox window
   starts and stops collecting.
 - **New expert options**, all off by default: monospace editor, dim the toolbar
   until hovered, hide the window after copying, skip duplicate entries in the copy
@@ -2378,14 +2378,14 @@ and a long list of rough edges is gone.
 ### Improved
 - **The portable version is a single file.** The PDF preview library is built into
   the exe, so nothing has to travel next to it any more.
-- **The installer runs through in one pass** — choosing "for all users" no longer
+- **The installer runs through in one pass**: choosing "for all users" no longer
   makes it restart itself halfway through. It asks for permission once at the start.
   A portable installation now lands in its own folder next to the setup file.
-- **Expert menu re-sorted** — the oversized "Tiles" block is split into *Tiles &
+- **Expert menu re-sorted**: the oversized "Tiles" block is split into *Tiles &
   copying*, *Tooltips* and *Tile appearance*; copy-history options sit with the copy
   history; folder settings sit with the feature they belong to. 77 settings whose
   name alone does not explain them now have a tooltip, in all 20 languages.
-- **Richer backup diagnostics and statistics** — backups this week, the period the
+- **Richer backup diagnostics and statistics**: backups this week, the period the
   kept backups cover, copies per day, the most-used prompt, the share of prompts
   ever used and the average prompt length.
 - **Tiles lift slightly on hover** by default, and update checks at launch are on
@@ -2403,7 +2403,7 @@ and a long list of rough edges is gone.
   as tall as its contents.
 - No more flicker when changing a setting, taking a backup, or collapsing a
   category in the expert menu.
-- "Reset settings" kept the backup password instead of discarding it — losing it
+- "Reset settings" kept the backup password instead of discarding it, losing it
   would have made every password-protected backup unreadable.
 - Copying a prompt with variables follows the same rule as every other prompt now:
   a plain click copies, a fast second click or Enter also pastes. Double-clicking
@@ -2420,32 +2420,32 @@ and a long list of rough edges is gone.
 
 A big feature release: a custom window frame, smarter search and sorting, batch
 editing, version history, backups, statistics, a duplicate finder, auto-paste and
-a clipboard inbox — plus finer tooltip control. Everything new has an on/off switch
+a clipboard inbox, plus finer tooltip control. Everything new has an on/off switch
 in the expert menu, in all 20 languages.
 
 ### Added
-- **Custom title bar** — the native Windows frame is gone; minimize, maximize and
+- **Custom title bar**: the native Windows frame is gone; minimize, maximize and
   close now live in the app's own top-right corner and follow every theme.
-- **Automatic backups & restore** — rotating snapshots of your whole store, taken
+- **Automatic backups & restore**: rotating snapshots of your whole store, taken
   on start and on demand, with settings, diagnostics and a restore list all on the
   expert **Backups** page. Optional period-based (day/week/month) retention.
-- **Version history** — every prompt keeps a history of its previous name/text;
+- **Version history**: every prompt keeps a history of its previous name/text;
   open the collapsible **History** row in the editor to preview and restore.
-- **Batch operations** — a **Select** mode in the library: multi-select (with
+- **Batch operations**: a **Select** mode in the library: multi-select (with
   Shift-range) to set color, (un)favorite, add/remove from a view, export or
   delete many prompts at once.
-- **Usage statistics** — a dashboard on the expert **Backups** page with copy
+- **Usage statistics**: a dashboard on the expert **Backups** page with copy
   totals, most-used bars, cleanup candidates and per-view counts.
-- **Duplicate finder** — find near-duplicate prompts (expert · Tools), compare
+- **Duplicate finder**: find near-duplicate prompts (expert · Tools), compare
   side by side, keep one, or mark a pair as "not a duplicate".
-- **Fuzzy library search** — typo-tolerant search ("promt" still finds "prompt").
-- **Smart sort** — sort the library by **Most used** or **Recently used**.
-- **Auto-paste** — a fast double-click (or Enter) on a tile, library row or pill
+- **Fuzzy library search**: typo-tolerant search ("promt" still finds "prompt").
+- **Smart sort**: sort the library by **Most used** or **Recently used**.
+- **Auto-paste**: a fast double-click (or Enter) on a tile, library row or pill
   copies **and** pastes into the last app you used (opt-in).
-- **Clipboard inbox** — an optional watcher (normal settings toggle; capture
+- **Clipboard inbox**: an optional watcher (normal settings toggle; capture
   length + inbox size in the expert menu) that collects text you copy anywhere,
   so you can save the good bits as prompts.
-- **Live length counter** — chars · words · ~tokens under the editor textarea.
+- **Live length counter**: chars · words · ~tokens under the editor textarea.
 
 ### Improved
 - **Tooltips** now wait for an adjustable hover delay before appearing, so moving
@@ -2458,16 +2458,16 @@ in the expert menu, in all 20 languages.
 - **Settings** popup is wider and tidier: theme / language / font / text size / UI
   size / icon size sit three across; the on/off toggles fill two columns; full-width
   field labels moved to the left of their control. The per-page views editor is gone
-  (views are managed from the top view tabs — the "+" adds one, right-click a tab to
+  (views are managed from the top view tabs, the "+" adds one, right-click a tab to
   rename, resize its grid via dropdowns, recolor or delete); the **Favorites view**
   toggle moved into the toggle grid.
-- **Right-click the top toolbar** to toggle *every* top-bar button — library, copy
+- **Right-click the top toolbar** to toggle *every* top-bar button, library, copy
   history, chain, pin, clipboard inbox, favorites, view tabs, quick grid, logo, title
   (everything except Settings). Each entry shows its own icon, and the menu scrolls if
   the window is too short.
 - **Image tiles** now fill the whole button edge-to-edge and stay put while the
   window is resized.
-- **Batch operations** are faster — the backend no longer echoes every prompt back
+- **Batch operations** are faster, the backend no longer echoes every prompt back
   over the bridge after a bulk change; the library search no longer re-scores every
   prompt three times per keystroke.
 - Prompts with **variables** always ask for them before copy + auto-paste.
@@ -2477,7 +2477,7 @@ in the expert menu, in all 20 languages.
 - **Settings** layout refinements: text size sits under font in the third column, the
   global hotkey is its own row under the toggles, "Updates" is a left-aligned heading,
   and the expert menu keeps a compact two-column width.
-- **Updating / reinstalling** removes the previous version automatically and silently —
+- **Updating / reinstalling** removes the previous version automatically and silently,
   no leftover uninstaller window, and your prompts and settings in AppData are kept.
 - **Expert menu** reorganised: the scattered "Extras" groups are dissolved into their
   proper categories, every default-off feature is tagged **(Standard aus)**, and new
@@ -2493,7 +2493,7 @@ in the expert menu, in all 20 languages.
   which silently deleted entries for anyone who copied less than weekly. It now **keeps
   forever** by default (bounded only by the entry count), with an "∞ forever" option
   plus 7 / 30 / 90 / 365-day choices in the expert menu.
-- **UI size** scaling no longer breaks the layout — it uses the WebView's native zoom,
+- **UI size** scaling no longer breaks the layout, it uses the WebView's native zoom,
   which keeps popups, the grid and hit-testing aligned at every scale.
 - The **clipboard inbox** icon shows a numbered badge whenever collected items are
   waiting, instead of clearing the count the first time you open it.
@@ -2501,8 +2501,8 @@ in the expert menu, in all 20 languages.
   so a transient "already newest" message doesn't linger.
 - The **view editor** dialog's close ✕ matches the other modals (and is a bit larger),
   and the title-bar **★** favorites toggle is a touch larger.
-- The **settings popup** sizes to its content and centres — no empty band at the bottom
-  on a large window — while still capping at the window height and scrolling inside.
+- The **settings popup** sizes to its content and centres, no empty band at the bottom
+  on a large window, while still capping at the window height and scrolling inside.
 - **Delete all prompts** and **Expert menu** reliably share one row (delete left, expert
   right); a later CSS rule had been stacking them.
 - Keyboard focus now shows a **themed focus ring** on every button and chip instead of the
@@ -2516,14 +2516,14 @@ in the expert menu, in all 20 languages.
 - The **updater** verifies the download is a real Windows executable before running it.
 - A **failed save** (e.g. disk full, where both the database and JSON fallback fail) is now
   written to the crash log instead of being lost silently.
-- **Screenshot deletion** is constrained to the screenshot folder — a matching file name can
+- **Screenshot deletion** is constrained to the screenshot folder, a matching file name can
   no longer point it at another location.
 - **Signed-strength update check**: the auto-updater now verifies the downloaded installer's
   **SHA-256** against the hash published with each release before running it.
 - **Update download** URL is now strictly pinned to the exact release path (rejects
   `..`, `\`, encoded traversal, wrong host or non-`.exe`) and refuses a truncated file.
 - **Never lose prompts**: rows that fail to decrypt (e.g. after a Windows profile move
-  or password reset) no longer get wiped by the next save — prompt writes are locked
+  or password reset) no longer get wiped by the next save, prompt writes are locked
   and the raw store is copied to `data.db.locked.bak` instead.
 - **Clipboard inbox** honours the password-manager opt-out format, so copied secrets
   are not captured; its watcher can no longer deadlock the app when toggled quickly.
@@ -2534,8 +2534,8 @@ in the expert menu, in all 20 languages.
 ## 2.4.1 (2026-07-11)
 
 ### Improved
-- The **update notification** is now a clearer, more prominent card — an icon,
-  the new version, and a one-click **Install now** button — while still matching
+- The **update notification** is now a clearer, more prominent card, an icon,
+  the new version, and a one-click **Install now** button, while still matching
   your chosen theme.
 
 ### Fixed
@@ -2552,7 +2552,7 @@ tooltips, faster and better-named screenshots, and a tidier expert menu.
   library dialog to open it full-screen. Scroll to zoom in (up to 8×), drag to
   pan around, and close it with the **✕** in the corner or the Escape key.
 - **Favorite star in the title bar**: the edit and add dialogs now show a gold
-  **★** in their title bar — one click marks a prompt as a favorite, replacing
+  **★** in their title bar, one click marks a prompt as a favorite, replacing
   the old checkbox row.
 - **Forget recent searches**: each entry in the recent-searches dropdown now has
   its own **✕** to remove it from the list.
@@ -2569,7 +2569,7 @@ tooltips, faster and better-named screenshots, and a tidier expert menu.
   there are no more stray sliders for a disabled feature. The optional "extras"
   groups start collapsed.
 - **The recent-searches dropdown no longer pops up on its own** when you open the
-  library or history — it appears only when you click the search field again.
+  library or history, it appears only when you click the search field again.
 - **Consistent look**: the three-dot menu on every tile now matches your theme
   regardless of the tile's color or content, scrollbars sit flush against the
   edge, the close **✕** is in the same spot in every popup, and the grid-size
@@ -2577,7 +2577,7 @@ tooltips, faster and better-named screenshots, and a tidier expert menu.
 - The app title can no longer be accidentally selected as text.
 
 ### Fixed
-- **Saving a large screenshot as a button no longer freezes the app** — captures
+- **Saving a large screenshot as a button no longer freezes the app**: captures
   are stored efficiently and appear instantly.
 
 ## 2.2.0 (2026-06-20)
@@ -2588,16 +2588,16 @@ floating buttons.
 
 ### Added
 - **Screenshot tool**: a camera button captures a screen region or a whole
-  window — even protected ones like the Task Manager — and turns it straight
+  window, even protected ones like the Task Manager, and turns it straight
   into a copy button. The capture overlay opens instantly.
 - **Searchable prompt library**: the header list is now a search box over all
-  your prompts — type to filter, copy with one click, edit with the pencil
+  your prompts, type to filter, copy with one click, edit with the pencil
   icon, and optionally close the library right after copying. Filter by color
   or type.
 - **Prompt variables**: write `{{Name}}` placeholders in a prompt and you're
   asked to fill them in when you copy it.
 - **Copy history**: a journal of recently copied and most-used prompts with
-  optional timestamps and an adjustable retention time — and it can be turned
+  optional timestamps and an adjustable retention time, and it can be turned
   off completely for privacy.
 - **Drag & drop**: drop a file, image or text onto the window to create a
   button right away.
@@ -2612,7 +2612,7 @@ floating buttons.
 - The screenshot overlay now opens **instantly** instead of taking a few
   seconds.
 - Floating text buttons resize **smoothly** and always keep their text fully
-  visible — they never collapse into a circle and never clip; text and button
+  visible, they never collapse into a circle and never clip; text and button
   scale up together to the screen size.
 - You can drag a floating button only on the visible pill, not on the
   invisible area around its rounded corners.
@@ -2628,7 +2628,7 @@ floating buttons.
 
 ### Added
 - **Video player on floating buttons**: hover the lower edge of a video pill
-  for play/pause, scrubber, time, loop toggle and sound — same controls as on
+  for play/pause, scrubber, time, loop toggle and sound, same controls as on
   grid tiles
 - **Volume slider**: hovering the sound button opens a vertical slider
   (grid tiles and floating buttons)
@@ -2638,7 +2638,7 @@ floating buttons.
 - The WebView2 setup dialog on first start now speaks all 20 languages
 
 ### Improved
-- Images and videos fill the floating button **exactly** — every pixel
+- Images and videos fill the floating button **exactly**: every pixel
   visible, no cropping; S/M/L scales the whole button
 - Dragging a video button or a video tile no longer stutters
 - Tile text keeps its size when the window moves between monitors with
@@ -2655,7 +2655,7 @@ floating buttons.
 ## 1.7.0 (2026-06-06)
 
 ### Added
-- **Collapsible bars**: subtle arrows hide the top bar and the input bar —
+- **Collapsible bars**: subtle arrows hide the top bar and the input bar,
   the grid grows to use the freed space, the choice survives restarts, and
   small floating arrows bring each bar back
 - **Grid-size picker**: the size fields open a scrollable dropdown with all
@@ -2676,12 +2676,12 @@ floating buttons.
 
 ### Improved
 - Upgrading over an existing installation no longer asks about the previous
-  version — it is removed automatically (your prompts and settings are kept)
+  version, it is removed automatically (your prompts and settings are kept)
 
 ## 1.6.1 (2026-06-06)
 
 ### Fixed
-- Installing an update via the notification or the settings no longer fails —
+- Installing an update via the notification or the settings no longer fails,
   the silent installer now starts reliably and the app restarts itself
 - The update check runs right after launch (was: 30 seconds later)
 - No more white flash at the window edges while resizing
@@ -2708,13 +2708,13 @@ floating buttons.
 
 ### Fixed
 - Tile text can no longer overflow its button when resizing the window right
-  after startup — sizes are re-validated and tiles clip as a hard guarantee
+  after startup, sizes are re-validated and tiles clip as a hard guarantee
 
 ## 1.4.0 (2026-06-06)
 
 ### Added
 - **Image prompts**: the image button next to the input saves a picture from
-  the clipboard (or via file dialog) — clicking the tile copies the image,
+  the clipboard (or via file dialog), clicking the tile copies the image,
   ready to paste anywhere
 - **Icon images**: any text prompt can show a picture on its tile instead of
   the name (the click still copies the text)
@@ -2724,15 +2724,15 @@ floating buttons.
 - High-quality scaling (up to 1024 px, Lanczos) keeps images sharp
 
 ### Fixed
-- The window now appears only after the first fully sized layout — no more
+- The window now appears only after the first fully sized layout, no more
   visible text resizing on startup
 - The "Copied!" overlay on floating image buttons matches the visible image
 
-## 1.3.3 — HotFix (2026-06-04)
+## 1.3.3 - HotFix (2026-06-04)
 
 ### Added
 - **Prompt library**: new list button in the header shows every saved prompt
-  with its full text — click an entry to edit, drag it onto the grid or use
+  with its full text, click an entry to edit, drag it onto the grid or use
   its add button to place it on the current layout
 - **Quick grid size**: columns × rows of the active view directly in the
   header, next to the library button
@@ -2743,7 +2743,7 @@ floating buttons.
 
 ### Fixed
 - Wrong text size right after starting on monitors with display scaling
-- Tile text no longer shifts while dragging a prompt — the drag ghost now
+- Tile text no longer shifts while dragging a prompt, the drag ghost now
   follows the cursor exactly and the picked-up tile keeps its size
 - Letters with descenders (g, j, p, y) are no longer cut off at the bottom
   edge of prompt buttons
@@ -2754,13 +2754,13 @@ floating buttons.
 - The installer now lets you choose between **installing for all users**
   (asks for administrator rights) or **only for the current user**
 - Deleting a prompt always asks for a second confirmation
-- The overflow tray is gone — unplaced prompts live in the prompt library
+- The overflow tray is gone, unplaced prompts live in the prompt library
 
 ## 1.3.2 (2026-06-04)
 
 ### Added
 - **Installer** (alongside the portable exe): desktop / start menu shortcuts
-  and "run after install" — all pre-selected, all optional
+  and "run after install", all pre-selected, all optional
 - **Floating button menu**: right-click a floating pill for size presets
   (S / M / L), editing the prompt, or removing the pill
 - Floating pills use the same font and text-size rules as the grid tiles
@@ -2768,7 +2768,7 @@ floating buttons.
 - Automatic check for the WebView2 runtime with a guided one-click install
 
 ### Fixed
-- App froze when toggling a floating button — fixed for good
+- App froze when toggling a floating button, fixed for good
 - Floating buttons now appear reliably and spawn at the top-left of the
   primary monitor
 - Floating button background is fully transparent (no halo, no box)

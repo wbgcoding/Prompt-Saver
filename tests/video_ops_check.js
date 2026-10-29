@@ -1218,7 +1218,7 @@ const pending = [];
     return { value: out, end: i };
   };
   const sb = makeSandbox();
-  for (const p of ["C:/Users/Sam/clip.mp4", "C:/Users/Sam's/Sam's logo.png", "D:/it''s/a'b'c.png", "E:/x/'.png"]) {
+  for (const p of ["C:/Users/Example/clip.mp4", "C:/Users/Example's/Example's logo.png", "D:/it''s/a'b'c.png", "E:/x/'.png"]) {
     const arg = vm.runInContext("ffPath", sb)(p);
     const lvl1 = avToken(`'${arg}'[a]`, 0, ["[", "]", ",", ";"]).value;
     const lvl2 = avToken(lvl1, 0, [":"]);

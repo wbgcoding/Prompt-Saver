@@ -33,7 +33,7 @@ def named_at_runtime(ident):
     """True when JS gives this id a title or an accessible name after load.
 
     The small windows translate their menus from FLOAT_TXT instead of data-i18n, so
-    their buttons are named in code — that counts, and only that counts: the id has
+    their buttons are named in code: that counts, and only that counts: the id has
     to be captured in a variable that then gets a title or an aria-label.
     """
     if not ident:

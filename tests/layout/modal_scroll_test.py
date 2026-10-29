@@ -98,7 +98,7 @@ function measure() {
   const overlaps = [];
   const name = (e) => e.id || e.className || e.tagName.toLowerCase();
   // `display: contents` boxes (the Markdown wrapper around the textarea) are NOT rows
-  // of their own — their children are. Walking element.children alone dropped the
+  // of their own: their children are. Walking element.children alone dropped the
   // textarea out of the scan entirely, so it could grow over the colour row unseen.
   const boxes = (el) => [...el.children].flatMap((k) =>
     getComputedStyle(k).display === 'contents' ? boxes(k) : [k]);

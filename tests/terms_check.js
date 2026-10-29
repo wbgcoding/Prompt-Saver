@@ -104,7 +104,7 @@ for (const file of brands) {
       .filter((f) => !f.includes(" ") && !found.has(f));
     for (const sp of spare) notes.push(`${slug}: ${lang} maps "${sp}", which no string contains`);
   }
-  if (todo.length) notes.push(`${slug}: still to translate — ${todo.join(", ")}`);
+  if (todo.length) notes.push(`${slug}: still to translate: ${todo.join(", ")}`);
 }
 
 for (const n of notes) console.log("note:", n);
