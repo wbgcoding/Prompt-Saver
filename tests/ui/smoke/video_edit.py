@@ -327,9 +327,9 @@ def run(browser, tmp):
     if (Math.abs(VE.playhead - cutOp.startMs) > 50) errs.push('4029: a cut band click left the playhead at ' + VE.playhead + ' instead of the cut start ' + cutOp.startMs);
     """)
 
-    # 4030: shortcuts follow the physical key, not the typed letter.
-    failed += vprobe('keycode', 'shortcuts work with a non-Latin layout', r"""
-    // 4030: e.code dispatch.
+    # 4030: letter shortcuts follow the printed letter, the physical key on a non-Latin layout.
+    failed += vprobe('keycode', 'shortcuts work on German and non-Latin layouts', r"""
+    // 4030: letterCode dispatch.
     const $ = (id) => document.getElementById(id);
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     VE.sel = null; mod.renderRegions();
@@ -345,11 +345,18 @@ def run(browser, tmp):
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'я', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true }));
     await sleep(80);
     if (VE.ops.some((o) => o.tool === 'cut')) errs.push('4030: Ctrl+Z on a Cyrillic layout (code KeyZ) did not undo');
-    // A letter typed without that physical key does nothing.
-    VE.sel = null; mod.renderRegions();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', code: 'KeyK', bubbles: true, cancelable: true }));
-    await sleep(40);
-    if (VE.sel) errs.push('4030: a keydown with key i on another physical key still marked in');
+    // A Latin layout goes by the printed letter: on a German keyboard the Z key sits where a
+    // US keyboard has Y (code KeyY), and Ctrl+Z there must undo, not redo.
+    VE.sel = { a: 2000, b: 4000 }; mod.renderRegions();
+    $('ve-cut-add').click();
+    await sleep(80);
+    if (!VE.ops.some((o) => o.tool === 'cut')) errs.push('4030: no cut to undo on the German layout');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyY', ctrlKey: true, bubbles: true, cancelable: true }));
+    await sleep(80);
+    if (VE.ops.some((o) => o.tool === 'cut')) errs.push('4030: Ctrl+Z on a German layout (code KeyY) did not undo');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true }));
+    await sleep(80);
+    if (!VE.ops.some((o) => o.tool === 'cut')) errs.push('4030: Ctrl+Y on a German layout (code KeyZ) did not redo');
     """)
 
     # 4031: an overlay committed without text goes away, the preview shows the exported apostrophe.
