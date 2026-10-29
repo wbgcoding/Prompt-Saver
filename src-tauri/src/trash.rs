@@ -616,7 +616,7 @@ pub(crate) fn finish_pending_scrub(app: &AppHandle) {
     if !scrub_pending_marker(&dir).exists() {
         return;
     }
-    if let Some(conn) = db_conn(app) {
+    if let Some(conn) = db_conn_write(app) {
         if finish_pending_scrub_in(&dir, &conn) {
             append_crash_log("start-up: finished the database repack a data wipe had left open");
         }

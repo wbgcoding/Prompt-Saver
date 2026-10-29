@@ -336,7 +336,9 @@ pub(crate) fn edit_state_keep_days(app: &AppHandle) -> f64 {
 }
 
 pub(crate) fn sweep_edit_state_tick(app: &AppHandle) {
-    let Some(conn) = db_conn(app) else { return };
+    // "Path missing" is judged on this machine; in a folder another machine owns that would
+    // delete the owner's saved editor states.
+    let Some(conn) = db_conn_write(app) else { return };
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(app));
 }
 
@@ -345,7 +347,10 @@ pub(crate) fn sweep_edit_state_tick(app: &AppHandle) {
 // sweep_edit_state_conn reports nothing more.
 #[tauri::command(async)]
 pub(crate) fn sweep_edit_states_now(app: AppHandle) -> u32 {
-    let Some(conn) = db_conn(&app) else { return 0 };
+    if data_dir_write_blocked(&app) {
+        return 0;
+    }
+    let Some(conn) = db_conn_write(&app) else { return 0 };
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(&app)) as u32
 }
 

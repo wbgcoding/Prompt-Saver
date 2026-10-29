@@ -1985,7 +1985,12 @@ impl SyncRoundHost for AppRoundHost<'_> {
             return;
         }
         let cap = history_cap(settings);
-        match db_conn(self.0) {
+        // A read-only instance keeps no restore point in the owner's database (host.save is
+        // refused as well).
+        if data_dir_write_blocked_quiet() {
+            return;
+        }
+        match db_conn_write(self.0) {
             Some(c) => {
                 if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
                     append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
@@ -1998,7 +2003,7 @@ impl SyncRoundHost for AppRoundHost<'_> {
     fn on_trashed(&self, ids: &[String]) {
         for id in ids {
             close_floating_window(self.0, id);
-            if let Some(conn) = db_conn(self.0) {
+            if let Some(conn) = db_conn_write(self.0) {
                 discard_editor_draft_if(&conn, |t| t == id);
             }
         }

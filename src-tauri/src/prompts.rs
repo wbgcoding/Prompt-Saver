@@ -457,6 +457,11 @@ pub(crate) fn sweep_stale_recordings(
     broken_grace: Duration,
     retention_age: Option<Duration>,
 ) -> (u32, u64) {
+    // A read-only instance judges "unreferenced" against a store that may be stale and must not
+    // delete files in the folder another machine owns.
+    if data_dir_write_blocked_quiet() {
+        return (0, 0);
+    }
     sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced, &[], broken_sweep_on, broken_grace, retention_age)
 }
 
@@ -565,6 +570,9 @@ pub(crate) fn sweep_recordings_and_notify(app: &AppHandle) {
 }
 
 pub(crate) fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
+    if data_dir_write_blocked_quiet() {
+        return (0, 0);
+    }
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let referenced = orphan_referenced_set(&lock(&state));
     let (broken_on, grace) = recording_sweep_grace(app);
@@ -588,6 +596,9 @@ pub(crate) fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
 // can live (data_dir's recordings folder and the current recordingDir), since
 // discard_recording_file accepts either.
 pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
+    if data_dir_write_blocked_quiet() {
+        return (0, 0);
+    }
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let (keep_h, custom) = {
         let g = lock(&state);
@@ -614,6 +625,9 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
 // keeps the two rows from double-reporting.
 #[tauri::command(async)]
 pub(crate) fn sweep_discarded_recordings_now(app: AppHandle) -> (u32, u64) {
+    if data_dir_write_blocked(&app) {
+        return (0, 0);
+    }
     sweep_discarded_recordings(&app)
 }
 
@@ -644,6 +658,10 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
 // even nothing, unlike the silent background sweep.
 #[tauri::command(async)]
 pub(crate) fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
+    // Raises the read-only notice for a click; the shared sweep below only skips.
+    if data_dir_write_blocked(&app) {
+        return (0, 0);
+    }
     sweep_recordings_now_result(&app)
 }
 
@@ -1471,6 +1489,10 @@ pub(crate) fn db_drop_latest_version(conn: &Connection, prompt_id: &str) {
 // itself undoable and nothing is ever lost.
 #[tauri::command]
 pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) -> Result<Option<Prompt>, String> {
+    // Refused before the undo snapshot below is written into a folder another machine owns.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
+    }
     let restored = {
         let mut store = lock(&state);
         let record = match db_conn(&app).and_then(|c| db_get_version(&c, version_id)) {
@@ -1496,7 +1518,7 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             // restore could not be undone and "nothing is ever lost" would break. Inserted without
             // trimming: the history is cut to its cap only once the restore has saved, so a failed
             // one never evicts a real version.
-            let snapshot_ok = db_conn(&app)
+            let snapshot_ok = db_conn_write(&app)
                 .map(|c| db_insert_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants).is_ok())
                 .unwrap_or(false);
             if !snapshot_ok {
