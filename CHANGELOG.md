@@ -195,15 +195,15 @@ the introduction tour ship on; the screenshot editor is always on).
   height or percent fields, presets for 25/50/200% and "fit 1920 wide") as an
   undoable step of its own, with a halving-step downscale for readable text and
   an expert setting to pick sharp/nearest-neighbour resampling for pixel art.
-  A bottom bar offers Copy, Save, Save as, Save as button, Recognize text, New
-  screenshot and Close. Close (also Esc and Enter) keeps the result: it
-  re-copies the edited image and re-saves it to the screenshot folder if that
+  Every edit reaches the clipboard on its own a moment later, without filling
+  the Windows clipboard history. A bottom bar offers Save as, Save as button,
+  New screenshot and Close. Close (also Esc and Enter) keeps the result: it
+  copies the edited image and re-saves it to the screenshot folder if that
   setting is on; an untouched shot stays exactly as captured.
 - **Text recognition (OCR)** (expert menu, on by default): pull editable text
   out of a screenshot or an image file, fully offline through Windows' own
-  recognizer. A composer button opens a small menu to pick an image file or grab
-  a new screenshot; the screenshot editor also gets a "Recognize text" button that
-  works on the capture you already have. The result opens in an editable dialog
+  recognizer. The composer button grabs a new screenshot on a click and reads an
+  image file on a right-click. The result opens in an editable dialog
   with the detected language and character count, ready to copy or create as a
   new prompt. Small on-screen text is enlarged before recognition so it reads
   reliably, wrapped lines can be joined back into paragraphs, and the result can
