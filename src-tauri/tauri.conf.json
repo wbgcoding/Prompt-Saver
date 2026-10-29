@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "publisher": "BGCoding",
+    "copyright": "© 2026 BGCoding",
     "targets": ["nsis"],
     "resources": ["ffmpeg.exe", "ffmpeg-LICENSE"],
     "windows": {
