@@ -36,6 +36,11 @@ jobs:
           tar -xzf pdfium.tgz bin/pdfium.dll
           Move-Item bin/pdfium.dll src-tauri/pdfium.dll
 
+      # The bundle lists ffmpeg as a resource, so the build checks that the files exist.
+      # Tests never run it, so empty placeholders are enough.
+      - name: Stub ffmpeg resources
+        run: New-Item -ItemType File src-tauri/ffmpeg.exe, src-tauri/ffmpeg-LICENSE
+
       - name: Cache cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
