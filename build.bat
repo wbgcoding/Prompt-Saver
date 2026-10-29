@@ -9,6 +9,15 @@ set "APP_SLUG=prompt-saver"
 
 title %APP_NAME% - Build
 
+rem A double-clicked run (cmd /c, no automation flag) gets a small window that
+rem stays open on an error and closes itself shortly after a success.
+set "INTERACTIVE="
+if not defined PS_NONINTERACTIVE (
+    set "CMDLINE_SEEN=!CMDCMDLINE!"
+    if /i not "!CMDLINE_SEEN:/c=!"=="!CMDLINE_SEEN!" set "INTERACTIVE=1"
+)
+if defined INTERACTIVE mode con cols=100 lines=25
+
 echo ============================================
 echo  %APP_NAME% - Build (installer + portable)
 echo ============================================
@@ -183,25 +192,16 @@ echo ============================================
 echo.
 rem Automation / piped runs set PS_NONINTERACTIVE=1 to skip every interactive wait
 rem (choice/timeout hang when there is no console attached).
-if defined PS_NONINTERACTIVE goto :end
-rem Offer to open the output folder, but never block: default to "no" after 10s
-rem so the window can close itself unattended.
-choice /c YN /t 10 /d N /m "Open output folder (closes automatically)"
-if errorlevel 2 goto :end
+if not defined INTERACTIVE exit /b 0
+rem Offer to open the output folder; with no answer the window closes after 10 s.
+choice /c YN /t 10 /d N /m "Open output folder (closes automatically in 10 seconds)"
+if errorlevel 2 exit /b 0
 explorer "%DIST%"
-goto :end
+exit /b 0
 
 :fail
 echo.
 echo Build FAILED. Check the messages above.
-if defined PS_NONINTERACTIVE exit /b 1
-echo This window closes automatically in 30 seconds...
-timeout /t 30 >nul
+if not defined INTERACTIVE exit /b 1
+pause
 exit /b 1
-
-:end
-echo.
-if defined PS_NONINTERACTIVE exit /b 0
-echo Closing automatically in 8 seconds...
-timeout /t 8 >nul
-exit /b 0
