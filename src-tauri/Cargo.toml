@@ -49,7 +49,7 @@ flate2 = "=1.1.10"
 # Fast snip preview: SIMD JPEG encoder.
 jpeg-encoder = "=0.7.1"
 # Local SQLite store (bundled engine, no system dependency).
-rusqlite = { version = "=0.40.2", features = ["bundled"] }
+rusqlite = { version = "=0.41.1", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use - see pdfium_lib_path in images.rs).
