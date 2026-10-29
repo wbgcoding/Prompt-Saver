@@ -38,7 +38,7 @@ function sandbox() {
     snipEditTextInput: {}, document: { activeElement: null },
     $: () => ({ classList: { contains: () => true } }),
     snipEditContextIsOpen: () => false, snipColorPopIsOpen: () => false,
-    snipEditDrawShapeSelectionLive() {}, snipEditUpdateNudgeHint() {},
+    snipEditDrawShapeSelectionLive() {}, snipEditUpdateNudgeHint() {}, snipEditNoteChange() {},
     scalePopOpen: false, snipScalePopIsOpen() { return sb.scalePopOpen; }, closeSnipScalePop() { sb.scalePopOpen = false; sb.scaleClosed = true; },
     numPopEsc: false, numPopClosedByEscape: () => sb.numPopEsc,
     colorPop: { classList: { contains: () => true } }, closeColorPop() {},
@@ -53,7 +53,7 @@ function sandbox() {
   vm.runInContext(extractBlock("function snipEditKeydown(e) {"), sb);
   vm.runInContext(extractBlock("function snipEditNudge(op, key, amount, resize) {"), sb);
   vm.runInContext(extractBlock("function snipEditGeom(op) {"), sb);
-  vm.runInContext(extractBlock("function snipEditExportDataUrl() {"), sb);
+  vm.runInContext(extractBlock("function snipEditExportDataUrl(commitCrop = true) {"), sb);
   return sb;
 }
 
