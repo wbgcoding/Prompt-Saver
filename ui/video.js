@@ -1987,6 +1987,8 @@ $("ve-export-choose-folder").addEventListener("click", async () => {
   if (!folder) return;
   VE.destDir = folder;
   VE.destOverride = null; // the auto filename moves into the new folder
+  // A folder picked here beats the suggested folder of an externally opened file.
+  VE.originDir = "";
   // The backend only accepts this folder from the setter call that follows its own picker in the
   // same flow, so it is sent here once rather than via persistExportSettings, which resends the
   // unchanged VE.destDir on every unrelated change and would be refused after the first.

@@ -1459,6 +1459,19 @@ VIDEO_PROBE = """
     if (!destInput.value.startsWith('C:\\\\Videos\\\\Exports')) {
       errs.push('"Export to..." did not build the path from the picked folder');
     }
+    // An externally opened file suggests its own folder, but a folder picked here wins.
+    const { VE } = await import('./video.js');
+    const { updateExportNote } = await import('./videoExport.js');
+    VE.originDir = 'C:\\\\Elsewhere';
+    updateExportNote();
+    if (!destInput.value.startsWith('C:\\\\Elsewhere')) {
+      errs.push('an externally opened file does not suggest its own folder');
+    }
+    document.getElementById('ve-export-choose-folder').click();
+    await sleep(80);
+    if (!destInput.value.startsWith('C:\\\\Videos\\\\Exports')) {
+      errs.push('"Export to..." lost against the folder of an externally opened file: ' + destInput.value);
+    }
 
     // ---- the plain "File name" field, separate from the full path above --
     // a valid custom name flows straight into the export call, an invalid
