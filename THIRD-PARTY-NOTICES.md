@@ -91,7 +91,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | keyboard-types | 0.7.0, 0.8.3 | MIT OR Apache-2.0 |
 | libc | 0.2.191 | MIT OR Apache-2.0 |
 | libloading | 0.9.0 | ISC |
-| libsqlite3-sys | 0.38.2 | MIT |
+| libsqlite3-sys | 0.39.1 | MIT |
 | litemap | 0.8.3 | Unicode-3.0 |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 |
 | log | 0.4.34 | MIT OR Apache-2.0 |
@@ -131,7 +131,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 |
 | rfd | 0.17.2 | MIT |
 | ring | 0.17.14 | Apache-2.0 AND ISC |
-| rusqlite | 0.40.2 | MIT |
+| rusqlite | 0.41.1 | MIT |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 |
 | rustls-webpki | 0.103.16 | ISC |
