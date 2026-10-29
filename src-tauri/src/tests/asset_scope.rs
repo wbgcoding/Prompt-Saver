@@ -115,6 +115,11 @@ fn attachment_source_trust_needs_an_app_folder_a_pick_or_a_stored_path() {
     crate::asset_scope::grant_picked_file(&picked);
     assert!(crate::asset_scope::attachment_source_trusted(&picked, &roots, &none));
     assert!(!crate::asset_scope::attachment_source_trusted(&sibling, &roots, &none));
+    // A file this session's export wrote, in a folder picked once for it, is proof too.
+    let exported = touch(&base.join("Exports").join("clip.mp4"));
+    assert!(!crate::asset_scope::attachment_source_trusted(&exported, &roots, &none));
+    crate::video_editor::remember_export_output(Path::new(&exported));
+    assert!(crate::asset_scope::attachment_source_trusted(&exported, &roots, &none));
     let _ = fs::remove_dir_all(&base);
 }
 

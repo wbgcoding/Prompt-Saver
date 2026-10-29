@@ -81,12 +81,13 @@ pub(crate) fn stored_key(raw: &str) -> String {
 
 // Whether an attachment source named in an IPC call may be copied, probed and shown: empty, a
 // file inside one of the app's own folders (resolved, so ".." and links do not escape), a file
-// the user picked this session, or a path a stored prompt already holds.
+// the user picked this session, a file this session's video export wrote (it may sit in a
+// folder picked once for that export), or a path a stored prompt already holds.
 pub(crate) fn attachment_source_trusted(raw: &str, roots: &[PathBuf], stored: &HashSet<String>) -> bool {
     if raw.trim().is_empty() {
         return true;
     }
-    if stored.contains(&stored_key(raw)) || is_picked_file(raw) {
+    if stored.contains(&stored_key(raw)) || is_picked_file(raw) || crate::video_editor::is_known_export_output(Path::new(raw)) {
         return true;
     }
     if Path::new(raw).components().any(|c| matches!(c, std::path::Component::ParentDir)) {
