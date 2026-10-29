@@ -57,9 +57,9 @@ SECTION = """\
     if (!snipBtnEl || !recordBtnEl) {
       out.errors.push('417: the screenshot or record button is missing');
     } else {
-      // Every composer button with a right-click function names it in parentheses
-      // in its tooltip; the accessible name of the first two stays the plain name.
-      for (const id of ['snip-btn', 'record-btn', 'picker-btn', 'file-btn']) {
+      // Every composer button with a right-click function names it on a second
+      // tooltip line; the accessible name of the first two stays the plain name.
+      for (const id of ['snip-btn', 'record-btn', 'picker-btn', 'file-btn', 'ocr-btn']) {
         const btnEl = document.getElementById(id) || {};
         // A running recording swaps the record tooltip for its stop text.
         if (id === 'record-btn' && btnEl.classList && (btnEl.classList.contains('is-recording') || btnEl.classList.contains('is-paused'))) {
@@ -67,7 +67,8 @@ SECTION = """\
           continue;
         }
         const tip = btnEl.title || '';
-        if (!/[(（].+[:：].+[)）]/.test(tip)) out.errors.push('composer button ' + id + ' tooltip does not name its right-click function: ' + tip);
+        const tipLines = tip.split(String.fromCharCode(10));
+        if (tipLines.length !== 2 || !/[:：]/.test(tipLines[1]) || /[(（].*[)）]$/.test(tipLines[1])) out.errors.push('composer button ' + id + ' tooltip does not name its right-click function: ' + tip);
       }
       for (const b of [snipBtnEl, recordBtnEl]) {
         const al = b.getAttribute('aria-label') || '';

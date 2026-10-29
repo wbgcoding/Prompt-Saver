@@ -298,18 +298,24 @@ SECTION = """\
       if (!ocrBtn.title.trim() || /^[a-z]+[A-Z]/.test(ocrBtn.title)) {
         out.errors.push('OCR composer button has no real title (raw i18n key or empty)');
       }
+      // A click arms OCR and opens the capture; a right-click opens the file picker. No menu.
+      window.__SMOKE_ARGS__.length = 0;
       ocrBtn.click();
-      await sleep(100);
-      const menu = document.querySelector('.tab-menu:not(.hidden)');
-      const menuItems = menu ? [...menu.querySelectorAll('button[role=menuitem]')] : [];
-      if (menuItems.length !== 2) {
-        out.errors.push('OCR menu: expected 2 entries, found ' + menuItems.length);
-      } else if (menuItems[1].textContent.trim() !== 'Screenshot') {
-        // The screenshot entry belongs at the bottom of the menu.
-        out.errors.push('OCR menu: last entry is ' + JSON.stringify(menuItems[1].textContent.trim()) + ', expected the screenshot one');
+      await sleep(150);
+      const clickCalls = window.__SMOKE_ARGS__.map(([cmd, args]) => cmd + (args && args.mode ? ':' + args.mode : ''));
+      if (!clickCalls.includes('set_snip_mode:ocr') || !clickCalls.includes('open_snip')) {
+        out.errors.push('OCR button click: expected set_snip_mode ocr then open_snip, got ' + JSON.stringify(clickCalls));
+      } else if (clickCalls.indexOf('set_snip_mode:ocr') > clickCalls.indexOf('open_snip')) {
+        out.errors.push('OCR button click: OCR mode must be armed before the capture opens');
       }
-      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-      await sleep(50);
+      if (document.querySelector('.tab-menu:not(.hidden)')) out.errors.push('OCR button click opened a menu');
+      window.__SMOKE_ARGS__.length = 0;
+      ocrBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      const ctxCalls = window.__SMOKE_ARGS__.map(([cmd]) => cmd);
+      if (!ctxCalls.includes('pick_file_path')) out.errors.push('OCR button right-click did not open the file picker: ' + JSON.stringify(ctxCalls));
+      if (ctxCalls.includes('open_snip')) out.errors.push('OCR button right-click started a screenshot');
+      if (!ocrBtn.title.includes(String.fromCharCode(10))) out.errors.push('OCR button tooltip is not two lines: ' + JSON.stringify(ocrBtn.title));
       const injected = '<b>bold</b> and a tag look-alike </p>';
       window.__FIRE__('ocr-captured', { text: injected, lang: 'en' });
       await sleep(150);

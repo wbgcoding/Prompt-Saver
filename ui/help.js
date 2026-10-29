@@ -393,7 +393,7 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer. It runs fully offline and nothing leaves the machine.",
       howTo: [
-        "From the composer: the OCR button {icon:ocr} offers a screenshot or an existing image file.",
+        "From the composer: click the OCR button {icon:ocr} to recognize text in a screenshot, or right-click it to pick an existing image file.",
         "Review the result, then copy it or insert it directly.",
       ],
       whatHappens:
@@ -1131,7 +1131,7 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei. Das läuft vollständig offline und nichts verlässt das Gerät.",
       howTo: [
-        "Über die Eingabeleiste: der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
+        "Über die Eingabeleiste: ein Klick auf den OCR-Button {icon:ocr} erkennt Text in einem Screenshot, ein Rechtsklick darauf wählt eine vorhandene Bilddatei.",
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
       whatHappens:

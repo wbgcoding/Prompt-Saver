@@ -610,8 +610,9 @@ None of it touches the export.
 
 A button on the composer pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
-own text recognizer; nothing is uploaded or sent anywhere. The composer button
-opens a small menu: from an image file, or from a screenshot you take right now.
+own text recognizer; nothing is uploaded or sent anywhere. A click on the composer
+button recognizes text in a screenshot you take right now, a right-click picks an
+image file instead.
 It needs a Windows language pack: see "Language packs" below for how that
 install works. Recognized text can auto-copy to the clipboard and auto-join
 wrapped lines into full sentences, both adjustable.
@@ -1414,10 +1415,9 @@ Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt
 bleibt dabei bestehen, weil ein Sprung an eine herausgeschnittene Stelle nur
 verwirren würde. Der Export bleibt davon unberührt.
 
-**Texterkennung (OCR)**: liest per Button in der Leiste und
-im Screenshot-Editor Text aus einem Screenshot oder einer Bilddatei, komplett
-offline über die eigene Texterkennung von Windows. Der Button in der Leiste öffnet
-ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
+**Texterkennung (OCR)**: liest per Button in der Leiste Text aus einem Screenshot oder einer Bilddatei, komplett
+offline über die eigene Texterkennung von Windows. Ein Klick auf den Button
+in der Leiste liest einen Screenshot, ein Rechtsklick eine Bilddatei. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
 werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
 „Sprachpakete" unten).

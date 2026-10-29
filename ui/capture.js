@@ -8,7 +8,6 @@ import { fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { ocrErrToast, openOcrLangsModal } from "./dictation.js";
-import { openMiniMenu } from "./views.js";
 
 // ---- Colour-pick history popover (right-click on #picker-btn) ----
 export const pickHistoryPop = document.createElement("div");
@@ -829,31 +828,22 @@ export function bindCapture() {
     $("ocr-autocopy-note").classList.toggle("hidden", !autoCopy);
     ocrModal.classList.remove("hidden");
   }
-  // (b) standalone composer button: small menu (Screenshot / From image file).
-  $("ocr-btn").addEventListener("click", () => {
-    const r = $("ocr-btn").getBoundingClientRect();
-    openMiniMenu([
-      {
-        label: t("ocrMenuFromFile"),
-        run: async () => {
-          const path = await withDialog(() => invoke("pick_file_path"));
-          if (!path) return;
-          try {
-            showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
-            recordToolUsage("ocr");
-          } catch (err) { ocrErrToast(err); }
-        },
-      },
-      {
-        label: t("ocrMenuScreenshot"),
-        run: async () => {
-          // Arms the next capture for OCR instead of a normal save; the backend resets this when the
-          // session ends (capture or cancel).
-          await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
-          invoke("open_snip").catch((err) => errToast(err));
-        },
-      },
-    ], r.left, r.bottom + 4);
+  // (b) standalone composer button: a click recognizes text in a screenshot taken right now, a
+  // right-click in an image file picked from disk.
+  $("ocr-btn").addEventListener("click", async () => {
+    // Arms the next capture for OCR instead of a normal save; the backend resets this when the
+    // session ends (capture or cancel).
+    await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
+    invoke("open_snip").catch((err) => errToast(err));
+  });
+  $("ocr-btn").addEventListener("contextmenu", async (e) => {
+    e.preventDefault();
+    const path = await withDialog(() => invoke("pick_file_path"));
+    if (!path) return;
+    try {
+      showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
+      recordToolUsage("ocr");
+    } catch (err) { ocrErrToast(err); }
   });
   // Screenshot-into-OCR result, emitted by capture_region's OCR branch; a separate event from
   // "snip-captured" so the normal flow is unaffected.

@@ -50,6 +50,17 @@ for (const c of LANGS) if (!files.includes(c)) problems.push(`LANGS lists '${c}'
 for (const lang of langs) {
   if (I18N[lang].settingsSecAppearance !== I18N[lang].expTabAppearance) problems.push(`settings section and expert tab name the same area differently: ${lang}`);
 }
+// A tooltip that names a label plus its right-click action is two lines: the label, then
+// "Right-click: ..." on its own line. A trailing "(...)" or a missing line break fails.
+const TWO_LINE_TIPS = ["snipBtnTip", "recordBtnTip", "pickerTitle", "addFile", "ocrBtnTitle"];
+for (const lang of langs) {
+  for (const k of TWO_LINE_TIPS) {
+    const v = String(I18N[lang][k]);
+    const lines = v.split("\n");
+    if (lines.length !== 2 || !lines[0].trim() || !lines[1].trim()) problems.push(`${lang}: '${k}' must be a label line plus a right-click line`);
+    else if (/[(（][^()（）]*[)）]\s*$/.test(lines[1])) problems.push(`${lang}: '${k}' keeps the right-click hint in parentheses`);
+  }
+}
 // The loader's own list must be the same set (it cannot be required from Node: it is
 // an ES module that imports the DOM-side helpers).
 const loaderLangs = (fs.readFileSync(path.join(UI, "i18n.js"), "utf8").match(/export const LANGS = \[([^\]]*)\]/) || [])[1];
