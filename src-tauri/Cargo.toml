@@ -111,7 +111,7 @@ windows = { version = "=0.62.2", features = [
 # that exact name, pinned to the same release as `windows` above. One release
 # serves windows-capture, webview2-com and tauri as well, so every crate in the
 # build agrees on one ABI.
-windows-core = "=0.62.2"
+windows-core = "=0.100.0"
 # Screen recording: Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.
 # Uses the same `windows` release as pinned above.
