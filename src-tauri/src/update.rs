@@ -668,6 +668,12 @@ pub(crate) fn update_url_is_newer_release(url: &str) -> bool {
     !tag.is_empty() && version_newer(tag, APP_VERSION)
 }
 
+// The version read from the downloaded installer itself must be newer than this app; an
+// installer without a readable version is refused.
+pub(crate) fn installer_version_is_newer(installer_version: Option<&str>) -> bool {
+    installer_version.is_some_and(|v| version_newer(v, APP_VERSION))
+}
+
 // The release page of the version a pinned download URL belongs to. A portable
 // copy is not replaced by the installer, so it is sent there instead.
 pub(crate) fn release_page_for(url: &str) -> Option<String> {
@@ -845,6 +851,14 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     fs::create_dir_all(&stage).map_err(|e| format!("stage dir: {}", e))?;
     let installer = stage.join("setup.exe");
     fs::write(&installer, &bytes).map_err(|e| format!("save installer: {}", e))?;
+    // The signature covers the installer bytes, so the version inside them is the signed one;
+    // the tag in the URL is not. An older genuine installer re-published under a new tag must
+    // not install as an update.
+    #[cfg(windows)]
+    if !installer_version_is_newer(crate::win_windows::file_version_of(&installer.to_string_lossy()).as_deref()) {
+        let _ = fs::remove_dir_all(&stage);
+        return Err("this release is not newer than the installed version".to_string());
+    }
 
     // Helper script: silent install, relaunch the app, delete the installer + itself.
     let app_exe = std::env::current_exe().map_err(|e| e.to_string())?;

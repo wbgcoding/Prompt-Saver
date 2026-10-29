@@ -574,6 +574,26 @@ impl VersionBlock {
     }
 }
 
+/// The numeric file version ("major.minor.build") from a file's fixed version info.
+pub(crate) fn file_version_of(path: &str) -> Option<String> {
+    const FIXED_INFO_SIGNATURE: u32 = 0xFEEF_04BD;
+    let block = VersionBlock::load(path)?;
+    let (p, len) = block.query("\\")?;
+    // VS_FIXEDFILEINFO: signature, struct version, file version MS, file version LS, ...
+    if len < 16 {
+        return None;
+    }
+    // SAFETY: VerQueryValueW reports `len` bytes that live inside the block.
+    let (sig, ms, ls) = unsafe {
+        (
+            std::ptr::read_unaligned(p as *const u32),
+            std::ptr::read_unaligned(p.add(8) as *const u32),
+            std::ptr::read_unaligned(p.add(12) as *const u32),
+        )
+    };
+    (sig == FIXED_INFO_SIGNATURE).then(|| format!("{}.{}.{}", ms >> 16, ms & 0xFFFF, ls >> 16))
+}
+
 /// The name for a program image: its version resource strings, else its file stem.
 pub(crate) fn app_name_of_image(path: &str) -> Option<String> {
     let block = VersionBlock::load(path);

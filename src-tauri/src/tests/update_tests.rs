@@ -103,3 +103,11 @@ fn the_skip_list_takes_only_version_shaped_text_and_stays_bounded() {
     assert_eq!(list.last().unwrap(), "2.39.0");
     assert!(!list.contains(&"1.2.3".to_string()));
 }
+
+#[test]
+fn an_installer_must_carry_a_version_newer_than_this_app() {
+    assert!(installer_version_is_newer(Some("999.0.0")));
+    assert!(!installer_version_is_newer(Some(APP_VERSION)), "the same version is no update");
+    assert!(!installer_version_is_newer(Some("0.0.1")), "an older signed installer under a new tag is refused");
+    assert!(!installer_version_is_newer(None), "an installer without a readable version is refused");
+}

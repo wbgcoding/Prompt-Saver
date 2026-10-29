@@ -266,3 +266,13 @@ fn the_frame_rect_of_a_dead_window_is_none() {
     assert!(ww::frame_rect(u32::MAX).is_none());
     assert!(ww::frame_rect(0).is_none());
 }
+
+#[test]
+fn the_file_version_comes_from_the_fixed_version_info() {
+    let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_string());
+    let v = ww::file_version_of(&format!("{windir}\\System32\\kernel32.dll")).expect("kernel32 has a version");
+    let parts: Vec<u32> = v.split('.').map(|p| p.parse().unwrap()).collect();
+    assert_eq!(parts.len(), 3, "major.minor.build, got {v}");
+    assert!(parts[0] >= 6, "a Windows system file reports its real major version, got {v}");
+    assert_eq!(ww::file_version_of("C:\\no\\such\\file.exe"), None);
+}
