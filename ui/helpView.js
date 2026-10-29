@@ -290,18 +290,6 @@ export function openHelp() {
   $("help").classList.remove("hidden");
 }
 
-// Opens the help dialog pre-filtered to one article by its stable `id` (see ui/help.js),
-// through the search field gsOpenHelp also uses: an anchor is a lookup key, never the
-// per-language title text.
-export function openHelpAt(id) {
-  const cat = helpCategories().find((c) => c.id === id);
-  helpQuery = cat ? cat.title : "";
-  $("help-search").value = helpQuery;
-  helpCollapsed = new Set();
-  renderHelp();
-  $("help").classList.remove("hidden");
-}
-
 export function bindHelpView() {
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
