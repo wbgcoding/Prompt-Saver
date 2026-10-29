@@ -45,7 +45,7 @@ xcap = "0.0.14"
 rayon = "1"
 jpeg-encoder = "0.6"
 # Local SQLite store (bundled engine, no system dependency).
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use, see pdfium_lib_path in lib.rs).
