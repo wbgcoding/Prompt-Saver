@@ -49,7 +49,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use, see pdfium_lib_path in lib.rs).
-pdfium-render = "0.8"
+pdfium-render = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
