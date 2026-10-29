@@ -78,6 +78,24 @@ jobs:
       - name: Voice vocabulary
         run: node tests/voice_check.js
 
+      - name: Node unit checks
+        run: |
+          $failed = $false
+          foreach ($f in (Get-ChildItem tests -Filter *_check.js) + (Get-ChildItem tests/ui -Filter *_check.js)) {
+            node $f.FullName
+            if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $($f.Name)"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Static checks
+        run: |
+          $failed = $false
+          foreach ($s in 'no_emdash','module_guard','error_msg_check','a11y_check','shortcut_check','tour_check','settings_directory_check','automation_doc_check','contrast_check') {
+            python "tests/$s.py"
+            if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $s"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
       - name: Expert menu
         run: python tests/expert_menu_check.py
 
