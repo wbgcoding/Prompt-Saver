@@ -2396,8 +2396,11 @@ listen("ve-close-requested", (e) => { closeWindow({ quit: e.payload === true });
   .then(() => invoke("video_editor_close_ack", { state: "ready" }))
   .catch(() => {});
 listen(EXPORT_PROGRESS_EVENT, (e) => {
+  // A recording conversion in the main window reports on the same event; only the editor's own
+  // export tags its ticks.
+  if (e.payload?.job !== "export") return;
   if (!VE.exporting || !exportRun || exportRun.gen !== VE.loadGen) return;
-  const ms = Number(e.payload?.ms ?? e.payload ?? 0);
+  const ms = Number(e.payload.ms ?? 0);
   const total = exportRun.total;
   if (total > 0) setProgress((ms / total) * 100);
 });

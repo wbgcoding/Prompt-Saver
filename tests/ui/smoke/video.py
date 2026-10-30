@@ -1708,9 +1708,9 @@ VIDEO_PROBE = """
     // percentage is exactly ms/600000 -- no need to derive it indirectly.
     exportStartBtn.click();
     await sleep(10);
-    window.__FIRE__('recording-convert-progress', { ms: 18000 }); // 3%
+    window.__FIRE__('recording-convert-progress', { job: 'export', ms: 18000 }); // 3%
     await sleep(15);
-    window.__FIRE__('recording-convert-progress', { ms: 30000 }); // 5%, fast rate but still under 10%
+    window.__FIRE__('recording-convert-progress', { job: 'export', ms: 30000 }); // 5%, fast rate but still under 10%
     await sleep(10);
     if (exportEtaEl.textContent.trim() !== '') {
       errs.push(`387: remaining-time text showed before the minimum percent, got ${JSON.stringify(exportEtaEl.textContent)}`);
@@ -1725,8 +1725,14 @@ VIDEO_PROBE = """
     window.__EXPORT_DELAY_MS__ = 3500;
     exportStartBtn.click();
     await sleep(3000);
-    window.__FIRE__('recording-convert-progress', { ms: 60000 }); // 10% after ~3s -> roughly 3.3%/s
+    window.__FIRE__('recording-convert-progress', { job: 'export', ms: 60000 }); // 10% after ~3s -> roughly 3.3%/s
     await sleep(10);
+    // A conversion's progress (no job) must not move the export bar.
+    window.__FIRE__('recording-convert-progress', { ms: 300000 });
+    await sleep(10);
+    if (Math.round(document.getElementById('ve-export-progress').value) !== 10) {
+      errs.push(`F10: a conversion progress event moved the export bar to ${document.getElementById('ve-export-progress').value}`);
+    }
     if (!/about/i.test(exportEtaEl.textContent)) {
       errs.push(`387: remaining-time text did not appear past the minimum percent with a slow rate, got ${JSON.stringify(exportEtaEl.textContent)}`);
     }
