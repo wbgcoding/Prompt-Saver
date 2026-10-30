@@ -564,6 +564,21 @@ fn ocr_resize_target_upscales_a_small_crop_2x() {
     assert_eq!(ocr_resize_target(120, 80, 4200, 300), Some((240, 160)));
 }
 
+#[test]
+fn ocr_hands_winrt_a_png_copy_of_any_type_it_may_not_decode() {
+    for ok in ["a.png", "a.JPG", "a.jpeg", "a.bmp"] {
+        assert!(!ocr_needs_png_copy(Path::new(ok)), "{ok} is read natively");
+    }
+    for copy in ["a.webp", "a.WEBP", "a", "a.gif"] {
+        assert!(ocr_needs_png_copy(Path::new(copy)), "{copy} needs the copy");
+    }
+    // resize_for_ocr needs WinRT-free decoding only, but sits in the windows-only module: the
+    // wiring is checked on its source.
+    let src = include_str!("../ocr.rs").replace("\r\n", "\n");
+    let body = src.split("fn resize_for_ocr(").nth(1).and_then(|b| b.split("\nfn recognize(").next()).unwrap();
+    assert!(body.contains("super::ocr_needs_png_copy(path)"), "the copy decision must feed the resize result");
+}
+
 // ---- Voice dictation ----
 
 #[cfg(windows)]

@@ -172,6 +172,14 @@ pub(crate) fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: 
     }
 }
 
+// The file types WinRT's BitmapDecoder reads on every Windows install. Anything else the picker
+// accepts (webp needs the optional WebP codec, absent on N/LTSC editions) is handed over as a
+// PNG copy that the image crate decoded, so recognition never depends on that codec.
+pub(crate) fn ocr_needs_png_copy(path: &Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase());
+    !matches!(ext.as_deref(), Some("png" | "jpg" | "jpeg" | "bmp"))
+}
+
 // StorageFile::GetFileFromPathAsync only takes a plain backslash path. A forward-slash path
 // (from a webview or a script) or an extended-length one fails with a bad-pathname error.
 pub(crate) fn winrt_file_path(path: &str) -> String {

@@ -136,7 +136,7 @@ fn ocr_temp_path() -> PathBuf {
 // Downscale a too-large image (proportionally, to MaxImageDimension) or upscale a very
 // small one 2x, which is what makes small on-screen text recognizable. The result goes to a
 // new temp file: `path` itself, possibly the user's own file, is never modified. Returns
-// `path` unchanged, with no disk write, when no resize is needed.
+// `path` unchanged, with no disk write, when no resize is needed and WinRT reads its format.
 fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(PathBuf, TempFileGuard), String> {
     // Decoded upright (phone photos carry an EXIF rotation BitmapDecoder would ignore) and
     // handed on as a temp copy whenever the pixels differ from the file's.
@@ -145,7 +145,7 @@ fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(P
     let (w, h) = img.dimensions();
     let resized = super::ocr_resize_target(w, h, max_dim, upscale_below_px)
         .map(|(nw, nh)| img.resize(nw, nh, FilterType::Lanczos3))
-        .or_else(|| (orientation != image::metadata::Orientation::NoTransforms).then_some(img));
+        .or_else(|| (orientation != image::metadata::Orientation::NoTransforms || super::ocr_needs_png_copy(path)).then_some(img));
     match resized {
         None => Ok((path.to_path_buf(), TempFileGuard(None))),
         Some(im) => {
