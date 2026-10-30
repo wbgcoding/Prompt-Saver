@@ -1392,6 +1392,22 @@ pub(crate) fn sync_run_lock() -> std::sync::MutexGuard<'static, ()> {
 // the worst outcome here, so every failure is logged and the count lets the caller the user
 // is waiting on say so.
 pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) -> usize {
+    sync_write_all_with(app, prompts, settings, sync_write_all_core)
+}
+
+// The write an activation or a folder switch makes: it has just read the folder itself, so
+// the hold on writes before the first read does not apply. Held back, it would report a
+// failed write for a folder that was never tried.
+pub(crate) fn sync_write_all_now(app: &AppHandle, prompts: &[Prompt], settings: &Settings) -> usize {
+    sync_write_all_with(app, prompts, settings, sync_write_all_now_core)
+}
+
+fn sync_write_all_with(
+    app: &AppHandle,
+    prompts: &[Prompt],
+    settings: &Settings,
+    core: fn(&Path, &[Prompt], &Settings, &dyn Fn(&str) -> bool) -> usize,
+) -> usize {
     if !sync_enabled(settings) {
         return 0;
     }
@@ -1409,7 +1425,7 @@ pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings:
         Some(state) => sync_live_in(&state, id),
         None => true,
     };
-    sync_write_all_core(&dir, prompts, settings, &live)
+    core(&dir, prompts, settings, &live)
 }
 
 pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {
@@ -1426,6 +1442,10 @@ pub(crate) fn sync_write_all_core(dir: &Path, prompts: &[Prompt], settings: &Set
     if sync_state().booting.load(Ordering::SeqCst) {
         return 1;
     }
+    sync_write_all_now_core(dir, prompts, settings, is_live)
+}
+
+pub(crate) fn sync_write_all_now_core(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
     let _run = sync_run_lock();
     sync_write_dir_checked(dir, prompts, settings, is_live)
 }
@@ -2719,12 +2739,23 @@ pub(crate) fn sync_activate_impl(app: &AppHandle) -> usize {
         let s = lock(&state);
         sync_dir_path(app, &s.settings)
     };
-    sync_activate_core(&state, &dir, &AppRoundHost(app), &|prompts, settings| sync_write_all_impl(app, prompts, settings))
+    sync_activate_core(&state, &dir, &AppRoundHost(app), &|prompts, settings| sync_write_all_now(app, prompts, settings))
 }
 
 // Holds the folder writes back (SyncState.booting) until the first read of the folder is done,
 // however that ends.
 struct SyncBootGuard(&'static SyncState);
+
+// Held while a switch-on is under way, from before the flag is saved until the folder is
+// learned and written: a save in between would queue a write of this library over a folder
+// another machine filled. Does nothing when the first read of the session already holds the
+// writes back, since that one ends them on its own.
+pub(crate) struct SyncActivationHold(#[allow(dead_code)] Option<SyncBootGuard>);
+
+pub(crate) fn sync_hold_writes_for_activation() -> SyncActivationHold {
+    let state = sync_state();
+    SyncActivationHold((!state.booting.swap(true, Ordering::SeqCst)).then(|| SyncBootGuard(state)))
+}
 
 impl Drop for SyncBootGuard {
     fn drop(&mut self) {

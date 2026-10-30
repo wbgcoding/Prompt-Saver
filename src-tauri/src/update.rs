@@ -280,6 +280,9 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     // library is large, so it runs on a snapshot taken under a short lock, like
     // spawn_sync_write_all: otherwise every copy, save and other window would wait for it.
     let clear_ocr_index = key == "ocrIndex" && !enabled;
+    // From before the flag exists: a save during the backup would otherwise queue a write of
+    // this library into a folder that has not been read yet.
+    let sync_hold = is_sync_enable.then(sync_hold_writes_for_activation);
     let snapshot = {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key.clone(), enabled);
@@ -321,7 +324,9 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         }
         // The poll loop ends itself when it next finds the feature off, so switching back on needs
         // a fresh one; the claim inside start_sync_poll makes this safe even if one is still
-        // winding down.
+        // winding down. The hold ends first: the folder is learned and written by now, and
+        // start_sync_poll raises its own for the first read.
+        drop(sync_hold);
         start_sync_poll(app.clone());
     }
     apply_flag_effects(&app, &key, enabled);

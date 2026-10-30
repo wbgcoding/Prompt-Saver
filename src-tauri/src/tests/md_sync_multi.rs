@@ -102,7 +102,7 @@ impl SyncInst {
     pub(super) fn activate(&self, dir: &Path) -> usize {
         self.run(|| {
             sync_activate_core(&self.db, dir, &RigHost(self), &|prompts, settings| {
-                sync_write_all_core(dir, prompts, settings, &|id| sync_live_in(&self.db, id))
+                sync_write_all_now_core(dir, prompts, settings, &|id| sync_live_in(&self.db, id))
             })
         })
     }
@@ -1610,4 +1610,46 @@ fn multi_an_outside_edit_whose_copy_cannot_be_written_is_not_overwritten() {
     let failed = rig.a.flush(&rig.dir);
     assert!(failed >= 1, "a write that skipped the file must be counted for a retry");
     assert_eq!(fs::read(&path).unwrap(), bytes, "the only copy of the outside edit was replaced");
+}
+
+#[test]
+fn multi_switching_on_writes_even_while_the_first_read_still_holds_writes_back() {
+    let rig = Rig::new();
+    let id = rig.a.add("Shared", "start");
+    rig.a.state.booting.store(true, Ordering::SeqCst);
+    let failed = rig.a.activate(&rig.dir);
+    assert_eq!(failed, 0, "an activation was reported as a failed write because of the hold meant for the background writer");
+    assert!(rig.dir.join(format!("{id}.md")).exists());
+    let prompts = rig.a.lock().prompts.clone();
+    let settings = rig.a.lock().settings.clone();
+    let queued = rig.a.run(|| sync_write_all_core(&rig.dir, &prompts, &settings, &|_| true));
+    assert_eq!(queued, 1, "the background writer must still wait for the first read");
+}
+
+#[test]
+fn multi_the_activation_hold_ends_only_what_it_raised() {
+    let rig = Rig::new();
+    let booting = &rig.a.state.booting;
+    booting.store(false, Ordering::SeqCst);
+    rig.a.run(|| {
+        let hold = sync_hold_writes_for_activation();
+        assert!(booting.load(Ordering::SeqCst), "writes are not held back during the switch-on");
+        drop(hold);
+        assert!(!booting.load(Ordering::SeqCst), "the hold stayed on after the switch-on");
+        booting.store(true, Ordering::SeqCst);
+        drop(sync_hold_writes_for_activation());
+        assert!(booting.load(Ordering::SeqCst), "the hold ended the first read's own hold");
+    });
+}
+
+#[test]
+fn multi_the_flag_is_set_only_after_writes_are_held_back_and_released_before_the_poll_starts() {
+    let src = include_str!("../update.rs").replace("\r\n", "\n");
+    let at = |needle: &str| src.find(needle).unwrap_or_else(|| panic!("update.rs lost `{needle}`"));
+    let hold = at("sync_hold_writes_for_activation");
+    let flag = at("store.settings.ui_flags.insert(key.clone(), enabled)");
+    let release = at("drop(sync_hold)");
+    let poll = at("start_sync_poll(app.clone())");
+    assert!(hold < flag, "a save between the flag and the hold queues a write over a folder not read yet");
+    assert!(flag < release && release < poll, "the hold must end after the activation and before the poll's own");
 }
