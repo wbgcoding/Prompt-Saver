@@ -2191,6 +2191,8 @@ document.addEventListener("keydown", (e) => {
   if (!ovCtxPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
     if (e.key === "Tab") { trapTabWithin(ovCtxPop, e); return; }
+    // The menu is about one overlay; arrows and Delete must not edit it behind the menu.
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return; }
   }
   if (!addVideoPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }

@@ -2410,10 +2410,19 @@ def run_expert(browser, tmp):
     const dupBtn = [...document.querySelectorAll('body > .ctx[role=menu] button')].find((b) => !b.classList.contains('danger'));
     if (!dupBtn) errs.push('537: the overlay context menu had no duplicate button');
     else {
+      // The menu is still open while the overlay is edited and nudged: the copy follows the
+      // overlay as it is when Duplicate is pressed, and the menu swallows the arrow keys.
+      rectX.value = String(x0 + 30);
+      rectX.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(40);
+      const x1 = Number(fieldOf('X').value);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true, cancelable: true }));
+      await sleep(40);
+      if (Number(fieldOf('X').value) !== x1) errs.push('F-ctx: an arrow key moved the overlay while its menu was open');
       dupBtn.click();
       await until(() => overlayRows() === 2, 60);
       const dx = fieldOf('X') ? Number(fieldOf('X').value) - x0 : NaN;
-      if (dx !== 16) errs.push('537: the duplicated overlay moved by ' + dx + ' px, expected 16');
+      if (dx !== 46) errs.push('537: the duplicated overlay moved by ' + dx + ' px, expected 46 (edited 30 + offset 16)');
     }
     document.getElementById('ve-ov-add-spotlight').click();
     await until(() => overlayRows() === 3, 60);

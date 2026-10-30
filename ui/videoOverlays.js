@@ -214,7 +214,8 @@ function openOvCtxPop(op, x, y) {
 ovCtxDupBtn.addEventListener("click", () => {
   const op = ovCtxOp;
   closeOvCtxPop();
-  if (op) duplicateOverlay(op);
+  // The row's op is a snapshot from when the menu opened; the overlay may have been edited since.
+  if (op) duplicateOverlay(liveOverlay(op));
 });
 ovCtxDelBtn.addEventListener("click", () => {
   const op = ovCtxOp;
