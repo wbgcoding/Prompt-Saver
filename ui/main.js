@@ -477,17 +477,22 @@ async function maybeOfferEditorDraftRecovery() {
     await invoke("discard_editor_draft").catch(() => {});
     return;
   }
-  let variants = [];
-  try { variants = JSON.parse(draft.variants || "[]"); } catch (_) { variants = []; }
+  // The draft always stores its entries list, so "[]" means the user removed every extra entry;
+  // only a legacy row with no list at all (null) falls back to the saved prompt's entries.
+  let variants = null;
+  try {
+    const parsed = draft.variants ? JSON.parse(draft.variants) : null;
+    if (Array.isArray(parsed)) variants = parsed;
+  } catch (_) { variants = null; }
   if (draft.promptId && draft.promptId !== "neu") {
     let p = null;
     try { p = await invoke("get_prompt", { id: draft.promptId }); } catch (_) { p = null; }
     if (p) {
-      openModal({ ...promptToModal(p), mode: "edit", id: draft.promptId, name: draft.name, text: draft.text, variants: variants.length ? variants : (p.variants || []) });
+      openModal({ ...promptToModal(p), mode: "edit", id: draft.promptId, name: draft.name, text: draft.text, variants: variants ?? (p.variants || []) });
       return;
     }
   }
-  openModal({ mode: "create", name: draft.name, text: draft.text, variants, title: t("nameModalTitle") });
+  openModal({ mode: "create", name: draft.name, text: draft.text, variants: variants || [], title: t("nameModalTitle") });
 }
 
 // Each launch-time step runs on its own: one that fails must not skip the rest

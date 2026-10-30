@@ -231,7 +231,25 @@ def run(browser, tmp):
     const note = document.getElementById('feedback').textContent;
     if (!/Couldn.t focus the target window/.test(note)) errs.push('pastefail: a refused paste showed ' + JSON.stringify(note) + ' on the pill');
 """)
-    failed += ar_probe('f13','folder popover member: missing file banner like the grid tile', 'index', '1000x780', '', r"""
+    failed += ar_probe('draftvariants', 'crash-draft restore: entries the user removed stay removed', 'index', '1000x780', '<script>window.__EDITOR_DRAFT_FIXTURE__ = { promptId: "p10", name: "Prompt 11", text: "Example prompt body number 11, first entry.", variants: "[]", updatedAt: Math.floor(Date.now() / 1000) - 120 };</script>\n', r"""
+    const cm = document.getElementById('confirm-modal');
+    let shown = false;
+    for (let i = 0; i < 60 && !shown; i++) {
+      await sleep(300);
+      if (cm.classList.contains('hidden')) continue;
+      if (/restore/i.test(document.getElementById('confirm-title').textContent)) { shown = true; break; }
+      document.getElementById('confirm-cancel').click();
+    }
+    if (!shown) { errs.push('draftvariants: no recovery question appeared'); }
+    else {
+      document.getElementById('confirm-ok').click();
+      await sleep(600);
+      if (document.getElementById('modal').classList.contains('hidden')) errs.push('draftvariants: the editor did not open on restore');
+      const rows = document.querySelectorAll('#modal-rotate-entries .rotate-entry-input').length;
+      if (rows !== 0) errs.push('draftvariants: the restored editor brought back ' + rows + ' entries the draft had removed');
+    }
+""")
+    failed += ar_probe('f13', 'folder popover member: missing file banner like the grid tile', 'index', '1000x780', '', r"""
     await bootReady();
     const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(200); };
     window.__FIRE__('missing-files', ['p11']);
