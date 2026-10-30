@@ -502,7 +502,8 @@ pub(crate) async fn finish_and_continue_recording(
         let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
         let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
         let out_path = recording::continuation_output_path(&base_path, part_number);
-        match recording::start(
+        let start_part = if carry_paused { recording::start_paused } else { recording::start };
+        match start_part(
             target, out_path.clone(), audio, &canvas_mode,
             recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         ) {

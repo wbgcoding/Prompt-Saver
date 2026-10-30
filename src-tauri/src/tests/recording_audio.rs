@@ -939,6 +939,19 @@ fn the_key_overlay_clock_is_moved_to_the_first_frame_from_both_sides() {
     assert_eq!(cmds.matches("recording::align_key_overlay_start(").count(), 2, "start and continue must both align a late-installed capture");
 }
 
+// Structural: the first frame comes from a real capture, so the order is pinned in the source.
+#[test]
+fn a_continued_paused_take_starts_its_next_part_paused() {
+    let rec = source!("../recording.rs");
+    let inner = rec.split("fn start_inner(").nth(1).unwrap();
+    let clock_at = inner.find("let clock = Arc::new(RecordClock::new());").unwrap();
+    let pause_at = inner.find("clock.pause();").unwrap();
+    let capture_at = inner.find("start_free_threaded(").unwrap();
+    assert!(clock_at < pause_at && pause_at < capture_at, "the clock must be paused before any capture can deliver a frame");
+    let cmds = source!("../rec_cmds.rs");
+    assert!(cmds.contains("if carry_paused { recording::start_paused } else { recording::start }"));
+}
+
 #[test]
 fn a_refused_start_removes_the_mic_sidecar_with_the_empty_output() {
     let dir = std::env::temp_dir().join(format!("ps-refused-start-{}", std::process::id()));

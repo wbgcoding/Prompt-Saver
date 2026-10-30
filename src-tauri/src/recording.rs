@@ -707,7 +707,21 @@ pub struct RecStartOptions {
 pub fn start(
     target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
 ) -> Result<RecSession, String> {
-    let result = start_inner(target, output_path.clone(), audio, canvas_mode, opts);
+    start_with_pause(target, output_path, audio, canvas_mode, opts, false)
+}
+
+// A continuation part of a paused take: the clock is paused before the capture exists, so a first
+// frame that arrives while the caller is still wiring the part up is never encoded.
+pub fn start_paused(
+    target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
+) -> Result<RecSession, String> {
+    start_with_pause(target, output_path, audio, canvas_mode, opts, true)
+}
+
+fn start_with_pause(
+    target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions, paused: bool,
+) -> Result<RecSession, String> {
+    let result = start_inner(target, output_path.clone(), audio, canvas_mode, opts, paused);
     if result.is_err() {
         discard_start_leftovers(&output_path);
     }
@@ -790,7 +804,7 @@ impl Drop for StartGuard {
 }
 
 fn start_inner(
-    target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
+    target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions, paused: bool,
 ) -> Result<RecSession, String> {
     let RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb } = opts;
     let (native_w, native_h) = resolve_target_size(target)?;
@@ -828,6 +842,9 @@ fn start_inner(
     let used_area = canvas.placement.then(|| Arc::new(UsedAreaTracker::new()));
     let canvas_note = if canvas.note.is_empty() { None } else { Some(canvas.note) };
     let clock = Arc::new(RecordClock::new());
+    if paused {
+        clock.pause();
+    }
     let shared = Arc::new(RecFeederShared::new());
     spawn_disk_watch(shared.clone(), clock.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, audio_active);
     let mut guard = StartGuard::new({
@@ -925,7 +942,7 @@ fn start_inner(
         control, clock, shared, feeder, audio_stop, audio_threads, mic_queue, system_queue,
         audio_queues, mic_wav_thread, mic_wav_path,
         audio_system: audio.system, audio_mic: audio.mic,
-        output_path, target, phase: RecPhase::Recording, started_at_ms: now_ms(),
+        output_path, target, phase: if paused { RecPhase::Paused } else { RecPhase::Recording }, started_at_ms: now_ms(),
         used_area, canvas_note, canvas_size: (width, height),
         canvas_origin, show_cursor,
         video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb,
