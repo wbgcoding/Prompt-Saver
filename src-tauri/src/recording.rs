@@ -5,7 +5,7 @@ use super::{
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
     scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
-    estimate_recording_seconds_remaining, active_tick_secs, UsedAreaTracker,
+    estimate_recording_seconds_remaining, active_tick_secs, DISK_CHECK_SECS, UsedAreaTracker,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -623,9 +623,9 @@ fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
     }
 }
 
-// Runs as long as the recording does, checking about once a minute whether the destination
-// drive is about to run out. The 1-second sleep granularity lets the thread notice a normal
-// stop and exit within a second instead of sleeping up to a minute.
+// Runs as long as the recording does, checking every DISK_CHECK_SECS whether the destination
+// drive is about to run out (a long gap lets a high bitrate fill the drive between two checks).
+// The 1-second sleep granularity lets the thread notice a normal stop and exit within a second.
 // Also enforces the optional safety nets recMaxMin/recMaxMb (0 = off) through the same
 // "set an error, request a stop" channel as the disk check, on the same 1s tick since both
 // read a cheap number (elapsed time, one fs::metadata call).
@@ -653,7 +653,7 @@ fn spawn_disk_watch(
                     return;
                 }
             }
-            if waited < Duration::from_secs(60) {
+            if waited < Duration::from_secs(DISK_CHECK_SECS) {
                 continue;
             }
             waited = Duration::ZERO;

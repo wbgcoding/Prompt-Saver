@@ -308,6 +308,11 @@ pub(crate) fn active_tick_secs(paused: bool) -> u64 {
     if paused { 0 } else { 1 }
 }
 
+// Seconds between two free-space checks of the destination drive. The hard stop leaves a quarter
+// of the warning threshold, so the gap must stay short enough that the highest bitrate cannot
+// write that much between two checks and fill the drive before the stop fires.
+pub(crate) const DISK_CHECK_SECS: u64 = 2;
+
 // Pure predicate for the two optional safety nets (recMaxMin and recMaxMb, 0 = off), free of
 // the watch thread's sleep loop so it is testable without a real recording.
 pub(crate) fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min: f64, max_mb: f64) -> bool {

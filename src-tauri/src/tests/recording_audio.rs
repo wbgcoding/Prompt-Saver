@@ -911,6 +911,14 @@ fn a_paused_tick_does_not_count_toward_the_recording_minute_limit() {
 }
 
 #[test]
+fn the_disk_check_gap_cannot_fill_the_drive_at_the_highest_bitrate() {
+    // 50 Mbps video plus generous audio, against the hard stop at a quarter of the 500 MB default warning.
+    let bytes_per_sec = (50_000u64 + 512) * 1000 / 8;
+    let critical = 500u64 * 1024 * 1024 / 4;
+    assert!(bytes_per_sec * DISK_CHECK_SECS < critical / 4, "a check gap of {DISK_CHECK_SECS}s writes too much");
+}
+
+#[test]
 fn a_refused_start_removes_the_mic_sidecar_with_the_empty_output() {
     let dir = std::env::temp_dir().join(format!("ps-refused-start-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
