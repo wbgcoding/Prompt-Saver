@@ -1463,6 +1463,10 @@ const RESULTS = {
   }),
   collapse_float_folder: () => null,
   set_float_folder_scale: () => null,
+  // Free pill resize: the backend takes the cursor itself; a started drag answers true.
+  float_resize_start: () => true,
+  float_resize_move: () => null,
+  float_resize_end: () => null,
   dissolve_float_folder: () => null,
   remove_folder_member: () => null,
   rename_float_folder: () => null,

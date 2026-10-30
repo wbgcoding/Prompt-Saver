@@ -43,26 +43,24 @@ FLOAT_PROBE = """
     // The OS move loop startDragging() hands the window to CONSUMES the button
     // release, so a dragged pill never sees `mouseup`. The merge test therefore has
     // to run off the first later event that reports no button held.
-    // Edge resize. Grabbing the ring snaps the window to the pill box straight away,
-    // and THAT call is what this checks: it must carry the exact box, with no monitor
-    // clamp - clamping this path moved the window out from under the cursor on every
-    // frame near a screen edge. The frames that follow are rAF-driven and a quiet
-    // headless frame produces none, so the tracking itself is a manual check.
+    // Edge resize. Grabbing the ring starts a backend-driven drag (float_resize_start), which
+    // reads the real cursor and does all geometry in physical pixels, so the page sends only
+    // the grabbed edge. The tracking itself runs in the backend and is a VM check.
     args().length = 0;
     const cat = document.getElementById('rz-catch');
-    const before = pill.getBoundingClientRect();
-    const cx = Math.round(before.right - 2), cy = Math.round(before.top + before.height / 2);
+    // The faked 240x160 window: the middle third of its right side is the right edge.
+    const cx = 236, cy = 80;
     cat.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1,
       clientX: cx, clientY: cy, screenX: cx, screenY: cy }));
-    const bounds = args().filter((c) => c[0] === 'set_float_bounds').map((c) => c[1]);
+    const starts = args().filter((c) => c[0] === 'float_resize_start').map((c) => c[1]);
     if (!pill.classList.contains('resizing')) {
       errs.push('grabbing the resize ring did not start a resize');
-    } else if (!bounds.length) {
-      errs.push('grabbing the resize ring set no bounds');
+    } else if (!starts.length) {
+      errs.push('grabbing the resize ring did not start the backend resize');
     } else {
-      if (bounds.some((b) => b.clamp)) errs.push('a live resize asked for the monitor clamp');
-      const b = bounds[bounds.length - 1];
-      if (!(b.width > 0 && b.height > 0)) errs.push('the resize sent an empty box');
+      const a = starts[0];
+      if (!(a.dirX === 1 && a.dirY === 0)) errs.push('the right edge grab sent direction ' + a.dirX + ',' + a.dirY);
+      if (a.pill !== null) errs.push('a closed menu must not send a pill box');
     }
     up();
     await sleep(50);
