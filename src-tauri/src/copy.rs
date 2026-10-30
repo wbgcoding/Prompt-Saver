@@ -677,11 +677,17 @@ pub(crate) struct CopyLogRow {
 // fails leaves the table exactly as it was, never a half-restored history.
 //
 // `rows` is the snapshot as recent_copies lists it, newest first. The log orders by rowid, so
-// the rows go in oldest first: the newest copy ends up with the highest rowid again.
+// the restored rows take rowids just below the smallest one now in the table (negative is
+// valid): a copy made between the clear and the Undo stays the newest entry, and the next
+// trim drops the oldest restored row instead of that copy.
 pub(crate) fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
     let tx = conn.unchecked_transaction()?;
-    for row in rows.iter().rev() {
-        tx.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
+    let floor: i64 = tx.query_row("SELECT COALESCE(MIN(rowid), 1) FROM copy_log", [], |r| r.get(0))?;
+    for (i, row) in rows.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO copy_log(rowid, ts, id) VALUES(?1, ?2, ?3)",
+            params![floor - 1 - i as i64, row.ts as i64, row.id],
+        )?;
     }
     tx.commit()
 }

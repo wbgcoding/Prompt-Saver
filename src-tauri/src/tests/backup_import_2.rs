@@ -1115,3 +1115,22 @@ fn an_import_file_with_a_byte_order_mark_still_parses() {
     let data = parse_import_bytes(csv.as_bytes(), std::path::Path::new("x.csv")).unwrap();
     assert_eq!(data.prompts[0].name, "A");
 }
+
+#[test]
+fn restore_copy_history_keeps_a_copy_made_after_the_clear_as_the_newest() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
+    // A copy written between the clear and the Undo click.
+    db_append_copy(&conn, &CopyEntry { id: "mid".into(), ts: 30 }, 3, None).unwrap();
+    let rows = vec![
+        CopyLogRow { ts: 20, id: "b".into() },
+        CopyLogRow { ts: 10, id: "a".into() },
+    ];
+    db_restore_copy_log(&conn, &rows).unwrap();
+    let order: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
+    assert_eq!(order, ["mid", "b", "a"]);
+    // The next copy trims against a full history: the oldest restored row goes, not "mid".
+    db_append_copy(&conn, &CopyEntry { id: "next".into(), ts: 40 }, 3, None).unwrap();
+    let order: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
+    assert_eq!(order, ["next", "mid", "b"]);
+}
