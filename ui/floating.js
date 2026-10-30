@@ -7,7 +7,7 @@ import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
 import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize, readCopyPrefs, copyGate, needsMainWindowCopy } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize, readCopyPrefs, copyGate, needsMainWindowCopy, pasteFailText } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab switcher, so
 // it comes from the brand.
@@ -18,6 +18,7 @@ const { listen, emit } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
+let pillTexts = {}; // the compact strings of the current language
 let copiedText = ""; // localized "Copied!", re-announced on every copy (see showCopied)
 const promptId = appWin.label.replace(/^float-/, "");
 
@@ -167,6 +168,7 @@ function applyTexts(s) {
   const lang = resolveLang(s.language, LANGS);
   document.documentElement.lang = lang;
   const t = compactTexts(lang);
+  pillTexts = t;
   copiedText = t.copied;
   document.getElementById("feedback").textContent = copiedText;
   document.getElementById("size-label").textContent = t.size;
@@ -483,14 +485,16 @@ listen("missing-files", (e) => {
   if (hasFile) pill.classList.toggle("file-missing", (e.payload || []).includes(promptId));
 });
 
-function showCopied() {
+// `notice` replaces "Copied!" when an auto-paste was refused: the text is on the clipboard
+// either way, and the pill must not stay silent about the paste.
+function showCopied(notice) {
   const fb = document.getElementById("feedback");
+  // Cleared and reset rather than left alone: a screen reader needs a real mutation to
+  // announce a second copy in a row.
+  fb.textContent = "";
+  fb.textContent = notice || copiedText;
   fitText(fb, pill.clientWidth - 10, pill.clientHeight - 6, 120);
   applyCopySizeLevel(fb, copySizeLevel);
-  // Cleared and reset rather than left alone: the text never changed since the pill was made,
-  // and a screen reader needs a real mutation to announce a second copy in a row.
-  fb.textContent = "";
-  fb.textContent = copiedText;
   pill.classList.add("copied");
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => pill.classList.remove("copied"), COPIED_MS);
@@ -775,7 +779,7 @@ async function activatePill() {
   }, copyPrefs);
   if (r === "paste") {
     // Fast second click pastes the just-copied text into the last app.
-    invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch(() => {});
+    invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch((e) => showCopied(pasteFailText(e, pillTexts)));
   } else if (r === "copied") {
     showCopied();
     invoke("record_copy", { id: promptId }).catch(() => {});

@@ -196,7 +196,42 @@ def run(browser, tmp):
       if (!callsFor('paste_into_previous').length) errs.push('563-10: a fast second member click did not paste into the previous window');
     }
 """)
-    failed += ar_probe('f13', 'folder popover member: missing file banner like the grid tile', 'index', '1000x780', '', r"""
+    failed += ar_probe('pastefail-folder', 'folder window member: a refused auto-paste says so instead of staying silent', 'folder', '520x420', '', r"""
+    await until(() => document.getElementById('fname').textContent !== '', 100);
+    RESULTS.paste_into_previous = () => { throw 'no-target'; };
+    document.getElementById('icon').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    const pop = document.getElementById('pop');
+    await until(() => !pop.classList.contains('hidden'), 100);
+    const tile = document.querySelector('#grid .folder-member');
+    if (!tile) { errs.push('pastefail: the open folder rendered no members'); }
+    else {
+      for (let i = 0; i < 2; i++) {
+        tile.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1 }));
+        window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, buttons: 0 }));
+        await sleep(60);
+      }
+      await sleep(200);
+      if (!callsFor('paste_into_previous').length) errs.push('pastefail: fixture: the second click did not try to paste');
+      const note = tile.querySelector('.member-ok').textContent;
+      if (!/No window to paste into/.test(note)) errs.push('pastefail: a refused paste showed ' + JSON.stringify(note) + ' on the member');
+      if (!/No window to paste into/.test(document.getElementById('live').textContent)) errs.push('pastefail: the live region did not announce the refused paste');
+    }
+""")
+    failed += ar_probe('pastefail-pill', 'pill: a refused auto-paste says so instead of staying silent', 'floating', '240x60', '', r"""
+    await until(() => document.getElementById('feedback').textContent !== '', 100);
+    RESULTS.paste_into_previous = () => { throw 'focus-failed'; };
+    for (let i = 0; i < 2; i++) {
+      document.getElementById('pill').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+      await sleep(80);
+    }
+    await sleep(200);
+    if (!callsFor('paste_into_previous').length) errs.push('pastefail: fixture: the second click did not try to paste');
+    const note = document.getElementById('feedback').textContent;
+    if (!/Couldn.t focus the target window/.test(note)) errs.push('pastefail: a refused paste showed ' + JSON.stringify(note) + ' on the pill');
+""")
+    failed += ar_probe('f13','folder popover member: missing file banner like the grid tile', 'index', '1000x780', '', r"""
     await bootReady();
     const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(200); };
     window.__FIRE__('missing-files', ['p11']);

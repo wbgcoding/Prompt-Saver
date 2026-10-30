@@ -140,6 +140,15 @@ export async function copyGate(id, copyFn, prefs) {
   return "failed";
 }
 
+// The notice for a refused auto-paste, or "" for any other failure. The two codes are the
+// ones the main grid also turns into toasts.
+export function pasteFailText(err, txt) {
+  const code = String(err);
+  if (code === "no-target") return txt.pasteNoTarget || "";
+  if (code === "focus-failed") return txt.pasteFocusFail || "";
+  return "";
+}
+
 // Resolve the active UI language: the explicit setting first, the browser locale as fallback,
 // matched against a list of available language codes (pass the LANGS export from i18n.js).
 // Takes the list as a parameter instead of importing i18n.js, so a window that loads the

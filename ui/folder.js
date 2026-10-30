@@ -8,7 +8,7 @@ import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
 import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound, markSelectedSize, rotateBadgeLabel, readCopyPrefs, copyGate, needsMainWindowCopy } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound, markSelectedSize, rotateBadgeLabel, readCopyPrefs, copyGate, needsMainWindowCopy, pasteFailText } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -312,16 +312,23 @@ async function reflow() {
 
 // ---- copying a member (same path as a pill: copy_prompt + record_copy) ----
 
-function flash(id) {
+// `notice` replaces "Copied!" when an auto-paste was refused: the text is on the clipboard
+// either way, and the member must not stay silent about the paste.
+function flash(id, notice) {
   const tile = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"]`);
+  const ok = tile && tile.querySelector(".member-ok");
   if (tile) {
+    if (notice && ok) ok.textContent = notice;
     tile.classList.add("copied");
-    setTimeout(() => tile.classList.remove("copied"), COPIED_MS);
+    setTimeout(() => {
+      tile.classList.remove("copied");
+      if (ok) ok.textContent = TXT.copied;
+    }, COPIED_MS);
   }
   if (copyPrefs.copySoundOn) playCopySound(copyPrefs.copySoundVolume);
   const live = document.getElementById("live");
   live.textContent = "";
-  live.textContent = TXT.copied;
+  live.textContent = notice || TXT.copied;
 }
 
 async function copyMember(id) {
@@ -338,7 +345,7 @@ async function copyMember(id) {
   }, copyPrefs);
   if (r === "paste") {
     // A fast second click pastes the just-copied text into the last app.
-    invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch(() => {});
+    invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch((e) => flash(id, pasteFailText(e, TXT)));
   } else if (r === "copied") {
     flash(id);
     invoke("record_copy", { id }).catch(() => {});
