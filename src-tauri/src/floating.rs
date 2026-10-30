@@ -48,6 +48,12 @@ pub(crate) fn float_size_of(settings: &Settings, id: &str) -> Option<(f64, f64)>
     }
 }
 
+// The box one pill really has: its stored free size, else the scale box.
+pub(crate) fn pill_box_of(settings: &Settings, prompt: &Prompt) -> (f64, f64) {
+    float_size_of(settings, &prompt.id)
+        .unwrap_or_else(|| pill_dims(is_image_prompt(prompt), float_scale_of(settings, &prompt.id)))
+}
+
 // Pill window size: square box for image pills, classic pill for text.
 pub(crate) fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
     if is_image {

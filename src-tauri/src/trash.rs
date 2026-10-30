@@ -137,6 +137,8 @@ pub(crate) struct PromptPlacement {
     #[serde(default)]
     pub(crate) float_scale: Option<f64>,
     #[serde(default)]
+    pub(crate) float_size: Option<[f64; 2]>,
+    #[serde(default)]
     pub(crate) video_prefs: Option<VideoPrefs>,
     #[serde(default)]
     pub(crate) tile_folder: Option<TileFolder>,
@@ -163,6 +165,7 @@ pub(crate) fn capture_placements(settings: &Settings, ids: &[String]) -> Vec<Pro
                 .collect(),
             floating: settings.floating.get(id).cloned(),
             float_scale: settings.float_scale.get(id).copied(),
+            float_size: settings.float_size.get(id).copied(),
             video_prefs: settings.video_prefs.get(id).copied(),
             tile_folder: settings.tile_folders.iter().find(|f| f.members.contains(id)).cloned(),
             float_folder: settings.float_folders.iter().find(|f| f.members.contains(id)).cloned(),
@@ -249,6 +252,9 @@ pub(crate) fn restore_placed_core(store: &mut Store, placements: &[PromptPlaceme
         }
         if let Some(scale) = pl.float_scale {
             store.settings.float_scale.insert(pl.id.clone(), scale);
+        }
+        if let Some(size) = pl.float_size {
+            store.settings.float_size.insert(pl.id.clone(), size);
         }
         if let Some(prefs) = pl.video_prefs {
             store.settings.video_prefs.insert(pl.id.clone(), prefs);

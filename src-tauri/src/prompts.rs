@@ -1415,15 +1415,15 @@ pub(crate) async fn update_prompt(
                 let orphan_scan = (attachment_changed || image_changed)
                     .then(|| orphan_cleanup_enabled(&store).then(|| orphan_referenced_set(&store)))
                     .flatten();
-                let scale = float_scale_of(&store.settings, &id);
-                Some((clone, scale, rebind, orphan_scan))
+                let pill_box = pill_box_of(&store.settings, &clone);
+                Some((clone, pill_box, rebind, orphan_scan))
             }
             None => None,
         }
     };
-    let (updated, scale, rebind, orphan_scan) = match updated {
+    let (updated, pill_box, rebind, orphan_scan) = match updated {
         Some((p, s, r, o)) => (Some(p), s, r, o),
-        None => (None, 1.0, false, None),
+        None => (None, (0.0, 0.0), false, None),
     };
     // The actual filesystem sweep, deferred until the store lock (dropped
     // when the block above ended) is no longer held.
@@ -1446,7 +1446,7 @@ pub(crate) async fn update_prompt(
         rebuild_tray(&app); // A rename shows up in the tray entries
         // An open pill switches between text pill and image box live.
         if let Some(win) = app.get_webview_window(&flabel(&p.id)) {
-            let (w, h) = pill_dims(is_image_prompt(p), scale);
+            let (w, h) = pill_box;
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
     }
@@ -1766,6 +1766,7 @@ pub(crate) fn delete_prompt_core(store: &mut Store, id: &str, now: u64, save: im
     }
     store.settings.floating.remove(id);
     store.settings.float_scale.remove(id);
+    store.settings.float_size.remove(id);
     store.settings.video_prefs.remove(id);
     store.normalize_folders(); // And out of whatever folder held it
     if let Some(pos) = moved {
@@ -1817,6 +1818,7 @@ pub(crate) fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -
     for id in ids {
         store.settings.floating.remove(id);
         store.settings.float_scale.remove(id);
+        store.settings.float_size.remove(id);
         store.settings.video_prefs.remove(id);
     }
     store.normalize_folders();

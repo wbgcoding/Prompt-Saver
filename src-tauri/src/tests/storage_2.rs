@@ -1297,3 +1297,39 @@ fn argon2_and_aes_gcm_output_match_older_releases() {
     assert!(aead_open(&key, &[7u8; 11], &ct).is_none(), "a short nonce is refused");
     assert!(aead_open(&key, &[7u8; 12], &ct[..8]).is_none(), "shorter than a tag is refused");
 }
+
+#[test]
+fn pill_box_prefers_the_free_size_over_the_scale_box() {
+    let p = test_prompt("p1");
+    let mut s = Settings::default();
+    assert_eq!(pill_box_of(&s, &p), pill_dims(is_image_prompt(&p), 1.0));
+    s.float_scale.insert("p1".into(), 1.5);
+    assert_eq!(pill_box_of(&s, &p), pill_dims(is_image_prompt(&p), 1.5));
+    s.float_size.insert("p1".into(), [300.0, 60.0]);
+    assert_eq!(pill_box_of(&s, &p), (300.0, 60.0));
+}
+
+#[test]
+fn trash_round_trip_keeps_the_free_pill_size() {
+    let mut store = placement_fixture();
+    store.settings.float_size.insert("p3".into(), [210.0, 44.0]);
+    let ids = vec!["p3".to_string()];
+    let snapshot = capture_placements(&store.settings, &ids);
+    assert_eq!(snapshot[0].float_size, Some([210.0, 44.0]));
+    move_batch_to_trash(&mut store, &ids, 100);
+    assert!(!store.settings.float_size.contains_key("p3"), "delete drops the free size");
+    assert_eq!(restore_placed_core(&mut store, &snapshot, |_| true), Ok(1));
+    assert_eq!(store.settings.float_size.get("p3"), Some(&[210.0, 44.0]));
+}
+
+#[test]
+fn an_old_trash_entry_without_a_free_size_still_restores() {
+    let old: PromptPlacement = serde_json::from_str(r#"{"id":"p3","float_scale":1.5}"#).expect("old snapshot parses");
+    assert_eq!(old.float_size, None);
+    let mut store = placement_fixture();
+    let ids = vec!["p3".to_string()];
+    move_batch_to_trash(&mut store, &ids, 100);
+    assert_eq!(restore_placed_core(&mut store, &[old], |_| true), Ok(1));
+    assert_eq!(store.settings.float_scale.get("p3"), Some(&1.5));
+    assert!(!store.settings.float_size.contains_key("p3"));
+}

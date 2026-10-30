@@ -441,7 +441,7 @@ pub(crate) async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, 
             .iter()
             .filter_map(|mid| {
                 let prompt = store.prompts.iter().find(|p| &p.id == mid)?;
-                let (w, h) = pill_dims(is_image_prompt(prompt), float_scale_of(&store.settings, mid));
+                let (w, h) = pill_box_of(&store.settings, prompt);
                 let pos = store.settings.floating.get(mid).cloned().unwrap_or_else(|| folder.pos.clone());
                 Some((
                     mid.clone(),
@@ -520,7 +520,7 @@ pub(crate) async fn remove_folder_member(
         {
             return Err("not a member of this folder".to_string());
         }
-        pill_dims(is_image_prompt(prompt), float_scale_of(&store.settings, &id))
+        pill_box_of(&store.settings, prompt)
     };
     let work = work_rect_at(&app, px, py);
     let (nx, ny) = clamp_to_work(work, pw * dpi, ph * dpi, px - pw * dpi / 2.0, py - ph * dpi / 2.0);
