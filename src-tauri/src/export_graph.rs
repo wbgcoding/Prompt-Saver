@@ -186,8 +186,16 @@ fn canonical(path: &str) -> Option<PathBuf> {
     fs::canonicalize(path).ok()
 }
 
-// Checks one graph against the allowed file set (canonical paths).
-pub(crate) fn validate_export_graph(graph: &str, allowed: &[PathBuf]) -> Result<(), String> {
+// A path spelled the way a graph spells it, for comparing texts: forward slashes, no case.
+fn graph_text_key(path: &str) -> String {
+    path.replace('\\', "/").to_ascii_lowercase()
+}
+
+// Checks one graph against the allowed file set (canonical paths). `allowed_texts` are the
+// request's own path spellings (the source and the media files it names, already vetted by the
+// caller): a network-looking source in a graph is canonicalized only when its text is one of
+// them, so a path the request does not name never makes this machine contact a remote host.
+pub(crate) fn validate_export_graph(graph: &str, allowed: &[PathBuf], allowed_texts: &[String]) -> Result<(), String> {
     let refuse = |why: &str| Err(format!("export graph not allowed: {why}"));
     let filters = match parse_graph(graph) {
         Ok(f) => f,
@@ -203,6 +211,12 @@ pub(crate) fn validate_export_graph(graph: &str, allowed: &[PathBuf]) -> Result<
             let Some(path) = movie_source_path(f.args.as_deref()) else {
                 return refuse("media source options");
             };
+            if crate::paths::is_network_path(&path) {
+                let key = graph_text_key(&path);
+                if !allowed_texts.iter().any(|t| graph_text_key(t) == key) {
+                    return refuse("media file not named by the request");
+                }
+            }
             let ok = canonical(&path).is_some_and(|p| allowed.contains(&p));
             if !ok {
                 return refuse("media file not named by the request");
@@ -229,6 +243,8 @@ pub(crate) fn validate_export_graph(graph: &str, allowed: &[PathBuf]) -> Result<
 // exist and carry a media extension) are the only files a graph may read.
 pub(crate) fn validate_export_request_graphs(src: &Path, media_paths: &[String], graphs: &[&str]) -> Result<(), String> {
     let mut allowed: Vec<PathBuf> = Vec::new();
+    let mut allowed_texts: Vec<String> = vec![src.to_string_lossy().to_string()];
+    allowed_texts.extend(media_paths.iter().cloned());
     if let Ok(p) = fs::canonicalize(src) {
         allowed.push(p);
     }
@@ -244,7 +260,7 @@ pub(crate) fn validate_export_request_graphs(src: &Path, media_paths: &[String],
         }
     }
     for g in graphs {
-        validate_export_graph(g, &allowed)?;
+        validate_export_graph(g, &allowed, &allowed_texts)?;
     }
     Ok(())
 }

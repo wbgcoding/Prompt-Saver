@@ -431,3 +431,22 @@ fn the_clipboard_file_and_its_previews_check_the_path_text_first() {
         assert_text_check_first(body, sig, opens);
     }
 }
+
+#[test]
+fn a_graph_source_on_a_share_is_judged_on_its_text_before_it_is_opened() {
+    let graph = source!("../export_graph.rs");
+    let body = fn_body(&graph, "fn validate_export_graph(");
+    assert_text_check_first(body, "validate_export_graph", &["canonical(&path)"]);
+    assert!(body.contains("is_network_path(&path)"));
+    // Nothing is named by the request: a share in a graph is refused on its text alone.
+    for g in [
+        "movie='//nas/share/x.mp4'[o];[0:v][o]overlay[vout]",
+        r"amovie='\\nas\share\x.mp4'[a]",
+        r"movie='\\?\UNC\nas\share\x.mp4'[o]",
+    ] {
+        assert!(validate_export_graph(g, &[], &[]).is_err(), "{g}");
+    }
+    // The request's own paths feed the text step.
+    let request = fn_body(&graph, "fn validate_export_request_graphs(");
+    assert!(request.contains("allowed_texts.extend(media_paths"));
+}
