@@ -30,6 +30,10 @@ const rzCatch = document.getElementById("rz-catch");
 const parkedBadge = document.getElementById("parked-badge");
 
 let scale = 1;
+// Box the user dragged the pill to (logical px), or null while the S/M/L scale sizes it. With a
+// box the content is fitted inside instead of the box following the content.
+let fixedSize = null;
+let prefsReady = false; // the stored size is known; before that a window at its stored box must not be "healed"
 let tileSize = 0; // global text size setting (0 = auto)
 let globalFontKey = "system";
 let copySizeLevel = "large"; // "Copied!" text size level: small, medium or large (large fills the pill)
@@ -90,6 +94,9 @@ const PILL_FONT_SIZE_DEFAULT = 26; // text pill font size at scale 1
 const PILL_TEXT_MIN_W = 200; // smallest text-pill width; grows with the label
 const PILL_BORDER_W = 5; // colored frame width around media pills
 const SIZE_EPSILON = 2; // px tolerance ending the self-healing resize loop
+const FIT_MIN_FONT = 8; // smallest label size of a dragged box; below it the text gets an ellipsis
+const BOX_MIN_W = 48; // mirrors FLOAT_MIN_W / FLOAT_MIN_H in floating.rs
+const BOX_MIN_H = 28;
 const PILL_RING_FRAC = 0.18; // ring thickness as a fraction of the shorter window side
 // pillTextFontBase, not pillFontSize: that name is the function below.
 let pillTextFontBase = PILL_FONT_SIZE_DEFAULT;
@@ -118,6 +125,8 @@ function pillFontSize(effScale = scale) {
 // (longest side = PILL_IMG, plus the colored frame), so the picture fills the button without
 // cropping or letterboxing. Text width follows the label.
 function pillBox() {
+  if (fixedSize) return fitToBox(fixedSize.w, fixedSize.h);
+  pill.classList.remove("fitted");
   if (pill.classList.contains("has-image")) {
     const base = PILL_IMG * scale;
     let w = base;
@@ -144,8 +153,47 @@ function pillBox() {
   return { w, h };
 }
 
+// Dragged box: the text takes the largest size (at most today's size at this height) that fits
+// the box minus its padding and gets an ellipsis below the minimum; images and videos are
+// letterboxed by object-fit: contain.
+let fitScale = 1;
+function fitToBox(w, h) {
+  pill.classList.add("fitted");
+  if (pill.classList.contains("has-image")) {
+    fitScale = Math.min(w, h) / PILL_IMG;
+  } else {
+    const k = h / PILL_H;
+    fitScale = k;
+    const padX = Math.max(4, Math.round(Math.min(30 * k, w * 0.12)));
+    const avail = Math.max(1, w - 2 * padX);
+    label.style.setProperty("--fit-w", `${avail}px`);
+    const cap = Math.max(FIT_MIN_FONT, pillFontSize(k));
+    let fs = cap;
+    label.style.fontSize = `${fs}px`;
+    let need = label.scrollWidth;
+    if (need > avail) {
+      fs = Math.max(FIT_MIN_FONT, Math.floor((cap * avail) / need));
+      label.style.fontSize = `${fs}px`;
+      need = label.scrollWidth;
+      while (need > avail && fs > FIT_MIN_FONT) {
+        fs -= 1;
+        label.style.fontSize = `${fs}px`;
+        need = label.scrollWidth;
+      }
+    }
+  }
+  updateCaptionScale();
+  return { w, h };
+}
+
 function applyPillSize() {
   if (menuOpen) return;
+  if (fixedSize) {
+    const box = pillBox();
+    const args = { id: promptId, width: box.w, height: box.h };
+    (pill.classList.contains("has-image") ? invoke("resize_float_media", args) : invoke("resize_float_pill", args)).catch(() => {});
+    return;
+  }
   if (pill.classList.contains("has-image")) {
     if (!imgRatio) return;
     const box = pillBox();
@@ -208,6 +256,12 @@ function applyPrefs(s) {
   // the "L" preset and freely resized pills back on the next start.
   const rawScale = Number(s.float_scale && s.float_scale[promptId]);
   scale = Number.isFinite(rawScale) && rawScale > 0 ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale)) : 1;
+  if (!resizing) {
+    const fs = s.float_size && s.float_size[promptId];
+    fixedSize = Array.isArray(fs) && Number.isFinite(fs[0]) && Number.isFinite(fs[1]) && fs[0] > 0 && fs[1] > 0
+      ? { w: Math.max(BOX_MIN_W, fs[0]), h: Math.max(BOX_MIN_H, fs[1]) }
+      : null;
+  }
   tileSize = Number(s.tile_size) || 0;
   globalFontKey = s.tile_font || "system";
   copySizeLevel = s.ui_texts?.copySizeLevel;
@@ -226,7 +280,8 @@ function applyPrefs(s) {
   const pfs = Number(s.ui_values?.pillFontSize);
   pillTextFontBase = Number.isFinite(pfs) ? pfs : PILL_FONT_SIZE_DEFAULT;
   applyFont();
-  markSelectedSize(menu, scale);
+  markSelectedSize(menu, fixedSize ? 0 : scale);
+  prefsReady = true;
   applyPillSize();
 }
 
@@ -236,8 +291,8 @@ function applyPrefs(s) {
 function enforcePillSize() {
   // No resize ping-pong while the OS moves the window, the user resizes it, or the
   // merge preview is holding the window at its grown size.
-  if (menuOpen || mergeHint || pill.classList.contains("dragging") || pill.classList.contains("resizing")) return;
-  if (pill.classList.contains("has-image") && !imgRatio) return;
+  if (!prefsReady || menuOpen || mergeHint || pill.classList.contains("dragging") || pill.classList.contains("resizing")) return;
+  if (!fixedSize && pill.classList.contains("has-image") && !imgRatio) return;
   const box = pillBox();
   if (Math.abs(window.innerWidth - box.w) > SIZE_EPSILON ||
       Math.abs(window.innerHeight - box.h) > SIZE_EPSILON) {
@@ -645,7 +700,9 @@ window.addEventListener("blur", () => { if (!drag) closeMenu(); });
 for (const btn of menu.querySelectorAll("[data-scale]")) {
   btn.addEventListener("click", async () => {
     scale = Number(btn.dataset.scale) || 1;
+    fixedSize = null; // a size button returns to scale sizing; the backend drops the stored box
     markSelectedSize(menu, scale);
+    updateCaptionScale();
     await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
     // closeMenu (Escape) may have run while the scale was being stored and already restored the
     // window.
@@ -788,46 +845,66 @@ async function activatePill() {
 pill.addEventListener("click", (e) => { if (e.detail === 0) activatePill(); });
 
 // ---- Edge/corner resize ----
-// The grabbed edge or corner follows the cursor 1:1 while the opposite side stays put.
-// Content scales with the window (aspect kept), up to nearly full screen.
-let resizing = null;
+// The grabbed edge or corner follows the cursor 1:1, width and height independently, while the
+// opposite side stays put. The backend does all geometry in physical pixels from the real
+// cursor position (float_resize_*); this page only starts, steps and ends the drag and fits
+// its content into the box it gets back.
+let resizing = null; // {dirX, dirY, started, ready, ending}
 let rzRaf = 0;
-let rzPending = null;
+let rzBusy = false;
+let rzAgain = false;
+let rzFlight = Promise.resolve();
 
 function updateCaptionScale() {
-  document.getElementById("caption").style.fontSize = pCaptionSize > 1 ? `${Math.round(pCaptionSize * scale)}px` : "";
+  document.getElementById("caption").style.fontSize = pCaptionSize > 1 ? `${Math.round(pCaptionSize * (fixedSize ? fitScale : scale))}px` : "";
 }
 
-// Pill box (logical px) at a given scale, leaving the live scale untouched.
-function boxAtScale(s) {
-  const saved = scale;
-  scale = s;
-  const b = pillBox();
-  scale = saved;
-  pillBox(); // restore the label font to the current scale
-  return b;
+// One step: ask the backend to follow the cursor, then fit the content to the box it set.
+// Steps never overlap; a request that arrives meanwhile runs once more afterwards.
+function stepResize() {
+  if (!resizing || !resizing.ready) return;
+  if (rzBusy) { rzAgain = true; return; }
+  rzBusy = true;
+  rzFlight = invoke("float_resize_move", { id: promptId }).then((sz) => {
+    if (resizing && Array.isArray(sz)) {
+      fixedSize = { w: sz[0], h: sz[1] };
+      pillBox();
+    }
+  }, () => {}).then(() => {
+    rzBusy = false;
+    if (rzAgain) { rzAgain = false; scheduleResizeStep(); }
+  });
+  return rzFlight;
 }
 
-function liveResize(s) {
-  const r = resizing;
-  scale = Math.max(SCALE_MIN, Math.min(r.sMax, s));
-  updateCaptionScale();
-  const box = pillBox(); // actual size at the new scale (re-measures text)
-  const left = r.dirX > 0 ? r.L : r.dirX < 0 ? r.L + r.w0 - box.w : r.L + (r.w0 - box.w) / 2;
-  const top = r.dirY > 0 ? r.T : r.dirY < 0 ? r.T + r.h0 - box.h : r.T + (r.h0 - box.h) / 2;
-  invoke("set_float_bounds", { id: promptId, x: left, y: top, width: box.w, height: box.h }).catch(() => {});
+function scheduleResizeStep() {
+  if (!rzRaf) rzRaf = requestAnimationFrame(() => { rzRaf = 0; stepResize(); });
 }
 
 async function endResize() {
-  if (!resizing) return;
-  resizing = null;
+  const r = resizing;
+  if (!r || r.ending) return;
+  r.ending = true;
   cancelAnimationFrame(rzRaf);
   rzRaf = 0;
-  rzPending = null;
+  rzAgain = false;
+  try {
+    await r.started;
+    await rzFlight;
+    if (r.ready) {
+      // Last step at the cursor's release position, then the final box is stored.
+      const sz = await invoke("float_resize_move", { id: promptId });
+      if (Array.isArray(sz)) fixedSize = { w: sz[0], h: sz[1] };
+      const stored = await invoke("float_resize_end", { id: promptId });
+      if (Array.isArray(stored)) fixedSize = { w: stored[0], h: stored[1] };
+    }
+  } catch {}
+  resizing = null;
   pill.classList.remove("resizing");
-  await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
-  markSelectedSize(menu, scale);
+  markSelectedSize(menu, 0);
+  pillBox();
   ensureVideoPlaying();
+  enforcePillSize();
 }
 
 // Which third of the pill the pointer is in picks the resize anchor; shared by the cursor
@@ -851,10 +928,10 @@ rzCatch.addEventListener("mousemove", (e) => {
   rzCatch.style.cursor = rzCursor(dx || (dy ? 0 : 1), dy);
 });
 
-// Grab the stadium ring to resize. Which third of the pill was grabbed picks the anchor (the
-// opposite edge stays put); for the uniform pill scale that only sets which way it grows.
+// Grab the stadium ring to resize. Which third of the pill was grabbed picks the edges that move
+// (the opposite ones stay put).
 rzCatch.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 || resizing) return;
   e.preventDefault();
   e.stopPropagation();
   const d = rzDir(e);
@@ -863,10 +940,9 @@ rzCatch.addEventListener("mousedown", (e) => {
   if (!dirX && !dirY) dirX = 1; // always drive at least one axis
   rzCatch.style.cursor = rzCursor(dirX, dirY); // lock the matching cursor
   const pr = pill.getBoundingClientRect();
-  // Pill top-left in screen CSS px (works whatever side the menu is on).
-  const L = e.screenX - e.clientX + pr.left;
-  const T = e.screenY - e.clientY + pr.top;
-  // Right-click menu open? Collapse it and resize the pill itself.
+  // Right-click menu open? Collapse it and resize the pill itself; the backend is told where
+  // the pill sits inside the larger window.
+  const inMenu = menuOpen;
   if (menuOpen) {
     menuOpen = false;
     menu.classList.add("hidden");
@@ -876,33 +952,25 @@ rzCatch.addEventListener("mousedown", (e) => {
     pill.style.height = "";
     menuState = null;
   }
-  const b1 = boxAtScale(1); // base size: maps cursor distance to scale
-  resizing = {
-    dirX, dirY,
-    L, T, w0: pr.width, h0: pr.height,
-    w1: b1.w, h1: b1.h,
-    sMax: Math.max(scale, Math.min(screen.availWidth * 0.97 / b1.w, screen.availHeight * 0.97 / b1.h)),
-  };
+  const r = { dirX, dirY, ready: false, ending: false, started: null };
+  r.started = invoke("float_resize_start", {
+    id: promptId, dirX, dirY, pill: inMenu ? [pr.left, pr.top, pr.width, pr.height] : null,
+  }).then((ok) => {
+    if (!ok) throw new Error("no drag");
+    r.ready = true;
+    if (resizing === r && !r.ending) stepResize(); // snap the window to the pill box right away
+  }).catch(() => {
+    if (resizing === r) { resizing = null; pill.classList.remove("resizing"); }
+  });
+  resizing = r;
   pill.classList.add("resizing");
   if (!videoEl.classList.contains("hidden")) pauseByApp();
-  liveResize(scale); // snap the window to the pill box right away
 });
 
 window.addEventListener("mousemove", (e) => {
   if (!resizing) return;
   if (e.buttons === 0) { endResize(); return; }
-  const r = resizing;
-  const sx = r.dirX > 0 ? (e.screenX - r.L) / r.w1
-    : r.dirX < 0 ? (r.L + r.w0 - e.screenX) / r.w1 : null;
-  const sy = r.dirY > 0 ? (e.screenY - r.T) / r.h1
-    : r.dirY < 0 ? (r.T + r.h0 - e.screenY) / r.h1 : null;
-  rzPending = sx != null && sy != null ? Math.max(sx, sy) : sx != null ? sx : sy;
-  if (!rzRaf) {
-    rzRaf = requestAnimationFrame(() => {
-      rzRaf = 0;
-      if (resizing && rzPending != null) liveResize(rzPending);
-    });
-  }
+  scheduleResizeStep();
 });
 window.addEventListener("mouseup", () => { if (resizing) endResize(); });
 

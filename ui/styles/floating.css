@@ -180,6 +180,17 @@ html, body {
 /* Never clip glyphs vertically (script fonts have huge descenders); the
    window itself bounds overlong text, the width tracks the label anyway. */
 .label { overflow: visible; }
+/* Dragged box (see fitToBox in floating.js): the label is sized to fit by script and gets an
+   ellipsis only once it reaches the minimum size. The vertical padding keeps glyph descenders
+   inside the clip. */
+.pill.fitted:not(.has-image) { padding: 0; }
+.pill.fitted .label {
+  max-width: var(--fit-w, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-block: 0.2em;
+  margin-block: -0.2em;
+}
 .feedback {
   overflow: hidden;
   text-overflow: ellipsis;
