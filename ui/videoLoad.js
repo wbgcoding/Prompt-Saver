@@ -102,7 +102,7 @@ async function checkEditState(path, myGen) {
   if (VE.loadGen !== myGen) return;
   const ok = await askRestoreEditState(parsed.ops.length);
   if (VE.loadGen !== myGen) return;
-  if (ok) {
+  if (ok === true) {
     // The files its overlays and clips name were allowed by a pick in an earlier session; the
     // backend re-allows exactly those from the stored state before the previews ask for them.
     await invoke("allow_edit_state_files", { kind: "video", target: path, size, mtime }).catch(() => {});
@@ -115,10 +115,11 @@ async function checkEditState(path, myGen) {
     // silently skipped. Best-effort and never awaited, so the editor opens with a stale badge for
     // a moment instead of waiting on a stat per source.
     refreshExtraSourceAvailability(myGen);
-  } else {
-    // Only an explicit "start fresh" answer drops the saved state; a dialog that
-    // was superseded by another source never gets here (the load generation check
-    // above returns first) and leaves it for the next open.
+  } else if (ok === "alt") {
+    // Only the explicit "start fresh" button drops the saved state. Cancel, Escape and a click on
+    // the dimmed background (the dialog opens by itself after the load) leave it for the next
+    // open, and a dialog superseded by another source never gets here (the load generation check
+    // above returns first).
     invoke("discard_edit_state", { kind: "video", target: path }).catch(() => {});
   }
 }
@@ -128,7 +129,7 @@ function askRestoreEditState(opCount) {
     title: t("editStateRestoreTitle"),
     message: t("editStateRestoreMsg").replace("{count}", String(opCount)),
     confirmLabel: t("editStateRestoreContinue"),
-    cancelLabel: t("editStateRestoreDiscard"),
+    altLabel: t("editStateRestoreDiscard"),
     danger: false,
   });
 }

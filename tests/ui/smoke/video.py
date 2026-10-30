@@ -1840,16 +1840,24 @@ EDIT_STATE_PROBE = """
       if (!msg.includes('(2)')) errs.push(which + 'the dialog message does not name the saved op count: ' + msg);
       const okBtn = document.getElementById('confirm-ok');
       const cancelBtn = document.getElementById('confirm-cancel');
-      if (!okBtn.textContent.trim() || !cancelBtn.textContent.trim()) {
+      const altBtn = document.getElementById('confirm-alt');
+      if (!okBtn.textContent.trim() || !cancelBtn.textContent.trim() || altBtn.classList.contains('hidden') || !altBtn.textContent.trim()) {
         errs.push(which + 'the dialog buttons carry no label');
       }
-      (action === 'continue' ? okBtn : cancelBtn).click();
+      // "discard" is the explicit start-fresh button; "later" is a click on the dimmed background,
+      // which must keep the saved state (a stray click beside the dialog is not an answer).
+      if (action === 'continue') okBtn.click();
+      else if (action === 'discard') document.getElementById('confirm-alt').click();
+      else overlay.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       await sleep(200);
       if (!overlay.classList.contains('hidden')) errs.push(which + 'the dialog did not close after the answer');
       const opRows = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
       if (action === 'continue') {
         if (opRows !== 2) errs.push(which + 'continuing did not restore the saved ops onto the timeline: ' + opRows + ' rows');
         if (window.__EDIT_STATE_DISCARDED__) errs.push(which + 'continuing must not also discard the saved edit state');
+      } else if (action === 'later') {
+        if (opRows !== 0) errs.push(which + 'dismissing left restored ops on the timeline: ' + opRows + ' rows');
+        if (window.__EDIT_STATE_DISCARDED__) errs.push(which + 'a dismissed restore question discarded the saved edit state');
       } else {
         if (opRows !== 0) errs.push(which + 'starting fresh left restored ops on the timeline: ' + opRows + ' rows');
         const d = window.__EDIT_STATE_DISCARDED__;
@@ -2125,7 +2133,7 @@ def run(browser, tmp):
             {"tool": "fade", "inMs": 100, "outMs": 200},
         ],
     }))
-    for action in ("continue", "discard"):
+    for action in ("continue", "discard", "later"):
         side = tmp / "ui" / f"video-restore-{action}.html"
         side.write_text(
             (REPO / "ui" / "video.html").read_text(encoding="utf-8")
