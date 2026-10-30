@@ -1430,3 +1430,38 @@ fn multi_a_restored_prompt_is_not_written_while_its_old_delete_marker_cannot_be_
     assert!(leftover_of(&rig, &id).exists(), "the write did not go through once the marker could be removed");
     assert!(!marker.exists());
 }
+
+// Two computers judge the same dead lock stale at once. The first replaces it with a fresh lock;
+// the second, still acting on its earlier read, must not remove that fresh lock.
+#[test]
+fn multi_two_takeovers_of_one_dead_lock_leave_only_one_holder() {
+    let dir = sync_tmp_dir("lock-takeover-race");
+    let lock = dir.join("p.md.lock");
+    let dead = lock_text("DEAD-PC", 7, 1);
+    fs::write(&lock, &dead).unwrap();
+    age_file(&lock, SYNC_LOCK_STALE_SECS + 5);
+    let (a, b) = (lock_text("PC-A", 1, 10), lock_text("PC-B", 2, 20));
+    assert!(sync_lock_take_over(&lock, &dead, &a));
+    assert!(!sync_lock_take_over(&lock, &dead, &b), "the second claimant took a lock that was already replaced");
+    assert_eq!(fs::read_to_string(&lock).unwrap(), a, "the first holder's lock stays");
+    let leftovers: Vec<String> = fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(leftovers, vec!["p.md.lock".to_string()], "no claim file stays behind");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A claim left by a computer that died inside the takeover blocks the lock only for a stale limit.
+#[test]
+fn multi_a_dead_claimants_claim_file_is_cleared_after_the_stale_limit() {
+    let dir = sync_tmp_dir("lock-claim-stale");
+    let lock = dir.join("p.md.lock");
+    let dead = lock_text("DEAD-PC", 7, 1);
+    fs::write(&lock, &dead).unwrap();
+    let claim = sync_claim_path(&lock, &dead);
+    fs::write(&claim, "").unwrap();
+    let mine = lock_text("PC-A", 1, 10);
+    assert!(!sync_lock_take_over(&lock, &dead, &mine), "a fresh claim is respected");
+    age_file(&claim, SYNC_LOCK_STALE_SECS + 5);
+    assert!(sync_lock_take_over(&lock, &dead, &mine), "an abandoned claim does not block the file for good");
+    assert_eq!(fs::read_to_string(&lock).unwrap(), mine);
+    let _ = fs::remove_dir_all(&dir);
+}

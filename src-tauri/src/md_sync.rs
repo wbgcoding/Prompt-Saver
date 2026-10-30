@@ -2297,6 +2297,8 @@ pub(crate) fn sync_dir_scan(dir: &Path) -> SyncDirScan {
                     .is_some_and(|(fields, _)| md_is_ours(&fields))
         } else if let Some(rest) = name.strip_suffix(".md.lock") {
             sync_safe_id(rest) // our own write lock, cleared by whoever holds it
+        } else if let Some((rest, _)) = name.split_once(".md.lock.claim-") {
+            sync_safe_id(rest) // a takeover claim left by a computer that stopped midway
         } else if let Some(rest) = name.strip_suffix(".deleted") {
             sync_safe_id(rest) && sync_tomb_read(&path).is_some_and(|c| c.parse::<u64>().is_ok()) // a delete marker: only a time
         } else {

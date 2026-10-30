@@ -176,20 +176,82 @@ pub(crate) fn sync_lock_is_stale(lock_path: &Path) -> bool {
 pub(crate) fn sync_lock_acquire(md_path: &Path) -> bool {
     let lock_path = sync_lock_path(md_path);
     let since = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let token = format!("{}
-{}
-{}", local_host_name(), std::process::id(), since);
-    let try_create = |p: &Path| {
-        fs::OpenOptions::new().write(true).create_new(true).open(p).and_then(|mut f| std::io::Write::write_all(&mut f, token.as_bytes()))
-    };
-    let mut taken = try_create(&lock_path).is_ok();
+    let token = format!("{}\n{}\n{}", local_host_name(), std::process::id(), since);
+    let mut taken = sync_lock_create(&lock_path, &token);
     if !taken && sync_lock_is_stale(&lock_path) {
-        let _ = fs::remove_file(&lock_path);
-        taken = try_create(&lock_path).is_ok();
+        let dead = fs::read(&lock_path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+        taken = sync_lock_take_over(&lock_path, &dead, &token);
     }
     if taken {
         sync_state().locks.lock().unwrap_or_else(|e| e.into_inner()).insert(sync_seen_key(&lock_path), token);
     }
+    taken
+}
+
+// Creates the lock file with its text. A write that fails (disk full) must not leave an empty
+// lock behind: it would block the file for the whole stale limit.
+fn sync_lock_create(lock_path: &Path, token: &str) -> bool {
+    let Ok(mut f) = fs::OpenOptions::new().write(true).create_new(true).open(lock_path) else { return false };
+    if std::io::Write::write_all(&mut f, token.as_bytes()).is_ok() {
+        return true;
+    }
+    drop(f);
+    let _ = fs::remove_file(lock_path);
+    false
+}
+
+const SYNC_CLAIM_INFIX: &str = ".claim-";
+
+// One claim file per dead lock text, the same name on every computer, so its exclusive create
+// lets only one of them replace that lock.
+pub(crate) fn sync_claim_path(lock_path: &Path, dead: &str) -> PathBuf {
+    let hash = crate::ffmpeg::hex_lower(&crate::ffmpeg::sha256(dead.as_bytes())[..8]);
+    let mut s = lock_path.as_os_str().to_os_string();
+    s.push(format!("{SYNC_CLAIM_INFIX}{hash}"));
+    PathBuf::from(s)
+}
+
+// Wins the claim, or not. One left by a computer that died inside the takeover is cleared once
+// it is a stale limit old; the rename lets only one process clear it.
+fn sync_claim_win(claim: &Path) -> bool {
+    let create = || fs::OpenOptions::new().write(true).create_new(true).open(claim);
+    match create() {
+        Ok(_) => return true,
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return false,
+        Err(_) => {}
+    }
+    let old = fs::metadata(claim).ok().and_then(|m| m.modified().ok()).and_then(|m| m.elapsed().ok());
+    if old.is_none_or(|d| d.as_secs() < SYNC_LOCK_STALE_SECS) {
+        return false;
+    }
+    let mut aside = claim.as_os_str().to_os_string();
+    aside.push(format!(".stale-{}-{}", local_host_name(), std::process::id()));
+    let aside = PathBuf::from(aside);
+    if fs::rename(claim, &aside).is_err() {
+        return false;
+    }
+    let _ = fs::remove_file(&aside);
+    create().is_ok()
+}
+
+// Replaces a lock judged stale. Two computers can judge the same dead lock at the same time;
+// the claim for that text lets one of them in, and it looks at the lock again before removing
+// it: a claimant that was already through has put a fresh lock there, which must stay.
+pub(crate) fn sync_lock_take_over(lock_path: &Path, dead: &str, token: &str) -> bool {
+    let claim = sync_claim_path(lock_path, dead);
+    if !sync_claim_win(&claim) {
+        return false;
+    }
+    let now = fs::read(lock_path).ok().map(|b| String::from_utf8_lossy(&b).into_owned());
+    let taken = match now {
+        Some(text) if text != dead => false,
+        Some(_) => {
+            let _ = fs::remove_file(lock_path);
+            sync_lock_create(lock_path, token)
+        }
+        None => sync_lock_create(lock_path, token),
+    };
+    let _ = fs::remove_file(&claim);
     taken
 }
 
