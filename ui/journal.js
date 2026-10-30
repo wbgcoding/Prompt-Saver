@@ -613,6 +613,14 @@ export function bindJournal() {
       settings.last_used = {};
     }
     if (clipAffected) {
+      // Entries stored while the dialog was open must come back on Undo too: read again.
+      if (flag("confirmClearHistory")) {
+        try { items = await invoke("clip_inbox_list"); } catch (e) {
+          if (appAffected) await loadJournal();
+          failAfterClear(e);
+          return;
+        }
+      }
       // A failed clear stops right here: no purge. The copy log, if it was cleared a
       // moment ago, stays undoable in the very toast that shows the error.
       try { await invoke("clip_inbox_clear"); } catch (e) {
