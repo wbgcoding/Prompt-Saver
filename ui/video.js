@@ -239,9 +239,13 @@ function applyI18n() {
   renderHelp();
 }
 
+// Counts loadTexts calls so a slower language import cannot overwrite a newer one.
+let textsSeq = 0;
 export async function loadTexts(settings) {
   const lang = resolveLang(settings?.language, LANGS);
+  const seq = ++textsSeq;
   const { tx } = await fullTexts(lang);
+  if (seq !== textsSeq) return;
   LANG = lang;
   TX = tx;
   TXT_READY = true;
