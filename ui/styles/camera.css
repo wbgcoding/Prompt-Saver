@@ -296,10 +296,12 @@ option:checked { background-color: var(--accent); color: var(--accent-fg); }
   50% { opacity: 0.35; }
 }
 
+/* A fixed 16:9 picture: the window is sized to its content (see fitWindowHeight in
+   camera.js), so the preview never stretches into a tall black area. */
 .cam-stage {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: none;
+  aspect-ratio: 16 / 9;
   margin: 0 12px;
   border-radius: 8px;
   overflow: hidden;

@@ -1344,7 +1344,7 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 /* `hidden auto`, not `hidden`: on a short window the head + filter rows alone can eat
    the whole dialog, and the list below keeps a minimum height (see .library-list);
    the dialog then scrolls to it instead of crushing it out of existence. */
-#library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
+#library .modal { width: min(var(--lib-width, 900px), 95vw); height: auto; max-height: var(--full-modal-h); overflow: hidden auto; }
 /* The two tabs of the library: one panel each, the dialog keeps one size. */
 .lib-tabs { display: flex; gap: 4px; margin-left: 12px; }
 /* Library head: title, tabs and the close X on the first line, the tab's own actions

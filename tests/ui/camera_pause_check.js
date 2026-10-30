@@ -72,6 +72,8 @@ async function main() {
   };
   sandbox.window = sandbox;
   sandbox.addEventListener = () => {};
+  sandbox.requestAnimationFrame = () => 0;
+  sandbox.cancelAnimationFrame = () => {};
   sandbox.__TAURI__ = {
     core: {
       invoke: async (cmd) => {

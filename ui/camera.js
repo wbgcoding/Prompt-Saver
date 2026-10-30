@@ -607,6 +607,23 @@ Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default
   .catch(() => {})
   .finally(() => { settingsReady = true; startPreviewWhenReady(); });
 
+// The window is exactly as tall as its content: the preview keeps a 16:9 shape, so the height
+// follows the width and nothing is left blank under the buttons. Runs at load, after every
+// text change and when the window is resized (a drag on the edge snaps back to the fit).
+let fitFrame = 0;
+function fitWindowHeight() {
+  cancelAnimationFrame(fitFrame);
+  fitFrame = requestAnimationFrame(() => {
+    const last = document.querySelector(".cam-transport");
+    const LogicalSize = window.__TAURI__.dpi && window.__TAURI__.dpi.LogicalSize;
+    if (!last || !LogicalSize || typeof appWin.setSize !== "function") return;
+    const h = Math.ceil(last.getBoundingClientRect().bottom);
+    if (!(h > 0) || Math.abs(h - window.innerHeight) < 2) return;
+    Promise.resolve(appWin.setSize(new LogicalSize(window.innerWidth, h))).catch(() => {});
+  });
+}
+window.addEventListener("resize", fitWindowHeight);
+
 // Every text this window shows, drawn again from the current language. The window
 // stays open while the language can be switched in the main window, so this runs
 // at load and on every language-changed.
@@ -625,6 +642,7 @@ function applyTexts() {
   const silent = audioSelect.options[0];
   if (silent && silent.value === "") silent.textContent = t("cameraAudioNone");
   if (!noDeviceEl.classList.contains("hidden")) noDeviceEl.textContent = t("cameraNoDevice");
+  fitWindowHeight();
 }
 listen("language-changed", () => {
   Promise.all([invoke("get_settings"), import("./floatShared.js")])

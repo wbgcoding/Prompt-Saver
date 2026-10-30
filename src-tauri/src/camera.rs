@@ -433,8 +433,8 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
     CAM_PERMISSION_FAILED.store(false, std::sync::atomic::Ordering::SeqCst);
     let win = WebviewWindowBuilder::new(&app, CAMERA_WIN_LABEL, WebviewUrl::App("camera.html".into()))
         .title(crate::brand::DISPLAY_NAME)
-        .inner_size(420.0, 620.0)
-        .min_inner_size(360.0, 520.0)
+        .inner_size(420.0, 490.0)
+        .min_inner_size(360.0, 420.0)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)

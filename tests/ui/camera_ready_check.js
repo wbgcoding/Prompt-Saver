@@ -70,6 +70,8 @@ async function main() {
   };
   sandbox.window = sandbox;
   sandbox.addEventListener = () => {};
+  sandbox.requestAnimationFrame = () => 0;
+  sandbox.cancelAnimationFrame = () => {};
   sandbox.__TAURI__ = {
     core: {
       // Permission is already granted (its event fired before the listener); the settings
