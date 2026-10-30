@@ -158,6 +158,42 @@ fn own_screenshot_gate_only_passes_our_files_in_a_save_folder() {
     let _ = fs::remove_dir_all(&nested);
 }
 
+// ---- a saved file's bytes match the extension it was saved under ----
+
+#[test]
+fn format_for_extension_reads_the_supported_names() {
+    assert_eq!(format_for_extension(Path::new("a/shot.PNG")), Some("png"));
+    assert_eq!(format_for_extension(Path::new("shot.jpg")), Some("jpeg"));
+    assert_eq!(format_for_extension(Path::new("shot.JPEG")), Some("jpeg"));
+    assert_eq!(format_for_extension(Path::new("shot.webp")), Some("webp"));
+    assert_eq!(format_for_extension(Path::new("shot.bmp")), Some("bmp"));
+    assert_eq!(format_for_extension(Path::new("shot.txt")), None);
+    assert_eq!(format_for_extension(Path::new("shot")), None);
+    // every named format round-trips through the extension the encoder writes
+    for f in ["png", "jpeg", "webp", "bmp"] {
+        let name = format!("x.{}", screenshot_format_ext(f));
+        assert_eq!(format_for_extension(Path::new(&name)), Some(f));
+    }
+}
+
+#[test]
+fn a_picked_file_name_decides_the_format_written() {
+    let mut png = Vec::new();
+    image::DynamicImage::new_rgba8(8, 8)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let jpeg = reencode_screenshot_bytes(&png, "jpeg", 90).unwrap();
+    assert!(jpeg.starts_with(&[0xFF, 0xD8]));
+    // the editor said JPEG, the name says .png: PNG bytes
+    let got = bytes_for_picked_path(Path::new("shot.png"), "jpg", jpeg.clone(), &png, 90).unwrap();
+    assert!(got.starts_with(&[0x89, b'P', b'N', b'G']), "a .png name must hold PNG bytes");
+    // name and format agree, or the name says nothing: the encoded bytes go as they are
+    assert_eq!(bytes_for_picked_path(Path::new("shot.jpg"), "jpg", jpeg.clone(), &png, 90).unwrap(), jpeg);
+    assert_eq!(bytes_for_picked_path(Path::new("shot.JPEG"), "jpg", jpeg.clone(), &png, 90).unwrap(), jpeg);
+    assert_eq!(bytes_for_picked_path(Path::new("shot"), "jpg", jpeg.clone(), &png, 90).unwrap(), jpeg);
+    assert_eq!(bytes_for_picked_path(Path::new("shot.dat"), "jpg", jpeg.clone(), &png, 90).unwrap(), jpeg);
+}
+
 // ---- a stale preview encode never lands in the slot ----
 
 #[test]

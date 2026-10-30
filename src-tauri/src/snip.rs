@@ -1103,6 +1103,25 @@ pub(crate) fn screenshot_format_ext(format: &str) -> &'static str {
         _ => "png",
     }
 }
+// The screenshot format a file name's extension asks for; None for no or an unknown extension.
+pub(crate) fn format_for_extension(path: &std::path::Path) -> Option<&'static str> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "png" => Some("png"),
+        "jpg" | "jpeg" => Some("jpeg"),
+        "webp" => Some("webp"),
+        "bmp" => Some("bmp"),
+        _ => None,
+    }
+}
+// The bytes to write under a picked file name: the ones already encoded in the editor's format
+// when the name agrees with it (or has no format of its own), else the source image encoded in
+// the format the name's extension asks for.
+pub(crate) fn bytes_for_picked_path(path: &std::path::Path, chosen_ext: &str, chosen: Vec<u8>, source: &[u8], quality: u8) -> Result<Vec<u8>, String> {
+    match format_for_extension(path).filter(|f| screenshot_format_ext(f) != chosen_ext) {
+        Some(f) => reencode_screenshot_bytes(source, f, quality),
+        None => Ok(chosen),
+    }
+}
 pub(crate) fn screenshot_format_mime(format: &str) -> &'static str {
     match format {
         "jpeg" => "image/jpeg",
@@ -1379,6 +1398,8 @@ pub(crate) async fn save_screenshot_as(
         )
     };
     let format = format.unwrap_or(default_format);
+    // Kept for a second encode when the picked file name asks for another format.
+    let source = bytes.clone();
     let out_bytes = tauri::async_runtime::spawn_blocking(move || reencode_screenshot_bytes(&bytes, &format, quality).map(|b| (b, format)))
         .await
         .map_err(|e| e.to_string())??;
@@ -1409,6 +1430,13 @@ pub(crate) async fn save_screenshot_as(
     let _ = win.set_focus();
     match picked {
         Some(p) => {
+            // A typed or picked name wins over the editor's format select: the bytes must match
+            // the extension the user sees (renaming the file instead could overwrite a file the
+            // dialog never asked about).
+            let named = p.clone();
+            let out_bytes = tauri::async_runtime::spawn_blocking(move || bytes_for_picked_path(&named, ext, out_bytes, &source, quality))
+                .await
+                .map_err(|e| e.to_string())??;
             write_bytes_atomic(&p, &out_bytes).map_err(|e| e.to_string())?;
             Ok(Some(p.to_string_lossy().to_string()))
         }
