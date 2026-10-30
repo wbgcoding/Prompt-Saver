@@ -3,7 +3,7 @@
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
 import { keysPreviewModel } from "./videoKeys.js";
-import { typographicApostrophe } from "./videoGraph.js";
+import { typographicApostrophe, videoOverlayWindowOutMs } from "./videoGraph.js";
 import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, selectOverlay, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
@@ -370,7 +370,11 @@ export function renderOverlayLive(vb) {
   const stack = overlayStack();
   for (const op of stack) {
     const prev = VE.liveEls.get(op.id);
-    if (now < op.startMs || now > op.endMs) {
+    // A video that plays once has nothing left to show once its footage ended; the export drops
+    // it there too instead of freezing the last frame.
+    const spent = op.kind === "video" && !op.loop && op.videoDurationMs > 0
+      && outMs(clamp(now, 0, VE.dur)) > videoOverlayWindowOutMs(op).endOut;
+    if (now < op.startMs || now > op.endMs || spent) {
       if (prev) {
         prev.hidden = true;
         // A hidden inserted video would otherwise keep decoding off screen.

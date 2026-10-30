@@ -547,6 +547,24 @@ def run(browser, tmp):
     if (VE.ops[0].startMs !== 1000) errs.push('4046: undo after redo did not step back to the old trim');
     """)
 
+    # 4047: a video overlay that plays once is gone from the preview after its footage ends.
+    failed += vprobe('ovspent', 'a spent video overlay is hidden in the preview', r"""
+    const { renderOverlayLive } = await import('./videoPreview.js');
+    const op = { tool: 'overlay', id: 'ov-spent', kind: 'video', z: 1, startMs: 0, endMs: 10000, path: 'C:/Temp/x.mp4',
+      rect: { x: 10, y: 10, w: 100, h: 60 }, opacity: 100, volume: 0, loop: false, hasAudio: false, videoDurationMs: 2000 };
+    VE.ops = [op];
+    VE.playhead = 1000;
+    renderOverlayLive();
+    const el = VE.liveEls.get('ov-spent');
+    if (!el || el.hidden) errs.push('4047: fixture: the overlay is not shown inside its footage');
+    VE.playhead = 5000;
+    renderOverlayLive();
+    if (!VE.liveEls.get('ov-spent').hidden) errs.push('4047: the overlay stays on screen after its footage ended');
+    op.loop = true;
+    renderOverlayLive();
+    if (VE.liveEls.get('ov-spent').hidden) errs.push('4047: a looping overlay was hidden');
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);

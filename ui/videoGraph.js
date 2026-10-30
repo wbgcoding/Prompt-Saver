@@ -48,7 +48,7 @@ export function enableExpr(op) {
 // file (which broke the whole export). The footage plays at native speed on the output clock,
 // so the cap is added to the start after both ends went through outMs(): a speed change or cut
 // inside the range must not stretch or shrink the footage's length.
-function videoOverlayWindowOutMs(op) {
+export function videoOverlayWindowOutMs(op) {
   const aOut = outMs(clamp(op.startMs, 0, VE.dur));
   const bOut = outMs(clamp(op.endMs, 0, VE.dur), true);
   const endOut = op.loop || !op.videoDurationMs ? bOut : Math.min(bOut, aOut + op.videoDurationMs);
