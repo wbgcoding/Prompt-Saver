@@ -473,6 +473,24 @@ fn restore_moves_a_trashed_prompt_back_only_with_yes() {
 }
 
 #[test]
+fn restore_gives_a_fresh_id_when_a_live_prompt_already_holds_it() {
+    let mut store = fixture_store();
+    let dir = std::env::temp_dir();
+    let mut twin = store.prompts.iter().find(|p| p.id == "p1").unwrap().clone();
+    twin.trashed_at = 5;
+    store.trash.push(twin);
+    let live = store.prompts.len();
+    let ok = run_cmd(&mut store, &dir, &["restore", "p1", "--yes"]);
+    assert_eq!(ok.code, 0);
+    assert!(store.trash.is_empty());
+    assert_eq!(store.prompts.len(), live + 1);
+    let mut ids: Vec<&str> = store.prompts.iter().map(|p| p.id.as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), live + 1, "no two prompts may share an id, the write would refuse them");
+}
+
+#[test]
 fn tag_add_and_remove_round_trip_only_with_yes() {
     let mut store = fixture_store();
     let dir = std::env::temp_dir();

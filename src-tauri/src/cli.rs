@@ -17,7 +17,7 @@ use crate::{
     gfs_from_settings, list_backups_impl_at, lock, migrate_prompts, parse_import_bytes,
     parse_ui_text_map, read_file_capped, resolved_for_export, restore_selective, sanitize_notes,
     sanitize_tags, show_main, stage_and_validate_backup, tag_key, to_csv, to_json, to_txt,
-    upgrade_placeholders, upgrade_prompt_placeholders, valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt,
+    upgrade_placeholders, valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt,
     Store, WrittenRows, MAX_IMPORT_BYTES,
 };
 use std::path::{Path, PathBuf};
@@ -1483,15 +1483,11 @@ fn cmd_delete(store: &mut Store, id: &str) -> Outcome {
 }
 
 fn cmd_restore(store: &mut Store, id: &str, json: bool) -> Outcome {
-    let Some(pos) = store.trash.iter().position(|p| p.id == id) else {
+    // The app's own restore: same seat on the active view, a fresh id when a live prompt holds
+    // this one, and the sync marks cleared. The save step is the caller's, so it always passes.
+    if crate::trash::restore_trashed_core(store, id, |_| true).is_err() {
         return Outcome::err(2, format!("no prompt with id {id} in the trash\n"));
-    };
-    let mut p = store.trash.remove(pos);
-    p.trashed_at = 0;
-    upgrade_prompt_placeholders(&mut p);
-    // Same seat the app's own restore gives: on the active view, or its overflow row.
-    crate::seat_restored_in_active_view(&mut store.settings, &p.id);
-    store.prompts.push(p);
+    }
     let body = if json { "{\"ok\":true}\n".to_string() } else { String::new() };
     Outcome::ok(body).mutating_trash().mutating_settings()
 }
