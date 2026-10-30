@@ -1485,6 +1485,21 @@ fn copy_log_migration_writes_nothing_while_read_only() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn copy_log_migration_keeps_the_history_when_the_insert_fails() {
+    let dir = ddlock_test_dir("migrate-fail");
+    let mut conn = db_conn_at(&dir).unwrap();
+    // A table the insert cannot use stands in for a busy or locked database.
+    conn.execute("ALTER TABLE copy_log RENAME TO copy_log_gone", []).unwrap();
+    let mut s = Settings { copy_log: vec![CopyEntry { id: "b".into(), ts: 20 }, CopyEntry { id: "a".into(), ts: 10 }], ..Default::default() };
+    assert!(!migrate_copy_log_once(&mut conn, &mut s, true));
+    assert_eq!(s.copy_log.len(), 2, "the blob history stays until the rows are really stored");
+    let marker = conn.query_row("SELECT 1 FROM meta WHERE key='copy_log_migrated'", [], |_| Ok(())).is_ok();
+    assert!(!marker, "no marker, so the next load retries");
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // A unit test cannot run a command (no app handle), so the gate is pinned in the source: each
 // writer opens its connection through db_conn_write, which refuses while the folder is
 // another machine's, and none of them is allowed back onto the plain connection.

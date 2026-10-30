@@ -1946,25 +1946,27 @@ pub(crate) fn migrate_copy_log_once(conn: &mut Connection, settings: &mut Settin
             }
         }
         if may_write {
-            if let Ok(tx) = conn.transaction() {
+            // The rows and the marker commit together or not at all (a dropped transaction rolls
+            // back), so a busy database leaves the blob history in place for the next load.
+            let moved = (|| -> rusqlite::Result<()> {
+                let tx = conn.transaction()?;
                 {
-                    if let Ok(mut stmt) = tx.prepare("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)") {
-                        for e in settings.copy_log.iter().rev() {
-                            let _ = stmt.execute(params![e.ts as i64, e.id]);
-                        }
+                    let mut stmt = tx.prepare("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)")?;
+                    for e in settings.copy_log.iter().rev() {
+                        stmt.execute(params![e.ts as i64, e.id])?;
                     }
-                    let _ = tx.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", []);
                 }
-                if tx.commit().is_ok() {
-                    migrated_log = true;
-                }
-            }
+                tx.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", [])?;
+                tx.commit()
+            })();
+            migrated_log = moved.is_ok();
         }
     } else if may_write {
         // No legacy history to move: mark done so we never re-check.
         let _ = conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')", []);
     }
-    if may_write {
+    // Emptied only once the rows are safe in the table.
+    if migrated_log {
         settings.copy_log.clear();
     }
     migrated_log
