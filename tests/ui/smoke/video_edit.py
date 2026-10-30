@@ -505,6 +505,29 @@ def run(browser, tmp):
     if (VE.ops.some((o) => o.tool === 'scale')) errs.push('4044: Ctrl+Z did nothing with a checkbox focused');
     """)
 
+    # 4045: undo and delete wait while a drag that commits on release is running.
+    failed += vprobe('dragundo', 'undo and Delete are ignored during an edit drag', r"""
+    // 4045: a rect drag in progress keeps its op.
+    const w = document.getElementById('ve-scale-w');
+    w.value = '320';
+    w.dispatchEvent(new Event('change', { bubbles: true }));
+    if (!VE.ops.some((o) => o.tool === 'scale')) errs.push('4045: fixture: no scale op');
+    VE.drag = { kind: 'rect' };
+    const press = (init) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ bubbles: true, cancelable: true }, init)));
+    press({ key: 'z', code: 'KeyZ', ctrlKey: true });
+    await sleep(40);
+    if (!VE.ops.some((o) => o.tool === 'scale')) errs.push('4045: Ctrl+Z during a drag removed the op');
+    VE.drag = null;
+    press({ key: 'z', code: 'KeyZ', ctrlKey: true });
+    await sleep(40);
+    if (VE.ops.some((o) => o.tool === 'scale')) errs.push('4045: fixture: Ctrl+Z without a drag did nothing');
+    VE.drag = { kind: 'rect' };
+    press({ key: 'y', code: 'KeyY', ctrlKey: true });
+    await sleep(40);
+    if (VE.ops.some((o) => o.tool === 'scale')) errs.push('4045: Ctrl+Y during a drag redid the op');
+    VE.drag = null;
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);

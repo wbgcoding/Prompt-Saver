@@ -466,8 +466,12 @@ function restoreRemoved(marker) {
   for (const { op, at } of marker.removed) VE.ops.splice(Math.min(at, VE.ops.length), 0, op);
 }
 
+// A drag that will commit an op on release (rect, resize, trim) must not have that op undone or
+// deleted from under it, or the release pushes it back as a new entry and drops the redo stack.
+const editDragActive = () => !!VE.drag && ["rect", "resize", "trim"].includes(VE.drag.kind);
+
 export function undo() {
-  if (VE.ops.length <= VE.floor) return;
+  if (editDragActive() || VE.ops.length <= VE.floor) return;
   const idx = VE.ops.length - 1;
   const cur = VE.ops[idx];
   if (cur.tool === "removal") {
@@ -490,7 +494,7 @@ export function undo() {
 }
 
 export function redo() {
-  if (!VE.redo.length) return;
+  if (editDragActive() || !VE.redo.length) return;
   const next = VE.redo.pop();
   if (next.tool === "removal") {
     VE.floor = Math.max(0, VE.floor - next.removed.filter((r) => r.at < VE.floor).length);
@@ -2249,7 +2253,7 @@ document.addEventListener("keydown", (e) => {
   }
   // Delete or Backspace removes the overlay selected on the picture (undoable). A key that a
   // focused row already took for itself (defaultPrevented) is not used twice.
-  if (selectedOverlay && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+  if (selectedOverlay && !editDragActive() && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
     e.preventDefault();
     VE.selOv = null;
     deleteOp(selectedOverlay);
