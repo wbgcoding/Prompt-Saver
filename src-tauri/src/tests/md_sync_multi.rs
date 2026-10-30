@@ -1566,3 +1566,20 @@ fn multi_a_lock_of_this_process_that_it_failed_to_remove_does_not_block_the_file
     sync_lock_release(&md);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn multi_a_lock_dated_far_ahead_becomes_old_by_the_time_this_instance_has_seen_it() {
+    let rig = Rig::new();
+    let lock = rig.dir.join("p.md.lock");
+    fs::write(&lock, lock_text("OTHER-PC", 1, unix_ns_now())).unwrap();
+    let f = fs::OpenOptions::new().write(true).open(&lock).unwrap();
+    f.set_modified(SystemTime::now() + Duration::from_secs(7200)).unwrap();
+    drop(f);
+    rig.a.run(|| {
+        assert!(!sync_lock_is_stale(&lock), "just seen: not old");
+    });
+    rig.a.skew(SYNC_LOCK_FOREIGN_STALE_SECS as i64 + 5);
+    rig.a.run(|| {
+        assert!(sync_lock_is_stale(&lock), "a crashed writer with a fast clock blocked the file for hours");
+    });
+}

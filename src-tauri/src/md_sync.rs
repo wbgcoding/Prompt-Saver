@@ -933,6 +933,9 @@ pub(crate) struct SyncState {
     pub(crate) tomb_text: Mutex<HashMap<String, (SyncStamp, String)>>,
     /// The lock files this instance holds right now: lock path -> the text it wrote into it.
     pub(crate) locks: Mutex<HashMap<String, String>>,
+    /// Lock files dated in the future, when this instance first saw each text by its own
+    /// clock: lock path -> (text, time). Their age counts from here, not from the file date.
+    pub(crate) lock_sighted: Mutex<HashMap<String, (String, u64)>>,
     pub(crate) health: Mutex<SyncHealth>,
     /// True from the start of the app until the first poll has read the folder: a write before
     /// that would put a library that may be older than the folder over the folder's text.

@@ -159,9 +159,28 @@ fn read_sync_lock_text(lock_path: &Path) -> String {
 // Judges the lock text read before this call. The file's age is read afterwards, so a lock
 // that another computer replaced in between looks young and is left alone.
 fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
-    let Ok(meta) = fs::metadata(lock_path) else { return true }; // gone already
-    // A lock dated in the future (the other computer's clock runs ahead) is not old.
-    let Some(age) = meta.modified().ok().and_then(|m| m.elapsed().ok()).map(|d| d.as_secs()) else { return false };
+    let key = sync_seen_key(lock_path);
+    let Ok(meta) = fs::metadata(lock_path) else {
+        sync_state().lock_sighted.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
+        return true; // gone already
+    };
+    let age = match meta.modified().ok().and_then(|m| m.elapsed().ok()) {
+        Some(d) => d.as_secs(),
+        // Dated in the future (the writer's clock runs ahead, or this one was set back): the
+        // date says nothing, so the age counts from the first time this instance saw this text.
+        None => {
+            let now = sync_now_secs();
+            let mut sighted = sync_state().lock_sighted.lock().unwrap_or_else(|e| e.into_inner());
+            let first = match sighted.get(&key) {
+                Some((t, at)) if t == text => *at,
+                _ => {
+                    sighted.insert(key.clone(), (text.to_string(), now));
+                    now
+                }
+            };
+            now.saturating_sub(first)
+        }
+    };
     match sync_lock_holder(text) {
         SyncLockHolder::Here { pid, since_ns } => {
             if age < SYNC_LOCK_STALE_SECS {
