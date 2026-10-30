@@ -1120,6 +1120,7 @@ export function updateGridBatchBar() {
 // statistics or duplicate dialogs is the topmost thing, so those do not count.
 export function otherOverlayOpen(selfId) {
   if (isValuePopOpen()) return true; // an open value list takes Escape first
+  if (!$("ctx").classList.contains("hidden")) return true; // so does an open tile menu
   const under = document.body.classList.contains("library-front") ? ["backup-modal", "stats-modal", "dupes-modal"] : [];
   return [...document.querySelectorAll(".overlay:not(.hidden)")].some((o) => o.id !== selfId && !under.includes(o.id));
 }

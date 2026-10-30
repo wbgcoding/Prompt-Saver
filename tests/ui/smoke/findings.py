@@ -136,6 +136,32 @@ def run(browser, tmp):
     if (!bar.classList.contains('hidden')) errs.push('563-4: the batch bar stayed visible after switching to the favorites grid');
     if (document.body.classList.contains('grid-selecting')) errs.push('563-4: the grid stayed in selection mode after switching to the favorites grid');
 """)
+    failed += ar_probe('f4b', 'grid selection: Escape with the tile menu open closes the menu and keeps the selection', 'index', '1000x780', '', r"""
+    await bootReady();
+    tileEl('p1').querySelector('.tile-select').click();
+    await sleep(150);
+    tileEl('p1').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+    await sleep(150);
+    const ctx = document.getElementById('ctx');
+    if (ctx.classList.contains('hidden')) errs.push('f4b: fixture: the tile menu did not open');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await sleep(150);
+    if (!ctx.classList.contains('hidden')) errs.push('f4b: Escape left the tile menu open');
+    if (!document.body.classList.contains('grid-selecting')) errs.push('f4b: Escape for the menu also cleared the selection');
+""")
+    failed += ar_probe('copyfail', 'a copy the clipboard refuses says so instead of claiming it was copied', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { ocrAutoCopy: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.copy_text = () => false;
+    document.getElementById('toast').textContent = '';
+    window.__FIRE__('ocr-captured', { text: 'hello', lang: 'en' });
+    await sleep(300);
+    if (!document.getElementById('ocr-autocopy-note').classList.contains('hidden')) errs.push('copyfail: the OCR result says the text is on the clipboard after a refused copy');
+    if (!/clipboard could not be written/i.test(document.getElementById('toast').textContent)) errs.push('copyfail: a refused OCR auto-copy showed no notice, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
+    RESULTS.copy_text = () => true;
+    window.__FIRE__('ocr-captured', { text: 'again', lang: 'en' });
+    await sleep(300);
+    if (document.getElementById('ocr-autocopy-note').classList.contains('hidden')) errs.push('copyfail: a good auto-copy no longer shows the note');
+""")
     failed += ar_probe('f11', 'folder popover member: a click in chain mode picks the prompt for the chain', 'index', '1000x780', '', r"""
     await bootReady();
     const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(300); };
