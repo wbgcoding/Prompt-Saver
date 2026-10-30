@@ -1678,3 +1678,47 @@ fn multi_the_folder_switch_deletes_the_old_folder_under_the_run_lock() {
     let delete = body.find("sync_delete_dir(&old").expect("set_sync_dir deletes the old folder");
     assert!(lock < delete, "a write queued for the old folder can run between the delete and its own check");
 }
+
+// Takes away the right to create files in a folder for the current user, and gives it back.
+#[cfg(windows)]
+struct ReadOnlyFolder(PathBuf, String);
+
+#[cfg(windows)]
+impl ReadOnlyFolder {
+    fn new(dir: &Path) -> ReadOnlyFolder {
+        let user = std::env::var("USERNAME").expect("USERNAME");
+        let status = std::process::Command::new("icacls")
+            .arg(dir)
+            .args(["/deny", &format!("{user}:(WD,AD)")])
+            .output()
+            .expect("icacls");
+        assert!(status.status.success(), "icacls could not deny writes: {}", String::from_utf8_lossy(&status.stdout));
+        ReadOnlyFolder(dir.to_path_buf(), user)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ReadOnlyFolder {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("icacls").arg(&self.0).args(["/remove:d", &self.1]).output();
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn multi_a_folder_that_cannot_take_new_files_is_still_read() {
+    let rig = Rig::new();
+    let id = rig.b.add("From the share", "handed out");
+    rig.b.step(&rig.dir);
+    rig.settle();
+    let late = rig.b.add("Added later", "second");
+    rig.b.step(&rig.dir);
+    let _locked = ReadOnlyFolder::new(&rig.dir);
+    rig.tick(3);
+    for _ in 0..3 {
+        rig.tick(3);
+        rig.a.poll(&rig.dir);
+    }
+    assert!(rig.a.get(&late).is_some(), "nothing was imported from a folder that is read-only for this user");
+    assert!(rig.a.get(&id).is_some());
+}

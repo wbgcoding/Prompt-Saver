@@ -2275,11 +2275,16 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
     for SyncToRead { path, key, stem, name, stamp } in to_read {
         // Acquire the file lock before reading, so it actually protects the read from a concurrent
         // writer.
-        if !sync_lock_acquire(&path) {
+        // A folder that does not let this user create files (a read-only share handed out for
+        // reading) can never take the lock, and nobody here writes into it either: read as is.
+        let locked = sync_lock_acquire(&path);
+        if !locked && !sync_lock_refused_by_folder(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
         let read = read_file_capped(&path, MAX_SYNC_MD_BYTES);
-        sync_lock_release(&path);
+        if locked {
+            sync_lock_release(&path);
+        }
         // A failed read (a cloud placeholder that did not download, a handle held for a moment)
         // says nothing about the file: it stays unhandled and is read again next round. Only
         // a too-big file is refused for good.

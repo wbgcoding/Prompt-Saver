@@ -233,6 +233,23 @@ pub(crate) fn sync_lock_acquire(md_path: &Path) -> bool {
     taken
 }
 
+// Whether the folder itself refuses new files to this user, which is why no lock can be
+// taken there (as opposed to a lock another writer holds). Probed with a file of its own
+// name, so a lock that is really held is never touched.
+pub(crate) fn sync_lock_refused_by_folder(md_path: &Path) -> bool {
+    let mut name = sync_lock_path(md_path).into_os_string();
+    name.push(format!(".probe-{}", std::process::id()));
+    let probe = PathBuf::from(name);
+    match fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(f) => {
+            drop(f);
+            let _ = fs::remove_file(&probe);
+            false
+        }
+        Err(e) => e.kind() == std::io::ErrorKind::PermissionDenied,
+    }
+}
+
 // Creates the lock file with its text. A write that fails (disk full) must not leave an empty
 // lock behind: it would block the file for the whole stale limit.
 fn sync_lock_create(lock_path: &Path, token: &str) -> bool {
