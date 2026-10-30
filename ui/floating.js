@@ -153,8 +153,8 @@ function pillBox() {
   return { w, h };
 }
 
-// Dragged box: the text takes the largest size (at most today's size at this height) that fits
-// the box minus its padding and gets an ellipsis below the minimum; images and videos are
+// Dragged box: the text wraps and takes the largest size (at most today's size at this height)
+// that fits the box minus its padding, and gets an ellipsis below the minimum; images and videos are
 // letterboxed by object-fit: contain.
 let fitScale = 1;
 function fitToBox(w, h) {
@@ -165,21 +165,34 @@ function fitToBox(w, h) {
     const k = h / PILL_H;
     fitScale = k;
     const padX = Math.max(4, Math.round(Math.min(30 * k, w * 0.12)));
+    // A box taller than wide has round caps at top and bottom: keep the lines out of them.
+    const padY = Math.max(2, Math.round(h * 0.08), h > w ? Math.round(w * 0.2) : 0);
     const avail = Math.max(1, w - 2 * padX);
+    const availH = Math.max(1, h - 2 * padY);
     label.style.setProperty("--fit-w", `${avail}px`);
-    const cap = Math.max(FIT_MIN_FONT, pillFontSize(k));
-    let fs = cap;
-    label.style.fontSize = `${fs}px`;
-    let need = label.scrollWidth;
-    if (need > avail) {
-      fs = Math.max(FIT_MIN_FONT, Math.floor((cap * avail) / need));
+    label.style.removeProperty("--fit-lines");
+    // The text wraps at word boundaries and takes the largest size whose lines all fit the box:
+    // a narrow, tall box gets several readable lines instead of one tiny one. A word wider than
+    // the box shrinks the size, never splits.
+    const fits = (fs) => {
       label.style.fontSize = `${fs}px`;
-      need = label.scrollWidth;
-      while (need > avail && fs > FIT_MIN_FONT) {
-        fs -= 1;
-        label.style.fontSize = `${fs}px`;
-        need = label.scrollWidth;
+      return label.scrollWidth <= avail + 0.5 && label.scrollHeight <= availH + 0.5;
+    };
+    const cap = Math.max(FIT_MIN_FONT, pillFontSize(k));
+    let lo = FIT_MIN_FONT, hi = cap;
+    if (fits(hi)) lo = hi;
+    else {
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (fits(mid)) lo = mid; else hi = mid;
       }
+    }
+    label.style.fontSize = `${lo}px`;
+    // Still too much text at the minimum size: show as many whole lines as fit, the last one
+    // ending in an ellipsis.
+    if (lo === FIT_MIN_FONT && !fits(lo)) {
+      const lineH = parseFloat(getComputedStyle(label).lineHeight) || lo * 1.2;
+      label.style.setProperty("--fit-lines", String(Math.max(1, Math.floor(availH / lineH))));
     }
   }
   updateCaptionScale();

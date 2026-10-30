@@ -1599,6 +1599,8 @@ const noopWindow = {
 // the only way to exercise a code path the backend normally starts: e.g. a prompt
 // hotkey being pressed while the app sits in the tray.
 const LISTENERS = {};
+// A probe swaps a single command result in place (e.g. the box a resize step returns).
+window.__STUB_RESULTS__ = RESULTS;
 window.__FIRE__ = (event, payload) => {
   for (const fn of LISTENERS[event] || []) fn({ event, payload });
 };

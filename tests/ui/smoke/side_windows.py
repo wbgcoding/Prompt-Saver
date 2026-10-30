@@ -66,6 +66,37 @@ FLOAT_PROBE = """
     await sleep(50);
     if (pill.classList.contains('resizing')) errs.push('the resize did not end on mouseup');
 
+    // pill-wrap: a freely sized box wraps the label at word boundaries: a tall, narrow box shows two
+    // lines at a larger size than one squeezed line would get, and nothing spills out.
+    window.__FIRE__('prompt-updated', { id: 'p0', name: 'Weekly status report', text: 'x' });
+    await sleep(50);
+    const label = document.getElementById('label');
+    const fitBox = async (w, h) => {
+      window.__STUB_RESULTS__.float_resize_move = () => [w, h];
+      // The backend sizes the window to the box; the headless frame stays put, so the pill
+      // takes the box itself.
+      pill.style.width = w + 'px';
+      pill.style.height = h + 'px';
+      cat.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1,
+        clientX: cx, clientY: cy, screenX: cx, screenY: cy }));
+      await sleep(30);
+      up();
+      await sleep(50);
+      const lh = parseFloat(getComputedStyle(label).lineHeight);
+      const fw = parseFloat(label.style.getPropertyValue('--fit-w'));
+      return { fs: parseFloat(label.style.fontSize), lines: Math.round((label.clientHeight - 0.4 * parseFloat(label.style.fontSize)) / lh), sw: label.scrollWidth, fw };
+    };
+    const wide = await fitBox(420, 60);
+    if (wide.lines !== 1) errs.push('pill-wrap: a wide free box broke the label into ' + wide.lines + ' lines');
+    const tall = await fitBox(110, 150);
+    if (tall.lines < 2) errs.push('pill-wrap: a tall narrow free box kept the label on one line (' + tall.fs + 'px)');
+    if (tall.sw > tall.fw + 0.5) errs.push('pill-wrap: the wrapped label is wider than its box: ' + tall.sw + ' > ' + tall.fw);
+    const flat = await fitBox(110, 40);
+    if (!(tall.fs > flat.fs)) errs.push('pill-wrap: wrapping did not give the tall box a larger text: ' + tall.fs + ' vs ' + flat.fs + 'px');
+    window.__STUB_RESULTS__.float_resize_move = () => null;
+    pill.style.width = '';
+    pill.style.height = '';
+
     // 41: folders must default ON even with folders ABSENT from ui_flags
     // (a fresh install) -- the stub otherwise ships it pre-set true, which cannot
     // tell an inverted default-off check apart from the correct default-on one
