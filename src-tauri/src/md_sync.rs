@@ -400,7 +400,12 @@ pub(crate) fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String
                 continue;
             }
             if let Some(idx) = line.find(':') {
-                fields.insert(line[..idx].trim().to_string(), line[idx + 1..].trim().to_string());
+                let (key, raw) = (line[..idx].trim(), &line[idx + 1..]);
+                // Only the one space the writer puts after the colon goes from the notes: the
+                // spaces a note starts or ends with belong to it, and the machines would
+                // disagree about the text for good if the reader dropped them.
+                let value = if key == "notes" { raw.strip_prefix(' ').unwrap_or(raw) } else { raw.trim() };
+                fields.insert(key.to_string(), value.to_string());
             }
         } else {
             body_lines.push(line);

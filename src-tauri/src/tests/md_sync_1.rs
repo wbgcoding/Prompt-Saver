@@ -1293,3 +1293,15 @@ fn the_startup_seed_removes_a_plaintext_file_of_a_confidential_prompt_itself() {
     assert!(foreign.exists(), "a file that is not ours is never touched");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn notes_keep_the_spaces_they_start_and_end_with_through_a_file() {
+    for notes in ["  indented", "trailing  ", "line1\n  ", "\n  second line", " "] {
+        let mut p = sync_blank_prompt("p1".to_string());
+        p.name = "Name".to_string();
+        p.notes = notes.to_string();
+        let md = prompt_to_md(&p, &SyncPlacement::default());
+        let back = apply_md_to_prompt(&sync_blank_prompt("p1".to_string()), &md).expect("our own file reads back");
+        assert_eq!(back.notes, notes, "the note changed on its way through the file:{nl}{md}", nl = "\n");
+    }
+}
