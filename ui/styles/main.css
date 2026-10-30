@@ -1396,6 +1396,8 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 /* Editing a text prompt fills the window height so the textarea shows as much as
    possible; the textarea grows to take all the free space. */
 #modal.tall .modal { height: var(--full-modal-h); max-height: var(--full-modal-h); }
+/* Rotation replaces the textarea with a short list: the box hugs it instead of staying tall. */
+#modal.tall .modal:has(#modal-rotate-list:not(.hidden)) { height: auto; width: min(640px, 92vw); }
 #modal.tall .modal-text { flex: 1 1 auto; min-height: var(--ta-fit, 120px); max-height: none; resize: none; }
 /* With the version history open the textarea must stop hogging the height, or the
    expanded list + Save row get pushed out of reach on short windows. Cap it and let
@@ -1437,25 +1439,32 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
    colour swatches). */
 .modal-rotate-list { display: flex; flex-direction: column; gap: 6px; }
 .modal-rotate-entries { display: flex; flex-direction: column; gap: 6px; }
-.rotate-entry-row { display: flex; align-items: center; gap: 6px; }
+/* The number column is exactly as wide as the picture button left of the name field, and the
+   gap matches the name row, so every entry input starts at the name input's x. */
+.rotate-entry-row { display: flex; align-items: center; gap: 8px; }
 .rotate-entry-num {
-  flex: 0 0 auto;
-  min-width: 18px;
+  flex: 0 0 var(--modal-lead-w);
   font-size: 12px;
   color: var(--muted);
-  text-align: right;
+  text-align: center;
 }
+.modal:has(#modal-add-icon.hidden) .rotate-entry-num { display: none; }
 .rotate-entry-input {
   flex: 1 1 auto;
   min-width: 0;
   resize: none;
   overflow-y: hidden;
 }
-.rotate-entry-btns { display: flex; flex: 0 0 auto; gap: 2px; }
+.rotate-entry-btns { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 2px; }
 .rotate-entry-btns .icon-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
-/* "+ Entry" left, mode dropdown pinned to the right edge with "From the
-   start" immediately left of it (and the "Next: n/total" readout left of that). */
-.modal-rotate-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* Three equal columns over the full content width, every control as tall as the inputs. */
+.modal-rotate-controls-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 8px; }
+.modal-rotate-controls-row > * { min-width: 0; width: 100%; box-sizing: border-box; padding: 10px 4px; font-size: 13px; text-align: center; text-align-last: center; line-height: normal; }
+.modal-rotate-controls-row > .ghost-btn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The saved position and the reset button: one muted line under the controls. */
+.modal-rotate-status { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: -2px; }
+.modal-rotate-status:not(:has(> :not(.hidden))) { display: none; }
+.modal-rotate-status .ghost-btn { padding: 2px 8px; font-size: 12px; color: var(--muted); }
 /* Visible heading over the prompt text only: the name and the note keep a placeholder,
    so the editor does not grow taller. The negative margin pulls it against the field
    past the dialog's row gap. */
@@ -1470,8 +1479,6 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 .modal-vars-link { background: none; border: 0; padding: 2px 0; color: var(--accent-text); font: inherit; font-size: 12px; cursor: pointer; }
 .modal-vars-link:hover { text-decoration: underline; }
 .modal-vars-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.modal-rotate-mode-group { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
-.modal-rotate-mode { flex: 0 0 auto; width: auto; }
 .modal-rotate-next { font-size: 12px; color: var(--muted); }
 
 /* ---- Markdown preview / syntax colours ---- */
@@ -2766,6 +2773,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    glyphs next to a tall box. */
 .modal-name-row { display: flex; align-items: stretch; gap: 8px; }
 .modal-name-row .clear-wrap, .modal-name-row > #modal-name { flex: 1 1 auto; min-width: 0; }
+.modal { --modal-lead-w: 42px; }
 .modal-name-row .modal-fav-star,
 .modal-name-row .modal-name-icon {
   flex: 0 0 auto;
@@ -2775,6 +2783,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   aspect-ratio: 1;
   padding: 0;
 }
+.modal-name-row .modal-name-icon { width: var(--modal-lead-w); aspect-ratio: auto; }
 .modal-name-row .modal-name-icon svg { width: 58%; height: 58%; }
 /* A dashed well reads as a picture slot. */
 .modal-name-row .modal-name-icon { border: 1.5px dashed var(--border); border-radius: 8px; color: var(--muted); background: transparent; }

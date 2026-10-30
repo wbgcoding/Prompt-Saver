@@ -360,18 +360,19 @@
         <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
         <div class="modal-rotate-controls-row">
           <button type="button" id="modal-rotate-add" class="ghost-btn modal-rotate-add" data-i18n="rotateAddEntry">+ Rotation text</button>
-          <div class="modal-rotate-mode-group">
-            <span id="modal-rotate-next" class="modal-rotate-next hidden"></span>
-            <button type="button" id="modal-rotate-reset" class="ghost-btn hidden" data-i18n="rotateFromStart">From the start</button>
-            <select id="modal-rotate-mode" class="modal-input expert-select modal-rotate-mode">
-              <option value="order" data-i18n="optRotateOrder">In order</option>
-              <option value="random" data-i18n="optRotateRandom">Random</option>
-            </select>
-            <!-- Auto-advance on every real paste, not just on copy. Disabled
-                 (with a reason in the tooltip) for image/file prompts and single-entry
-                 prompts, never a silent no-op button. -->
-            <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Rotate on paste</button>
-          </div>
+          <select id="modal-rotate-mode" class="modal-input expert-select modal-rotate-mode">
+            <option value="order" data-i18n="optRotateOrder">In order</option>
+            <option value="random" data-i18n="optRotateRandom">Random</option>
+          </select>
+          <!-- Auto-advance on every real paste, not just on copy. Disabled
+               (with a reason in the tooltip) for image/file prompts and single-entry
+               prompts, never a silent no-op button. -->
+          <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Rotate on paste</button>
+        </div>
+        <!-- One muted line under the controls, only for a saved prompt with several entries. -->
+        <div class="modal-rotate-status">
+          <span id="modal-rotate-next" class="modal-rotate-next hidden"></span>
+          <button type="button" id="modal-rotate-reset" class="ghost-btn hidden" data-i18n="rotateFromStart">From the start</button>
         </div>
       </div>
       <!-- Private note, full width, labelled: never copied, gated on promptNotes.

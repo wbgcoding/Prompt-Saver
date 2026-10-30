@@ -144,29 +144,45 @@ SECTION = """\
           if (lenBox && lenBox.getBoundingClientRect().height > 0) {
             out.errors.push('the chars/words readout is still shown while rotation is on');
           }
-          // 33/90-94: the order/random control sits in the "+ Entry" row, pushed
-          // right, with the reset ("from the start") to its left and the Auto
-          // toggle (90-94) flush right of the mode control - not on a row of its own.
+          // Controls row: add, mode and auto-rotate are three equal columns on one row, as tall
+          // as the inputs, filling the content width.
           const addBtn = document.getElementById('modal-rotate-add');
           const modeSel = document.getElementById('modal-rotate-mode');
-          const resetBtn = document.getElementById('modal-rotate-reset');
           const autoBtn = document.getElementById('modal-rotate-auto');
-          if (addBtn && modeSel && ctrlRow) {
-            const a = addBtn.getBoundingClientRect(), m = modeSel.getBoundingClientRect();
+          const nameIn = document.getElementById('modal-name');
+          if (addBtn && modeSel && autoBtn && ctrlRow) {
+            const a = addBtn.getBoundingClientRect(), m = modeSel.getBoundingClientRect(), au = autoBtn.getBoundingClientRect();
             const r = ctrlRow.getBoundingClientRect();
-            if (Math.abs(a.top - m.top) > 6) out.errors.push('the mode control is not on the "+ Entry" row');
-            if (m.left <= a.right) out.errors.push('the mode control is not right of "+ Entry"');
-            if (resetBtn && !resetBtn.classList.contains('hidden')) {
-              const rs = resetBtn.getBoundingClientRect();
-              if (rs.right > m.left + 1) out.errors.push('"from the start" is not left of the mode control');
+            if (Math.abs(a.top - m.top) > 1 || Math.abs(m.top - au.top) > 1) out.errors.push('the three rotation controls are not on one row');
+            if (Math.abs(a.width - m.width) > 1 || Math.abs(m.width - au.width) > 1) out.errors.push('the rotation controls are not equal width: ' + [a, m, au].map(x => Math.round(x.width)).join('/'));
+            if (Math.abs(a.left - r.left) > 1 || Math.abs(au.right - r.right) > 1) out.errors.push('the rotation controls do not fill the content width');
+            const ih = nameIn.getBoundingClientRect().height;
+            if ([a, m, au].some(x => Math.abs(x.height - ih) > 2)) out.errors.push('the rotation controls are not as tall as the inputs: ' + [a, m, au].map(x => Math.round(x.height)).join('/') + ' vs ' + Math.round(ih));
+            for (const el of [addBtn, autoBtn]) {
+              if (el.scrollWidth > el.clientWidth + 1) out.errors.push('the label of ' + el.id + ' is cut off');
             }
-            if (autoBtn) {
-              const au = autoBtn.getBoundingClientRect();
-              if (au.left < m.right - 1) out.errors.push('the Auto toggle is not right of the mode control');
-              if (r.right - au.right > 12) out.errors.push('the Auto toggle is not flush right in its row');
-            } else if (r.right - m.right > 12) {
-              out.errors.push('the mode control is not flush right in its row');
+          }
+          // Entry inputs start at the name input's x; the action cluster ends on the content edge.
+          {
+            const e0 = document.querySelector('.rotate-entry-row .rotate-entry-input');
+            if (e0 && Math.abs(e0.getBoundingClientRect().left - nameIn.getBoundingClientRect().left) > 1) {
+              out.errors.push('the entry input starts at ' + Math.round(e0.getBoundingClientRect().left) + ', the name input at ' + Math.round(nameIn.getBoundingClientRect().left));
             }
+            const cl = document.querySelector('.rotate-entry-btns');
+            if (cl && ctrlRow && Math.abs(cl.getBoundingClientRect().right - ctrlRow.getBoundingClientRect().right) > 1) {
+              out.errors.push('the entry action cluster does not end on the content edge');
+            }
+            // The box hugs its content while the list replaces the textarea.
+            // Measured with Advanced collapsed, which is the short state.
+            const advHead = document.getElementById('modal-advanced-head');
+            advHead.click();
+            await sleep(150);
+            const box = document.querySelector('#modal .modal');
+            const kids = [...box.children].filter(c => c.getBoundingClientRect().height > 0);
+            const gapBelow = box.getBoundingClientRect().bottom - kids[kids.length - 1].getBoundingClientRect().bottom - parseFloat(getComputedStyle(box).paddingBottom) - 1;
+            if (box.scrollHeight <= box.clientHeight + 1 && gapBelow > 6) out.errors.push('the editor box keeps ' + Math.round(gapBelow) + 'px of blank space under its last row in rotation mode');
+            advHead.click();
+            await sleep(150);
           }
           const list = document.getElementById('modal-rotate-list');
           if (!list || list.classList.contains('hidden')) {
