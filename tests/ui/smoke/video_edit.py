@@ -432,6 +432,20 @@ def run(browser, tmp):
     if (VE.dirty) errs.push('4040: the second recording starts out edited');
     """, pre='<script>window.__SEED_UI_TEXTS__ = {"videoExportScale": "720"};</script>\n')
 
+    # 4041: a preset switches the format programmatically; a typed full destination follows its extension.
+    failed += vprobe('presetext', 'a preset changes the extension of a typed destination', r"""
+    // 4041: preset vs destination extension.
+    const dest = document.getElementById('ve-export-dest');
+    dest.value = 'D:/out/clip.mp4';
+    dest.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('ve-preset-gif').click();
+    await sleep(100);
+    if (!/clip[.]gif$/.test(VE.destOverride || '')) errs.push('4041: after the GIF preset the destination is ' + VE.destOverride);
+    document.getElementById('ve-preset-same').click();
+    await sleep(100);
+    if (!/clip[.]mp4$/.test(VE.destOverride || '')) errs.push('4041: after the same-quality preset the destination is ' + VE.destOverride);
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);

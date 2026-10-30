@@ -2014,6 +2014,8 @@ $("ve-export-choose-folder").addEventListener("click", async () => {
 
 function applyPreset(format, quality, downscale) {
   $("ve-export-format").value = format;
+  // Setting the value fires no change event, so the extension fix-up of the format select runs here.
+  if (VE.destOverride) VE.destOverride = withExtension(VE.destOverride, formatExt(exportFormat()));
   $("ve-export-quality").value = quality;
   // These presets are about a smaller file: they only ever shrink, so a
   // source already at or below their height keeps its own size.
