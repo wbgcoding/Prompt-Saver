@@ -68,30 +68,36 @@ fn create_auto_engine() -> Result<OcrEngine, String> {
 
 // Resolve (and cache) the OcrEngine for `lang` ("auto" or a BCP-47 tag). For an explicit
 // tag whose pack is not installed, `auto_pick` decides between falling back to an installed
-// language and failing with ocr-no-language. The cache key stays the requested `lang`, like
-// "auto"; installing a pack clears the whole cache (see mod ocr::install_result), so a
-// stale fallback never lingers.
-fn resolve_engine(lang: &str, auto_pick: bool) -> Result<OcrEngine, String> {
+// language and failing with ocr-no-language. Only an engine that really is the requested
+// language (or "auto") is cached: a fallback stays uncached, so a pack installed outside the
+// app (Windows Settings) is used from the next call on instead of after a restart.
+pub(super) fn resolve_engine(lang: &str, auto_pick: bool) -> Result<OcrEngine, String> {
     // One guard spans the whole check-then-insert so two concurrent calls cannot both miss the
     // cache and each build an engine.
     let mut cache = engine_cache().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(e) = cache.get(lang) {
         return Ok(e.clone());
     }
-    let engine = if lang == "auto" {
-        create_auto_engine()?
+    let (engine, cacheable) = if lang == "auto" {
+        (create_auto_engine()?, true)
     } else {
         let explicit = Language::CreateLanguage(&HSTRING::from(lang))
             .ok()
             .and_then(|language| OcrEngine::TryCreateFromLanguage(&language).ok());
         match explicit {
-            Some(e) => e,
-            None if auto_pick => create_auto_engine()?,
+            Some(e) => (e, true),
+            None if auto_pick => (create_auto_engine()?, false),
             None => return Err("ocr-no-language".to_string()),
         }
     };
-    cache.insert(lang.to_string(), engine.clone());
+    if cacheable {
+        cache.insert(lang.to_string(), engine.clone());
+    }
     Ok(engine)
+}
+
+pub(super) fn engine_cached(lang: &str) -> bool {
+    engine_cache().lock().unwrap_or_else(|e| e.into_inner()).contains_key(lang)
 }
 
 fn bitmap_from_path(path: &Path) -> Result<SoftwareBitmap, String> {

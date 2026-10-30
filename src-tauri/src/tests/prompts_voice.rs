@@ -849,6 +849,16 @@ fn resolved_image_text_only_recognizes_a_non_empty_picture_with_the_switch_on() 
     assert_eq!(calls.get(), 1);
 }
 
+#[test]
+fn an_auto_picked_fallback_engine_is_not_cached_under_the_requested_tag() {
+    ocr::ensure_winrt();
+    let tag = "xx-NoSuchPack";
+    // Whatever the machine has installed (or an error when nothing is), the unavailable tag
+    // must stay uncached, or a pack installed later outside the app would never be picked up.
+    let _ = ocr::resolve_engine(tag, true);
+    assert!(!ocr::engine_cached(tag));
+}
+
 fn real_png_data_url() -> String {
     let mut bytes = Vec::new();
     image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 255, 255, 255])))
