@@ -487,6 +487,24 @@ def run(browser, tmp):
     if (VE.redo.length !== redoBefore) errs.push('4043: Escape changed the redo stack');
     """)
 
+    # 4044: after a checkbox was clicked, Ctrl+Z still undoes; Space on it stays the checkbox's own.
+    failed += vprobe('boxkeys', 'editor shortcuts work while a checkbox has the focus', r"""
+    // 4044: shortcuts with a checkbox focused.
+    const w = document.getElementById('ve-scale-w');
+    w.value = '320';
+    w.dispatchEvent(new Event('change', { bubbles: true }));
+    if (!VE.ops.some((o) => o.tool === 'scale')) errs.push('4044: fixture: no scale op');
+    const box = document.getElementById('ve-crop-on');
+    box.focus();
+    if (document.activeElement !== box) errs.push('4044: fixture: the checkbox took no focus');
+    const space = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
+    box.dispatchEvent(space);
+    if (space.defaultPrevented) errs.push('4044: Space on a focused checkbox was taken from it');
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true }));
+    await sleep(60);
+    if (VE.ops.some((o) => o.tool === 'scale')) errs.push('4044: Ctrl+Z did nothing with a checkbox focused');
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);

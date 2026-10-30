@@ -2130,12 +2130,15 @@ async function closeWindowAsked(quit) {
   appWin.close().catch(() => {});
 }
 
-const TYPING = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 // Escape in a field gives back what the field held when it got focus (or when it last committed),
 // so a half-typed file name or time is abandoned instead of taking the whole editor with it.
 const NON_TEXT_INPUT = new Set(["checkbox", "radio", "range", "button", "submit", "color", "file"]);
 const isTextField = (el) => !!el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !NON_TEXT_INPUT.has(el.type)));
+// Controls that use the plain letter, arrow and Space keys themselves. A checkbox or button does
+// not, so the editor's shortcuts must keep working after one was clicked.
+const KEY_INPUT_TYPES = new Set(["range", "radio"]);
+const keepsOwnKeys = (el) => isTextField(el) || el?.tagName === "SELECT" || (el?.tagName === "INPUT" && KEY_INPUT_TYPES.has(el.type));
 let fieldFocus = null;
 document.addEventListener("focusin", (e) => { fieldFocus = isTextField(e.target) ? { el: e.target, value: e.target.value } : null; });
 document.addEventListener("change", (e) => { if (fieldFocus && fieldFocus.el === e.target) fieldFocus.value = e.target.value; }, true);
@@ -2190,7 +2193,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
   }
   if (e.code === "F1") { e.preventDefault(); openShortcutsModal(); return; }
-  const typing = TYPING.has(document.activeElement?.tagName);
+  const typing = keepsOwnKeys(document.activeElement);
   if (e.key === "Escape") {
     e.preventDefault();
     if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
@@ -2260,6 +2263,7 @@ document.addEventListener("keydown", (e) => {
       // mouse click the button has no focus ring, and Space still plays.
       const ae = document.activeElement;
       if (ae && ae.matches("button, a[href], [role='button'], summary") && ae.matches(":focus-visible")) break;
+      if (ae && ae.matches("input[type=checkbox]")) break; // Space toggles the box
       e.preventDefault();
       togglePlay();
       break;
