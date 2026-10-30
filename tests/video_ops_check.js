@@ -690,8 +690,8 @@ async function exportIdleCheck() {
   }
 }
 
-// The export tab and the button beside Export: three tabs switch the panels, "Back" leads to the
-// Edit tab while nothing runs and never closes the editor, "Stop export" cancels a running export.
+// The export tab and the button beside Export: three tabs switch the panels, "Stop export" shows
+// only while an export runs and cancels it.
 {
   const mk = (id, extra) => {
     const el = { id, hidden: false, cls: new Set(), attrs: {}, dataset: {}, textContent: "", focused: false, ...extra };
@@ -716,7 +716,7 @@ async function exportIdleCheck() {
   vm.runInContext([
     extractBlock("showPanel", "function showPanel(id) {"),
     extractBlock("syncExportButton", "function syncExportButton() {"),
-    extractBlock("exportStopOrBack", "function exportStopOrBack() {"),
+    extractBlock("stopExport", "function stopExport() {"),
   ].join("\n"), sb);
   const run = (code) => vm.runInContext(code, sb);
   const shown = () => panels.filter((p) => !p.cls.has("hidden")).map((p) => p.id).join();
@@ -724,23 +724,23 @@ async function exportIdleCheck() {
   expect("the Export tab shows the export panel only", shown() === "ve-panel-export", shown());
   expect("the Export tab is the selected one", byId["ve-tab-export"].attrs["aria-selected"] === "true" && byId["ve-tab-edit"].attrs["aria-selected"] === "false");
   expect("the html has the third tab wired to the export panel", /id="ve-tab-export"[^>]*data-panel="ve-panel-export"[^>]*data-i18n="veTabExport"/.test(fs.readFileSync(path.join(__dirname, "..", "ui", "video.html"), "utf8")));
-  // Idle: the button says Back and leads to the Edit tab.
+  // Idle: the Stop button is hidden and a stray click cancels nothing.
   run("syncExportButton()");
-  expect("idle, the button reads Back", byId["ve-export-cancel"].textContent === "<veBack>" && byId["ve-export-cancel"].dataset.i18n === "veBack");
-  run("exportStopOrBack()");
-  expect("Back returns to the Edit tab", shown() === "ve-panel-edit", shown());
-  expect("Back moves the focus to the Edit tab", byId["ve-tab-edit"].focused === true);
-  expect("Back never closes the editor or cancels anything", calls.length === 0, calls.join());
-  // Running: the button reads Stop export and cancels.
+  expect("idle, the Stop export button is hidden", byId["ve-export-cancel"].cls.has("hidden"));
+  run("stopExport()");
+  expect("idle, a click on Stop export cancels nothing and leaves the panel", calls.length === 0 && shown() === "ve-panel-export", calls.join());
+  // Running: the button shows and cancels.
   sb.VE.exporting = true;
   run("syncExportButton()");
-  expect("while exporting, the button reads Stop export", byId["ve-export-cancel"].textContent === "<veStopExport>" && byId["ve-export-cancel"].dataset.i18n === "veStopExport");
-  run('showPanel("ve-panel-export")');
-  run("exportStopOrBack()");
+  expect("while exporting, the Stop export button is shown", !byId["ve-export-cancel"].cls.has("hidden"));
+  run("stopExport()");
   expect("Stop export cancels the running export and stays on the panel", calls.join() === "cancel_export" && shown() === "ve-panel-export", calls.join());
   sb.VE.exporting = false;
   run("syncExportButton()");
-  expect("the label goes back to Back once the export ended", byId["ve-export-cancel"].textContent === "<veBack>");
+  expect("the Stop export button is hidden again once the export ended", byId["ve-export-cancel"].cls.has("hidden"));
+  const videoHtml = fs.readFileSync(path.join(__dirname, "..", "ui", "video.html"), "utf8");
+  expect("the html starts the Stop export button hidden and labelled Stop export", /<button id="ve-export-cancel"[^>]*class="[^"]*\bhidden\b[^"]*"[^>]*data-i18n="veStopExport"/.test(videoHtml));
+  expect("the title bar has no Export button", !videoHtml.includes("ve-export-" + "open"));
 }
 
 // Keyboard and screen reader: trim handles are millisecond sliders, mute buttons say what a click

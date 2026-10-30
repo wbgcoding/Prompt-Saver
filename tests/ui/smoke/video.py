@@ -1306,9 +1306,9 @@ VIDEO_PROBE = """
       }
     }
 
-    // Export opens from the title bar button and from its own tab; the Export tab is the selected
-    // one then, the start button has the focus, and the Edit tab leads back.
-    document.getElementById('ve-export-open').click();
+    // Export opens from its own tab; the Export tab is the selected one then, there is no title
+    // bar Export button, and the Edit tab leads back.
+    document.getElementById('ve-tab-export').click();
     await sleep(80);
     if (document.getElementById('ve-panel-export').classList.contains('hidden')) {
       errs.push('the export button did not reveal the export panel');
@@ -1317,16 +1317,14 @@ VIDEO_PROBE = """
         || [...document.querySelectorAll('.ve-tab')].filter((t) => t.getAttribute('aria-selected') === 'true').length !== 1) {
       errs.push('987: the Export tab is not the one selected tab while the export panel is shown');
     }
-    if (document.activeElement.id !== 've-export-start') {
-      errs.push('935: the export start button did not take the focus: ' + document.activeElement.id);
-    }
+    if (document.getElementById('ve-export-' + 'open')) errs.push('the title bar still has an Export button');
     if (!document.querySelector('.ve-tab[data-panel="ve-panel-export"]')) errs.push('987: the Export tab is missing');
     {
       const tabEdit = document.getElementById('ve-tab-edit');
       tabEdit.click();
       await sleep(60);
       if (document.getElementById('ve-panel-edit').classList.contains('hidden')) errs.push('935: the Edit tab did not lead back from the export panel');
-      document.getElementById('ve-export-open').click();
+      document.getElementById('ve-tab-export').click();
       await sleep(60);
     }
     rawKeyCheck('export tab');
@@ -1400,7 +1398,7 @@ VIDEO_PROBE = """
 
       // The Export tab mirrors the same target as a read-only summary (no Change button) and
       // shows the resulting size as plain text.
-      document.getElementById('ve-export-open').click();
+      document.getElementById('ve-tab-export').click();
       await sleep(80);
       const summary = document.getElementById('ve-export-scale-summary').textContent;
       if (summary.trim() !== '480 × 270 px') {
@@ -1546,7 +1544,7 @@ VIDEO_PROBE = """
     // The one control that acts on a finished export reads "Save as..." (it moves
     // the file) with a tooltip, and the old pre-export file picker is gone: the name
     // field plus "Export to..." cover it. The row reads like the screenshot editor's:
-    // Cancel, Save as, Copy, then the primary Export; Cancel is always there.
+    // Stop export, Save as, Copy, then the primary Export; Stop export shows only while a run goes.
     {
       const moveBtn = document.getElementById('ve-export-saveas');
       const moveText = moveBtn.textContent.trim();
@@ -1557,7 +1555,7 @@ VIDEO_PROBE = """
       if (saveAsLike.length) errs.push('547: a Save as button is still in the export panel: ' + saveAsLike.map((b) => b.id).join(','));
       const rowIds = [...document.getElementById('ve-export-cancel').parentElement.querySelectorAll('button')].map((b) => b.id).join(',');
       if (rowIds !== 've-export-cancel,ve-export-saveas,ve-export-clip,ve-export-start') errs.push('673: the export row order is ' + rowIds);
-      if (document.getElementById('ve-export-cancel').classList.contains('hidden')) errs.push('673: Cancel is hidden although no export runs');
+      if (!document.getElementById('ve-export-cancel').classList.contains('hidden')) errs.push('673: Stop export is shown although no export runs');
       if (document.getElementById('ve-export-clip').textContent.trim() !== 'Copy') errs.push('673: the clipboard button reads ' + JSON.stringify(document.getElementById('ve-export-clip').textContent.trim()));
     }
     window.__PICK_FOLDER__ = null;
@@ -1740,8 +1738,20 @@ VIDEO_PROBE = """
     if (!/about/i.test(exportEtaEl.textContent)) {
       errs.push(`387: remaining-time text did not appear past the minimum percent with a slow rate, got ${JSON.stringify(exportEtaEl.textContent)}`);
     }
+    // 55a: while that export is pending the Stop export button shows and stops it; afterwards it is gone.
+    {
+      const stopBtn = document.getElementById('ve-export-cancel');
+      if (stopBtn.classList.contains('hidden') || stopBtn.textContent.trim() !== 'Stop export') {
+        errs.push('55a: a running export shows no Stop export button, got ' + JSON.stringify(stopBtn.textContent.trim()) + ' hidden=' + stopBtn.classList.contains('hidden'));
+      }
+      window.__SMOKE_ARGS__ = [];
+      stopBtn.click();
+      await sleep(30);
+      if (!(window.__SMOKE_ARGS__ || []).some(([cmd]) => cmd === 'cancel_export')) errs.push('55a: Stop export did not call cancel_export');
+    }
     await sleep(700);
     window.__EXPORT_DELAY_MS__ = undefined;
+    if (!document.getElementById('ve-export-cancel').classList.contains('hidden')) errs.push('55a: Stop export stays shown after the export ended');
 
     // ---- 399: a real classified ffmpeg failure never shows its raw log text
     // as the headline -- the status line gets the translated key, the raw

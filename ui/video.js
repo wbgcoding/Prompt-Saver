@@ -1608,7 +1608,6 @@ for (const tab of document.querySelectorAll(".ve-tab")) {
   tab.addEventListener("click", () => showPanel(tab.dataset.panel));
 }
 
-$("ve-export-open").addEventListener("click", () => { showPanel("ve-panel-export"); $("ve-export-start").focus(); });
 
 $("ve-close").addEventListener("click", () => closeWindow());
 // The window has no OS title bar, so the bar carries minimize and maximize/restore too.
@@ -2046,14 +2045,11 @@ $("ve-preset-gif").addEventListener("click", () => applyPreset("gif", "small", "
 
 $("ve-export-start").addEventListener("click", () => startExport(false));
 $("ve-export-clip").addEventListener("click", () => startExport(true));
-// Stops a running export; with nothing running it only leads back to the Edit tab, so a click
-// meant as "never mind" cannot close the editor.
-function exportStopOrBack() {
-  if (VE.exporting) { invoke("cancel_export").catch(() => {}); return; }
-  showPanel("ve-panel-edit");
-  $("ve-tab-edit").focus();
+// The Stop button only shows while an export runs (syncExportButton), so a click always means stop.
+function stopExport() {
+  if (VE.exporting) invoke("cancel_export").catch(() => {});
 }
-$("ve-export-cancel").addEventListener("click", exportStopOrBack);
+$("ve-export-cancel").addEventListener("click", stopExport);
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
   const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : errMessageLogged(err, t, "video")); return null; });
