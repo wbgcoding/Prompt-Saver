@@ -20,6 +20,10 @@ pub(crate) struct RecordingProbe {
     // Whether the recording has a key-overlay sidecar (see keylog); the editor offers the keys
     // presets only then.
     pub(crate) has_keys_sidecar: bool,
+    // Counter-clockwise quarter turns (0..3) the stored picture needs for display, the sense
+    // ffmpeg's own autorotate uses. A `movie=` source in the export graph is not autorotated, so
+    // the editor adds the matching transpose itself for an inserted clip or video overlay.
+    pub(crate) rotation_quarters: u8,
 }
 
 // The text-overlay font list is built from SystemRoot (or windir), which Windows sets
@@ -74,19 +78,26 @@ pub(crate) fn parse_ffprobe_rate(s: &str) -> Option<f64> {
     if den == 0.0 { None } else { Some(num / den) }
 }
 
-// The size the picture has after the container's rotation is applied. ffmpeg's export graph and
-// the preview both autorotate, so a portrait phone clip stored as 1920x1080 + rotate 90 must be
-// reported as 1080x1920 or crop, overlay and clip coordinates land on transposed bounds.
-pub(crate) fn stream_display_size(video: &serde_json::Value) -> (u32, u32) {
-    let w = video["width"].as_u64().unwrap_or(0) as u32;
-    let h = video["height"].as_u64().unwrap_or(0) as u32;
+// Counter-clockwise quarter turns (0..3) the stored picture needs for display, read from the
+// stream's display-matrix rotation (ffprobe reports it counter-clockwise, 90 = turn left) or the
+// older `rotate` tag. A rotation that is not a multiple of 90 degrees is ignored, as ffmpeg does.
+pub(crate) fn stream_rotation_quarters(video: &serde_json::Value) -> u8 {
     let side = video["side_data_list"]
         .as_array()
         .and_then(|l| l.iter().find_map(|d| d["rotation"].as_f64().or_else(|| d["rotation"].as_str()?.parse().ok())));
     let tag = || video["tags"]["rotate"].as_str().and_then(|r| r.trim().parse::<f64>().ok());
     let rot = side.or_else(tag).unwrap_or(0.0);
     let quarter = (rot / 90.0).round() as i64;
-    if (rot - quarter as f64 * 90.0).abs() < 1.0 && quarter.rem_euclid(2) == 1 { (h, w) } else { (w, h) }
+    if (rot - quarter as f64 * 90.0).abs() < 1.0 { quarter.rem_euclid(4) as u8 } else { 0 }
+}
+
+// The size the picture has after the container's rotation is applied. ffmpeg's export graph and
+// the preview both autorotate, so a portrait phone clip stored as 1920x1080 + rotate 90 must be
+// reported as 1080x1920 or crop, overlay and clip coordinates land on transposed bounds.
+pub(crate) fn stream_display_size(video: &serde_json::Value) -> (u32, u32) {
+    let w = video["width"].as_u64().unwrap_or(0) as u32;
+    let h = video["height"].as_u64().unwrap_or(0) as u32;
+    if stream_rotation_quarters(video) % 2 == 1 { (h, w) } else { (w, h) }
 }
 
 pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe, String> {
@@ -109,6 +120,7 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
     let streams = json["streams"].as_array().cloned().unwrap_or_default();
     let video = streams.iter().find(|s| s["codec_type"] == "video");
     let (width, height) = video.map(stream_display_size).unwrap_or((0, 0));
+    let rotation_quarters = video.map(stream_rotation_quarters).unwrap_or(0);
     let fps = video
         .and_then(|v| v["avg_frame_rate"].as_str())
         .and_then(parse_ffprobe_rate)
@@ -137,6 +149,7 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
         mic_sidecar,
         stream_copy_safe,
         has_keys_sidecar,
+        rotation_quarters,
     })
 }
 

@@ -451,6 +451,25 @@ fn a_rotated_phone_clip_reports_its_upright_size() {
 }
 
 #[test]
+fn a_rotated_clip_reports_the_quarter_turns_ffmpeg_autorotate_applies() {
+    let side = |rot: serde_json::Value| serde_json::json!({"width": 1920, "height": 1080, "side_data_list": [{"side_data_type": "Display Matrix", "rotation": rot}]});
+    // ffprobe reports the rotation counter-clockwise: 90 turns the picture left (one quarter),
+    // -90 and 270 turn it right (three quarters).
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(90))), 1);
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(-90))), 3);
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(270))), 3);
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(180))), 2);
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(-180))), 2);
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(0))), 0);
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!("-90"))), 3, "string form");
+    assert_eq!(stream_rotation_quarters(&side(serde_json::json!(45))), 0, "not a quarter turn");
+    let tag = serde_json::json!({"width": 1920, "height": 1080, "tags": {"rotate": "270"}});
+    assert_eq!(stream_rotation_quarters(&tag), 3);
+    let plain = serde_json::json!({"width": 1920, "height": 1080});
+    assert_eq!(stream_rotation_quarters(&plain), 0);
+}
+
+#[test]
 fn a_re_encoded_mp4_gets_an_even_size_step_after_the_last_output_label() {
     let g = even_final_size("[0:v]trim=start=1,setpts=PTS-STARTPTS[vout]");
     assert_eq!(g, "[0:v]trim=start=1,setpts=PTS-STARTPTS[vevenin];[vevenin]scale=trunc(iw/2)*2:trunc(ih/2)*2[vout]");

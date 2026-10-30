@@ -1031,6 +1031,122 @@ fn export_video_real_ffmpeg_video_overlay_starts_at_its_own_beginning() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// The filter ui/videoGraph.js rotationFilter() puts right after a clip's or video overlay's
+// `movie=` source, from the probe's counter-clockwise quarter turns.
+fn rotation_filter_for_test(quarters: u8) -> &'static str {
+    match quarters {
+        1 => "transpose=cclock",
+        2 => "hflip,vflip",
+        3 => "transpose=clock",
+        _ => "null",
+    }
+}
+
+// Re-labels an already encoded clip with a display-matrix rotation without touching its pixels,
+// the way a phone stores a portrait take.
+fn remux_with_display_rotation(ffmpeg: &Path, src: &Path, dest: &Path, degrees: i32) {
+    use std::os::windows::process::CommandExt;
+    let status = std::process::Command::new(ffmpeg)
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-display_rotation:v", &degrees.to_string(), "-i"])
+        .arg(src)
+        .args(["-c", "copy"])
+        .arg(dest)
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .expect("could not run ffmpeg to rotate the fixture");
+    assert!(status.success());
+}
+
+// One lossless frame (rgb24 bytes) of `-filter_complex` output; no encoder in between, so two
+// frames can be compared byte for byte.
+fn raw_frame_of_graph(ffmpeg: &Path, src: &Path, graph: &str) -> Vec<u8> {
+    use std::os::windows::process::CommandExt;
+    let out = std::process::Command::new(ffmpeg)
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=black:s=8x8:d=1"])
+        .arg("-i")
+        .arg(src)
+        .arg("-filter_complex")
+        .arg(graph)
+        .args(["-map", "[o]", "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .expect("could not run ffmpeg");
+    assert!(out.status.success(), "graph failed: {}", String::from_utf8_lossy(&out.stderr));
+    out.stdout
+}
+
+#[test]
+fn real_ffmpeg_the_probe_quarter_turns_match_what_autorotate_does_to_a_movie_source() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let Some(ffprobe) = test_ffprobe() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-rot-sign-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    // testsrc is asymmetric, so a wrong turn direction cannot hide behind a symmetric picture.
+    let base = make_test_mp4(&ffmpeg, &dir, "base.mp4", 1, "96x64");
+    for degrees in [90, -90, 180] {
+        let rotated = dir.join(format!("rot{degrees}.mp4"));
+        remux_with_display_rotation(&ffmpeg, &base, &rotated, degrees);
+        let probe = probe_recording_blocking(&ffprobe, &rotated).expect("probe");
+        let ff = ff_path_for_test(&rotated);
+        // Reference: ffmpeg's own autorotate of a plain `-i` input.
+        let reference = raw_frame_of_graph(&ffmpeg, &rotated, "[1:v]null,format=rgb24[o]");
+        let turned = raw_frame_of_graph(
+            &ffmpeg,
+            &rotated,
+            &format!("movie='{ff}',{},format=rgb24[o]", rotation_filter_for_test(probe.rotation_quarters)),
+        );
+        assert_eq!(turned, reference, "rotation {degrees} (quarters {}) must reproduce autorotate", probe.rotation_quarters);
+        // A movie= source alone is NOT autorotated: that is the bug the filter fixes.
+        if degrees != 180 {
+            let raw = raw_frame_of_graph(&ffmpeg, &rotated, &format!("movie='{ff}',format=rgb24[o]"));
+            assert_ne!(raw, reference, "rotation {degrees}: an unrotated movie= must differ from autorotate");
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn export_video_real_ffmpeg_a_rotated_inserted_clip_comes_out_portrait() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let Some(ffprobe) = test_ffprobe() else { return };
+    use std::os::windows::process::CommandExt;
+    let dir = std::env::temp_dir().join(format!("ps-rot-clip-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let main = make_test_mp4(&ffmpeg, &dir, "main.mp4", 2, "32x64");
+    // A pure green landscape clip stored sideways: displayed it is 32x64 and fills the portrait
+    // frame; unrotated it is a 64x32 band with black bars above and below.
+    let flat = dir.join("flat.mp4");
+    let status = std::process::Command::new(&ffmpeg)
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=green:s=64x32:d=1:r=15", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(&flat)
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .expect("could not build the green clip");
+    assert!(status.success());
+    let extra = dir.join("extra.mp4");
+    remux_with_display_rotation(&ffmpeg, &flat, &extra, 90);
+    let probe = probe_recording_blocking(&ffprobe, &extra).expect("probe");
+    assert_eq!((probe.width, probe.height, probe.rotation_quarters), (32, 64, 1));
+    let extra_ff = ff_path_for_test(&extra);
+    let is_green = |p: [u8; 3]| p[0] < 30 && p[1] > 90 && p[2] < 30;
+    for (turn, expect_filled) in [(rotation_filter_for_test(probe.rotation_quarters), true), ("null", false)] {
+        let dest = dir.join(format!("out-{expect_filled}.mp4"));
+        let video_chain = format!(
+            "[0:v]fps=15,trim=start=0.000:end=2.000,setpts=PTS-STARTPTS[v0];\
+                 movie='{extra_ff}',{turn}[vb];\
+                 [vb]fps=15,scale=32:64:force_original_aspect_ratio=decrease,pad=32:64:(ow-iw)/2:(oh-ih)/2:color=black,setpts=PTS-STARTPTS[v1];\
+                 [v0][v1]concat=n=2:v=1:a=0[vout]"
+        );
+        run_overlay_export(&ffmpeg, &main, &dest, video_chain);
+        let out = probe_recording_blocking(&ffprobe, &dest).expect("probe of the export");
+        assert_eq!((out.width, out.height), (32, 64));
+        // Second 2.5 is inside the inserted clip; y=2 is the top edge of the portrait frame.
+        let top = sample_pixel_rgb24_at(&ffmpeg, &dest, 2.5, 15, 2);
+        assert_eq!(is_green(top), expect_filled, "filter {turn:?}: top edge sampled {top:?}");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn export_video_real_ffmpeg_cancel_leaves_no_destination_file() {
     let Some(ffmpeg) = test_ffmpeg() else { return };
