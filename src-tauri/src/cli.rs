@@ -1232,7 +1232,7 @@ fn cmd_get(store: &Store, id: &str, json: bool) -> Outcome {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
     if p.secret {
-        return Outcome::err(1, format!("prompt {id} is confidential and can only be read in the app itself\n"));
+        return Outcome::err(4, format!("prompt {id} is confidential and can only be read in the app itself\n"));
     }
     let trashed = p.trashed_at > 0;
     if json {
@@ -1259,7 +1259,7 @@ fn cmd_copy(store: &Store, id: &str) -> Outcome {
     // Same rule as `get`: a confidential prompt's text is only shown in the app, and the store
     // holds ciphertext for it.
     if p.secret {
-        return Outcome::err(1, format!("prompt {id} is confidential and can only be copied in the app itself\n"));
+        return Outcome::err(4, format!("prompt {id} is confidential and can only be copied in the app itself\n"));
     }
     // Our own copy: the clipboard watcher must not take it for a foreign one and can see the
     // change before the write returns, so note it first.
@@ -1376,7 +1376,7 @@ fn cmd_edit(store: &mut Store, id: &str, name: Option<&str>, text: Option<&str>,
     // A confidential entry's text is sealed with the vault key, which the command line never
     // holds: plain text written here would sit on disk as is and fail to open in the app.
     if p.secret && text.is_some() {
-        return Outcome::err(1, format!("prompt {id} is confidential and its text can only be changed in the app itself\n"));
+        return Outcome::err(4, format!("prompt {id} is confidential and its text can only be changed in the app itself\n"));
     }
     if let Some(n) = name {
         p.name = crate::md_sync::sync_clean_name(n);
@@ -1575,7 +1575,7 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
     }
     match crate::write_bytes_atomic(&out_path, content.as_bytes()) {
         Ok(()) => Outcome::ok(format!("exported {} prompt(s) to {}\n", resolved.len(), out_path.display())),
-        Err(e) => Outcome::err(3, format!("could not write {}: {e}\n", out_path.display())),
+        Err(e) => Outcome::err(1, format!("could not write {}: {e}\n", out_path.display())),
     }
 }
 
@@ -1583,7 +1583,8 @@ fn cmd_import(store: &mut Store, cwd: &Path, path: &str) -> Outcome {
     let in_path = resolve_path_arg(cwd, path);
     let bytes = match read_file_capped(&in_path, MAX_IMPORT_BYTES) {
         Ok(b) => b,
-        Err(e) => return Outcome::err(3, format!("{e}\n")),
+        // A bad path is the caller's to fix, not a store problem to retry later.
+        Err(e) => return Outcome::err(if in_path.exists() { 1 } else { 2 }, format!("{e}\n")),
     };
     let data = match parse_import_bytes(&bytes, &in_path) {
         Ok(d) => d,
@@ -1732,7 +1733,7 @@ fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
 
 fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
     if crate::is_remote_secret_key(key) {
-        return Outcome::err(1, format!("{key} is managed by the app and cannot be set\n"));
+        return Outcome::err(4, format!("{key} is managed by the app and cannot be set\n"));
     }
     // Folder authority, the vault keys, the backup password and the import-denied switches
     // have dedicated writers and are refused for an import too; this generic setter must not
@@ -1743,7 +1744,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
         || crate::is_import_denied_flag(key)
         || crate::is_import_denied_value(key)
     {
-        return Outcome::err(1, format!("{key} can only be changed in the app itself\n"));
+        return Outcome::err(4, format!("{key} can only be changed in the app itself\n"));
     }
     let s = &mut store.settings;
     match key {
@@ -1751,11 +1752,11 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
         "language" => s.language = value.to_string(),
         "autostart" => match value.parse::<bool>() {
             Ok(b) => s.autostart = b,
-            Err(_) => return Outcome::err(1, "autostart takes true or false\n".to_string()),
+            Err(_) => return Outcome::err(4, "autostart takes true or false\n".to_string()),
         },
         "alwaysOnTop" => match value.parse::<bool>() {
             Ok(b) => s.always_on_top = b,
-            Err(_) => return Outcome::err(1, "alwaysOnTop takes true or false\n".to_string()),
+            Err(_) => return Outcome::err(4, "alwaysOnTop takes true or false\n".to_string()),
         },
         _ => {
             // A key that already holds a value keeps its kind: a text setting "2024" stays text, and a
@@ -1773,7 +1774,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
             let as_number = if held == "number" || held.is_empty() { value.parse::<f64>().ok() } else { None };
             if as_flag.is_none() && as_number.is_none() && !(held.is_empty() || held == "text") {
                 let wants = if held == "flag" { "true or false" } else { "a number" };
-                return Outcome::err(1, format!("{key} takes {wants}\n"));
+                return Outcome::err(4, format!("{key} takes {wants}\n"));
             }
             if let Some(b) = as_flag {
                 // Switching the picture-text index off here erases its text, as the switch in the app does.
@@ -1788,7 +1789,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
                 // "NaN", "inf" and "1e999" parse as numbers but cannot be stored: they are written as null
                 // and the whole settings block fails to load.
                 let Some(n) = crate::clamp_ui_value(key, n) else {
-                    return Outcome::err(1, format!("{key} needs a finite number
+                    return Outcome::err(4, format!("{key} needs a finite number
 "));
                 };
                 s.ui_values.insert(key.to_string(), n);

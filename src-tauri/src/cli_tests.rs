@@ -616,7 +616,7 @@ fn settings_set_refuses_non_finite_numbers_and_clamps_the_rest() {
     let dir = std::env::temp_dir();
     for value in ["NaN", "nan", "inf", "-inf", "infinity", "1e999"] {
         let set = run_cmd(&mut store, &dir, &["settings", "set", "hoverLift", value, "--yes"]);
-        assert_ne!(set.code, 0, "{value} must be refused");
+        assert_eq!(set.code, 4, "{value} must be refused");
         assert!(!set.mutated_settings);
         assert!(!store.settings.ui_values.contains_key("hoverLift"), "{value} was stored");
     }
@@ -643,7 +643,7 @@ fn settings_set_refuses_every_key_with_its_own_dedicated_writer() {
         let before = serde_json::to_string(&store.settings).unwrap();
         for value in ["true", "12", "x"] {
             let set = run_cmd(&mut store, &dir, &["settings", "set", key, value, "--yes"]);
-            assert_ne!(set.code, 0, "{key} must not be writable here");
+            assert_eq!(set.code, 4, "{key} must not be writable here");
             assert!(!set.mutated_settings, "{key} must not flag a settings write");
         }
         assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "{key} changed the store");
@@ -760,7 +760,19 @@ fn import_of_a_missing_file_fails_cleanly() {
     let tmp = TempDir::new("import-missing");
     let mut store = fixture_store();
     let out = run_cmd(&mut store, tmp.path(), &["import", "does-not-exist.json", "--yes"]);
-    assert_ne!(out.code, 0);
+    assert_eq!(out.code, 2, "a missing file is not a locked store");
+}
+
+#[test]
+fn a_file_problem_is_a_bad_path_not_a_locked_store() {
+    let tmp = TempDir::new("file-problems");
+    let mut store = fixture_store();
+    // A folder where a file is expected exists but cannot be read as one.
+    std::fs::create_dir(tmp.path().join("folder.json")).unwrap();
+    assert_eq!(run_cmd(&mut store, tmp.path(), &["import", tmp.path().join("folder.json").to_str().unwrap(), "--yes"]).code, 1);
+    // An export whose parent is a file cannot be written.
+    std::fs::write(tmp.path().join("plain.txt"), "x").unwrap();
+    assert_eq!(run_cmd(&mut store, tmp.path(), &["export", tmp.path().join("plain.txt").join("out.json").to_str().unwrap(), "--yes"]).code, 1);
 }
 
 // ---- backups: real files under a temp "data dir" ----
@@ -1348,8 +1360,8 @@ fn copy_refuses_a_confidential_prompt_like_get() {
     store.prompts[0].text = "CIPHERTEXT".to_string();
     let id = store.prompts[0].id.clone();
     let out = run_cmd(&mut store, &dir, &["copy", &id]);
-    assert_eq!(out.code, 1);
-    assert_eq!(run_cmd(&mut store, &dir, &["get", &id]).code, 1);
+    assert_eq!(out.code, 4);
+    assert_eq!(run_cmd(&mut store, &dir, &["get", &id]).code, 4);
 }
 
 #[test]
@@ -1360,7 +1372,7 @@ fn edit_refuses_new_text_for_a_confidential_prompt() {
     store.prompts[0].text = "CIPHERTEXT".to_string();
     let id = store.prompts[0].id.clone();
     let out = run_cmd(&mut store, &dir, &["edit", &id, "--text", "plain", "--yes"]);
-    assert_ne!(out.code, 0);
+    assert_eq!(out.code, 4);
     assert_eq!(store.prompts[0].text, "CIPHERTEXT");
     let out = run_cmd(&mut store, &dir, &["edit", &id, "--name", "Renamed", "--yes"]);
     assert_eq!(out.code, 0);
@@ -1392,8 +1404,8 @@ fn settings_set_keeps_the_kind_a_key_already_has() {
     assert_eq!(store.settings.ui_texts.get("myText").map(String::as_str), Some("true"));
     assert!(!store.settings.ui_flags.contains_key("myText") && !store.settings.ui_values.contains_key("myText"));
     // A mismatch is refused and leaves every map alone.
-    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myNumber", "true", "--yes"]).code, 1);
-    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myFlag", "5", "--yes"]).code, 1);
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myNumber", "true", "--yes"]).code, 4);
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myFlag", "5", "--yes"]).code, 4);
     assert_eq!(store.settings.ui_values.get("myNumber"), Some(&3.0));
     assert_eq!(store.settings.ui_flags.get("myFlag"), Some(&true));
     assert!(!store.settings.ui_flags.contains_key("myNumber") && !store.settings.ui_values.contains_key("myFlag"));

@@ -133,10 +133,10 @@ parse stdout as JSON once it is 0.
 | Exit code | Meaning |
 | --- | --- |
 | 0 | ok |
-| 1 | bad invocation (missing/unknown argument, wrong flag value) |
-| 2 | not found (unknown id, unknown backup name, unknown setting key) |
+| 1 | bad invocation (missing/unknown argument, wrong flag value), or a file that cannot be read or written (`import`, `export`) |
+| 2 | not found (unknown id, unknown backup name, unknown setting key, an `import` file that does not exist) |
 | 3 | store locked or unavailable (another machine holds the data folder, or a row failed to decrypt), or a command handed to the running instance gave no result: it did not accept the request within 5 seconds, or returned nothing within 10 minutes (the command may still be running) |
-| 4 | refused (a mutating command run without `--yes`, or a value that fails validation) |
+| 4 | refused (a mutating command run without `--yes`, a confidential prompt that can only be read, copied or changed in the app, a setting only the app may change, or a value that fails validation) |
 
 ## Limits
 

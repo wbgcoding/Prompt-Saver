@@ -287,7 +287,7 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
     // window flag): they go through the app's own handlers, which change both.
     if let Some((key, parsed)) = os_backed_toggle(&cmd) {
         let Ok(on) = parsed else {
-            return (1, String::new(), format!("{key} takes true or false\n"));
+            return (4, String::new(), format!("{key} takes true or false\n"));
         };
         if crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || crate::SETTINGS_LOCKED.load(Ordering::Relaxed) {
             return (3, String::new(), "the store refused the write (locked or unavailable)\n".to_string());
