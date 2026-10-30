@@ -345,6 +345,13 @@ pub(crate) fn refresh_owned_lock(path: &Path, me: &LockMe, beat: u64) -> Refresh
                 write_data_dir_lock(path, &fresh);
                 RefreshOutcome::Kept
             }
+            // Another instance on this computer (more than one allowed) took the claim: the folder is
+            // not lost, since a claim is only ever contested between machines. Writing ours back
+            // keeps both instances writable instead of trading read-only turns every tick.
+            Ok(e) if e.host == me.host => {
+                write_data_dir_lock(path, &fresh);
+                RefreshOutcome::Kept
+            }
             Ok(e) => RefreshOutcome::Lost(e.host),
             Err(_) => RefreshOutcome::Skipped,
         },
@@ -1019,7 +1026,16 @@ pub(crate) fn early_allow_multiple_instances() -> bool {
         .map(|s| PathBuf::from(s.trim()))
         .filter(|p| !p.as_os_str().is_empty() && p.is_dir())
         .unwrap_or(base);
-    let Ok(conn) = Connection::open(dir.join("data.db")) else { return false };
+    allow_multiple_instances_in(&dir)
+}
+
+// The flag as stored in the folder's database. The file is only ever opened read-only: a plain
+// open creates an empty data.db in a folder that has none yet, and the legacy-folder migration
+// treats an existing data.db as "nothing to move" and would never run again.
+pub(crate) fn allow_multiple_instances_in(dir: &Path) -> bool {
+    let Ok(conn) = Connection::open_with_flags(dir.join("data.db"), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+        return false;
+    };
     let raw: Option<String> = conn
         .query_row("SELECT value FROM meta WHERE key='settings'", [], |r| r.get(0))
         .ok();
@@ -1984,22 +2000,6 @@ pub(crate) fn migrate_copy_log_once(conn: &mut Connection, settings: &mut Settin
     migrated_log
 }
 
-pub(crate) fn load_store(app: &AppHandle) -> Store {
-    let store = load_store_inner(app);
-    // The windows read media through the asset protocol, whose static scope allows nothing: the
-    // folders and attachments of the store just loaded are allowed here (startup, folder switch,
-    // restore and lock takeover all load through this).
-    crate::asset_scope::allow_loaded(app, &store);
-    store
-}
-
-fn load_store_inner(app: &AppHandle) -> Store {
-    let dir = data_dir(app);
-    if let Some(mut conn) = db_conn(app) {
-        // Filled from the rows as they are read, so the first save of the session
-        // already only writes what changed (see WrittenRows).
-        let mut written = WrittenRows::new();
-        // Every write this load would make is collected here and applied after the data-folder
 thread_local! {
     // Set while a caller that holds the store guard loads another store: the startup sweeps
     // (trash retention, orphan attachment files) lock the store themselves, and the std mutex is

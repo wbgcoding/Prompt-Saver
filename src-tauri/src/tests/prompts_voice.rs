@@ -89,6 +89,22 @@ fn takeover_offer_info_reports_the_real_size_and_prompt_count() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+// Peeking at a folder (offer dialog, early flag read) must never create the database there.
+#[test]
+fn peeking_at_a_folder_without_a_database_does_not_create_one() {
+    let root = std::env::temp_dir().join(format!("{}-test-peek-no-create", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("prompts.json"), b"[]").unwrap();
+
+    assert_eq!(takeover_offer_info(&root).prompts, None);
+    assert!(!root.join("data.db").exists(), "the offer must not create a database in the installed folder");
+    assert!(!allow_multiple_instances_in(&root));
+    assert!(!root.join("data.db").exists(), "the early flag read must not create a database");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn takeover_offer_info_names_an_unreadable_database_as_unknown_rather_than_failing() {
     let root = std::env::temp_dir().join(format!("{}-test-takeover-offer-info-bad-db", brand::SLUG));

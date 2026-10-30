@@ -377,6 +377,19 @@ fn a_create_error_other_than_already_exists_is_not_ownership() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// With more than one instance allowed, two live processes of one computer share the folder: the
+// claim of the other one is not a loss, or the two would trade read-only turns every tick.
+#[test]
+fn an_owner_refresh_keeps_the_folder_when_the_same_computer_took_the_claim() {
+    let dir = lock_test_dir("refresh-same-host");
+    let path = data_dir_lock_path(&dir);
+    let me = LockMe { host: "A", pid: 2, id: "ida" };
+    write_data_dir_lock(&path, &lock_info("A", "idother", 9, 9));
+    assert!(matches!(refresh_owned_lock(&path, &me, 3), RefreshOutcome::Kept));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, "ida", "our claim is written back");
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn an_owner_refresh_never_overwrites_another_claim() {
     let dir = lock_test_dir("refresh-foreign");

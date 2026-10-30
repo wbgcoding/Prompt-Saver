@@ -882,7 +882,8 @@ pub(crate) struct TakeoverOffer {
 // direct read-only COUNT(*) is enough and never touches restore's read rail.
 pub(crate) fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
     let size = STORE_FILES.iter().filter_map(|f| fs::metadata(src.join(f)).ok()).map(|m| m.len()).sum();
-    let prompts = Connection::open(src.join("data.db"))
+    // Read-only: a plain open would create an empty data.db in a folder that only holds legacy files.
+    let prompts = Connection::open_with_flags(src.join("data.db"), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
         .ok()
         .and_then(|c| c.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)).ok())
         .map(|n| n as usize);
