@@ -1234,6 +1234,40 @@ const pending = [];
   }
 }
 
+// A caption's leading and trailing blanks must reach the picture: ffmpeg's option reader drops
+// unescaped whitespace at both ends of a value (even one that was quoted at the graph level),
+// so ffText escapes them. Read here the way av_get_token does.
+{
+  const WS = " \t\n\r";
+  const lvl1 = (text) => {
+    let i = 0, out = "";
+    while (i < text.length) {
+      const ch = text[i++];
+      if (ch === "\\" && i < text.length) out += text[i++];
+      else if (ch === "'") { while (i < text.length && text[i] !== "'") out += text[i++]; i++; } else out += ch;
+    }
+    return out;
+  };
+  const lvl2 = (text) => {
+    let i = 0, out = "", keep = 0;
+    while (i < text.length && WS.includes(text[i])) i++;
+    while (i < text.length) {
+      const ch = text[i++];
+      if (ch === "\\" && i < text.length) { out += text[i++]; keep = out.length; } else { out += ch; if (!WS.includes(ch)) keep = out.length; }
+    }
+    return out.slice(0, keep);
+  };
+  const sb = makeSandbox();
+  vm.runInContext([
+    extractLine("typographicApostrophe", "const typographicApostrophe = (text) => String(text).replace(/'/g, \"\u2019\");"),
+    extractBlock("ffText", "function ffText(text) {"),
+  ].join("\n"), sb);
+  for (const s of ["   Step 1", "Step 1   ", "  both  ", "a: b", "C:\\x  ", "plain"]) {
+    const got = lvl2(lvl1(`'${vm.runInContext("ffText", sb)(s)}'`));
+    expect(`ffText keeps the blanks of ${JSON.stringify(s)}`, got === s, JSON.stringify(got));
+  }
+}
+
 cameraOverlayRaceCheck().then(() => Promise.all(pending)).then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(closeAskChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);

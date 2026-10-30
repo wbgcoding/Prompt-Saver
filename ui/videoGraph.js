@@ -28,7 +28,10 @@ export function ffText(text) {
   return typographicApostrophe(String(text))
     .replace(/\r?\n/g, " ")
     .replace(/\\/g, "\\\\")
-    .replace(/:/g, "\\:");
+    .replace(/:/g, "\\:")
+    // The option reader drops unescaped blanks at both ends of the value, quoted or not, while
+    // the preview keeps them (white-space: pre).
+    .replace(/^[ \t]+|[ \t]+$/g, (blanks) => blanks.replace(/[ \t]/g, "\\$&"));
 }
 
 export const secs = (ms) => (ms / 1000).toFixed(3);
