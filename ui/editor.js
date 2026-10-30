@@ -37,6 +37,7 @@ export let draftLastSaved = null; // fingerprint of the last written draft, so a
 // opts.compact (editor only) shortens the row to none, the colours in use (opts.used,
 // already ordered), the custom swatch only while a custom colour is selected, and a
 // More colors button that shows the full set incl. the free picker.
+// opts.noNone omits the "no color" swatch for callers that always need a real colour.
 export function buildSwatches(container, selected, onPick, onCustom, opts = {}) {
   const compact = !!opts.compact;
   container.innerHTML = "";
@@ -52,10 +53,12 @@ export function buildSwatches(container, selected, onPick, onCustom, opts = {}) 
     return sw;
   };
 
-  const none = mkSwatch("none" + (selected === "" ? " sel" : ""));
-  none.title = t("colorNone");
-  none.setAttribute("aria-label", t("colorNone"));
-  none.addEventListener("click", () => onPick(""));
+  if (!opts.noNone) {
+    const none = mkSwatch("none" + (selected === "" ? " sel" : ""));
+    none.title = t("colorNone");
+    none.setAttribute("aria-label", t("colorNone"));
+    none.addEventListener("click", () => onPick(""));
+  }
 
   if (!compact || isCustom) {
     const custom = mkSwatch("custom" + (isCustom ? " sel" : ""), isCustom ? selected : "");

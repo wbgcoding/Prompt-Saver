@@ -1168,7 +1168,8 @@ export function initSnipEditor() {
     sw.className = "swatches";
     buildSwatches(sw, ts.color,
       (hex) => { ts.color = hex; snipEditRenderContext(); closeSnipColorPop(); },
-      (anchor2, cur) => openColorPop(anchor2, cur, (hex) => { ts.color = hex; snipEditRenderContext(); }));
+      (anchor2, cur) => openColorPop(anchor2, cur, (hex) => { ts.color = hex; snipEditRenderContext(); }),
+      { noNone: true });
     snipColorPop.appendChild(sw);
     snipColorPop.classList.remove("hidden");
     placePopover(snipColorPop, anchor.getBoundingClientRect(), 6);
