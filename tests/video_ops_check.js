@@ -312,6 +312,19 @@ expect("double frame preview puts its outline inside the border", src.includes("
   expect("a clip without audio stays a silent gap", g && !g.includes("amovie=") && g.includes("anullsrc="), g);
 }
 
+// A speed change that lets the pitch move relabels the samples, so the audio
+// must be brought to 48 kHz first or a 44.1 kHz source drifts out of sync.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true });
+  const speed = (pitch) => ({ tool: "speed", rate: 2, pitch });
+  sb.VE = Object.assign(baseState([speed(false)]), { hasSys: true, hasMic: false });
+  let g = vm.runInContext("buildAudioChain()", sb);
+  expect("a pitch-moving speed resamples to 48 kHz before relabelling", g && g.includes("aresample=48000,asetrate=48000*2,aresample=48000"), g);
+  sb.VE = Object.assign(baseState([speed(true)]), { hasSys: true, hasMic: false });
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("a pitch-keeping speed uses atempo only", g && g.includes("atempo=") && !g.includes("asetrate"), g);
+}
+
 // Overlays are applied after the inserted clips are concatenated in, so their
 // time range has to move later by every clip that sits in front of them.
 {

@@ -400,7 +400,7 @@ export function buildAudioChain() {
     if (Math.abs(rate - 1) > 0.001) {
       // Keeping the pitch is atempo's job; letting it move is what a plain
       // sample-rate change does, which is the "chipmunk" result some clips want.
-      chain(speed && speed.pitch === false ? `asetrate=48000*${rate},aresample=48000` : atempoChain(rate));
+      chain(speed && speed.pitch === false ? `aresample=48000,asetrate=48000*${rate},aresample=48000` : atempoChain(rate));
     }
     if (fade) {
       const total = totalOutMs() / 1000;
