@@ -11,6 +11,7 @@ import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, varPreview } from "./floatShared.js";
 import { saveBackupSetting, saveUiState, statCard } from "./backups.js";
 import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
+import { ocrErrToast } from "./dictation.js";
 
 // ---- Usage statistics dashboard (opened from the expert menu) ----
 export function statSection(text) {
@@ -759,7 +760,7 @@ export function wireManagement() {
       if (q) refreshImageHits(q);
     } catch (e) {
       // A pass is already running: its progress and cancel button are in the jobs popover.
-      if (String(e) !== "ocr-index-busy") errToast(e);
+      if (String(e) !== "ocr-index-busy") ocrErrToast(e);
     }
   };
 }

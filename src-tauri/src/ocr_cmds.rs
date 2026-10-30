@@ -457,14 +457,33 @@ pub(crate) fn cap_ocr_text(text: &str, max_chars: usize) -> String {
 // not the OCR feature itself is on. A picture that cannot be decoded, an engine with no
 // language pack, or a blank result all come back as "": the same "nothing to index" outcome.
 pub(crate) fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
+    ocr_index_text_checked(data_url, max_chars).unwrap_or_default()
+}
+
+// Same read, but a machine that cannot recognize at all ("ocr-no-language") is an error
+// instead of an empty text, so a whole pass can stop and say so rather than report success
+// over pictures it never read. Any other per-picture failure still means "nothing to index".
+pub(crate) fn ocr_index_text_checked(data_url: &str, max_chars: usize) -> Result<String, String> {
+    #[cfg(windows)]
+    let recognize = |img: image::RgbaImage| ocr::recognize_crop(img, 480, true, "auto", true).map(|r| r.text);
+    #[cfg(not(windows))]
+    let recognize = |_img: image::RgbaImage| -> Result<String, String> { Ok(String::new()) };
+    index_text_via(data_url, max_chars, recognize)
+}
+
+// The decode, cap and error split of ocr_index_text_checked, with the engine injected so it is
+// testable without one.
+pub(crate) fn index_text_via(data_url: &str, max_chars: usize, recognize: impl FnOnce(image::RgbaImage) -> Result<String, String>) -> Result<String, String> {
     if data_url.is_empty() || !data_url_within_limit(data_url, MAX_OCR_IMAGE_BYTES) {
-        return String::new();
+        return Ok(String::new());
     }
     let bytes = data_url_bytes(data_url);
-    let Some(img) = decode_image_mem_oriented(&bytes) else { return String::new() };
-    #[cfg(windows)]
-    let text = ocr::recognize_crop(img.to_rgba8(), 480, true, "auto", true).map(|r| r.text).unwrap_or_default();
-    cap_ocr_text(&text, max_chars)
+    let Some(img) = decode_image_mem_oriented(&bytes) else { return Ok(String::new()) };
+    match recognize(img.to_rgba8()) {
+        Ok(text) => Ok(cap_ocr_text(&text, max_chars)),
+        Err(e) if e == "ocr-no-language" => Err(e),
+        Err(_) => Ok(String::new()),
+    }
 }
 
 // The decision behind "attach fills the field only while ocrIndex is on, removing the
@@ -672,13 +691,22 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
         };
         if let Some(image) = image {
             if !image.is_empty() {
-                let joined = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image)).await;
+                let joined = tauri::async_runtime::spawn_blocking(move || (ocr_index_text_checked(&image, max_chars), image)).await;
                 // A decoder that panicked ends the pass; the job row must not stay "running".
                 let (text, image) = match joined {
                     Ok(pair) => pair,
                     Err(e) => {
                         push_bg_op(&app, "ocr-index", "ocr-index", "error", None, None);
                         return Err(e.to_string());
+                    }
+                };
+                // No recognition language at all: every further picture would fail the same
+                // way, so the pass ends with the error the language dialog hangs off.
+                let text = match text {
+                    Ok(text) => text,
+                    Err(e) => {
+                        push_bg_op(&app, "ocr-index", "ocr-index", "error", None, None);
+                        return Err(e);
                     }
                 };
                 if !text.is_empty() {

@@ -2500,5 +2500,28 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
     await sleep(60);
     if ($('rec-modal-status').textContent.includes('41s')) errs.push('ocrconv: the editor export tick moved the converting status: ' + JSON.stringify($('rec-modal-status').textContent));
 """)
+    failed += ar_probe('ocridx', 'read existing pictures: a machine without a recognition language gets the language toast, not a raw error', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { ocrIndex: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.ocr_index_backfill = () => { throw 'ocr-no-language'; };
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let btn = null;
+    for (const tb of document.querySelectorAll('#expert-tabs-bar .expert-tab')) {
+      tb.click(); await sleep(80);
+      btn = document.querySelector('#expert-flags [data-action="ocr-index-backfill"]');
+      if (btn) break;
+    }
+    if (!btn) { errs.push('ocridx: fixture: the read-existing-pictures button was not found'); }
+    else {
+      btn.click();
+      await sleep(200);
+      const toastEl = document.getElementById('toast');
+      const act = toastEl && toastEl.querySelector('.toast-btn');
+      if (!act || !/language/i.test(act.textContent)) errs.push('ocridx: no language action on the failure toast, got ' + JSON.stringify(toastEl && toastEl.textContent));
+      if (toastEl && /^ocr-no-language/.test(toastEl.textContent.trim())) errs.push('ocridx: the raw error key is shown');
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

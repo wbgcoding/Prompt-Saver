@@ -849,6 +849,34 @@ fn resolved_image_text_only_recognizes_a_non_empty_picture_with_the_switch_on() 
     assert_eq!(calls.get(), 1);
 }
 
+fn real_png_data_url() -> String {
+    let mut bytes = Vec::new();
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 255, 255, 255])))
+        .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+        .expect("png fixture");
+    format!("data:image/png;base64,{}", base64_encode(&bytes))
+}
+
+#[test]
+fn index_text_reports_a_missing_recognition_language_instead_of_an_empty_text() {
+    let url = real_png_data_url();
+    // The one systemic failure ends a whole pass; the pass must not count it as pictures read.
+    assert_eq!(index_text_via(&url, 100, |_| Err("ocr-no-language".to_string())), Err("ocr-no-language".to_string()));
+    // Any other per-picture failure is just "nothing to index".
+    assert_eq!(index_text_via(&url, 100, |_| Err("boom".to_string())), Ok(String::new()));
+    // A read text is capped; a picture that does not decode never reaches the engine.
+    assert_eq!(index_text_via(&url, 3, |_| Ok("invoice".to_string())), Ok("inv".to_string()));
+    assert_eq!(index_text_via("data:image/png;base64,AAA", 100, |_| panic!("not decodable")), Ok(String::new()));
+}
+
+#[test]
+fn the_backfill_pass_ends_with_the_checked_error_not_a_done_state() {
+    let src = include_str!("../ocr_cmds.rs");
+    let cmd = src.split("pub(crate) async fn ocr_index_backfill").nth(1).unwrap().split("pub(crate) async fn ocr_capabilities(").next().unwrap();
+    assert!(cmd.contains("ocr_index_text_checked("), "the pass must use the checked read");
+    assert!(!cmd.contains("ocr_index_text("), "the unchecked read would count an unreadable picture as done");
+}
+
 pub(super) fn image_text_prompt(id: &str, image_text: &str) -> Prompt {
     let mut p = test_prompt(id);
     p.image_text = image_text.into();
