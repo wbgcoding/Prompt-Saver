@@ -2222,21 +2222,19 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   z-index: 6;
   white-space: nowrap;
 }
-/* Takes no height: the hint floats over the bottom edge of the canvas, so showing it on a
-   selection never moves the image. */
+/* Its own line under the image area, always reserved: the hint never covers the image and
+   showing it on a selection never moves anything. */
 .snip-edit-nudge-hint {
-  flex: 0 0 0;
-  height: 0;
-  position: relative;
-  z-index: 6;
+  flex: 0 0 auto;
+  height: 28px;
   display: flex;
   justify-content: center;
-  align-items: flex-end;
+  align-items: center;
   pointer-events: none;
 }
 .snip-edit-nudge-hint > span {
-  margin: 0 12px 6px;
-  padding: 3px 10px;
+  margin: 0 12px;
+  padding: 2px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-2);

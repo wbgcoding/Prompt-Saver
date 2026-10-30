@@ -103,7 +103,10 @@ ACTS = {
     "tagpop_on": "$('grid-tag-btn').click(); await sleep(300); document.querySelector('.grid-tag-pop .tag-filter').click(); await sleep(300);",
     "recresult": "window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' }); await sleep(900);",
     "snipedit": SNIP_OPEN,
-    "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);",
+    "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);"
+                "const dv = $('snip-edit-live'); const dr = dv.getBoundingClientRect();"
+                "const dp = (t, x, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: dr.left + x, clientY: dr.top + y }));"
+                "dp('pointerdown', 120, 80, dv); dp('pointermove', 260, 150, dv); dp('pointerup', 260, 150); await sleep(300);",
     "sniptext": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
                 "const lv = $('snip-edit-live'); const lr = lv.getBoundingClientRect();"
                 "lv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"

@@ -2540,5 +2540,52 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
       else if (!a || a.imagesOnly !== true) errs.push('ocrpick: the picker is not limited to images: ' + JSON.stringify(a));
     }
 """)
+    failed += ar_probe('x53', 'screenshot editor: arrow keys nudge the shape whatever has the focus, the hint stays off the image', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('x53: the editor did not open'); }
+    else {
+      // leftmost inked column on a row through the rectangle
+      const leftEdge = async () => {
+        const img = await baExport();
+        for (let x = 0; x < BAW; x++) if (!near(img.px(x, 90), BGC, 30)) return x;
+        return -1;
+      };
+      // a real key goes to the focused element, falling back to the body
+      const press = (key, extra) => {
+        const el = document.activeElement || document.body;
+        el.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra || {})));
+      };
+      const nudge3 = async (label) => {
+        const before = await leftEdge();
+        const on = document.activeElement && (document.activeElement.id || document.activeElement.tagName);
+        press('ArrowRight'); press('ArrowRight'); press('ArrowRight'); await sleep(60);
+        const moved = (await leftEdge()) - before;
+        if (moved !== 3) errs.push('x53: ' + label + ': three ArrowRight moved the shape by ' + moved + ' (focus on ' + on + '), expected 3');
+      };
+      await baTool('rect'); await baDrag(20, 75, 120, 105);
+      await nudge3('right after drawing');
+      document.querySelector('#snip-edit-tools button[data-tool="rect"]').focus();
+      await nudge3('a tool button has the focus');
+      document.getElementById('snip-edit-undo').focus();
+      await nudge3('the undo button has the focus');
+      const ctrl = document.querySelector('#snip-edit-context button');
+      if (!ctrl) errs.push('x53: fixture: the context bar has no button');
+      else { ctrl.click(); ctrl.focus(); await sleep(60); await nudge3('a context button was clicked'); }
+      const sl = document.querySelector('#snip-edit-context input[type=range]');
+      if (sl) { sl.focus(); await nudge3('a slider has the focus'); }
+      // an existing shape selected with the pointer
+      await baTool('pen'); await baTool('rect');
+      await baClick(70, 75);
+      await nudge3('an existing shape was selected');
+      // after undo, selecting again
+      await baUndo();
+      await baClick(70, 75);
+      await nudge3('after undo and selecting again');
+      // the hint line sits below the image area and is always reserved
+      const hint = document.getElementById('snip-edit-nudge-hint').getBoundingClientRect();
+      const area = document.getElementById('snip-edit-canvas-wrap').getBoundingClientRect();
+      if (hint.height < 8) errs.push('x53: the hint has no reserved line (height ' + hint.height + ')');
+      if (hint.top < area.bottom - 0.5) errs.push('x53: the hint overlaps the image area (hint top ' + hint.top + ', area bottom ' + area.bottom + ')');
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

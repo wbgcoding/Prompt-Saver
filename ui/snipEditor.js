@@ -605,10 +605,11 @@ export function initSnipEditor() {
     snipEditUpdateUndoRedoButtons();
     snipEditNoteChange();
   }
-  // Shown only while something is nudgeable. The arrow keys have no other job in this editor,
-  // but a short line always says what they currently do.
+  // Text shown only while something is nudgeable. The arrow keys have no other job in this
+  // editor, but a short line always says what they currently do.
   function snipEditUpdateNudgeHint() {
-    snipEditNudgeHintEl.classList.toggle("hidden", !SE.lastNudged);
+    // The line itself is always reserved under the image; only its text comes and goes.
+    snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged);
     // A text box can also be opened again, which the hint then says too.
     const textHint = !!SE.lastNudged && SE.lastNudged.tool === "text";
     const hintText = snipEditNudgeHintEl.firstElementChild;
@@ -1503,6 +1504,13 @@ export function initSnipEditor() {
     snipEditSetZoom(Math.min(1, availW / SE.w, availH / SE.h));
   }
 
+  // Takes the focus off a text field that would own the keys, unless it is the editor's own
+  // text box.
+  function snipEditHandKeysBack() {
+    const a = document.activeElement;
+    if (a && a !== snipEditTextInput && snipEditFieldOwnsKeys(a)) a.blur();
+  }
+
   // ---- pointer wiring ----
   function snipEditOnPointerDown(e) {
     if (!SE.active) return;
@@ -1513,6 +1521,9 @@ export function initSnipEditor() {
     // after the handler returns). Prevent it.
     e.preventDefault();
     snipEditFinishTextIfOpen();
+    // The prevented mousedown leaves a field that kept the focus (the main window's prompt box,
+    // a size field) focused, and that field would swallow the arrow keys meant for the shape.
+    snipEditHandKeysBack();
     const pt0 = snipEditToImage(e);
     if (SE.eyedropArm) {
       snipEditToolState(SE.eyedropArm).color = snipEditGetPixelColor(pt0);
@@ -1857,6 +1868,9 @@ export function initSnipEditor() {
       snipEditSyncCropFromOps(); // a default tool of crop starts with the full-image box
       snipEditUpdateUndoRedoButtons();
       snipEdit.classList.remove("hidden");
+      // The window behind the editor may still hold the focus (its prompt box): that field would
+      // take every key typed over the editor.
+      snipEditHandKeysBack();
       snipSyncWinButtons();
       snipEditFit();
       snipEditWrap.scrollLeft = 0;
