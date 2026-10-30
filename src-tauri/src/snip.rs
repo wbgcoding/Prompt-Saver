@@ -1492,9 +1492,15 @@ pub(crate) fn own_screenshot_in_save_dir(p: &std::path::Path, custom_dir: &str) 
 
 // Writes an edited screenshot over the file the capture saved, under the same name (the
 // extension follows the format of this save). The atomic write puts the new bytes in place
-// before the old ones go, so a failure leaves the old file. None when it could not be written.
+// before the old ones go, so a failure leaves the old file. None when it could not be written or
+// the new extension would land on a file that already exists.
 pub(crate) fn replace_screenshot(bytes: &[u8], old: &std::path::Path, ext: &str) -> Option<String> {
     let target = old.with_extension(ext);
+    // A format change lands on another file name; one already there is somebody's shot (the same
+    // stem saved in both formats), so the caller falls back to the save that never overwrites.
+    if target != old && target.exists() {
+        return None;
+    }
     write_bytes_atomic(&target, bytes).ok()?;
     if target != old {
         let _ = fs::remove_file(old);

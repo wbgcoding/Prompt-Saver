@@ -140,6 +140,18 @@ fn replace_screenshot_leaves_the_old_file_when_the_write_fails() {
 }
 
 #[test]
+fn replace_screenshot_never_overwrites_a_file_of_the_other_format() {
+    let dir = std::env::temp_dir().join(format!("{}-replace-keep-{}", brand::TEMP_PREFIX, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let old = save_screenshot(b"png shot", &dir, "Screenshot-2026-01-01_00-00-02", "png");
+    let other = save_screenshot(b"jpg shot", &dir, "Screenshot-2026-01-01_00-00-02", "jpg");
+    assert!(replace_screenshot(b"edited", Path::new(&old), "jpg").is_none());
+    assert_eq!(fs::read(&other).unwrap(), b"jpg shot", "the existing file keeps its bytes");
+    assert_eq!(fs::read(&old).unwrap(), b"png shot", "the old file stays for the caller's fallback save");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn own_screenshot_gate_only_passes_our_files_in_a_save_folder() {
     let name = format!("Screenshot-gate-{}.png", std::process::id());
     let ours = std::env::temp_dir().join(&name);
