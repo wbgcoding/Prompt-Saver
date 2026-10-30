@@ -1236,7 +1236,16 @@ pub(crate) fn convert_recording_blocking(
         ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
     if dst != src {
-        let _ = fs::remove_file(src);
+        if format == "gif" {
+            // A GIF is capped at 30 s and has no audio, so the full-length source holds footage the
+            // result lacks: it goes to the discard folder (where it can be restored until the
+            // keep window ends) and stays put if it cannot be moved there.
+            if let Some(dir) = src.parent() {
+                let _ = crate::media_files::discard_recording_file_in(&[dir.to_path_buf()], src);
+            }
+        } else {
+            let _ = fs::remove_file(src);
+        }
     }
     Ok(dst.to_string_lossy().to_string())
 }

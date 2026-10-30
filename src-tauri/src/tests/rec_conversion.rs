@@ -70,15 +70,32 @@ fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source
 }
 
 #[test]
-fn convert_recording_real_ffmpeg_gif_has_gif_magic_and_removes_the_source() {
+fn convert_recording_real_ffmpeg_gif_has_gif_magic_and_keeps_the_source_in_the_discard_folder() {
     let Some(ffmpeg) = test_ffmpeg() else { return };
     let dir = std::env::temp_dir().join(format!("ps-convtest-gif-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
+    let src = make_test_mp4(&ffmpeg, &dir, "rec-src.mp4", 1, "64x64");
     let out = convert_recording_blocking(&ffmpeg, &src, "gif", false, || false, |_| {}).expect("conversion should succeed");
     let bytes = fs::read(&out).unwrap();
     assert_eq!(&bytes[0..3], b"GIF");
-    assert!(!src.is_file());
+    // A GIF is capped and shortened, so the full-length source must survive the conversion.
+    assert!(!src.is_file(), "the source leaves the recordings folder");
+    assert!(
+        dir.join(crate::stats::DISCARD_SUBDIR).join("rec-src.mp4").is_file(),
+        "the full-length source must wait in the discard folder, not be deleted"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn convert_recording_real_ffmpeg_gif_keeps_a_source_that_cannot_be_moved_aside() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-convtest-gif-keep-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    // No "rec-" stem: the discard move refuses it, and the footage must then stay where it is.
+    let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
+    convert_recording_blocking(&ffmpeg, &src, "gif", false, || false, |_| {}).expect("conversion should succeed");
+    assert!(src.is_file(), "a source that cannot be moved aside is never deleted");
     let _ = fs::remove_dir_all(&dir);
 }
 
