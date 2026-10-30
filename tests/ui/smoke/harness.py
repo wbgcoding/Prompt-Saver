@@ -116,9 +116,20 @@ def unescape(s):
 
 
 def run_chrome(browser, profile, window_size, budget_ms, uri, timeout):
-    return subprocess.run(
-        [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-         f"--user-data-dir={profile}", "--allow-file-access-from-files",
-         f"--window-size={window_size}", f"--virtual-time-budget={budget_ms}",
-         "--dump-dom", uri],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    def once(prof):
+        return subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={prof}", "--allow-file-access-from-files",
+             f"--window-size={window_size}", f"--virtual-time-budget={budget_ms}",
+             "--dump-dom", uri],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    # On a loaded machine a headless start can hang or end without dumping the page. That is a
+    # browser failure, not a page verdict (it hits a random page each time), so it gets exactly
+    # one more run on a fresh profile; a page that did render is never run twice.
+    try:
+        proc = once(profile)
+        if "<html" in proc.stdout:
+            return proc
+    except subprocess.TimeoutExpired:
+        pass
+    return once(f"{profile}-retry")

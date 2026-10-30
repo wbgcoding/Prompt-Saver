@@ -37,11 +37,6 @@ def run(browser, tmp):
         w, h = size.split("x")
         proc = run_chrome(browser, tmp / ('profile-ar-' + tag), f"{w},{h}", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
-        if not m:
-            # No DOM dump at all is a browser start-up failure on a loaded machine, not a probe
-            # verdict (it hits a different probe each time); one more run tells the two apart.
-            proc = run_chrome(browser, tmp / ('profile-ar-' + tag + '-r'), f"{w},{h}", 45000, side.as_uri(), 180)
-            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- {label}")
         for e in errs:
