@@ -1942,6 +1942,29 @@ pub(crate) struct StartupWrites {
     // goes back into the database.
     pub(crate) prompts_fallback: Option<Vec<Prompt>>,
     pub(crate) settings_fallback: Option<Settings>,
+    // Fallback files that exist but could not be read back. They hold edits the database never
+    // got, so they are renamed aside instead of being left where the next successful save
+    // would delete them.
+    pub(crate) quarantine: Vec<&'static str>,
+}
+
+// True when the file is there and not empty (an empty one never held an edit).
+fn fallback_has_content(path: &Path) -> bool {
+    fs::metadata(path).map(|m| m.len() > 0).unwrap_or(true)
+}
+
+// Renames an unreadable fallback file to `<name>.unreadable-<ms>` so the save that drops stale
+// fallbacks can never remove it. Returns whether the rename happened.
+pub(crate) fn quarantine_fallback(dir: &Path, file: &str) -> bool {
+    let from = dir.join(file);
+    let kept = format!("{file}.unreadable-{}", now_ms());
+    if fs::rename(&from, dir.join(&kept)).is_ok() {
+        append_crash_log(&format!("{file} fallback could not be read; kept as {kept}"));
+        true
+    } else {
+        append_crash_log(&format!("{file} fallback could not be read and could not be set aside"));
+        false
+    }
 }
 
 // Performs the deferred writes, and only when this process may write into the folder. While
@@ -1950,6 +1973,9 @@ pub(crate) struct StartupWrites {
 pub(crate) fn apply_startup_writes(dir: &Path, conn: &mut Connection, written: &std::cell::RefCell<WrittenRows>, plan: StartupWrites, may_write: bool) {
     if !may_write {
         return;
+    }
+    for file in &plan.quarantine {
+        quarantine_fallback(dir, file);
     }
     let mut written = written.borrow_mut();
     if let Some((j_prompts, j_settings)) = plan.legacy_import {
@@ -2136,10 +2162,11 @@ fn load_store_inner(app: &AppHandle) -> Store {
                             prompts = fallback;
                             startup.prompts_fallback = Some(prompts.clone());
                         }
-                        SealedRead::Unreadable => append_crash_log(
-                            "prompts.json fallback present but could not be decrypted/parsed; \
-                             DB left untouched, file kept for inspection",
-                        ),
+                        // Unreadable, or a read error on a file that has content (a sync client
+                        // or scanner holding it): either way the file may hold the only copy of
+                        // an edit, so it is set aside once the folder is known to be writable.
+                        SealedRead::Unreadable => startup.quarantine.push("prompts.json"),
+                        SealedRead::Missing if fallback_has_content(&pj) => startup.quarantine.push("prompts.json"),
                         SealedRead::Missing => {}
                     }
                 }
@@ -2151,10 +2178,8 @@ fn load_store_inner(app: &AppHandle) -> Store {
                             settings_defaulted = false;
                             startup.settings_fallback = Some(settings.clone());
                         }
-                        SealedRead::Unreadable => append_crash_log(
-                            "settings.json fallback present but could not be decrypted/parsed; \
-                             DB left untouched, file kept for inspection",
-                        ),
+                        SealedRead::Unreadable => startup.quarantine.push("settings.json"),
+                        SealedRead::Missing if fallback_has_content(&sj) => startup.quarantine.push("settings.json"),
                         SealedRead::Missing => {}
                     }
                 }

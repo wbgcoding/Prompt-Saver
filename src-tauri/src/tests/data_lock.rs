@@ -1470,6 +1470,7 @@ fn fallback_plan(dir: &Path) -> StartupWrites {
         legacy_import: None,
         prompts_fallback: Some(numbered_prompts(2)),
         settings_fallback: Some(Settings::default()),
+        quarantine: Vec::new(),
     }
 }
 
@@ -1487,6 +1488,32 @@ fn startup_fallback_retry_leaves_files_and_rows_alone_while_read_only() {
     apply_startup_writes(&dir, &mut conn, &written, fallback_plan(&dir), true);
     assert_eq!(prompt_rows(&conn), 2);
     assert!(!dir.join("prompts.json").exists() && !dir.join("settings.json").exists());
+    drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// An unreadable fallback file is the only copy of an edit the database never took. It is set
+// aside under a new name, so the save that clears stale fallbacks cannot delete it.
+#[test]
+fn an_unreadable_fallback_is_set_aside_not_left_for_the_next_save_to_drop() {
+    let dir = ddlock_test_dir("startup-quarantine");
+    let mut conn = db_conn_at(&dir).unwrap();
+    let written = std::cell::RefCell::new(WrittenRows::new());
+    fs::write(dir.join("prompts.json"), "not json at all {").unwrap();
+    fs::write(dir.join("settings.json"), "also broken").unwrap();
+    let plan = || StartupWrites { quarantine: vec!["prompts.json", "settings.json"], ..Default::default() };
+    // While another machine owns the folder nothing moves.
+    apply_startup_writes(&dir, &mut conn, &written, plan(), false);
+    assert!(dir.join("prompts.json").is_file() && dir.join("settings.json").is_file());
+    apply_startup_writes(&dir, &mut conn, &written, plan(), true);
+    assert!(!dir.join("prompts.json").exists() && !dir.join("settings.json").exists());
+    let names: Vec<String> = fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    assert!(names.iter().any(|n| n.starts_with("prompts.json.unreadable-")), "{names:?}");
+    assert!(names.iter().any(|n| n.starts_with("settings.json.unreadable-")), "{names:?}");
+    // Nothing is left for drop_stale_fallback to delete.
+    drop_stale_fallback(&dir, "prompts.json");
+    let kept = fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".unreadable-")).count();
+    assert_eq!(kept, 2);
     drop(conn);
     let _ = fs::remove_dir_all(&dir);
 }
