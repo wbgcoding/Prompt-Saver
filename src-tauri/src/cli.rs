@@ -413,19 +413,29 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
 async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer, app: &AppHandle) {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let app2 = app.clone();
-    if app
+    let queued = app
         .run_on_main_thread(move || {
             let _ = tx.send(());
             show_main(&app2);
         })
-        .is_ok()
-    {
-        let _ = rx.await; // no timeout here -- the launch-side ping enforces its own
-    }
-    let resp = PipeResponse { code: 0, stdout: String::new(), stderr: String::new() };
+        .is_ok();
+    // The closure never running (an event loop already closed while the process is still in its
+    // exit handlers) is no proof of life, and an answer of success would end the new launch
+    // without any window.
+    let reached = queued && rx.await.is_ok(); // no timeout here -- the launch-side ping enforces its own
+    let resp = show_ping_response(reached);
     if let Ok(bytes) = serde_json::to_vec(&resp) {
         let _ = write_frame(pipe, &bytes).await;
     }
+}
+
+fn show_ping_response(reached_main_thread: bool) -> PipeResponse {
+    PipeResponse { code: if reached_main_thread { 0 } else { 1 }, stdout: String::new(), stderr: String::new() }
+}
+
+// Only a success answer proves the instance is alive and showing itself.
+fn show_ping_proves_life(frame: &[u8]) -> bool {
+    serde_json::from_slice::<PipeResponse>(frame).map(|r| r.code == 0).unwrap_or(false)
 }
 
 // ---------- Second-launch handshake (a plain GUI start, not a CLI command) ----------
@@ -490,7 +500,11 @@ async fn resolve_second_launch_async() -> LaunchDecision {
         write_frame(&mut client, &bytes).await.ok()?;
         read_frame(&mut client, MAX_FRAME_BYTES).await.ok()
     };
-    let answered = tokio::time::timeout(SECOND_LAUNCH_TIMEOUT, roundtrip).await.ok().flatten().is_some();
+    let answered = tokio::time::timeout(SECOND_LAUNCH_TIMEOUT, roundtrip)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|frame| show_ping_proves_life(&frame));
     if answered {
         return LaunchDecision::HandedOff;
     }

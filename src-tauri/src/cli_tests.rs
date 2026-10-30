@@ -1264,6 +1264,18 @@ fn a_non_unicode_argument_never_panics_the_launch() {
     assert_eq!(read_launch_args(Vec::<OsString>::new()), LaunchArgs::Gui);
 }
 
+// ---- second-launch liveness proof ----
+
+#[test]
+fn a_show_ping_answer_counts_only_when_the_main_thread_was_reached() {
+    let ok = serde_json::to_vec(&show_ping_response(true)).unwrap();
+    let not_reached = serde_json::to_vec(&show_ping_response(false)).unwrap();
+    assert!(show_ping_proves_life(&ok));
+    assert!(!show_ping_proves_life(&not_reached), "a failed liveness proof must not end the new launch");
+    assert!(!show_ping_proves_life(b"not json"));
+    assert!(!show_ping_proves_life(b""));
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]
