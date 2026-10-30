@@ -106,6 +106,12 @@ pub struct CamBeginResult {
 
 
 
+// A screen recording counts as in flight while it has a session OR while a start/stop/cancel
+// holds the start claim (the session is out of the state during the teardown).
+fn screen_recording_in_flight(has_session: bool, start_claim_held: bool) -> bool {
+    has_session || start_claim_held
+}
+
 // Pure, so the dual-open decision has its own test: a companion still recording is
 // mid-write, not a file to open, and one with no path (or a vanished file) has nothing to
 // align against.
@@ -260,7 +266,13 @@ pub fn camera_finish_recording(
     let screen_still_active = {
         #[cfg(windows)]
         {
-            rstate.0.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+            // The stop and cancel commands take the session out of the state BEFORE the encoder is
+            // finalised (or the file moved to the discard area), and hold the start claim until
+            // they are done: until then the file is not a recording to open.
+            screen_recording_in_flight(
+                rstate.0.lock().unwrap_or_else(|e| e.into_inner()).is_some(),
+                crate::rec_cmds::REC_STARTING.load(std::sync::atomic::Ordering::SeqCst),
+            )
         }
     };
     let companion_path = resolve_finish_companion(session.companion_path, screen_still_active, |p| p.is_file());
@@ -848,5 +860,14 @@ mod tests {
         assert!(!stray.exists());
         assert!(live_session_paths(&None).is_empty());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_companion_screen_recording_is_in_flight_during_its_teardown() {
+        assert!(screen_recording_in_flight(true, false));
+        assert!(screen_recording_in_flight(false, true), "stop/cancel hold the claim while the encoder closes");
+        assert!(!screen_recording_in_flight(false, false));
+        let rs = include_str!("camera.rs");
+        assert!(rs.contains("crate::rec_cmds::REC_STARTING.load("), "the finish must read the start claim");
     }
 }
