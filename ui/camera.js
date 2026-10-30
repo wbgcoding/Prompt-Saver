@@ -474,7 +474,14 @@ function showFolder(dir) {
 folderBtn.addEventListener("click", async () => {
   const dir = await invoke("pick_folder", { purpose: "recording" }).catch(() => null);
   if (dir) {
-    await invoke("set_recording_dir", { dir }).catch(() => {});
+    // The path is shown only once it is saved: a refused folder must not look like the next
+    // take's target.
+    try {
+      await invoke("set_recording_dir", { dir });
+    } catch (err) {
+      await showCameraError(err);
+      return;
+    }
     showFolder(dir);
   }
 });
