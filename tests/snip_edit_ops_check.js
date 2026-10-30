@@ -178,6 +178,31 @@ function sandbox() {
   check("merged nudge: redo branch ended", sb.SE.redo.length, 0);
   check("merged nudge: still one undo entry", sb.SE.ops.length, 2);
 }
+// Ctrl+Arrow on a line or arrow moves its end point only (the hint promises it); on a pen
+// stroke it does nothing, and the hint offers no Ctrl there.
+{
+  const sb = sandbox();
+  const line = { tool: "arrow", points: [{ x: 10, y: 10 }, { x: 50, y: 10 }] };
+  sb.SE.ops = []; sb.SE.tool = "arrow"; sb.SE.redo = [];
+  sb.snipEditNudge(line, "ArrowDown", 10, true);
+  check("ctrl nudge line: start point stays", line.points[0], { x: 10, y: 10 });
+  check("ctrl nudge line: end point moved", line.points[1], { x: 50, y: 20 });
+  const pen = { tool: "pen", points: [{ x: 1, y: 1 }, { x: 5, y: 5 }] };
+  sb.snipEditNudge(pen, "ArrowRight", 1, true);
+  check("ctrl nudge pen: unchanged", pen.points, [{ x: 1, y: 1 }, { x: 5, y: 5 }]);
+}
+{
+  const hintSb = { SE: {}, t: (k) => k, snipEditNudgeHintEl: { firstElementChild: { dataset: {}, textContent: "", classList: { toggle() {} } } } };
+  vm.createContext(hintSb);
+  vm.runInContext(extractBlock("function snipEditUpdateNudgeHint() {"), hintSb);
+  const hintFor = (op) => { hintSb.SE.lastNudged = op; hintSb.snipEditUpdateNudgeHint(); return hintSb.snipEditNudgeHintEl.firstElementChild.dataset.i18n; };
+  check("hint: line", hintFor({ tool: "line", points: [] }), "snipEditNudgeHintLine");
+  check("hint: arrow", hintFor({ tool: "arrow", points: [] }), "snipEditNudgeHintLine");
+  check("hint: rect", hintFor({ tool: "rect", rect: {} }), "snipEditNudgeHint");
+  check("hint: pen", hintFor({ tool: "pen", points: [] }), "snipEditNudgeHintMove");
+  check("hint: step", hintFor({ tool: "step", point: {} }), "snipEditNudgeHintMove");
+  check("hint: text", hintFor({ tool: "text", point: {} }), "snipEditNudgeHintText");
+}
 // Export draws the cropped image from the bare base, never the dimmed one.
 {
   const sb = sandbox();

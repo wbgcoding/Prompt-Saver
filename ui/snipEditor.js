@@ -610,10 +610,15 @@ export function initSnipEditor() {
   function snipEditUpdateNudgeHint() {
     // The line itself is always reserved under the image; only its text comes and goes.
     snipEditNudgeHintEl.firstElementChild.classList.toggle("hidden", !SE.lastNudged);
-    // A text box can also be opened again, which the hint then says too.
-    const textHint = !!SE.lastNudged && SE.lastNudged.tool === "text";
+    // The hint names only what works on this kind: Ctrl+Arrow resizes a box, moves a line's end
+    // point and does nothing on the rest; a text box can also be opened again.
+    const op = SE.lastNudged;
     const hintText = snipEditNudgeHintEl.firstElementChild;
-    hintText.dataset.i18n = textHint ? "snipEditNudgeHintText" : "snipEditNudgeHint";
+    hintText.dataset.i18n = !op ? "snipEditNudgeHint"
+      : op.tool === "text" ? "snipEditNudgeHintText"
+      : op.tool === "line" || op.tool === "arrow" ? "snipEditNudgeHintLine"
+      : op.rect ? "snipEditNudgeHint"
+      : "snipEditNudgeHintMove";
     hintText.textContent = t(hintText.dataset.i18n);
   }
   function snipEditNudge(op, key, amount, resize) {
@@ -621,10 +626,18 @@ export function initSnipEditor() {
     const dx = key === "ArrowLeft" ? -amount : key === "ArrowRight" ? amount : 0;
     const dy = key === "ArrowUp" ? -amount : key === "ArrowDown" ? amount : 0;
     if (resize) {
-      // Only a rect has a size to change; for the other tools Ctrl+Arrow is a no-op.
-      if (!op.rect) return;
-      op.rect.w = Math.max(4, op.rect.w + dx);
-      op.rect.h = Math.max(4, op.rect.h + dy);
+      // A rect changes its size, a line or arrow moves its end point (the tip); for the other
+      // tools Ctrl+Arrow is a no-op.
+      if (op.rect) {
+        op.rect.w = Math.max(4, op.rect.w + dx);
+        op.rect.h = Math.max(4, op.rect.h + dy);
+      } else if ((op.tool === "line" || op.tool === "arrow") && op.points && op.points.length === 2) {
+        const end = op.points[1];
+        // Never onto the start point: a zero-length line has no direction to draw.
+        if (end.x + dx === op.points[0].x && end.y + dy === op.points[0].y) return;
+        end.x += dx;
+        end.y += dy;
+      } else return;
     } else {
       if (op.points) for (const p of op.points) { p.x += dx; p.y += dy; }
       if (op.point) { op.point.x += dx; op.point.y += dy; }
