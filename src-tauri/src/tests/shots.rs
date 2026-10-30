@@ -535,3 +535,17 @@ fn a_clipboard_copy_that_cannot_happen_is_an_error_not_a_silent_false() {
     assert_eq!(crate::snip::copy_image_data("data:image/png;base64,AAAA".into(), Some(true)), undecodable);
     assert_eq!(crate::snip::copy_image_data(String::new(), None), undecodable);
 }
+
+#[test]
+fn a_running_snip_session_keeps_its_mode_when_another_is_requested() {
+    use crate::snip::{snip_mode_after_request, SnipMode};
+    // Idle: the request arms the next session.
+    assert!(snip_mode_after_request(false, SnipMode::Capture, SnipMode::Ocr) == SnipMode::Ocr);
+    assert!(snip_mode_after_request(false, SnipMode::Ocr, SnipMode::Capture) == SnipMode::Capture);
+    // A session is on its way: a normal screenshot must not turn into a text read, or back.
+    assert!(snip_mode_after_request(true, SnipMode::Capture, SnipMode::Ocr) == SnipMode::Capture);
+    assert!(snip_mode_after_request(true, SnipMode::Ocr, SnipMode::Capture) == SnipMode::Ocr);
+    let src = include_str!("../snip.rs");
+    let cmd = src.split("pub(crate) fn set_snip_mode").nth(1).unwrap().split("pub(crate) fn snip_mode_after_request").next().unwrap();
+    assert!(cmd.contains("SNIP_ACTIVE.load"), "the command must consult the running session");
+}

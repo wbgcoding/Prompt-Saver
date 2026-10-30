@@ -1279,8 +1279,17 @@ pub(crate) fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(
 // stays armed past that session.
 #[tauri::command]
 pub(crate) fn set_snip_mode(state: State<'_, SnipModeState>, mode: String) -> Result<(), String> {
-    *state.0.lock().unwrap_or_else(|e| e.into_inner()) = if mode == "ocr" { SnipMode::Ocr } else { SnipMode::Capture };
+    let requested = if mode == "ocr" { SnipMode::Ocr } else { SnipMode::Capture };
+    let mut slot = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    *slot = snip_mode_after_request(SNIP_ACTIVE.load(Ordering::SeqCst), *slot, requested);
     Ok(())
+}
+
+// The mode is global, not per session: while a session is already running (a delayed or
+// still-open screenshot) a request meant for the next one must not turn that session into
+// something else. The ended session resets the mode anyway.
+pub(crate) fn snip_mode_after_request(session_active: bool, current: SnipMode, requested: SnipMode) -> SnipMode {
+    if session_active { current } else { requested }
 }
 
 // Target folder for saved screenshots: a custom expert path, else Pictures\Screenshots.
