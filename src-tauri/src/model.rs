@@ -234,6 +234,10 @@ pub(crate) struct Settings {
     // Per-floating-button size factor (1.0 = default).
     #[serde(default)]
     pub(crate) float_scale: HashMap<String, f64>,
+    // Per-floating-button free size (logical px, width x height) from dragging an edge or
+    // corner. Present = the pill opens at exactly this box; the S/M/L buttons clear it.
+    #[serde(default)]
+    pub(crate) float_size: HashMap<String, [f64; 2]>,
     // Pill folders. Kept while the feature is off, so turning it back on restores them.
     #[serde(default)]
     pub(crate) float_folders: Vec<FloatFolder>,
@@ -424,6 +428,7 @@ impl Default for Settings {
             theme: default_theme(),
             floating: HashMap::new(),
             float_scale: HashMap::new(),
+            float_size: HashMap::new(),
             float_folders: Vec::new(),
             video_prefs: HashMap::new(),
             window: None,

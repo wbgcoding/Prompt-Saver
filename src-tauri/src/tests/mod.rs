@@ -48,6 +48,7 @@ mod logging_tests;
 mod stats_tests;
 mod update_tests;
 mod os_integration;
+mod float_resize;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;

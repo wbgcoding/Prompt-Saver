@@ -33,6 +33,21 @@ pub(crate) fn float_scale_of(settings: &Settings, id: &str) -> f64 {
     if s.is_finite() { s.clamp(FLOAT_SCALE_MIN, FLOAT_SCALE_MAX) } else { 1.0 }
 }
 
+// Smallest free-resize box in logical px, and the largest any caller may ask for.
+pub(crate) const FLOAT_MIN_W: f64 = 48.0;
+pub(crate) const FLOAT_MIN_H: f64 = 28.0;
+pub(crate) const FLOAT_MAX_SIDE: f64 = 8000.0;
+
+// The stored free size of one pill (logical px), if it has one and it is usable.
+pub(crate) fn float_size_of(settings: &Settings, id: &str) -> Option<(f64, f64)> {
+    let [w, h] = *settings.float_size.get(id)?;
+    if w.is_finite() && h.is_finite() {
+        Some((w.clamp(FLOAT_MIN_W, FLOAT_MAX_SIDE), h.clamp(FLOAT_MIN_H, FLOAT_MAX_SIDE)))
+    } else {
+        None
+    }
+}
+
 // Pill window size: square box for image pills, classic pill for text.
 pub(crate) fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
     if is_image {
@@ -328,12 +343,13 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
     }
 
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
-    let (saved, scale, count, excluded) = {
+    let (saved, scale, free_size, count, excluded) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
         (
             store.settings.floating.get(&prompt.id).cloned(),
             float_scale_of(&store.settings, &prompt.id),
+            float_size_of(&store.settings, &prompt.id),
             store.settings.floating.len(),
             capture_excluded(&store.settings),
         )
@@ -347,7 +363,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         save_settings(app, &store.settings);
     }
 
-    let (pw, ph) = pill_dims(is_image_prompt(prompt), scale);
+    let (pw, ph) = free_size.unwrap_or_else(|| pill_dims(is_image_prompt(prompt), scale));
     // Spots and `taken` are physical pixels, the window sizes logical ones.
     let dpi = main_scale_factor(app);
     let (x, y, parked) = resolve_float_spot(&pos, pw * dpi, ph * dpi, &screen_snapshot(app), taken);
@@ -1156,10 +1172,10 @@ pub(crate) fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect,
     pill_ids.sort(); // stable fan-out order across runs
     for id in &pill_ids {
         let scale = float_scale_of(settings, id);
-        let (w, h) = match prompts.iter().find(|p| &p.id == id) {
+        let (w, h) = float_size_of(settings, id).unwrap_or_else(|| match prompts.iter().find(|p| &p.id == id) {
             Some(p) => pill_dims(is_image_prompt(p), scale),
             None => pill_dims(false, scale),
-        };
+        });
         wishes.push(Rect { x: work.x, y: work.y, w: w * dpi, h: h * dpi });
     }
     for folder in &settings.float_folders {
@@ -1259,6 +1275,7 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
             let mut store = lock(&state);
             store.settings.floating.remove(&id);
             store.settings.float_scale.remove(&id);
+            store.settings.float_size.remove(&id);
             for folder in store.settings.float_folders.iter_mut() {
                 folder.members.retain(|m| m != &id);
             }
@@ -1323,6 +1340,8 @@ pub(crate) async fn set_float_scale(
     let is_img = {
         let mut store = lock(&state);
         store.settings.float_scale.insert(id.clone(), scale);
+        // A size button always wins over a hand-dragged box.
+        store.settings.float_size.remove(&id);
         save_settings(&app, &store.settings);
         store.prompts.iter().find(|p| p.id == id).map(is_image_prompt).unwrap_or(false)
     };
@@ -1346,10 +1365,15 @@ pub(crate) async fn resize_float_pill(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let scale = float_scale_of(&lock(&state).settings, &id);
+    let (scale, free) = {
+        let store = lock(&state);
+        (float_scale_of(&store.settings, &id), float_size_of(&store.settings, &id).is_some())
+    };
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let w = if width.is_finite() { width.clamp(80.0, 8000.0) } else { FLOAT_W * scale };
-        let h = if height.is_finite() { height.clamp(40.0, 8000.0) } else { FLOAT_H * scale };
+        // A hand-dragged box may be smaller than a scaled pill ever is.
+        let (min_w, min_h) = if free { (FLOAT_MIN_W, FLOAT_MIN_H) } else { (80.0, 40.0) };
+        let w = if width.is_finite() { width.clamp(min_w, FLOAT_MAX_SIDE) } else { FLOAT_W * scale };
+        let h = if height.is_finite() { height.clamp(min_h, FLOAT_MAX_SIDE) } else { FLOAT_H * scale };
         let _ = win.set_size(tauri::LogicalSize::new(w, h));
     }
     Ok(())
@@ -1359,11 +1383,19 @@ pub(crate) async fn resize_float_pill(
 // Media pills: the window matches the media's aspect ratio (no invisible
 // click area beyond the visible video/image).
 #[tauri::command]
-pub(crate) async fn resize_float_media(app: AppHandle, id: String, width: f64, height: f64) -> Result<(), String> {
+pub(crate) async fn resize_float_media(
+    app: AppHandle,
+    state: State<'_, Db>,
+    id: String,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let free = float_size_of(&lock(&state).settings, &id).is_some();
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
         if width.is_finite() && height.is_finite() {
+            let min_h = if free { FLOAT_MIN_H } else { 48.0 };
             let w = width.clamp(48.0, 4000.0);
-            let h = height.clamp(48.0, 4000.0);
+            let h = height.clamp(min_h, 4000.0);
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
     }
@@ -1398,6 +1430,169 @@ pub(crate) fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64
         (w * s).round() as i32,
         (h * s).round() as i32,
     )
+}
+
+// ---- Free edge/corner resize ----
+// The whole drag runs in physical desktop pixels, the one space every monitor shares: the
+// start reads the cursor and the pill's box from Windows, every move reads the cursor again
+// and sets the box in ONE call. Nothing depends on the page's screen coordinates, which are
+// not one consistent space across monitors with different scaling.
+
+// Where the grabbed edges end up. `dir` is -1 (left/top edge moves), 0 (that axis stays) or
+// 1 (right/bottom edge moves); the opposite edges never move. A moving edge follows the cursor
+// delta exactly and is only held back by the minimum box and the monitor's work area (an edge
+// that already lies outside it is never pulled back, it just cannot grow further).
+pub(crate) fn resize_rect(
+    start: Rect,
+    from: (f64, f64),
+    now: (f64, f64),
+    dir: (i32, i32),
+    min: (f64, f64),
+    work: Rect,
+) -> Rect {
+    let (l, r) = resize_axis(start.x, start.right(), now.0 - from.0, dir.0, min.0, work.x, work.right());
+    let (t, b) = resize_axis(start.y, start.bottom(), now.1 - from.1, dir.1, min.1, work.y, work.bottom());
+    Rect { x: l, y: t, w: r - l, h: b - t }
+}
+
+fn resize_axis(lo: f64, hi: f64, delta: f64, dir: i32, min: f64, work_lo: f64, work_hi: f64) -> (f64, f64) {
+    if dir > 0 {
+        let top = work_hi.max(hi).max(lo + min);
+        (lo, (hi + delta).clamp(lo + min, top))
+    } else if dir < 0 {
+        let bottom = work_lo.min(lo).min(hi - min);
+        ((lo + delta).clamp(bottom, hi - min), hi)
+    } else {
+        (lo, hi)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ResizeSession {
+    start: Rect,
+    cursor: (f64, f64),
+    dir: (i32, i32),
+    min: (f64, f64),
+    work: Rect,
+}
+
+static FLOAT_RESIZES: Mutex<Vec<(String, ResizeSession)>> = Mutex::new(Vec::new());
+
+fn resize_sessions() -> std::sync::MutexGuard<'static, Vec<(String, ResizeSession)>> {
+    FLOAT_RESIZES.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// The cursor in physical desktop pixels.
+#[cfg(windows)]
+fn cursor_phys() -> Option<(f64, f64)> {
+    #[repr(C)]
+    struct PointW { x: i32, y: i32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetCursorPos(p: *mut PointW) -> i32;
+    }
+    let mut p = PointW { x: 0, y: 0 };
+    if unsafe { GetCursorPos(&mut p) } == 0 {
+        return None;
+    }
+    Some((p.x as f64, p.y as f64))
+}
+
+#[cfg(not(windows))]
+fn cursor_phys() -> Option<(f64, f64)> {
+    None
+}
+
+// A logical box from a physical one.
+fn logical_size(r: Rect, scale: f64) -> [f64; 2] {
+    let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    [r.w / s, r.h / s]
+}
+
+// Begin a drag on one pill; false = nothing to drag (no window, no cursor). `pill` = the
+// pill's box inside the window (x, y, w, h in logical px) when the window is larger than the
+// pill (context menu open); None = the window is the pill.
+#[tauri::command]
+pub(crate) async fn float_resize_start(
+    app: AppHandle,
+    id: String,
+    dir_x: i32,
+    dir_y: i32,
+    pill: Option<[f64; 4]>,
+) -> Result<bool, String> {
+    let Some(win) = app.get_webview_window(&flabel(&id)) else { return Ok(false) };
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let Some(rect) = window_rect(&win) else { return Ok(false) };
+    let start = match pill {
+        Some([x, y, w, h]) if [x, y, w, h].iter().all(|v| v.is_finite()) && w > 0.0 && h > 0.0 => Rect {
+            x: rect.x + (x * scale).round(),
+            y: rect.y + (y * scale).round(),
+            w: (w * scale).round(),
+            h: (h * scale).round(),
+        },
+        _ => rect,
+    };
+    let Some(cursor) = cursor_phys() else { return Ok(false) };
+    let (cx, cy) = start.center();
+    let session = ResizeSession {
+        start,
+        cursor,
+        dir: (dir_x.signum(), dir_y.signum()),
+        min: ((FLOAT_MIN_W * scale).round(), (FLOAT_MIN_H * scale).round()),
+        work: work_rect_at(&app, cx, cy),
+    };
+    let mut sessions = resize_sessions();
+    sessions.retain(|(k, _)| k != &id);
+    sessions.push((id, session));
+    Ok(true)
+}
+
+// One step: the window takes the box the cursor asks for. Returns the new logical size so
+// the page can fit its content without waiting for the window's resize event; None when no
+// drag is running.
+#[tauri::command]
+pub(crate) async fn float_resize_move(app: AppHandle, id: String) -> Result<Option<[f64; 2]>, String> {
+    let session = resize_sessions().iter().find(|(k, _)| k == &id).map(|(_, s)| *s);
+    let (Some(session), Some(win), Some(now)) = (session, app.get_webview_window(&flabel(&id)), cursor_phys()) else {
+        return Ok(None);
+    };
+    let r = resize_rect(session.start, session.cursor, now, session.dir, session.min, session.work);
+    set_bounds_phys(&win, r);
+    Ok(Some(logical_size(r, win.scale_factor().unwrap_or(1.0))))
+}
+
+// Finish the drag: the window's final box (logical px) is stored, so the pill opens at it
+// next time. Returns it; None when no drag was running.
+#[tauri::command]
+pub(crate) async fn float_resize_end(
+    app: AppHandle,
+    state: State<'_, Db>,
+    id: String,
+) -> Result<Option<[f64; 2]>, String> {
+    let had = {
+        let mut sessions = resize_sessions();
+        let before = sessions.len();
+        sessions.retain(|(k, _)| k != &id);
+        sessions.len() != before
+    };
+    if !had {
+        return Ok(None);
+    }
+    let Some(win) = app.get_webview_window(&flabel(&id)) else { return Ok(None) };
+    let Some(rect) = window_rect(&win) else { return Ok(None) };
+    let [w, h] = logical_size(rect, win.scale_factor().unwrap_or(1.0));
+    let size = [w.clamp(FLOAT_MIN_W, FLOAT_MAX_SIDE), h.clamp(FLOAT_MIN_H, FLOAT_MAX_SIDE)];
+    {
+        let mut store = lock(&state);
+        // Entries of pills that are gone (deleted, unpinned elsewhere) go with this save.
+        let pinned: Vec<String> = store.settings.floating.keys().cloned().collect();
+        store.settings.float_size.retain(|k, _| pinned.contains(k));
+        if store.settings.floating.contains_key(&id) {
+            store.settings.float_size.insert(id, size);
+        }
+        save_settings(&app, &store.settings);
+    }
+    Ok(Some(size))
 }
 
 // Expert privacy flag (Datenschutz tab), phrased from the user's side: "allow
