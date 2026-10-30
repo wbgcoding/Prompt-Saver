@@ -391,6 +391,22 @@ pub fn camera_permission_ready() -> bool {
     CAM_PERMISSION_READY.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+// True when the handler could not be attached after the window opened (WebView2 refused the
+// core object or the subscription). Same one-shot-event-plus-flag shape as the ready answer, so
+// the page can say so instead of sitting on an empty preview.
+static CAM_PERMISSION_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+const PERMISSION_FAILED_EVENT: &str = "camera-permission-failed";
+
+#[tauri::command]
+pub fn camera_permission_failed() -> bool {
+    CAM_PERMISSION_FAILED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn report_permission_failure(app: &AppHandle) {
+    CAM_PERMISSION_FAILED.store(true, std::sync::atomic::Ordering::SeqCst);
+    let _ = app.emit_to(CAMERA_WIN_LABEL, PERMISSION_FAILED_EVENT, ());
+}
+
 #[tauri::command]
 pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(), String> {
     let enabled = lock(&db).settings.ui_flags.get("cameraRecord") == Some(&true);
@@ -409,6 +425,7 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
     // A new window starts unanswered, whatever the previous one reached. Reset before the build,
     // so its page can never read the previous window's answer.
     CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+    CAM_PERMISSION_FAILED.store(false, std::sync::atomic::Ordering::SeqCst);
     let win = WebviewWindowBuilder::new(&app, CAMERA_WIN_LABEL, WebviewUrl::App("camera.html".into()))
         .title(crate::brand::DISPLAY_NAME)
         .inner_size(420.0, 620.0)
@@ -435,6 +452,7 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
         if matches!(event, WindowEvent::Destroyed) {
             // The next window starts unanswered, whatever this one reached.
             CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+            CAM_PERMISSION_FAILED.store(false, std::sync::atomic::Ordering::SeqCst);
             if let Some(state) = cleanup_app.try_state::<CameraState>() {
                 let taken = state.0.lock().unwrap_or_else(|e| e.into_inner()).take();
                 if let Some(session) = taken {
@@ -490,7 +508,8 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
     win.with_webview(move |webview| {
         let Ok(core) = (unsafe { webview.controller().CoreWebView2() }) else {
             // No working permission answer: leaving the prompt unanswered is safer than allowing every
-            // kind.
+            // kind. The page is told, so it does not wait on a camera that will never be asked for.
+            report_permission_failure(&app_ready);
             return;
         };
         let mut token = 0i64;
@@ -533,6 +552,8 @@ fn install_permission_handler(app: &AppHandle, win: &tauri::WebviewWindow) -> Re
         if unsafe { core.add_PermissionRequested(&handler, &mut token) }.is_ok() {
             CAM_PERMISSION_READY.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = app_ready.emit_to(CAMERA_WIN_LABEL, PERMISSION_READY_EVENT, ());
+        } else {
+            report_permission_failure(&app_ready);
         }
     })
     .map_err(|e| e.to_string())
@@ -869,5 +890,13 @@ mod tests {
         assert!(!screen_recording_in_flight(false, false));
         let rs = include_str!("camera.rs");
         assert!(rs.contains("crate::rec_cmds::REC_STARTING.load("), "the finish must read the start claim");
+    }
+
+    #[test]
+    fn a_permission_handler_that_cannot_attach_tells_the_page() {
+        let rs = include_str!("camera.rs");
+        let rs = &rs[..rs.find("#[cfg(test)]").unwrap()];
+        assert_eq!(rs.matches("report_permission_failure(&app_ready);").count(), 2, "both failure paths report");
+        assert!(include_str!("lib.rs").contains("camera::camera_permission_failed"));
     }
 }

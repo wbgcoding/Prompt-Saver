@@ -1083,6 +1083,7 @@ pub fn run() {
             camera::camera_begin_recording,
             camera::camera_append_chunk,
             camera::camera_permission_ready,
+            camera::camera_permission_failed,
             camera::camera_finish_recording,
             camera::camera_mark_finishing,
             camera::camera_discard_recording,

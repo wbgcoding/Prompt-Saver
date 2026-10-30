@@ -560,6 +560,20 @@ listen("camera-permission-ready", markPermissionReady)
   .then((ready) => { if (ready && !permissionReady) markPermissionReady(); })
   .catch(() => {});
 
+// The backend could not attach its permission answer: getUserMedia would hang unanswered, so
+// the page says there is no usable camera instead of leaving an empty preview. The event is a
+// one-shot, so the flag is asked for too (same as the ready answer above).
+function markPermissionFailed() {
+  preview.srcObject = null;
+  noDeviceEl.textContent = t("cameraNoDevice");
+  noDeviceEl.classList.remove("hidden");
+  startBtn.disabled = true;
+}
+listen("camera-permission-failed", markPermissionFailed)
+  .then(() => invoke("camera_permission_failed"))
+  .then((failed) => { if (failed) markPermissionFailed(); })
+  .catch(() => {});
+
 // A headset plugged in or out while the window is open: the microphone list follows, and the
 // preview restarts when the picked microphone vanished or the stream died with its device.
 // refreshPreview() itself does nothing during a take.
