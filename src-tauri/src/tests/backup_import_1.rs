@@ -407,6 +407,66 @@ fn import_all_data_scope_leaves_settings_untouched() {
     );
 }
 
+// An import taken before a prompt was deleted brings it back as a live prompt: the trash must
+// not keep a second entry with that id, or restoring it and deleting it again both collide.
+#[test]
+fn an_import_that_brings_back_a_trashed_prompt_drops_its_trash_entry() {
+    let mut store = Store {
+        prompts: vec![test_prompt("live")],
+        trash: vec![test_prompt("back"), test_prompt("stays")],
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: Default::default(),
+    };
+    let backup = Backup { prompts: vec![test_prompt("back")], settings: Settings::default() };
+    apply_import(&mut store, backup, true, false);
+    let trash_ids: Vec<&str> = store.trash.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(trash_ids, vec!["stays"], "only the entry that came back as a live prompt leaves the trash");
+
+    // A settings-only import leaves prompts and trash as they are.
+    let backup = Backup { prompts: vec![test_prompt("stays")], settings: Settings::default() };
+    apply_import(&mut store, backup, false, true);
+    assert_eq!(store.trash.len(), 1);
+}
+
+// A store already holding the same id in both lists (from such an import) still restores.
+#[test]
+fn restoring_a_trash_entry_whose_id_is_live_gives_it_a_new_id() {
+    let migrated_settings = || {
+        let mut s = Settings::default();
+        s.migrate();
+        s
+    };
+    let mut store = Store {
+        prompts: vec![test_prompt("x")],
+        trash: vec![test_prompt("x")],
+        settings: migrated_settings(),
+        prompts_locked: false,
+        written: Default::default(),
+    };
+    restore_trashed_core(&mut store, "x", |st| {
+        let mut ids: Vec<&str> = st.prompts.iter().map(|p| p.id.as_str()).collect();
+        ids.sort();
+        ids.dedup();
+        ids.len() == st.prompts.len()
+    })
+    .expect("the restore must not collide with the live prompt");
+    assert_eq!(store.prompts.len(), 2);
+    assert!(store.trash.is_empty());
+
+    // A failed write puts the entry back under its own id.
+    let mut store = Store {
+        prompts: vec![test_prompt("x")],
+        trash: vec![test_prompt("x")],
+        settings: migrated_settings(),
+        prompts_locked: false,
+        written: Default::default(),
+    };
+    assert!(restore_trashed_core(&mut store, "x", |_| false).is_err());
+    assert_eq!(store.trash[0].id, "x");
+    assert_eq!(store.prompts.len(), 1);
+}
+
 #[test]
 fn import_all_settings_scope_leaves_data_untouched() {
     let mut store = Store {

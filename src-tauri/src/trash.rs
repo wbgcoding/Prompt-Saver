@@ -66,8 +66,14 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
     let original_settings = store.settings.clone();
     let mut p = store.trash.remove(pos);
     let original_trashed_at = p.trashed_at;
+    let original_id = p.id.clone();
     p.trashed_at = 0;
     store.settings.sync_trash_marks.remove(id);
+    // A live prompt with this id (an older import brought it back) would make the write refuse a
+    // second row of that id for good: the restored copy takes a new one.
+    if store.prompts.iter().any(|q| q.id == p.id) {
+        p.id = gen_id();
+    }
     // A trash entry from before the placeholder spelling changed comes back readable.
     upgrade_prompt_placeholders(&mut p);
     seat_restored_in_active_view(&mut store.settings, &p.id);
@@ -78,6 +84,7 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
     if !save(store) {
         if let Some(mut p) = store.prompts.pop() {
             p.trashed_at = original_trashed_at;
+            p.id = original_id;
             let at = pos.min(store.trash.len());
             store.trash.insert(at, p);
         }

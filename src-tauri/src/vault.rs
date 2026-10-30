@@ -1101,6 +1101,11 @@ pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, w
             clear_network_paths(p);
         }
         migrate_prompts(&mut store.prompts);
+        // A prompt the import brings back must not also sit in the trash: restoring that entry or
+        // deleting the prompt again would put a second one with the same id into a list, and every
+        // save after that is refused.
+        let live: std::collections::HashSet<&str> = store.prompts.iter().map(|p| p.id.as_str()).collect();
+        store.trash.retain(|t| !live.contains(t.id.as_str()));
         store.prompts_locked = false; // a full import supersedes any decrypt lock
         // Deliberately NOT forget_written_rows() here: write_rows matches an
         // imported row against the disk by (id, content hash), never by trusting
@@ -1325,10 +1330,15 @@ pub(crate) async fn import_all(
         // An import that overrides the decrypt lock replaces the table: the rows
         // that caused the lock are unknown to this process and would stay behind.
         let replace_prompts = want_data && store.prompts_locked;
+        let trash_before = store.trash.len();
         let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
             save_import(&app, st, prompts, settings, replace_prompts)
         })?;
-        // The import's own save covers the prompt rows; the trash is written here.
+        // The import's own save covers the prompt rows; the trash is written here, also when the
+        // import took back entries that came back as live prompts.
+        if store.trash.len() != trash_before {
+            save_trash(&app, &store);
+        }
         if want_settings && ocr_was_on && !ocr_index_flag_on(&store) {
             write_ocr_wipe(&app, &store, "import");
         }
