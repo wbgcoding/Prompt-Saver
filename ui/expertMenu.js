@@ -1395,8 +1395,15 @@ export function colorRow(key) {
     swatch.style.background = hex;
     swatch.title = hex;
     hexOut.textContent = hex;
-    settings.ui_texts = { ...(settings.ui_texts || {}), [key]: hex };
-    try { await invoke("set_ui_text", { key, value: hex }); } catch (e) { errToast(e); }
+    const saved = await persistUiText(key, hex);
+    if (!saved) {
+      // The store refused it: show what is stored again.
+      const stored = HEX_RE.test(settings.ui_texts?.[key] || "") ? settings.ui_texts[key] : defColor;
+      swatch.style.background = stored;
+      swatch.title = stored;
+      hexOut.textContent = stored;
+      hex = stored;
+    }
     if (reset) reset.classList.toggle("hidden", hex === defColor);
   };
   // The live value, not the render-time one: a colour picked earlier must be where the popup restarts.
@@ -1460,7 +1467,10 @@ export function jumpToExpertSetting(key, kind) {
   settingsEl.classList.remove("hidden");
   expertTab = expertTabIndexOf(key, kind);
   expertQuery = "";
+  $("expert-search").value = "";
   expertOnlyChanged = false;
+  $("expert-only-changed").checked = false;
+  syncOnlyChangedChip();
   showExpertPage(true);
   flashSettingsRow(document.querySelector(`#settings-expert [data-setting-row="${key}"]`));
 }
@@ -1526,8 +1536,8 @@ export function toggleExpertGroup(title, sec, fill) {
 // other hotkey field via bindHotkeyField). Rebuilt on every renderExpert() call, so the field
 // is bound fresh each time rather than once at boot.
 export const HOTKEY_ROW_DEFS = {
-  recStopHotkey: { current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
-  recPauseHotkey: { current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
+  recStopHotkey: { slot: "recStop", current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
+  recPauseHotkey: { slot: "recPause", current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
 };
 export function hotkeyRow(key, labelKey) {
   const def = HOTKEY_ROW_DEFS[key];
@@ -1555,7 +1565,7 @@ export function hotkeyRow(key, labelKey) {
     try { await def.onCommit(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     input.value = "";
   });
-  bindHotkeyField(input, { current: def.current, onCommit: def.onCommit });
+  bindHotkeyField(input, { slot: def.slot, current: def.current, onCommit: def.onCommit });
   return withTip(row, key);
 }
 
@@ -1855,13 +1865,31 @@ export async function resetExpertGroup(group, changed, count) {
   if (!ok) return;
   for (const key of changed.flags.filter((k) => !EXPERT_BULK_NEVER.includes(k))) {
     const enabled = shipsOn(key);
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_flags || {}, key);
+    const before = settings.ui_flags?.[key];
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_flag", { key, enabled });
+    } catch (err) {
+      const back = { ...(settings.ui_flags || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_flags = back;
+      errToast(err);
+    }
   }
   for (const key of [...changed.values, ...changed.selects]) {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_values || {}, key);
+    const before = settings.ui_values?.[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
-    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { errToast(err); }
+    try {
+      await invoke("set_ui_value", { key, value: cfg.def });
+    } catch (err) {
+      const back = { ...(settings.ui_values || {}) };
+      if (had) back[key] = before; else delete back[key];
+      settings.ui_values = back;
+      errToast(err);
+    }
   }
   for (const key of changed.dropdowns) {
     const cfg = EXPERT_DROPDOWNS[key];
