@@ -134,6 +134,10 @@ impl ActiveClock {
         Self { start_abs_ms, pauses: Vec::new() }
     }
 
+    fn rebase(&mut self, start_abs_ms: u64) {
+        self.start_abs_ms = start_abs_ms;
+    }
+
     fn pause(&mut self, now: u64) {
         if !matches!(self.pauses.last(), Some((_, None))) {
             self.pauses.push((now, None));
@@ -1291,6 +1295,17 @@ pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64, shortcuts_
         }
     }
     *guard = start(hold_ms, start_abs_ms, shortcuts_only);
+}
+
+// Moves the running capture's time zero to the instant the video track's first frame was taken
+// (the encoder counts from that frame, which arrives a little after the capture starts). Safe in
+// either order with maybe_start: the feeder calls it when the frame arrives, the starter calls it
+// after installing the capture if the frame came first. No capture running: nothing to do.
+pub fn rebase_start(first_frame_ms: u64) {
+    let guard = slot().lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(cap) = guard.as_ref() {
+        cap.clock.lock().unwrap_or_else(|e| e.into_inner()).rebase(first_frame_ms);
+    }
 }
 
 pub fn maybe_stop_and_write(output_path: &Path) {

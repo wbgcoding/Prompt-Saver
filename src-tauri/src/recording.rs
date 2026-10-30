@@ -7,6 +7,7 @@ use super::{
     scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
     estimate_recording_seconds_remaining, active_tick_secs, DISK_CHECK_SECS, UsedAreaTracker,
 };
+use crate::keylog;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -335,7 +336,10 @@ fn drain_pending_frames(
     while let Some(item) = shared.try_pop() {
         if !*video_started {
             *video_started = true;
-            shared.mark_first_frame();
+            let at = keylog::mono_ms();
+            shared.mark_first_frame(at);
+            // The video track starts at this frame: the key overlay counts from here too.
+            keylog::rebase_start(at);
             for q in queues {
                 q.clear();
             }
@@ -676,6 +680,14 @@ fn spawn_disk_watch(
     });
     if spawned.is_err() {
         append_crash_log("recording: could not start the disk-space watch thread");
+    }
+}
+
+// Called right after the key-overlay capture is installed: when the first frame already came in
+// before it, the feeder's own rebase found no capture, so the overlay's time zero moves here.
+pub fn align_key_overlay_start(session: &RecSession) {
+    if let Some(at) = session.shared.first_frame_mono_ms() {
+        keylog::rebase_start(at);
     }
 }
 

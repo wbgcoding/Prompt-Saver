@@ -919,6 +919,27 @@ fn the_disk_check_gap_cannot_fill_the_drive_at_the_highest_bitrate() {
 }
 
 #[test]
+fn the_first_frame_instant_is_kept_for_the_key_overlay_clock() {
+    let shared = RecFeederShared::new();
+    assert_eq!(shared.first_frame_mono_ms(), None);
+    shared.mark_first_frame(0);
+    assert_eq!(shared.first_frame_mono_ms(), Some(0), "a first frame at instant zero is still a first frame");
+    assert!(shared.has_first_frame());
+}
+
+// Structural: the capture and the feeder run on real devices, so the wiring is pinned in the source.
+#[test]
+fn the_key_overlay_clock_is_moved_to_the_first_frame_from_both_sides() {
+    let rec = source!("../recording.rs");
+    let drain = rec.split("fn drain_pending_frames(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(drain.contains("keylog::rebase_start("), "the feeder must move the overlay clock when the first frame arrives");
+    let cmds = source!("../rec_cmds.rs");
+    assert_eq!(cmds.matches("recording::align_key_overlay_start(").count(), 2, "start and continue must both align a late-installed capture");
+}
+
+#[test]
 fn a_refused_start_removes_the_mic_sidecar_with_the_empty_output() {
     let dir = std::env::temp_dir().join(format!("ps-refused-start-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

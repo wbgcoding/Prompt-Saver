@@ -789,6 +789,9 @@ pub(crate) struct RecFeederShared {
     // pre-roll at the same "time zero" as the main track without taking frames from the feeder's
     // single-consumer queue.
     pub(crate) first_frame: std::sync::atomic::AtomicBool,
+    // keylog::mono_ms() when that first frame was taken, plus one so 0 means "not yet". The video
+    // track starts at that frame, so the key overlay's time zero has to move there too.
+    pub(crate) first_frame_mono_ms_plus_one: std::sync::atomic::AtomicU64,
     // Written only by the capture callback, in the resize safety net (scale_to_fit_frame_top_down)
     // that shrinks a grown window's picture to fit the encoder's original canvas, which is when
     // content starts being lost off the edge. Largest frame size seen (only the timestamp is
@@ -812,6 +815,7 @@ impl RecFeederShared {
             stopping: std::sync::atomic::AtomicBool::new(false),
             encode_error: Mutex::new(None),
             first_frame: std::sync::atomic::AtomicBool::new(false),
+            first_frame_mono_ms_plus_one: std::sync::atomic::AtomicU64::new(0),
             resize_crop_max_w: std::sync::atomic::AtomicU32::new(0),
             resize_crop_max_h: std::sync::atomic::AtomicU32::new(0),
             resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64::new(0),
@@ -836,8 +840,14 @@ impl RecFeederShared {
         let plus_one = self.resize_crop_first_ms_plus_one.load(Relaxed);
         (plus_one > 0).then(|| plus_one - 1)
     }
-    pub(crate) fn mark_first_frame(&self) {
+    // The instant is stored before the flag, so whoever sees the flag also sees the instant.
+    pub(crate) fn mark_first_frame(&self, mono_ms: u64) {
+        self.first_frame_mono_ms_plus_one.store(mono_ms.saturating_add(1), std::sync::atomic::Ordering::Release);
         self.first_frame.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn first_frame_mono_ms(&self) -> Option<u64> {
+        let plus_one = self.first_frame_mono_ms_plus_one.load(std::sync::atomic::Ordering::Acquire);
+        (plus_one > 0).then(|| plus_one - 1)
     }
     pub(crate) fn has_first_frame(&self) -> bool {
         self.first_frame.load(std::sync::atomic::Ordering::Relaxed)

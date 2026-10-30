@@ -970,6 +970,16 @@ fn active_clock_with_no_pause_is_plain_elapsed_wall_time() {
 }
 
 #[test]
+fn active_clock_rebased_to_the_first_frame_counts_keys_from_the_video_start() {
+    // Capture came up at 1_000, the first frame (video time zero) arrived 300 ms later.
+    let mut clock = ActiveClock::new(1_000);
+    assert_eq!(clock.active_ms(1_350), 350, "before the rebase a key reads late by the first-frame latency");
+    clock.rebase(1_300);
+    assert_eq!(clock.active_ms(1_350), 50);
+    assert_eq!(clock.active_ms(1_200), 0, "a key before the first frame clamps to the start");
+}
+
+#[test]
 fn active_clock_marks_a_key_struck_during_a_closed_pause_as_paused() {
     let mut clock = ActiveClock::new(0);
     clock.pause(100);

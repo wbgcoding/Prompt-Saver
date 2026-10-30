@@ -294,6 +294,7 @@ pub(crate) async fn start_recording(
     // installed with nothing recording, and the next recording's maybe_start would no-op against
     // that orphan ("never a second hook") and miss its keys.
     keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms(), key_overlay_shortcuts_only);
+    recording::align_key_overlay_start(&session);
     // Region only: Monitor/Window recordings keep the OS capture border and get no outline window
     // (see outline_rect_for_target).
     let outline = {
@@ -526,6 +527,7 @@ pub(crate) async fn finish_and_continue_recording(
                 // without this the last part's sidecar would hold the whole chain's keys.
                 keylog::maybe_stop_and_write(&path);
                 keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms, key_overlay_shortcuts_only);
+                recording::align_key_overlay_start(&new_session);
                 if carry_paused {
                     do_pause_recording(&mut new_session);
                 }
