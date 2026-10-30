@@ -171,6 +171,36 @@ def run(browser, tmp):
     if (JSON.stringify(cuts()) !== '[[3000,5000]]') errs.push('4024: a cut outside the trim was accepted: ' + JSON.stringify(cuts()));
     """)
 
+    # 54: "Remove all cuts" clears every cut made the way a user makes them, in one undo step.
+    failed += vprobe('rmcuts', 'remove all cuts clears cuts, bands, count line and plan in one undo', r"""
+    // 54: one cut from the button, one from the C key, then the clear button.
+    const $ = (id) => document.getElementById(id);
+    const cuts = () => VE.ops.filter((o) => o.tool === 'cut');
+    const bands = () => document.querySelectorAll('#ve-regions .ve-cut').length;
+    const press = (key, code) => document.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+    const dur = (ms) => mod.fmtTime(ms);
+    const full = mod.keptSegments().length;
+    VE.sel = { a: 1000, b: 2000 }; mod.renderRegions(); $('ve-cut-add').click();
+    VE.sel = { a: 3000, b: 4000 }; mod.renderRegions(); press('c', 'KeyC');
+    if (cuts().length !== 2) { errs.push('54: setup made ' + cuts().length + ' cuts, want 2'); return; }
+    if (bands() !== 2) errs.push('54: ' + bands() + ' cut bands before the clear, want 2');
+    if ($('ve-cut-clear').disabled) errs.push('54: the clear button is disabled with two cuts');
+    if (mod.keptSegments().length !== 3) errs.push('54: two cuts gave ' + mod.keptSegments().length + ' kept parts, want 3');
+    const lenCut = $('ve-cut-count').textContent;
+    $('ve-cut-clear').click();
+    await sleep(60);
+    if (cuts().length !== 0) errs.push('54: ' + cuts().length + ' cut ops left after the clear');
+    if (bands() !== 0) errs.push('54: ' + bands() + ' cut bands still drawn after the clear');
+    if ($('ve-cut-count').textContent !== 'Finished length ' + dur(mod.totalOutMs())) errs.push('54: the count line says "' + $('ve-cut-count').textContent + '" after the clear');
+    if (mod.keptSegments().length !== full) errs.push('54: the kept parts were not rejoined: ' + mod.keptSegments().length);
+    if (!$('ve-cut-clear').disabled) errs.push('54: the clear button stays enabled with no cuts');
+    if (!VE.ops.length) errs.push('54: the clear left no undo step');
+    mod.undo();
+    await sleep(60);
+    if (cuts().length !== 2 || bands() !== 2) errs.push('54: one undo brought back ' + cuts().length + ' cuts and ' + bands() + ' bands, want 2 and 2');
+    if ($('ve-cut-count').textContent !== lenCut) errs.push('54: the count line after undo says "' + $('ve-cut-count').textContent + '", was "' + lenCut + '"');
+    """)
+
     # 4025: mark in/out fall back to the trim range, not the recording.
     failed += vprobe('marks', 'mark in and out default to the trim range', r"""
     // 4025: marks against a trimmed clip.

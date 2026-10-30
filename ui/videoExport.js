@@ -93,13 +93,9 @@ async function refreshExportSizeNote(format) {
   $("ve-export-note").textContent = notes.join(" ");
 }
 
-// The button beside Export: "Stop export" while a run is going, otherwise "Back" to the Edit tab.
-// The i18n key moves with the text so a later language pass keeps the right label.
+// The "Stop export" button beside Export is there only while a run is going.
 export function syncExportButton() {
-  const key = VE.exporting ? "veStopExport" : "veBack";
-  const button = $("ve-export-cancel");
-  button.dataset.i18n = key;
-  button.textContent = t(key);
+  $("ve-export-cancel").classList.toggle("hidden", !VE.exporting);
 }
 
 // The one place that decides whether Export/Copy-to-clipboard may be clicked: an invalid or
