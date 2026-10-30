@@ -1173,6 +1173,30 @@ fn a_read_waits_on_the_store_only_for_what_it_reads() {
     assert!(unreadable_store_message(&list, false, true).is_none());
 }
 
+// ---- a standalone run does not leave the data folder claimed ----
+
+#[test]
+fn a_standalone_read_leaves_no_claim_on_the_data_folder() {
+    let tmp = TempDir::new("f3-read");
+    ensure_test_schema(tmp.path());
+    let dir = tmp.path().to_path_buf();
+    let code = run_standalone_with(move || dir, &args(&["list"]), Path::new("."));
+    assert_eq!(code, 0);
+    assert!(!crate::store::data_dir_lock_path(tmp.path()).exists(), "a read must not write a lock naming a process that is gone");
+}
+
+#[test]
+fn a_standalone_write_gives_the_data_folder_back_when_it_is_done() {
+    let tmp = TempDir::new("f3-write");
+    ensure_test_schema(tmp.path());
+    let dir = tmp.path().to_path_buf();
+    let code = run_standalone_with(move || dir, &args(&["add", "--name", "n", "--text", "t", "--yes"]), Path::new("."));
+    assert_eq!(code, 0);
+    assert!(!crate::store::data_dir_lock_path(tmp.path()).exists(), "the claim made for the write must be released");
+    let again = tmp.path().to_path_buf();
+    assert_eq!(run_standalone_with(move || again, &args(&["list"]), Path::new(".")), 0);
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]

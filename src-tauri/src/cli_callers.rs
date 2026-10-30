@@ -44,6 +44,23 @@ pub(super) fn unreadable_store_message(cmd: &Cmd, prompts_locked: bool, settings
     unreadable.then_some("the store could not be read completely (the database did not open or a row failed to decrypt)\n")
 }
 
+// Gives back the data-folder claim a standalone run made, so the folder is free for the app or
+// another machine the moment the command is done. Only a lock that still carries this
+// process's claim id is removed.
+struct OwnedLockRelease(PathBuf);
+
+impl Drop for OwnedLockRelease {
+    fn drop(&mut self) {
+        if !crate::DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed) {
+            return;
+        }
+        let path = crate::store::data_dir_lock_path(&self.0);
+        if crate::store::read_data_dir_lock(&path).is_some_and(|l| l.id == crate::store::lock_claim_id()) {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
     run_standalone_with(data_dir_headless, argv, cwd)
 }
@@ -75,7 +92,13 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     }
     let dir = resolve_dir();
     let (store, health) = load_store_headless_checked(&dir);
-    acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
+    // Only a command that writes claims the folder. A read claimed it too and left a lock naming a
+    // process that was gone a moment later, which held the app's next start read-only on this
+    // machine until the stale limit ran out. A claim this run made is given back when it ends.
+    let _lock_release = writes_data_folder(&cmd).then(|| {
+        acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
+        OwnedLockRelease(dir.clone())
+    });
 
     // Before the restore arm: a restore replaces the whole database, so a store another machine
     // holds locked must be refused for it like for every other change.
