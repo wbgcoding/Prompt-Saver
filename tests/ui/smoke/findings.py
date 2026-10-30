@@ -1435,17 +1435,18 @@ def run(browser, tmp):
     if (!callsFor('preview_import').length) errs.push('910: From file did not start the import preview');
     if (!pop.classList.contains('hidden')) errs.push('910: choosing an entry left the menu open');
 """)
-    failed += ar_probe('bm912', 'settings: the expert menu button has a normal size and closes the System line', 'index', '880x600', '', r"""
-    // 912: the button is one short primary button at the right end of the System line.
+    failed += ar_probe('bm912', 'settings: the expert menu button spans the System section as its last row', 'index', '880x600', '', r"""
+    // 912: the button is one primary button across the full width of the System section.
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
     const eo = document.getElementById('expert-open');
     const r = eo.getBoundingClientRect();
     if (!(r.width > 0)) errs.push('912: the expert menu button is not visible');
-    if (r.width >= 260) errs.push('912: the expert menu button is ' + Math.round(r.width) + 'px wide, expected under 260');
+    const fw = eo.parentElement.getBoundingClientRect().width;
+    if (Math.abs(r.width - fw) > 2) errs.push('912: the expert menu button is ' + Math.round(r.width) + 'px wide, expected the section width ' + Math.round(fw));
     if (!eo.classList.contains('primary-btn')) errs.push('912: the expert menu button is not primary-styled');
-    if (eo !== eo.parentElement.lastElementChild) errs.push('912: the expert menu button is not the last item of the System line');
+    if (eo !== eo.parentElement.lastElementChild) errs.push('912: the expert menu button is not the last item of the System section');
     if (eo.scrollWidth > eo.clientWidth + 1) errs.push('912: the expert menu label is cut');
 """)
     failed += ar_probe('bm913', 'settings: the update interval sits beside the Auto update switch and shows only while it is on', 'index', '880x600', '', r"""
@@ -1462,7 +1463,7 @@ def run(browser, tmp):
     if ([...sel.options].some((o) => o.value === '0')) errs.push('913: the interval list still has a 0 entry');
     const lab = sw.closest('label').getBoundingClientRect();
     const gap = wrap.getBoundingClientRect().left - lab.right;
-    if (gap < 0 || gap > 16) errs.push('913: the interval sits ' + Math.round(gap) + 'px from the switch, expected within 16');
+    if (gap < 0 || gap > 24) errs.push('913: the interval sits ' + Math.round(gap) + 'px from the switch row, expected within 24');
     sw.checked = false;
     sw.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(200);

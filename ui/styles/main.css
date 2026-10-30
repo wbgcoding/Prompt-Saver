@@ -2900,7 +2900,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
-#expert-open { flex: 0 0 auto; padding-inline: 16px; white-space: nowrap; }
+#expert-open { padding-inline: 16px; white-space: nowrap; }
 /* Compact controls inside the settings list: the dialog is one short scroll list. */
 #settings-main .modal-input { padding-block: 6px; }
 #settings-main .ghost-btn, #settings-main .primary-btn { padding-block: 6px; }
@@ -4086,25 +4086,32 @@ body.drag-over::after {
    instead of breaking its text in two. */
 .export-row .ghost-btn { flex: 1 1 auto; white-space: nowrap; }
 /* Export and its format choice stay together, format on the right. */
-.export-pair { display: inline-flex; flex: 1 1 auto; gap: 6px; margin-left: 12px; }
-/* System: one line with the version status, About, the check button, the auto-update
-   switch and the interval, which takes the room left over at the right edge. */
-.update-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.update-line > .ghost-btn, .update-line > .primary-btn { flex: 0 0 auto; padding-inline: 10px; white-space: nowrap; }
-/* The interval list sits right beside the switch and shows only while Auto update is on.
-   Only when even that is not enough (the minimum window in a long language) the line
-   wraps instead of cutting a text. */
-.update-line > .update-auto { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; }
-.update-auto > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
-/* The explicit width is the size the line is broken on (the group wraps as a whole);
-   the interval then grows into leftover room up to max-width. */
-.update-interval { flex: 1 1 84px; width: 84px; min-width: 84px; max-width: 150px; }
-/* Same 8px vertical padding as the buttons beside it, so the whole line is one height. */
-.update-interval > select { width: 100%; padding-block: 8px; }
+.export-pair { display: flex; gap: 4px; min-width: 0; }
+.export-pair > .ghost-btn { flex: 1 1 0; min-width: 0; padding-inline: 4px; }
+.export-pair > select { flex: 0 0 auto; padding: 6px 24px 6px 10px; }
+/* Data: four equal columns. With the 16px gap the second column ends exactly where the
+   switch grid's left column ends (and the third starts where its right column starts). */
+#impexp-field .export-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 16px; }
+#impexp-field .export-row .ghost-btn { white-space: normal; line-height: 20px; }
+#impexp-field .export-row .export-pair > .ghost-btn { white-space: nowrap; }
+@media (max-width: 468px) {
+  #impexp-field .export-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+/* System, row 1: the version status on the left, About and the check button at the right edge. */
+.update-line { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
+.update-btns { display: flex; flex: 0 1 auto; gap: 8px; min-width: 0; }
+.update-btns > .ghost-btn { flex: 0 1 auto; padding-inline: 12px; }
+/* Row 2: the switch row in the left column, the interval list filling the right one.
+   Both are as tall as a switch row, so the rows keep the grid's spacing. */
+.update-auto { align-items: center; }
+.update-interval { min-width: 0; }
+.update-interval > select { width: 100%; padding-block: 6px; }
+/* Row 3: the Expert menu button across the full content width. */
+#updates-field > #expert-open { width: 100%; }
 /* Clickable version/status label, plain text look → releases page, or the update
    dialog once an update is pending. */
 .update-version {
-  flex: 0 0 auto;
+  flex: 0 1 auto; min-width: 0;
   background: none; border: none; padding: 0;
   color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer; text-align: left; white-space: nowrap;

@@ -35,7 +35,8 @@ SECTION = """\
         if (!help729.getAttribute('aria-label') || !help729.title) out.errors.push('729: help-open has no accessible name or tooltip');
         const eo729 = document.getElementById('expert-open');
         if (!eo729.classList.contains('primary-btn') || !eo729.closest('#updates-field')) out.errors.push('975: the expert menu button is not the primary button of the System line');
-        if (eo729.getBoundingClientRect().width > 260) out.errors.push('729: the expert menu button is wider than a normal button: ' + Math.round(eo729.getBoundingClientRect().width));
+        const fw729 = eo729.parentElement.getBoundingClientRect().width;
+        if (Math.abs(eo729.getBoundingClientRect().width - fw729) > 2) out.errors.push('729: the expert menu button does not span the System section: ' + Math.round(eo729.getBoundingClientRect().width) + ' vs ' + Math.round(fw729));
         await click('expert-open');
         const hr2 = help729.getBoundingClientRect();
         if (!hr2.width || !hr2.height) out.errors.push('729: help-open is not visible on the expert page');
@@ -76,31 +77,44 @@ SECTION = """\
           out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(lineH) + ' vs ' + Math.round(lineHOld));
         }
         uv.textContent = 'Version 2.7.0';
-        // The switch and its interval sit in one non-wrapping group; count them as two controls. The
-        // Expert menu button closes the line.
-        const kids727 = [...line1.children].flatMap((k) => (k.classList.contains('update-auto') ? [...k.children] : [k]));
-        if (kids727.length !== 6 || !line1.contains(ub) || !line1.contains(ui727) || !line1.contains(document.getElementById('expert-open'))) {
-          out.errors.push('727: the System line does not hold all six controls (' + kids727.length + ')');
+        // Three rows: version + About + check; the switch with its interval; the Expert menu button.
+        const field727 = document.getElementById('updates-field');
+        const autoGrid727 = field727.querySelector('.update-auto');
+        const sw727 = document.getElementById('opt-autoupdate');
+        const ex727 = document.getElementById('expert-open');
+        if (!line1.contains(ub) || !line1.contains(aboutBtn) || !autoGrid727 || !autoGrid727.contains(ui727) || !autoGrid727.contains(sw727) || ex727.parentElement !== field727) {
+          out.errors.push('727: the System section is not laid out in its three rows');
         }
-        const oneRow727 = (label) => {
-          // Below the minimum window size the line may wrap; it never cuts a text. The Expert menu
-          // button closing the line may drop to a second row of its own.
-          const mids = kids727.filter((k) => k.id !== 'expert-open').map((k) => { const r = k.getBoundingClientRect(); return r.top + r.height / 2; });
-          if (window.innerWidth >= 680 && Math.max(...mids) - Math.min(...mids) > 4) out.errors.push('727: the System line wraps in ' + label + ' at ' + window.innerWidth + 'px');
+        const rect = (el) => el.getBoundingClientRect();
+        const behaviorGrid727 = document.querySelector('#settings-main .switch-grid');
+        const colRight727 = behaviorGrid727 && behaviorGrid727.querySelectorAll('.switch-field')[1];
+        const check727 = (label) => {
+          // Row 1 shares one centre line and no text is cut; the right edges and the second column
+          // line up with the switch grid above; the Expert menu button spans the section.
+          const mids = [uv, aboutBtn, ub].map((k) => { const r = rect(k); return r.top + r.height / 2; });
+          if (Math.max(...mids) - Math.min(...mids) > 4) out.errors.push('727: the version row is not on one line in ' + label + ' at ' + window.innerWidth + 'px');
           const cut = [uv, aboutBtn, ub].filter((el) => el.scrollWidth > el.clientWidth + 1);
           if (cut.length) out.errors.push('727: ' + cut.map((el) => el.id).join(', ') + ' cut in ' + label + ' at ' + window.innerWidth + 'px');
+          if (window.innerWidth >= 680 && colRight727) {
+            const gr = rect(behaviorGrid727);
+            if (Math.abs(rect(ub).right - gr.right) > 1.5) out.errors.push('727: the check button misses the right edge of the switch grid in ' + label + ' at ' + window.innerWidth + 'px');
+            if (Math.abs(rect(ui727.closest('.update-interval')).left - rect(colRight727).left) > 1.5) out.errors.push('727: the interval misses the right grid column in ' + label + ' at ' + window.innerWidth + 'px');
+            if (Math.abs(rect(ex727).left - gr.left) > 1.5 || Math.abs(rect(ex727).right - gr.right) > 1.5) out.errors.push('727: the Expert menu button does not span the grid in ' + label + ' at ' + window.innerWidth + 'px');
+          }
+          const swLabel727 = sw727.closest('label').querySelector('span');
+          if (swLabel727.scrollWidth > swLabel727.clientWidth + 1 || rect(swLabel727).height > 40) out.errors.push('727: the auto update label wraps in ' + label + ' at ' + window.innerWidth + 'px');
         };
-        oneRow727('the page language');
-        const prev727 = [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent];
+        check727('the page language');
+        const swSpan727 = sw727.closest('label').querySelector('span');
+        const prev727 = [aboutBtn.textContent, ub.textContent, swSpan727.textContent];
         aboutBtn.textContent = 'Über';
         ub.textContent = 'Updates suchen';
-        line1.querySelector('.switch-field > span').textContent = 'Automatische Updates';
+        swSpan727.textContent = 'Automatische Updates';
         uv.textContent = 'Update v2.10.0';
-        oneRow727('German');
-        [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent] = prev727;
-        const rect = (el) => el.getBoundingClientRect();
-        if (window.innerWidth >= 680 && !(rect(aboutBtn).left > rect(uv).left && rect(ub).left > rect(aboutBtn).left && rect(ui727).left > rect(ub).left)) {
-          out.errors.push('727: the System line is not in the order version, About, check, switch, interval');
+        check727('German');
+        [aboutBtn.textContent, ub.textContent, swSpan727.textContent] = prev727;
+        if (window.innerWidth >= 680 && !(rect(aboutBtn).left > rect(uv).left && rect(ub).left > rect(aboutBtn).left && rect(ui727).top > rect(ub).top && rect(ex727).top > rect(ui727).top)) {
+          out.errors.push('727: the System rows are not in the order version row, switch row, Expert menu');
         }
         if (!ui727.getAttribute('aria-label')) out.errors.push('727: the interval select has no accessible name');
         if (document.querySelector('.update-row, .update-actions')) out.errors.push('727: the old update grid markup is still there');

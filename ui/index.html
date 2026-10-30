@@ -1091,24 +1091,27 @@
       </section>
       <section class="settings-sec">
         <h3 class="settings-sec-title" data-i18n="settingsSecUpdates">System</h3>
-        <!-- One line: version status, About, the check button, the auto-update switch,
-             its interval and the Expert menu button. -->
+        <!-- Three rows on the same two-column grid as the switches above: version status
+             with About and the check button, the auto-update switch with its interval,
+             and the Expert menu button across the full width. -->
         <div id="updates-field" class="field">
           <div class="update-line">
             <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
-            <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
-            <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
-            <div class="update-auto">
-              <label class="field switch-field" data-i18n-title="autoUpdateHint">
-                <span data-i18n="autoUpdate">Auto update</span>
-                <input id="opt-autoupdate" type="checkbox" class="switch" />
-              </label>
-              <div class="update-interval">
-                <select id="opt-update-interval" class="batch-view-select" data-i18n-aria="valUpdateCheckH"></select>
-              </div>
-            </div>
-            <button id="expert-open" type="button" class="primary-btn" data-i18n="expertMenu">Expert menu</button>
+            <span class="update-btns">
+              <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
+              <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
+            </span>
           </div>
+          <div class="update-auto switch-grid">
+            <label class="field switch-field" data-i18n-title="autoUpdateHint">
+              <span data-i18n="autoUpdate">Auto update</span>
+              <input id="opt-autoupdate" type="checkbox" class="switch" />
+            </label>
+            <div class="update-interval">
+              <select id="opt-update-interval" class="batch-view-select" data-i18n-aria="valUpdateCheckH"></select>
+            </div>
+          </div>
+          <button id="expert-open" type="button" class="primary-btn" data-i18n="expertMenu">Expert menu</button>
         </div>
       </section>
       <section class="settings-sec settings-sec-danger">

@@ -240,7 +240,7 @@ ABOUT = """
     else {
       // Vertical alignment: the line may wrap (the expert menu button drops to a row of its
       // own at the narrowest width); every item is centred on the row it sits in.
-      const kids = [...lines[0].children].filter((k) => k.getClientRects().length);
+      const kids = [lines[0].querySelector('#update-version'), ...lines[0].querySelectorAll('.update-btns > button')].filter((k) => k && k.getClientRects().length);
       const rows = [];
       for (const kid of kids) {
         const kr = kid.getBoundingClientRect();
@@ -248,8 +248,8 @@ ABOUT = """
         if (row) { row.kids.push(kid); row.top = Math.min(row.top, kr.top); row.bottom = Math.max(row.bottom, kr.bottom); }
         else rows.push({ kids: [kid], top: kr.top, bottom: kr.bottom });
       }
-      if (rows.length > 2) errs.push('about: the System line wraps into ' + rows.length + ' rows');
-      if (rows.length && rows[0].kids.length < 4) errs.push('about: the first System row holds only ' + rows[0].kids.length + ' items');
+      if (rows.length > 1) errs.push('about: the version row wraps into ' + rows.length + ' rows');
+      if (rows.length && rows[0].kids.length < 3) errs.push('about: the version row holds only ' + rows[0].kids.length + ' items');
       for (const row of rows) {
         for (const kid of row.kids) {
           const kr = kid.getBoundingClientRect();
