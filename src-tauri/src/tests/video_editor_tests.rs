@@ -445,7 +445,7 @@ fn a_rotated_phone_clip_reports_its_upright_size() {
     assert_eq!(stream_display_size(&side("180")), (1920, 1080));
     assert_eq!(stream_display_size(&side("0")), (1920, 1080));
     let tag = serde_json::json!({"width": 1920, "height": 1080, "tags": {"rotate": "90"}});
-    assert_eq!(stream_display_size(&tag), (1080, 1920));
+    assert_eq!(stream_display_size(&tag), (1920, 1080), "a bare rotate tag is not applied by ffmpeg or the preview");
     let plain = serde_json::json!({"width": 1920, "height": 1080});
     assert_eq!(stream_display_size(&plain), (1920, 1080));
 }
@@ -464,7 +464,7 @@ fn a_rotated_clip_reports_the_quarter_turns_ffmpeg_autorotate_applies() {
     assert_eq!(stream_rotation_quarters(&side(serde_json::json!("-90"))), 3, "string form");
     assert_eq!(stream_rotation_quarters(&side(serde_json::json!(45))), 0, "not a quarter turn");
     let tag = serde_json::json!({"width": 1920, "height": 1080, "tags": {"rotate": "270"}});
-    assert_eq!(stream_rotation_quarters(&tag), 3);
+    assert_eq!(stream_rotation_quarters(&tag), 0, "a bare rotate tag is not applied by ffmpeg or the preview");
     let plain = serde_json::json!({"width": 1920, "height": 1080});
     assert_eq!(stream_rotation_quarters(&plain), 0);
 }

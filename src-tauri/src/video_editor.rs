@@ -85,8 +85,9 @@ pub(crate) fn stream_rotation_quarters(video: &serde_json::Value) -> u8 {
     let side = video["side_data_list"]
         .as_array()
         .and_then(|l| l.iter().find_map(|d| d["rotation"].as_f64().or_else(|| d["rotation"].as_str()?.parse().ok())));
-    let tag = || video["tags"]["rotate"].as_str().and_then(|r| r.trim().parse::<f64>().ok());
-    let rot = side.or_else(tag).unwrap_or(0.0);
+    // Only the display matrix counts: the bundled ffmpeg and the preview both ignore a bare
+    // "rotate" tag, so honouring it here would turn a clip neither of them turns.
+    let rot = side.unwrap_or(0.0);
     let quarter = (rot / 90.0).round() as i64;
     if (rot - quarter as f64 * 90.0).abs() < 1.0 { quarter.rem_euclid(4) as u8 } else { 0 }
 }
