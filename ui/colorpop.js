@@ -42,7 +42,8 @@ export function createColorPop() {
     let h = 0;
     if (d) {
       h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      h = Math.round(h * 60);
+      // Kept fractional: a whole-degree hue would shift the colour on the round trip back to hex.
+      h *= 60;
       if (h < 0) h += 360;
     }
     return { h, s: max ? d / max : 0, v: max };
