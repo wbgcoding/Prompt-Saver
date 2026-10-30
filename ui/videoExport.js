@@ -255,6 +255,9 @@ export async function startExport(toClipboard) {
         // only when nothing was edited while it ran: a later edit is not in the file.
         const covered = !toClipboard && exportCoveredEdits(gen, rev);
         if (covered) VE.dirty = false;
+        // The picked folder is now the authorized one; a typed or saved path left on the refused
+        // folder would send every later export through the picker again.
+        if (destRetried && VE.destOverride && stillHere()) VE.destOverride = dest;
         // A finished export leaves nothing "unfinished": clear the remembered row so reopening this
         // recording never offers to restore work that already made it out. Later edits get a fresh row
         // from the next autosave tick.

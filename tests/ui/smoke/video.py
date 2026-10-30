@@ -1539,6 +1539,10 @@ VIDEO_PROBE = """
     if (document.getElementById('ve-export-saveas').classList.contains('hidden')) {
       errs.push('503: the retried export did not complete successfully');
     }
+    {
+      const keptDest = String((await import('./video.js')).VE.destOverride || '');
+      if (!keptDest.includes('Retry')) errs.push('F-dest: the typed destination kept its refused folder after the retry: ' + keptDest);
+    }
     // The one control that acts on a finished export reads "Save as..." (it moves
     // the file) with a tooltip, and the old pre-export file picker is gone: the name
     // field plus "Export to..." cover it. The row reads like the screenshot editor's:
