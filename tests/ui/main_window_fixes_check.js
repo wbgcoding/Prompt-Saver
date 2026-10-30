@@ -68,8 +68,9 @@ section(() => {
 // 2. Selection Escape listeners stand back for any other open overlay.
 section(() => {
   const lib = read("library.js");
-  const make = (open, libraryFront, popOpen = false) => run(extractBlock(lib, "export function otherOverlayOpen(").replace("export ", ""), {
+  const make = (open, libraryFront, popOpen = false, ctxOpen = false) => run(extractBlock(lib, "export function otherOverlayOpen(").replace("export ", ""), {
     isValuePopOpen: () => popOpen,
+    $: (id) => ({ classList: { contains: (c) => id === "ctx" && c === "hidden" && !ctxOpen } }),
     document: {
       body: { classList: { contains: (c) => c === "library-front" && libraryFront } },
       querySelectorAll: () => open.map((id) => ({ id })),
@@ -82,6 +83,7 @@ section(() => {
   check(make(["library", "backup-modal"], true).otherOverlayOpen("library") === false, "backups under a raised library do not count");
   check(make(["library", "backup-modal", "confirm-modal"], true).otherOverlayOpen("library") === true, "a confirm over a raised library still counts");
   check(make([], false, true).otherOverlayOpen("") === true, "an open value list keeps Escape for itself");
+  check(make([], false, false, true).otherOverlayOpen("") === true, "an open tile menu keeps Escape for itself");
   check(/Escape" && libSelectMode[^\n]*otherOverlayOpen\("library"\)/.test(lib), "library select Escape listener must use otherOverlayOpen");
   check(/Escape" && gridSelected\.size[^\n]*otherOverlayOpen\(""\)/.test(lib), "grid select Escape listener must use otherOverlayOpen");
 });
