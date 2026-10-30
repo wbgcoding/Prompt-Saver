@@ -1457,7 +1457,9 @@ function updateCutCount() {
   $("ve-cut-count").textContent = cuts.length
     ? t("veCutCount").replace("{n}", String(cuts.length)).replace("{d}", fmtTime(totalOutMs()))
     : t("veCutNone").replace("{d}", fmtTime(totalOutMs()));
-  $("ve-cut-clear").disabled = !cuts.length;
+  // The button sits under the clip start/end fields and resets those too, so a trimmed clip
+  // with no cut is something to remove as well.
+  $("ve-cut-clear").disabled = !cuts.length && !opsOf("trim").length;
 }
 
 const SCALE_HEIGHT_PRESETS = [2160, 1440, 1080, 720, 480, 360];
@@ -1687,7 +1689,7 @@ export function cutSelection() {
   else pushOp({ tool: "cut", startMs, endMs });
 }
 $("ve-cut-add").addEventListener("click", cutSelection);
-$("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut"));
+$("ve-cut-clear").addEventListener("click", () => removeOps((o) => o.tool === "cut" || o.tool === "trim"));
 
 $("ve-still").addEventListener("click", async () => {
   if ($("ve-still").disabled) return;

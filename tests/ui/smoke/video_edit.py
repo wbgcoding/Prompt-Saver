@@ -199,6 +199,13 @@ def run(browser, tmp):
     await sleep(60);
     if (cuts().length !== 2 || bands() !== 2) errs.push('54: one undo brought back ' + cuts().length + ' cuts and ' + bands() + ' bands, want 2 and 2');
     if ($('ve-cut-count').textContent !== lenCut) errs.push('54: the count line after undo says "' + $('ve-cut-count').textContent + '", was "' + lenCut + '"');
+    // A trim alone (clip start/end fields) also enables the button, and the button resets it.
+    const trims = () => VE.ops.filter((o) => o.tool === 'trim');
+    $('ve-cut-clear').click(); await sleep(60);
+    mod.pushOp({ tool: 'trim', startMs: 500, endMs: 5000 }); await sleep(60);
+    if ($('ve-cut-clear').disabled) errs.push('54: the clear button is disabled with only a trim set');
+    $('ve-cut-clear').click(); await sleep(60);
+    if (trims().length !== 0) errs.push('54: the clear left ' + trims().length + ' trim ops');
     """)
 
     # 4025: mark in/out fall back to the trim range, not the recording.
