@@ -1498,7 +1498,7 @@ export function bindLibrary() {
   $("library-close-toggle").addEventListener("change", async (e) => {
     const enabled = e.target.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), closeAfterCopy: enabled };
-    try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { errToast(err); }
+    try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { settings.ui_flags = { ...(settings.ui_flags || {}), closeAfterCopy: !enabled }; errToast(err); }
     syncLibraryToggle();
   });
   const renderLibraryDebounced = debounced(renderLibrary);

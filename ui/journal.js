@@ -511,7 +511,7 @@ export function bindJournal() {
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
     let accepted = true;
     try { await invoke("set_ui_flag", { key: "clipWatcher", enabled: on }); }
-    catch (e) { accepted = false; errToast(e); }
+    catch (e) { accepted = false; settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: !on }; errToast(e); }
     applyFlags();
     if (!on && accepted) await offerClipInboxCleanup();
     await refreshClipInbox();
