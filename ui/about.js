@@ -221,8 +221,18 @@ export function bindAbout() {
   attachSelectPicker($("opt-update-interval"));
   $("opt-update-interval").addEventListener("change", async (e) => {
     const hours = Number(e.target.value);
+    const had = Object.prototype.hasOwnProperty.call(settings.ui_values || {}, "updateCheckH");
+    const before = settings.ui_values?.updateCheckH;
     settings.ui_values = { ...(settings.ui_values || {}), updateCheckH: hours };
-    await invoke("set_ui_value", { key: "updateCheckH", value: hours }).catch((err) => errToast(err));
+    try {
+      await invoke("set_ui_value", { key: "updateCheckH", value: hours });
+    } catch (err) {
+      const back = { ...(settings.ui_values || {}) };
+      if (had) back.updateCheckH = before; else delete back.updateCheckH;
+      settings.ui_values = back;
+      fillUpdateIntervalSelect();
+      errToast(err);
+    }
   });
   listen("update-available", (e) => {
     offerUpdate(e.payload);
