@@ -2026,10 +2026,11 @@ fn move_data_dir_blocking(app: &AppHandle, new: PathBuf) -> Result<String, Strin
             if !save_settings(app, &store.settings) {
                 return Err("the settings could not be saved to the folder being left".to_string());
             }
+            // Set while the store lock is still held, so no save can slip in between the flush and
+            // the gate. From here no other writer may touch the folder; move_store_dir clears this
+            // on every way out. The checkpoint opens its own connection, as db_conn now refuses.
+            DATA_MOVE_IN_PROGRESS.store(true, Ordering::SeqCst);
         }
-        // From here no other writer may touch the folder; move_store_dir clears this on every way
-        // out. The checkpoint opens its own connection, as db_conn now refuses.
-        DATA_MOVE_IN_PROGRESS.store(true, Ordering::SeqCst);
         // Fold the WAL back into data.db so the single-file copy is complete
         // (recent copy_log appends can otherwise still live in data.db-wal).
         if let Some(c) = db_conn_at(&data_dir(app)) {
