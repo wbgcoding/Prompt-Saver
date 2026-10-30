@@ -828,6 +828,20 @@ pub(crate) fn claim_present_rows(conn: &Connection, table: &str, written: &mut W
     Ok(())
 }
 
+// Marker entry in the map of a store loaded from the JSON fallback: its prompt list came
+// from prompts.json, so nothing is known about the prompts table. The first database write
+// claims every row present there (claim_present_rows), so a prompt missing from the list is
+// deleted instead of surviving as an unknown row. The key starts with a control character,
+// so it never matches a table prefix and adopt_written_rows leaves it alone.
+pub(crate) const CLAIM_PROMPTS_KEY: &str = "\u{2}claim-prompts";
+
+fn claim_prompts_if_pending(conn: &Connection, written: &mut WrittenRows) -> rusqlite::Result<()> {
+    if written.contains_key(CLAIM_PROMPTS_KEY) {
+        claim_present_rows(conn, "prompts", written)?;
+    }
+    Ok(())
+}
+
 // Swap in one table's half of the map, after that table's write committed.
 pub(crate) fn adopt_written_rows(written: &mut WrittenRows, table: &str, fresh: WrittenRows) {
     let prefix = row_key(table, "");
@@ -837,9 +851,11 @@ pub(crate) fn adopt_written_rows(written: &mut WrittenRows, table: &str, fresh: 
 
 pub(crate) fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
+    claim_prompts_if_pending(&tx, written)?;
     let fresh = write_rows(&tx, "prompts", prompts, written)?;
     tx.commit()?;
     adopt_written_rows(written, "prompts", fresh);
+    written.remove(CLAIM_PROMPTS_KEY);
     Ok(())
 }
 
@@ -864,11 +880,13 @@ pub(crate) fn db_write_prompts_and_trash(
     written: &mut WrittenRows,
 ) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
+    claim_prompts_if_pending(&tx, written)?;
     let fresh_prompts = write_rows(&tx, "prompts", prompts, written)?;
     let fresh_trash = write_rows(&tx, "trash", trash, written)?;
     tx.commit()?;
     adopt_written_rows(written, "prompts", fresh_prompts);
     adopt_written_rows(written, "trash", fresh_trash);
+    written.remove(CLAIM_PROMPTS_KEY);
     Ok(())
 }
 
@@ -881,10 +899,12 @@ pub(crate) fn db_write_prompts_and_settings(
     written: &mut WrittenRows,
 ) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
+    claim_prompts_if_pending(&tx, written)?;
     let fresh = write_rows(&tx, "prompts", prompts, written)?;
     db_write_settings(&tx, settings)?;
     tx.commit()?;
     adopt_written_rows(written, "prompts", fresh);
+    written.remove(CLAIM_PROMPTS_KEY);
     Ok(())
 }
 
@@ -2301,13 +2321,19 @@ pub(crate) fn load_store_from_json_parts(dir: &Path) -> (Store, bool) {
         );
     }
     // No usable database was read here, so nothing is known to be on disk: the map
-    // starts empty and the next successful save writes every row.
+    // starts empty and the next successful save writes every row. A usable prompt list
+    // also carries the claim marker, so that first database write takes over the prompts
+    // table and deletes the rows the list lacks; a locked store never writes.
+    let mut written = WrittenRows::new();
+    if !unreadable {
+        written.insert(CLAIM_PROMPTS_KEY.to_string(), STALE_ROW_HASH);
+    }
     let store = Store {
         prompts,
         trash: Vec::new(),
         settings,
         prompts_locked: unreadable,
-        written: std::cell::RefCell::new(WrittenRows::new()),
+        written: std::cell::RefCell::new(written),
     };
     (store, settings_unreadable)
 }

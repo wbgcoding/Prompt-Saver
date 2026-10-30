@@ -455,6 +455,53 @@ fn a_missing_prompts_json_beside_a_database_locks_prompt_writes() {
     let _ = std::fs::remove_dir_all(&fresh);
 }
 
+// A session loaded from prompts.json knows nothing about the prompts table. Its first
+// database write must take the table over, or a prompt deleted from the list would stay
+// behind as a row the write never dares to remove, and come back on the next launch.
+#[test]
+fn a_json_loaded_store_deletes_table_rows_its_list_lacks_on_first_write() {
+    let dir = std::env::temp_dir().join(format!("{}-test-json-claim", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let db = dir.join("data.db");
+    let all = numbered_prompts(3);
+    {
+        let mut conn = Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);",
+        )
+        .unwrap();
+        db_write_prompts(&mut conn, &all, &mut WrittenRows::new()).unwrap();
+    }
+    // The fallback file lacks the last prompt: it was deleted in the session that wrote it.
+    assert!(write_sealed_json(&dir.join("prompts.json"), &all[..2].to_vec()));
+    let (store, _) = load_store_from_json_parts(&dir);
+    assert!(!store.prompts_locked);
+    assert_eq!(store.prompts.len(), 2);
+
+    let mut conn = Connection::open(&db).unwrap();
+    db_write_prompts(&mut conn, &store.prompts, &mut store.written.borrow_mut()).unwrap();
+    let ids: Vec<String> = stored_rows(&conn, "prompts").into_iter().map(|r| r.0).collect();
+    assert_eq!(ids.len(), 2, "the row the list lacks must be deleted");
+    assert!(!ids.contains(&all[2].id));
+    assert!(
+        !store.written.borrow().contains_key(CLAIM_PROMPTS_KEY),
+        "the claim is spent after the first committed write"
+    );
+
+    // Claiming is one-shot: a row added by someone else later is spared again.
+    conn.execute(
+        "INSERT INTO prompts(id, ord, data) VALUES('foreign', 9, '{}')",
+        [],
+    )
+    .unwrap();
+    db_write_prompts(&mut conn, &store.prompts, &mut store.written.borrow_mut()).unwrap();
+    assert_eq!(stored_rows(&conn, "prompts").len(), 3);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // A data-folder move first writes the live state into the folder it is leaving,
 // and the cleanup offered afterwards deletes exactly that folder. So a flush
 // that could not write (a folder gone read-only, a permission change) has to
