@@ -115,6 +115,17 @@ fn sync_dir_scan_counts_our_files_apart_from_everything_else() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn sync_dir_scan_knows_a_leftover_permission_probe() {
+    let dir = sync_tmp_dir("scan-probe");
+    fs::write(dir.join("p1.md.lock.probe-4242"), "").unwrap();
+    fs::write(dir.join("not an id.md.lock.probe-1"), "").unwrap();
+    let scan = sync_dir_scan(&dir);
+    assert_eq!(scan.ours.len(), 1, "our own probe file does not block removing the folder");
+    assert_eq!(scan.foreign.len(), 1);
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // ---- Reading the folder: settle first, then read, then leave it alone ----
 
 #[test]
