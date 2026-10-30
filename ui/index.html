@@ -1055,6 +1055,13 @@
             <span data-i18n="minimizeOnClose">Minimize to background on close</span>
             <input id="opt-minimize" type="checkbox" class="switch" />
           </label>
+          <label class="field switch-field" data-i18n-title="tipAutoPaste">
+            <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
+            <input id="opt-autopaste" type="checkbox" class="switch" />
+          </label>
+          <!-- Every global hotkey is edited in the All shortcuts dialog; this is its door. It shares
+               the Auto-paste row, so the autostart pair below keeps its optional second cell. -->
+          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
           <label class="field switch-field">
             <span data-i18n="autostart">Start automatically at login</span>
             <input id="opt-autostart" type="checkbox" class="switch" />
@@ -1063,12 +1070,6 @@
             <span data-i18n="startMinimized">Start in the background on autostart</span>
             <input id="opt-startmin" type="checkbox" class="switch" />
           </label>
-          <label class="field switch-field" data-i18n-title="tipAutoPaste">
-            <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
-            <input id="opt-autopaste" type="checkbox" class="switch" />
-          </label>
-          <!-- Every global hotkey is edited in the All shortcuts dialog; this is its door. -->
-          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
         </div>
       </section>
       <section id="settings-sec-data" class="settings-sec">
