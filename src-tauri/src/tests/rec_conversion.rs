@@ -732,3 +732,14 @@ fn placing_or_discarding_a_part_waits_for_its_background_crop() {
     let quit = &quit[..quit.find("place_recording_parts(&mut parts").unwrap()];
     assert!(quit.contains("wait_for_interim_crops"));
 }
+
+#[test]
+fn continue_closes_the_old_part_key_capture_before_the_next_part_starts() {
+    // The next part's first frame rebases the key clock of the capture in the slot; the old
+    // part's capture must be gone by then or its sidecar offsets shift to the new start.
+    let src = source!("../rec_cmds.rs");
+    let body = &src[src.find("let switch_instant_ms = keylog::mono_ms();").unwrap()..];
+    let stop = body.find("keylog::maybe_stop_and_write(&path)").unwrap();
+    let start = body.find("match start_part(").unwrap();
+    assert!(stop < start, "the old part's sidecar is written before start_part runs");
+}

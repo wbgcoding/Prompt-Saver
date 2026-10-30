@@ -502,6 +502,11 @@ pub(crate) async fn finish_and_continue_recording(
         let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
         let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
         let out_path = recording::continuation_output_path(&base_path, part_number);
+        // Close out the part that just finished (its own sidecar, timed from its own start) before
+        // the continuation starts: the new part's first frame rebases the key clock of whatever
+        // capture sits in the slot, which must not be the old part's. maybe_start is a no-op while a
+        // hook is running, so without this the last part's sidecar would hold the whole chain's keys.
+        keylog::maybe_stop_and_write(&path);
         let start_part = if carry_paused { recording::start_paused } else { recording::start };
         match start_part(
             target, out_path.clone(), audio, &canvas_mode,
@@ -523,10 +528,6 @@ pub(crate) async fn finish_and_continue_recording(
                 // shift every offset early). Keys typed in between are captured by neither side: the old
                 // capture is cut off and the new hook is installed by maybe_start below.
                 let new_start_ms = keylog::mono_ms();
-                // Close out the part that just finished (its own sidecar, timed from its own start) before
-                // the continuation capture begins. maybe_start is a no-op while a hook is running, so
-                // without this the last part's sidecar would hold the whole chain's keys.
-                keylog::maybe_stop_and_write(&path);
                 keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms, key_overlay_shortcuts_only);
                 recording::align_key_overlay_start(&new_session);
                 if carry_paused {
@@ -576,8 +577,7 @@ pub(crate) async fn finish_and_continue_recording(
             }
             Err(start_err) => {
                 // This file becomes the final one after all: same crop/result path as a real stop, with
-                // every earlier part folded in, and the key-overlay sidecar written.
-                keylog::maybe_stop_and_write(&path);
+                // every earlier part folded in (its key-overlay sidecar was written before the start).
                 if needs_crop {
                     let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
                     *pending = Some((path.clone(), crop_rect.unwrap()));
