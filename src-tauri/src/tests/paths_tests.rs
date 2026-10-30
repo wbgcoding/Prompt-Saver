@@ -350,3 +350,48 @@ fn an_attachment_path_naming_the_store_or_a_network_share_is_refused() {
     let head = &images[at..at + 300];
     assert!(head.find("is_foreign_network_path(").is_some_and(|n| n < head.find(".exists()").unwrap()), "text check before exists()");
 }
+
+fn legacy_test_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("{}-test-legacy-{name}-{}", brand::SLUG, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+// An unclean exit leaves committed rows only in data.db-wal; the migrated database must hold them.
+#[test]
+fn the_legacy_migration_carries_the_write_ahead_log() {
+    let root = legacy_test_dir("wal");
+    let (old, new) = (root.join("old"), root.join("new"));
+    fs::create_dir_all(&old).unwrap();
+    fs::create_dir_all(&new).unwrap();
+    let conn = db_conn_at(&old).unwrap();
+    conn.execute("PRAGMA wal_autocheckpoint=0", []).ok();
+    conn.execute("INSERT INTO meta(key, value) VALUES('wal_probe', '1')", []).unwrap();
+    assert!(old.join("data.db-wal").exists());
+    assert!(copy_legacy_store(&old, &new));
+    drop(conn);
+    let moved = db_conn_at(&new).unwrap();
+    let n: i64 = moved.query_row("SELECT COUNT(*) FROM meta WHERE key='wal_probe'", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 1, "the row that only lived in the log arrives");
+    drop(moved);
+    let _ = fs::remove_dir_all(&root);
+}
+
+// A copy that fails halfway must not leave a data.db behind: its presence ends the migration.
+#[test]
+fn a_failed_legacy_copy_leaves_no_database_and_can_retry() {
+    let root = legacy_test_dir("fail");
+    let (old, new) = (root.join("old"), root.join("new"));
+    fs::create_dir_all(&old).unwrap();
+    fs::create_dir_all(&new).unwrap();
+    fs::write(old.join("data.db"), b"rows").unwrap();
+    fs::create_dir_all(old.join("settings.json")).unwrap(); // exists, but cannot be copied as a file
+    assert!(!copy_legacy_store(&old, &new));
+    assert!(!new.join("data.db").exists(), "no data.db, so the next start migrates again");
+    assert!(!new.join("data.db.migrating").exists());
+    fs::remove_dir_all(old.join("settings.json")).unwrap();
+    assert!(copy_legacy_store(&old, &new));
+    assert_eq!(fs::read(new.join("data.db")).unwrap(), b"rows");
+    let _ = fs::remove_dir_all(&root);
+}

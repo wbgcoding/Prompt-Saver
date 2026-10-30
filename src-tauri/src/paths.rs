@@ -85,13 +85,44 @@ pub(crate) fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
         if old.as_path() == new || !STORE_FILES.iter().any(|f| old.join(f).exists()) {
             continue;
         }
-        for f in STORE_FILES {
-            if old.join(f).exists() {
-                let _ = fs::copy(old.join(f), new.join(f));
-            }
+        if !copy_legacy_store(&old, new) {
+            crate::logging::append_crash_log("legacy data folder could not be copied; will retry on the next start");
         }
         return;
     }
+}
+
+// Copies a store folder's files into `new`. The write-ahead log goes along (rows of an unclean
+// exit live only there), every file lands under a temporary name first, and data.db is renamed
+// in last: new/data.db is what ends the migration, so a failed copy must never leave one behind.
+// Returns false after removing what it put in place, so the next start tries again.
+pub(crate) fn copy_legacy_store(old: &std::path::Path, new: &std::path::Path) -> bool {
+    let mut placed: Vec<PathBuf> = Vec::new();
+    let mut ok = true;
+    for f in ["data.db-wal", "prompts.json", "settings.json", "data.db"] {
+        let src = old.join(f);
+        let dst = new.join(f);
+        if !src.exists() {
+            if f == "data.db-wal" {
+                // A log left in the target would be replayed onto the copied database.
+                let _ = fs::remove_file(&dst);
+            }
+            continue;
+        }
+        let tmp = new.join(format!("{f}.migrating"));
+        if fs::copy(&src, &tmp).is_err() || fs::rename(&tmp, &dst).is_err() {
+            let _ = fs::remove_file(&tmp);
+            ok = false;
+            break;
+        }
+        placed.push(dst);
+    }
+    if !ok {
+        for p in placed {
+            let _ = fs::remove_file(p);
+        }
+    }
+    ok
 }
 
 // Portable build = run without the installer's uninstall.exe beside the exe
