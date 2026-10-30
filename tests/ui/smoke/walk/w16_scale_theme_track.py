@@ -850,11 +850,11 @@ SECTION = """\
           // frame-stepping to hand the arrow keys back to here, unlike the
           // video editor's own 395 check. ----
           const hint395 = document.getElementById('snip-edit-nudge-hint');
-          if (!hint395 || hint395.classList.contains('hidden')) {
+          if (!hint395 || hint395.firstElementChild.classList.contains('hidden')) {
             out.errors.push('395: the nudge hint is not shown while a shape is selected');
           }
-          if (hint395 && hint395.offsetHeight !== 0) {
-            out.errors.push('395: the nudge hint takes layout height, so showing it moves the image');
+          if (hint395 && hint395.offsetHeight < 8) {
+            out.errors.push('395: the nudge hint has no line of its own under the image');
           }
           // Handles are 8x8px squares (see snipEditPaintShapeHandles), too wide
           // to tell a 4px move apart from noise with a single pixel sample --
@@ -918,7 +918,7 @@ SECTION = """\
           if (bandCentreX(30, 70, 50) !== null || bandCentreY(155, 140, 165) !== null) {
             out.errors.push('395: Escape did not remove the selection handles');
           }
-          if (!hint395.classList.contains('hidden')) {
+          if (!hint395.firstElementChild.classList.contains('hidden') || hint395.offsetHeight < 8) {
             out.errors.push('395: the nudge hint stayed visible after Escape deselected the shape');
           }
 
