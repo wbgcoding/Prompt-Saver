@@ -251,8 +251,9 @@ export async function startExport(toClipboard) {
         const returned = await invoke("export_video", { req: request });
         const outPath = typeof returned === "string" && returned ? returned : dest;
         invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
-        // Only when nothing was edited while it ran: a later edit is not in the file.
-        const covered = exportCoveredEdits(gen, rev);
+        // Only a real export saves the edits (a clipboard file is a temp file that gets swept), and
+        // only when nothing was edited while it ran: a later edit is not in the file.
+        const covered = !toClipboard && exportCoveredEdits(gen, rev);
         if (covered) VE.dirty = false;
         // A finished export leaves nothing "unfinished": clear the remembered row so reopening this
         // recording never offers to restore work that already made it out. Later edits get a fresh row

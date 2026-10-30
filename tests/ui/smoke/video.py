@@ -1778,8 +1778,15 @@ VIDEO_PROBE = """
     // ---- 336: "Copy to clipboard" runs its own export into a throwaway temp
     // file and lands that file on the clipboard, without touching destInput ----
     window.__CLIP_EXPORT_COPIED__ = undefined;
+    // The clipboard file is a temp file that gets swept: it never counts as saving the edits.
+    const clipVE = (await import('./video.js')).VE;
+    clipVE.dirty = true;
+    clipVE.editStateKeepOn = true;
+    window.__EDIT_STATE_DISCARDED__ = undefined;
     document.getElementById('ve-export-clip').click();
     await sleep(150);
+    if (!clipVE.dirty) errs.push('F-clip: a clipboard export cleared the unsaved-edits mark');
+    if (window.__EDIT_STATE_DISCARDED__) errs.push('F-clip: a clipboard export dropped the remembered edit state');
     if (!window.__CLIP_EXPORT_COPIED__) {
       errs.push('"Copy to clipboard" never reached copy_file_to_clipboard');
     } else if (!window.__CLIP_EXPORT_COPIED__.includes('clipexport')) {
