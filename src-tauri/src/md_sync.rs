@@ -1514,6 +1514,14 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
                         "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
                         copy.file_name().unwrap_or_default().to_string_lossy()
                     ));
+                } else {
+                    // The outside version would exist nowhere once the file is replaced.
+                    sync_lock_release(&path);
+                    failed += 1;
+                    append_crash_log(&format!("prompt-sync: {filename} was edited outside the app and its copy could not be written, trying again"));
+                    sync_known_note(&path);
+                    wanted.insert(filename);
+                    continue;
                 }
             }
             // One more look right before the replace: the lock file is only ours, an
@@ -1538,6 +1546,13 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
                         "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
                         late_copy.file_name().unwrap_or_default().to_string_lossy()
                     ));
+                } else {
+                    sync_lock_release(&path);
+                    failed += 1;
+                    append_crash_log(&format!("prompt-sync: {filename} was edited outside the app while it was being written and its copy could not be written, trying again"));
+                    sync_known_note(&path);
+                    wanted.insert(filename);
+                    continue;
                 }
             }
             // Never in place: a write cut short there would leave a half file the other instances

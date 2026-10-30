@@ -1583,3 +1583,31 @@ fn multi_a_lock_dated_far_ahead_becomes_old_by_the_time_this_instance_has_seen_i
         assert!(sync_lock_is_stale(&lock), "a crashed writer with a fast clock blocked the file for hours");
     });
 }
+
+// Makes every conflict copy name for the next few seconds unusable (a directory of that name
+// is refused by the create, not "already there").
+fn block_conflict_copies(rig: &Rig, id: &str) {
+    let now = rig.a.run(sync_now_secs) as i64;
+    for d in -5..=15i64 {
+        let secs = (now + d) as u64;
+        let _ = fs::create_dir(rig.dir.join(format!("{id}.conflict-{secs}.md")));
+    }
+}
+
+#[test]
+fn multi_an_outside_edit_whose_copy_cannot_be_written_is_not_overwritten() {
+    let rig = Rig::new();
+    let id = rig.a.add("Plain", "before");
+    rig.settle();
+    let path = rig.dir.join(format!("{id}.md"));
+    let text = fs::read_to_string(&path).unwrap().replace("before", "utf sixteen words");
+    let mut bytes = vec![0xFF, 0xFE];
+    bytes.extend(text.encode_utf16().flat_map(|u| u.to_le_bytes()));
+    fs::write(&path, &bytes).unwrap();
+    rig.tick(3);
+    block_conflict_copies(&rig, &id);
+    rig.a.edit(&id, |p| p.text = "changed in the app".into());
+    let failed = rig.a.flush(&rig.dir);
+    assert!(failed >= 1, "a write that skipped the file must be counted for a retry");
+    assert_eq!(fs::read(&path).unwrap(), bytes, "the only copy of the outside edit was replaced");
+}
