@@ -1465,3 +1465,36 @@ fn multi_a_dead_claimants_claim_file_is_cleared_after_the_stale_limit() {
     assert_eq!(fs::read_to_string(&lock).unwrap(), mine);
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ---- Reads and writes that fail without the file being gone ----
+
+// Holds the file the way a cloud client does while it uploads: nobody else may open it.
+#[cfg(windows)]
+fn hold_exclusively(path: &Path) -> fs::File {
+    use std::os::windows::fs::OpenOptionsExt;
+    fs::OpenOptions::new().read(true).share_mode(0).open(path).expect("hold the file")
+}
+
+#[cfg(windows)]
+#[test]
+fn multi_a_read_that_failed_is_tried_again_not_taken_as_handled() {
+    let rig = Rig::new();
+    let id = rig.a.add("Shared", "start");
+    rig.settle();
+    rig.b.edit(&id, |p| p.text = "edited on B".into());
+    rig.b.step(&rig.dir);
+    let path = rig.dir.join(format!("{id}.md"));
+    {
+        let _held = hold_exclusively(&path);
+        for _ in 0..3 {
+            rig.tick(3);
+            rig.a.poll(&rig.dir);
+        }
+        assert_eq!(rig.a.get(&id).unwrap().text, "start");
+    }
+    for _ in 0..3 {
+        rig.tick(3);
+        rig.a.poll(&rig.dir);
+    }
+    assert_eq!(rig.a.get(&id).unwrap().text, "edited on B", "the edit was never read once the file was free again");
+}

@@ -2188,8 +2188,15 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
         if !sync_lock_acquire(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
-        let bytes = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok();
+        let read = read_file_capped(&path, MAX_SYNC_MD_BYTES);
         sync_lock_release(&path);
+        // A failed read (a cloud placeholder that did not download, a handle held for a moment)
+        // says nothing about the file: it stays unhandled and is read again next round. Only
+        // a too-big file is refused for good.
+        if matches!(&read, Err(e) if *e != size_error(MAX_SYNC_MD_BYTES)) {
+            continue;
+        }
+        let bytes = read.ok();
         let hash = bytes.as_deref().map(sync_hash).unwrap_or(0);
         let content = bytes.and_then(sync_decode_text);
         // Whatever the read said, this stamp has now been dealt with: a file that
