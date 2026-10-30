@@ -1329,15 +1329,17 @@ pub(crate) async fn update_prompt(
                 p.variants = variants;
                 p.rotate_mode = sanitize_rotate_mode(rotate_mode, &p.variants);
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
-                // Only a real change to the picture re-indexes it: cleared when the picture is gone, re-run
+                // Only a real change to the picture re-indexes it: cleared when the picture is gone, read
                 // (while ocrIndex is on) when replaced, so an old picture's text never survives under a new
-                // one.
+                // one. The read happened before the lock; when it no longer fits (the switch or the picture
+                // changed in between) the text stays empty, since recognising here would block every
+                // command that needs the store. The picture-text backfill fills it in later.
                 let image_changed = image.as_deref().is_some_and(|v| v != p.image);
                 p.image = merge_image(&p.image, image);
                 if image_changed {
                     p.image_text = match &staged_image_text {
                         Some(t) if staged_valid && staged_ocr_on == ocr_index_on && staged_ocr_max == ocr_max_chars => t.clone(),
-                        _ => resolved_image_text(&p.image, ocr_index_on, |img| ocr_index_text(img, ocr_max_chars)),
+                        _ => String::new(),
                     };
                 }
                 if let Some(si) = show_image { p.show_image = si; }

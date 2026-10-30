@@ -864,6 +864,27 @@ fn resolved_image_text_only_recognizes_a_non_empty_picture_with_the_switch_on() 
     assert_eq!(calls.get(), 1);
 }
 
+// Recognition is a WinRT call that can take seconds and cannot run in a unit test, so this pins
+// the structure: the section of add_prompt and update_prompt that holds the store lock never
+// recognises a picture (that would freeze every command needing the store). A staged result
+// that no longer fits is replaced by empty text, which the picture-text backfill fills later.
+#[test]
+fn picture_recognition_never_runs_while_the_store_lock_is_held() {
+    let src = include_str!("../prompts.rs").replace("\r\n", "\n");
+    for (name, locked_from) in [
+        ("pub(crate) async fn add_prompt(", "    let prompt = {\n        let mut store = lock(&state);"),
+        ("pub(crate) async fn update_prompt(", "    let updated = {\n        let mut store = lock(&state);"),
+    ] {
+        let start = src.find(name).unwrap_or_else(|| panic!("{name} exists"));
+        let body = &src[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let locked = &body[body.find(locked_from).unwrap_or_else(|| panic!("{name} has its locked section"))..];
+        for call in ["ocr_index_text(", "resolved_image_text("] {
+            assert!(!locked.contains(call), "{name} must not call {call} while the store lock is held");
+        }
+    }
+}
+
 #[test]
 fn an_auto_picked_fallback_engine_is_not_cached_under_the_requested_tag() {
     ocr::ensure_winrt();
