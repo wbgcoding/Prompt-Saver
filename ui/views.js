@@ -105,10 +105,23 @@ export const favViewEnabled = () => flag("favorites") && optFlag("favViewButton"
 export function favLayoutMap() {
   try { const m = JSON.parse(settings.ui_texts?.favLayout || "{}"); return m && typeof m === "object" ? m : {}; } catch (_) { return {}; }
 }
-export function saveFavLayout(map) {
+// Resolves true once the write is stored. On a refused write the previous arrangement comes
+// back and the error shows, unless `quiet` (the best-effort tidy-up while drawing).
+export async function saveFavLayout(map, quiet = false) {
   const value = JSON.stringify(map);
-  settings.ui_texts = { ...(settings.ui_texts || {}), favLayout: value };
-  invoke("set_ui_text", { key: "favLayout", value }).catch(() => {});
+  const before = settings.ui_texts || {};
+  settings.ui_texts = { ...before, favLayout: value };
+  try {
+    await invoke("set_ui_text", { key: "favLayout", value });
+    return true;
+  } catch (e) {
+    if (quiet) return false;
+    const back = { ...(settings.ui_texts || {}) };
+    if ("favLayout" in before) back.favLayout = before.favLayout; else delete back.favLayout;
+    settings.ui_texts = back;
+    errToast(e);
+    return false;
+  }
 }
 
 // Star button visibility (setting + expert flag) and pressed state. In the favorites view the
@@ -169,7 +182,7 @@ export function renderFavGrid() {
     const cell = firstFree(occupied, cols, rows);
     if (cell) { layout[p.id] = cell; occupied.set(cellKey(...cell), p.id); changed = true; }
   }
-  if (changed) saveFavLayout(layout);
+  if (changed) saveFavLayout(layout, true);
 
   const byCell = new Map();
   for (const p of favs) { const c = layout[p.id]; if (c) byCell.set(cellKey(c[0], c[1]), p); }
@@ -215,7 +228,7 @@ export async function placeFav(id, col, row) {
   const occupant = Object.entries(layout).find(([oid, c]) => oid !== id && c[0] === col && c[1] === row);
   if (occupant) { if (old) layout[occupant[0]] = old; else delete layout[occupant[0]]; }
   layout[id] = [col, row];
-  saveFavLayout(layout);
+  await saveFavLayout(layout);
   await renderGrid(true);
 }
 
