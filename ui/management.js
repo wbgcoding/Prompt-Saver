@@ -329,6 +329,7 @@ export async function keepOneDup(group, keepId) {
   closeCompareView();
   renderViews();
   await renderGrid(true);
+  if (!libraryEl.classList.contains("hidden")) renderLibrary();
   scanDupes();
   undoToast(t("batchDeleteDone").replace("{n}", String(remove.length)), async () => {
     await restoreBatchDelete(remove, placements);
