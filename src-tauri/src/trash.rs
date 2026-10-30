@@ -472,6 +472,9 @@ pub(crate) fn stale_trash_ids(trash: &[Prompt], max_age: u64, now: u64) -> Vec<S
 // on a timer, so a long-idle app does not surprise-purge something the user only just
 // noticed in the trash.
 pub(crate) fn sweep_trash(app: &AppHandle, store: &mut Store) {
+    if !startup_sweeps_allowed() {
+        return;
+    }
     let Some(max_age) = trash_retention_secs(&store.settings) else {
         return;
     };
@@ -948,7 +951,8 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
         if copied.is_ok() || landed {
             let _ = fs::remove_file(dir.join("data.db-wal"));
             let _ = fs::remove_file(dir.join("data.db-shm"));
-            let fresh = load_store(&app);
+            // Loaded under the guard, so without the sweeps that lock the store again.
+            let fresh = load_store_without_sweeps(&app);
             end_session_if_vault_changed(&store.settings, &fresh.settings);
             *store = fresh;
         }

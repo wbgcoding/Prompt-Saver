@@ -312,6 +312,25 @@ fn startup_sweep_drops_version_history_of_vanished_prompts() {
 // `lock(&state)` guard of its own function.
 #[test]
 fn sweep_orphan_files_is_never_called_under_the_store_guard() {
+    let (defs, checked) = calls_under_store_guard("sweep_orphan_files");
+    assert_eq!(defs, 1, "sweep_orphan_files must be defined exactly once in the crate sources");
+    assert!(checked >= 5, "the scan found only {checked} call sites");
+}
+
+// load_store runs the startup sweeps, which lock the store themselves: a caller holding the
+// guard must use load_store_without_sweeps.
+#[test]
+fn load_store_is_never_called_under_the_store_guard() {
+    let (defs, checked) = calls_under_store_guard("load_store");
+    assert_eq!(defs, 1, "load_store must be defined exactly once in the crate sources");
+    assert!(checked >= 3, "the scan found only {checked} call sites");
+}
+
+// Scans every function of the crate for calls to `callee(` made while a `let x = lock(&state)`
+// guard of that function is still alive (panics on one). Returns how many definitions of the
+// callee and how many call sites were seen.
+fn calls_under_store_guard(callee: &str) -> (usize, usize) {
+    let call = format!("{callee}(");
     let src = production_sources();
     let code: String = src
         .lines()
@@ -338,11 +357,11 @@ fn sweep_orphan_files_is_never_called_under_the_store_guard() {
         let body = &code[start..end];
         let head = body.lines().next().unwrap_or("");
         let name = head.split("fn ").nth(1).unwrap_or("?").split(['(', '<']).next().unwrap_or("?").to_string();
-        if name == "sweep_orphan_files" {
+        if name == callee {
             defs += 1;
             continue;
         }
-        if !body.contains("sweep_orphan_files(") {
+        if !body.contains(&call) {
             continue;
         }
         // (guard name, brace depth it was declared at)
@@ -360,9 +379,9 @@ fn sweep_orphan_files_is_never_called_under_the_store_guard() {
                 let nm = arg.trim_end_matches(';').trim_end_matches(')').to_string();
                 guards.retain(|(g, _)| *g != nm);
             }
-            if t.contains("sweep_orphan_files(") {
+            if t.contains(&call) {
                 checked += 1;
-                assert!(guards.is_empty(), "{name} calls sweep_orphan_files while holding the store lock");
+                assert!(guards.is_empty(), "{name} calls {callee} while holding the store lock");
             }
             for ch in line.chars() {
                 match ch {
@@ -376,8 +395,7 @@ fn sweep_orphan_files_is_never_called_under_the_store_guard() {
             }
         }
     }
-    assert_eq!(defs, 1, "sweep_orphan_files must be defined exactly once in the crate sources");
-    assert!(checked >= 5, "the scan found only {checked} call sites");
+    (defs, checked)
 }
 
 #[test]

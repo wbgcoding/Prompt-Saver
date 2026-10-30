@@ -2028,6 +2028,22 @@ pub(crate) fn load_store_without_sweeps(app: &AppHandle) -> Store {
     load_store(app)
 }
 
+pub(crate) fn load_store(app: &AppHandle) -> Store {
+    let store = load_store_inner(app);
+    // The windows read media through the asset protocol, whose static scope allows nothing: the
+    // folders and attachments of the store just loaded are allowed here (startup, folder switch,
+    // restore and lock takeover all load through this).
+    crate::asset_scope::allow_loaded(app, &store);
+    store
+}
+
+fn load_store_inner(app: &AppHandle) -> Store {
+    let dir = data_dir(app);
+    if let Some(mut conn) = db_conn(app) {
+        // Filled from the rows as they are read, so the first save of the session
+        // already only writes what changed (see WrittenRows).
+        let mut written = WrittenRows::new();
+        // Every write this load would make is collected here and applied after the data-folder
         // lock was resolved: before that this process cannot tell whether another machine owns
         // the folder, and a skipped write has to leave the stored file exactly as it was.
         let mut startup = StartupWrites::default();

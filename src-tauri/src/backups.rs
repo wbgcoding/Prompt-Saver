@@ -1090,7 +1090,8 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
         // A restore that brings settings with it may have switched the picture-text
         // index off while the prompts that stay still carry its text.
         if ocr_was_on && scope != "data" {
-            let mut fresh = load_store(&app);
+            // Loaded under the store guard, so without the sweeps that lock the store again.
+            let mut fresh = load_store_without_sweeps(&app);
             if clear_ocr_text_if_switched_off(true, &mut fresh) {
                 write_ocr_wipe(&app, &fresh, "restore");
             }
