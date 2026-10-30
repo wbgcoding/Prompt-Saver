@@ -1236,6 +1236,25 @@ fn a_shutdown_during_voice_prepare_cancels_the_pending_start() {
     assert!(!cancel.load(Ordering::SeqCst), "no pending start, nothing to cancel");
 }
 
+// Structural (the start needs an app handle and a microphone): voice_shutdown sets the cancel flag
+// while holding the handle slot, so the start has to read the flag, spawn the session and store
+// the handle under one hold of that same slot. A check outside it leaves a window in which the
+// flag is set after the check and never read, and the microphone session runs with the window hidden.
+#[test]
+fn the_voice_start_checks_cancel_and_stores_its_handle_under_one_lock() {
+    let src = include_str!("../voice_cmds.rs").replace("\r\n", "\n");
+    let at = src.find("pub(crate) async fn voice_start").unwrap();
+    let body = &src[at..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let after_prepare = &body[body.find("voice::prepare(lang, true)").unwrap()..];
+    let slot = after_prepare.find("let mut slot = vstate.0.lock()").expect("the slot is taken after prepare");
+    let cancel = after_prepare.find("vstate.2.swap(false").expect("cancel flag is read");
+    let spawn = after_prepare.find("voice::start_session(").expect("session spawn");
+    let store = after_prepare.find("*slot = Some(VoiceHandle").expect("handle stored through the held slot");
+    assert!(slot < cancel && cancel < spawn && spawn < store, "check, spawn and store under the one guard");
+    assert_eq!(after_prepare.matches("vstate.0.lock()").count(), 1, "no second, separate lock for the handle");
+}
+
 #[cfg(windows)]
 #[test]
 fn a_hung_powershell_query_is_killed_at_its_deadline() {

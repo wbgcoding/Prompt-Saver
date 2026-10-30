@@ -76,12 +76,6 @@ pub(crate) async fn voice_start(
                 return Err(e);
             }
         };
-        // The window closed to the tray while prepare() was awaited: voice_shutdown found no live
-        // session to signal and left this flag instead. Never open the microphone for it.
-        if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
-            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
-            return Err("cancelled".to_string());
-        }
         // Never opens the microphone without consent: checked before the session thread (and Create())
         // starts. A later 0x80045509 from Windows itself (declined at the OS level after voiceOnlineOk
         // was set) is handled by the session as voice-privacy-off.
@@ -96,6 +90,16 @@ pub(crate) async fn voice_start(
         let app2 = app.clone();
         let ended2 = ended.clone();
         let lang2 = resolved_lang.clone();
+        // The cancel flag, the spawn and the handle share one hold of the lock voice_shutdown takes
+        // before it sets that flag: a shutdown landing between the check and the store would find
+        // no session to signal and leave a flag nobody reads, and the microphone would stay open.
+        let mut slot = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        // The window closed to the tray while prepare() was awaited: voice_shutdown found no live
+        // session to signal and left this flag instead. Never open the microphone for it.
+        if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+            return Err("cancelled".to_string());
+        }
         // Set before the session thread starts: a fast failure inside the thread could otherwise race
         // its own set_tray_recording(false) ahead of this one and leave the tooltip on "recording".
         set_tray_recording(&app, true);
@@ -107,8 +111,8 @@ pub(crate) async fn voice_start(
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err(e.to_string());
         }
-        *vstate.0.lock().unwrap_or_else(|e| e.into_inner()) =
-            Some(VoiceHandle { id, stop: tx, ended });
+        *slot = Some(VoiceHandle { id, stop: tx, ended });
+        drop(slot);
         vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(VoiceStartResult { id, lang: resolved_lang })
     }
