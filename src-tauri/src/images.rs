@@ -505,7 +505,7 @@ pub(crate) async fn attachment_text_preview(
     max_kb: u32,
 ) -> Result<AttachTextPreview, String> {
     if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
-        return Err("network path".into());
+        return Err("source-not-allowed".into());
     }
     if !is_text_preview_ext(&path) {
         return Err("not a text attachment".into());
