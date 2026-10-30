@@ -71,6 +71,8 @@ function makeSandbox(extra) {
       extractBlock("enableExpr", "function enableExpr(op) {"),
       extractLine("hexToFf", "const hexToFf = (hex, opacity) => `0x${String(hex).replace(\"#\", \"\")}@${(clamp(opacity ?? 100, 0, 100) / 100).toFixed(2)}`;"),
       extractBlock("scaleTarget", "function scaleTarget() {"),
+      extractBlock("rotationFilter", "function rotationFilter(quarters) {"),
+      extractBlock("turnedMovieLabel", "function turnedMovieLabel(op, src, label, parts) {"),
       extractBlock("clipVideoLabel", "function clipVideoLabel(op, label, parts, fps) {"),
       extractBlock("buildVideoChain", "function buildVideoChain() {"),
       extractLine("editDragActive", "const editDragActive = () => !!VE.drag && [\"rect\", \"resize\", \"trim\"].includes(VE.drag.kind);"),
@@ -186,6 +188,40 @@ expect("double frame preview puts its outline inside the border", src.includes("
   const looping = Object.assign({}, overlay, { loop: true, videoDurationMs: 3000 });
   // 20 s source at 2x = 10 s of output, repeated 3 s footage: 4 plays = loop count 3.
   expect("loop count follows the output window", vm.runInContext("videoOverlayLoopArg", sb)(looping) === ":loop=3", vm.runInContext("videoOverlayLoopArg", sb)(looping));
+}
+
+// A movie= source is not autorotated by ffmpeg (only a `-i` input is), so a clip or video overlay
+// stored sideways needs its own transpose right after the movie= step; an unrotated one, or an op
+// saved before the probe reported a rotation, gets none.
+{
+  const sb = makeSandbox({
+    exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true,
+    SILENT_FORMATS: new Set(["gif"]), MAX_SILENT_DIM: 1280, afterOpsChanged: () => {},
+  });
+  const build = (ops) => {
+    sb.VE = baseState(ops);
+    Object.assign(sb.VE, { floor: 0, undoMax: 50, redo: [], w: 1080, h: 1920, fps: 30 });
+    return vm.runInContext("buildVideoChain()", sb) || "";
+  };
+  const clip = (extra) => Object.assign({ tool: "clip", position: "end", missing: false, hasAudio: false, path: "C:/x/phone.mp4", durationMs: 3000 }, extra);
+  const overlay = (extra) => Object.assign({ tool: "overlay", kind: "video", id: "V", startMs: 0, endMs: 5000, rect: { x: 10, y: 10, w: 200, h: 100 }, opacity: 100, volume: 0, loop: false, missing: false, path: "C:/x/phone.mp4", videoDurationMs: 3000 }, extra);
+  // The turn must sit between the movie= source and the step that follows it.
+  const turnedRight = (g, filter) => new RegExp(String.raw`movie='C[^']*phone\.mp4'\[(v\d+)\];\[\1\]${filter}\[(v\d+)\];\[\2\](fps=|setpts=)`).test(g);
+  const plain = (g) => /movie='C[^']*phone\.mp4'\[(v\d+)\];\[\1\](fps=|setpts=)/.test(g);
+  for (const [q, filter] of [[1, "transpose=cclock"], [2, "hflip,vflip"], [3, "transpose=clock"]]) {
+    let g = build([clip({ rotQuarters: q })]);
+    expect(`a clip rotated ${q} quarter(s) gets ${filter} after its movie=`, turnedRight(g, filter), g);
+    g = build([overlay({ rotQuarters: q })]);
+    expect(`a video overlay rotated ${q} quarter(s) gets ${filter} after its movie=`, turnedRight(g, filter), g);
+  }
+  for (const [what, extra] of [["rotated 0", { rotQuarters: 0 }], ["saved without a rotation", {}], ["rotated 4 (a full turn)", { rotQuarters: 4 }]]) {
+    let g = build([clip(extra)]);
+    expect(`a clip ${what} has no turn step`, plain(g) && !g.includes("transpose") && !g.includes("hflip"), g);
+    g = build([overlay(extra)]);
+    expect(`a video overlay ${what} has no turn step`, plain(g) && !g.includes("transpose") && !g.includes("hflip"), g);
+  }
+  const both = build([clip({ rotQuarters: 1 }), overlay({ rotQuarters: 3 })]);
+  expect("a rotated clip and a rotated overlay each keep their own turn", both.includes("transpose=cclock") && both.includes("transpose=clock"), both);
 }
 
 // Overlays stack by a number given at creation, not by position in the op list:

@@ -57,6 +57,17 @@ async function refreshExtraSourceAvailability(myGen) {
     } catch (_) {
       op.missing = true;
     }
+    // A clip or overlay saved before the probe reported its rotation: read it now so a
+    // portrait phone clip does not export sideways. A failed probe leaves it unset (no turn)
+    // and is tried again on the next open.
+    if (!op.missing && op.rotQuarters === undefined) {
+      try {
+        const probe = await invoke("probe_extra_video_source", { path: op.path });
+        if (VE.loadGen === myGen) op.rotQuarters = Number(probe.rotation_quarters) || 0;
+      } catch (_) {
+        // Left unset.
+      }
+    }
     if (VE.loadGen !== myGen) return;
   }
   if (extras.length) { renderClipList(); renderOverlayList(); }

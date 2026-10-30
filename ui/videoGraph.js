@@ -104,6 +104,26 @@ export function scaleTarget() {
   return scaleOp ? { w: scaleOp.w, h: scaleOp.h } : null;
 }
 
+// ffmpeg autorotates a `-i` input from its display matrix but never a `movie=` source, so an
+// inserted clip or video overlay shot in portrait on a phone would come out sideways. The probe
+// reports the counter-clockwise quarter turns (ffprobe's rotation / 90); this applies the filter
+// ffmpeg's own autorotate would (90 = transpose=cclock, 270 = transpose=clock, 180 = both flips),
+// so the picture matches the preview and the main input. A missing value (an op saved before the
+// probe reported it) is no turn.
+function rotationFilter(quarters) {
+  const q = (((Math.round(Number(quarters)) || 0) % 4) + 4) % 4;
+  return q === 1 ? "transpose=cclock" : q === 2 ? "hflip,vflip" : q === 3 ? "transpose=clock" : "";
+}
+
+// Chains the rotation step after a movie= source and returns the label to continue from.
+function turnedMovieLabel(op, src, label, parts) {
+  const turn = rotationFilter(op.rotQuarters);
+  if (!turn) return src;
+  const out = label();
+  parts.push(`[${src}]${turn}[${out}]`);
+  return out;
+}
+
 // One inserted section clip's video, fps- and size-normalized to the main video's: two files
 // rarely share a resolution or frame rate, and concat of mismatched streams either fails or
 // drifts against its audio. `movie=` opens the file fresh, so no second `-i` is needed (see
@@ -111,7 +131,8 @@ export function scaleTarget() {
 function clipVideoLabel(op, label, parts, fps) {
   const src = label(), out = label();
   parts.push(`movie='${ffPath(op.path)}'[${src}]`);
-  parts.push(`[${src}]fps=${fps},scale=${VE.w}:${VE.h}:force_original_aspect_ratio=decrease,pad=${VE.w}:${VE.h}:(ow-iw)/2:(oh-ih)/2:color=black,setpts=PTS-STARTPTS[${out}]`);
+  const turned = turnedMovieLabel(op, src, label, parts);
+  parts.push(`[${turned}]fps=${fps},scale=${VE.w}:${VE.h}:force_original_aspect_ratio=decrease,pad=${VE.w}:${VE.h}:(ow-iw)/2:(oh-ih)/2:color=black,setpts=PTS-STARTPTS[${out}]`);
   return out;
 }
 
@@ -207,7 +228,8 @@ export function buildVideoChain() {
       // audio's adelay below, keeping picture and sound in sync.
       const startOutSec = (outMs(clamp(op.startMs, 0, VE.dur)) / 1000).toFixed(3);
       parts.push(`movie='${ffPath(op.path)}'${loopArg}[${src}]`);
-      parts.push(`[${src}]setpts=PTS-STARTPTS+${startOutSec}/TB,scale=${op.rect.w}:${op.rect.h}:force_original_aspect_ratio=decrease,pad=${op.rect.w}:${op.rect.h}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=${(clamp(op.opacity, 5, 100) / 100).toFixed(2)}[${scaled}]`);
+      const turned = turnedMovieLabel(op, src, label, parts);
+      parts.push(`[${turned}]setpts=PTS-STARTPTS+${startOutSec}/TB,scale=${op.rect.w}:${op.rect.h}:force_original_aspect_ratio=decrease,pad=${op.rect.w}:${op.rect.h}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=${(clamp(op.opacity, 5, 100) / 100).toFixed(2)}[${scaled}]`);
       parts.push(`[${cur}][${scaled}]overlay=${op.rect.x}:${op.rect.y}:${enable}[${out}]`);
       cur = out;
     } else if (op.kind === "frame") {

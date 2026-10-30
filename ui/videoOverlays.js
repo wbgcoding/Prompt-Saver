@@ -146,6 +146,7 @@ export async function addAlignedCameraOverlay(path, gen) {
     path, rect, opacity: VE.ovImageOpacityDefault ?? 100,
     volume: 0, loop: false,
     hasAudio: !!probe.has_audio, videoDurationMs: durationMs,
+    rotQuarters: Number(probe.rotation_quarters) || 0,
   };
   VE.selOv = op.id;
   pushOp(op);
@@ -160,6 +161,7 @@ function createVideoOverlay({ path, probe }) {
     // A freshly added video overlay carries no sound until asked to.
     volume: VE.ovVideoVolumeDefault ?? 0, loop: false,
     hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0,
+    rotQuarters: Number(probe.rotation_quarters) || 0,
   };
   VE.selOv = op.id;
   pushOp(op);
@@ -186,6 +188,7 @@ function createClip({ path, probe }, position) {
     name: path.split(/[\\/]/).pop() || path,
     durationMs: Number(probe.duration_ms) || 0,
     hasAudio: !!probe.has_audio, missing: false,
+    rotQuarters: Number(probe.rotation_quarters) || 0,
   };
   if (position === "cut") op.atMs = clipAtMsFromPlayhead();
   pushOp(op);
@@ -673,7 +676,7 @@ export function renderOverlayEditor() {
       try {
         const probe = await invoke("probe_extra_video_source", { path });
         if (!overlayStillInEditor(op, gen)) return;
-        commitOverlay(op, { path, hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0, missing: false });
+        commitOverlay(op, { path, hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0, rotQuarters: Number(probe.rotation_quarters) || 0, missing: false });
       } catch (err) {
         const { message } = parseFfmpegError(err, t);
         toast(message);
