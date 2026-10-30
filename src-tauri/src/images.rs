@@ -212,6 +212,10 @@ pub(crate) async fn get_clipboard_file_path(app: AppHandle) -> Option<String> {
             .ok()?
             .into_iter()
             .next()?;
+        // A network spelling is refused on its text, before the preview could open the host.
+        if is_foreign_network_path(&first, &own_storage_dirs(&app, &app.state::<Db>())) {
+            return None;
+        }
         // The editor previews it before anything is saved.
         crate::asset_scope::grant_picked_file(&first);
         crate::asset_scope::allow_file(&app, &first);
@@ -276,7 +280,10 @@ pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> 
 
 // Preview for an attached file that happens to be an image.
 #[tauri::command]
-pub(crate) async fn load_image_file(path: String) -> Option<String> {
+pub(crate) async fn load_image_file(app: AppHandle, path: String) -> Option<String> {
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return None;
+    }
     // Decoding a large photo is seconds of CPU: off the async runtime's worker threads.
     tauri::async_runtime::spawn_blocking(move || image_file_preview(&path)).await.ok().flatten()
 }
@@ -412,6 +419,9 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
 #[tauri::command]
 pub(crate) async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<String> {
     use pdfium_render::prelude::*;
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return None;
+    }
     let lib = pdfium_lib_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let bindings = Pdfium::bind_to_library(lib).ok()?;
@@ -489,7 +499,14 @@ pub(crate) struct AttachTextPreview {
 // Plain-text preview for a .txt/.md/.json/.csv attachment, read with a size cap so a huge file
 // cannot stall the UI. The caller puts it into the DOM as plain text, never as markup.
 #[tauri::command]
-pub(crate) async fn attachment_text_preview(path: String, max_kb: u32) -> Result<AttachTextPreview, String> {
+pub(crate) async fn attachment_text_preview(
+    app: AppHandle,
+    path: String,
+    max_kb: u32,
+) -> Result<AttachTextPreview, String> {
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return Err("network path".into());
+    }
     if !is_text_preview_ext(&path) {
         return Err("not a text attachment".into());
     }

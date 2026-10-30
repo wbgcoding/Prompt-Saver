@@ -395,3 +395,39 @@ fn a_failed_legacy_copy_leaves_no_database_and_can_retry() {
     assert_eq!(fs::read(new.join("data.db")).unwrap(), b"rows");
     let _ = fs::remove_dir_all(&root);
 }
+
+// The text of one function, from its signature to the closing brace at column 0.
+fn fn_body<'a>(src: &'a str, signature: &str) -> &'a str {
+    let at = src.find(signature).unwrap_or_else(|| panic!("{signature} not found"));
+    let rest = &src[at..];
+    &rest[..rest.find("\n}\n").unwrap_or(rest.len())]
+}
+
+// The network check on the path text must come before any call that would open the path.
+fn assert_text_check_first(body: &str, name: &str, opens: &[&str]) {
+    let gate = body
+        .find("is_foreign_network_path(")
+        .or_else(|| body.find("is_network_path("))
+        .or_else(|| body.find("is_own_recording_source("))
+        .unwrap_or_else(|| panic!("{name} has no network check"));
+    for call in opens {
+        if let Some(open) = body.find(call) {
+            assert!(gate < open, "{name}: the network check must come before {call}");
+        }
+    }
+}
+
+#[test]
+fn the_clipboard_file_and_its_previews_check_the_path_text_first() {
+    let images = source!("../images.rs");
+    for (sig, opens) in [
+        ("fn get_clipboard_file_path(", &["grant_picked_file", "allow_file"][..]),
+        ("fn load_image_file(", &["spawn_blocking", "image_file_preview"][..]),
+        ("fn pdf_preview(", &["pdfium_lib_path", "load_pdf_from_file"][..]),
+        ("fn attachment_text_preview(", &["spawn_blocking", "read_bytes_preview"][..]),
+    ] {
+        let body = fn_body(&images, sig);
+        assert!(body.contains("is_foreign_network_path("), "{sig} asks the own-dir rule");
+        assert_text_check_first(body, sig, opens);
+    }
+}
