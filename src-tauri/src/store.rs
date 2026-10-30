@@ -2000,6 +2000,34 @@ fn load_store_inner(app: &AppHandle) -> Store {
         // already only writes what changed (see WrittenRows).
         let mut written = WrittenRows::new();
         // Every write this load would make is collected here and applied after the data-folder
+thread_local! {
+    // Set while a caller that holds the store guard loads another store: the startup sweeps
+    // (trash retention, orphan attachment files) lock the store themselves, and the std mutex is
+    // not reentrant.
+    static LOAD_WITHOUT_SWEEPS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn startup_sweeps_allowed() -> bool {
+    !LOAD_WITHOUT_SWEEPS.with(|f| f.get())
+}
+
+struct SweepsOff(bool);
+impl Drop for SweepsOff {
+    fn drop(&mut self) {
+        let prev = self.0;
+        LOAD_WITHOUT_SWEEPS.with(|f| f.set(prev));
+    }
+}
+
+// load_store for a caller that still holds the store guard (a takeover adopting a database, a
+// restore checking the restored settings). It skips the retention sweep and the orphan-file
+// sweep, which the next launch runs anyway; running them here would also delete files a
+// still-open undo point refers to.
+pub(crate) fn load_store_without_sweeps(app: &AppHandle) -> Store {
+    let _off = SweepsOff(LOAD_WITHOUT_SWEEPS.with(|f| f.replace(true)));
+    load_store(app)
+}
+
         // lock was resolved: before that this process cannot tell whether another machine owns
         // the folder, and a skipped write has to leave the stored file exactly as it was.
         let mut startup = StartupWrites::default();

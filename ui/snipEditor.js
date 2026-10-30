@@ -1799,15 +1799,21 @@ export function initSnipEditor() {
   // onClose(editedDataUrl | null): the editor closed (Close, Esc, Enter, X); null = nothing was
   // edited. actions: { save, saveAs, keep, ocr, retry } called with the current edited image;
   // `retry` is absent for an opened file, which hides "New screenshot".
+  // Counts the opens: images decode asynchronously, so a slow one finishing after a newer open
+  // must not take the editor over from it.
+  let snipEditOpenSeq = 0;
   function snipEditOpen(dataUrl, { onClose, onCancel, actions }) {
     const img = new Image();
+    const seq = ++snipEditOpenSeq;
     // A capture that fails to decode (truncated data URL, broken picked file) takes the same
     // path as a user cancel, so nothing is left half-open.
     img.onerror = () => {
+      if (seq !== snipEditOpenSeq) return;
       toast(t("snipEditOpenFailed"));
       onCancel?.();
     };
     img.onload = () => {
+      if (seq !== snipEditOpenSeq) return;
       recordToolUsage("screenshot_editor");
       snipEditCancelLiveCopy();
       snipLiveCopyFailed = false;
