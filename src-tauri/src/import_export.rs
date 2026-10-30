@@ -996,7 +996,9 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
             trashed_at: 0,
             name: item.name,
             text: item.text,
-            color: item.color,
+            // A colour from a file is held to the same #rrggbb-or-empty rule as an editor save,
+            // or every later edit of the prompt would be refused.
+            color: crate::views::valid_tag_color(&item.color).unwrap_or_default(),
             image: item.image,
             show_image: item.show_image,
             copy_image: item.copy_image,

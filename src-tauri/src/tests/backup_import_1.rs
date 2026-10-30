@@ -1063,6 +1063,36 @@ fn imported_rows_never_keep_a_network_path() {
 }
 
 #[test]
+fn imported_prompt_colours_are_held_to_the_hex_rule() {
+    let item = |color: &str| ImportedPrompt {
+        name: format!("C{color}"),
+        text: "body".to_string(),
+        color: color.to_string(),
+        font: String::new(),
+        font_size: 0,
+        file_path: String::new(),
+        pdf_page: 0,
+        icon_path: String::new(),
+        caption: String::new(),
+        caption_size: 0,
+        show_image: false,
+        copy_image: false,
+        image: String::new(),
+        tags: Vec::new(),
+        notes: String::new(),
+        variants: Vec::new(),
+        rotate_mode: String::new(),
+        favorite: false,
+        secret: false,
+    };
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    let items = vec![item("red"), item("#fff"), item(" #A1B2C3 "), item("")];
+    assert_eq!(append_imported_prompts(&mut store, items), 4);
+    let colors: Vec<&str> = store.prompts.iter().map(|p| p.color.as_str()).collect();
+    assert_eq!(colors, ["", "", "#a1b2c3", ""]);
+}
+
+#[test]
 fn a_wiped_library_leaves_no_old_row_bytes_in_the_database_or_its_log() {
     let dir = std::env::temp_dir().join(format!("ps-wipe-scrub-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
