@@ -859,6 +859,20 @@ fn an_auto_picked_fallback_engine_is_not_cached_under_the_requested_tag() {
     assert!(!ocr::engine_cached(tag));
 }
 
+#[test]
+fn the_ocr_file_picker_offers_only_the_types_the_check_accepts() {
+    let src = include_str!("../images.rs");
+    let cmd = src.split("pub(crate) async fn pick_file_path").nth(1).unwrap().split("pub(crate) async fn pick_media_file_path").next().unwrap();
+    assert!(
+        cmd.contains("images_only == Some(true)") && cmd.contains("add_filter(\"Images\", &OCR_IMAGE_EXTS)"),
+        "the filter must be built from the extensions ocr_validate_path accepts"
+    );
+    // A missing file fails on the file check, not on the type check, for every offered type.
+    for ext in OCR_IMAGE_EXTS {
+        assert_ne!(ocr_validate_path(&format!("no-such-dir/file.{ext}")), Err("unsupported image type".to_string()), "{ext}");
+    }
+}
+
 fn real_png_data_url() -> String {
     let mut bytes = Vec::new();
     image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 255, 255, 255])))

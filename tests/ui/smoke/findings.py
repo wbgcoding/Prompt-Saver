@@ -2523,5 +2523,17 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
       if (toastEl && /^ocr-no-language/.test(toastEl.textContent.trim())) errs.push('ocridx: the raw error key is shown');
     }
 """)
+    failed += ar_probe('ocrpick', 'text recognition from a file: the picker is limited to image files', 'index', '1000x780', '', r"""
+    await bootReady();
+    const btn = document.getElementById('ocr-btn');
+    if (!btn) { errs.push('ocrpick: fixture: no ocr button'); }
+    else {
+      btn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+      await until(() => callsFor('pick_file_path').length > 0, 40);
+      const a = callsFor('pick_file_path')[0];
+      if (!a) errs.push('ocrpick: the picker was not opened');
+      else if (!a || a.imagesOnly !== true) errs.push('ocrpick: the picker is not limited to images: ' + JSON.stringify(a));
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

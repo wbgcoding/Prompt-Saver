@@ -851,7 +851,7 @@ export function bindCapture() {
   });
   $("ocr-btn").addEventListener("contextmenu", async (e) => {
     e.preventDefault();
-    const path = await withDialog(() => invoke("pick_file_path"));
+    const path = await withDialog(() => invoke("pick_file_path", { imagesOnly: true }));
     if (!path) return;
     try {
       showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
