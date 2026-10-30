@@ -1218,22 +1218,20 @@ fn docs_example_2_search_matches_the_manual() {
 }
 
 #[test]
-fn docs_example_3_fill_a_placeholder_and_copy_matches_the_manual() {
+fn docs_example_3_fill_a_placeholder_leaves_the_stored_prompt_alone() {
     let dir = TempDir::new("docs-ex3");
     let mut store = fixture_store();
-    let added = run_cmd(&mut store, dir.path(), &["add", "--name", "Release checklist", "--text", "Version: {{version}}", "--tags", "work", "--yes", "--json"]);
+    let added = run_cmd(&mut store, dir.path(), &["add", "--name", "Release checklist", "--text", "Version: {?version}", "--tags", "work", "--yes", "--json"]);
     let id: String = serde_json::from_str::<serde_json::Value>(added.stdout.trim()).unwrap()["id"].as_str().unwrap().to_string();
     let got = run_cmd(&mut store, dir.path(), &["get", &id, "--json"]);
     assert_eq!(got.code, 0);
     let detail: serde_json::Value = serde_json::from_str(got.stdout.trim()).unwrap();
-    assert_eq!(detail["text"], "Version: {{version}}");
-    let edited = run_cmd(&mut store, dir.path(), &["edit", &id, "--text", "Version: 2.7.0", "--yes"]);
-    assert_eq!(edited.code, 0, "stderr: {}", edited.stderr);
-    let refetched = run_cmd(&mut store, dir.path(), &["get", &id, "--json"]);
-    let detail2: serde_json::Value = serde_json::from_str(refetched.stdout.trim()).unwrap();
-    assert_eq!(detail2["text"], "Version: 2.7.0", "edit --text must have replaced the placeholder before copy");
+    assert_eq!(detail["text"], "Version: {?version}", "get --json returns the template with its placeholder, as the manual shows");
     let copied = run_cmd(&mut store, dir.path(), &["copy", &id]);
     assert_eq!(copied.code, 0, "stderr: {}", copied.stderr);
+    let again = run_cmd(&mut store, dir.path(), &["get", &id, "--json"]);
+    let detail2: serde_json::Value = serde_json::from_str(again.stdout.trim()).unwrap();
+    assert_eq!(detail2["text"], "Version: {?version}", "copy leaves the stored text as it was");
 }
 
 #[test]

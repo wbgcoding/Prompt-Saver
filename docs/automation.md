@@ -170,22 +170,24 @@ prompt-saver search "release" --tag work --json
 [{ "id": "p_demo01", "name": "Release checklist", "favorite": false, "tags": ["work", "release"] }]
 ```
 
-### 3. Fill a placeholder prompt and copy it
+### 3. Fill a placeholder prompt
 
-Prompt Saver's placeholder syntax (`docs/help.md`) is filled by `edit`ing a
-scratch copy of the prompt's text before copying it, since the command line
-has no separate "fill" step of its own:
+Prompt Saver's placeholder syntax (`docs/help.md`) is filled in the app's own
+popup. The command line has no "fill" step, and `edit` would overwrite the
+stored text for good, so a script reads the template, fills it itself and puts
+the result where it needs it. `copy` puts the stored text on the clipboard
+with its placeholders unfilled.
 
 ```
 prompt-saver get p_demo01 --json
 ```
 ```json
-{ "id": "p_demo01", "name": "Release checklist", "text": "Version: {{version}}", "favorite": false, "tags": ["work"], "notes": "", "color": "", "trashed": false }
+{ "id": "p_demo01", "name": "Release checklist", "text": "Version: {?version}", "favorite": false, "tags": ["work"], "notes": "", "color": "", "trashed": false }
 ```
-```
-prompt-saver edit p_demo01 --text "Version: 2.7.0" --yes
-prompt-saver copy p_demo01
-```
+
+The script replaces `{?version}` in the returned `text` (for example with
+`2.7.0`) and uses the result in its own way, such as `Set-Clipboard` in
+PowerShell. The stored prompt stays as it was.
 
 ### 4. Take a backup
 
