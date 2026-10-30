@@ -390,7 +390,7 @@ export function bindGlobalSearch() {
   gsEl.addEventListener("pointerdown", (e) => { if (e.target === gsEl) closeGlobalSearch(); });
   $("gs-input").addEventListener("input", (e) => { gsQuery = e.target.value; gsRenderPending = true; gsRenderDebounced(); });
   $("gs-input").addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.preventDefault(); closeGlobalSearch(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGlobalSearch(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.min(gsActive + 1, gsFlatRows.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.max(gsActive - 1, 0)); }
     else if (e.key === "Enter") {
