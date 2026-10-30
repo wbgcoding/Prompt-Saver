@@ -38,6 +38,10 @@ pub(crate) fn windows_fonts_dir() -> String {
 
 #[tauri::command]
 pub(crate) async fn probe_recording(app: AppHandle, path: String) -> Result<RecordingProbe, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
@@ -53,6 +57,10 @@ pub(crate) async fn probe_recording(app: AppHandle, path: String) -> Result<Reco
 // uses, so the editor's ffErr* messages (see classify_ffmpeg_error) cover this path too.
 #[tauri::command]
 pub(crate) async fn probe_extra_video_source(app: AppHandle, path: String) -> Result<RecordingProbe, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&path);
     if !src.is_file() {
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
@@ -177,7 +185,11 @@ pub(crate) fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> 
 // from the webview.
 #[cfg(windows)]
 #[tauri::command]
-pub(crate) async fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
+pub(crate) async fn read_key_sidecar(app: AppHandle, path: String) -> Option<keylog::KeySidecar> {
+    // A network spelling is refused on its text, before the sidecar read would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return None;
+    }
     tauri::async_runtime::spawn_blocking(move || read_key_sidecar_at(&sidecar_path(Path::new(&path), KEYS_SIDECAR_EXT)))
         .await
         .ok()
@@ -284,8 +296,14 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
 pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_path: String, sidecar_path: String) -> Result<(), String> {
     let video = PathBuf::from(&video_path);
     let sidecar = PathBuf::from(&sidecar_path);
-    if !video.is_file() || !sidecar.is_file() {
-        return Err("recording or mic sidecar not found".to_string());
+    // Both paths are judged on their text first, so a share is never opened to find out whether
+    // the file exists: a network spelling, then the sidecar being exactly this video's own.
+    let own_dirs = own_storage_dirs(&app, &state);
+    if is_foreign_network_path(&video_path, &own_dirs)
+        || is_foreign_network_path(&sidecar_path, &own_dirs)
+        || !is_own_mic_sidecar(&video, &sidecar)
+    {
+        return Err("source-not-allowed".to_string());
     }
     // mux_mic_track_blocking replaces video in place and deletes sidecar on success, so both
     // must be proven to belong to this app first: the video one of our recordings, the sidecar
@@ -294,8 +312,8 @@ pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_pa
     if !is_own_recording_source(&recording_source_dirs(&app, &state), &video) && !is_editor_work_copy(&video) {
         return Err("source-not-allowed".to_string());
     }
-    if !is_own_mic_sidecar(&video, &sidecar) {
-        return Err("source-not-allowed".to_string());
+    if !video.is_file() || !sidecar.is_file() {
+        return Err("recording or mic sidecar not found".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let audio_kbps = crate::rec_cmds::REC_AUDIO_KBPS;
@@ -360,6 +378,10 @@ pub(crate) static FILMSTRIP_GEN: AtomicU64 = AtomicU64::new(0);
 // timeline, so ffprobe is known to be present.
 #[tauri::command]
 pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32) -> Result<Vec<String>, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
@@ -430,6 +452,10 @@ pub(crate) const WAVEFORM_SAMPLE_RATE: u32 = 8_000;
 
 #[tauri::command]
 pub(crate) async fn generate_waveform_peaks(app: AppHandle, path: String, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
@@ -583,6 +609,10 @@ pub(crate) fn pcm_s16le_to_peaks(pcm: &[u8], buckets: u32) -> Vec<f32> {
 
 #[tauri::command]
 pub(crate) async fn extract_still_frame(app: AppHandle, state: State<'_, Db>, path: String, at_ms: u64) -> Result<Option<String>, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &state)) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&path);
     if !src.is_file() {
         return Err("recording file not found".to_string());

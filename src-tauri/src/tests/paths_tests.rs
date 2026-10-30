@@ -433,6 +433,30 @@ fn the_clipboard_file_and_its_previews_check_the_path_text_first() {
 }
 
 #[test]
+fn the_editor_commands_check_the_path_text_before_they_open_it() {
+    let video = source!("../video_editor.rs");
+    for sig in [
+        "fn probe_recording(",
+        "fn probe_extra_video_source(",
+        "fn read_key_sidecar(",
+        "fn generate_filmstrip(",
+        "fn generate_waveform_peaks(",
+        "fn extract_still_frame(",
+        "fn mux_mic_track(",
+    ] {
+        let body = fn_body(&video, sig);
+        assert!(body.contains("is_foreign_network_path("), "{sig} asks the own-dir rule");
+        assert_text_check_first(body, sig, &[".is_file()", "spawn_blocking", "sidecar_path("]);
+    }
+    // The mic mux decides on both texts before it asks whether either file exists.
+    let mux = fn_body(&video, "fn mux_mic_track(");
+    let gate = mux.find("is_foreign_network_path(&sidecar_path").unwrap();
+    assert!(gate < mux.find("is_own_mic_sidecar(").unwrap());
+    assert!(mux.find("is_own_mic_sidecar(").unwrap() < mux.find(".is_file()").unwrap());
+    assert!(mux.find("is_own_recording_source(").unwrap() < mux.find(".is_file()").unwrap());
+}
+
+#[test]
 fn a_graph_source_on_a_share_is_judged_on_its_text_before_it_is_opened() {
     let graph = source!("../export_graph.rs");
     let body = fn_body(&graph, "fn validate_export_graph(");
