@@ -1245,6 +1245,19 @@ fn a_standalone_write_gives_the_data_folder_back_when_it_is_done() {
     assert_eq!(run_standalone_with(move || again, &args(&["list"]), Path::new(".")), 0);
 }
 
+#[test]
+fn a_standalone_write_clears_the_takeover_markers_it_leaves_behind() {
+    let tmp = TempDir::new("f3-markers");
+    ensure_test_schema(tmp.path());
+    let lock = crate::store::data_dir_lock_path(tmp.path());
+    let marker = crate::store::takeover_marker_path(&lock, "dead lock content");
+    std::fs::write(&marker, b"").unwrap();
+    let dir = tmp.path().to_path_buf();
+    let code = run_standalone_with(move || dir, &args(&["add", "--name", "n", "--text", "t", "--yes"]), Path::new("."));
+    assert_eq!(code, 0);
+    assert!(!marker.exists(), "the claim marker of a finished one-shot run must not stay in the data folder");
+}
+
 // ---- which launches are commands ----
 
 #[test]

@@ -87,6 +87,9 @@ impl Drop for OwnedLockRelease {
         let path = crate::store::data_dir_lock_path(&self.0);
         if crate::store::read_data_dir_lock(&path).is_some_and(|l| l.id == crate::store::lock_claim_id()) {
             let _ = std::fs::remove_file(&path);
+            // A run that took over a dead claim never lives to the second beat that clears the
+            // takeover markers, so they would stay in the data folder for good.
+            crate::store::remove_takeover_markers(&path);
         }
     }
 }
