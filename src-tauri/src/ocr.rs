@@ -96,6 +96,7 @@ pub(super) fn resolve_engine(lang: &str, auto_pick: bool) -> Result<OcrEngine, S
     Ok(engine)
 }
 
+#[cfg(test)]
 pub(super) fn engine_cached(lang: &str) -> bool {
     engine_cache().lock().unwrap_or_else(|e| e.into_inner()).contains_key(lang)
 }
