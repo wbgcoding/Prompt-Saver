@@ -155,6 +155,8 @@ parse stdout as JSON once it is 0.
 | 3 | store locked or unavailable (another machine holds the data folder, the database did not open, or a row failed to decrypt), or a command handed to the running instance gave no result: it was busy and did not accept the request within 5 seconds, could not be reached, or returned nothing within 10 minutes (the command may still be running) |
 | 4 | refused (a mutating command run without `--yes`, a confidential prompt that can only be read, copied or changed in the app, a setting only the app may change, or a value that fails validation) |
 
+A lock written by another computer counts as live until it has been seen unchanged for about 90 seconds, so a standalone write right after that computer stopped can still exit 3; retry later.
+
 ## Limits
 
 - `add`, `edit`, `delete`, `restore`, `tag add`, `tag remove`, `view add`,
