@@ -621,6 +621,20 @@ fn the_data_folder_move_shuts_database_writes_between_flush_and_pointer() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+// The flush closure of the data folder move needs a running app, so this checks the source: the
+// gate must be shut inside the block that holds the store lock, after the last flush save.
+#[test]
+fn the_data_folder_move_shuts_the_gate_while_the_flush_still_holds_the_store_lock() {
+    let src = include_str!("../snip.rs").replace("\r\n", "\n");
+    let start = src.find("fn move_data_dir_blocking").expect("move_data_dir_blocking exists");
+    let body = &src[start..];
+    let lock = body.find("let store = lock(&state);").expect("the flush takes the store lock");
+    let settings = body.find("if !save_settings(app, &store.settings)").expect("the flush saves the settings");
+    let gate = body.find("DATA_MOVE_IN_PROGRESS.store(true, Ordering::SeqCst);").expect("the flush shuts the gate");
+    let block_end = body[lock..].find("\n        }\n").map(|i| i + lock).expect("the lock block ends");
+    assert!(lock < settings && settings < gate && gate < block_end, "the gate is set inside the locked block, after the last save");
+}
+
 // Picking a folder that already holds a store adopts it as it is. The caller has to
 // reload the in-memory store from there, so the move must say that it happened and
 // must leave the adopted files alone.
@@ -1572,6 +1586,33 @@ fn an_unreadable_fallback_is_set_aside_not_left_for_the_next_save_to_drop() {
     let kept = fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".unreadable-")).count();
     assert_eq!(kept, 2);
     drop(conn);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A fallback that is locked by another program cannot be set aside at startup. It must then
+// survive the next successful save, which is told to keep it and try the move-aside again.
+#[test]
+fn a_fallback_that_could_not_be_set_aside_is_never_deleted_by_the_next_save() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = ddlock_test_dir("startup-held");
+    let path = dir.join("prompts.json");
+    fs::write(&path, "edits the database never got").unwrap();
+    let unreadable = || fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".unreadable-")).count();
+    let lock = fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+    assert!(!quarantine_fallback(&dir, "prompts.json"));
+    // Still locked: the save finds the file kept in place.
+    drop_stale_fallback(&dir, "prompts.json");
+    assert!(path.is_file());
+    drop(lock);
+    // Released: the next save sets it aside instead of deleting it.
+    drop_stale_fallback(&dir, "prompts.json");
+    assert!(!path.exists());
+    assert_eq!(unreadable(), 1);
+    // The mark is gone once the file was set aside; a fresh fallback is dropped as usual.
+    fs::write(&path, "stale").unwrap();
+    drop_stale_fallback(&dir, "prompts.json");
+    assert!(!path.exists());
+    assert_eq!(unreadable(), 1);
     let _ = fs::remove_dir_all(&dir);
 }
 
