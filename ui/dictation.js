@@ -33,9 +33,10 @@ export const LANG_CMDS = {
 export const LANG_DIALOG = {
   // installing: the names whose elevated install was launched and has not reported back. It
   // outlives the dialog (only the pollers stop on close), so a reopened dialog still knows the
-  // row is busy. installChain marks the one live poller per name.
-  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
-  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  // row is busy. installChain marks the one live poller per name. lateInstall: names whose poll
+  // gave up while the install may still be running; a reopen polls them again.
+  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), lateInstall: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), lateInstall: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
 };
 export let langDialogKind = "ocr"; // which kind #ocr-langs-modal currently displays
 export function openLangsModal(kind) {
@@ -51,6 +52,11 @@ export function openLangsModal(kind) {
   // Installs started before the dialog was closed keep running as OS processes; pick their
   // result polling back up.
   for (const name of st.installing) pollLangInstall(kind, name);
+  for (const name of st.lateInstall) {
+    st.lateInstall.delete(name);
+    delete st.installErrors[name];
+    pollLangInstall(kind, name);
+  }
 }
 export function closeLangsModal() {
   $("ocr-langs-modal").classList.add("hidden");
@@ -302,6 +308,13 @@ export async function startLangInstall(kind, cap) {
 // running" forever, so the polling has a limit: ~10 minutes is generous even for a large
 // language pack on a slow connection, so hitting it is always a real stuck state.
 export const MAX_LANG_INSTALL_POLLS = 200;
+// Clear both caches so a new pack is selectable immediately, no restart.
+export async function refreshLangCaches(kind) {
+  invoke(LANG_CMDS[kind].languages).then((langs) => {
+    if (kind === "speech") assignVoiceLangsCache(langs || []); else assignOcrLangsCache(langs || []);
+  }).catch(() => {});
+  await loadLangCaps(kind, true); // force -- also drops the backend's own cache
+}
 export function pollLangInstall(kind, name) {
   const st = LANG_DIALOG[kind];
   if (st.installTimers[name]) return;
@@ -325,6 +338,10 @@ export function pollLangInstall(kind, name) {
         delete st.installTimers[name];
         st.installing.delete(name);
         st.installErrors[name] = t("ocrInstallResultTimeout");
+        // The install may finish later and nobody reads its result then: refresh now, and poll
+        // again on the next open.
+        st.lateInstall.add(name);
+        refreshLangCaches(kind);
         renderLangsBody(kind);
         return;
       }
@@ -337,11 +354,7 @@ export function pollLangInstall(kind, name) {
     delete st.installChain[name];
     st.installing.delete(name);
     if (res.ok) {
-      // Clear both caches so the new pack is selectable immediately, no restart.
-      invoke(LANG_CMDS[kind].languages).then((langs) => {
-        if (kind === "speech") assignVoiceLangsCache(langs || []); else assignOcrLangsCache(langs || []);
-      }).catch(() => {});
-      await loadLangCaps(kind, true); // force -- also drops the backend's own cache
+      await refreshLangCaches(kind);
       return;
     }
     // A real failure (e.g. Windows Home or policy blocked): the reason belongs in the row. The

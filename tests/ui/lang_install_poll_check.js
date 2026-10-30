@@ -27,6 +27,8 @@ const code = [
   "const MAX_LANG_INSTALL_POLLS = 200;",
   extractBlock("function pollLangInstall("),
   extractBlock("function closeLangsModal("),
+  extractBlock("async function refreshLangCaches("),
+  extractBlock("function openLangsModal("),
 ].join("\n");
 
 async function scenario(reopenBeforeAnswer) {
@@ -79,8 +81,57 @@ async function scenario(reopenBeforeAnswer) {
   return problems;
 }
 
+// A poll that gives up at the limit while the install is still running: the late result must not
+// be lost. The language lists are refreshed at once, and reopening the dialog polls the name again.
+async function timeoutScenario() {
+  let nextId = 1;
+  const timers = new Map();
+  const calls = [];
+  let answer = null;
+  const el = { classList: { add() {}, remove() {} }, textContent: "" };
+  const sandbox = {
+    LANG_DIALOG: { ocr: { cache: [], checked: 0, installTimers: {}, installErrors: {}, installing: new Set(), lateInstall: new Set(), installChain: {}, elevTimer: null, elevRunning: false } },
+    LANG_CMDS: { ocr: { installResult: "ocr_install_result", languages: "ocr_languages" } },
+    langDialogKind: "ocr",
+    assignOcrLangsCache: () => { calls.push("setter:ocr"); },
+    assignVoiceLangsCache: () => {},
+    $: () => el,
+    t: (k) => k,
+    renderLangsBody: () => {},
+    renderLangsLoading: () => {},
+    pollElevatedCaps: () => {},
+    loadLangCaps: async (kind, force) => { calls.push(`caps:${kind}:${force}`); },
+    invoke: (cmd) => (cmd === "ocr_install_result" ? Promise.resolve(answer) : Promise.resolve([])),
+    setTimeout: (fn) => { const id = nextId++; timers.set(id, fn); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  const st = sandbox.LANG_DIALOG.ocr;
+  const flush = () => new Promise((r) => setImmediate(r));
+  const fireTimers = async () => { for (const [id, fn] of [...timers]) { timers.delete(id); fn(); await flush(); } };
+
+  vm.runInContext('pollLangInstall("ocr", "de-DE")', sandbox);
+  for (let i = 0; i < 205 && timers.size; i++) await fireTimers();
+  const problems = [];
+  if (st.installing.has("de-DE")) problems.push("row still busy after the poll limit");
+  if (!calls.includes("caps:ocr:true")) problems.push("timeout did not refresh the capability list");
+  if (!calls.includes("setter:ocr")) problems.push("timeout did not refresh the language cache");
+  calls.length = 0;
+
+  answer = { ok: true };            // the install finishes after the poller gave up
+  vm.runInContext('openLangsModal("ocr")', sandbox);
+  await fireTimers(); await flush(); await flush();
+  if (st.installErrors["de-DE"]) problems.push("the timeout message stayed after the reopen");
+  if (st.installing.has("de-DE")) problems.push("a late result was not picked up on reopen");
+  if (!calls.includes("caps:ocr:true")) problems.push("a late result did not refresh the lists");
+  if (timers.size) problems.push("a poller is still armed after the late result");
+  return problems;
+}
+
 (async () => {
   const all = [];
+  for (const p of await timeoutScenario()) all.push(`timeout: ${p}`);
   for (const reopen of [false, true]) {
     for (const p of await scenario(reopen)) all.push(`${reopen ? "reopened" : "closed"}: ${p}`);
   }
