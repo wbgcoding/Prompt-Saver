@@ -99,14 +99,15 @@ export const accelKey = (a) => String(a || "").trim().toLowerCase()
 // Who already holds this combination inside the app: the app hotkey, another
 // prompt, or nobody. Naming the owner is the difference between "taken" and a
 // message the user can act on. `excludeId` is the prompt (if any) THIS field
-// belongs to, so its own current binding never reads back as "already taken".
-export function hotkeyOwner(accel, excludeId = null) {
+// belongs to, so its own current binding never reads back as "already taken". `slot` does the
+// same for a global field ("app", "voice", "recStop" or "recPause"): that slot is skipped.
+export function hotkeyOwner(accel, excludeId = null, slot = null) {
   const key = accelKey(accel);
   if (!key) return null;
-  if (accelKey(settings.hotkey) === key) return { app: true };
-  if (accelKey(settings.voice_hotkey) === key) return { voice: true };
-  if (accelKey(settings.rec_stop_hotkey) === key) return { recStop: true };
-  if (accelKey(settings.rec_pause_hotkey) === key) return { recPause: true };
+  if (slot !== "app" && accelKey(settings.hotkey) === key) return { app: true };
+  if (slot !== "voice" && accelKey(settings.voice_hotkey) === key) return { voice: true };
+  if (slot !== "recStop" && accelKey(settings.rec_stop_hotkey) === key) return { recStop: true };
+  if (slot !== "recPause" && accelKey(settings.rec_pause_hotkey) === key) return { recPause: true };
   const p = prompts.find((x) => x.id !== excludeId && accelKey(x.hotkey) === key);
   return p ? { name: p.name } : null;
 }
@@ -149,7 +150,7 @@ export function reassertHotkeyCapture() {
 // silently and leaves the field untouched: the editor does this when the user moved to
 // another prompt during the await, so a stale answer never overwrites a different
 // prompt's row.
-export function bindHotkeyField(input, { id = null, errEl = null, showAllEl = null, current, onCommit }) {
+export function bindHotkeyField(input, { id = null, slot = null, errEl = null, showAllEl = null, current, onCommit }) {
   const resolveId = () => (typeof id === "function" ? id() : id);
   const showErr = (msg) => {
     if (errEl) { errEl.textContent = msg || ""; errEl.classList.toggle("hidden", !msg); }
@@ -170,7 +171,7 @@ export function bindHotkeyField(input, { id = null, errEl = null, showAllEl = nu
     if (!clearing) {
       accel = accelFromEvent(e);
       if (!accel) { showErr(t("promptHotkeyInvalid")); return; }
-      const owner = hotkeyOwner(accel, resolveId());
+      const owner = hotkeyOwner(accel, resolveId(), slot);
       if (owner) { showErr(hotkeyTakenMsg(owner)); return; }
     }
     showErr("");
@@ -355,6 +356,7 @@ export function renderHotkeysList() {
 export function bindHotkeys() {
   // Global hotkey: click the field and press a key combo to capture it.
   bindHotkeyField($("opt-hotkey"), {
+    slot: "app",
     current: () => settings.hotkey,
     onCommit: commitGlobalHotkey,
   });
@@ -364,6 +366,7 @@ export function bindHotkeys() {
   }, "hotkey-clear");
   $("hotkey-list-btn").addEventListener("click", openAllShortcuts);
   bindHotkeyField($("opt-voice-hotkey"), {
+    slot: "voice",
     current: () => settings.voice_hotkey,
     onCommit: commitVoiceHotkey,
   });
