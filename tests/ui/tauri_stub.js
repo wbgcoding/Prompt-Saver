@@ -801,6 +801,7 @@ const RESULTS = {
   // never having taken effect, not a misleading "old folder kept" dialog.
   set_sync_dir: (a) => {
     if (window.__SYNC_DIR_REFUSE__) return Promise.reject("dir-not-picked");
+    if (window.__SYNC_DIR_WRITEFAIL__) return Promise.reject("the new folder could not be written (3 files), so nothing was deleted");
     window.__SYNC_DIR_CALL__ = { dir: a ? a.dir : null, deleteOld: a ? a.deleteOld : null };
     return 0;
   },

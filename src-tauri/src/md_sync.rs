@@ -2491,6 +2491,19 @@ pub(crate) fn set_sync_dir_core(
     (old, new_dir, failures, enabled)
 }
 
+// How a folder switch ends before any old-folder delete is considered, or None when the delete
+// is next. A new folder that could not be written is reported whether or not the old one was
+// to go: it is the one place the feature now lives, and a folder that silently stays empty is
+// the worst outcome. With a delete asked for, the new folder is also written FIRST and the old
+// one only goes once that worked, since deleting after a failed write would take the only
+// copy of those files with it.
+pub(crate) fn sync_dir_switch_early_end(write_failures: usize, delete_old: bool) -> Option<Result<usize, String>> {
+    if write_failures > 0 {
+        return Some(Err(format!("the new folder could not be written ({write_failures} files), so nothing was deleted")));
+    }
+    (!delete_old).then_some(Ok(0))
+}
+
 // Point the sync at another folder. delete_old is an explicit decision the window made
 // after asking the user; the backend never deletes on its own initiative. The deletable
 // folder is not passed in but read from the settings: the one the app was syncing to a
@@ -2521,13 +2534,8 @@ pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete
         SYNC_WAKE.notify_one();
     }
     notify_float_settings(&app);
-    if !delete_old {
-        return Ok(0);
-    }
-    // The new folder is written FIRST and the old one only goes once that worked.
-    // Deleting after a failed write would take the only copy of those files with it.
-    if write_failures > 0 {
-        return Err(format!("the new folder could not be written ({write_failures} files), so nothing was deleted"));
+    if let Some(done) = sync_dir_switch_early_end(write_failures, delete_old) {
+        return done;
     }
     let new = new_dir;
     if sync_same_dir(&old, &new) {

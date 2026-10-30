@@ -1136,6 +1136,13 @@ export async function applySyncDir(dir) {
       refreshSyncStatus(true);
       return;
     }
+    // Without a delete asked for, the only thing that can fail is writing the new folder: say
+    // so as a notice. The "old folder kept" dialog below is about a refused delete.
+    if (!deleteOld) {
+      errToast(e);
+      refreshSyncStatus(true);
+      return;
+    }
     // The switch itself went through; only the delete refused. Name what is left
     // in the old folder and why nothing there was touched.
     await infoDialog(

@@ -1273,3 +1273,14 @@ fn sweep_stale_temp_files_keeps_working_copies_of_living_processes() {
     assert!(!gone.exists(), "a copy whose process is gone is still swept");
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_folder_switch_that_wrote_nothing_says_so_with_or_without_a_delete() {
+    for delete_old in [false, true] {
+        let ended = sync_dir_switch_early_end(3, delete_old).expect("a failed write ends the switch");
+        let err = ended.expect_err("a failed write is an error, not a quiet success");
+        assert!(err.contains("3 files"), "the count is named: {err}");
+    }
+    assert_eq!(sync_dir_switch_early_end(0, false), Some(Ok(0)), "nothing to delete: done");
+    assert_eq!(sync_dir_switch_early_end(0, true), None, "the delete is next");
+}

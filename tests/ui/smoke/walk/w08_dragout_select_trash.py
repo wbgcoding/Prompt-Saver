@@ -150,6 +150,25 @@ SECTION = """\
           if (!shownAfterRefusal.includes('SyncB') || shownAfterRefusal.includes('SyncRefused')) {
             out.errors.push('503: after a refusal the row must keep showing the folder still actually in effect: ' + shownAfterRefusal);
           }
+          // ---- a folder that could not be written is told even when the old folder
+          // stays: the switch must not look like a success over an empty folder ----
+          document.getElementById('toast').classList.add('hidden');
+          window.__SYNC_DIR_WRITEFAIL__ = true;
+          const failedCm = await askFor('D:/SyncReadOnly');
+          if (failedCm && !failedCm.classList.contains('hidden')) {
+            await click('confirm-alt');
+            await sleep(300);
+          }
+          window.__SYNC_DIR_WRITEFAIL__ = false;
+          const keptModal2 = document.getElementById('confirm-modal');
+          if (keptModal2 && !keptModal2.classList.contains('hidden')) {
+            out.errors.push('writefail: an unwritable new folder showed the old-folder-kept dialog');
+            keptModal2.classList.add('hidden');
+          }
+          const failedToast = document.getElementById('toast');
+          if (failedToast.classList.contains('hidden') || !/could not be written/i.test(failedToast.textContent)) {
+            out.errors.push(`writefail: an unwritable new folder showed no notice, toast reads ${JSON.stringify(failedToast.textContent)}`);
+          }
         }
         // Back to the shipped default for everything after this.
         const off = await expertRow('Sync prompts as Markdown');
