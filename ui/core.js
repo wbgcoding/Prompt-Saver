@@ -103,6 +103,9 @@ export const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip
 export let BUBBLE_MS = 950; // "Copied!" bubble lifetime (expert-tunable)
 export function assignBUBBLE_MS(v) { BUBBLE_MS = v; }
 export const TOAST_MS = 1400; // toast lifetime for plain messages
+// Lifetime for a notice the user did not ask for (e.g. the recording sweep): it arrives
+// unexpected, so it has to stay long enough to be noticed and read in full.
+export const TOAST_NOTICE_MS = 7000;
 export const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
 export const SIZE_MAX = 40;
 export const SIZE_STEP = 2;
@@ -516,6 +519,18 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   armToastTimer(duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
   // Shown under a resting pointer: no enter event will come, so start paused.
   if (toastEl.matches(":hover")) { toastHovered = true; pauseToast(); }
+}
+
+// An unprompted notice: shown with the long notice lifetime, and only once the window is
+// actually visible (a start into the tray would otherwise let it expire unseen).
+export function noticeToast(msg) {
+  if (!document.hidden) { toast(msg, null, "", null, TOAST_NOTICE_MS); return; }
+  const onVisible = () => {
+    if (document.hidden) return;
+    document.removeEventListener("visibilitychange", onVisible);
+    toast(msg, null, "", null, TOAST_NOTICE_MS);
+  };
+  document.addEventListener("visibilitychange", onVisible);
 }
 
 // Logs the error and returns the text the user is shown for it. A string with no translation

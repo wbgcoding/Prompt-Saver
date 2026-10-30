@@ -4,7 +4,7 @@ import EN from "./i18n/en.js";
 import { FOLDER_SVG, fmtBytes, trapTabWithin } from "./floatShared.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { assignVarsWindowPending, varsWindowPending } from "./promptVars.js";
-import { $, applyBrand, appVersion, assignAppVersion, autoGrow, closeColorPop, colorPop, ctxEl, errToast, EXPERT_ACTIONS, flag, ICON_WARN, inputEl, invoke, LANG, libraryEl, listen, modal, prompts, setStatusText, settings, settingsEl, t, toast, val, wireColorPop } from "./core.js";
+import { $, applyBrand, appVersion, assignAppVersion, autoGrow, closeColorPop, colorPop, ctxEl, errToast, EXPERT_ACTIONS, flag, ICON_WARN, inputEl, invoke, LANG, libraryEl, listen, modal, noticeToast, prompts, setStatusText, settings, settingsEl, t, toast, val, wireColorPop } from "./core.js";
 import { assignTabDragBlockClick, bindViews, closeMiniMenu, closeViewModal, miniMenu, renderGrid, seedExamplesIfNeeded, switchToView, viewModal, viewOrder, wireNumPop, wireViews } from "./views.js";
 import { bindCopyFlow, onPromptHotkey, wireCopyFlow } from "./copyFlow.js";
 import { applyMissingFiles, fitAllTiles, fitCache, pollMissingFiles, wireTiles } from "./tiles.js";
@@ -539,7 +539,7 @@ async function init() {
     // Whatever the startup sweep found (if anything): collected once,
     // here, since it ran before this window (or any of its listeners) existed.
     invoke("take_recording_sweep_notice").then((r) => {
-      if (r && r[0] > 0) toast(t("recSweepDone").replace("{n}", String(r[0])).replace("{v}", fmtBytes(r[1], LANG)));
+      if (r && r[0] > 0) noticeToast(t("recSweepDone").replace("{n}", String(r[0])).replace("{v}", fmtBytes(r[1], LANG)));
     }).catch(() => {});
     // OCR language list: fetched once, cached, "Automatic" is always
     // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).

@@ -1,5 +1,5 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errText, errToast, flag, invoke, LANG, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errText, errToast, flag, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -479,7 +479,7 @@ export function bindCapture() {
   // removed something.
   listen("recording-sweep-done", (e) => {
     const { count, bytes } = e.payload || {};
-    if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes, LANG)));
+    if (count > 0) noticeToast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes, LANG)));
   });
   // The control bar's target-switch button lives in a window with no toast of its own. A
   // failed switch leaves the previous source recording; this is the "here is why" note.
