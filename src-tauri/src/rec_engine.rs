@@ -58,19 +58,33 @@ pub(crate) fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u
     format!("rec-{year:04}-{month:02}-{day:02}_{hour:02}{minute:02}{second:02}.mp4")
 }
 
+// True while any file of a take with this stem is still around: the mp4, a converted sibling
+// (conversion deletes the mp4), a sidecar, or the first continuation part. The local-time stamp
+// repeats at the clock's fall-back hour, and a taken stem would let the new take overwrite the
+// kept take's mic and key sidecars or replace its converted file.
+fn rec_stem_taken(dir: &Path, stem: &str) -> bool {
+    let video = |name: String| VIDEO_FORMATS.iter().any(|ext| dir.join(format!("{name}.{ext}")).exists());
+    video(stem.to_string())
+        || video(format!("{stem}_part2"))
+        || dir.join(format!("{stem}.mic.wav")).exists()
+        || dir.join(format!("{stem}.{KEYS_SIDECAR_EXT}")).exists()
+        || dir.join(format!("{stem}.{CAM_SIDECAR_EXT}")).exists()
+}
+
 // The first free name for a new recording: `name` itself, else the same name with -2, -3 ...
 // before the extension. The one-second timestamp repeats when a take is stopped and the next
 // one starts within the second, or when the clock steps back; the encoder truncates its output,
 // so a taken name would silently overwrite a kept recording.
 pub(crate) fn free_rec_path(dir: &Path, name: &str) -> PathBuf {
+    let (stem, ext) = name.rsplit_once('.').unwrap_or((name, "mp4"));
     let first = dir.join(name);
-    if !first.exists() {
+    if !rec_stem_taken(dir, stem) {
         return first;
     }
-    let (stem, ext) = name.rsplit_once('.').unwrap_or((name, "mp4"));
     (2u32..)
-        .map(|n| dir.join(format!("{stem}-{n}.{ext}")))
-        .find(|p| !p.exists())
+        .map(|n| (n, dir.join(format!("{stem}-{n}.{ext}"))))
+        .find(|(n, _)| !rec_stem_taken(dir, &format!("{stem}-{n}")))
+        .map(|(_, p)| p)
         .unwrap_or(first)
 }
 

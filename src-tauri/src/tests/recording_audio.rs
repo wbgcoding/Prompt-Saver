@@ -1116,6 +1116,28 @@ fn a_new_recording_never_takes_an_existing_name() {
 }
 
 #[test]
+fn a_new_recording_keeps_clear_of_a_converted_take_and_its_sidecars() {
+    let root = std::env::temp_dir().join(format!("ps-recname-conv-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let name = rec_filename(2026, 10, 25, 2, 30, 0);
+    // A converted take leaves no mp4, only the new container and its sidecars.
+    let stem = "rec-2026-10-25_023000";
+    for tail in [".webm", ".mic.wav", ".keys.json", "_part2.mp4"] {
+        let leftover = format!("{stem}{tail}");
+        fs::write(root.join(&leftover), b"x").unwrap();
+        assert_eq!(free_rec_path(&root, &name), root.join(format!("{stem}-2.mp4")), "{leftover} must keep the stem taken");
+        fs::remove_file(root.join(&leftover)).unwrap();
+    }
+    assert_eq!(free_rec_path(&root, &name), root.join(&name));
+    // The suffixed stem is checked the same way.
+    fs::write(root.join("rec-2026-10-25_023000.gif"), b"x").unwrap();
+    fs::write(root.join("rec-2026-10-25_023000-2.mic.wav"), b"x").unwrap();
+    assert_eq!(free_rec_path(&root, &name), root.join("rec-2026-10-25_023000-3.mp4"));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn a_mic_sidecar_that_cannot_be_created_marks_the_mic_lost() {
     let queue = Arc::new(AudioQueueShared::new());
     let bad = std::env::temp_dir().join(format!("ps-nodir-{}", std::process::id())).join("x").join("rec.mic.wav");
