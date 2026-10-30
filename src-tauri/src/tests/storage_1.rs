@@ -1256,3 +1256,15 @@ fn the_storage_commands_measure_off_the_async_worker_and_gate_the_folder_open() 
     let of = &src[src.find("pub(crate) fn open_storage_folder").unwrap()..];
     assert!(of[..of.find("open_explorer_at").unwrap()].contains("is_foreign_network_path"));
 }
+
+#[test]
+fn read_import_folder_file_drops_a_byte_order_mark() {
+    let dir = std::env::temp_dir().join(format!("ps-import-folder-bom-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("Bom.txt"), "\u{feff}Title\nBody text").unwrap();
+    let content = read_import_folder_file(&dir.join("Bom.txt")).unwrap();
+    assert_eq!(content, "Title\nBody text", "a BOM must not stick to the first line");
+    let (text, note) = split_folder_note(&content);
+    assert_eq!((text.as_str(), note.as_str()), ("Body text", "Title"));
+    let _ = fs::remove_dir_all(&dir);
+}

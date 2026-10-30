@@ -827,13 +827,19 @@ pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: 
     format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
 }
 
+// An editor's UTF-8 byte-order mark is not part of the text: left in, it sticks to the first
+// line (and changes the dedup signature) or makes serde_json refuse the file.
+pub(crate) fn strip_bom(text: &str) -> &str {
+    text.strip_prefix('\u{feff}').unwrap_or(text)
+}
+
 // Parses already-read bytes: the caller reads once and hashes those same bytes for the
 // changed-since-preview check, so the file is never read twice.
 pub(crate) fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
     // An editor's byte-order mark would otherwise stick to the first heading or break the JSON.
-    let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
-    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let content = strip_bom(&content);
+    let ext =path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let mut data = match ext.as_str() {
         "csv" => parse_csv_data(content),
         "json" => parse_json_data(content)?,
@@ -1185,7 +1191,8 @@ pub(crate) fn read_import_folder_file(path: &Path) -> Result<String, &'static st
         return Err("too-large");
     }
     let bytes = fs::read(path).map_err(|_| "read-error")?;
-    String::from_utf8(bytes).map_err(|_| "bad-encoding")
+    let text = String::from_utf8(bytes).map_err(|_| "bad-encoding")?;
+    Ok(strip_bom(&text).to_string())
 }
 
 pub(crate) fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) -> (Vec<FolderImportEntry>, bool) {
