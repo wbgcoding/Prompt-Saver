@@ -73,6 +73,7 @@ function makeSandbox(extra) {
       extractBlock("scaleTarget", "function scaleTarget() {"),
       extractBlock("clipVideoLabel", "function clipVideoLabel(op, label, parts, fps) {"),
       extractBlock("buildVideoChain", "function buildVideoChain() {"),
+      extractLine("editDragActive", "const editDragActive = () => !!VE.drag && [\"rect\", \"resize\", \"trim\"].includes(VE.drag.kind);"),
       extractBlock("undo", "function undo() {"),
       extractBlock("redo", "function redo() {"),
       extractBlock("removeOps", "function removeOps(match) {"),
@@ -558,7 +559,7 @@ async function exportIdleCheck() {
   focusOn(f, "name");
   expect("Escape in a field reports the field layer", run("handleEscape()") === "field");
   expect("Escape in a field restores the value it had on focus", f.value === "name", f.value);
-  expect("Escape in a field announces the restore", f.events.join() === "input,change", f.events.join());
+  expect("Escape in a field announces only the live restore, never a commit", f.events.join() === "input", f.events.join());
   expect("Escape in a field releases the focus", f.blurred === true);
   expect("Escape in a field keeps overlay, range and window", sb.VE.selOv === "o1" && sb.VE.sel !== null && !log.includes("close"));
   // An untouched field is only blurred.
