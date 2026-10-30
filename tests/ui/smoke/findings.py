@@ -817,8 +817,6 @@ def run(browser, tmp):
       if (hasInk(img, 60, 75)) errs.push('555: the second undo did not remove the rectangle');
     }
 ''')
-    else {
-      await baTool('crop'); await baCropTo(60, 30, 140, 90);
     failed += ar_probe('ba1798', 'screenshot editor: a slow image decode finishing after a newer open does not take the editor over', 'index', '1000x780', '', ba_common + r'''
     await bootReady();
     const slowCv = document.createElement('canvas'); slowCv.width = 300; slowCv.height = 150;
@@ -843,6 +841,8 @@ def run(browser, tmp):
 ''')
     failed += ar_probe('ba592a', 'screenshot editor: undoing a committed crop clears the crop box, export is the full image', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
+    else {
+      await baTool('crop'); await baCropTo(60, 30, 140, 90);
       baKey('Enter'); await sleep(80);
       let img = await baExport();
       if (!img || img.w !== 80 || img.h !== 60) errs.push('592: fixture: the crop did not export 80x60, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
