@@ -730,6 +730,28 @@ fn export_leaves_confidential_entries_out() {
 }
 
 #[test]
+fn export_ids_never_widen_or_silently_narrow_the_selection() {
+    // A selection that came out empty is a usage error, not "export everything".
+    for empty in ["", ",", " , "] {
+        assert!(parse(&args(&["export", "o.json", "--ids", empty])).is_err(), "--ids {empty:?} must be refused");
+    }
+    let tmp = TempDir::new("export-ids");
+    let mut store = fixture_store();
+    let known = store.prompts[0].id.clone();
+    let run = |store: &mut Store, ids: &[&str]| {
+        let cmd = Cmd::Export { path: "o.json".to_string(), format: "json".to_string(), ids: Some(ids.iter().map(|s| s.to_string()).collect()), confirmed: true };
+        exec(store, tmp.path(), &cmd, tmp.path())
+    };
+    let out = run(&mut store, &[&known, "p_missing"]);
+    assert_eq!(out.code, 2);
+    assert!(out.stderr.contains("p_missing"), "{}", out.stderr);
+    assert!(!tmp.path().join("o.json").exists(), "nothing is written when an id is unknown");
+    let ok = run(&mut store, &[&known]);
+    assert_eq!(ok.code, 0, "{}", ok.stderr);
+    assert!(ok.stdout.contains("exported 1 prompt"), "{}", ok.stdout);
+}
+
+#[test]
 fn export_relative_paths_resolve_against_the_callers_cwd_not_this_process() {
     let tmp = TempDir::new("export-cwd");
     let mut store = fixture_store();

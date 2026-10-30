@@ -951,6 +951,10 @@ fn parse_search(a: &mut Args) -> Result<Cmd, String> {
 fn parse_export(a: &mut Args) -> Result<Cmd, String> {
     let format = take_flag_value(a, "--format")?.unwrap_or_else(|| "json".to_string());
     let ids = take_flag_value(a, "--ids")?.map(|s| split_tags(&s));
+    // An empty selection (a script whose list came out empty) must not turn into "everything".
+    if ids.as_ref().is_some_and(|list| list.is_empty()) {
+        return Err(usage_err("--ids needs at least one prompt id"));
+    }
     let confirmed = take_flag(a, "--yes");
     let path = a.next_positional().ok_or_else(|| usage_err("missing output path"))?.to_string();
     reject_extra(a)?;
@@ -1550,11 +1554,15 @@ fn cmd_view_remove(store: &mut Store, id: &str) -> Outcome {
 
 fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&[String]>, confirmed: bool) -> Outcome {
     let selected: Vec<Prompt> = match ids {
-        Some(list) if !list.is_empty() => {
+        Some(list) => {
             let set: std::collections::HashSet<&str> = list.iter().map(String::as_str).collect();
+            let unknown: Vec<&str> = list.iter().map(String::as_str).filter(|id| !store.prompts.iter().any(|p| p.id == *id)).collect();
+            if !unknown.is_empty() {
+                return Outcome::err(2, format!("no prompt with id {}\n", unknown.join(", ")));
+            }
             store.prompts.iter().filter(|p| set.contains(p.id.as_str())).cloned().collect()
         }
-        _ => store.prompts.clone(),
+        None => store.prompts.clone(),
     };
     // A confidential entry holds sealed ciphertext in its text fields and never leaves in a file,
     // as with the app's own export.
