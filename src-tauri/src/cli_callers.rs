@@ -34,6 +34,9 @@ pub(super) fn errln(args: std::fmt::Arguments) {
 // empty" and a default setting as the user's choice.
 pub(super) struct StoreHealth {
     pub(super) settings_ok: bool,
+    // Rows that failed to decrypt, or a database that did not open. An unreadable settings row
+    // alone is not this: the prompt reads still answer faithfully then, as in the app.
+    pub(super) rows_unreadable: bool,
 }
 
 pub(super) fn load_store_headless(dir: &Path) -> Store {
@@ -50,16 +53,16 @@ pub(super) fn load_store_headless_checked(dir: &Path) -> (Store, StoreHealth) {
         settings.migrate();
         migrate_prompts(&mut prompts);
         let store = Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 || settings_unreadable, written: std::cell::RefCell::new(written) };
-        (store, StoreHealth { settings_ok: !settings_unreadable })
+        (store, StoreHealth { settings_ok: !settings_unreadable, rows_unreadable: decrypt_fails > 0 })
     } else {
         let store = Store { prompts: Vec::new(), trash: Vec::new(), settings: crate::Settings::default(), prompts_locked: true, written: std::cell::RefCell::new(WrittenRows::new()) };
-        (store, StoreHealth { settings_ok: false })
+        (store, StoreHealth { settings_ok: false, rows_unreadable: true })
     }
 }
 
 // The answer for a read the store cannot give faithfully (exit 3, like a refused write), or None
-// when the read may go ahead. `prompts_locked` covers rows that failed to decrypt and a database
-// that did not open; `settings_ok` is false when the settings row is unreadable.
+// when the read may go ahead. `prompts_locked` here means rows that failed to decrypt or a database
+// that did not open (not the settings row); `settings_ok` is false when the settings row is unreadable.
 pub(super) fn unreadable_store_message(cmd: &Cmd, prompts_locked: bool, settings_ok: bool) -> Option<&'static str> {
     let unreadable = match cmd {
         Cmd::List { .. } | Cmd::Get { .. } | Cmd::Copy { .. } | Cmd::TagList { .. } | Cmd::ViewList { .. } | Cmd::Search { .. } | Cmd::Export { .. } => {
@@ -156,7 +159,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         errln(format_args!("the store has rows that failed to decrypt; writes are refused until that is resolved\n"));
         return 3;
     }
-    if let Some(msg) = unreadable_store_message(&cmd, store.prompts_locked, health.settings_ok) {
+    if let Some(msg) = unreadable_store_message(&cmd, health.rows_unreadable, health.settings_ok) {
         err(format_args!("{msg}"));
         return 3;
     }

@@ -1207,6 +1207,20 @@ fn a_read_waits_on_the_store_only_for_what_it_reads() {
     assert!(unreadable_store_message(&list, false, true).is_none());
 }
 
+#[test]
+fn a_standalone_library_read_ignores_an_unreadable_settings_row() {
+    let tmp = TempDir::new("f2-settings-row");
+    ensure_test_schema(tmp.path());
+    let conn = db_conn_at(tmp.path()).unwrap();
+    conn.execute("INSERT INTO meta(key, value) VALUES('settings', 'not a settings value') ON CONFLICT(key) DO UPDATE SET value = excluded.value", []).unwrap();
+    drop(conn);
+    // The same answers the running app gives: prompt reads work, only the setting read is refused.
+    let dir = tmp.path().to_path_buf();
+    assert_eq!(run_standalone_with(move || dir, &args(&["list"]), Path::new(".")), 0);
+    let dir = tmp.path().to_path_buf();
+    assert_eq!(run_standalone_with(move || dir, &args(&["settings", "get", "theme"]), Path::new(".")), 3);
+}
+
 // ---- a standalone run does not leave the data folder claimed ----
 
 #[test]
