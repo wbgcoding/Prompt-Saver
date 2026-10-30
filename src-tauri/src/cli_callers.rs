@@ -2,7 +2,18 @@ use super::*;
 
 // ---------- Standalone caller (nothing is running) ----------
 
+// How much of the store a headless load could actually read. A store that is not fully readable
+// must not answer a read with what is left of it: an empty list would read as "the library is
+// empty" and a default setting as the user's choice.
+pub(super) struct StoreHealth {
+    pub(super) settings_ok: bool,
+}
+
 pub(super) fn load_store_headless(dir: &Path) -> Store {
+    load_store_headless_checked(dir).0
+}
+
+pub(super) fn load_store_headless_checked(dir: &Path) -> (Store, StoreHealth) {
     if let Some(conn) = db_conn_at(dir) {
         let mut written = WrittenRows::new();
         let (mut prompts, settings_opt, _needs_mig, prompt_fails, settings_unreadable) = db_load(&conn, &mut written);
@@ -11,10 +22,26 @@ pub(super) fn load_store_headless(dir: &Path) -> Store {
         let mut settings = settings_opt.unwrap_or_default();
         settings.migrate();
         migrate_prompts(&mut prompts);
-        Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 || settings_unreadable, written: std::cell::RefCell::new(written) }
+        let store = Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 || settings_unreadable, written: std::cell::RefCell::new(written) };
+        (store, StoreHealth { settings_ok: !settings_unreadable })
     } else {
-        Store { prompts: Vec::new(), trash: Vec::new(), settings: crate::Settings::default(), prompts_locked: true, written: std::cell::RefCell::new(WrittenRows::new()) }
+        let store = Store { prompts: Vec::new(), trash: Vec::new(), settings: crate::Settings::default(), prompts_locked: true, written: std::cell::RefCell::new(WrittenRows::new()) };
+        (store, StoreHealth { settings_ok: false })
     }
+}
+
+// The answer for a read the store cannot give faithfully (exit 3, like a refused write), or None
+// when the read may go ahead. `prompts_locked` covers rows that failed to decrypt and a database
+// that did not open; `settings_ok` is false when the settings row is unreadable.
+pub(super) fn unreadable_store_message(cmd: &Cmd, prompts_locked: bool, settings_ok: bool) -> Option<&'static str> {
+    let unreadable = match cmd {
+        Cmd::List { .. } | Cmd::Get { .. } | Cmd::Copy { .. } | Cmd::TagList { .. } | Cmd::ViewList { .. } | Cmd::Search { .. } | Cmd::Export { .. } => {
+            prompts_locked
+        }
+        Cmd::SettingsGet { .. } => !settings_ok,
+        _ => false,
+    };
+    unreadable.then_some("the store could not be read completely (the database did not open or a row failed to decrypt)\n")
 }
 
 pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
@@ -47,7 +74,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         return 0;
     }
     let dir = resolve_dir();
-    let store = load_store_headless(&dir);
+    let (store, health) = load_store_headless_checked(&dir);
     acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
 
     // Before the restore arm: a restore replaces the whole database, so a store another machine
@@ -77,6 +104,10 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
 
     if is_mutating(&cmd) && store.prompts_locked {
         eprintln!("the store has rows that failed to decrypt; writes are refused until that is resolved\n");
+        return 3;
+    }
+    if let Some(msg) = unreadable_store_message(&cmd, store.prompts_locked, health.settings_ok) {
+        eprint!("{msg}");
         return 3;
     }
 
@@ -285,6 +316,9 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
             && (crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || store.prompts_locked || crate::SETTINGS_LOCKED.load(Ordering::Relaxed))
         {
             return (Outcome::err(3, "the store refused the write (locked or unavailable)\n"), None);
+        }
+        if let Some(msg) = unreadable_store_message(&cmd, store.prompts_locked, !crate::SETTINGS_LOCKED.load(Ordering::Relaxed)) {
+            return (Outcome::err(3, msg), None);
         }
         let outcome = exec_persisted(&mut store, &dir, &cmd, &cwd, |st, o| {
             let persisted = if o.mutated_trash {

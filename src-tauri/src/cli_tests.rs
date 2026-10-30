@@ -1137,6 +1137,42 @@ fn a_client_that_hangs_up_before_it_is_accepted_does_not_end_the_server() {
     });
 }
 
+// ---- a read of a store that could not be read never reports an empty library ----
+
+fn garbage_store_dir(tag: &str) -> TempDir {
+    let tmp = TempDir::new(tag);
+    std::fs::write(tmp.path().join("data.db"), vec![b'x'; 4096]).unwrap();
+    tmp
+}
+
+#[test]
+fn a_standalone_read_of_a_database_that_will_not_open_exits_three() {
+    let tmp = garbage_store_dir("f2-open");
+    for items in [&["list"][..], &["search", "x"], &["tag", "list"], &["view", "list"], &["get", "p1"], &["settings", "get", "theme"]] {
+        let dir = tmp.path().to_path_buf();
+        let code = run_standalone_with(move || dir, &args(items), Path::new("."));
+        assert_eq!(code, 3, "{items:?} must not read an unopened store as empty");
+    }
+}
+
+#[test]
+fn a_read_that_does_not_touch_the_store_still_works_when_the_database_will_not_open() {
+    let tmp = garbage_store_dir("f2-dirread");
+    let dir = tmp.path().to_path_buf();
+    assert_eq!(run_standalone_with(move || dir, &args(&["backup", "list"]), Path::new(".")), 0);
+}
+
+#[test]
+fn a_read_waits_on_the_store_only_for_what_it_reads() {
+    let list = Cmd::List { tag: None, favorite: false, trash: false, json: false };
+    let get_setting = Cmd::SettingsGet { key: "theme".into(), json: false };
+    // Rows that failed to decrypt spoil a library read, not a setting read.
+    assert!(unreadable_store_message(&list, true, true).is_some());
+    assert!(unreadable_store_message(&get_setting, true, true).is_none());
+    assert!(unreadable_store_message(&get_setting, false, false).is_some());
+    assert!(unreadable_store_message(&list, false, true).is_none());
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]
