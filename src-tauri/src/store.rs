@@ -1972,6 +1972,7 @@ pub(crate) fn quarantine_fallback(dir: &Path, file: &str) -> bool {
         true
     } else {
         append_crash_log(&format!("{file} fallback could not be read and could not be set aside"));
+        hold_fallback(dir, file);
         false
     }
 }

@@ -253,9 +253,28 @@ pub(crate) fn read_text_capped(path: &std::path::Path, max: u64) -> Option<Strin
 // read back as the truth on the next launch (see load_store).
 pub(crate) fn drop_stale_fallback(dir: &Path, file: &str) {
     let path = dir.join(file);
+    if held_fallbacks().lock().unwrap_or_else(|e| e.into_inner()).contains(&path) {
+        // An unreadable file that could not be set aside at startup holds edits the database
+        // never got: it is never deleted, the move-aside is tried again instead.
+        if !path.exists() || fs::rename(&path, dir.join(format!("{file}.unreadable-{}", now_ms()))).is_ok() {
+            held_fallbacks().lock().unwrap_or_else(|e| e.into_inner()).remove(&path);
+        }
+        return;
+    }
     if path.exists() {
         let _ = fs::remove_file(path);
     }
+}
+
+// Fallback files that were unreadable and could not be renamed aside (keyed by full path).
+fn held_fallbacks() -> &'static Mutex<std::collections::HashSet<PathBuf>> {
+    static HELD: std::sync::OnceLock<Mutex<std::collections::HashSet<PathBuf>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(Default::default)
+}
+
+// Marks a fallback file as one drop_stale_fallback must keep and try to set aside again.
+pub(crate) fn hold_fallback(dir: &Path, file: &str) {
+    held_fallbacks().lock().unwrap_or_else(|e| e.into_inner()).insert(dir.join(file));
 }
 
 // Atomic write: returns whether the data reached disk, so callers can log a persist failure.
