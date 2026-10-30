@@ -1315,9 +1315,10 @@ pub(crate) fn data_url_bytes(data_url: &str) -> Vec<u8> {
 
 // Save a screenshot data URL into Pictures\Screenshots now (result dialog: folder-saving was
 // enabled after the shot, or an edit changed the image after an auto-save). Returns the
-// path. format overrides the screenshotFormat setting for this one save.
+// path. format overrides the screenshotFormat setting for this one save. replace names the
+// file an earlier auto-save wrote: the new image takes its name.
 #[tauri::command]
-pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>, stem: Option<String>) -> Result<Option<String>, String> {
+pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>, stem: Option<String>, replace: Option<String>) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return Err(image_data_too_large(&data_url));
     }
@@ -1340,7 +1341,13 @@ pub(crate) async fn save_screenshot_now(state: State<'_, Db>, data_url: String, 
     let (out_bytes, format) = out_bytes?;
     // The capture's own stem keeps the source app in the name; anything else gets a fresh stamp.
     let stem = stem.filter(|s| is_shot_stem(s)).unwrap_or_else(|| format!("Screenshot-{}", local_stamp()));
-    let path = save_screenshot(&out_bytes, &screenshot_dir(&custom), &stem, screenshot_format_ext(&format));
+    let ext = screenshot_format_ext(&format);
+    // An edited shot takes the place of the file the capture saved, keeping its name.
+    let replaced = replace
+        .map(std::path::PathBuf::from)
+        .filter(|p| own_screenshot_in_save_dir(p, &custom))
+        .and_then(|p| replace_screenshot(&out_bytes, &p, ext));
+    let path = replaced.unwrap_or_else(|| save_screenshot(&out_bytes, &screenshot_dir(&custom), &stem, ext));
     Ok(if path.is_empty() { None } else { Some(path) })
 }
 
@@ -1423,26 +1430,39 @@ pub(crate) fn is_own_screenshot_name(name: &str, ext: &str) -> bool {
 // <brand>-*.png an older version wrote.
 #[tauri::command]
 pub(crate) async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bool, String> {
+    let custom = lock(&state).settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default();
     let p = std::path::Path::new(&path);
+    Ok(own_screenshot_in_save_dir(p, &custom) && fs::remove_file(p).is_ok())
+}
+
+// True for an existing file that is one of our screenshots inside a folder we save screenshots
+// to (the configured/default screenshot dir, or temp): never an arbitrary location a matching
+// file name could otherwise point at. Gate for deleting or replacing a file by a path the UI sent.
+pub(crate) fn own_screenshot_in_save_dir(p: &std::path::Path, custom_dir: &str) -> bool {
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let ours = is_own_screenshot_name(name, ext);
-    if !ours || !p.is_file() {
-        return Ok(false);
+    if !is_own_screenshot_name(name, ext) || !p.is_file() {
+        return false;
     }
-    // Defense in depth: only ever delete inside a folder we actually save screenshots
-    // to (the configured/default screenshot dir, or temp): never an arbitrary location
-    // a matching file name could otherwise point at.
     let parent = match p.parent().and_then(|d| d.canonicalize().ok()) {
         Some(d) => d,
-        None => return Ok(false),
+        None => return false,
     };
-    let custom = lock(&state).settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default();
-    let allowed = [screenshot_dir(&custom), std::env::temp_dir()];
-    let in_allowed = allowed
+    [screenshot_dir(custom_dir), std::env::temp_dir()]
         .iter()
-        .any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false));
-    Ok(in_allowed && fs::remove_file(p).is_ok())
+        .any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false))
+}
+
+// Writes an edited screenshot over the file the capture saved, under the same name (the
+// extension follows the format of this save). The atomic write puts the new bytes in place
+// before the old ones go, so a failure leaves the old file. None when it could not be written.
+pub(crate) fn replace_screenshot(bytes: &[u8], old: &std::path::Path, ext: &str) -> Option<String> {
+    let target = old.with_extension(ext);
+    write_bytes_atomic(&target, bytes).ok()?;
+    if target != old {
+        let _ = fs::remove_file(old);
+    }
+    Some(target.to_string_lossy().to_string())
 }
 
 fn image_data_too_large(data_url: &str) -> String {

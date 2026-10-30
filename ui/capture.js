@@ -702,10 +702,10 @@ export function bindCapture() {
   async function saveSnipToFolder(dataUrl) {
     const oldPath = pendingSnipPath;
     const gen = snipCaptureGen;
-    const saved = (await invoke("save_screenshot_now", { dataUrl, stem: pendingSnipStem || undefined }).catch(() => "")) || "";
+    const saved = (await invoke("save_screenshot_now", { dataUrl, stem: pendingSnipStem || undefined, replace: oldPath || undefined }).catch(() => "")) || "";
     if (saved) {
-      // The same timestamp name overwrites the old file in place; then the old path is the new one
-      // and must stay.
+      // The edited copy replaces the old file under its own name; then the old path is the new one
+      // and must stay. Only a refused replace (or another format's extension) leaves a different path.
       if (oldPath && oldPath !== saved) await invoke("delete_screenshot_file", { path: oldPath }).catch(() => {});
       if (gen === snipCaptureGen) pendingSnipPath = saved;
       return saved;

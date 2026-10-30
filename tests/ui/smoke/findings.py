@@ -709,6 +709,8 @@ def run(browser, tmp):
       document.getElementById('snip-edit-apply').click(); await sleep(500);
       const order = (window.__SMOKE_ARGS__ || []).map(([c]) => c).filter((c) => c === 'save_screenshot_now' || c === 'delete_screenshot_file');
       if (order.join() !== 'save_screenshot_now,delete_screenshot_file') errs.push('597: expected save then delete, got ' + order.join());
+      const sv = callsFor('save_screenshot_now')[0];
+      if (!sv || sv.replace !== 'C:/shots/first.png') errs.push('705: the edited save must ask to replace the auto-saved file, got ' + JSON.stringify(sv && sv.replace));
       const del = callsFor('delete_screenshot_file')[0];
       if (!del || del.path !== 'C:/shots/first.png') errs.push('597: the wrong file was deleted: ' + JSON.stringify(del));
       // the same name comes back (same second): the old path is the new file, it must stay

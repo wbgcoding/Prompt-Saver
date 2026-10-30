@@ -108,6 +108,56 @@ fn save_screenshot_keeps_both_files_for_the_same_stem() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// ---- an edited shot takes the place of the auto-saved file ----
+
+#[test]
+fn replace_screenshot_keeps_the_name_and_swaps_the_bytes() {
+    let dir = std::env::temp_dir().join(format!("{}-replace-{}", brand::TEMP_PREFIX, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let old = save_screenshot(b"before", &dir, "Screenshot-2026-01-01_00-00-00", "png");
+    let got = replace_screenshot(b"after", Path::new(&old), "png").expect("replaced");
+    assert_eq!(got, old, "same name, no (2) suffix");
+    assert_eq!(fs::read(&old).unwrap(), b"after");
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 1, "no stray temp or second file");
+    // another format: the name stays, the extension follows, the old file is gone
+    let got = replace_screenshot(b"jpeg", Path::new(&old), "jpg").expect("replaced");
+    assert!(got.ends_with("Screenshot-2026-01-01_00-00-00.jpg"), "{got}");
+    assert_eq!(fs::read(&got).unwrap(), b"jpeg");
+    assert!(!Path::new(&old).exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn replace_screenshot_leaves_the_old_file_when_the_write_fails() {
+    let dir = std::env::temp_dir().join(format!("{}-replace-fail-{}", brand::TEMP_PREFIX, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let old = save_screenshot(b"before", &dir, "Screenshot-2026-01-01_00-00-01", "png");
+    // the target name of the new format is taken by a directory: the write cannot succeed
+    fs::create_dir_all(dir.join("Screenshot-2026-01-01_00-00-01.jpg")).unwrap();
+    assert!(replace_screenshot(b"after", Path::new(&old), "jpg").is_none());
+    assert_eq!(fs::read(&old).unwrap(), b"before");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn own_screenshot_gate_only_passes_our_files_in_a_save_folder() {
+    let name = format!("Screenshot-gate-{}.png", std::process::id());
+    let ours = std::env::temp_dir().join(&name);
+    fs::write(&ours, b"x").unwrap();
+    assert!(own_screenshot_in_save_dir(&ours, ""));
+    let foreign = std::env::temp_dir().join(format!("notes-gate-{}.png", std::process::id()));
+    fs::write(&foreign, b"x").unwrap();
+    assert!(!own_screenshot_in_save_dir(&foreign, ""), "not a screenshot name");
+    assert!(!own_screenshot_in_save_dir(&std::env::temp_dir().join("Screenshot-missing-file.png"), ""), "missing file");
+    let nested = std::env::temp_dir().join(format!("{}-gate-{}", brand::TEMP_PREFIX, std::process::id()));
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join(&name), b"x").unwrap();
+    assert!(!own_screenshot_in_save_dir(&nested.join(&name), ""), "a folder we never save to");
+    let _ = fs::remove_file(&ours);
+    let _ = fs::remove_file(&foreign);
+    let _ = fs::remove_dir_all(&nested);
+}
+
 // ---- a stale preview encode never lands in the slot ----
 
 #[test]
