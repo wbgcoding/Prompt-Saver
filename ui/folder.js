@@ -411,6 +411,10 @@ function applyTexts(s) {
     b.title = `${TXT.size} ${b.textContent}`;
     b.setAttribute("aria-label", b.title);
   }
+  // The icon tooltip and the grid labels are built from TXT, so they follow a language change
+  // and the first settings answer arriving after the folder state.
+  renderIcon();
+  if (open === "grid") renderGrid();
 }
 
 function applyPrefs(s) {
