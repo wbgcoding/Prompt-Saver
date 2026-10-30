@@ -629,6 +629,14 @@ export function initSnipEditor() {
       if (op.point) { op.point.x += dx; op.point.y += dy; }
       if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
     }
+    // A crop stays inside the image, like the pointer drag keeps it; export clamps only the
+    // origin, so a rect pushed past an edge would save a different region than the box shows.
+    if (op.tool === "crop" && op.rect) {
+      op.rect.w = Math.min(op.rect.w, SE.w);
+      op.rect.h = Math.min(op.rect.h, SE.h);
+      op.rect.x = snipEditClamp(op.rect.x, 0, SE.w - op.rect.w);
+      op.rect.y = snipEditClamp(op.rect.y, 0, SE.h - op.rect.h);
+    }
     // One undo step per run of nudges: a run on the same op and tool folds into the entry just
     // below the top; a different op or tool, or any other action in between, starts a new one.
     const last = SE.ops[SE.ops.length - 1];
