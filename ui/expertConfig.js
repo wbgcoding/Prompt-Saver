@@ -192,8 +192,7 @@ export const OPT_FLAG_LABELS = {
   // Statistics: counts tool use only once switched on (the backend has always
   // read it that way). The switch lives in the expert menu; the statistics dialog links to it.
   usageStats: "statsEnable",
-  // Save every screenshot into the Screenshots folder: the Settings switch and
-  // the snip dialog switch are the two places it is shown.
+  // Save every screenshot into the Screenshots folder (expert menu, Capture, Screenshot).
   screenshotSave: "screenshotToFolder",
   gridViewBorder: "flagGridViewBorder",         // colored border around the grid in the view's color
   // header columns x rows fields; the grid size otherwise lives in the view menu
@@ -506,7 +505,7 @@ export const EXPERT_TABS = [
   { title: "expTabCapture", groups: [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
-    { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupScreenshot", flags: ["screenshot", { key: "screenshotSave", gate: "screenshot" }], values: ["snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
     { title: "expGroupSnipEditor", flags: [{ key: "snipEditSnap", gate: "screenshot" }], dropdowns: ["snipEditDefaultTool", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal: same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }], dropdowns: ["ocrLang"],
@@ -587,7 +586,7 @@ export const EXPERT_TIPS = [
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "codeHighlight", "codeAutoDetect", "copyFormatted",
-  "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN",
+  "screenshotSave", "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN",
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",

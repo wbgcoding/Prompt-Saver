@@ -1535,7 +1535,7 @@ export default {
     clearField: "Temizle",
     tipAutoPaste: "Bir istemi kopyalayıp son uygulamanıza yapıştırmak için çift tıklayın. Uzman menüsü: yapıştırma gecikmesi, çift tıklama hızı ve 'yapıştırdıktan sonra Enter'a bas'.",
     tipTooltips: "Üzerine gelindiğinde araç ipuçlarını göster. Uzman menüsü: gösterme gecikmesi.",
-    tipScreenshotFolder: "Ekran görüntülerini her zaman Ekran Görüntüleri klasöründe dosya olarak tut. Uzman menüsü: önizleme boyutu ve özel kaydetme klasörü.",
+    tipScreenshotSave: "Ekran görüntülerini her zaman Ekran Görüntüleri klasöründe dosya olarak tut.",
     tipClipWatcher: "Başka yerde kopyaladığınız metni, istem olarak kaydedilmeye hazır şekilde bir gelen kutusunda toplar.",
     tipClipSkipSecrets: "Sadece bir tahmin, başka bir şey değil: şifre gibi görünen metin (tek satır, boşluksuz, harf/rakam/sembol karışımı) hiçbir zaman gelen kutusuna eklenmez. Şüphe durumunda, gerçek bir şifreyi saklama riskine girmek yerine kopya her zaman atlanır.",
     flagBackupGfs: "Günlük, haftalık, aylık ve yıllık yedekleri sakla",

@@ -9,7 +9,7 @@ SECTION = """\
       }
       const titles724 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
         .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-      const want724 = ['Appearance', 'Behavior', 'Capture', 'Data', 'System', 'Reset and delete'];
+      const want724 = ['Appearance', 'Behavior', 'Data', 'System', 'Reset and delete'];
       if (titles724.join('|') !== want724.join('|')) {
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
@@ -42,18 +42,14 @@ SECTION = """\
         await click('expert-back');
       }
     }
-    // 730: the screenshot switch carries the short label and keeps it on one line.
+    // 730: the screenshot switch is gone from Settings (it lives in the expert menu).
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
       if (document.getElementById('settings-main').classList.contains('hidden')) {
         await click('expert-back');
         await sleep(50);
       }
-      const span730 = document.querySelector('#opt-screenshot-folder').closest('label').querySelector('span');
-      if (span730.textContent.trim() !== 'Always save screenshots') out.errors.push('730: the screenshot switch reads "' + span730.textContent.trim() + '"');
-      const range730 = document.createRange();
-      range730.selectNodeContents(span730);
-      if (range730.getClientRects().length !== 1) out.errors.push('730: the screenshot switch label wraps at ' + window.innerWidth + 'px');
+      if (document.getElementById('opt-screenshot-folder')) out.errors.push('730: the screenshot switch is still on the Settings page');
     }
     // 96: the short "Latest X.Y.Z" status keeps the first update line no taller than
     // before, with the longest of the 11 translations (Romanian).
@@ -180,8 +176,8 @@ SECTION = """\
         if (btns725[btns725.length - 1] !== del) out.errors.push('725: delete-data is not the last button of the settings page');
         const titles725 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
           .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-        if (titles725.length !== 6 || titles725[5] !== 'Reset and delete') {
-          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected six ending in Reset and delete');
+        if (titles725.length !== 5 || titles725[4] !== 'Reset and delete') {
+          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected five ending in Reset and delete');
         }
       }
     }

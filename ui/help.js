@@ -35,7 +35,7 @@ export const HELP_CONTENT = {
         "Pick the language, the theme, and the text size and font of the tiles.",
         "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background when closed.",
         "A portable copy always quits when closed instead of going to the background.",
-        "Set auto-paste on double-click, whether screenshots always go to the screenshots folder (section Capture), and open the list of all shortcuts.",
+        "Set auto-paste on double-click and open the list of all shortcuts.",
       ],
       whatHappens:
         "Every change applies at once, with no save button. \"Automatic\" as the language follows Windows and falls back to English. Reset puts every setting back to its default and keeps the tiles; Delete removes all data and asks first.",
@@ -304,7 +304,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "The app's own windows are hidden for the moment of capture so they never end up in the shot. The result reaches the clipboard immediately; saving it as a tile or file is a separate, optional step. Saving into the screenshots folder never replaces an existing file; it takes the next free name.",
-      settings: ["Screenshot tool, save location, format and quality, capture delay: Expert menu → Capture → Screenshot", "Always save screenshots: Settings"],
+      settings: ["Screenshot tool, save location, format and quality, capture delay: Expert menu → Capture → Screenshot", "Always save screenshots: Expert menu → Capture → Screenshot"],
     },
     {
       section: "capture",
@@ -769,7 +769,7 @@ export const HELP_CONTENT = {
         "Sprache, Design sowie Textgröße und Schriftart der Kacheln wählen.",
         "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt.",
         "Eine portable Kopie beendet sich beim Schließen immer, statt in den Hintergrund zu gehen.",
-        "Auto-Einfügen bei Doppelklick, das Speichern von Screenshots im Screenshots-Ordner (Abschnitt „Aufnehmen“) und die Liste aller Tastenkürzel einstellen.",
+        "Auto-Einfügen bei Doppelklick einstellen und die Liste aller Tastenkürzel öffnen.",
       ],
       whatHappens:
         "Jede Änderung gilt sofort, ohne Speichern-Button. „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück. Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln; Löschen entfernt alle Daten und fragt vorher nach.",
@@ -1041,7 +1041,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die eigenen Fenster der App werden für den Moment der Aufnahme ausgeblendet, sodass sie nie im Bild landen. Das Ergebnis erreicht sofort die Zwischenablage; das Speichern als Kachel oder Datei ist ein separater, optionaler Schritt. Beim Speichern im Screenshots-Ordner wird nie eine vorhandene Datei ersetzt; die Aufnahme bekommt den nächsten freien Namen.",
-      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Aufnahmeverzögerung: Expertenmenü → Aufnehmen → Screenshot", "Screenshots immer speichern: Einstellungen"],
+      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Aufnahmeverzögerung: Expertenmenü → Aufnehmen → Screenshot", "Screenshots immer speichern: Expertenmenü → Aufnehmen → Screenshot"],
     },
     {
       section: "capture",

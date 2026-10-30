@@ -1535,7 +1535,7 @@ export default {
     clearField: "Golește",
     tipAutoPaste: "Faceți dublu clic pe un prompt pentru a-l copia ȘI lipi în ultima aplicație. Meniu expert: întârziere la lipire, viteza dublu clic și 'apăsați Enter după lipire'.",
     tipTooltips: "Afișați sfaturile instrument la trecerea mouse-ului. Meniu expert: întârziere afișare.",
-    tipScreenshotFolder: "Păstrați întotdeauna capturile de ecran ca fișiere în folderul Capturi de ecran. Meniu expert: dimensiune previzualizare și folder personalizat pentru salvare.",
+    tipScreenshotSave: "Păstrați întotdeauna capturile de ecran ca fișiere în folderul Capturi de ecran.",
     tipClipWatcher: "Adună textul copiat în altă parte într-o cutie, gata să devină un prompt.",
     tipClipSkipSecrets: "Doar o presupunere, nimic mai mult: textul care arată ca o parolă (o singură linie, fără spații, un amestec de litere/cifre/simboluri) nu ajunge niciodată în casetă. În caz de îndoială, copia este mereu omisă, în loc să riște păstrarea unei parole reale.",
     flagBackupGfs: "Păstrează backupuri zilnice, săptămânale, lunare și anuale",

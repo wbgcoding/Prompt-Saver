@@ -1542,7 +1542,7 @@ export default {
     clearField: "Leeren",
     tipAutoPaste: "Prompt doppelklicken zum Kopieren UND Einfügen in die zuletzt genutzte App. Expertenmenü: Einfüge-Verzögerung, Doppelklick-Tempo und „Nach Auto-Einfügen Enter drücken“.",
     tipTooltips: "Kurzinfos beim Überfahren anzeigen. Expertenmenü: Anzeige-Verzögerung.",
-    tipScreenshotFolder: "Screenshots immer als Datei im Screenshots-Ordner behalten. Expertenmenü: Vorschaugröße und eigener Speicherordner.",
+    tipScreenshotSave: "Screenshots immer als Datei im Screenshots-Ordner behalten.",
     tipClipWatcher: "Sammelt anderswo kopierten Text in einem Eingang, bereit als Prompt gespeichert zu werden.",
     tipClipSkipSecrets: "Nur eine Vermutung, nicht mehr: Text, der wie ein Passwort aussieht (eine Zeile, kein Leerzeichen, Buchstaben-/Zahlen-/Zeichen-Mix), landet nie im Eingang. Im Zweifel wird die Kopie immer übersprungen, statt ein echtes Passwort zu riskieren.",
     flagBackupGfs: "Tages-, Wochen-, Monats- und Jahressicherungen behalten",

@@ -40,7 +40,6 @@ export const SETTINGS_DIRECTORY = [
   { key: "opt-startmin", area: "normal", label: "startMinimized", when: () => $("opt-autostart").checked },
   { key: "opt-autopaste", area: "normal", label: "autoPasteSetting", tip: "tipAutoPaste" },
   { key: "opt-tooltips", area: "normal", label: "showTooltips", tip: "tipTooltips" },
-  { key: "opt-screenshot-folder", area: "normal", label: "screenshotToFolder", tip: "tipScreenshotFolder" },
   { key: "opt-favview", area: "normal", label: "favViewTitle", tip: "favViewOption" },
   { key: "hotkey-list-btn", area: "normal", label: "hotkeysAllBtn", tip: "hotkeysAllTitle" },
   { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },

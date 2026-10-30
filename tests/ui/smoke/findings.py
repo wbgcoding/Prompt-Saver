@@ -1335,7 +1335,7 @@ def run(browser, tmp):
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
-    if (document.getElementById('opt-hotkey') || document.getElementById('opt-voice-hotkey')) errs.push('908: Settings still holds a hotkey input');
+    if (document.querySelector('#settings-main .hotkey-row')) errs.push('908: Settings still holds a hotkey input');
     document.getElementById('hotkey-list-btn').click();
     await sleep(250);
     const hk = document.querySelector('.hotkeys-row-global').closest('.hotkeys-row').querySelector('.modal-input');
@@ -1368,8 +1368,8 @@ def run(browser, tmp):
     }
     if (document.querySelector('.hotkey-row button.ghost-btn[id$="-clear"]')) errs.push('908: a text Clear button is still in the markup');
 """)
-    failed += ar_probe('bm909', 'settings: switches in two columns (one below 440px), screenshot saving in its own Capture section', 'index', '880x600', '', r"""
-    // 909: two switch columns (one when the dialog is narrower than 440px), the capture switch in a section of its own.
+    failed += ar_probe('bm909', 'settings: switches in two columns (one below 440px), screenshot saving gone from Settings', 'index', '880x600', '', r"""
+    // 909: two switch columns (one when the dialog is narrower than 440px); the screenshot switch lives in the expert menu now.
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
@@ -1380,13 +1380,34 @@ def run(browser, tmp):
       const want = document.querySelector('#settings .modal').clientWidth < 440 ? 1 : 2;
       if (tracks !== want) errs.push('909: a switch grid has ' + tracks + ' columns, expected ' + want);
     }
-    const cb = document.getElementById('opt-screenshot-folder');
-    const sec = cb && cb.closest('section');
-    if (!sec || sec.id !== 'settings-sec-capture') errs.push('909: the screenshot switch is not in the Capture section');
+    if (document.getElementById('opt-screenshot-folder') || document.getElementById('settings-sec-capture')) errs.push('909: the screenshot switch is still on the Settings page');
+""")
+    failed += ar_probe('bm909b', 'expert menu: the Screenshot group holds the save-to-folder switch and it stores screenshotSave', 'index', '880x600', '', r"""
+    // The switch moved here from Settings; toggling it must still write the same stored setting.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(250);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      row = document.querySelector('#settings-expert [data-setting-row="screenshotSave"]');
+      if (row && row.getBoundingClientRect().height) break;
+      row = null;
+    }
+    if (!row) errs.push('909b: the screenshotSave switch is not in the expert menu');
     else {
-      const r = sec.getBoundingClientRect();
-      if (!r.width || !r.height) errs.push('909: the Capture section is not visible');
-      if (!sec.querySelector('.settings-sec-title').textContent.trim()) errs.push('909: the Capture section has no title');
+      const grp = row.closest('.expert-group');
+      const title = grp && grp.querySelector('.expert-group-title-btn, .expert-group-title');
+      if (!title || !title.textContent.trim().startsWith('Screenshot')) errs.push('909b: the switch is not in the Screenshot group: ' + (title ? title.textContent.trim() : 'no group'));
+      const box = row.querySelector('input.switch');
+      const before = box.checked;
+      window.__SMOKE_ARGS__ = [];
+      box.click();
+      await sleep(400);
+      const calls = (window.__SMOKE_ARGS__ || []).filter(([cmd, a]) => cmd === 'set_ui_flag' && a && a.key === 'screenshotSave');
+      if (!calls.length || calls[calls.length - 1][1].enabled !== !before) errs.push('909b: toggling the switch did not store screenshotSave ' + (!before));
     }
 """)
     failed += ar_probe('bm910', 'settings: one Import button opens a menu with a file and a folder entry', 'index', '880x600', '', r"""

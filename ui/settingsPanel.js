@@ -1,5 +1,5 @@
 // Settings dialog: export and import, data wipe, scale presets, settings apply and reload.
-import { $, appVersion, armButton, assignSettings, DISARM_MS, disarmButton, errText, errToast, flag, invoke, LANG, libraryEl, LOCK_SVG, modal, optFlag, setLang, setLangSelect, setStatusText, settings, settingsEl, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, toast, val, withTaskbarBusy } from "./core.js";
+import { $, appVersion, armButton, assignSettings, DISARM_MS, disarmButton, errText, errToast, flag, invoke, LANG, libraryEl, LOCK_SVG, modal, setLang, setLangSelect, setStatusText, settings, settingsEl, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, toast, val, withTaskbarBusy } from "./core.js";
 import { confirmSecretExport, renderLibrary } from "./library.js";
 import { favViewEnabled, refreshFavViewUi, renderGrid, seedExamplesIfNeeded } from "./views.js";
 import { applyBars, applyI18n, wireClearButtons } from "./windowChrome.js";
@@ -510,7 +510,6 @@ export function bindSettingsPanel() {
       errToast(err);
     }
   });
-  $("opt-screenshot-folder").addEventListener("change", (e) => persistFlagSwitch(e.target, "screenshotSave"));
   // Master tooltip switch (default on): off = no hover tooltips anywhere.
   $("opt-tooltips").addEventListener("change", (e) => persistFlagSwitch(e.target, "tooltipsEnabled"));
   // Auto-paste (default on): normal setting; enter-after stays in the expert menu.
@@ -739,7 +738,6 @@ export function syncSettingsControls() {
     fillThemeSelect();
     setLangSelect();
     $("opt-minimize").checked = settings.minimize_to_tray === true;
-    $("opt-screenshot-folder").checked = optFlag("screenshotSave");
     $("opt-tooltips").checked = flag("tooltipsEnabled");
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autostart").checked = settings.autostart === true;

@@ -38,8 +38,6 @@ NOT_IN_EXPERT = {
     "backupDaily", "backupWeekly", "backupMonthly", "backupYearly",
     # The statistics list length, rendered by renderStatsPanel.
     "statsTopN",
-    # Screenshot folder save: Settings page and the screenshot dialog.
-    "screenshotSave",
     # Interface size, set by the select on the normal settings page.
     "uiScale",
     # Remembered by the library's own Close-after-copy button.
@@ -317,7 +315,10 @@ for kind, known in (("flags", all_flags), ("values", values),
 # (a tag row needs both its own toggle AND the global tags flag) without
 # moving in beside it -- unlike a local flag (chainPrompts, promptHotkeys, ...)
 # whose only sensible dependents are its own immediate parameters.
-subsystem_toggles = {ks[0] for _, kinds, _, _ in groups for ks in [kinds.get("flags", [])] if len(ks) == 1}
+# A group also counts when its other flags are all gated on its first one (the
+# Screenshot group: the tool switch, then "always save" gated on it).
+subsystem_toggles = {ks[0] for _, kinds, _, _ in groups for ks in [kinds.get("flags", [])]
+                     if len(ks) == 1 or (ks and all(declared.get(k, "").lstrip("!") == ks[0] for k in ks[1:]))}
 
 for key, gate in sorted(declared.items()):
     parent = gate.lstrip("!")

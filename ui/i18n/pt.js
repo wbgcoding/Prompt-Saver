@@ -1535,7 +1535,7 @@ export default {
     clearField: "Limpar",
     tipAutoPaste: "Clique duas vezes em um prompt para copiar E colar no seu último aplicativo. Menu de especialista: atraso ao colar, velocidade do clique duplo e 'pressionar Enter após colar'.",
     tipTooltips: "Mostrar dicas ao passar o mouse. Menu de especialista: atraso de exibição.",
-    tipScreenshotFolder: "Sempre manter capturas de tela como arquivos na pasta Capturas de tela. Menu de especialista: tamanho da visualização e uma pasta de salvamento personalizada.",
+    tipScreenshotSave: "Sempre manter capturas de tela como arquivos na pasta Capturas de tela.",
     tipClipWatcher: "Recolhe o texto que você copia em outros lugares em uma caixa, pronto para virar um prompt.",
     tipClipSkipSecrets: "Apenas um palpite, nada mais: um texto que parece uma senha (uma linha, sem espaços, mistura de letras, números e símbolos) nunca é adicionado à entrada. Na dúvida, a cópia é sempre ignorada, em vez de arriscar guardar uma senha de verdade.",
     flagBackupGfs: "Manter cópias diárias, semanais, mensais e anuais",
