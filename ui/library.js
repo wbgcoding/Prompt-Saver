@@ -1424,14 +1424,14 @@ export async function copyResolved(p) {
     // without it the Auto switch would do nothing on this path, unlike the floating buttons
     // (which copy through copy_prompt).
     const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
-    return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch(() => false), {
+    return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch((e) => { errToast(e); return false; }), {
       resolve: (raw) => (varTokens(p, raw).length ? resolveVars(raw) : raw),
     });
   }
   if (varTokens(p).length) {
     const text = await resolveVars(p.text);
     if (text === null) return false;
-    return invoke("copy_text", { text }).catch(() => false);
+    return invoke("copy_text", { text }).catch((e) => { errToast(e); return false; });
   }
   return invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
 }
