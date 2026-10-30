@@ -433,6 +433,23 @@ fn the_clipboard_file_and_its_previews_check_the_path_text_first() {
 }
 
 #[test]
+fn the_recording_commands_check_the_path_text_before_they_open_it() {
+    let media = source!("../media_files.rs");
+    for sig in ["fn save_recording_as(", "fn save_recording_now(", "fn copy_recording_to_clipboard("] {
+        let body = fn_body(&media, sig);
+        assert!(body.contains("is_foreign_network_path(&src_path"), "{sig} asks the own-dir rule");
+        assert_text_check_first(body, sig, &[".is_file()", "spawn_blocking", "place_in_dir("]);
+    }
+    let discard = fn_body(&media, "fn discard_recording_file_in(");
+    assert_text_check_first(discard, "discard_recording_file_in", &["and_then(|d| d.canonicalize()", "path.is_file()"]);
+    assert!(discard.contains("is_foreign_network_path("));
+    let camera = source!("../camera.rs");
+    let at = camera.find("pub fn read_camera_sidecar(").unwrap();
+    assert!(camera[..at].trim_end().ends_with("#[tauri::command(async)]"), "off the main thread");
+    assert_text_check_first(fn_body(&camera, "pub fn read_camera_sidecar("), "read_camera_sidecar", &["read_sidecar("]);
+}
+
+#[test]
 fn the_editor_commands_check_the_path_text_before_they_open_it() {
     let video = source!("../video_editor.rs");
     for sig in [

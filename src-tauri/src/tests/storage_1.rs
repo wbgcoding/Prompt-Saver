@@ -270,6 +270,15 @@ fn discard_recording_file_in_moves_into_verworfen_instead_of_deleting() {
 }
 
 #[test]
+fn discard_refuses_a_share_path_on_its_text() {
+    // The refusal comes from the path text alone; nothing here asks the network anything.
+    let foreign = [std::env::temp_dir()];
+    for p in [r"\\nas.invalid\share\rec-1.mp4", "//nas.invalid/share/rec-1.mp4", r"\\?\UNC\nas.invalid\share\rec-1.mp4"] {
+        assert!(discard_recording_file_in(&foreign, Path::new(p)).is_none(), "{p}");
+    }
+}
+
+#[test]
 fn a_discarded_recording_starts_its_keep_window_at_the_discard() {
     let dir = std::env::temp_dir().join(format!("ps-discard-clock-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

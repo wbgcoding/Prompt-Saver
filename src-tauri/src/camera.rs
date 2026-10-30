@@ -371,8 +371,13 @@ pub fn read_sidecar(path: &Path) -> Option<CamSidecar> {
 
 // The editor's counterpart to keylog's read_key_sidecar: the durable source of truth for a
 // camera take's start, read by addAlignedCameraOverlay in ui/videoOverlays.js.
-#[tauri::command]
-pub fn read_camera_sidecar(path: String) -> Option<CamSidecar> {
+#[tauri::command(async)]
+pub fn read_camera_sidecar(app: AppHandle, state: State<'_, Db>, path: String) -> Option<CamSidecar> {
+    // A network spelling is refused on its text, before the read would contact the host; a
+    // recording folder that is itself a share keeps working.
+    if crate::paths::is_foreign_network_path(&path, &crate::media_files::own_storage_dirs(&app, &state)) {
+        return None;
+    }
     read_sidecar(Path::new(&path))
 }
 

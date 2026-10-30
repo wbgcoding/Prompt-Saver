@@ -545,6 +545,10 @@ pub(crate) fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std:
 // frontend updates its pending path afterwards so a later Attach/Copy still finds the file.
 #[tauri::command]
 pub(crate) async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&src_path, &own_storage_dirs(&app, &state)) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
@@ -766,6 +770,10 @@ pub(crate) async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Op
 // save_recording_as keeps the free dialog for everything else.
 #[tauri::command]
 pub(crate) async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<String, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&src_path, &own_storage_dirs(&app, &state)) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
@@ -793,6 +801,10 @@ pub(crate) async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src
 // action would fail with "file not found" although the recording still exists at `dest`.
 #[tauri::command]
 pub(crate) async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&src_path, &own_storage_dirs(&app, &state)) {
+        return Err("source-not-allowed".to_string());
+    }
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
@@ -927,6 +939,11 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     // sets recSavedOrAttached first, taking the file out of discard's reach.
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if !name.starts_with("rec-") {
+        return None;
+    }
+    // A network spelling is refused on its text, before canonicalize() would contact the host;
+    // a recording folder that is itself a share keeps working.
+    if is_foreign_network_path(&path.to_string_lossy(), allowed) {
         return None;
     }
     let parent = path.parent().and_then(|d| d.canonicalize().ok())?;
