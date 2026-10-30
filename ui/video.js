@@ -117,6 +117,7 @@ export const VE = {
   w: 0,
   h: 0,
   pendingScaleKey: null, // a scale preset waiting on VE.w/VE.h from applyProbe()
+  scaleDefaultKey: "", // the saved default export scale, re-armed for every loaded source
   ops: [],
   redo: [],
   floor: 0,             // undo may not walk back past this index
@@ -1503,6 +1504,20 @@ function currentScalePresetKey() {
   return null;
 }
 
+// The saved default scale is the starting state of a freshly loaded source, not an edit: it is
+// locked below the undo floor and leaves the editor clean, so opening and closing a recording
+// untouched asks nothing, stores no edit state and one Undo cannot silently drop it.
+export function applyDefaultScale(key) {
+  const pristine = !VE.dirty && !VE.ops.length;
+  applyScalePresetKey(key);
+  if (!pristine) return;
+  VE.floor = VE.ops.length;
+  VE.redo = [];
+  VE.dirty = false;
+  $("ve-undo").disabled = true;
+  $("ve-redo").disabled = true;
+}
+
 export function applyScalePresetKey(key) {
   if (!key) { setScaleOp(null, null); return; }
   const keyNum = Number(key);
@@ -2283,6 +2298,8 @@ export function resetForNewSource() {
   VE.peaks = { 0: null, 1: null };
   VE.playhead = 0;
   VE.dirty = false;
+  // The saved default scale applies to every source, not only the first one the window loads.
+  VE.pendingScaleKey = VE.scaleDefaultKey || null;
   VE.lastExport = "";
   // A full manual "Save as…" path (or typed file name) names this source's file, so a newly
   // loaded video starts fresh with both; the remembered destination folder (VE.destDir) is a
@@ -2387,8 +2404,9 @@ export function applySettings(settings) {
   // consumed once they are known. A scale op the user (or an earlier default) already set is
   // left alone, like the fade-default guard below.
   const scaleDef = texts.videoExportScale ?? "";
+  VE.scaleDefaultKey = scaleDef;
   if (!opOf("scale")) {
-    if (VE.w && VE.h) applyScalePresetKey(scaleDef);
+    if (VE.w && VE.h) applyDefaultScale(scaleDef);
     else VE.pendingScaleKey = scaleDef;
   }
   VE.destDir = texts.videoExportDir || "";

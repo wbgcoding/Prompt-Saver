@@ -2,7 +2,7 @@
 // interrupted edit reopens where it was left.
 import { confirmDialog } from "./dialog.js";
 import { noteFfmpeg } from "./videoExport.js";
-import { $, afterOpsChanged, applyScalePresetKey, convertFileSrc, fitZoom, fmtTime, invoke, layoutTrack, loadStrip, resetForNewSource, scheduleWaves, setZoom, t, textsReady, toast, TXT_READY, updateAudioLabels, VE, videoEl } from "./video.js";
+import { $, afterOpsChanged, applyDefaultScale, convertFileSrc, fitZoom, fmtTime, invoke, layoutTrack, loadStrip, resetForNewSource, scheduleWaves, setZoom, t, textsReady, toast, TXT_READY, updateAudioLabels, VE, videoEl } from "./video.js";
 import { addAlignedCameraOverlay, renderClipList, renderOverlayList } from "./videoOverlays.js";
 import { renderRects } from "./videoPreview.js";
 
@@ -197,7 +197,10 @@ export async function loadRecording(path, originDir, overlayPath) {
   }
   $("ve-stage-msg").classList.add("hidden");
   setZoom(fitZoom());
+  // Only a refresh of the panels: a default scale applied by applyProbe leaves the editor clean.
+  const dirtyBefore = VE.dirty;
   afterOpsChanged();
+  VE.dirty = dirtyBefore;
   loadStrip();
   scheduleWaves();
   await checkEditState(path, myGen);
@@ -225,7 +228,7 @@ export function applyProbe(probe) {
   // Deferred from applySettings(), which ran before VE.w/VE.h were known --
   // consumed once here so the loadedmetadata fallback re-entry never re-applies it.
   if (VE.pendingScaleKey != null) {
-    applyScalePresetKey(VE.pendingScaleKey);
+    applyDefaultScale(VE.pendingScaleKey);
     VE.pendingScaleKey = null;
   }
 

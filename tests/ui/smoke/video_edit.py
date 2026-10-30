@@ -418,6 +418,20 @@ def run(browser, tmp):
     window.__STUB_DELAY_MS__ = {};
     """)
 
+    # 4040: a saved default export scale is the starting state of every loaded source, not an edit.
+    failed += vprobe('defscale', 'a saved default scale leaves the editor clean and applies to each source', r"""
+    // 4040: default export scale.
+    const scaleOps = () => VE.ops.filter((o) => o.tool === 'scale');
+    if (scaleOps().length !== 1) errs.push('4040: the saved default scale was not applied (' + scaleOps().length + ' scale ops)');
+    if (VE.dirty) errs.push('4040: applying the saved default marked the editor as edited');
+    if (!document.getElementById('ve-undo').disabled) errs.push('4040: Undo is enabled for the saved default scale');
+    const { loadRecording } = await import('./videoLoad.js');
+    await loadRecording('C:/Temp/second.mp4', '', '');
+    await sleep(300);
+    if (scaleOps().length !== 1) errs.push('4040: a second recording got ' + scaleOps().length + ' scale ops, want the default');
+    if (VE.dirty) errs.push('4040: the second recording starts out edited');
+    """, pre='<script>window.__SEED_UI_TEXTS__ = {"videoExportScale": "720"};</script>\n')
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);
