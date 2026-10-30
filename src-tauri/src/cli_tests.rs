@@ -1322,6 +1322,28 @@ fn a_drive_relative_path_is_refused_not_resolved_in_another_directory() {
     assert_eq!(out.code, 1, "{}", out.stderr);
 }
 
+// ---- delete while the Markdown folder sync is on ----
+
+#[test]
+fn delete_owes_the_sync_folder_a_marker_only_while_sync_is_on() {
+    let tmp = TempDir::new("delete-sync");
+    let mut store = fixture_store();
+    let id = store.prompts[0].id.clone();
+    let other = store.prompts[1].id.clone();
+    let out = run_cmd(&mut store, tmp.path(), &["delete", &other, "--yes"]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(store.settings.sync_trash_marks.is_empty(), "no marker with the feature off");
+
+    store.settings.ui_flags.insert("promptSync".to_string(), true);
+    let out = run_cmd(&mut store, tmp.path(), &["delete", &id, "--yes"]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(
+        store.settings.sync_trash_marks.get(&id),
+        Some(&0),
+        "a delete run without the app must leave the debt that stops the next start bringing the prompt back"
+    );
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]

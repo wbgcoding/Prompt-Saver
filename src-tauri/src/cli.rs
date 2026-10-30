@@ -1464,6 +1464,10 @@ fn cmd_delete(store: &mut Store, id: &str) -> Outcome {
     };
     let mut p = store.prompts.remove(pos);
     p.trashed_at = crate::now_secs();
+    // With Markdown folder sync on, the app owes the folder a delete marker. Run without the app
+    // there is no sweep to write it, so the debt is kept in the settings: the next start then knows
+    // the file left in the folder is this delete's leftover and does not bring the prompt back.
+    crate::md_sync::sync_owe_marker(&mut store.settings, &p);
     store.trash.insert(0, p);
     for view in &mut store.settings.views {
         for layout in view.layouts.values_mut() {
