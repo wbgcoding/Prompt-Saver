@@ -1268,3 +1268,13 @@ fn read_import_folder_file_drops_a_byte_order_mark() {
     assert_eq!((text.as_str(), note.as_str()), ("Body text", "Title"));
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn csv_round_trip_keeps_text_that_starts_with_an_apostrophe_and_a_formula_char() {
+    for text in ["'- quoted list", "'@user", "''=x", "=SUM(A1)", "-5", "'plain", "''plain", "plain"] {
+        let rows = parse_csv(&csv_row(&[text, "b"]));
+        assert_eq!(rows, vec![vec![text.to_string(), "b".to_string()]], "round trip of {text:?}");
+    }
+    // A file written before this rule guarded only real formula starts with one quote.
+    assert_eq!(parse_csv("\"'=1+1\";\"'x\"")[0], vec!["=1+1".to_string(), "'x".to_string()]);
+}

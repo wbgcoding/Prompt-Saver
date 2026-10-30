@@ -2,11 +2,18 @@ use super::*;
 
 // ---------- Import / export ----------
 
+// True when the text, after any leading apostrophes, starts with a formula character. The
+// exporter adds one apostrophe to such a cell and the importer removes exactly one, so text
+// that already begins with `'-` or `'@` survives the round trip.
+fn starts_with_guarded_char(s: &str) -> bool {
+    matches!(s.trim_start_matches('\'').as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'))
+}
+
 pub(crate) fn csv_cell(s: &str) -> String {
     // CSV formula injection: a cell starting with =, +, -, @ or a tab is read as a
     // formula by Excel/LibreOffice once reopened: CSV-quoting only protects the
     // CSV syntax, not spreadsheet evaluation. A leading single quote forces text.
-    let needs_prefix = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'));
+    let needs_prefix = starts_with_guarded_char(s);
     let s = if needs_prefix { format!("'{s}") } else { s.to_string() };
     format!("\"{}\"", s.replace('"', "\"\""))
 }
@@ -504,15 +511,14 @@ pub(crate) async fn export_prompts(
     }
 }
 
-// Reverses csv_cell's formula-injection guard: a field re-quoted with a leading `'` in
-// front of =, +, -, @, tab or CR gets that quote stripped, so a round trip never gains a
-// stray character.
+// Reverses csv_cell's formula-injection guard: a field that is a leading `'` plus text
+// starting (after any further apostrophes) with =, +, -, @, tab or CR gets that one quote
+// stripped, so a round trip never gains or loses a character.
 pub(crate) fn strip_formula_guard(s: String) -> String {
-    let mut chars = s.chars();
-    if chars.next() == Some('\'') && matches!(chars.next(), Some('=' | '+' | '-' | '@' | '\t' | '\r')) {
-        return s[1..].to_string();
+    match s.strip_prefix('\'') {
+        Some(rest) if starts_with_guarded_char(rest) => rest.to_string(),
+        _ => s,
     }
-    s
 }
 
 // Minimal CSV reader for our own export format (quoted fields, ';' delimiter).
