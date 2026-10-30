@@ -1276,6 +1276,34 @@ fn a_show_ping_answer_counts_only_when_the_main_thread_was_reached() {
     assert!(!show_ping_proves_life(b""));
 }
 
+// ---- output to a reader that has gone ----
+
+struct GoneReader(i32);
+
+impl std::io::Write for GoneReader {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::from_raw_os_error(self.0))
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::Error::from_raw_os_error(self.0))
+    }
+}
+
+#[test]
+fn output_to_a_closed_pipe_is_dropped_instead_of_panicking() {
+    // 232 = ERROR_NO_DATA (the pipe is being closed), 109 = ERROR_BROKEN_PIPE
+    for code in [232, 109] {
+        write_ignoring_closed_pipe(&mut GoneReader(code), format_args!("a prompt\n"));
+    }
+}
+
+#[test]
+fn output_to_a_working_writer_arrives_whole() {
+    let mut buf: Vec<u8> = Vec::new();
+    write_ignoring_closed_pipe(&mut buf, format_args!("{} {}", "a", 1));
+    assert_eq!(buf, b"a 1");
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]

@@ -1,5 +1,32 @@
 use super::*;
 
+// ---------- Output ----------
+
+// print! and eprint! panic when the reader of a pipe has gone (`list | head -1`, a parent that
+// stopped reading): the process then dies with a panic message and exit 101, often after a change
+// was already committed. A reader that left is not an error of the command, so a failed write is
+// dropped and the real exit code stands.
+pub(super) fn write_ignoring_closed_pipe(w: &mut impl std::io::Write, args: std::fmt::Arguments) {
+    let _ = w.write_fmt(args);
+    let _ = w.flush();
+}
+
+pub(super) fn out(args: std::fmt::Arguments) {
+    write_ignoring_closed_pipe(&mut std::io::stdout().lock(), args);
+}
+
+pub(super) fn err(args: std::fmt::Arguments) {
+    write_ignoring_closed_pipe(&mut std::io::stderr().lock(), args);
+}
+
+pub(super) fn outln(args: std::fmt::Arguments) {
+    out(format_args!("{args}\n"));
+}
+
+pub(super) fn errln(args: std::fmt::Arguments) {
+    err(format_args!("{args}\n"));
+}
+
 // ---------- Standalone caller (nothing is running) ----------
 
 // How much of the store a headless load could actually read. A store that is not fully readable
@@ -71,13 +98,13 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     let parsed = match parse(argv) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("{e}");
+            errln(format_args!("{e}"));
             return 1;
         }
     };
     let cmd = match parsed {
         Parsed::Help(text) => {
-            println!("{text}");
+            outln(format_args!("{text}"));
             return 0;
         }
         Parsed::Run(cmd) => cmd,
@@ -87,7 +114,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         return 0;
     }
     if matches!(cmd, Cmd::Describe) {
-        println!("{}", describe_json());
+        outln(format_args!("{}", describe_json()));
         return 0;
     }
     let dir = resolve_dir();
@@ -103,34 +130,34 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     // Before the restore arm: a restore replaces the whole database, so a store another machine
     // holds locked must be refused for it like for every other change.
     if writes_data_folder(&cmd) && crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
-        eprintln!("the data folder is locked by another machine right now\n");
+        errln(format_args!("the data folder is locked by another machine right now\n"));
         return 3;
     }
 
     if let Cmd::BackupRestore { name, keep, scope, confirmed } = &cmd {
         if !confirmed {
-            eprintln!("refused: {}. Pass --yes to actually do it.", dry_run_description(&cmd));
+            errln(format_args!("refused: {}. Pass --yes to actually do it.", dry_run_description(&cmd)));
             return 4;
         }
         let keep = keep.unwrap_or_else(|| default_keep(&store.settings));
         return match restore_backup_standalone(&dir, name, keep, scope, &store.settings) {
             Ok(()) => {
-                println!("restored backup {name}");
+                outln(format_args!("restored backup {name}"));
                 0
             }
             Err(e) => {
-                eprintln!("{e}");
+                errln(format_args!("{e}"));
                 map_restore_err_code(&e)
             }
         };
     }
 
     if is_mutating(&cmd) && store.prompts_locked {
-        eprintln!("the store has rows that failed to decrypt; writes are refused until that is resolved\n");
+        errln(format_args!("the store has rows that failed to decrypt; writes are refused until that is resolved\n"));
         return 3;
     }
     if let Some(msg) = unreadable_store_message(&cmd, store.prompts_locked, health.settings_ok) {
-        eprint!("{msg}");
+        err(format_args!("{msg}"));
         return 3;
     }
 
@@ -141,7 +168,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         Some(("autostart", Ok(_))) => match crate::autostart_command() {
             Ok(entry) => Some(entry),
             Err(e) => {
-                eprintln!("the Windows entry could not be read: {e}\n");
+                errln(format_args!("the Windows entry could not be read: {e}\n"));
                 return 3;
             }
         },
@@ -150,7 +177,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     let outcome = exec(&mut store, &dir, &cmd, cwd);
     if outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings {
         let Some(mut conn) = db_conn_at(&dir) else {
-            eprintln!("could not open the store to save the change\n");
+            errln(format_args!("could not open the store to save the change\n"));
             return 3;
         };
         // Reuses the map load_store_headless() populated from the table, not an empty one:
@@ -166,7 +193,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         };
         let settings_ok = if outcome.mutated_settings { db_write_settings(&conn, &store.settings).is_ok() } else { true };
         if !write_ok || !settings_ok {
-            eprintln!("the write did not reach the database\n");
+            errln(format_args!("the write did not reach the database\n"));
             return 3;
         }
         // Nothing is running to do it, so the Run entry is brought in line here.
@@ -185,26 +212,26 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
                     }
                     store.settings.autostart = prior_autostart;
                     let restored = db_write_settings(&conn, &store.settings).is_ok();
-                    eprintln!(
+                    errln(format_args!(
                         "the Windows entry could not be changed{}: {e}\n",
                         if restored { "" } else { " and the setting could not be put back" }
-                    );
+                    ));
                     return 3;
                 }
             }
         }
     }
     if !outcome.stdout.is_empty() {
-        print!("{}", outcome.stdout);
+        out(format_args!("{}", outcome.stdout));
     }
     if !outcome.stderr.is_empty() {
-        eprint!("{}", outcome.stderr);
+        err(format_args!("{}", outcome.stderr));
     }
     outcome.code
 }
 
 pub(super) fn print_version() {
-    println!("{} {}", crate::brand::DISPLAY_NAME, env!("CARGO_PKG_VERSION"));
+    outln(format_args!("{} {}", crate::brand::DISPLAY_NAME, env!("CARGO_PKG_VERSION")));
 }
 
 // ---------- Already-running caller ----------

@@ -84,7 +84,7 @@ pub(crate) fn dispatch_from_launch_args() -> Option<i32> {
     let argv = match launch {
         LaunchArgs::Cli(argv) => argv,
         _ => {
-            eprintln!("an argument is not valid text");
+            errln(format_args!("an argument is not valid text"));
             return Some(1);
         }
     };
@@ -238,14 +238,14 @@ async fn try_forward_at(name: &str, busy_wait: std::time::Duration, argv: &[Stri
             Err(e) => match classify_open_failure(e.raw_os_error()) {
                 OpenFailure::Busy => {
                     if std::time::Instant::now() >= deadline {
-                        eprintln!("prompt-saver: the running instance is busy and did not accept the command within 5 seconds");
+                        errln(format_args!("prompt-saver: the running instance is busy and did not accept the command within 5 seconds"));
                         return Some(3);
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
                 OpenFailure::NoInstance => return None,
                 OpenFailure::Unreachable => {
-                    eprintln!("prompt-saver: could not reach the running instance: {e}");
+                    errln(format_args!("prompt-saver: could not reach the running instance: {e}"));
                     return Some(3);
                 }
             },
@@ -261,25 +261,25 @@ async fn try_forward_at(name: &str, busy_wait: std::time::Duration, argv: &[Stri
     match exchange(&mut client, &bytes, FORWARD_HANDOFF, FORWARD_RESULT_WAIT).await {
         Forwarded::Answer(resp) => {
             if !resp.stdout.is_empty() {
-                print!("{}", resp.stdout);
+                out(format_args!("{}", resp.stdout));
             }
             if !resp.stderr.is_empty() {
-                eprint!("{}", resp.stderr);
+                err(format_args!("{}", resp.stderr));
             }
             Some(resp.code)
         }
         // The running instance never took the request, so nothing ran: the store is unreachable from
         // here for now, like a foreign machine's fresh data-dir lock (exit 3).
         Forwarded::NotHandedOver => {
-            eprintln!("prompt-saver: the running instance did not accept the command within 5 seconds");
+            errln(format_args!("prompt-saver: the running instance did not accept the command within 5 seconds"));
             Some(3)
         }
         Forwarded::Closed => {
-            eprintln!("prompt-saver: the running instance closed the connection without an answer; the command may or may not have run");
+            errln(format_args!("prompt-saver: the running instance closed the connection without an answer; the command may or may not have run"));
             Some(3)
         }
         Forwarded::TimedOut => {
-            eprintln!("prompt-saver: no result after 10 minutes; the command may still be running in the running instance");
+            errln(format_args!("prompt-saver: no result after 10 minutes; the command may still be running in the running instance"));
             Some(3)
         }
     }
