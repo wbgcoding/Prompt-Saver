@@ -2487,5 +2487,18 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
     if (noDevice.classList.contains('hidden')) errs.push('cam4b: the flag was not asked for');
     if (!startBtn.disabled) errs.push('cam4b: Start is enabled without a handler');
 """)
+    failed += ar_probe('ocrconv', 'recording dialog: a job-tagged progress tick from the video editor does not move the converting status', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_texts: { recFormat: "webm" } };</script>\n', r"""
+    await bootReady();
+    const $ = (id) => document.getElementById(id);
+    window.__STUB_DELAY_MS__ = { convert_recording: 900 };
+    window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' });
+    await until(() => visible($('rec-modal')) && /Converting/.test($('rec-modal-status').textContent), 60);
+    window.__FIRE__('recording-convert-progress', { ms: 3200 });
+    await sleep(60);
+    if (!$('rec-modal-status').textContent.includes('3s')) errs.push('ocrconv: fixture: an untagged tick did not reach the status, got ' + JSON.stringify($('rec-modal-status').textContent));
+    window.__FIRE__('recording-convert-progress', { job: 'export', ms: 41000 });
+    await sleep(60);
+    if ($('rec-modal-status').textContent.includes('41s')) errs.push('ocrconv: the editor export tick moved the converting status: ' + JSON.stringify($('rec-modal-status').textContent));
+""")
     # ---- main window findings: generated block end ----
     return failed

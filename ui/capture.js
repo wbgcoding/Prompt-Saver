@@ -424,6 +424,9 @@ export function bindCapture() {
     recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_convert").catch(() => {}); };
     recProgressOff = await listen("recording-convert-progress", (e) => {
       if (gen !== recGen) return;
+      // The video editor's own exports tag their ticks with a job; only this conversion's
+      // untagged ticks belong here.
+      if (e.payload?.job) return;
       secs = Math.floor((e.payload?.ms || 0) / 1000);
       showConverting();
     });
