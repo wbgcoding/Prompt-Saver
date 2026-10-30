@@ -74,6 +74,21 @@ pub(crate) fn parse_ffprobe_rate(s: &str) -> Option<f64> {
     if den == 0.0 { None } else { Some(num / den) }
 }
 
+// The size the picture has after the container's rotation is applied. ffmpeg's export graph and
+// the preview both autorotate, so a portrait phone clip stored as 1920x1080 + rotate 90 must be
+// reported as 1080x1920 or crop, overlay and clip coordinates land on transposed bounds.
+pub(crate) fn stream_display_size(video: &serde_json::Value) -> (u32, u32) {
+    let w = video["width"].as_u64().unwrap_or(0) as u32;
+    let h = video["height"].as_u64().unwrap_or(0) as u32;
+    let side = video["side_data_list"]
+        .as_array()
+        .and_then(|l| l.iter().find_map(|d| d["rotation"].as_f64().or_else(|| d["rotation"].as_str()?.parse().ok())));
+    let tag = || video["tags"]["rotate"].as_str().and_then(|r| r.trim().parse::<f64>().ok());
+    let rot = side.or_else(tag).unwrap_or(0.0);
+    let quarter = (rot / 90.0).round() as i64;
+    if (rot - quarter as f64 * 90.0).abs() < 1.0 && quarter.rem_euclid(2) == 1 { (h, w) } else { (w, h) }
+}
+
 pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe, String> {
     use std::os::windows::process::CommandExt;
     let mut cmd = std::process::Command::new(ffprobe);
@@ -93,8 +108,7 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
         .unwrap_or(0);
     let streams = json["streams"].as_array().cloned().unwrap_or_default();
     let video = streams.iter().find(|s| s["codec_type"] == "video");
-    let width = video.and_then(|v| v["width"].as_u64()).unwrap_or(0) as u32;
-    let height = video.and_then(|v| v["height"].as_u64()).unwrap_or(0) as u32;
+    let (width, height) = video.map(stream_display_size).unwrap_or((0, 0));
     let fps = video
         .and_then(|v| v["avg_frame_rate"].as_str())
         .and_then(parse_ffprobe_rate)
@@ -829,7 +843,19 @@ pub(crate) fn export_file_name_from(name: &str, fallback: &str) -> String {
 // every media file. Decided on text alone and before any fs call, so a refused UNC spelling
 // never makes this machine contact a host.
 pub(crate) fn export_request_paths_refused(own_dirs: &[PathBuf], dest_path: &str, media_paths: &[String]) -> bool {
-    is_foreign_network_path(dest_path, own_dirs) || media_paths.iter().any(|m| is_foreign_network_path(m, own_dirs))
+    export_request_refusal(own_dirs, dest_path, media_paths).is_some()
+}
+
+// The error text for the refused path: a destination keeps the folder-picker retry, while a
+// media file on another computer says so instead of sending the user to pick a folder.
+pub(crate) fn export_request_refusal(own_dirs: &[PathBuf], dest_path: &str, media_paths: &[String]) -> Option<&'static str> {
+    if is_foreign_network_path(dest_path, own_dirs) {
+        Some("export destination not recognized")
+    } else if media_paths.iter().any(|m| is_foreign_network_path(m, own_dirs)) {
+        Some("source-not-allowed")
+    } else {
+        None
+    }
 }
 
 pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
@@ -1037,8 +1063,8 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     if is_foreign_network_path(&req.src_path, &own_dirs) {
         return Err("source-not-allowed".to_string());
     }
-    if export_request_paths_refused(&own_dirs, &req.dest_path, &req.media_paths) {
-        return Err("export destination not recognized".to_string());
+    if let Some(refusal) = export_request_refusal(&own_dirs, &req.dest_path, &req.media_paths) {
+        return Err(refusal.to_string());
     }
     let src = PathBuf::from(&req.src_path);
     if !src.is_file() {
@@ -1078,7 +1104,7 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     push_bg_op(&app, &id, "export", "running", Some(0), Some(target.clone()));
     let result = tauri::async_runtime::spawn_blocking(move || {
         export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, move |ms| {
-            let _ = progress_app.emit("recording-convert-progress", ConvertProgressPayload { ms });
+            let _ = progress_app.emit("recording-convert-progress", ConvertProgressPayload { ms, job: Some("export") });
             let pct = ((ms as u64 * 100) / total_ms).min(100) as u32;
             push_bg_op(&progress_app, &progress_id, "export", "running", Some(pct), Some(progress_target.clone()));
         })
@@ -1131,11 +1157,14 @@ pub(crate) fn run_batch_job_blocking(
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(dest_path);
+    // A whole-recording export still carries the microphone, mixed into one stream as the
+    // editor's own copy does, because most players only play the first audio track.
+    let audio_map = if format == "gif" { None } else { batch_mic_graph(count_audio_streams(ffmpeg, &src), &src) };
     let req = ExportRequest {
         src_path: src_path.to_string(),
         dest_path: dest_path.to_string(),
         filter_chain: None,
-        audio_map: None,
+        audio_map,
         media_paths: Vec::new(),
         lossless_copy: false,
         copy_audio: CopyAudio::All,
@@ -1151,22 +1180,64 @@ pub(crate) fn run_batch_job_blocking(
     result
 }
 
-pub(crate) type ExportJoinHandle = tauri::async_runtime::JoinHandle<Result<String, String>>;
+// Counts the audio streams of a file from ffmpeg's own stream listing, so the batch needs no
+// ffprobe. 0 when the file cannot be read.
+pub(crate) fn count_audio_streams(ffmpeg: &Path, src: &Path) -> usize {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-hide_banner", "-i"]).arg(src);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::piped());
+    let Ok(output) = output_in_job(&mut cmd, Duration::from_secs(30)) else { return 0 };
+    count_audio_lines(&String::from_utf8_lossy(&output.stderr))
+}
+
+pub(crate) fn count_audio_lines(listing: &str) -> usize {
+    listing.lines().filter(|l| l.trim_start().starts_with("Stream #") && l.contains(": Audio:")).count()
+}
+
+// The audio graph of a batch item: the video's two tracks, or its one track plus the mic that
+// still sits in the recording's sidecar, mixed into [aout]. None leaves the audio as it is (no
+// mic anywhere). Only this recording's own sidecar is taken.
+pub(crate) fn batch_mic_graph(audio_streams: usize, src: &Path) -> Option<String> {
+    if audio_streams >= 2 {
+        return Some("[0:a:0][0:a:1]amix=inputs=2:normalize=0[aout]".to_string());
+    }
+    let sidecar = src.with_extension("mic.wav");
+    if !sidecar.is_file() || !is_own_mic_sidecar(src, &sidecar) {
+        return None;
+    }
+    // The same spelling the editor's graph uses for a path inside a filter option.
+    let path = sidecar.to_string_lossy().replace('\\', "/").replace(':', "\\:").replace('\'', "'\\\\\\''");
+    Some(match audio_streams {
+        0 => format!("amovie='{path}'[bmic];[bmic]anull[aout]"),
+        _ => format!("amovie='{path}'[bmic];[0:a:0][bmic]amix=inputs=2:normalize=0[aout]"),
+    })
+}
+
+pub(crate) type ExportJoinHandle =tauri::async_runtime::JoinHandle<Result<String, String>>;
 
 // Awaits one in-flight export and records its outcome in the bg-ops registry; shared by the
-// concurrency loop and the final drain.
-pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<bool, String> {
+// concurrency loop and the final drain. Some(true) finished, Some(false) failed, None was
+// cancelled by the user (neither a success nor a failure, as in export_video).
+pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<Option<bool>, String> {
     // A panicked export task fails that one item like any encode error does; the
     // rest of the batch still runs and the item's row does not stay "running".
     let res = handle.await.unwrap_or_else(|e| Err(e.to_string()));
     let ok = match &res {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);
-            true
+            Some(true)
+        }
+        Err(e) if e == "cancelled" => {
+            push_bg_op(&app, &id, "export", "done", None, None);
+            None
         }
         Err(_) => {
             push_bg_op(&app, &id, "export", "error", None, None);
-            false
+            Some(false)
         }
     };
     video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&generation);
@@ -1207,7 +1278,11 @@ pub(crate) async fn export_recordings_batch(
     for item in items {
         if in_flight.len() >= parallel {
             let (handle, id, generation, job_app) = in_flight.pop_front().unwrap();
-            if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
+            match await_batch_export(handle, id, generation, job_app).await? {
+                Some(true) => ok += 1,
+                Some(false) => failed += 1,
+                None => {}
+            }
         }
         // A quit that cancelled the running jobs must not see the next item start.
         if EXPORTS_CANCEL_EPOCH.load(Ordering::SeqCst) != cancel_epoch {
@@ -1250,7 +1325,11 @@ pub(crate) async fn export_recordings_batch(
         in_flight.push_back((handle, id, my_gen, app.clone()));
     }
     while let Some((handle, id, generation, job_app)) = in_flight.pop_front() {
-        if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
+        match await_batch_export(handle, id, generation, job_app).await? {
+            Some(true) => ok += 1,
+            Some(false) => failed += 1,
+            None => {}
+        }
     }
     Ok(BatchExportResult { ok, failed })
 }
@@ -1351,9 +1430,12 @@ pub(crate) fn export_video_blocking(
         // GIF carries no audio: never map or filter an audio stream into it, even if the frontend
         // sent one.
         let is_silent = req.format == "gif";
+        // libx264 and mpeg4 refuse an odd width or height, and only a crop or scale op evens the
+        // size, so an odd source with any other edit would fail every retry.
+        let needs_even = matches!(req.format.as_str(), "mp4" | "avi");
         let mut graphs = Vec::new();
         if let Some(v) = &req.filter_chain {
-            graphs.push(v.clone());
+            graphs.push(if needs_even { even_final_size(v) } else { v.clone() });
         }
         if !is_silent {
             if let Some(a) = &req.audio_map {
@@ -1369,6 +1451,9 @@ pub(crate) fn export_video_blocking(
         }
         output_args.push("-map".to_string());
         output_args.push(if req.filter_chain.is_some() { "[vout]".to_string() } else { "0:v".to_string() });
+        if needs_even && req.filter_chain.is_none() {
+            output_args.extend(["-vf".to_string(), EVEN_SIZE_FILTER.to_string()]);
+        }
         if !is_silent {
             output_args.push("-map".to_string());
             output_args.push(if req.audio_map.is_some() { "[aout]".to_string() } else { "0:a?".to_string() });
@@ -1419,6 +1504,18 @@ pub(crate) fn export_video_blocking(
     }
     let staged = staged?;
     place_staged_export(&staged, dst)
+}
+
+const EVEN_SIZE_FILTER: &str = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
+
+// Appends an even-size step after the graph's final [vout] label; a size that is already even
+// passes through untouched. A graph that does not end in [vout] is returned as it is.
+pub(crate) fn even_final_size(graph: &str) -> String {
+    let t = graph.trim_end().trim_end_matches(';');
+    match t.rfind("[vout]") {
+        Some(i) if i + "[vout]".len() == t.len() => format!("{}[vevenin];[vevenin]{EVEN_SIZE_FILTER}[vout]", &t[..i]),
+        _ => graph.to_string(),
+    }
 }
 
 // Moves a finished staged export to its final name. dest_path is the frontend's "<stem>.<ext>"

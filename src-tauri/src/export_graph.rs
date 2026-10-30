@@ -17,10 +17,10 @@ const EXPORT_GRAPH_FILTERS: [&str; 33] = [
 // Extensions a media file named by the request may have. Text-like extensions are
 // left out on purpose: ffmpeg decodes several of them (.txt, .nfo, .asc ...) into
 // pictures, which would turn a text file into video.
-const EXPORT_MEDIA_EXTS: [&str; 40] = [
+const EXPORT_MEDIA_EXTS: [&str; 46] = [
     "png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "apng", "avif", "mp4", "webm", "avi", "mov", "mkv", "m4v", "wmv", "flv",
     "mpg", "mpeg", "ts", "m2ts", "3gp", "ogv", "mp3", "wav", "m4a", "aac", "ogg", "oga", "opus", "flac", "wma", "mka", "aif", "aiff",
-    "mp2", "ac3", "ico", "jfif",
+    "mp2", "ac3", "ico", "jfif", "mts", "mxf", "vob", "m2v", "heic", "jxl",
 ];
 
 const WS: [char; 4] = [' ', '\n', '\t', '\r'];
@@ -116,21 +116,41 @@ fn parse_graph(graph: &str) -> Result<Vec<GraphFilter>, String> {
     }
 }
 
+// ffmpeg's own key reader: an option key is a run of plain characters, optionally framed by
+// blanks, that ends right at the `=`. Anything else in front of the `=` (an escaped drive colon,
+// a blank inside a word) makes the whole token a positional value, so the path
+// `C\:/clips/a=b.mp4` is a file name and not a key.
+fn is_key_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '/' | '.')
+}
+
+fn take_key(c: &[char], i: &mut usize) -> Option<String> {
+    let mut j = *i;
+    skip_ws(c, &mut j);
+    let start = j;
+    while j < c.len() && is_key_char(c[j]) {
+        j += 1;
+    }
+    let end = j;
+    skip_ws(c, &mut j);
+    if end == start || j >= c.len() || c[j] != '=' {
+        return None;
+    }
+    *i = j + 1;
+    Some(c[start..end].iter().collect())
+}
+
 // The filter's option string split the way ffmpeg splits it: `key=value` pairs and
-// shorthand values, separated by an unescaped colon (a key ends at the colon too).
+// shorthand values, separated by an unescaped colon.
 fn parse_filter_args(args: &str) -> Vec<(Option<String>, String)> {
     let c: Vec<char> = args.chars().collect();
     let mut i = 0usize;
     let mut out = Vec::new();
     while i < c.len() {
-        let start = i;
-        let key = av_token(&c, &mut i, &['=', ':']);
-        if !key.is_empty() && i < c.len() && c[i] == '=' {
-            i += 1;
+        if let Some(key) = take_key(&c, &mut i) {
             let val = av_token(&c, &mut i, &[':']);
             out.push((Some(key), val));
         } else {
-            i = start;
             let val = av_token(&c, &mut i, &[':']);
             out.push((None, val));
         }

@@ -432,6 +432,10 @@ pub(crate) static REC_CONVERT_CANCEL: AtomicBool = AtomicBool::new(false);
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct ConvertProgressPayload {
     pub(crate) ms: u32,
+    // Set by the editor's export, absent from a recording conversion: both share one event
+    // name, and a window that listens for just one of them filters on this.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -556,7 +560,7 @@ pub(crate) async fn convert_recording(
     let app_done = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         convert_recording_blocking(&ffmpeg, &src, &format, lossless, || REC_CONVERT_CANCEL.load(Ordering::SeqCst), |ms| {
-            let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms });
+            let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms, job: None });
         })
     })
     .await

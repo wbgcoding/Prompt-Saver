@@ -110,6 +110,12 @@ pub(crate) fn export_disk_warning(drive: String, free_bytes: u64, needed_bytes: 
 #[cfg(windows)]
 #[tauri::command(async)]
 pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> Option<ExportDiskWarning> {
+    // Decided on the text before any file system call: probing a UNC or mapped share would make
+    // this machine contact that host with the user's credentials, and the export itself refuses
+    // such a destination anyway.
+    if is_network_path(&dest_path) {
+        return None;
+    }
     let dest = std::path::Path::new(&dest_path);
     let free = free_space_bytes(dest).ok()?;
     let est = estimate_export_bytes(&format, video_kbps, lossless_quality, duration_ms);
@@ -126,6 +132,9 @@ pub(crate) fn check_export_disk_space(dest_path: String, format: String, video_k
 #[cfg(windows)]
 #[tauri::command(async)]
 pub(crate) fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, durations_ms: Vec<u64>) -> Option<ExportDiskWarning> {
+    if is_network_path(&dest_dir) {
+        return None;
+    }
     let dest = std::path::Path::new(&dest_dir);
     let free = free_space_bytes(dest).ok()?;
     let needed: u64 = durations_ms

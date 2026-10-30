@@ -435,3 +435,182 @@ fn the_batch_export_loop_gates_an_item_on_text_before_any_file_check() {
     assert!(!body.contains("!item_src.is_file() ||"), "is_file must not run ahead of the network gate");
     assert!(body.contains("export_request_paths_refused(&own_dirs, &item.dest_path"));
 }
+
+#[test]
+fn a_rotated_phone_clip_reports_its_upright_size() {
+    let side = |rot: &str| serde_json::json!({"width": 1920, "height": 1080, "side_data_list": [{"side_data_type": "Display Matrix", "rotation": rot.parse::<f64>().unwrap()}]});
+    assert_eq!(stream_display_size(&side("-90")), (1080, 1920));
+    assert_eq!(stream_display_size(&side("90")), (1080, 1920));
+    assert_eq!(stream_display_size(&side("270")), (1080, 1920));
+    assert_eq!(stream_display_size(&side("180")), (1920, 1080));
+    assert_eq!(stream_display_size(&side("0")), (1920, 1080));
+    let tag = serde_json::json!({"width": 1920, "height": 1080, "tags": {"rotate": "90"}});
+    assert_eq!(stream_display_size(&tag), (1080, 1920));
+    let plain = serde_json::json!({"width": 1920, "height": 1080});
+    assert_eq!(stream_display_size(&plain), (1920, 1080));
+}
+
+#[test]
+fn a_re_encoded_mp4_gets_an_even_size_step_after_the_last_output_label() {
+    let g = even_final_size("[0:v]trim=start=1,setpts=PTS-STARTPTS[vout]");
+    assert_eq!(g, "[0:v]trim=start=1,setpts=PTS-STARTPTS[vevenin];[vevenin]scale=trunc(iw/2)*2:trunc(ih/2)*2[vout]");
+    let multi = even_final_size("[0:v]split[a][b];[a][b]overlay[vout];");
+    assert!(multi.ends_with("[vevenin]scale=trunc(iw/2)*2:trunc(ih/2)*2[vout]"));
+    assert!(multi.contains("overlay[vevenin];"), "only the final label is renamed: {multi}");
+    assert_eq!(even_final_size("[0:v]null[other]"), "[0:v]null[other]");
+}
+
+#[test]
+fn the_export_args_even_the_size_for_mp4_and_avi_only() {
+    let src = source!("../video_editor.rs");
+    let args = &src[src.find("let needs_even").unwrap()..];
+    assert!(args.contains("matches!(req.format.as_str(), \"mp4\" | \"avi\")"));
+    assert!(args.contains("if needs_even && req.filter_chain.is_none()"));
+    assert!(args.contains("even_final_size(v)"));
+}
+
+#[test]
+fn a_media_file_on_another_computer_is_not_reported_as_a_refused_destination() {
+    let none: Vec<PathBuf> = Vec::new();
+    assert_eq!(export_request_refusal(&none, r"\\host\share\x.mp4", &[]), Some("export destination not recognized"));
+    assert_eq!(export_request_refusal(&none, r"C:\out\x.mp4", &[r"\\host\share\a.png".to_string()]), Some("source-not-allowed"));
+    assert_eq!(export_request_refusal(&none, r"C:\out\x.mp4", &[r"D:\m\a.png".to_string()]), None);
+}
+
+#[test]
+fn a_cancelled_batch_item_is_neither_a_success_nor_a_failure() {
+    let src = source!("../video_editor.rs");
+    let at = src.find("pub(crate) async fn await_batch_export").unwrap();
+    let body = &src[at..at + 1200];
+    let cancelled = body.find("Err(e) if e == \"cancelled\"").expect("cancel is told apart from an error");
+    let generic = body.find("Err(_) =>").unwrap();
+    assert!(cancelled < generic, "the cancel arm comes before the generic failure arm");
+    assert!(body[cancelled..generic].contains("None"), "a cancel is counted nowhere");
+}
+
+#[test]
+fn the_batch_mic_graph_mixes_the_sidecar_or_the_second_track() {
+    let two = batch_mic_graph(2, Path::new(r"C:\nope\rec.mp4")).unwrap();
+    assert_eq!(two, "[0:a:0][0:a:1]amix=inputs=2:normalize=0[aout]");
+    assert!(batch_mic_graph(1, Path::new(r"C:\nope\rec.mp4")).is_none(), "no sidecar, one track: audio stays as it is");
+    assert_eq!(count_audio_lines("  Stream #0:0: Video: h264\n  Stream #0:1[0x2](und): Audio: aac\n  Stream #0:2: Audio: aac\n"), 2);
+    let dir = std::env::temp_dir().join(format!("ps-batchmic-graph-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec-1.mp4");
+    fs::write(dir.join("rec-1.mic.wav"), b"x").unwrap();
+    let one = batch_mic_graph(1, &src).unwrap();
+    assert!(one.starts_with("amovie='") && one.contains("rec-1.mic.wav'[bmic];[0:a:0][bmic]amix=inputs=2"), "{one}");
+    assert!(one.ends_with("[aout]"));
+    let none = batch_mic_graph(0, &src).unwrap();
+    assert!(none.ends_with("[bmic]anull[aout]"), "{none}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_batch_export_keeps_the_microphone_that_still_sits_in_its_sidecar() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-batchmic-real-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = make_test_mp4(&ffmpeg, &dir, "rec-mic.mp4", 1, "64x48");
+    let wav = make_test_wav(&dir, "rec-mic.mic.wav", 1);
+    assert_eq!(wav, src.with_extension("mic.wav"));
+    let dest = dir.join("out.mp4");
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    run_batch_job_blocking(&ffmpeg, &src.to_string_lossy(), &dest.to_string_lossy(), 1000, "mp4", false, Some(2000), my_gen, |_| {})
+        .expect("the batch job succeeds");
+    assert_eq!(count_audio_streams(&ffmpeg, &dest), 1, "the mic is in the export as one stream");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_odd_sized_source_exports_to_mp4_once_an_edit_forces_a_re_encode() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-odd-real-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    // ffv1 can store an odd size; libx264 cannot, so the export has to even it.
+    use std::os::windows::process::CommandExt;
+    let src = dir.join("odd.mkv");
+    let status = std::process::Command::new(&ffmpeg)
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=65x47:rate=15", "-c:v", "ffv1", "-pix_fmt", "yuv420p"])
+        .arg(&src)
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let dest = dir.join("out.mp4");
+    let req = ExportRequest {
+        src_path: src.to_string_lossy().to_string(),
+        dest_path: dest.to_string_lossy().to_string(),
+        filter_chain: Some("[0:v]setpts=PTS-STARTPTS[vout]".to_string()),
+        audio_map: None,
+        media_paths: Vec::new(),
+        lossless_copy: false,
+        copy_audio: CopyAudio::All,
+        lossless_quality: false,
+        format: "mp4".to_string(),
+        video_kbps: Some(1000),
+        trim_start_ms: None,
+        trim_end_ms: None,
+        total_ms: 1000,
+    };
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("an odd source exports");
+    // The no-graph re-encode takes the same fix through -vf.
+    let req2 = ExportRequest { filter_chain: None, dest_path: dir.join("out2.mp4").to_string_lossy().to_string(), ..req };
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    export_video_blocking(&ffmpeg, &src, &dir.join("out2.mp4"), &req2, my_gen, |_| {}).expect("an odd source exports without a graph");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_media_path_with_an_equals_sign_is_a_file_name_not_an_option_key() {
+    let dir = std::env::temp_dir().join(format!("ps-graph-eq-{}", std::process::id())).join("a=b");
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec.mp4");
+    let badge = dir.join("x=y.png");
+    for p in [&src, &badge] {
+        fs::write(p, b"x").unwrap();
+    }
+    let ff = |p: &Path| {
+        let c = fs::canonicalize(p).unwrap().to_string_lossy().to_string();
+        c.trim_start_matches(r"\\?\").replace('\\', "/").replace(':', r"\:")
+    };
+    let media = vec![badge.to_string_lossy().to_string()];
+    let graph = format!("movie='{}'[i0];[0:v][i0]overlay=1:2[vout]", ff(&badge));
+    assert!(validate_export_request_graphs(&src, &media, &[&graph]).is_ok(), "{graph}");
+    // A real key stays a key, even framed by blanks or hidden behind an escape at the graph level.
+    let other = format!("movie=' filename ={}'[i0]", ff(&badge));
+    assert!(validate_export_request_graphs(&src, &media, &[&other]).is_ok());
+    assert!(validate_export_request_graphs(&src, &media, &[r"[0:v]drawtext=t\extfile=C\:/x.txt[vout]"]).is_err());
+    assert!(validate_export_request_graphs(&src, &media, &["[0:v]drawtext= textfile =x[vout]"]).is_err());
+    assert!(validate_export_request_graphs(&src, &media, &["[0:v]drawtext=/text=x[vout]"]).is_err());
+    let _ = fs::remove_dir_all(dir.parent().unwrap());
+}
+
+#[test]
+fn camcorder_and_still_formats_the_picker_offers_pass_the_media_type_check() {
+    for name in ["clip.MTS", "a.mxf", "disc.vob", "raw.m2v", "photo.heic", "pic.jxl", "clip.mp4"] {
+        assert!(has_export_media_ext(Path::new(name)), "{name}");
+    }
+    assert!(!has_export_media_ext(Path::new("notes.txt")));
+}
+
+#[test]
+fn the_editors_export_progress_carries_a_job_tag_a_conversion_does_not() {
+    let export = serde_json::to_value(ConvertProgressPayload { ms: 5, job: Some("export") }).unwrap();
+    assert_eq!(export, serde_json::json!({"ms": 5, "job": "export"}));
+    let convert = serde_json::to_value(ConvertProgressPayload { ms: 5, job: None }).unwrap();
+    assert_eq!(convert, serde_json::json!({"ms": 5}), "the conversion payload keeps its old shape");
+}
+
+#[test]
+fn the_export_disk_probes_skip_a_network_destination_on_text() {
+    assert!(check_export_disk_space(r"\\host\share\x.mp4".to_string(), "mp4".to_string(), None, false, 600_000).is_none());
+    assert!(check_export_disk_space_batch(r"\\host\share".to_string(), "mp4".to_string(), None, false, vec![600_000]).is_none());
+    let src = source!("../rec_cmds.rs");
+    for name in ["pub(crate) fn check_export_disk_space(", "pub(crate) fn check_export_disk_space_batch("] {
+        let at = src.find(name).unwrap();
+        let body = &src[at..at + 900];
+        assert!(body.find("is_network_path(").unwrap() < body.find("free_space_bytes(").unwrap(), "{name}: text gate first");
+    }
+}
