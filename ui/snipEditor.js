@@ -553,6 +553,9 @@ export function initSnipEditor() {
     snipEditFit();
   }
   function snipEditUndo() {
+    // Mid-drag the dragged shape is still in the list: popping it would let the pointer-up
+    // change a shape that is no longer there and leave a dead step in the history.
+    if (SE.drag) return;
     if (SE.ops.length <= SE.floor) return;
     const op = SE.ops.pop();
     SE.redo.push(op);
@@ -576,6 +579,7 @@ export function initSnipEditor() {
     snipEditNoteChange();
   }
   function snipEditRedo() {
+    if (SE.drag) return;
     if (!SE.redo.length) return;
     const op = SE.redo.pop();
     SE.ops.push(op);

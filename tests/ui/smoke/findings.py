@@ -791,6 +791,32 @@ def run(browser, tmp):
 """)
     failed += ar_probe('ba592a', 'screenshot editor: undoing a committed crop clears the crop box, export is the full image', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
+    failed += ar_probe('ba555', 'screenshot editor: Ctrl+Z while a shape is being dragged waits, the move lands on a shape still in the list', 'index', '1000x780', '', ba_common + r'''
+    if (!(await baOpen(''))) { errs.push('555: the editor did not open'); }
+    else {
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x, y + d), BGC, 30)) return true; } return false; };
+      await baTool('rect'); await baDrag(20, 75, 120, 105);
+      let img = await baExport();
+      if (!img || !hasInk(img, 60, 75)) errs.push('555: fixture: the rectangle is not drawn');
+      const live = document.getElementById('snip-edit-live');
+      let a = baPt(60, 75);
+      baPtr('pointerdown', a[0], a[1], live);
+      a = baPt(60, 85); baPtr('pointermove', a[0], a[1], live);
+      baKey('z', { ctrlKey: true }); await sleep(40);
+      a = baPt(60, 95); baPtr('pointermove', a[0], a[1], live);
+      baPtr('pointerup', a[0], a[1], window);
+      await sleep(60);
+      img = await baExport();
+      if (!hasInk(img, 60, 95)) errs.push('555: the rectangle is gone after Ctrl+Z during its move');
+      // one undo brings it back to where it was, the next one removes it: no dead step
+      await baUndo();
+      img = await baExport();
+      if (!hasInk(img, 60, 75) || hasInk(img, 60, 95)) errs.push('555: the first undo did not put the rectangle back');
+      await baUndo();
+      img = await baExport();
+      if (hasInk(img, 60, 75)) errs.push('555: the second undo did not remove the rectangle');
+    }
+''')
     else {
       await baTool('crop'); await baCropTo(60, 30, 140, 90);
       baKey('Enter'); await sleep(80);
