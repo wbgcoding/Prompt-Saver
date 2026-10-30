@@ -831,11 +831,13 @@ pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: 
 // changed-since-preview check, so the file is never read twice.
 pub(crate) fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
+    // An editor's byte-order mark would otherwise stick to the first heading or break the JSON.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let mut data = match ext.as_str() {
-        "csv" => parse_csv_data(&content),
-        "json" => parse_json_data(&content)?,
-        _ => parse_txt(&content),
+        "csv" => parse_csv_data(content),
+        "json" => parse_json_data(content)?,
+        _ => parse_txt(content),
     };
     // A file from an older version still spells placeholders the old way.
     for p in &mut data.prompts {

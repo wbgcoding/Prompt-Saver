@@ -1099,3 +1099,19 @@ fn an_oversized_plain_snapshot_is_refused_before_any_copy() {
     assert!(leftovers.is_empty(), "no staged file remains: {leftovers:?}");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// An editor that re-saves an export with a byte-order mark must not cost the first prompt (TXT)
+// or the whole file (JSON).
+#[test]
+fn an_import_file_with_a_byte_order_mark_still_parses() {
+    let txt = "\u{feff}### First\nHello\n\n---\n\n### Second\nWorld";
+    let data = parse_import_bytes(txt.as_bytes(), std::path::Path::new("x.txt")).unwrap();
+    assert_eq!(data.prompts.len(), 2, "the first prompt is not dropped");
+    assert_eq!(data.prompts[0].name, "First");
+    let json = "\u{feff}[{\"name\":\"A\",\"text\":\"t\"}]";
+    let data = parse_import_bytes(json.as_bytes(), std::path::Path::new("x.json")).unwrap();
+    assert_eq!(data.prompts[0].name, "A");
+    let csv = "\u{feff}name;text\nA;body\n";
+    let data = parse_import_bytes(csv.as_bytes(), std::path::Path::new("x.csv")).unwrap();
+    assert_eq!(data.prompts[0].name, "A");
+}
