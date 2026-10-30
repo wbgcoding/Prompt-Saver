@@ -1888,7 +1888,12 @@ pub(crate) fn move_store_dir(
     if path_matches_configured_dir(new, current) {
         return Ok(false);
     }
+    // From the end of the flush to the pointer write no database write may reach the folder
+    // being left (see DATA_MOVE_IN_PROGRESS). The gate clears itself on every way out; the
+    // success path releases it right after the pointer write, before the rebase needs to save.
+    let gate = DataMoveWriteGate;
     flush()?;
+    DATA_MOVE_IN_PROGRESS.store(true, Ordering::SeqCst);
     // Adopt an existing store in the target, otherwise copy ours across, aborting before the
     // redirect pointer is written so a launch is never pointed at a truncated store. All store
     // files are copied: a prompts.json or settings.json from a failed DB write may be the only
@@ -1927,8 +1932,9 @@ pub(crate) fn move_store_dir(
     }
     rebind();
     // Point future launches at the new folder (pointer lives in the canonical dir).
-    write_bytes_atomic(&pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
-        .map_err(|e| e.to_string())?;
+    let pointer_written = write_bytes_atomic(&pointer_dir.join("datapath"), new.to_string_lossy().as_bytes());
+    drop(gate);
+    pointer_written.map_err(|e| e.to_string())?;
     // Everything the move consists of has landed, so the folder we came from is now
     // a redundant copy: and the only one delete_data_dir is allowed to clean.
     *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.to_path_buf());
@@ -1977,6 +1983,15 @@ pub(crate) async fn set_data_dir(app: AppHandle, dir: String) -> Result<String, 
     .map_err(|e| e.to_string())?
 }
 
+// Clears DATA_MOVE_IN_PROGRESS when move_store_dir ends, whichever way it ends.
+struct DataMoveWriteGate;
+
+impl Drop for DataMoveWriteGate {
+    fn drop(&mut self) {
+        DATA_MOVE_IN_PROGRESS.store(false, Ordering::SeqCst);
+    }
+}
+
 // Lets exactly one data folder move run at a time; set by set_data_dir, cleared on drop.
 pub(crate) static DATA_MOVE_BUSY: AtomicBool = AtomicBool::new(false);
 
@@ -2012,9 +2027,12 @@ fn move_data_dir_blocking(app: &AppHandle, new: PathBuf) -> Result<String, Strin
                 return Err("the settings could not be saved to the folder being left".to_string());
             }
         }
+        // From here no other writer may touch the folder; move_store_dir clears this on every way
+        // out. The checkpoint opens its own connection, as db_conn now refuses.
+        DATA_MOVE_IN_PROGRESS.store(true, Ordering::SeqCst);
         // Fold the WAL back into data.db so the single-file copy is complete
         // (recent copy_log appends can otherwise still live in data.db-wal).
-        if let Some(c) = db_conn(app) {
+        if let Some(c) = db_conn_at(&data_dir(app)) {
             checkpoint_wal(&c, 10)?;
         }
         Ok(())

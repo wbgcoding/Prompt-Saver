@@ -564,6 +564,63 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+// Between the flush and the pointer write the old folder is already copied (or being copied), so
+// a database write there would be lost with the folder the cleanup deletes. The write gate must
+// be shut for exactly that span, open while the flush itself saves and while the rebase saves
+// into the new folder, and never stay shut after a failed move.
+#[test]
+fn the_data_folder_move_shuts_database_writes_between_flush_and_pointer() {
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = std::env::temp_dir().join(format!("{}-test-datadir-gate", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&root);
+    let current = root.join("old");
+    let new = root.join("new");
+    let pointer = root.join("pointer");
+    for d in [&current, &new, &pointer] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    std::fs::write(current.join("data.db"), b"the real store").unwrap();
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let shut = || DATA_MOVE_IN_PROGRESS.load(Ordering::SeqCst);
+    assert!(!shut());
+
+    let seen = std::cell::RefCell::new(Vec::new());
+    {
+        let mut flush = || -> Result<(), String> {
+            seen.borrow_mut().push(("flush", shut()));
+            Ok(())
+        };
+        let mut rebind = || seen.borrow_mut().push(("rebind", shut()));
+        let mut rebase = || -> Result<(), String> {
+            seen.borrow_mut().push(("rebase", shut()));
+            Ok(())
+        };
+        assert_eq!(move_store_dir(&current, &new, &pointer, &mut flush, &mut rebind, &mut rebase), Ok(false));
+    }
+    assert_eq!(*seen.borrow(), [("flush", false), ("rebind", true), ("rebase", false)]);
+    assert!(!shut(), "the gate opens again once the pointer is written");
+
+    // A flush that fails after shutting the gate itself leaves it open again.
+    let _ = std::fs::remove_dir_all(&new);
+    std::fs::create_dir_all(&new).unwrap();
+    let mut flush = || -> Result<(), String> {
+        DATA_MOVE_IN_PROGRESS.store(true, Ordering::SeqCst);
+        Err("checkpoint failed".to_string())
+    };
+    assert!(move_store_dir(&current, &new, &pointer, &mut flush, &mut || {}, &mut || Ok(())).is_err());
+    assert!(!shut(), "a failed move must not leave database writes refused");
+
+    // So does a copy that fails.
+    std::fs::create_dir_all(current.join("files")).unwrap();
+    let inside = current.join("files").join("deeper");
+    std::fs::create_dir_all(&inside).unwrap();
+    assert!(move_store_dir(&current, &inside, &pointer, &mut || Ok(()), &mut || {}, &mut || Ok(())).is_err());
+    assert!(!shut());
+
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // Picking a folder that already holds a store adopts it as it is. The caller has to
 // reload the in-memory store from there, so the move must say that it happened and
 // must leave the adopted files alone.

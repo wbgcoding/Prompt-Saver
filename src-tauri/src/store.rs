@@ -166,6 +166,12 @@ pub(crate) static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 // on success the restarted process starts with false.
 pub(crate) static DEMO_TRANSITION_LOCKED: AtomicBool = AtomicBool::new(false);
 
+// Set by move_store_dir from the moment the live state has been flushed into the folder being
+// left until the redirect pointer is written. data_dir() still names the old folder in that
+// span, so a write now (a copy-log row, a draft, a version snapshot) would land in a file that
+// is already copied and is deleted afterwards. db_conn() answers "unavailable" while it is set.
+pub(crate) static DATA_MOVE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
 pub(crate) enum LockOutcome {
     Owned,
     ReadOnly(String),
@@ -532,7 +538,10 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
 // The same gate without the refusal event, for background jobs that would otherwise raise the
 // toast on every round.
 pub(crate) fn data_dir_write_blocked_quiet() -> bool {
-    DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || STORE_RELOADING.load(Ordering::SeqCst) || DATA_DIR_READONLY.load(Ordering::Relaxed)
+    DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed)
+        || DATA_MOVE_IN_PROGRESS.load(Ordering::SeqCst)
+        || STORE_RELOADING.load(Ordering::SeqCst)
+        || DATA_DIR_READONLY.load(Ordering::Relaxed)
 }
 
 // The single choke point for save_prompts, save_prompts_and_trash, save_trash and
@@ -540,7 +549,7 @@ pub(crate) fn data_dir_write_blocked_quiet() -> bool {
 // whichever action triggered it.
 pub(crate) fn data_dir_write_blocked(app: &AppHandle) -> bool {
     // No event here: the window is already on its way down for app.restart().
-    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || DATA_MOVE_IN_PROGRESS.load(Ordering::SeqCst) {
         return true;
     }
     // The store is being replaced after a takeover: a save now would come from the stale copy.
@@ -665,7 +674,7 @@ pub(crate) fn db_conn(app: &AppHandle) -> Option<Connection> {
     // data_dir_write_blocked() (save_editor_draft, save_edit_state, the copy log, version
     // snapshots). Checking here makes the demo-transition lock block all of them. None reads as
     // "DB unavailable", which callers already handle.
-    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) || DATA_MOVE_IN_PROGRESS.load(Ordering::SeqCst) {
         return None;
     }
     db_conn_at(&data_dir(app))
