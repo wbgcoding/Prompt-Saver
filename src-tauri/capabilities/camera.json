@@ -29,6 +29,7 @@
     "allow-camera-finish-recording",
     "allow-camera-mark-finishing",
     "allow-camera-permission-ready",
+    "allow-camera-permission-failed",
     "allow-camera-screen-elapsed-ms",
     "allow-current-theme",
     "allow-default-recording-dir",

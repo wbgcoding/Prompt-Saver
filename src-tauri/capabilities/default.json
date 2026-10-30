@@ -318,6 +318,7 @@
     "allow-camera-begin-recording",
     "allow-camera-append-chunk",
     "allow-camera-permission-ready",
+    "allow-camera-permission-failed",
     "allow-camera-finish-recording",
     "allow-camera-mark-finishing",
     "allow-camera-discard-recording",
