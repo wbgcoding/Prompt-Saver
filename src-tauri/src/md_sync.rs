@@ -1469,7 +1469,20 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
         }
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
-        let on_disk = fs::read(&path).unwrap_or_default();
+        // Only a file that is not there reads as empty. A read that failed for any other reason
+        // (a cloud placeholder that did not download, a handle held for a moment) says nothing
+        // about the file: writing over it would replace a newer version that was never seen.
+        let on_disk = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => {
+                failed += 1;
+                append_crash_log(&format!("prompt-sync: {filename} could not be read before writing, trying again: {e}"));
+                sync_known_note(&path);
+                wanted.insert(filename);
+                continue;
+            }
+        };
         if on_disk.is_empty() {
             match sync_tomb_allows_write(&dir, &p.id) {
                 TombWrite::Allowed => {}
@@ -1503,7 +1516,19 @@ pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &
             // One more look right before the replace: the lock file is only ours, an
             // external editor never honors it, so a save that landed after the first
             // read has to end up in the conflict copy as well, not be overwritten.
-            let latest = fs::read(&path).unwrap_or_default();
+            let latest = match fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(e) => {
+                    // Cannot tell whether the file changed since the first read: leave it.
+                    sync_lock_release(&path);
+                    failed += 1;
+                    append_crash_log(&format!("prompt-sync: {filename} could not be read before the replace, trying again: {e}"));
+                    sync_known_note(&path);
+                    wanted.insert(filename);
+                    continue;
+                }
+            };
             if latest != on_disk && latest != content.as_bytes() && !latest.is_empty() {
                 if let Some(late_copy) = sync_write_conflict_copy(&dir, &p.id, "-late", &latest) {
                     append_crash_log(&format!(

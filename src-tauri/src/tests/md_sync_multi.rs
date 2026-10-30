@@ -1498,3 +1498,36 @@ fn multi_a_read_that_failed_is_tried_again_not_taken_as_handled() {
     }
     assert_eq!(rig.a.get(&id).unwrap().text, "edited on B", "the edit was never read once the file was free again");
 }
+
+// Held so that it cannot be read but can still be replaced, like a placeholder whose download
+// is refused: the write that follows a failed read must not take that for an empty file.
+#[cfg(windows)]
+fn hold_unreadable(path: &Path) -> fs::File {
+    use std::os::windows::fs::OpenOptionsExt;
+    const SHARE_WRITE_DELETE: u32 = 0x2 | 0x4;
+    fs::OpenOptions::new().read(true).share_mode(SHARE_WRITE_DELETE).open(path).expect("hold the file")
+}
+
+#[cfg(windows)]
+#[test]
+fn multi_a_file_that_cannot_be_read_is_not_replaced_by_the_next_save() {
+    let rig = Rig::new();
+    let id = rig.a.add("Shared", "start");
+    let other = rig.a.add("Other", "x");
+    rig.settle();
+    rig.b.edit(&id, |p| p.text = "edited on B".into());
+    rig.b.step(&rig.dir);
+    let path = rig.dir.join(format!("{id}.md"));
+    {
+        let _held = hold_unreadable(&path);
+        rig.tick(3);
+        rig.a.edit(&other, |p| p.text = "y".into());
+        let failed = rig.a.flush(&rig.dir);
+        assert!(failed >= 1, "a file that could not be read must be counted for a retry");
+    }
+    let on_disk = fs::read_to_string(&path).unwrap_or_default();
+    assert!(on_disk.contains("edited on B"), "B's newer version was replaced without a look: {on_disk:?}");
+    rig.settle();
+    assert_eq!(rig.a.get(&id).unwrap().text, "edited on B");
+    rig.assert_converged();
+}
