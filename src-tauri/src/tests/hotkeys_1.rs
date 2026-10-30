@@ -1401,3 +1401,15 @@ fn a_second_hotkey_rearm_asks_the_running_one_to_repeat_instead_of_overlapping()
     assert!(claim_rearm(&running, &again), "after the run ended the next caller runs again");
     assert!(again.load(SeqCst), "the request is already in place when the claim is decided");
 }
+
+#[test]
+fn a_failed_settings_save_after_clearing_history_restores_the_counters() {
+    let mut s = Settings::default();
+    s.usage.insert("a".into(), 4);
+    s.last_used.insert("a".into(), 77);
+    assert_eq!(clear_history_and_save(|| true, |_| false, &mut s), (true, false));
+    assert_eq!(s.usage.get("a"), Some(&4));
+    assert_eq!(s.last_used.get("a"), Some(&77));
+    assert_eq!(clear_history_and_save(|| true, |c| c.usage.is_empty(), &mut s), (true, true));
+    assert!(s.usage.is_empty() && s.last_used.is_empty());
+}

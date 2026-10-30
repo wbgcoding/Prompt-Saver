@@ -637,6 +637,25 @@ pub(crate) fn clear_history_core(delete_log: impl FnOnce() -> bool, settings: &m
     true
 }
 
+// Clears, then saves the cleared counters. A save that fails puts the counters back: memory must
+// keep matching the settings row on disk, or a later collected write would persist the cleared
+// maps anyway and the outcome would depend on timing.
+pub(crate) fn clear_history_and_save(
+    delete_log: impl FnOnce() -> bool,
+    save: impl FnOnce(&Settings) -> bool,
+    settings: &mut Settings,
+) -> (bool, bool) {
+    let usage = settings.usage.clone();
+    let last_used = settings.last_used.clone();
+    let cleared = clear_history_core(delete_log, settings);
+    let saved = cleared && save(settings);
+    if cleared && !saved {
+        settings.usage = usage;
+        settings.last_used = last_used;
+    }
+    (cleared, saved)
+}
+
 // Wipe copy history + usage counters (privacy / journal "clear").
 #[tauri::command]
 pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
@@ -644,14 +663,14 @@ pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> 
     // success while the log rows are still on disk.
     let (cleared, saved) = {
         let mut store = lock(&state);
-        let cleared = clear_history_core(
+        clear_history_and_save(
             || match db_conn_write(&app) {
                 Some(conn) => conn.execute("DELETE FROM copy_log", []).is_ok(),
                 None => false,
             },
+            |settings| save_settings(&app, settings),
             &mut store.settings,
-        );
-        (cleared, cleared && save_settings(&app, &store.settings))
+        )
     };
     rebuild_tray(&app); // A wiped history empties the "recently used" section
     if !cleared {
