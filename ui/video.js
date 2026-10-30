@@ -2147,8 +2147,9 @@ function handleEscape() {
   if (isTextField(el)) {
     if (fieldFocus && fieldFocus.el === el && el.value !== fieldFocus.value) {
       el.value = fieldFocus.value;
+      // Only "input": the abandoned text never committed, so a "change" would re-commit the old
+      // value as an undo step that changes nothing, clear the redo stack and mark the editor edited.
       el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
     }
     el.blur();
     return "field";

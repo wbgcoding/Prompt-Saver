@@ -465,6 +465,28 @@ def run(browser, tmp):
     if (!again || again.inMs <= 0) errs.push('4042: an empty field should fall back to the default, got ' + JSON.stringify(again));
     """)
 
+    # 4043: Escape in an edited field abandons the text without committing anything.
+    failed += vprobe('escfield', 'Escape in an edited field adds no undo step and leaves the editor clean', r"""
+    // 4043: Escape restore.
+    const w = document.getElementById('ve-scale-w');
+    w.value = '320';
+    w.dispatchEvent(new Event('change', { bubbles: true }));
+    if (!VE.ops.some((o) => o.tool === 'scale')) errs.push('4043: fixture: no scale op');
+    VE.dirty = false;
+    const before = JSON.stringify(VE.ops);
+    const redoBefore = VE.redo.length;
+    w.focus();
+    const shown = w.value;
+    w.value = '321';
+    w.dispatchEvent(new Event('input', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+    await sleep(100);
+    if (w.value !== shown) errs.push('4043: the field kept the abandoned text: ' + w.value);
+    if (JSON.stringify(VE.ops) !== before) errs.push('4043: Escape changed the operations: ' + JSON.stringify(VE.ops));
+    if (VE.dirty) errs.push('4043: Escape marked the editor as edited');
+    if (VE.redo.length !== redoBefore) errs.push('4043: Escape changed the redo stack');
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);
