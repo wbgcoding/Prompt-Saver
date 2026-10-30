@@ -1231,6 +1231,39 @@ fn a_standalone_write_gives_the_data_folder_back_when_it_is_done() {
     assert_eq!(run_standalone_with(move || again, &args(&["list"]), Path::new(".")), 0);
 }
 
+// ---- which launches are commands ----
+
+#[test]
+fn a_typo_or_a_leading_flag_is_a_command_not_a_gui_start() {
+    for argv in [&["lsit"][..], &["help"], &["--json", "list"], &["--yes", "delete", "p1"], &["-x"], &["--help"], &["-h"], &["--version"]] {
+        assert!(looks_like_cli(&args(argv)), "{argv:?} must be answered by the command line");
+    }
+    assert!(parse(&args(&["lsit"])).is_err());
+    assert_eq!(run_standalone_with(|| PathBuf::from("."), &args(&["lsit"]), Path::new(".")), 1);
+}
+
+#[test]
+fn nothing_the_autostart_flag_or_a_file_path_is_a_gui_start() {
+    for argv in [&[][..], &["--minimized"], &["C:\\Users\\x\\a.txt"], &["a.txt"], &["./a"], &["D:\\x"]] {
+        assert!(!looks_like_cli(&args(argv)), "{argv:?} must start the window");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn a_non_unicode_argument_never_panics_the_launch() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    let bad = OsString::from_wide(&[0x61, 0xD800, 0x62]);
+    assert_eq!(read_launch_args(vec![bad.clone()]), LaunchArgs::Gui);
+    assert_eq!(read_launch_args(vec![OsString::from("list"), bad.clone()]), LaunchArgs::BadArgument);
+    assert_eq!(
+        read_launch_args(vec![OsString::from("list"), OsString::from("--json")]),
+        LaunchArgs::Cli(args(&["list", "--json"]))
+    );
+    assert_eq!(read_launch_args(Vec::<OsString>::new()), LaunchArgs::Gui);
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]

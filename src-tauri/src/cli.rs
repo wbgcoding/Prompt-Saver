@@ -30,16 +30,44 @@ pub(crate) use callers::*;
 
 // ---------- Launch-side entry point ----------
 
-const SUBCOMMANDS: &[&str] = &[
-    "list", "get", "copy", "add", "edit", "delete", "restore", "tag", "view", "search", "export",
-    "import", "backup", "settings", "version", "describe",
-];
-
+// A launch is a GUI start only when it carries nothing, the autostart flag, or a first word that
+// is a path (a file handed over by a shortcut or "Open with"). Everything else is a command: a
+// typo, `help` or a flag in front would otherwise open the window (or hand off to the running
+// instance and exit 0) and a script would read success for a command that never ran. The parser
+// answers an unknown command with exit 1.
 fn looks_like_cli(argv: &[String]) -> bool {
     match argv.first().map(String::as_str) {
-        Some(a) if SUBCOMMANDS.contains(&a) => true,
-        Some("--help" | "-h" | "--version") => true,
-        _ => false,
+        None | Some("") | Some("--minimized") => false,
+        Some(a) if a.starts_with('-') => true,
+        Some(a) => !a.contains(['\\', '/', ':', '.']),
+    }
+}
+
+// How this launch's raw arguments read. A first word that is not valid Unicode can only be a file
+// name, so it is a GUI start; a later one inside a command is refused instead of panicking.
+#[derive(Debug, PartialEq)]
+enum LaunchArgs {
+    Gui,
+    Cli(Vec<String>),
+    BadArgument,
+}
+
+fn read_launch_args(raw: impl IntoIterator<Item = std::ffi::OsString>) -> LaunchArgs {
+    let mut argv: Vec<String> = Vec::new();
+    let mut non_unicode = false;
+    for a in raw {
+        match a.into_string() {
+            Ok(s) => argv.push(s),
+            Err(_) if argv.is_empty() => return LaunchArgs::Gui,
+            Err(_) => non_unicode = true,
+        }
+    }
+    if !looks_like_cli(&argv) {
+        LaunchArgs::Gui
+    } else if non_unicode {
+        LaunchArgs::BadArgument
+    } else {
+        LaunchArgs::Cli(argv)
     }
 }
 
@@ -47,12 +75,19 @@ fn looks_like_cli(argv: &[String]) -> bool {
 // `Some(code)` means: exit with this code, no window was ever created.
 // `None` means: this launch is an ordinary GUI start, carry on as before.
 pub(crate) fn dispatch_from_launch_args() -> Option<i32> {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
-    if !looks_like_cli(&argv) {
+    let launch = read_launch_args(std::env::args_os().skip(1));
+    if launch == LaunchArgs::Gui {
         return None;
     }
     #[cfg(windows)]
     attach_parent_console_if_needed();
+    let argv = match launch {
+        LaunchArgs::Cli(argv) => argv,
+        _ => {
+            eprintln!("an argument is not valid text");
+            return Some(1);
+        }
+    };
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build();
