@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "Resolutie",
     cameraRecording: "Bezig met opnemen…",
     camChunkWriteFailed: "Een deel van de opname kon niet worden opgeslagen. Het ruwe bestand is bewaard: {path}",
+    camTakeKept: "De opname is opgeslagen, maar de editor kon hem niet openen. Het bestand staat hier: {path}",
     recBarSystemAudioOff: "Systeemgeluid wordt niet opgenomen",
     recBarMuteSystemAudio: "Systeemgeluid dempen",
     recBarUnmuteSystemAudio: "Dempen van systeemgeluid opheffen",

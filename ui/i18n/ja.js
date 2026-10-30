@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "解像度",
     cameraRecording: "録画中…",
     camChunkWriteFailed: "録画の一部を保存できませんでした。元のファイルは残してあります：{path}",
+    camTakeKept: "録画は保存されましたが、エディターで開けませんでした。ファイルの場所：{path}",
     recBarSystemAudioOff: "システム音声は録音していません",
     recBarMuteSystemAudio: "システム音声をミュート",
     recBarUnmuteSystemAudio: "システム音声のミュートを解除",

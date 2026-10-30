@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "分辨率",
     cameraRecording: "正在录制…",
     camChunkWriteFailed: "录制的一部分无法保存。原始文件已保留：{path}",
+    camTakeKept: "录制已保存，但编辑器无法打开它。文件位于：{path}",
     recBarSystemAudioOff: "未录制系统声音",
     recBarMuteSystemAudio: "将系统声音静音",
     recBarUnmuteSystemAudio: "取消系统声音静音",

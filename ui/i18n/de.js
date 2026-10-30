@@ -1645,6 +1645,7 @@ export default {
     cameraResolution: "Auflösung",
     cameraRecording: "Aufnahme läuft…",
     camChunkWriteFailed: "Ein Teil der Aufnahme konnte nicht gespeichert werden. Die Rohdatei bleibt erhalten: {path}",
+    camTakeKept: "Die Aufnahme wurde gespeichert, aber der Editor konnte sie nicht übernehmen. Die Datei liegt hier: {path}",
     recBarSystemAudioOff: "Systemton wird nicht aufgenommen",
     recBarMuteSystemAudio: "Systemton stummschalten",
     recBarUnmuteSystemAudio: "Stummschaltung des Systemtons aufheben",

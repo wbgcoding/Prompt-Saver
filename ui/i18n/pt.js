@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "Resolução",
     cameraRecording: "Gravando…",
     camChunkWriteFailed: "Não foi possível salvar uma parte da gravação. O arquivo bruto foi mantido: {path}",
+    camTakeKept: "A gravação foi salva, mas o editor não conseguiu abri-la. O arquivo está aqui: {path}",
     recBarSystemAudioOff: "O áudio do sistema não está a ser gravado",
     recBarMuteSystemAudio: "Silenciar áudio do sistema",
     recBarUnmuteSystemAudio: "Reativar o áudio do sistema",

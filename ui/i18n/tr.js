@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "Çözünürlük",
     cameraRecording: "Kayıt yapılıyor…",
     camChunkWriteFailed: "Kaydın bir bölümü kaydedilemedi. Ham dosya korundu: {path}",
+    camTakeKept: "Kayıt kaydedildi ancak düzenleyici onu açamadı. Dosya burada: {path}",
     recBarSystemAudioOff: "Sistem sesi kaydedilmiyor",
     recBarMuteSystemAudio: "Sistem sesini kapat",
     recBarUnmuteSystemAudio: "Sistem sesini aç",

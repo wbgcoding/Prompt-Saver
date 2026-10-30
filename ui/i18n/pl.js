@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "Rozdzielczość",
     cameraRecording: "Nagrywanie…",
     camChunkWriteFailed: "Nie udało się zapisać części nagrania. Surowy plik został zachowany: {path}",
+    camTakeKept: "Nagranie zostało zapisane, ale edytor nie mógł go otworzyć. Plik znajduje się tutaj: {path}",
     recBarSystemAudioOff: "Dźwięk systemowy nie jest nagrywany",
     recBarMuteSystemAudio: "Wycisz dźwięk systemowy",
     recBarUnmuteSystemAudio: "Wyłącz wyciszenie dźwięku systemowego",

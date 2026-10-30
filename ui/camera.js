@@ -383,17 +383,19 @@ async function startRecording() {
       return;
     }
     let finishError = null;
+    let keptNotice = "";
     try {
       const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs, screenElapsedMs });
       // A companion screen recording that already stopped opens as the primary source with
       // this camera take as an aligned overlay when one is ready; otherwise the camera file
       // opens on its own. The overlay alignment lives in its sidecar (written above), not
       // in open_video_editor's arguments.
-      if (finished && finished.companion_path) {
-        await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path });
-      } else {
-        await invoke("open_video_editor", { srcPath: path });
-      }
+      const opened = finished && finished.companion_path
+        ? await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path })
+        : await invoke("open_video_editor", { srcPath: path });
+      // An editor that is open with unsaved work refuses the new source: the take is saved but
+      // nothing shows it, so the status strip says where it is.
+      if (opened === false) keptNotice = t("camTakeKept").replace("{path}", () => path);
     } catch (err) {
       // A failed finish leaves the raw file in place, still playable.
       finishError = err;
@@ -401,6 +403,10 @@ async function startRecording() {
     idleControls();
     refreshPreview();
     if (finishError) await showCameraError(finishError);
+    else if (keptNotice) {
+      statusText.textContent = keptNotice;
+      statusText.title = keptNotice;
+    }
   };
   try {
     recorder.start(1000);

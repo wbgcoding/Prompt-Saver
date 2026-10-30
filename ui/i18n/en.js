@@ -1645,6 +1645,7 @@ export default {
     cameraResolution: "Resolution",
     cameraRecording: "Recording…",
     camChunkWriteFailed: "Part of the recording could not be saved. The raw file was kept: {path}",
+    camTakeKept: "The recording was saved, but the editor could not take it over. The file is here: {path}",
     recBarSystemAudioOff: "System audio is not being recorded",
     recBarMuteSystemAudio: "Mute system audio",
     recBarUnmuteSystemAudio: "Unmute system audio",

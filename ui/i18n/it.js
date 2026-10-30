@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "Risoluzione",
     cameraRecording: "Registrazione in corso…",
     camChunkWriteFailed: "Non è stato possibile salvare una parte della registrazione. Il file grezzo è stato conservato: {path}",
+    camTakeKept: "La registrazione è stata salvata, ma l'editor non ha potuto aprirla. Il file si trova qui: {path}",
     recBarSystemAudioOff: "L'audio di sistema non viene registrato",
     recBarMuteSystemAudio: "Disattiva l'audio di sistema",
     recBarUnmuteSystemAudio: "Attiva l'audio di sistema",

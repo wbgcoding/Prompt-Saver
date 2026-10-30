@@ -1638,6 +1638,7 @@ export default {
     cameraResolution: "Rezoluție",
     cameraRecording: "Se înregistrează…",
     camChunkWriteFailed: "O parte a înregistrării nu a putut fi salvată. Fișierul brut a fost păstrat: {path}",
+    camTakeKept: "Înregistrarea a fost salvată, dar editorul nu a putut-o deschide. Fișierul se află aici: {path}",
     recBarSystemAudioOff: "Sunetul sistemului nu este înregistrat",
     recBarMuteSystemAudio: "Dezactivează sunetul sistemului",
     recBarUnmuteSystemAudio: "Activează sunetul sistemului",
