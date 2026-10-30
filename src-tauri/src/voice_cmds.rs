@@ -93,20 +93,25 @@ pub(crate) async fn voice_start(
         // The cancel flag, the spawn and the handle share one hold of the lock voice_shutdown takes
         // before it sets that flag: a shutdown landing between the check and the store would find
         // no session to signal and leave a flag nobody reads, and the microphone would stay open.
+        // The tooltip is set before the session thread starts: a fast failure inside the thread could
+        // otherwise race its own set_tray_recording(false) ahead of this one and leave the tooltip on
+        // "recording". Never while the slot is held: the tooltip call waits for the main thread, and
+        // the main thread takes the slot in voice_shutdown when the window hides.
+        set_tray_recording(&app, true);
         let mut slot = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
         // The window closed to the tray while prepare() was awaited: voice_shutdown found no live
         // session to signal and left this flag instead. Never open the microphone for it.
         if vstate.2.swap(false, std::sync::atomic::Ordering::SeqCst) {
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+            drop(slot);
+            set_tray_recording(&app, false);
             return Err("cancelled".to_string());
         }
-        // Set before the session thread starts: a fast failure inside the thread could otherwise race
-        // its own set_tray_recording(false) ahead of this one and leave the tooltip on "recording".
-        set_tray_recording(&app, true);
         if let Err(e) = std::thread::Builder::new()
             .name("voice-session".into())
             .spawn(move || voice::start_session(app2, id, token, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
         {
+            drop(slot);
             set_tray_recording(&app, false);
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err(e.to_string());

@@ -1253,6 +1253,13 @@ fn the_voice_start_checks_cancel_and_stores_its_handle_under_one_lock() {
     let store = after_prepare.find("*slot = Some(VoiceHandle").expect("handle stored through the held slot");
     assert!(slot < cancel && cancel < spawn && spawn < store, "check, spawn and store under the one guard");
     assert_eq!(after_prepare.matches("vstate.0.lock()").count(), 1, "no second, separate lock for the handle");
+    // The tray tooltip call blocks on the main thread, whose window-close handler takes this slot:
+    // calling it with the slot held deadlocks a hide during start.
+    let held = &after_prepare[slot..];
+    for (i, _) in held.match_indices("set_tray_recording(") {
+        assert!(held[..i].trim_end().ends_with("drop(slot);"), "tray tooltip set while the voice slot is held");
+    }
+    assert!(after_prepare[..slot].contains("set_tray_recording(&app, true)"), "recording tooltip set before the slot");
 }
 
 #[cfg(windows)]
