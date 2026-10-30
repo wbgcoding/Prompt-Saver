@@ -1067,22 +1067,8 @@
             <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
             <input id="opt-autopaste" type="checkbox" class="switch" />
           </label>
-        </div>
-        <!-- Global hotkey: its own full-width row directly under the toggle grid. -->
-        <div class="field field-inline" data-i18n-title="tipHotkeyLabel">
-          <span data-i18n="hotkeyLabel">Global hotkey</span>
-          <div class="hotkey-row">
-            <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
-            <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
-          </div>
-        </div>
-        <!-- Voice dictation's own global hotkey -- visible only with the
-             voiceHotkey expert flag on, same shape as the app hotkey row above. -->
-        <div id="voice-hotkey-row" class="field field-inline">
-          <span data-i18n="voiceHotkeyLabel">Dictation hotkey</span>
-          <div class="hotkey-row">
-            <input id="opt-voice-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="voiceHotkeyLabel" />
-          </div>
+          <!-- Every global hotkey is edited in the All shortcuts dialog; this is its door. -->
+          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
         </div>
       </section>
       <section id="settings-sec-capture" class="settings-sec">

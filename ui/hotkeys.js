@@ -1,7 +1,6 @@
 // Hotkey recording and the hotkey list.
-import { $, errToast, EXPERT_ACTIONS, flag, flagState, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
+import { $, errToast, EXPERT_ACTIONS, flag, flagState, invoke, modal, modalState, prompts, settings, t, toast } from "./core.js";
 import { hotkeyClearX, openAllShortcuts } from "./windowChrome.js";
-import { assignSettingsOpener } from "./settingsPanel.js";
 import { showExpertPage } from "./expertMenu.js";
 
 // Build a Tauri accelerator ("CommandOrControl+Shift+P") from a keydown event.
@@ -295,14 +294,14 @@ export async function toggleRotateAutoDirect(id) {
 // "prompt" rows carry their own id (for the lookup and to exclude themselves from
 // hotkeyOwner's conflict check); the other three share the null-id bucket.
 export const HOTKEYS_LIST_KINDS = {
-  global: { current: () => settings.hotkey, onCommit: commitGlobalHotkey },
+  global: { slot: "app", current: () => settings.hotkey, onCommit: commitGlobalHotkey },
   prompt: {
     current: (id) => prompts.find((x) => x.id === id)?.hotkey || "",
     onCommit: (accel, id) => commitPromptHotkeyDirect(id, accel),
   },
-  voice: { current: () => settings.voice_hotkey, onCommit: commitVoiceHotkey },
-  recStop: { current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
-  recPause: { current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
+  voice: { slot: "voice", current: () => settings.voice_hotkey, onCommit: commitVoiceHotkey },
+  recStop: { slot: "recStop", current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
+  recPause: { slot: "recPause", current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
 };
 export function renderHotkeysList() {
   const box = $("hotkeys-list");
@@ -343,6 +342,7 @@ export function renderHotkeysList() {
     box.appendChild(row);
     bindHotkeyField(input, {
       id: r.id,
+      slot: kindDef.slot,
       current: () => kindDef.current(r.id),
       onCommit: (accel) => kindDef.onCommit(accel, r.id),
     });
@@ -354,34 +354,10 @@ export function renderHotkeysList() {
 }
 
 export function bindHotkeys() {
-  // Global hotkey: click the field and press a key combo to capture it.
-  bindHotkeyField($("opt-hotkey"), {
-    slot: "app",
-    current: () => settings.hotkey,
-    onCommit: commitGlobalHotkey,
-  });
-  hotkeyClearX($("opt-hotkey"), async () => {
-    try { await commitGlobalHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    $("opt-hotkey").value = "";
-  }, "hotkey-clear");
   $("hotkey-list-btn").addEventListener("click", openAllShortcuts);
-  bindHotkeyField($("opt-voice-hotkey"), {
-    slot: "voice",
-    current: () => settings.voice_hotkey,
-    onCommit: commitVoiceHotkey,
-  });
-  hotkeyClearX($("opt-voice-hotkey"), async () => {
-    try { await commitVoiceHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    $("opt-voice-hotkey").value = "";
-  }, "voice-hotkey-clear");
   EXPERT_ACTIONS["voice-hotkey-set"] = () => {
-    assignSettingsOpener(document.activeElement);
     showExpertPage(false);
-    settingsEl.classList.remove("hidden");
-    requestAnimationFrame(() => {
-      $("opt-voice-hotkey").scrollIntoView({ block: "center" });
-      $("opt-voice-hotkey").focus();
-    });
+    openAllShortcuts();
   };
   $("hotkeys-search").addEventListener("input", renderHotkeysList);
 }

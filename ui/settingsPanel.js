@@ -11,7 +11,6 @@ import { attachSelectPicker } from "./selectpop.js";
 import { placePopover } from "./popover.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { fitAllTiles, fitCache } from "./tiles.js";
-import { prettyAccel } from "./hotkeys.js";
 import { applyFlags, applyValues, refreshSettingsLocked, showExpertPage } from "./expertMenu.js";
 import { maybeDupImportToast } from "./management.js";
 import { openBackups } from "./backups.js";
@@ -750,8 +749,6 @@ export function syncSettingsControls() {
     $("opt-favview").checked = favViewEnabled();
     $("opt-favview").closest(".field").classList.toggle("hidden", !flag("favorites"));
     refreshFavViewUi();
-    $("opt-hotkey").value = prettyAccel(settings.hotkey);
-    $("opt-voice-hotkey").value = prettyAccel(settings.voice_hotkey);
     $("pin-top").classList.toggle("active", settings.always_on_top === true);
     $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
     $("opt-autoupdate").checked = settings.auto_update !== false;

@@ -20,9 +20,8 @@ choices; everything optional lives in the expert menu, opened from the same
 window. It holds the language, the theme, the text size and font of the tiles,
 whether the window stays on top, starts with Windows, starts in the background
 and goes to the background instead of quitting when closed (a portable copy
-always quits), the global hotkey,
-auto-paste on double-click, and whether screenshots always go to the screenshots
-folder (section Capture). Every change applies at once, with no save button. "Automatic" as the
+always quits), auto-paste on double-click, whether screenshots always go to the screenshots
+folder (section Capture), and a button that opens the list of all shortcuts. Every change applies at once, with no save button. "Automatic" as the
 language follows Windows and falls back to English. Reset puts every setting
 back to its default and keeps the tiles; Delete removes all data and asks first.
 
@@ -178,7 +177,7 @@ app hotkey always wins a conflict, and among tiles the first one in the list
 keeps a combination two tiles happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
-"All shortcuts", next to the global hotkey field in Settings, opens the shortcuts dialog with every hotkey,
+"All shortcuts" in Settings opens the shortcuts dialog with every hotkey,
 global and per-tile, in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
 
@@ -1013,9 +1012,8 @@ mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, da
 sich im selben Fenster öffnet. Dort stehen Sprache, Design, Textgröße und Schriftart
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
 Hintergrund startet und sich beim Schließen in den Hintergrund legt (eine
-portable Kopie beendet sich immer), der globale
-Tastenkürzel, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
-Screenshots-Ordner (Abschnitt „Aufnehmen“). Jede Änderung gilt sofort, ohne Speichern-Button.
+portable Kopie beendet sich immer), Auto-Einfügen bei Doppelklick, das Speichern von Screenshots im
+Screenshots-Ordner (Abschnitt „Aufnehmen“) und die Liste aller Tastenkürzel. Jede Änderung gilt sofort, ohne Speichern-Button.
 „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.
 Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln;
 Löschen entfernt alle Daten und fragt vorher nach.
@@ -1117,9 +1115,9 @@ eingesetzt, bevor er getippt oder übernommen wird.
 </p>
 
 **Tastenkürzel**: ein globales Tastenkürzel öffnet den Schnellstarter (Standard
-Strg+Alt+P), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
+Strg+Alt+P, einstellbar unter Einstellungen → Alle Tastenkürzel), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Tastenkürzel, sonst die erste Kachel in der Liste.
-„Alle Tastenkürzel“ neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
+„Alle Tastenkürzel“ in den Einstellungen öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
 mit eigenem Tastenkürzel zeigt ein kleines Tastatursymbol.
 

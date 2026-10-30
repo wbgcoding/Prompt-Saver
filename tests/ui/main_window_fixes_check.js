@@ -971,8 +971,9 @@ section(() => {
 // 46. The all-hotkeys list carries the dictation hotkey row.
 section(() => {
   const src = read("hotkeys.js");
-  check(/voice: \{ current: \(\) => settings\.voice_hotkey, onCommit: commitVoiceHotkey \}/.test(src), "the list has a voice kind");
-  check(/flagState\("voiceHotkey"\) \? \[\{ kind: "voice"/.test(src), "the voice row is gated like the settings field");
+  check(/voice: \{ slot: "voice", current: \(\) => settings\.voice_hotkey, onCommit: commitVoiceHotkey \}/.test(src), "the list has a voice kind that skips its own slot in the conflict check");
+  check(/global: \{ slot: "app",/.test(src) && /slot: kindDef\.slot,/.test(src), "the list rows pass their kind's slot to the capture field");
+  check(/flagState\("voiceHotkey"\) \? \[\{ kind: "voice"/.test(src), "the voice row is gated by the voiceHotkey flag");
   const fn = extractBlock(src, "export async function commitVoiceHotkey(");
   check(fn.includes("renderHotkeysList()"), "committing the dictation hotkey refreshes an open list");
 });

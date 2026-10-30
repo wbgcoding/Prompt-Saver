@@ -917,7 +917,7 @@ SECTION = """\
       await click('gear');
       const listBtn = document.getElementById('hotkey-list-btn');
       if (!listBtn) {
-        out.errors.push('the "All hotkeys" button is missing next to the global hotkey field');
+        out.errors.push('the "All shortcuts" button is missing in Settings');
       } else {
         listBtn.click();
         await sleep(150);

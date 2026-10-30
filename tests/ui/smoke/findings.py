@@ -424,7 +424,8 @@ def run(browser, tmp):
     failed += ar_probe('g35', 'hotkey field: a refused capture leaves the global hotkeys off while the field has focus', 'index', '1000x780', '', r"""
     await bootReady();
     document.getElementById('gear').click(); await sleep(250);
-    const input = document.getElementById('opt-hotkey');
+    document.getElementById('hotkey-list-btn').click(); await sleep(250);
+    const input = document.querySelector('.hotkeys-row-global').closest('.hotkeys-row').querySelector('.modal-input');
     input.focus(); await sleep(150);
     const capture = () => callsFor('set_hotkey_capture');
     if (!capture().some((a) => a && a.active === true)) errs.push('564-35: fixture: focusing the field did not switch capture on');
@@ -1334,8 +1335,11 @@ def run(browser, tmp):
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
-    const hk = document.getElementById('opt-hotkey');
-    const x = document.getElementById('hotkey-clear');
+    if (document.getElementById('opt-hotkey') || document.getElementById('opt-voice-hotkey')) errs.push('908: Settings still holds a hotkey input');
+    document.getElementById('hotkey-list-btn').click();
+    await sleep(250);
+    const hk = document.querySelector('.hotkeys-row-global').closest('.hotkeys-row').querySelector('.modal-input');
+    const x = hk.parentElement.querySelector('.clear-btn');
     if (!x || !hk.parentElement.classList.contains('hotkey-clear-wrap') || x.parentElement !== hk.parentElement) {
       errs.push('908: the global hotkey X is not inside the field wrapper');
     } else {
