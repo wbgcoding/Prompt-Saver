@@ -599,7 +599,8 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
     });
     schedule_session_expiry(app.clone());
     let store = lock(&state);
-    if let Some(mut conn) = db_conn(&app) {
+    // Sealing rewrites (and drops undecodable) version rows: not in a folder another machine owns.
+    if let Some(mut conn) = db_conn_write(&app) {
         let all: Vec<Prompt> = store.prompts.iter().chain(store.trash.iter()).filter(|p| p.secret).cloned().collect();
         seal_confidential_versions(&mut conn, &all, &key);
     }

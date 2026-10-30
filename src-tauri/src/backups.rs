@@ -80,11 +80,15 @@ pub(crate) fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
         }
     }
     let db = backup_db_file(folder)?;
-    let tmp;
+    // A name of its own per call: two lists running at once must not truncate or remove each
+    // other's unpacked copy.
+    let tmp = folder.join(format!("count.tmp-{}", gen_id()));
     let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
-        tmp = folder.join("count.tmp");
-        gunzip_to(&db, &tmp).ok()?;
-        tmp
+        if gunzip_to(&db, &tmp).is_err() {
+            let _ = fs::remove_file(&tmp);
+            return None;
+        }
+        tmp.clone()
     } else {
         db
     };
@@ -92,8 +96,9 @@ pub(crate) fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
         .ok()
         .and_then(|c| c.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)).ok())
         .map(|n| n.max(0) as usize);
-    let _ = fs::remove_file(folder.join("count.tmp"));
-    if let Some(n) = n {
+    let _ = fs::remove_file(&tmp);
+    // The note is a cache in the snapshot folder: not written into a folder another machine owns.
+    if let (Some(n), false) = (n, data_dir_write_blocked_quiet()) {
         let _ = fs::write(folder.join(BACKUP_COUNT_FILE), n.to_string());
     }
     n
@@ -147,26 +152,29 @@ pub(crate) fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt>
     let cache = folder.join(BACKUP_NAMES_FILE);
     if cache.exists() {
         let (items, legacy) = read_prompt_names_cache(&cache);
-        if legacy {
+        if legacy && !data_dir_write_blocked_quiet() {
             write_prompt_names(&cache, &items);
         }
         return items;
     }
     let Some(db) = backup_db_file(folder) else { return Vec::new() };
-    let tmp;
+    let tmp = folder.join(format!("names.tmp-{}", gen_id()));
     let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
-        tmp = folder.join("names.tmp");
         if gunzip_to(&db, &tmp).is_err() {
+            let _ = fs::remove_file(&tmp);
             return Vec::new();
         }
-        tmp
+        tmp.clone()
     } else {
         db
     };
     let items = read_prompt_names(&path);
-    let _ = fs::remove_file(folder.join("names.tmp"));
+    let _ = fs::remove_file(&tmp);
     // An empty list is cached only when the snapshot really holds no prompt: a failed read looks
-    // the same and must not be pinned.
+    // the same and must not be pinned. Never into a folder another machine owns.
+    if data_dir_write_blocked_quiet() {
+        return items;
+    }
     if !items.is_empty() || backup_prompt_count(folder) == Some(0) {
         write_prompt_names(&cache, &items);
     }
@@ -394,6 +402,11 @@ pub(crate) fn auto_backup_tick(app: &AppHandle) {
 // count rows, list names or purge the clip inbox hold a whole library and must not stay.
 const BACKUP_STRAY_FILES: [&str; 5] = ["data.db.tmp", "data.db.gz.part", "count.tmp", "names.tmp", "purge.tmp"];
 
+// The unpacked copies carry a per-call suffix (`count.tmp-<id>`), the older ones none.
+pub(crate) fn is_backup_stray(name: &str) -> bool {
+    BACKUP_STRAY_FILES.iter().any(|s| name == *s || name.strip_prefix(s).is_some_and(|rest| rest.starts_with('-')))
+}
+
 // Start-up sweep of what a quit or crash mid-pack leaves behind: the raw copy, the
 // half-written archive, and folders that never got a snapshot. Anything newer than `min_age`
 // may belong to a running backup and is left alone, and a folder that holds a snapshot is
@@ -412,9 +425,9 @@ pub(crate) fn cleanup_incomplete_backups(root: &std::path::Path, min_age: Durati
             continue;
         }
         if backup_db_file(&folder).is_some() {
-            for stray in BACKUP_STRAY_FILES {
-                let f = folder.join(stray);
-                if f.exists() && old_enough(&f) {
+            for inner in fs::read_dir(&folder).into_iter().flatten().flatten() {
+                let f = inner.path();
+                if is_backup_stray(&inner.file_name().to_string_lossy()) && old_enough(&f) {
                     let _ = fs::remove_file(&f);
                 }
             }

@@ -1551,3 +1551,54 @@ fn every_new_claim_restarts_the_beat_that_clears_takeover_markers() {
         assert!(src[..i].trim_end().ends_with("DATA_DIR_LOCK_BEAT.store(0, Ordering::Relaxed);"), "beat reset right before ownership");
     }
 }
+
+// A read-only instance lists another machine's snapshots without leaving a note or an unpacked
+// copy in them; a writable one still caches the note and cleans up after itself.
+#[test]
+fn listing_snapshots_read_only_writes_nothing_into_the_folder() {
+    let _g = DdlockGuard::capture();
+    let dir = ddlock_test_dir("ro-backup-list");
+    let folder = dir.join("20260101-000000");
+    fs::create_dir_all(&folder).unwrap();
+    let raw = dir.join("raw.db");
+    drop(full_schema_db(&raw, "ro"));
+    gzip_to(&raw, &folder.join("data.db.gz")).unwrap();
+    let names_of = || -> Vec<String> {
+        let mut v: Vec<String> = fs::read_dir(&folder).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        v.sort();
+        v
+    };
+
+    DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+    assert_eq!(backup_prompt_count(&folder), Some(0));
+    assert!(backup_prompt_names(&folder).is_empty());
+    assert_eq!(names_of(), vec!["data.db.gz".to_string()], "no note and no unpacked copy beside the snapshot");
+
+    DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+    assert_eq!(backup_prompt_count(&folder), Some(0));
+    assert!(backup_prompt_names(&folder).is_empty());
+    let after = names_of();
+    assert!(after.contains(&BACKUP_COUNT_FILE.to_string()) && after.contains(&BACKUP_NAMES_FILE.to_string()), "the notes are cached when writing is allowed");
+    assert!(!after.iter().any(|n| n.contains(".tmp")), "the unpacked copies are removed again");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_leftover_sweep_knows_the_per_call_copy_names() {
+    assert!(is_backup_stray("count.tmp"));
+    assert!(is_backup_stray("names.tmp-p123_4"));
+    assert!(!is_backup_stray("count.tmpx"));
+    assert!(!is_backup_stray("prompts.count"));
+}
+
+// The unlock seals version rows in the database: a read-only instance must not do that in the
+// folder another machine owns (the AppHandle-bound command has no harness, so the source is checked).
+#[test]
+fn unlocking_the_vault_seals_versions_only_through_the_write_gate() {
+    let src = include_str!("../vault.rs").replace("\r\n", "\n");
+    let start = src.find("fn secret_vault_unlock(").expect("secret_vault_unlock");
+    let body = &src[start..start + src[start..].find("\n}\n").expect("end of fn")];
+    let seal = body.find("seal_confidential_versions(").expect("the unlock seals versions");
+    let opener = &body[..seal];
+    assert!(opener.trim_end().rsplit('\n').take(3).any(|l| l.contains("db_conn_write(&app)")), "the connection must come from db_conn_write");
+}
