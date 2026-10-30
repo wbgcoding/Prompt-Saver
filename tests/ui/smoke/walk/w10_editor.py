@@ -520,15 +520,15 @@ SECTION = """\
           out.errors.push('the compare view has no "take right" action');
         } else {
           const leftId = 'p0', rightId = 'p2';
-          const leftText = PROMPTS.find(p => p.id === leftId).text;
+          const rightText = PROMPTS.find(p => p.id === rightId).text;
           takeRightBtn.click();
           await sleep(300);
           if (!document.getElementById('compare-modal').classList.contains('hidden')) {
             out.errors.push('the compare view stayed open after taking a side');
           }
-          // "Take right" pushes the LEFT entry's content onto the right one.
-          if (PROMPTS.find(p => p.id === rightId).text !== leftText) {
-            out.errors.push('"take right" did not overwrite the right entry with the left one\\'s text');
+          // "Use right" keeps the right side: its content lands on the LEFT entry.
+          if (PROMPTS.find(p => p.id === leftId).text !== rightText) {
+            out.errors.push('"use right" did not overwrite the left entry with the right one\\'s text');
           }
         }
       }

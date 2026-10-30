@@ -447,12 +447,12 @@ export function renderCompareView() {
     takeLeft.type = "button";
     takeLeft.className = "ghost-btn";
     takeLeft.textContent = t("compareTakeLeft");
-    takeLeft.addEventListener("click", () => takeCompareSide(ps[0], ps[1]));
+    takeLeft.addEventListener("click", () => takeCompareSide(ps[1], ps[0]));
     const takeRight = document.createElement("button");
     takeRight.type = "button";
     takeRight.className = "ghost-btn";
     takeRight.textContent = t("compareTakeRight");
-    takeRight.addEventListener("click", () => takeCompareSide(ps[1], ps[0]));
+    takeRight.addEventListener("click", () => takeCompareSide(ps[0], ps[1]));
     actions.append(takeLeft, takeRight);
   }
   const closeBtn = document.createElement("button");
