@@ -60,6 +60,11 @@ let recScreenElapsedAtStart = null;
 // the session finishing without waiting on the read.
 let recScreenElapsedValue = null;
 let recTimer = 0;
+// True from the stop of a take until its finish has run (the last chunks written, the session
+// closed, the editor asked). Start, the selects and the preview stay untouched meanwhile, and a
+// close asked for in that window waits for it, so the window cannot go away under the finish.
+let finishing = false;
+let closeAfterFinish = false;
 // Expert-menu settings this window has no control for (device, framerate), read once at
 // boot and applied to every getUserMedia call. Resolution has its own select; only its
 // starting value comes from settings.
@@ -141,6 +146,9 @@ function stopStream() {
 // corrupts the file.
 async function refreshPreview() {
   if (recorder && recorder.state !== "inactive") return;
+  // The finish of a take owns the controls (its last step calls this again), and a window that
+  // is about to close needs no stream.
+  if (finishing || closeAfterFinish) return;
   const gen = ++previewGen;
   stopStream();
   const height = Number(resSelect.value) || 720;
@@ -310,6 +318,7 @@ async function startRecording() {
       });
   };
   recorder.onstop = async () => {
+    finishing = true;
     clearInterval(recTimer);
     recBadge.classList.add("hidden");
     setStatus("idle");
@@ -324,6 +333,12 @@ async function startRecording() {
     const idleControls = () => {
       audioSelect.disabled = false;
       resSelect.disabled = false;
+      finishing = false;
+      // A close asked for during the finish happens now that the take is saved.
+      if (closeAfterFinish) {
+        stopStream();
+        appWin.close();
+      }
     };
     if (!path) {
       idleControls();
@@ -418,7 +433,12 @@ async function showCameraError(err) {
 }
 
 function stopRecording() {
-  if (recorder && recorder.state !== "inactive") recorder.stop();
+  if (recorder && recorder.state !== "inactive") {
+    // Set before the recorder's stop event arrives (it fires after the last chunk), so a close
+    // pressed in between already waits for the finish.
+    finishing = true;
+    recorder.stop();
+  }
 }
 
 startBtn.addEventListener("click", startRecording);
@@ -455,6 +475,9 @@ folderBtn.addEventListener("click", async () => {
 closeBtn.addEventListener("click", async () => {
   // A running take is stopped and kept, like Escape; a second press closes the window.
   if (isRecording()) { stopBtn.click(); return; }
+  // The stop is on its way (the recorder reports it after the last chunk): the window closes
+  // once the finish has saved the take.
+  if (finishing) { closeAfterFinish = true; return; }
   stopStream();
   appWin.close();
 });

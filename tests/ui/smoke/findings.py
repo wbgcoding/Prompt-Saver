@@ -2386,5 +2386,72 @@ def run(browser, tmp):
       if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('wb20: a window button closed the editor');
     }
 """)
+    # ---- camera window: finish phase, refused editor, refused folder, missing permission handler ----
+    cam_pre = """<script>
+window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null, setDirFail: false, permFailed: false };
+</script>
+"""
+    cam_common = r"""
+    const w0 = window.__TAURI__.webviewWindow.getCurrentWebviewWindow;
+    window.__TAURI__.webviewWindow.getCurrentWebviewWindow = () => new Proxy(w0(), {
+      get: (t, k) => (k === 'close' ? async () => { window.__CAMX.closes++; } : (typeof t[k] === 'function' ? t[k].bind(t) : t[k])),
+    });
+    class FakeRec {
+      static isTypeSupported() { return true; }
+      constructor() { this.state = 'inactive'; window.__REC = this; }
+      start() { this.state = 'recording'; setTimeout(() => { if (this.onstart) this.onstart(); }, 0); }
+      stop() { this.state = 'inactive'; if (this.onstop) this.onstop(); }
+      emit(text) { this.ondataavailable({ data: new Blob([text]) }); }
+    }
+    window.MediaRecorder = FakeRec;
+    if (!navigator.mediaDevices) { navigator.mediaDevices = new EventTarget(); }
+    navigator.mediaDevices.getUserMedia = () => { window.__CAMX.gum++; return Promise.resolve(new MediaStream()); };
+    navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+    const origInvoke = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      const r = await origInvoke(cmd, args);
+      if (cmd === 'camera_begin_recording') return { path: 'C:/r/rec-cam-1.webm' };
+      if (cmd === 'camera_mark_finishing' && window.__CAMX.markGate) await window.__CAMX.markGate;
+      if (cmd === 'camera_finish_recording') return { path: args.path };
+      if (cmd === 'camera_permission_failed') return window.__CAMX.permFailed;
+      if (cmd === 'open_video_editor') return window.__CAMX.editor;
+      if (cmd === 'pick_folder') return window.__CAMX.pickDir;
+      if (cmd === 'set_recording_dir' && window.__CAMX.setDirFail) throw 'dir-not-picked';
+      return r;
+    };
+    const startBtn = document.getElementById('cam-start-btn');
+    const statusText = document.getElementById('cam-status-text');
+    const noDevice = document.getElementById('cam-no-device');
+    const bootCam = async () => {
+      await until(() => startBtn.textContent.trim());
+      window.__FIRE__('camera-permission-ready', null);
+      return until(() => !startBtn.disabled);
+    };
+    const takeStopped = async () => {
+      startBtn.click();
+      await until(() => window.__REC && window.__REC.state === 'recording');
+      window.__REC.emit('a');
+      document.getElementById('cam-stop-btn').click();
+    };
+"""
+    failed += ar_probe('cam1', 'camera window: during the finish a device change keeps Start off and a close waits for the saved take', 'camera', '420x620', cam_pre, cam_common + r"""
+    if (!(await bootCam())) errs.push('cam1: Start never became enabled');
+    let release;
+    window.__CAMX.markGate = new Promise((r) => { release = r; });
+    await takeStopped();
+    await sleep(100);
+    const before = window.__CAMX.gum;
+    navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+    await sleep(300);
+    if (!startBtn.disabled) errs.push('cam1: a device change during the finish re-enabled Start');
+    if (window.__CAMX.gum !== before) errs.push('cam1: the preview was restarted during the finish');
+    document.getElementById('cam-close').click();
+    await sleep(100);
+    if (window.__CAMX.closes !== 0) errs.push('cam1: the window closed before the take was saved');
+    release();
+    await until(() => window.__CAMX.closes > 0, 100);
+    if (window.__CAMX.closes !== 1) errs.push('cam1: the window did not close after the finish (' + window.__CAMX.closes + ')');
+    if (callsFor('open_video_editor').length !== 1) errs.push('cam1: the saved take was not handed to the editor');
+""")
     # ---- main window findings: generated block end ----
     return failed

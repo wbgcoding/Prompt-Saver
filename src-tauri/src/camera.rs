@@ -325,6 +325,24 @@ fn discard_session(session: &CamSession) {
     let _ = fs::remove_file(sidecar_path(&session.output_path, CAM_SIDECAR_EXT));
 }
 
+// What a window that went away under a live session leaves behind. The close button, Escape and
+// the stop button keep a running take, so Alt+F4, the taskbar close and an app quit must too: a
+// take with bytes on disk is kept with the abandoned marker (the recordings sweep would
+// otherwise delete it as unreferenced after an hour), and one that was already finishing also
+// gets its sidecar. Only a reserved file that never received a byte is removed.
+fn settle_session_on_close(session: &CamSession) {
+    let has_bytes = fs::metadata(&session.output_path).is_ok_and(|m| m.len() > 0);
+    if !has_bytes {
+        discard_session(session);
+        return;
+    }
+    if let Some((cam_start_ms, screen_elapsed_ms)) = session.finishing {
+        // Nobody is left to tell: the window is already gone.
+        let _ = finalize_session(session, cam_start_ms, screen_elapsed_ms);
+    }
+    let _ = fs::write(abandoned_marker_path(&session.output_path), b"");
+}
+
 pub fn read_sidecar(path: &Path) -> Option<CamSidecar> {
     let data = fs::read_to_string(sidecar_path(path, CAM_SIDECAR_EXT)).ok()?;
     serde_json::from_str(&data).ok()
@@ -367,6 +385,9 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
         let store = lock(&db);
         crate::capture_excluded(&store.settings)
     };
+    // A new window starts unanswered, whatever the previous one reached. Reset before the build,
+    // so its page can never read the previous window's answer.
+    CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
     let win = WebviewWindowBuilder::new(&app, CAMERA_WIN_LABEL, WebviewUrl::App("camera.html".into()))
         .title(crate::brand::DISPLAY_NAME)
         .inner_size(420.0, 620.0)
@@ -380,28 +401,25 @@ pub async fn open_camera_window(app: AppHandle, db: State<'_, Db>) -> Result<(),
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
     crate::set_capture_exclusion(&win, excluded);
-    // A new window starts unanswered, whatever the previous one reached.
-    CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
     // Without its handler this window must not survive: the next open would just show it.
     if let Err(e) = install_permission_handler(&app, &win) {
         let _ = win.destroy();
         return Err(e);
     }
-    // Alt+F4, the taskbar close or an app quit skip camera.js's close-button handler
-    // (discardRecording) and would leave a half-written file and an active session. This is the
-    // window's last chance to do the same cleanup from the session state.
+    // Alt+F4, the taskbar close or an app quit skip camera.js's close-button handler and would
+    // leave a half-written file and an active session. This is the window's last chance to settle
+    // the session from its state: the take is kept, never deleted (see settle_session_on_close).
     let cleanup_app = app.clone();
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
+            // The next window starts unanswered, whatever this one reached.
+            CAM_PERMISSION_READY.store(false, std::sync::atomic::Ordering::SeqCst);
             if let Some(state) = cleanup_app.try_state::<CameraState>() {
-                if let Some(session) = state.0.lock().unwrap_or_else(|e| e.into_inner()).take() {
-                    match session.finishing {
-                        Some((cam_start_ms, screen_elapsed_ms)) => {
-                            // Nobody is left to tell: the window is already gone.
-                            let _ = finalize_session(&session, cam_start_ms, screen_elapsed_ms);
-                        }
-                        None => discard_session(&session),
-                    }
+                let taken = state.0.lock().unwrap_or_else(|e| e.into_inner()).take();
+                if let Some(session) = taken {
+                    // This handler runs on the event loop: the disk work happens off it, so a
+                    // recording folder on a slow or sleeping share cannot stall every window.
+                    tauri::async_runtime::spawn_blocking(move || settle_session_on_close(&session));
                 }
             }
         }
@@ -744,5 +762,57 @@ mod tests {
         assert!(slot.is_none());
         assert_eq!(fs::read(&video).unwrap(), b"partial");
         let _ = fs::remove_dir_all(&dir);
+    }
+    #[test]
+    fn a_window_closed_under_a_running_take_keeps_the_file() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-close-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("rec-cam-1.webm");
+        fs::write(&video, b"ten minutes of video").unwrap();
+        let session = CamSession { output_path: video.clone(), companion_path: None, finishing: None };
+        settle_session_on_close(&session);
+        assert!(video.exists(), "Alt+F4 during a take must not delete it");
+        assert!(is_kept_abandoned(&video), "the sweep must leave the kept take alone");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_window_closed_while_finishing_keeps_the_file_and_writes_the_sidecar() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-close2-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("rec-cam-1.webm");
+        fs::write(&video, b"video").unwrap();
+        let session = CamSession { output_path: video.clone(), companion_path: None, finishing: Some((5_000, Some(1_200))) };
+        settle_session_on_close(&session);
+        assert!(video.exists());
+        assert!(is_kept_abandoned(&video), "a finished-by-fallback take must survive the sweep too");
+        let sidecar = read_sidecar(&video).expect("sidecar written");
+        assert_eq!((sidecar.start_ms, sidecar.overlay_start_ms), (5_000, Some(1_200)));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_window_closed_before_the_first_chunk_removes_the_empty_reservation() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-close3-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("rec-cam-1.webm");
+        fs::write(&video, b"").unwrap();
+        let session = CamSession { output_path: video.clone(), companion_path: None, finishing: None };
+        settle_session_on_close(&session);
+        assert!(!video.exists(), "a file that never got a byte is not a recording");
+        assert!(!is_kept_abandoned(&video));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_close_handler_settles_the_session_off_the_event_loop() {
+        let rs = include_str!("camera.rs");
+        let at = rs.find("if matches!(event, WindowEvent::Destroyed)").expect("destroyed handler");
+        let arm = &rs[at..at + 1200];
+        assert!(arm.contains("spawn_blocking(move || settle_session_on_close(&session))"), "{arm}");
+        assert!(!arm.contains("discard_session("), "the close handler must not delete a take");
     }
 }
