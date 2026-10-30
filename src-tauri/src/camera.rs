@@ -343,6 +343,15 @@ fn settle_session_on_close(session: &CamSession) {
     let _ = fs::write(abandoned_marker_path(&session.output_path), b"");
 }
 
+// The files of the live camera take, for the recordings sweep: it sits unreferenced for as long
+// as the take runs, and a long pause moves no chunks, so its modification time stops too.
+pub(crate) fn live_session_paths(slot: &Option<CamSession>) -> Vec<PathBuf> {
+    match slot {
+        Some(s) => vec![s.output_path.clone(), sidecar_path(&s.output_path, CAM_SIDECAR_EXT)],
+        None => Vec::new(),
+    }
+}
+
 pub fn read_sidecar(path: &Path) -> Option<CamSidecar> {
     let data = fs::read_to_string(sidecar_path(path, CAM_SIDECAR_EXT)).ok()?;
     serde_json::from_str(&data).ok()
@@ -814,5 +823,30 @@ mod tests {
         let arm = &rs[at..at + 1200];
         assert!(arm.contains("spawn_blocking(move || settle_session_on_close(&session))"), "{arm}");
         assert!(!arm.contains("discard_session("), "the close handler must not delete a take");
+    }
+
+    #[test]
+    fn the_live_camera_take_is_listed_for_the_recordings_sweep() {
+        use crate::prompts::sweep_stale_recordings_in;
+        use std::collections::HashSet;
+        use std::time::{Duration, SystemTime};
+        let dir = std::env::temp_dir().join(format!("psc-cam-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("rec-cam-1.webm");
+        let stray = dir.join("rec-cam-2.webm");
+        for f in [&video, &stray] {
+            fs::write(f, b"video").unwrap();
+            let old = SystemTime::now() - Duration::from_secs(3 * 3600);
+            fs::OpenOptions::new().write(true).open(f).unwrap().set_modified(old).unwrap();
+        }
+        let live = session_at(&video.to_string_lossy());
+        let protected = live_session_paths(&live);
+        let (count, _) = sweep_stale_recordings_in(&dir, &HashSet::new(), &protected, false, Duration::from_secs(60), None);
+        assert_eq!(count, 1, "only the take that is not live goes");
+        assert!(video.exists(), "a paused live take is not stale");
+        assert!(!stray.exists());
+        assert!(live_session_paths(&None).is_empty());
+        let _ = fs::remove_dir_all(&dir);
     }
 }

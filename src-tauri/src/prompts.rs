@@ -675,6 +675,11 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         push_recording_with_sidecars(&mut out, &p);
     }
     out.extend(protected_take_paths());
+    // The live camera take: unreferenced and, while paused, not growing, so its age alone would
+    // make it fair game for the sweep a screen recording's stop triggers.
+    if let Some(cam) = app.try_state::<camera::CameraState>() {
+        out.extend(camera::live_session_paths(&cam.0.lock().unwrap_or_else(|e| e.into_inner())));
+    }
     let mut editor_sources = Vec::new();
     if let Some(state) = app.try_state::<VideoEditorPending>() {
         editor_sources.push(state.lock().clone());
