@@ -1808,10 +1808,15 @@ $("ve-speed-pitch").addEventListener("change", () => {
 $("ve-fade-on").addEventListener("change", () => {
   if ($("ve-fade-on").checked) {
     const fadeDef = VE.fadeMsDefault || 500;
+    // An empty or unreadable field means the default; a typed 0 is a deliberate "no fade on this side".
+    const fadeField = (id) => {
+      const raw = $(id).value.trim();
+      return raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : fadeDef;
+    };
     pushReplacing((o) => o.tool === "fade", {
       tool: "fade",
-      inMs: clamp(Number($("ve-fade-in").value) || fadeDef, 0, 10000),
-      outMs: clamp(Number($("ve-fade-out").value) || fadeDef, 0, 10000),
+      inMs: clamp(fadeField("ve-fade-in"), 0, 10000),
+      outMs: clamp(fadeField("ve-fade-out"), 0, 10000),
     });
   } else {
     removeOps((o) => o.tool === "fade");

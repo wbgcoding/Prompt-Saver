@@ -446,6 +446,25 @@ def run(browser, tmp):
     if (!/clip[.]mp4$/.test(VE.destOverride || '')) errs.push('4041: after the same-quality preset the destination is ' + VE.destOverride);
     """)
 
+    # 4042: switching fade off and on keeps a deliberate 0 on one side.
+    failed += vprobe('fadezero', 'a fade side set to 0 stays 0 when fade is switched on again', r"""
+    // 4042: fade zero.
+    const on = document.getElementById('ve-fade-on');
+    const fin = document.getElementById('ve-fade-in');
+    const fout = document.getElementById('ve-fade-out');
+    const fire = (el) => el.dispatchEvent(new Event('change', { bubbles: true }));
+    on.checked = true; fire(on);
+    fin.value = '0'; fire(fin);
+    fout.value = '1000'; fire(fout);
+    on.checked = false; fire(on);
+    on.checked = true; fire(on);
+    const fade = VE.ops.find((o) => o.tool === 'fade');
+    if (!fade || fade.inMs !== 0 || fade.outMs !== 1000) errs.push('4042: fade came back as ' + JSON.stringify(fade));
+    fin.value = ''; on.checked = false; fire(on); on.checked = true; fire(on);
+    const again = VE.ops.find((o) => o.tool === 'fade');
+    if (!again || again.inMs <= 0) errs.push('4042: an empty field should fall back to the default, got ' + JSON.stringify(again));
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);
