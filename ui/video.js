@@ -20,7 +20,7 @@ import { stripFormatExt } from "./exportName.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
-import { markedRange, centeredRect, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
+import { markedRange, centeredRect, addAlignedCameraOverlay, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
 import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
@@ -2381,7 +2381,13 @@ listen("video-editor-load", async (e) => {
   // The opener waits for this answer: it only treats the switch as done once taken.
   const reqId = typeof e.payload === "object" ? e.payload?.request_id : null;
   const ack = (state) => { if (reqId != null) invoke("video_editor_load_ack", { requestId: reqId, state }).catch(() => {}); };
-  if (!path || path === VE.src) { ack(path ? "accepted" : "refused"); return; }
+  if (!path || path === VE.src) {
+    // The recording is already open; a camera recording opened for it afterwards only adds its
+    // overlay.
+    if (path && overlayPath && VE.dur > 0 && VE.w > 0) addAlignedCameraOverlay(overlayPath, VE.loadGen);
+    ack(path ? "accepted" : "refused");
+    return;
+  }
   // Switching source ("Edit video" on another tile while this window is open) must not silently
   // discard unsaved edits: it guards the same case closeWindow() does, with its exact confirm.
   if (VE.ops.length && VE.dirty) {

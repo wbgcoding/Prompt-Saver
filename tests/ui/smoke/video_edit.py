@@ -565,6 +565,18 @@ def run(browser, tmp):
     if (VE.liveEls.get('ov-spent').hidden) errs.push('4047: a looping overlay was hidden');
     """)
 
+    # 4048: opening the camera take of the recording that is already open adds its overlay.
+    failed += vprobe('camsame', 'the camera overlay is added to an already open recording', r"""
+    const before = VE.ops.filter((o) => o.tool === 'overlay' && o.kind === 'video').length;
+    window.__FIRE__('video-editor-load', { path: VE.src, origin_dir: '', overlay_path: 'C:/Recordings/cam-take.mp4' });
+    await until(() => VE.ops.filter((o) => o.tool === 'overlay' && o.kind === 'video').length > before, 60);
+    const added = VE.ops.filter((o) => o.tool === 'overlay' && o.kind === 'video' && o.path === 'C:/Recordings/cam-take.mp4');
+    if (added.length !== 1) errs.push('4048: ' + added.length + ' camera overlays after the same-source load');
+    window.__FIRE__('video-editor-load', { path: VE.src, origin_dir: '', overlay_path: 'C:/Recordings/cam-take.mp4' });
+    await sleep(150);
+    if (VE.ops.filter((o) => o.kind === 'video' && o.path === 'C:/Recordings/cam-take.mp4').length !== 1) errs.push('4048: a repeated load added the camera overlay twice');
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);
