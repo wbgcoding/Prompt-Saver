@@ -1295,3 +1295,19 @@ fn a_folder_switch_that_wrote_nothing_says_so_with_or_without_a_delete() {
     assert_eq!(sync_dir_switch_early_end(0, false), Some(Ok(0)), "nothing to delete: done");
     assert_eq!(sync_dir_switch_early_end(0, true), None, "the delete is next");
 }
+
+#[test]
+fn a_lock_sighting_ends_once_its_date_is_sane_again() {
+    let dir = sync_tmp_dir("sighted");
+    let lock = dir.join("p1.md.lock");
+    fs::write(&lock, "stray lock text").unwrap();
+    let key = sync_seen_key(&lock);
+    let set = |t: SystemTime| fs::OpenOptions::new().write(true).open(&lock).unwrap().set_modified(t).unwrap();
+    set(SystemTime::now() + Duration::from_secs(300));
+    assert!(!sync_lock_is_stale(&lock));
+    assert!(sync_state().lock_sighted.lock().unwrap().contains_key(&key), "a future date is anchored on first sight");
+    set(SystemTime::now());
+    assert!(!sync_lock_is_stale(&lock));
+    assert!(!sync_state().lock_sighted.lock().unwrap().contains_key(&key), "a sane date drops the sighting");
+    let _ = fs::remove_dir_all(&dir);
+}

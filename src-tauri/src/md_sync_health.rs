@@ -165,7 +165,11 @@ fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
         return true; // gone already
     };
     let age = match meta.modified().ok().and_then(|m| m.elapsed().ok()) {
-        Some(d) => d.as_secs(),
+        Some(d) => {
+            // A date the clock accepts again ends the future-dated sighting for this lock.
+            sync_state().lock_sighted.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
+            d.as_secs()
+        }
         // Dated in the future (the writer's clock runs ahead, or this one was set back): the
         // date says nothing, so the age counts from the first time this instance saw this text.
         None => {
@@ -174,6 +178,11 @@ fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
             let first = match sighted.get(&key) {
                 Some((t, at)) if t == text => *at,
                 _ => {
+                    // Locks released while dated in the future are never asked about again; the
+                    // map stays small by starting over when it grows far past any real folder.
+                    if sighted.len() >= 256 {
+                        sighted.clear();
+                    }
                     sighted.insert(key.clone(), (text.to_string(), now));
                     now
                 }
