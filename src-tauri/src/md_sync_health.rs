@@ -147,12 +147,22 @@ pub(crate) fn pid_started_ns(pid: u32) -> Option<u128> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn sync_lock_is_stale(lock_path: &Path) -> bool {
+    sync_lock_text_is_stale(lock_path, &read_sync_lock_text(lock_path))
+}
+
+fn read_sync_lock_text(lock_path: &Path) -> String {
+    fs::read(lock_path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default()
+}
+
+// Judges the lock text read before this call. The file's age is read afterwards, so a lock
+// that another computer replaced in between looks young and is left alone.
+fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
     let Ok(meta) = fs::metadata(lock_path) else { return true }; // gone already
     // A lock dated in the future (the other computer's clock runs ahead) is not old.
     let Some(age) = meta.modified().ok().and_then(|m| m.elapsed().ok()).map(|d| d.as_secs()) else { return false };
-    let text = fs::read(lock_path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
-    match sync_lock_holder(&text) {
+    match sync_lock_holder(text) {
         SyncLockHolder::Here { pid, since_ns } => {
             if age < SYNC_LOCK_STALE_SECS {
                 return false;
@@ -178,9 +188,13 @@ pub(crate) fn sync_lock_acquire(md_path: &Path) -> bool {
     let since = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let token = format!("{}\n{}\n{}", local_host_name(), std::process::id(), since);
     let mut taken = sync_lock_create(&lock_path, &token);
-    if !taken && sync_lock_is_stale(&lock_path) {
-        let dead = fs::read(&lock_path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
-        taken = sync_lock_take_over(&lock_path, &dead, &token);
+    if !taken {
+        // One read serves both the stale judgement and the claim, so a lock another computer
+        // took over meanwhile is never mistaken for the dead one.
+        let dead = read_sync_lock_text(&lock_path);
+        if sync_lock_text_is_stale(&lock_path, &dead) {
+            taken = sync_lock_take_over(&lock_path, &dead, &token);
+        }
     }
     if taken {
         sync_state().locks.lock().unwrap_or_else(|e| e.into_inner()).insert(sync_seen_key(&lock_path), token);
