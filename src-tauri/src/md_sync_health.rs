@@ -167,6 +167,13 @@ fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
             if age < SYNC_LOCK_STALE_SECS {
                 return false;
             }
+            // This very process, with a lock it no longer tracks: a release whose removal failed
+            // (a virus scanner or a cloud client held the file) dropped it from the table and left
+            // the file. Nobody alive is going to finish that write, and the process id alone
+            // would call it alive for as long as the app runs.
+            if pid == std::process::id() && !sync_lock_is_tracked(text) {
+                return true;
+            }
             if !pid_is_alive(pid) {
                 return true;
             }
@@ -177,6 +184,11 @@ fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
         SyncLockHolder::Elsewhere => age >= SYNC_LOCK_FOREIGN_STALE_SECS,
         SyncLockHolder::Unreadable => age >= SYNC_LOCK_STALE_SECS,
     }
+}
+
+// Whether this instance holds a lock with exactly this text right now.
+fn sync_lock_is_tracked(text: &str) -> bool {
+    sync_state().locks.lock().unwrap_or_else(|e| e.into_inner()).values().any(|t| t == text)
 }
 
 // Atomic create (never check then create, which races between instances). A held,

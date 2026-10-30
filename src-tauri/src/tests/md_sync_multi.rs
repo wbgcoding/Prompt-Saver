@@ -1548,3 +1548,21 @@ fn multi_leaving_a_folder_keeps_a_file_edited_since_it_was_last_read() {
     assert!(fs::read_to_string(&path).unwrap().contains("not imported yet"), "the edit was deleted unseen");
     let _ = fs::remove_dir_all(&data);
 }
+
+#[test]
+fn multi_a_lock_of_this_process_that_it_failed_to_remove_does_not_block_the_file_for_good() {
+    let dir = sync_tmp_dir("lock-leftover");
+    let md = dir.join("p.md");
+    assert!(sync_lock_acquire(&md));
+    let lock = sync_lock_path(&md);
+    // The release could not remove the file and forgot the lock all the same.
+    let text = fs::read_to_string(&lock).unwrap();
+    sync_state().locks.lock().unwrap().clear();
+    assert!(lock.exists());
+    assert!(!sync_lock_is_stale(&lock), "a young lock is left for the stale age");
+    age_file(&lock, SYNC_LOCK_STALE_SECS + 5);
+    assert!(sync_lock_is_stale(&lock), "a lock this process lost track of blocks its file until restart: {text:?}");
+    assert!(sync_lock_acquire(&md), "the leftover lock was never taken over");
+    sync_lock_release(&md);
+    let _ = fs::remove_dir_all(&dir);
+}
