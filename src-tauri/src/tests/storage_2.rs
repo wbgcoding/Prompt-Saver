@@ -205,6 +205,19 @@ fn backup_is_due_fires_for_an_aged_backup_and_for_none_at_all() {
 }
 
 #[test]
+fn a_snapshot_stamped_in_the_future_does_not_hold_back_the_next_backup() {
+    let now = 1_800_000_000i64;
+    let day = 86_400i64;
+    // Only a snapshot from a clock that ran a month ahead: nothing real, so a backup is due.
+    assert!(backup_is_due(newest_stamp_age(now, &[now + 30 * day]), 24));
+    // Beside a genuine old one, the old one decides the age.
+    assert_eq!(newest_stamp_age(now, &[now + 30 * day, now - 2 * day]), Some(2 * day as u64));
+    // Slack for local-time shifts: a stamp an hour ahead still counts as fresh.
+    assert_eq!(newest_stamp_age(now, &[now + 3600]), Some(0));
+    assert_eq!(newest_stamp_age(now, &[]), None);
+}
+
+#[test]
 fn backup_is_due_stays_false_right_after_a_backup_just_ran() {
     // The same check that lets a due backup fire at start also keeps a
     // second app start moments later from taking a second one: it sees the

@@ -667,13 +667,22 @@ pub(crate) fn stamp_secs(name: &str) -> Option<i64> {
 // Seconds since the newest snapshot, or None when there is none yet.
 pub(crate) fn newest_backup_age(app: &AppHandle) -> Option<u64> {
     let now = stamp_secs(&local_stamp())?;
-    let newest = fs::read_dir(backups_dir(app))
+    let stamps: Vec<i64> = fs::read_dir(backups_dir(app))
         .into_iter()
         .flatten()
         .flatten()
         .filter(|e| e.path().is_dir() && backup_db_file(&e.path()).is_some())
         .filter_map(|e| stamp_secs(&e.file_name().to_string_lossy()))
-        .max()?;
+        .collect();
+    newest_stamp_age(now, &stamps)
+}
+
+// Age of the newest stamp that can be real. A snapshot named for a time more than a day ahead
+// (the clock was set forward once and corrected) would otherwise read as age 0 until that date
+// and keep the automatic backup from ever running; such stamps are skipped, a day of slack
+// covers daylight saving shifts in the local stamps.
+pub(crate) fn newest_stamp_age(now: i64, stamps: &[i64]) -> Option<u64> {
+    let newest = stamps.iter().copied().filter(|s| *s <= now + 86_400).max()?;
     Some((now - newest).max(0) as u64)
 }
 
