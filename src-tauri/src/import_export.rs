@@ -29,15 +29,41 @@ pub(crate) fn csv_row(cells: &[&str]) -> String {
 // inside a body would be ambiguous. An HTML-comment marker collides with neither and reads
 // as generated to someone editing the Markdown-sync file by hand.
 pub(crate) const VARIANT_SEP: &str = "\n<!-- next -->\n";
-// Escaped form of the marker, so an entry containing the literal separator survives the
-// round trip instead of being split: the inserted backslash means it never equals
-// VARIANT_SEP, so .split(VARIANT_SEP) cannot match inside it.
-pub(crate) const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
+// A marker line inside an entry is escaped line by line: one more backslash after "<!-- ",
+// so it never equals the marker. The escape is exactly reversible for any number of
+// backslashes, and for marker lines that follow each other (a substring replace would let
+// two neighbours share their newline and escape only the first).
+fn variant_marker_backslashes(line: &str) -> Option<usize> {
+    let inner = line.strip_prefix("<!-- ")?.strip_suffix("next -->")?;
+    inner.chars().all(|c| c == '\\').then_some(inner.len())
+}
+
+fn escape_variant_markers(entry: &str) -> String {
+    entry
+        .split('\n')
+        .map(|line| match variant_marker_backslashes(line) {
+            Some(n) => format!("<!-- {}next -->", "\\".repeat(n + 1)),
+            None => line.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn unescape_variant_markers(entry: &str) -> String {
+    entry
+        .split('\n')
+        .map(|line| match variant_marker_backslashes(line) {
+            Some(n) if n > 0 => format!("<!-- {}next -->", "\\".repeat(n - 1)),
+            _ => line.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 pub(crate) fn join_variants(text: &str, variants: &[String]) -> String {
     // Escaped even with no further entries: a single text that contains the marker
     // verbatim must not come back split in two.
-    let escape = |s: &str| s.replace(VARIANT_SEP, VARIANT_SEP_ESCAPED);
+    let escape = escape_variant_markers;
     if variants.is_empty() {
         return escape(text);
     }
@@ -48,10 +74,21 @@ pub(crate) fn join_variants(text: &str, variants: &[String]) -> String {
 }
 
 pub(crate) fn split_variants(joined: &str) -> (String, Vec<String>) {
-    let unescape = |s: &str| s.replace(VARIANT_SEP_ESCAPED, VARIANT_SEP);
-    let mut parts = joined.split(VARIANT_SEP);
-    let text = unescape(parts.next().unwrap_or(""));
-    (text, parts.map(unescape).collect())
+    // A separator is a marker line with a newline on both sides, so a marker at the very start
+    // or end of the text is plain content, as before.
+    let lines: Vec<&str> = joined.split('\n').collect();
+    let last = lines.len() - 1;
+    let mut parts: Vec<Vec<&str>> = vec![Vec::new()];
+    for (i, line) in lines.iter().enumerate() {
+        if *line == "<!-- next -->" && i > 0 && i < last {
+            parts.push(Vec::new());
+        } else if let Some(cur) = parts.last_mut() {
+            cur.push(line);
+        }
+    }
+    let mut parts = parts.into_iter().map(|p| unescape_variant_markers(&p.join("\n")));
+    let text = parts.next().unwrap_or_default();
+    (text, parts.collect())
 }
 
 // ---- Static placeholder resolution (export, Markdown sync) ----

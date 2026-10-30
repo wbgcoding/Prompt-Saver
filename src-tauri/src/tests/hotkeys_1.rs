@@ -1195,6 +1195,36 @@ fn join_variants_survives_an_entry_containing_the_separator_verbatim() {
     assert_eq!(out_variants, variants);
 }
 
+// Two marker lines in a row share the newline between them: escaping the pair as substrings
+// handled only the first and the leftover turned into a real separator.
+#[test]
+fn join_variants_survives_two_consecutive_separator_lines() {
+    let text = "a\n<!-- next -->\n<!-- next -->\nb".to_string();
+    let variants = vec!["<!-- next -->\n<!-- next -->".to_string(), "c".to_string()];
+    let (out_text, out_variants) = split_variants(&join_variants(&text, &variants));
+    assert_eq!(out_text, text);
+    assert_eq!(out_variants, variants);
+    let (single, none) = split_variants(&join_variants(&text, &[]));
+    assert_eq!(single, text);
+    assert!(none.is_empty());
+}
+
+// A text that already holds an escaped-looking marker line must come back unchanged, not
+// turn into the real marker.
+#[test]
+fn join_variants_keeps_a_literal_escaped_marker_line() {
+    for line in ["<!-- \\next -->", "<!-- \\\\next -->", "<!-- next -->"] {
+        let text = format!("x\n{line}\ny");
+        let variants = vec![format!("{line}\n{line}"), String::new()];
+        let (out_text, out_variants) = split_variants(&join_variants(&text, &variants));
+        assert_eq!(out_text, text, "{line}");
+        assert_eq!(out_variants, variants, "{line}");
+    }
+    let (t, v) = split_variants("x\n<!-- \\next -->\ny");
+    assert_eq!(t, "x\n<!-- next -->\ny");
+    assert!(v.is_empty(), "a file exported by the old escape still reads back as one entry");
+}
+
 // Rotating-prompt entries round-trip through every export/storage format
 // without loss. Each format gets its OWN test since each chose its own way to
 // embed the entries and could silently regress independently of the others.
