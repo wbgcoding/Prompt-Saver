@@ -1402,11 +1402,13 @@ pub(crate) fn sync_write_all_now(app: &AppHandle, prompts: &[Prompt], settings: 
     sync_write_all_with(app, prompts, settings, sync_write_all_now_core)
 }
 
+type SyncWriteCore = fn(&Path, &[Prompt], &Settings, &dyn Fn(&str) -> bool, &dyn Fn() -> bool) -> usize;
+
 fn sync_write_all_with(
     app: &AppHandle,
     prompts: &[Prompt],
     settings: &Settings,
-    core: fn(&Path, &[Prompt], &Settings, &dyn Fn(&str) -> bool) -> usize,
+    core: SyncWriteCore,
 ) -> usize {
     if !sync_enabled(settings) {
         return 0;
@@ -1425,7 +1427,17 @@ fn sync_write_all_with(
         Some(state) => sync_live_in(&state, id),
         None => true,
     };
-    core(&dir, prompts, settings, &live)
+    // The folder was resolved from a snapshot, possibly before this write got its turn. Asked
+    // again once the turn is here: a switch with "delete old" may have emptied and removed that
+    // folder meanwhile, and this write would put every prompt back into it.
+    let current = || match app.try_state::<Db>() {
+        Some(state) => {
+            let s = lock(&state);
+            sync_enabled(&s.settings) && sync_dir_path(app, &s.settings) == dir
+        }
+        None => true,
+    };
+    core(&dir, prompts, settings, &live, &current)
 }
 
 pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {
@@ -1437,16 +1449,31 @@ pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {
 }
 
 // The window-free half of sync_write_all_impl: what the background flush runs.
-pub(crate) fn sync_write_all_core(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
+pub(crate) fn sync_write_all_core(
+    dir: &Path,
+    prompts: &[Prompt],
+    settings: &Settings,
+    is_live: &dyn Fn(&str) -> bool,
+    current: &dyn Fn() -> bool,
+) -> usize {
     // Counted as a failed write, so the queue tries again after a poll interval.
     if sync_state().booting.load(Ordering::SeqCst) {
         return 1;
     }
-    sync_write_all_now_core(dir, prompts, settings, is_live)
+    sync_write_all_now_core(dir, prompts, settings, is_live, current)
 }
 
-pub(crate) fn sync_write_all_now_core(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
+pub(crate) fn sync_write_all_now_core(
+    dir: &Path,
+    prompts: &[Prompt],
+    settings: &Settings,
+    is_live: &dyn Fn(&str) -> bool,
+    current: &dyn Fn() -> bool,
+) -> usize {
     let _run = sync_run_lock();
+    if !current() {
+        return 0; // the folder was switched or the feature turned off while this waited
+    }
     sync_write_dir_checked(dir, prompts, settings, is_live)
 }
 
@@ -2575,6 +2602,9 @@ pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete
     if let Some(done) = sync_dir_switch_early_end(write_failures, delete_old) {
         return done;
     }
+    // A write queued for the old folder is waiting for this lock; once it has its turn it finds
+    // the folder switched and leaves it alone.
+    let _run = sync_run_lock();
     let new = new_dir;
     if sync_same_dir(&old, &new) {
         return Ok(0); // nothing moved, so there is no old folder to let go of

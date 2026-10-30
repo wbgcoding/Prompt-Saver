@@ -102,7 +102,7 @@ impl SyncInst {
     pub(super) fn activate(&self, dir: &Path) -> usize {
         self.run(|| {
             sync_activate_core(&self.db, dir, &RigHost(self), &|prompts, settings| {
-                sync_write_all_now_core(dir, prompts, settings, &|id| sync_live_in(&self.db, id))
+                sync_write_all_now_core(dir, prompts, settings, &|id| sync_live_in(&self.db, id), &|| true)
             })
         })
     }
@@ -117,7 +117,7 @@ impl SyncInst {
             let s = self.lock();
             (s.prompts.clone(), s.settings.clone())
         };
-        self.run(|| sync_write_all_core(dir, &prompts, &settings, &|id| sync_live_in(&self.db, id)))
+        self.run(|| sync_write_all_core(dir, &prompts, &settings, &|id| sync_live_in(&self.db, id), &|| true))
     }
 
     // One poll interval: read the folder, then write if a save is pending.
@@ -1622,7 +1622,7 @@ fn multi_switching_on_writes_even_while_the_first_read_still_holds_writes_back()
     assert!(rig.dir.join(format!("{id}.md")).exists());
     let prompts = rig.a.lock().prompts.clone();
     let settings = rig.a.lock().settings.clone();
-    let queued = rig.a.run(|| sync_write_all_core(&rig.dir, &prompts, &settings, &|_| true));
+    let queued = rig.a.run(|| sync_write_all_core(&rig.dir, &prompts, &settings, &|_| true, &|| true));
     assert_eq!(queued, 1, "the background writer must still wait for the first read");
 }
 
@@ -1652,4 +1652,29 @@ fn multi_the_flag_is_set_only_after_writes_are_held_back_and_released_before_the
     let poll = at("start_sync_poll(app.clone())");
     assert!(hold < flag, "a save between the flag and the hold queues a write over a folder not read yet");
     assert!(flag < release && release < poll, "the hold must end after the activation and before the poll's own");
+}
+
+#[test]
+fn multi_a_queued_write_leaves_a_folder_that_was_switched_away_from() {
+    let rig = Rig::new();
+    let id = rig.a.add("Shared", "start");
+    let prompts = rig.a.lock().prompts.clone();
+    let settings = rig.a.lock().settings.clone();
+    let gone = sync_tmp_dir("multi-switched-away");
+    let written = rig.a.run(|| sync_write_all_now_core(&gone, &prompts, &settings, &|_| true, &|| false));
+    assert_eq!(written, 0);
+    assert!(!gone.join(format!("{id}.md")).exists(), "a write for the old folder landed after the switch");
+    let again = rig.a.run(|| sync_write_all_now_core(&gone, &prompts, &settings, &|_| true, &|| true));
+    assert_eq!(again, 0);
+    assert!(gone.join(format!("{id}.md")).exists(), "the current folder was not written");
+    let _ = fs::remove_dir_all(&gone);
+}
+
+#[test]
+fn multi_the_folder_switch_deletes_the_old_folder_under_the_run_lock() {
+    let src = include_str!("../md_sync.rs").replace("\r\n", "\n");
+    let body = &src[src.find("pub(crate) fn set_sync_dir(").expect("set_sync_dir")..];
+    let lock = body.find("sync_run_lock()").expect("set_sync_dir takes the run lock");
+    let delete = body.find("sync_delete_dir(&old").expect("set_sync_dir deletes the old folder");
+    assert!(lock < delete, "a write queued for the old folder can run between the delete and its own check");
 }
