@@ -25,12 +25,28 @@ instead of a person.
 prompt-saver <command> [arguments] [--json] [--yes]
 ```
 
-The first launch each day starts the app headless just to run the one
-command and exits; every launch after that hands its argv to the
-already-running instance over a local named pipe and prints whatever it
-answers. Either way exactly one process ever touches the database at a time,
-and the caller cannot tell the difference from the outside -- same exit
-codes, same stdout, same stderr, whether or not a window happens to be open.
+When no instance of the app is running, the launch runs the one command
+itself, headless, and exits. When one is running, the launch hands its argv
+to that instance over a local named pipe and prints whatever it answers.
+Either way exactly one process ever touches the database at a time, and the
+caller cannot tell the difference from the outside -- same exit codes, same
+stdout, same stderr, whether or not a window happens to be open.
+
+The first word decides what a launch is: nothing, `--minimized` or a file
+path opens the window, anything else is a command. A mistyped command (or a
+flag placed before the command) exits 1 with a message; it never opens the
+window.
+
+The program is a Windows GUI executable, so a shell may return to its prompt
+before the command has finished. Wait for it and read its exit code with
+`Start-Process -Wait -PassThru` (PowerShell) or `start /wait` (cmd). Output
+is written to the console it was started from, or to a redirect.
+
+Everything printed is UTF-8 without a byte order mark. A program that
+captures it must decode it as UTF-8: in PowerShell 5.1 set
+`[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)` first, in
+Python pass `encoding="utf-8"` to `subprocess.run`. Otherwise a non-ASCII
+name arrives garbled.
 
 A launch that hands its command to the running instance waits for the result: up to 5 seconds
 for the instance to take the request, then up to 10 minutes for the answer (a backup, restore or
@@ -110,6 +126,7 @@ success shape; an error never mixes JSON and plain text, see "Errors"):
 [{ "id": "v_ef34gh", "name": "Default", "members": 8 }]
 
 // backup list --json
+// "prompts" is null when the backup's count cannot be read
 [{ "name": "2026-09-20_120000", "size": 40960, "prompts": 12 }]
 
 // backup create --json
@@ -118,7 +135,7 @@ success shape; an error never mixes JSON and plain text, see "Errors"):
 // add / view add --json: the new row's id
 { "id": "p_new001" }
 
-// edit --json
+// edit / restore --json
 { "ok": true }
 
 // settings get --json: the raw value (string, number, bool or null)
@@ -135,7 +152,7 @@ parse stdout as JSON once it is 0.
 | 0 | ok |
 | 1 | bad invocation (missing/unknown argument, wrong flag value), or a file that cannot be read or written (`import`, `export`) |
 | 2 | not found (unknown id, unknown backup name, unknown setting key, an `import` file that does not exist) |
-| 3 | store locked or unavailable (another machine holds the data folder, or a row failed to decrypt), or a command handed to the running instance gave no result: it did not accept the request within 5 seconds, or returned nothing within 10 minutes (the command may still be running) |
+| 3 | store locked or unavailable (another machine holds the data folder, the database did not open, or a row failed to decrypt), or a command handed to the running instance gave no result: it was busy and did not accept the request within 5 seconds, could not be reached, or returned nothing within 10 minutes (the command may still be running) |
 | 4 | refused (a mutating command run without `--yes`, a confidential prompt that can only be read, copied or changed in the app, a setting only the app may change, or a value that fails validation) |
 
 ## Limits
@@ -148,6 +165,10 @@ parse stdout as JSON once it is 0.
 - `export --ids` takes at least one id: an empty list is refused (exit 1)
   instead of exporting everything, and an id that is not in the library
   stops the export with exit 2, naming it, before anything is written.
+- A path given to `export` or `import` is either absolute or relative to the
+  directory the command was typed in. A drive-relative path such as
+  `C:out.json` is refused (exit 1) because it would depend on the app's own
+  current directory.
 
 ## Examples
 
