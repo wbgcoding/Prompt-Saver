@@ -450,10 +450,11 @@ pub(crate) fn folders_on(settings: &Settings) -> bool {
 }
 
 // Pill and folder windows read the settings once, when they open; this tells the open ones
-// to re-read after an expert change.
+// to re-read after an expert change. The video editor listens too (it follows the
+// keep-edit-state switch).
 pub(crate) fn notify_float_settings(app: &AppHandle) {
     for label in app.webview_windows().keys() {
-        if label.starts_with("float-") || label.starts_with("folder-") {
+        if label.starts_with("float-") || label.starts_with("folder-") || label == crate::video_editor::VIDEO_WIN_LABEL {
             let _ = app.emit_to(label.as_str(), "settings-changed", ());
         }
     }

@@ -142,6 +142,10 @@ pub(crate) fn edit_state_discard(conn: &Connection, kind: &str, target: &str) ->
 
 #[tauri::command]
 pub(crate) async fn save_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64, ops: String) -> Result<(), String> {
+    // The switch may have been turned off while an editor was still open; its timer must not
+    // keep storing sessions the user chose not to keep.
+    let keep = app.try_state::<Db>().map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("editStateKeep") != Some(&false)).unwrap_or(true);
+    if !keep { return Ok(()); }
     let conn = db_conn_write(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
     edit_state_write(&conn, &kind, &target, size, mtime, &ops, updated_at)

@@ -2372,7 +2372,8 @@ window.addEventListener("resize", () => {
 // ---------------------------------------------------------------- backend events
 listen("theme-changed", (e) => { applyTheme(e.payload?.theme, e.payload?.vars); waveColors[0] = waveColors[1] = null; drawWave(0); if (VE.hasMic) drawWave(1); });
 listen("language-changed", () => { invoke("get_settings").then((s) => loadTexts(s)).catch(() => {}); });
-listen("settings-changed", () => { invoke("get_settings").then((s) => { settings = s; applySettings(s); }).catch(() => {}); });
+// Only the keep-edit-state switch is followed live; the export defaults are read when the window opens.
+listen("settings-changed", () => { invoke("get_settings").then((s) => { settings = s; applyEditStateKeep(s); }).catch(() => {}); });
 // Opening a second recording reuses this window instead of stacking another one.
 listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
@@ -2423,10 +2424,16 @@ listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (total > 0) setProgress((ms / total) * 100);
 });
 
+function applyEditStateKeep(settings) {
+  const on = settings?.ui_flags?.editStateKeep !== false;
+  if (on === VE.editStateKeepOn) return;
+  VE.editStateKeepOn = on;
+  armEditStateAutosave();
+}
+
 export function applySettings(settings) {
   const values = settings?.ui_values || {};
-  VE.editStateKeepOn = settings?.ui_flags?.editStateKeep !== false;
-  armEditStateAutosave();
+  applyEditStateKeep(settings);
   const texts = settings?.ui_texts || {};
   // The export dialog opens on the user's own last choice.
   $("ve-export-format").value = normRecFormat(texts.videoExportFormat);
