@@ -1868,12 +1868,19 @@ pub(crate) fn prune_locked_backups(dir: &Path, now: u64) {
     }
 }
 
-// Copies the raw database aside for a lock incident (unless one was made within the hour) and
-// rotates the older copies.
-pub(crate) fn keep_locked_backup(dir: &Path, now: u64) {
+// Copies the database aside for a lock incident (unless one was made within the hour) and
+// rotates the older copies. With the open connection the copy is a VACUUM INTO, which also holds
+// the committed rows still sitting in data.db-wal (the unreadable ones may be among them); a
+// plain file copy of data.db is the fallback when that fails.
+pub(crate) fn keep_locked_backup(dir: &Path, now: u64, conn: Option<&Connection>) {
     let newest = locked_backups(dir).first().map(|(ts, _)| *ts);
     if newest.is_none_or(|ts| now.saturating_sub(ts) >= LOCKED_BAK_SAME_INCIDENT_SECS) {
-        let _ = fs::copy(dir.join("data.db"), dir.join(format!("data.db.locked.{now}.bak")));
+        let dest = dir.join(format!("data.db.locked.{now}.bak"));
+        let snapshot = conn.is_some_and(|c| c.execute("VACUUM INTO ?1", params![dest.to_string_lossy()]).is_ok());
+        if !snapshot {
+            let _ = fs::remove_file(&dest);
+            let _ = fs::copy(dir.join("data.db"), &dest);
+        }
     }
     prune_locked_backups(dir, now);
 }
@@ -1998,7 +2005,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
         // A row (prompts, trash or settings) could not be read back or decrypted: preserve the raw
         // DB and lock the affected writes (prompts_locked, SETTINGS_LOCKED).
         if decrypt_fails > 0 || settings_unreadable {
-            keep_locked_backup(&dir, crate::copy::now_secs());
+            keep_locked_backup(&dir, crate::copy::now_secs(), Some(&conn));
             append_crash_log(&format!(
                 "{} row(s) failed to load reliably (query error, unreadable row, or decrypt failure){}; \
                  writes locked, raw DB copied to data.db.locked.<time>.bak",

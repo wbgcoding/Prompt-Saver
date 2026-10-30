@@ -19,12 +19,12 @@ fn locked_database_copies_are_kept_per_incident_newest_two_and_aged_out() {
     std::fs::write(root.join("data.db"), b"rows").unwrap();
     let day = 86_400u64;
     let t0 = 1_700_000_000u64;
-    keep_locked_backup(&root, t0);
+    keep_locked_backup(&root, t0, None);
     assert_eq!(locked_copies(&root).len(), 1, "the first incident leaves a timestamped copy");
-    keep_locked_backup(&root, t0 + 60);
+    keep_locked_backup(&root, t0 + 60, None);
     assert_eq!(locked_copies(&root).len(), 1, "a relaunch within the hour is the same incident");
-    keep_locked_backup(&root, t0 + 2 * day);
-    keep_locked_backup(&root, t0 + 4 * day);
+    keep_locked_backup(&root, t0 + 2 * day, None);
+    keep_locked_backup(&root, t0 + 4 * day, None);
     let left = locked_copies(&root);
     assert_eq!(left.len(), 2, "only the newest two copies stay: {left:?}");
     assert!(left.iter().all(|n| !n.ends_with(&format!(".{t0}.bak"))), "the oldest copy rotated out");
@@ -33,6 +33,25 @@ fn locked_database_copies_are_kept_per_incident_newest_two_and_aged_out() {
     assert_eq!(locked_copies(&root).len(), 2, "a clean launch does not delete a young copy");
     prune_locked_backups(&root, t0 + 4 * day + 91 * day);
     assert!(locked_copies(&root).is_empty(), "copies older than 90 days are removed at launch");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// Rows committed since the last checkpoint live only in data.db-wal; a bare copy of data.db
+// would not hold them.
+#[test]
+fn the_locked_copy_holds_rows_still_in_the_wal() {
+    let root = std::env::temp_dir().join(format!("{}-test-locked-wal", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let conn = db_conn_at(&root).unwrap();
+    conn.execute("PRAGMA wal_autocheckpoint=0", []).ok();
+    conn.execute("INSERT INTO meta(key, value) VALUES('wal_probe', '1')", []).unwrap();
+    keep_locked_backup(&root, 1_700_000_000, Some(&conn));
+    let copy = Connection::open(root.join("data.db.locked.1700000000.bak")).unwrap();
+    let n: i64 = copy.query_row("SELECT COUNT(*) FROM meta WHERE key='wal_probe'", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 1, "the safety copy must contain the committed row");
+    drop(copy);
+    drop(conn);
     let _ = std::fs::remove_dir_all(&root);
 }
 
