@@ -2,7 +2,7 @@
 // export.
 import { FONT_FILES, fontsDir, outMs, t, VE } from "./video.js";
 import { commitOverlay, liveOverlay } from "./videoOverlays.js";
-import { ffPath, ffText, hexToFf } from "./videoGraph.js";
+import { enableExpr, ffPath, ffText, hexToFf } from "./videoGraph.js";
 
 // ---------------------------------------------------------------- keys overlay
 //
@@ -194,14 +194,18 @@ export function buildKeysFilters(op) {
   }
   const rows = keysLayoutRows(op);
   const holdMs = (VE.keySidecar && VE.keySidecar.hold_ms) || 400;
+  // Outlines and labels follow the overlay's own range, like the live preview; only the press
+  // fills carry the narrower per-press spans.
+  const rangeEnable = enableExpr(op);
+  if (!rangeEnable) return filters;
   for (const k of keysGridRects(rows, op.rect)) {
     const label = keyLabel(k.vk);
-    filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${color}:t=2`);
+    filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${color}:t=2:${rangeEnable}`);
     // The press fill goes down before the label so the label stays readable on top of it, and the
     // label is centred on the key by its own measured size rather than by a guessed offset.
     const enable = keysEnable(op, keyPressSpans(k.vk, holdMs));
     if (enable) filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${activeColor}:t=fill:${enable}`);
-    filters.push(`drawtext=fontfile='${font}':x=${k.x}+(${k.w}-text_w)/2:y=${k.y}+(${k.h}-text_h)/2:fontsize=${keyFontSize(k, label)}:fontcolor=${color}:expansion=none:text='${ffText(label)}'`);
+    filters.push(`drawtext=fontfile='${font}':x=${k.x}+(${k.w}-text_w)/2:y=${k.y}+(${k.h}-text_h)/2:fontsize=${keyFontSize(k, label)}:fontcolor=${color}:expansion=none:${rangeEnable}:text='${ffText(label)}'`);
   }
   return filters;
 }

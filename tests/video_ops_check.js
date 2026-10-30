@@ -594,6 +594,7 @@ async function exportIdleCheck() {
     VE: { keySidecar: { hold_ms: 400, events: [{ vk: 0x41, down: true, t_ms: 1000 }, { vk: 0x41, down: false, t_ms: 1200 }] } },
     commitOverlay: () => {}, liveOverlay: (o) => o,
     ffPath: (p) => p, ffText: (s) => String(s), hexToFf: (hex, pct) => `${hex}@${pct}`,
+    enableExpr: (o) => (o.endMs > o.startMs ? `enable='between(t,${o.startMs / 1000},${o.endMs / 1000})'` : null),
   };
   vm.createContext(sb);
   vm.runInContext(keysSrc, sb, { filename: "videoKeys.js (extracted)" });
@@ -607,6 +608,12 @@ async function exportIdleCheck() {
   expect("a pressed key's fill is drawn before its label", fillBefore(aIdx) >= 0 && fillBefore(aIdx) < aIdx, filters.slice(aIdx - 3, aIdx + 1).join(" | "));
   expect("the fill sits right after the key outline", filters[fillBefore(aIdx) - 1].includes("t=2"));
   expect("a key that is never pressed gets no fill", fillBefore(labelIdx("Q")) === -1);
+  // The export must match the preview, which hides the whole overlay outside its own range.
+  sb.__ranged = { ...sb.__op, startMs: 10000, endMs: 20000 };
+  const ranged = run("buildKeysFilters(__ranged)");
+  expect("every key outline and label is limited to the overlay's range", ranged.length > 0 && ranged.filter((f) => f.includes("t=2") || f.startsWith("drawtext")).every((f) => f.includes("enable='between(t,10,20)'")), ranged.slice(0, 2).join(" | "));
+  sb.__nothing = { ...sb.__op, startMs: 5000, endMs: 5000 };
+  expect("an overlay with an empty range adds no filter", run("buildKeysFilters(__nothing)").length === 0);
   expect("the label is centred horizontally on its own width", /:x=\d+\+\(\d+-text_w\)\/2:/.test(filters[aIdx]), filters[aIdx]);
   expect("the label is centred vertically on its own height", /:y=\d+\+\(\d+-text_h\)\/2:/.test(filters[aIdx]), filters[aIdx]);
   expect("no fixed label offset is left", !/x=\d+:y=\d+:fontsize/.test(filters[aIdx]));
