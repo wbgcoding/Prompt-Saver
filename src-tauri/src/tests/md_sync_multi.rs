@@ -1531,3 +1531,20 @@ fn multi_a_file_that_cannot_be_read_is_not_replaced_by_the_next_save() {
     assert_eq!(rig.a.get(&id).unwrap().text, "edited on B");
     rig.assert_converged();
 }
+
+#[test]
+fn multi_leaving_a_folder_keeps_a_file_edited_since_it_was_last_read() {
+    let rig = Rig::new();
+    let id = rig.a.add("Shared", "start");
+    rig.settle();
+    let path = rig.dir.join(format!("{id}.md"));
+    // An editor saves the file; the poll has not looked at it yet.
+    let edited = fs::read_to_string(&path).unwrap().replace("start", "edited in an editor, not imported yet");
+    fs::write(&path, edited).unwrap();
+    age_file(&path, 5);
+    let data = sync_tmp_dir("multi-leave-data");
+    let err = rig.a.run(|| sync_delete_dir(&rig.dir, &data)).expect_err("an unread edit must stop the delete");
+    assert!(err.contains(&format!("{id}.md")), "the edited file is named: {err}");
+    assert!(fs::read_to_string(&path).unwrap().contains("not imported yet"), "the edit was deleted unseen");
+    let _ = fs::remove_dir_all(&data);
+}

@@ -35,6 +35,8 @@ fn sync_delete_dir_removes_only_the_files_the_app_wrote() {
     write_ours(&dir, "p2.md", "two");
     sync_known_note(&dir.join("p1.md"));
     sync_known_note(&dir.join("p2.md"));
+    sync_seen_record_own_write(&dir.join("p1.md"));
+    sync_seen_record_own_write(&dir.join("p2.md"));
     fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
     fs::write(dir.join("p1.md.lock"), "1234").unwrap();
     let data = sync_tmp_dir("del-ok-data");
@@ -104,6 +106,7 @@ fn sync_dir_scan_counts_our_files_apart_from_everything_else() {
     let dir = sync_tmp_dir("scan");
     write_ours(&dir, "p1.md", "one");
     sync_known_note(&dir.join("p1.md"));
+    sync_seen_record_own_write(&dir.join("p1.md"));
     fs::write(dir.join("AGENTS.md"), "the user rewrote this note").unwrap();
     fs::write(dir.join("notes.md"), "no header at all").unwrap();
     let scan = sync_dir_scan(&dir);

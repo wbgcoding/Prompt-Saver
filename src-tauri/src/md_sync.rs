@@ -2322,8 +2322,13 @@ pub(crate) fn sync_dir_scan(dir: &Path) -> SyncDirScan {
             // Only a file this process wrote or read back for a prompt of the library:
             // another machine's new file or a hand-made one carries our header too,
             // is not in the new folder, and would be lost with the old one.
+            // The app must also have read it in its present state: after the switch nothing
+            // polls this folder any more, so an edit made since would be deleted unseen.
+            let known = sync_known_lock().contains(&sync_seen_key(&path));
+            let read_as_is = sync_seen_lock().get(&sync_seen_key(&path)).is_some_and(|s| s.handled && sync_stamp_of(&path) == Some(s.stamp));
             sync_safe_id(stem)
-                && sync_known_lock().contains(&sync_seen_key(&path))
+                && known
+                && read_as_is
                 && read_text_capped(&path, MAX_SYNC_MD_BYTES)
                     .and_then(|c| parse_frontmatter(&c))
                     .is_some_and(|(fields, _)| md_is_ours(&fields))
