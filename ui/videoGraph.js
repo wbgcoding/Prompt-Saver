@@ -22,16 +22,13 @@ export const typographicApostrophe = (text) => String(text).replace(/'/g, "’")
 // The same two levels for drawtext's own text, plus one thing the parser cannot express: an
 // ASCII apostrophe is silently dropped by every escape form ffmpeg accepts (the
 // quote-escape-requote spelling renders "its", not "it's"), so it becomes the typographic
-// apostrophe. Backslashes are doubled before colons are escaped, or the escape's own backslash
-// would be doubled in turn.
+// apostrophe. Backslashes, colons and the blanks at both ends are escaped in one pass, so no
+// inserted backslash is ever escaped again. The option reader drops unescaped blanks at both
+// ends of the value, quoted or not, while the preview keeps them (white-space: pre).
 export function ffText(text) {
   return typographicApostrophe(String(text))
     .replace(/\r?\n/g, " ")
-    .replace(/\\/g, "\\\\")
-    .replace(/:/g, "\\:")
-    // The option reader drops unescaped blanks at both ends of the value, quoted or not, while
-    // the preview keeps them (white-space: pre).
-    .replace(/^[ \t]+|[ \t]+$/g, (blanks) => blanks.replace(/[ \t]/g, "\\$&"));
+    .replace(/\\|:|^[ \t]+|[ \t]+$/g, (m) => [...m].map((c) => "\\" + c).join(""));
 }
 
 export const secs = (ms) => (ms / 1000).toFixed(3);
