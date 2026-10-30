@@ -125,7 +125,7 @@ export function overlayAt(point, tol) {
       const lines = String(op.text || "").split("\n");
       const longest = Math.max(1, ...lines.map((l) => l.length));
       const pad = op.back === "plate" ? Math.max(4, Math.round(op.fontPx / 4)) : 0;
-      box = { x: op.x, y: op.y, w: longest * op.fontPx * 0.6 + pad * 2, h: lines.length * op.fontPx * 1.25 + pad * 2 };
+      box = { x: op.x - pad, y: op.y - pad, w: longest * op.fontPx * 0.6 + pad * 2, h: lines.length * op.fontPx * 1.25 + pad * 2 };
     } else if (op.rect) {
       box = op.rect;
     }
@@ -479,8 +479,11 @@ function buildLiveOverlayEl(op, vb, reuse) {
   if (op.kind === "text") {
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-text") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-text";
-    el.style.left = `${vb.left + op.x * vb.scale}px`;
-    el.style.top = `${vb.top + op.y * vb.scale}px`;
+    // The export draws the glyphs at x/y and grows the plate outward, so the padded box starts
+    // one padding up and left of the anchor.
+    const platePad = op.back === "plate" ? Math.max(4, Math.round(op.fontPx / 4)) : 0;
+    el.style.left = `${vb.left + (op.x - platePad) * vb.scale}px`;
+    el.style.top = `${vb.top + (op.y - platePad) * vb.scale}px`;
     el.style.fontSize = `${Math.max(1, op.fontPx * vb.scale)}px`;
     el.style.fontFamily = FONT_CSS[op.font] || FONT_CSS.segoeui;
     el.style.fontWeight = op.font === "arialbd" ? "bold" : "normal";
@@ -490,7 +493,7 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.style.webkitTextStroke = "";
     if (op.back === "plate") {
       el.style.background = "rgba(0, 0, 0, 0.5)";
-      el.style.padding = `${Math.max(4, Math.round(op.fontPx / 4)) * vb.scale}px`;
+      el.style.padding = `${platePad * vb.scale}px`;
     } else if (op.back === "outline") {
       el.style.webkitTextStroke = `${Math.max(1, (op.outlinePx || 3) * vb.scale)}px ${contrastTextColor(op.color)}`;
     }

@@ -577,6 +577,28 @@ def run(browser, tmp):
     if (VE.ops.filter((o) => o.kind === 'video' && o.path === 'C:/Recordings/cam-take.mp4').length !== 1) errs.push('4048: a repeated load added the camera overlay twice');
     """)
 
+    # 4049: a text overlay with a plate starts one padding up and left of its anchor, like the export.
+    failed += vprobe('platepad', 'a plate text overlay is shifted by its padding', r"""
+    const { renderOverlayLive, overlayAt } = await import('./videoPreview.js');
+    const base = { tool: 'overlay', kind: 'text', z: 1, startMs: 0, endMs: 10000, x: 100, y: 80, fontPx: 48, text: 'Hi', font: 'segoeui', color: '#ffffff' };
+    const plated = { ...base, id: 'ov-plate', back: 'plate' };
+    const bare = { ...base, id: 'ov-bare', back: 'none' };
+    VE.ops = [plated, bare];
+    VE.playhead = 1000;
+    renderOverlayLive();
+    const a = VE.liveEls.get('ov-plate'), b = VE.liveEls.get('ov-bare');
+    if (!a || !b) { errs.push('4049: fixture: overlays not rendered'); }
+    else {
+      const pad = 12 * parseFloat(a.style.fontSize) / 48;
+      const dl = parseFloat(b.style.left) - parseFloat(a.style.left);
+      const dt = parseFloat(b.style.top) - parseFloat(a.style.top);
+      if (Math.abs(dt - pad) > 0.5) errs.push('4049: the plate top is ' + dt + 'px above the bare text, want ' + pad);
+      if (Math.abs(dl - pad) > 0.5) errs.push('4049: the plate left is ' + dl + 'px beside the bare text, want ' + pad);
+    }
+    const hit = overlayAt({ x: 95, y: 75 }, 0);
+    if (!hit || hit.id !== 'ov-plate') errs.push('4049: a click on the plate padding does not pick the overlay');
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);
