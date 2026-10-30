@@ -1648,7 +1648,9 @@ fn copy_store_files_from(src: &Path, dst: &Path, landed: &mut bool, live: bool) 
         if live && f == "data.db" {
             let tmp = dst.join("data.db.adopting");
             let _ = fs::remove_file(&tmp);
+            // The running copy may be mid-write: wait for its lock like the app's own connections.
             let snap = Connection::open(&from)
+                .and_then(|c| c.busy_timeout(std::time::Duration::from_secs(3)).map(|_| c))
                 .and_then(|c| c.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map(|_| ()))
                 .map_err(|e| e.to_string());
             let copied = snap.and_then(|_| fs::copy(&tmp, dst.join(f)).map(|_| ()).map_err(|e| e.to_string()));

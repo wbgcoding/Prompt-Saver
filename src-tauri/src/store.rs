@@ -294,8 +294,9 @@ pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserv
             }
             let key = lock_content_key(&e);
             // A lock naming this machine is never foreign, whatever its age (crash and restart on one
-            // computer).
-            if e.host != me.host && !obs.is_dead(&key, now) {
+            // computer). It is still watched, so a takeover loss kept from older content is reset.
+            let dead = obs.is_dead(&key, now);
+            if e.host != me.host && !dead {
                 return LockOutcome::ReadOnly(e.host);
             }
             key
