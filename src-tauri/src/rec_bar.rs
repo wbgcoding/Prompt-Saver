@@ -99,6 +99,27 @@ pub(crate) fn follow_stop_settled(stop_ok: bool, recording: bool, switching: boo
     stop_ok || (!recording && !switching)
 }
 
+// Runs a stop that a "finish and continue" restart can refuse for a moment, again after each
+// wait until it goes through or the state says there is nothing left to wait for (the same
+// test the bar's follow thread uses). `state` reads (recording, switching). True once stopped.
+pub(crate) fn stop_until_settled(
+    tries: u32, mut stop: impl FnMut() -> bool, mut state: impl FnMut() -> (bool, bool), mut wait: impl FnMut(),
+) -> bool {
+    for attempt in 0..tries {
+        if stop() {
+            return true;
+        }
+        let (recording, switching) = state();
+        if follow_stop_settled(false, recording, switching) {
+            return false;
+        }
+        if attempt + 1 < tries {
+            wait();
+        }
+    }
+    false
+}
+
 // Re-asserts the bar's position every 200ms while a window target moves or resizes,
 // stopping once the bar is hidden/closed or the recorded window is gone. Tauri has no
 // "external window moved" event, so this is a poll loop like the scheduler module's

@@ -545,12 +545,22 @@ pub(crate) fn toggle_voice_from_hotkey(app: &AppHandle) {
 // handler fires on the main thread, and stopping finalizes the encoder (disk I/O), which
 // must not stall the message loop.
 #[cfg(windows)]
+const HOTKEY_STOP_TRIES: u32 = 25;
+
+#[cfg(windows)]
 pub(crate) fn trigger_rec_stop_hotkey(app: &AppHandle) {
     let app = app.clone();
     let _ = std::thread::Builder::new().name("rec-hotkey-stop".into()).spawn(move || {
-        // A refused stop (a continue holds the session out of the state) leaves the
-        // bar up: it still controls the recording and closes itself once that ends.
-        if stop_recording_now(&app).is_ok() {
+        // A continue holds the session out of the state for about a second; the press is retried
+        // until the new part is published (then it stops that one) instead of being lost. A stop
+        // still refused after that leaves the bar up: it still controls the recording.
+        let stopped = stop_until_settled(
+            HOTKEY_STOP_TRIES,
+            || stop_recording_now(&app).is_ok(),
+            || (recording_active(&app), REC_STARTING.load(Ordering::SeqCst)),
+            || std::thread::sleep(std::time::Duration::from_millis(200)),
+        );
+        if stopped {
             if let Some(w) = app.get_webview_window("rec-bar") {
                 let _ = w.hide();
             }

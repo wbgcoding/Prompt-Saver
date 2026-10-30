@@ -658,6 +658,31 @@ fn follow_thread_keeps_the_bar_while_a_stop_is_refused_mid_switch() {
 }
 
 #[test]
+fn a_stop_refused_during_a_continue_is_retried_until_the_new_part_is_up() {
+    // The first two attempts hit the restart gap (nothing recording, a switch in flight), the third lands.
+    let mut attempts = 0;
+    let mut waits = 0;
+    let stopped = stop_until_settled(25, || { attempts += 1; attempts == 3 }, || (false, true), || waits += 1);
+    assert!(stopped && attempts == 3 && waits == 2);
+    // Nothing recording and nothing switching: no point waiting, one attempt only.
+    let mut attempts = 0;
+    assert!(!stop_until_settled(25, || { attempts += 1; false }, || (false, false), || {}));
+    assert_eq!(attempts, 1);
+    // A switch that never ends gives up after the bound.
+    let mut attempts = 0;
+    assert!(!stop_until_settled(4, || { attempts += 1; false }, || (false, true), || {}));
+    assert_eq!(attempts, 4);
+}
+
+#[test]
+fn the_stop_hotkey_goes_through_the_retrying_stop() {
+    let src = include_str!("../shortcuts.rs").replace("\r\n", "\n");
+    let start = src.find("pub(crate) fn trigger_rec_stop_hotkey(").unwrap();
+    let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+    assert!(body.contains("stop_until_settled("), "a refused hotkey stop must be retried, not dropped");
+}
+
+#[test]
 fn recording_status_stats_the_file_after_the_session_lock_is_released() {
     let src = include_str!("../rec_bar.rs").replace("\r\n", "\n");
     let start = src.find("pub(crate) async fn recording_status(").unwrap();
