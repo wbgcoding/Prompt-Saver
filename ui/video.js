@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { orderedInvoke, runFfmpegDownload, resolveLang, fillVideoFormatSelect, normRecFormat, numberField, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, numPopClosedByEscape } from "./floatShared.js";
+import { copyTextChecked, fillVideoFormatSelect, fmtSizeCompact, makeHoldOrTapToggle, normRecFormat, numberField, numPopClosedByEscape, orderedInvoke, resolveLang, runFfmpegDownload, trapTabWithin } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, buildShortcutRows, openShortcutsOverlay, closeShortcutsOverlay, letterCode } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -286,7 +286,7 @@ export function showExportErrorDetails(raw) {
   $("ve-export-error-raw").textContent = raw || "";
 }
 $("ve-export-error-copy").addEventListener("click", () => {
-  invoke("copy_text", { text: $("ve-export-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
+  copyTextChecked(invoke, $("ve-export-error-raw").textContent).then(() => toast(t("copied"))).catch((err) => toast(errMessageLogged(err, t, "video")));
 });
 
 // Accepts "mm:ss.mmm", "ss.mmm" and a bare number of seconds: whichever the

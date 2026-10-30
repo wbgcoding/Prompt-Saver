@@ -435,6 +435,13 @@ export function orderedInvoke(cmd, args, opts) {
   return keyOf ? serialInvoke(keyOf(args), cmd, args, opts) : window.__TAURI__.core.invoke(cmd, args, opts);
 }
 
+// copy_text answers false when another program holds the clipboard. This turns that answer
+// into the mapped clipboard error, so the caller's catch says so and no "copied" follows a
+// copy that did not happen.
+export async function copyTextChecked(invoke, text) {
+  if ((await invoke("copy_text", { text })) === false) throw "clipboard write failed";
+}
+
 // Turns a rejected export_video/convert_recording call into what a person should see. The
 // backend wraps a classified ffmpeg (or ffmpeg-adjacent Windows IO) failure as
 // `{"key":..., "code":..., "raw":...}` JSON (ffmpeg_error_json in ffmpeg.rs); this is the one

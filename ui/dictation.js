@@ -2,7 +2,7 @@
 import { $, autoGrow, EMPTY_VALUE, errText, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtCopyTime } from "./journal.js";
-import { fmtBytes } from "./floatShared.js";
+import { copyTextChecked, fmtBytes } from "./floatShared.js";
 import { applyFlags, assignOcrLangsCache, assignVoiceLangsCache } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
 import { autoPasteNow } from "./tiles.js";
@@ -665,7 +665,7 @@ export async function deliverVoiceHotkeyText(text) {
   }
   // Clipboard and paste both copy first; paste then adds the paste-into-previous-app step a
   // prompt hotkey already uses.
-  try { await invoke("copy_text", { text }); } catch (e) { errToast(e); return; }
+  try { await copyTextChecked(invoke, text); } catch (e) { errToast(e); return; }
   if (target === "paste") await autoPasteNow(null);
   else toast(t("copied"));
 }

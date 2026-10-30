@@ -8,7 +8,7 @@ import { runStatsExport, syncSettingsControls } from "./settingsPanel.js";
 import { lastEdited, libLabel, libQuery, presetLibQuery, refreshImageHits, renderLibrary, restoreBatchDelete } from "./library.js";
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
-import { fmtBytes, varPreview } from "./floatShared.js";
+import { copyTextChecked, fmtBytes, varPreview } from "./floatShared.js";
 import { saveBackupSetting, saveUiState, statCard } from "./backups.js";
 import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
 
@@ -642,7 +642,7 @@ export async function copyErrorLogAll() {
   const text = errorLogList
     .map((e) => `${new Date(e.ts * 1000).toLocaleString(LANG)} · ${e.origin} · ${e.text}${e.raw && e.raw !== e.text ? ` (${e.raw})` : ""}`)
     .join("\n");
-  try { await invoke("copy_text", { text }); toast(t("copied")); } catch (e) { errToast(e); }
+  try { await copyTextChecked(invoke, text); toast(t("copied")); } catch (e) { errToast(e); }
 }
 export async function clearErrorLogAll() {
   if (!errorLogList.length) return;

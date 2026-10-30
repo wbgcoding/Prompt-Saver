@@ -4,7 +4,7 @@ import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, wit
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
-import { fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
+import { copyTextChecked, fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { ocrErrToast, openOcrLangsModal } from "./dictation.js";
@@ -256,7 +256,7 @@ export function bindCapture() {
     $("rec-modal-error-raw").textContent = raw || "";
   }
   $("rec-modal-error-copy").addEventListener("click", () => {
-    invoke("copy_text", { text: $("rec-modal-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
+    copyTextChecked(invoke, $("rec-modal-error-raw").textContent).then(() => toast(t("copied"))).catch((err) => errToast(err));
   });
   // Closing the result window without Save/Save as/Attach deletes the recording; Discard, the X
   // button, the backdrop and Escape all end up in closeRecModal(). Copy alone does not count as
@@ -674,7 +674,7 @@ export function bindCapture() {
         // The notation already on the clipboard is marked instead of repeated in the message, which
         // would push the row onto a second line.
         current: v === value,
-        onClick: () => invoke("copy_text", { text: v }).catch((err) => errToast(err)),
+        onClick: () => copyTextChecked(invoke, v).catch((err) => errToast(err)),
       }));
     toast(t("colorCopied"), null, e.payload?.hex || "", chips);
     // Live-update the recent-colours popover if it was left open across a pick.
@@ -822,10 +822,15 @@ export function bindCapture() {
       return;
     }
     const autoCopy = flag("ocrAutoCopy");
-    if (autoCopy) invoke("copy_text", { text }).catch(() => {});
     $("ocr-result-text").value = text;
     $("ocr-result-meta").textContent = `${result.lang || ""} · ${text.length}`;
-    $("ocr-autocopy-note").classList.toggle("hidden", !autoCopy);
+    // The "already copied" note shows only once the copy really happened.
+    $("ocr-autocopy-note").classList.add("hidden");
+    if (autoCopy) {
+      copyTextChecked(invoke, text)
+        .then(() => { if ($("ocr-result-text").value === text) $("ocr-autocopy-note").classList.remove("hidden"); })
+        .catch((err) => errToast(err));
+    }
     ocrModal.classList.remove("hidden");
   }
   // (b) standalone composer button: a click recognizes text in a screenshot taken right now, a
@@ -882,7 +887,7 @@ export function bindCapture() {
 
   $("ocr-modal-copy").addEventListener("click", () => {
     const text = $("ocr-result-text").value;
-    invoke("copy_text", { text }).then(() => toast(t("copied"))).catch((err) => errToast(err));
+    copyTextChecked(invoke, text).then(() => toast(t("copied"))).catch((err) => errToast(err));
   });
   $("ocr-modal-create").addEventListener("click", () => {
     const text = $("ocr-result-text").value;

@@ -1,4 +1,5 @@
 // The copy history and the clipboard inbox.
+import { copyTextChecked } from "./floatShared.js";
 import { $, assignLibraryTab, assignSettings, debounced, errToast, errUndoToast, flag, ICON_ADD_SQUARE, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { attachSelectPicker } from "./selectpop.js";
@@ -253,7 +254,7 @@ export function journalClipRow(it) {
   prev.className = "clip-preview";
   prev.textContent = it.text;
   main.append(prev, time);
-  row.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
+  row.addEventListener("click", () => { copyTextChecked(invoke, it.text).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
   makeKeyboardActivatable(row);
   const actions = document.createElement("div");
   actions.className = "clip-actions";
