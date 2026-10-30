@@ -1436,13 +1436,21 @@ fn sync_write_all_with(
     // again once the turn is here: a switch with "delete old" may have emptied and removed that
     // folder meanwhile, and this write would put every prompt back into it.
     let current = || match app.try_state::<Db>() {
-        Some(state) => {
-            let s = lock(&state);
-            sync_enabled(&s.settings) && sync_dir_path(app, &s.settings) == dir
-        }
+        Some(state) => sync_target_current_in(&state, &dir, |s| sync_dir_path(app, s)),
         None => true,
     };
     core(&dir, prompts, settings, &live, &current)
+}
+
+// Whether the sync target is still `dir`. Runs while SYNC_RUN is held, so it never waits on the
+// store: a store held by a long operation counts as "unchanged" and the write goes ahead.
+pub(crate) fn sync_target_current_in(db: &Mutex<Store>, dir: &Path, dir_of: impl Fn(&Settings) -> PathBuf) -> bool {
+    let check = |store: &Store| sync_enabled(&store.settings) && dir_of(&store.settings) == dir;
+    match db.try_lock() {
+        Ok(store) => check(&store),
+        Err(std::sync::TryLockError::Poisoned(e)) => check(&e.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => true,
+    }
 }
 
 pub(crate) fn sync_live_in(db: &Mutex<Store>, id: &str) -> bool {

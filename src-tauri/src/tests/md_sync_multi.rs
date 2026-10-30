@@ -1735,3 +1735,24 @@ fn multi_the_poll_reads_the_folder_on_a_blocking_thread() {
     );
     assert!(!body.contains("            sync_poll_once(&app);"), "a poll round runs directly in the async task");
 }
+
+#[test]
+fn the_folder_check_never_waits_on_a_busy_store() {
+    let mut settings = Settings::default();
+    settings.ui_flags.insert("promptSync".to_string(), true);
+    let store = Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() };
+    let db = std::sync::Arc::new(Mutex::new(store));
+    let dir = PathBuf::from("sync-dir");
+    assert!(sync_target_current_in(&db, &dir, |_| PathBuf::from("sync-dir")));
+    assert!(!sync_target_current_in(&db, &dir, |_| PathBuf::from("other-dir")));
+    // Held by a long operation (a takeover copy): the writer holding SYNC_RUN must not queue behind it.
+    let held = db.lock().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let (db2, dir2) = (db.clone(), dir.clone());
+    std::thread::spawn(move || {
+        let _ = tx.send(sync_target_current_in(&db2, &dir2, |_| PathBuf::from("other-dir")));
+    });
+    let answer = rx.recv_timeout(std::time::Duration::from_secs(5));
+    drop(held);
+    assert_eq!(answer, Ok(true), "a busy store counts as unchanged instead of blocking");
+}
