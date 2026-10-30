@@ -145,6 +145,9 @@ parse stdout as JSON once it is 0.
   `--yes`; without it the command is refused (exit 4) and the output says
   what it would have done, so a script that forgot the flag
   still learns what it almost triggered.
+- `export --ids` takes at least one id: an empty list is refused (exit 1)
+  instead of exporting everything, and an id that is not in the library
+  stops the export with exit 2, naming it, before anything is written.
 
 ## Examples
 
