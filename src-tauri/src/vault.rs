@@ -832,8 +832,14 @@ pub(crate) async fn pick_settings_import_file(app: AppHandle) -> Option<String> 
         .flatten()
 }
 
+// A plain .json backup may have been re-saved by an editor that adds a byte-order mark.
+pub(crate) fn legacy_backup_text(raw: Vec<u8>) -> Result<String, String> {
+    let text = String::from_utf8(raw).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?;
+    Ok(strip_bom(&text).to_string())
+}
+
 pub(crate) fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
-    let text = std::str::from_utf8(raw).map_err(|_| "bad-file".to_string())?;
+    let text = strip_bom(std::str::from_utf8(raw).map_err(|_| "bad-file".to_string())?);
     // A wholly empty or non-object file (no ui_flags/ui_values/ui_texts key at
     // all) is rejected too: this ONLY accepts a file this same export produced,
     // never an unrelated JSON document that would otherwise silently parse into
@@ -1304,7 +1310,7 @@ pub(crate) async fn import_all(
     // Encrypted (PSB1) or a legacy plaintext .json backup.
     let content = match backup_decrypt(&raw, pw.as_deref())? {
         Some(plain) => String::from_utf8(plain).map_err(|_| "corrupt backup".to_string())?,
-        None => String::from_utf8(raw).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?,
+        None => legacy_backup_text(raw)?,
     };
     let backup: Backup =
         serde_json::from_str(&content).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?;

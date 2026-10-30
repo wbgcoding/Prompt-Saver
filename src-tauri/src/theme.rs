@@ -325,6 +325,11 @@ pub(crate) async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id
     }
 }
 
+pub(crate) fn parse_theme_import(bytes: Vec<u8>) -> Result<ThemeExport, String> {
+    let content = String::from_utf8(bytes).map_err(|_| "invalid theme file".to_string())?;
+    serde_json::from_str(strip_bom(&content)).map_err(|_| "invalid theme file".to_string())
+}
+
 // Reuses save_custom_theme's validation (name/base/vars), so an imported file is never trusted
 // more than a hand-typed value. async for the same reason as export_custom_theme.
 #[tauri::command]
@@ -336,8 +341,6 @@ pub(crate) async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) ->
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
-    let content = String::from_utf8(read_file_capped(&path, MAX_THEME_BYTES)?)
-        .map_err(|_| "invalid theme file".to_string())?;
-    let parsed: ThemeExport = serde_json::from_str(&content).map_err(|_| "invalid theme file".to_string())?;
+    let parsed = parse_theme_import(read_file_capped(&path, MAX_THEME_BYTES)?)?;
     save_custom_theme(app, state, String::new(), parsed.name, parsed.base, parsed.vars)
 }

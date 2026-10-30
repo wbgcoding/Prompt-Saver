@@ -251,3 +251,14 @@ fn random_below_stays_in_range_and_covers_it() {
     os_random(&mut b);
     assert_ne!(a, b, "two draws of 32 bytes differ");
 }
+
+#[test]
+fn json_imports_accept_a_file_with_a_byte_order_mark() {
+    let bom = "\u{feff}";
+    let theme = format!("{bom}{{\"name\":\"Mine\",\"base\":\"dark\",\"vars\":{{}}}}");
+    assert_eq!(parse_theme_import(theme.into_bytes()).unwrap().name, "Mine");
+    let settings = format!("{bom}{{\"ui_flags\":{{}}}}");
+    assert!(parse_settings_only(settings.as_bytes()).is_ok());
+    let backup = legacy_backup_text(format!("{bom}{{}}").into_bytes()).unwrap();
+    assert_eq!(backup, "{}");
+}
