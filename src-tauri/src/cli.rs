@@ -709,12 +709,17 @@ fn valid_path_arg(s: &str) -> Result<String, String> {
 
 // A relative path argument resolves against the caller's working directory, not this
 // process': a second launch forwarded to the running instance has a different one.
-fn resolve_path_arg(cwd: &Path, raw: &str) -> PathBuf {
+// A drive-relative path (`C:out.json`) names the current directory of that drive, which belongs
+// to the process that typed it. A forwarded command would resolve it in the running app's own
+// directory and read or write some other file, so it is refused.
+fn resolve_path_arg(cwd: &Path, raw: &str) -> Result<PathBuf, String> {
     let p = Path::new(raw);
     if p.is_absolute() {
-        p.to_path_buf()
+        Ok(p.to_path_buf())
+    } else if matches!(p.components().next(), Some(std::path::Component::Prefix(_))) {
+        Err(format!("\"{raw}\" is relative to a drive; give the full path with a backslash after the drive letter\n"))
     } else {
-        cwd.join(p)
+        Ok(cwd.join(p))
     }
 }
 
@@ -1624,7 +1629,10 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
         "txt" => to_txt(&resolved),
         _ => to_json(&resolved),
     };
-    let out_path = resolve_path_arg(cwd, path);
+    let out_path = match resolve_path_arg(cwd, path) {
+        Ok(p) => p,
+        Err(e) => return Outcome::err(1, e),
+    };
     if out_path.exists() && !confirmed {
         // Overwriting an existing file is the one export side effect that can destroy something, so
         // it is the only spot that needs confirmation.
@@ -1637,7 +1645,10 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
 }
 
 fn cmd_import(store: &mut Store, cwd: &Path, path: &str) -> Outcome {
-    let in_path = resolve_path_arg(cwd, path);
+    let in_path = match resolve_path_arg(cwd, path) {
+        Ok(p) => p,
+        Err(e) => return Outcome::err(1, e),
+    };
     let bytes = match read_file_capped(&in_path, MAX_IMPORT_BYTES) {
         Ok(b) => b,
         // A bad path is the caller's to fix, not a store problem to retry later.

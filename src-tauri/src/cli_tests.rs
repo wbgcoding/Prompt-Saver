@@ -1304,6 +1304,24 @@ fn output_to_a_working_writer_arrives_whole() {
     assert_eq!(buf, b"a 1");
 }
 
+// ---- drive-relative paths ----
+
+#[test]
+fn a_drive_relative_path_is_refused_not_resolved_in_another_directory() {
+    let cwd = Path::new("C:\\work");
+    assert!(resolve_path_arg(cwd, "C:out.json").is_err());
+    assert!(resolve_path_arg(cwd, "D:list.csv").is_err());
+    assert_eq!(resolve_path_arg(cwd, "out.json").unwrap(), cwd.join("out.json"));
+    assert_eq!(resolve_path_arg(cwd, "D:\\x\\out.json").unwrap(), PathBuf::from("D:\\x\\out.json"));
+
+    let tmp = TempDir::new("drive-rel");
+    let mut store = fixture_store();
+    let out = run_cmd(&mut store, tmp.path(), &["export", "C:out.json", "--yes"]);
+    assert_eq!(out.code, 1, "{}", out.stderr);
+    let out = run_cmd(&mut store, tmp.path(), &["import", "C:in.json", "--yes"]);
+    assert_eq!(out.code, 1, "{}", out.stderr);
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]
