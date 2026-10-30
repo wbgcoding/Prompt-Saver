@@ -192,7 +192,7 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
                 .unwrap_or_else(|| "mp4".to_string());
             let base = clean_app_name(&name);
             let base = if base.is_empty() { "video".to_string() } else { base };
-            let work_dir = std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-openedit-{}-{}", brand::TEMP_PREFIX, local_stamp(), std::process::id()));
+            let work_dir = std::env::temp_dir().join(brand::TEMP_DIR).join(openedit_dir_name(&local_stamp(), next_openedit_seq(), std::process::id()));
             fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
             let dest = work_dir.join(format!("{base}.{ext}"));
             // A copy of up to the size ceiling plus its sidecars: off the async runtime's threads.
@@ -212,6 +212,18 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
         }
         _ => Err("not-media".to_string()),
     }
+}
+
+// A working copy folder per open call: the one-second stamp alone let two files with the same
+// cleaned name, opened in the same second, share a folder and overwrite each other's copy and
+// sidecars. The process id stays the last part: the temp sweeps read it from there.
+pub(crate) fn openedit_dir_name(stamp: &str, seq: u64, pid: u32) -> String {
+    format!("{}-openedit-{}-{}-{}", brand::TEMP_PREFIX, stamp, seq, pid)
+}
+
+pub(crate) fn next_openedit_seq() -> u64 {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
 // Target folder for a plain "Save": a custom expert path, else Videos\<app>. Mirrors

@@ -405,3 +405,11 @@ fn the_discard_sweep_and_restore_commands_run_off_the_main_thread() {
     let at = prompts.find("pub(crate) fn sweep_discarded_recordings_now(").unwrap();
     assert!(prompts[..at].trim_end().ends_with("#[tauri::command(async)]"));
 }
+
+#[test]
+fn two_editor_copies_opened_in_the_same_second_never_share_a_folder() {
+    let a = openedit_dir_name("2026-01-01_10-00-00", next_openedit_seq(), 4242);
+    let b = openedit_dir_name("2026-01-01_10-00-00", next_openedit_seq(), 4242);
+    assert_ne!(a, b);
+    assert!(a.ends_with("-4242") && a.starts_with(&format!("{}-openedit-", brand::TEMP_PREFIX)), "the sweeps read the pid from the end: {a}");
+}
