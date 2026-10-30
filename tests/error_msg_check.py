@@ -51,6 +51,7 @@ ALLOW = {
         "name is empty", "name longer than {MAX_NAME_LEN} characters",
         "text longer than {MAX_TEXT_LEN} characters",
         "path is empty, contains a NUL byte, or is too long",
+        '"{raw}" is relative to a drive; give the full path with a backslash after the drive letter',
         "could not open the restored store", "could not write the restored store",
     ],
     "demo mode switch, only reachable from the command line": [

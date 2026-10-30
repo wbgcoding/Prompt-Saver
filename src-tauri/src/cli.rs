@@ -717,7 +717,7 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> Result<PathBuf, String> {
     if p.is_absolute() {
         Ok(p.to_path_buf())
     } else if matches!(p.components().next(), Some(std::path::Component::Prefix(_))) {
-        Err(format!("\"{raw}\" is relative to a drive; give the full path with a backslash after the drive letter\n"))
+        Err(format!("\"{raw}\" is relative to a drive; give the full path with a backslash after the drive letter"))
     } else {
         Ok(cwd.join(p))
     }
@@ -1635,7 +1635,7 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
     };
     let out_path = match resolve_path_arg(cwd, path) {
         Ok(p) => p,
-        Err(e) => return Outcome::err(1, e),
+        Err(e) => return Outcome::err(1, format!("{e}\n")),
     };
     if out_path.exists() && !confirmed {
         // Overwriting an existing file is the one export side effect that can destroy something, so
@@ -1651,7 +1651,7 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
 fn cmd_import(store: &mut Store, cwd: &Path, path: &str) -> Outcome {
     let in_path = match resolve_path_arg(cwd, path) {
         Ok(p) => p,
-        Err(e) => return Outcome::err(1, e),
+        Err(e) => return Outcome::err(1, format!("{e}\n")),
     };
     let bytes = match read_file_capped(&in_path, MAX_IMPORT_BYTES) {
         Ok(b) => b,
