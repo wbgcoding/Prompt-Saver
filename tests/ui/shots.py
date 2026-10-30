@@ -80,6 +80,9 @@ ACTS = {
                    "ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(400);",
     "editor_adv": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
                   "$('modal-advanced-head').click(); await sleep(400);",
+    "editor_rotate": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
+                     "$('modal-advanced-head').click(); await sleep(300); $('modal-rotate-switch').click(); await sleep(300);"
+                     "$('modal-rotate-add').click(); await sleep(200); $('modal-advanced-head').click(); await sleep(400);",
     "folder": ("const t = document.querySelector('#grid .folder-tile');"
                "t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
@@ -114,7 +117,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "history"],
-    "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
+    "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "sniptext"],
 }
