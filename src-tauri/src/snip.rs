@@ -1622,12 +1622,35 @@ pub(crate) fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std:
 // destination is no longer the store the caller has in memory, and a caller that
 // keeps using the old one would write it straight over the files that did arrive.
 pub(crate) fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
+    copy_store_files_from(src, dst, landed, false)
+}
+
+// The same for a store another process may be writing to (the installed app running in the
+// tray): data.db is read through a connection with VACUUM INTO, a consistent snapshot that holds
+// the rows still in its -wal file, instead of a file copy that can be torn or miss them.
+pub(crate) fn copy_live_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
+    copy_store_files_from(src, dst, landed, true)
+}
+
+fn copy_store_files_from(src: &Path, dst: &Path, landed: &mut bool, live: bool) -> Result<(), String> {
     for f in STORE_FILES {
         let from = src.join(f);
-        if from.exists() {
-            fs::copy(&from, dst.join(f)).map_err(|e| e.to_string())?;
-            *landed = true;
+        if !from.exists() {
+            continue;
         }
+        if live && f == "data.db" {
+            let tmp = dst.join("data.db.adopting");
+            let _ = fs::remove_file(&tmp);
+            let snap = Connection::open(&from)
+                .and_then(|c| c.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map(|_| ()))
+                .map_err(|e| e.to_string());
+            let copied = snap.and_then(|_| fs::copy(&tmp, dst.join(f)).map(|_| ()).map_err(|e| e.to_string()));
+            let _ = fs::remove_file(&tmp);
+            copied?;
+        } else {
+            fs::copy(&from, dst.join(f)).map_err(|e| e.to_string())?;
+        }
+        *landed = true;
     }
     Ok(())
 }

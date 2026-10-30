@@ -96,3 +96,51 @@ fn a_reset_keeps_a_trash_that_never_empties_itself() {
     old.ui_values.insert("trashRetentionDays".into(), 7.0);
     assert_eq!(trash_retention_secs(&settings_after_reset(&old)), Some(30 * 86_400), "a shorter window takes the default");
 }
+
+// The installed app can be running in the tray: its newest rows may exist only in data.db-wal,
+// and a plain file copy of data.db would miss them.
+#[test]
+fn adopting_a_running_store_takes_a_snapshot_with_its_wal_rows() {
+    let root = std::env::temp_dir().join(format!("{}-test-adopt-live-{}", brand::SLUG, std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (src, dst) = (root.join("src"), root.join("dst"));
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::create_dir_all(&dst).unwrap();
+    let live = db_conn_at(&src).unwrap();
+    live.execute("PRAGMA wal_autocheckpoint=0", []).ok();
+    live.execute("INSERT INTO meta(key, value) VALUES('wal_probe', '1')", []).unwrap();
+    let mut landed = false;
+    copy_live_store_files(&src, &dst, &mut landed).unwrap();
+    assert!(landed);
+    assert!(!dst.join("data.db.adopting").exists(), "the staging file is gone");
+    let copy = Connection::open(dst.join("data.db")).unwrap();
+    let n: i64 = copy.query_row("SELECT COUNT(*) FROM meta WHERE key='wal_probe'", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 1, "the row that only lived in the log is in the adopted database");
+    // A source that is no database lands nothing, so the caller keeps the store it has.
+    let bad = root.join("bad");
+    let bad_dst = root.join("bad_dst");
+    std::fs::create_dir_all(&bad).unwrap();
+    std::fs::create_dir_all(&bad_dst).unwrap();
+    std::fs::write(bad.join("data.db"), b"not a database at all, just text").unwrap();
+    let mut landed = false;
+    assert!(copy_live_store_files(&bad, &bad_dst, &mut landed).is_err());
+    assert!(!landed && !bad_dst.join("data.db").exists());
+    drop(copy);
+    drop(live);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// The empty-library check and the swap run under one hold of the store lock, so a prompt added in
+// between cannot be replaced by the adopted database.
+#[test]
+fn adopting_checks_and_swaps_under_one_store_lock() {
+    let src = include_str!("../trash.rs").replace("\r\n", "\n");
+    let at = src.find("pub(crate) fn takeover_apply").unwrap();
+    let body = &src[at..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    let adopt = &body[body.find("if adopt {").unwrap()..body.find("if remember {").unwrap()];
+    assert_eq!(adopt.matches("lock(&state)").count(), 1, "one acquisition for check and swap");
+    assert!(adopt.find("lock(&state)").unwrap() < adopt.find("store_has_no_real_prompts").unwrap());
+    assert!(adopt.find("store_has_no_real_prompts").unwrap() < adopt.find("copy_live_store_files").unwrap());
+    assert!(adopt.find("copy_live_store_files").unwrap() < adopt.find("*store = fresh").unwrap());
+}

@@ -931,30 +931,29 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
     let src = appdata_store_dir(&app, &dir);
     if adopt {
         let src = src.clone().ok_or("no-source")?;
-        // The offer was made on an empty store; a prompt added while the dialog was
-        // open would be replaced by the adopted database and lost.
-        {
-            let store = lock(&state);
-            if !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids) {
-                return Err("this library already has prompts".to_string());
-            }
+        // One lock from the empty-library check to the swap: the offer was made on an empty store,
+        // and a prompt added in between would be replaced by the adopted database and lost.
+        let mut store = lock(&state);
+        if !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids) {
+            return Err("this library already has prompts".to_string());
         }
         let mut landed = false;
-        if let Err(e) = copy_store_files(&src, &dir, &mut landed) {
-            // Whatever arrived is the store on disk now, while the one in memory (and its row
-            // bookkeeping) still describes the empty one it replaced, so the next save would delete
-            // every adopted row as gone. The source in %APPDATA% is untouched either way; reload from
-            // what landed before reporting the failure.
-            if landed {
-                let _ = fs::remove_file(dir.join("data.db-wal"));
-                let _ = fs::remove_file(dir.join("data.db-shm"));
-                let fresh = load_store(&app);
-                let mut store = lock(&state);
-                end_session_if_vault_changed(&store.settings, &fresh.settings);
-                *store = fresh;
-            }
-            return Err(e);
+        // The installed app may be running in the tray and writing to this store.
+        let copied = copy_live_store_files(&src, &dir, &mut landed);
+        // Whatever arrived is the store on disk now, while the one in memory (and its row
+        // bookkeeping) still describes the empty one it replaced, so the next save would delete
+        // every adopted row as gone. The source in %APPDATA% is untouched either way; reload from
+        // what landed, also when the copy failed halfway. The freshly copied database supersedes
+        // whatever the empty one wrote, so its write-ahead files must not survive into the new one.
+        if copied.is_ok() || landed {
+            let _ = fs::remove_file(dir.join("data.db-wal"));
+            let _ = fs::remove_file(dir.join("data.db-shm"));
+            let fresh = load_store(&app);
+            end_session_if_vault_changed(&store.settings, &fresh.settings);
+            *store = fresh;
         }
+        drop(store);
+        copied?;
         // An adopted store must bring its backup history along too (as set_data_dir does), or the
         // Backup panel shows 0 snapshots.
         let src_backups = src.join("backups");
@@ -963,16 +962,6 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
                 append_crash_log(&format!("takeover: could not copy backups/ ({e})"));
             }
         }
-        // The freshly copied database supersedes whatever the empty one wrote, so
-        // its write-ahead files must not survive into the new one.
-        let _ = fs::remove_file(dir.join("data.db-wal"));
-        let _ = fs::remove_file(dir.join("data.db-shm"));
-        // One lock for both steps: taking it twice would deadlock.
-        let fresh = load_store(&app);
-        let mut store = lock(&state);
-        end_session_if_vault_changed(&store.settings, &fresh.settings);
-        *store = fresh;
-        drop(store);
     }
     if remember {
         if let Some(src) = src {
