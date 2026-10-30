@@ -1536,3 +1536,18 @@ fn every_read_only_gated_writer_uses_the_write_connection() {
     let guard = lib.find("if !DATA_DIR_READONLY.load(Ordering::Relaxed) {").expect("read-only guard in setup");
     assert!(lib.find("cleanup_incomplete_backups(&backups_dir").unwrap() > guard, "backup cleanup runs inside the read-only guard");
 }
+
+// The owner clears takeover markers on its second refresh beat. The beat counter is process-wide,
+// so every new claim (startup, folder switch, takeover after a lost lock) has to restart it, or a
+// process that owned a folder before would never reach that beat again and leave its markers.
+#[test]
+fn every_new_claim_restarts_the_beat_that_clears_takeover_markers() {
+    let src = include_str!("../store.rs").replace("\r\n", "\n");
+    assert!(src.contains("RefreshOutcome::Kept if beat == 2 => remove_takeover_markers(&path)"));
+    let owned_sets = src.matches("DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);").count();
+    let resets = src.matches("DATA_DIR_LOCK_BEAT.store(0, Ordering::Relaxed);\n").count();
+    assert!(owned_sets >= 1 && resets == owned_sets, "each place that takes ownership restarts the beat");
+    for (i, _) in src.match_indices("DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);") {
+        assert!(src[..i].trim_end().ends_with("DATA_DIR_LOCK_BEAT.store(0, Ordering::Relaxed);"), "beat reset right before ownership");
+    }
+}

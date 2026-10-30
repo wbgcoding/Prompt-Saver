@@ -387,6 +387,9 @@ fn apply_lock_outcome(outcome: LockOutcome) {
             *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = Some(host);
         }
         LockOutcome::Owned => {
+            // Beats count from this claim, so the second one clears its takeover markers even when
+            // an earlier ownership in this process already counted past it.
+            DATA_DIR_LOCK_BEAT.store(0, Ordering::Relaxed);
             DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);
             DATA_DIR_READONLY.store(false, Ordering::Relaxed);
             *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -437,6 +440,7 @@ pub(crate) fn refresh_data_dir_lock(dir: &Path) -> bool {
     } else if DATA_DIR_READONLY.load(Ordering::Relaxed) && DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
         match claim_with_process_state(dir) {
             LockOutcome::Owned => {
+                DATA_DIR_LOCK_BEAT.store(0, Ordering::Relaxed);
                 DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);
                 return true;
             }
