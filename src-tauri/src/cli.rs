@@ -125,6 +125,8 @@ const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 // Windows' busy-pipe error code (ERROR_PIPE_BUSY), retried rather than read as "nobody is
 // listening".
 const ERROR_PIPE_BUSY: i32 = 231;
+const ERROR_FILE_NOT_FOUND: i32 = 2;
+const ERROR_ACCESS_DENIED: i32 = 5;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct PipeRequest {
@@ -160,23 +162,58 @@ async fn read_frame<R: tokio::io::AsyncRead + Unpin>(r: &mut R, max: usize) -> s
     Ok(buf)
 }
 
-// Tries the already-running instance. `None` means nothing answered (no pipe, or an error
-// opening it) and the caller falls back to standalone. `Some(code)` means an answer was
-// printed and this is the launch's exit code.
+// What opening the pipe failed with, as far as the launch's next step is concerned.
+#[derive(Debug, PartialEq)]
+enum OpenFailure {
+    // Every server instance is serving someone: an instance exists, so the command must not run
+    // beside it.
+    Busy,
+    // No pipe, or one this user may not open (another user's session owns the name): no instance
+    // of this user can be reached, so the command runs standalone.
+    NoInstance,
+    // Anything else says nothing about whether an instance runs; running standalone beside one
+    // would have two processes writing the database.
+    Unreachable,
+}
+
+fn classify_open_failure(code: Option<i32>) -> OpenFailure {
+    match code {
+        Some(ERROR_PIPE_BUSY) => OpenFailure::Busy,
+        Some(ERROR_FILE_NOT_FOUND | ERROR_ACCESS_DENIED) => OpenFailure::NoInstance,
+        _ => OpenFailure::Unreachable,
+    }
+}
+
+// How long a launch waits for a busy pipe before it gives up with exit 3.
+const FORWARD_BUSY_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
+// Tries the already-running instance. `None` means no instance of this user is listening and
+// the caller falls back to standalone. `Some(code)` means this is the launch's exit code: an
+// answer that was printed, or exit 3 when an instance may be running but could not be used.
 async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
+    try_forward_at(&pipe_name(), FORWARD_BUSY_WAIT, argv, cwd).await
+}
+
+async fn try_forward_at(name: &str, busy_wait: std::time::Duration, argv: &[String], cwd: &Path) -> Option<i32> {
     use tokio::net::windows::named_pipe::ClientOptions;
-    let name = pipe_name();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + busy_wait;
     let mut client = loop {
-        match ClientOptions::new().open(&name) {
+        match ClientOptions::new().open(name) {
             Ok(c) => break c,
-            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => {
-                if std::time::Instant::now() >= deadline {
-                    return None;
+            Err(e) => match classify_open_failure(e.raw_os_error()) {
+                OpenFailure::Busy => {
+                    if std::time::Instant::now() >= deadline {
+                        eprintln!("prompt-saver: the running instance is busy and did not accept the command within 5 seconds");
+                        return Some(3);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            }
-            Err(_) => return None, // nobody is listening -- run standalone instead
+                OpenFailure::NoInstance => return None,
+                OpenFailure::Unreachable => {
+                    eprintln!("prompt-saver: could not reach the running instance: {e}");
+                    return Some(3);
+                }
+            },
         }
     };
     // The argv (paths, passwords of an import) goes only to a server of this same user; any
@@ -254,29 +291,65 @@ async fn exchange<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
 // one on the plain setup() thread would panic the process before a window exists. The first
 // server instance is therefore created inside the spawned task, like every later one.
 pub(crate) fn install_server(app: &AppHandle) {
-    use tokio::net::windows::named_pipe::ServerOptions;
-    let name = pipe_name();
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut server = match ServerOptions::new().first_pipe_instance(true).create(&name) {
-            Ok(s) => s,
-            Err(_) => return, // another instance already owns the pipe; nothing to do here
-        };
-        loop {
-            if server.connect().await.is_err() {
-                return;
-            }
-            let connected = server;
-            // Queue the next instance before handing this one off, so a client that connects while this
-            // request runs is accepted immediately instead of racing the busy pipe.
-            server = match ServerOptions::new().create(&name) {
-                Ok(s) => s,
-                Err(_) => return,
-            };
+        serve_pipe(&pipe_name(), SERVER_RETRY, move |connected| {
             let app2 = app.clone();
             tauri::async_runtime::spawn(async move { handle_connection(connected, app2).await });
-        }
+        })
+        .await
     });
+}
+
+// How long the server waits before it tries to create a pipe instance again.
+const SERVER_RETRY: std::time::Duration = std::time::Duration::from_secs(3);
+
+// The accept loop. It never ends for the life of the process: a pipe nobody serves sends every
+// command line call to a standalone run beside the live app. A first instance that cannot be
+// created yet (another copy of the app owns the name, and may quit later) is retried, a client
+// that hangs up before it is accepted costs only that one instance, and a failed create backs off.
+async fn serve_pipe(
+    name: &str,
+    retry: std::time::Duration,
+    mut on_connection: impl FnMut(tokio::net::windows::named_pipe::NamedPipeServer),
+) {
+    use tokio::net::windows::named_pipe::ServerOptions;
+    let mut server = loop {
+        match ServerOptions::new().first_pipe_instance(true).create(name) {
+            Ok(s) => break s,
+            Err(_) => tokio::time::sleep(retry).await,
+        }
+    };
+    loop {
+        let (connected, next) = accept_next(server, name, retry).await;
+        server = next;
+        if let Some(connected) = connected {
+            on_connection(connected);
+        }
+    }
+}
+
+// Waits for one client on `server`. Gives back the connected instance (None when the client hung
+// up before it was accepted, which is no reason to stop serving) and the fresh instance to wait on
+// next. The next instance is queued before the connected one is handed off, so a client that
+// arrives while a request runs is accepted at once instead of racing a busy pipe.
+async fn accept_next(
+    server: tokio::net::windows::named_pipe::NamedPipeServer,
+    name: &str,
+    retry: std::time::Duration,
+) -> (
+    Option<tokio::net::windows::named_pipe::NamedPipeServer>,
+    tokio::net::windows::named_pipe::NamedPipeServer,
+) {
+    use tokio::net::windows::named_pipe::ServerOptions;
+    let connected = server.connect().await.is_ok();
+    let next = loop {
+        match ServerOptions::new().create(name) {
+            Ok(s) => break s,
+            Err(_) => tokio::time::sleep(retry).await,
+        }
+    };
+    (connected.then_some(server), next)
 }
 
 async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeServer, app: AppHandle) {

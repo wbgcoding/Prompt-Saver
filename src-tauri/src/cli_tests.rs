@@ -1031,6 +1031,112 @@ fn forwarded_request_reports_a_dropped_connection() {
     });
 }
 
+// ---- the launch never runs beside a live instance it could not reach ----
+
+fn probe_pipe_name(tag: &str) -> String {
+    format!(r"\\.\pipe\prompt-saver-clitest-{tag}-{}", std::process::id())
+}
+
+#[test]
+fn only_a_missing_or_foreign_pipe_lets_a_launch_run_standalone() {
+    assert_eq!(classify_open_failure(Some(ERROR_FILE_NOT_FOUND)), OpenFailure::NoInstance);
+    assert_eq!(classify_open_failure(Some(ERROR_ACCESS_DENIED)), OpenFailure::NoInstance);
+    assert_eq!(classify_open_failure(Some(ERROR_PIPE_BUSY)), OpenFailure::Busy);
+    assert_eq!(classify_open_failure(Some(53)), OpenFailure::Unreachable);
+    assert_eq!(classify_open_failure(None), OpenFailure::Unreachable);
+}
+
+#[test]
+fn a_launch_finding_no_pipe_runs_standalone() {
+    let rt = time_rt();
+    rt.block_on(async {
+        let out = try_forward_at(&probe_pipe_name("none"), std::time::Duration::from_millis(100), &args(&["list"]), Path::new(".")).await;
+        assert_eq!(out, None);
+    });
+}
+
+#[test]
+fn a_launch_finding_the_pipe_busy_past_its_wait_exits_three_instead_of_running_beside_the_app() {
+    use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
+    let rt = time_rt();
+    rt.block_on(async {
+        let name = probe_pipe_name("busy");
+        let server = ServerOptions::new().first_pipe_instance(true).create(&name).unwrap();
+        // One instance, already taken by a client that never lets go: every further open is busy.
+        let holder = ClientOptions::new().open(&name).unwrap();
+        server.connect().await.unwrap();
+        let out = try_forward_at(&name, std::time::Duration::from_millis(150), &args(&["list"]), Path::new(".")).await;
+        assert_eq!(out, Some(3));
+        drop(holder);
+    });
+}
+
+#[test]
+fn a_second_server_takes_over_the_pipe_once_the_first_is_gone() {
+    use tokio::net::windows::named_pipe::ClientOptions;
+    let rt = time_rt();
+    rt.block_on(async {
+        let name = probe_pipe_name("takeover");
+        let retry = std::time::Duration::from_millis(30);
+        let first = tokio::spawn({
+            let name = name.clone();
+            async move { serve_pipe(&name, retry, |_| {}).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (served_tx, mut served_rx) = tokio::sync::mpsc::unbounded_channel();
+        // The pipe name is taken, so this one has to keep trying instead of giving up for good.
+        let second = tokio::spawn({
+            let name = name.clone();
+            async move {
+                serve_pipe(&name, retry, move |_| {
+                    let _ = served_tx.send(());
+                })
+                .await
+            }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        first.abort();
+        let _ = first.await;
+        let mut got = false;
+        for _ in 0..40 {
+            if let Ok(client) = ClientOptions::new().open(&name) {
+                drop(client);
+                if tokio::time::timeout(std::time::Duration::from_millis(500), served_rx.recv()).await.is_ok() {
+                    got = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        second.abort();
+        assert!(got, "the second server must start answering once the first is gone");
+    });
+}
+
+#[test]
+fn a_client_that_hangs_up_before_it_is_accepted_does_not_end_the_server() {
+    use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
+    let rt = time_rt();
+    rt.block_on(async {
+        let name = probe_pipe_name("hangup");
+        let retry = std::time::Duration::from_millis(30);
+        let server = ServerOptions::new().first_pipe_instance(true).create(&name).unwrap();
+        // The client connects and goes away while nobody is in connect() yet.
+        drop(ClientOptions::new().open(&name).unwrap());
+        // Whether the vanished client counts as connected is up to the OS; either way the
+        // loop must get a fresh instance back instead of ending.
+        let (_connected, next) = accept_next(server, &name, retry).await;
+        // The instance it hands back is a working one: a real client reaches it.
+        let accepting = tokio::spawn(async move {
+            let next = next;
+            next.connect().await.map(|_| next)
+        });
+        let client = ClientOptions::new().open(&name).unwrap();
+        assert!(accepting.await.unwrap().is_ok());
+        drop(client);
+    });
+}
+
 // ---- `describe` / docs/automation-manifest.json ----
 
 #[test]
