@@ -827,47 +827,65 @@ pub(crate) fn save_tile_folder(
     let name = folder_name_of(&name)?;
     let color = valid_tag_color(&color)?;
     let mut store = lock(&state);
+    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    apply_tile_folder_save(&mut store.settings, &ids, &id, name, color, view_id, cell, members)?;
+    save_settings(&app, &store.settings);
+    Ok(webview_settings(&store.settings))
+}
+
+// The settings half of save_tile_folder. Every check runs before the first change, so a refused
+// save leaves the folders and their members exactly as they were.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_tile_folder_save(
+    settings: &mut Settings,
+    prompt_ids: &[String],
+    id: &str,
+    name: String,
+    color: String,
+    view_id: String,
+    cell: [u32; 2],
+    members: Vec<String>,
+) -> Result<(), String> {
     for pid in &members {
-        if !store.prompts.iter().any(|p| &p.id == pid) {
+        if !prompt_ids.contains(pid) {
             return Err(format!("unknown {}", brand::ITEM));
         }
     }
-    for folder in store.settings.tile_folders.iter_mut() {
+    let existing = settings.tile_folders.iter().any(|f| f.id == id);
+    if !existing {
+        if members.len() < 2 {
+            return Err(format!("a folder needs at least two {}", brand::ITEM_PLURAL));
+        }
+        if !settings.views.iter().any(|v| v.id == view_id) {
+            return Err("unknown view".to_string());
+        }
+        if settings.tile_folders.len() >= MAX_TILE_FOLDERS {
+            return Err(format!("max {} folders", MAX_TILE_FOLDERS));
+        }
+    }
+    for folder in settings.tile_folders.iter_mut() {
         if folder.id != id {
             folder.members.retain(|m| !members.contains(m));
         }
     }
-    match store.settings.tile_folders.iter_mut().find(|f| f.id == id) {
+    match settings.tile_folders.iter_mut().find(|f| f.id == id) {
         Some(folder) => {
             folder.name = name;
             folder.color = color;
             folder.cell = cell;
             folder.members = members;
         }
-        None => {
-            if members.len() < 2 {
-                return Err(format!("a folder needs at least two {}", brand::ITEM_PLURAL));
-            }
-            if !store.settings.views.iter().any(|v| v.id == view_id) {
-                return Err("unknown view".to_string());
-            }
-            if store.settings.tile_folders.len() >= MAX_TILE_FOLDERS {
-                return Err(format!("max {} folders", MAX_TILE_FOLDERS));
-            }
-            store.settings.tile_folders.push(TileFolder {
-                id: gen_id(),
-                name,
-                color,
-                view_id,
-                cell,
-                members,
-            });
-        }
+        None => settings.tile_folders.push(TileFolder {
+            id: gen_id(),
+            name,
+            color,
+            view_id,
+            cell,
+            members,
+        }),
     }
-    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
-    finish_tile_folder_edit(&mut store.settings, &ids);
-    save_settings(&app, &store.settings);
-    Ok(webview_settings(&store.settings))
+    finish_tile_folder_edit(settings, prompt_ids);
+    Ok(())
 }
 
 // The shared tail of a folder edit. A prompt inside a folder is not a tile: its layout

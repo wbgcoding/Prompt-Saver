@@ -77,6 +77,35 @@ fn renaming_a_tag_to_another_casing_keeps_its_colour() {
     assert_eq!(colors.get("css").map(String::as_str), Some("#ff0000"));
 }
 
+// A refused new-folder save must not have pulled members out of their old folders first.
+#[test]
+fn a_refused_new_folder_save_leaves_the_existing_folders_untouched() {
+    let mut settings = Settings { views: vec![test_view("v")], ..Settings::default() };
+    settings.tile_folders = vec![test_tile_folder("old", "v", [0, 0], &["a", "b", "c"])];
+    let ids: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+    let before = settings.tile_folders.clone();
+    let members = || vec!["a".to_string(), "d".to_string()];
+    let save = |s: &mut Settings, view: &str, members: Vec<String>| {
+        apply_tile_folder_save(s, &ids, "", String::new(), String::new(), view.to_string(), [1, 0], members)
+    };
+    assert!(save(&mut settings, "ghost-view", members()).is_err());
+    assert!(save(&mut settings, "v", vec!["a".to_string()]).is_err());
+    assert_eq!(settings.tile_folders.len(), before.len());
+    assert_eq!(settings.tile_folders[0].members, before[0].members, "no member was pulled out");
+    // At the cap the new folder is refused too.
+    let mut full = settings.clone();
+    while full.tile_folders.len() < MAX_TILE_FOLDERS {
+        full.tile_folders.push(test_tile_folder("filler", "v", [9, 9], &["z"]));
+    }
+    let n = full.tile_folders.len();
+    assert!(save(&mut full, "v", members()).is_err());
+    assert_eq!(full.tile_folders.len(), n);
+    assert_eq!(full.tile_folders[0].members, before[0].members);
+    // A valid save still moves the member out of its old folder.
+    assert!(save(&mut settings, "v", members()).is_ok());
+    assert!(!settings.tile_folders.iter().find(|f| f.id == "old").map(|f| f.members.contains(&"a".to_string())).unwrap_or(false));
+}
+
 #[test]
 fn hot_path_commands_run_off_the_main_thread() {
     // Contrast: a sync command runs on the event-loop thread and freezes the
