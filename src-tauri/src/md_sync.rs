@@ -2857,7 +2857,10 @@ pub(crate) fn start_sync_poll(app: AppHandle) {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))) => {}
                 _ = SYNC_WAKE.notified() => {}
             }
-            sync_poll_once(&app);
+            // File reads on a share that does not answer can take the OS timeout; that wait
+            // belongs on a thread of its own, not on a worker the other async tasks share.
+            let app2 = app.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || sync_poll_once(&app2)).await;
         }
     });
 }

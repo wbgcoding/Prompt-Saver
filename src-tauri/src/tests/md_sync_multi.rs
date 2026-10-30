@@ -1722,3 +1722,16 @@ fn multi_a_folder_that_cannot_take_new_files_is_still_read() {
     assert!(rig.a.get(&late).is_some(), "nothing was imported from a folder that is read-only for this user");
     assert!(rig.a.get(&id).is_some());
 }
+
+#[test]
+fn multi_the_poll_reads_the_folder_on_a_blocking_thread() {
+    let src = include_str!("../md_sync.rs").replace("\r\n", "\n");
+    let body = &src[src.find("pub(crate) fn start_sync_poll(").expect("start_sync_poll")..];
+    let call = body.find("sync_poll_once(&app2)").expect("the loop runs a poll round");
+    let before = &body[..call];
+    assert!(
+        before.rfind("spawn_blocking").is_some_and(|at| call - at < 200),
+        "a poll round that waits on an unreachable share would hold an async worker"
+    );
+    assert!(!body.contains("            sync_poll_once(&app);"), "a poll round runs directly in the async task");
+}
