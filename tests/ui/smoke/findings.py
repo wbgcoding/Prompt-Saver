@@ -721,6 +721,25 @@ def run(browser, tmp):
       if (callsFor('delete_screenshot_file').length) errs.push('597: the freshly saved file was deleted because it reused the old name');
     }
 """)
+    failed += ar_probe('ba86', 'screenshot capture: a failed clipboard write or folder save is told to the user', 'index', '1000x780', ba_seed, ba_common + r'''
+    await bootReady();
+    const toastText = () => document.getElementById('toast').textContent;
+    const fire = async (extra) => {
+      document.getElementById('toast').textContent = '';
+      window.__FIRE__('snip-captured', Object.assign({ data_url: captureFixture(), path: '', name: 'x.png' }, extra));
+      await sleep(400);
+      document.getElementById('snip-edit-close')?.click();
+      await sleep(150);
+    };
+    await fire({});
+    if (/clipboard|saved/i.test(toastText())) errs.push('86: a clean capture showed a notice: ' + JSON.stringify(toastText()));
+    await fire({ clipboard_failed: true });
+    if (!/clipboard could not be written/i.test(toastText())) errs.push('86: no notice for the failed clipboard write, toast is ' + JSON.stringify(toastText()));
+    await fire({ save_failed: true });
+    if (!/could not be saved to the folder/i.test(toastText())) errs.push('86: no notice for the failed folder save, toast is ' + JSON.stringify(toastText()));
+    await fire({ clipboard_failed: true, save_failed: true });
+    if (!/clipboard could not be written/i.test(toastText()) || !/saved to the folder/i.test(toastText())) errs.push('86: both failures must be told, toast is ' + JSON.stringify(toastText()));
+''')
     failed += ar_probe('ba594', 'screenshot editor: moving, resizing or deleting a finished shape is one undo step of its own', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('594: the editor did not open'); }
     else {

@@ -1,5 +1,5 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errToast, flag, invoke, LANG, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errText, errToast, flag, invoke, LANG, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -761,6 +761,11 @@ export function bindCapture() {
     if (!shot) return;
     snipCaptureGen++;
     recordToolUsage("screenshot");
+    // The capture goes on, but the user must know when the copy or the folder file did not happen.
+    const lost = [];
+    if (e.payload?.clipboard_failed) lost.push(errText("clipboard write failed"));
+    if (e.payload?.save_failed) lost.push(t("snipSaveFailed"));
+    if (lost.length) toast(lost.join(". "));
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
     pendingSnipStem = e.payload?.stem || "";

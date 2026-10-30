@@ -65,7 +65,7 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
         .unwrap_or((false, String::new(), SNIP_SAVE_Q, "png".to_string()));
 
     let stem_for_ui = stem.clone();
-    let (data_url, path) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String), String> {
+    let (data_url, path, clipboard_failed, save_failed) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String, bool, bool), String> {
         // The data URL feeds an <img>/canvas on the JS side (the result dialog's
         // preview, then the editor if it opens); every offered format is one a
         // browser decodes, so the same bytes also go to the folder copy.
@@ -75,19 +75,24 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
         if !snip_session_current(gen) {
             return Err("cancelled".to_string());
         }
-        let _ = arboard::Clipboard::new().and_then(|mut c| {
-            c.set_image(arboard::ImageData {
-                width: cw as usize,
-                height: ch as usize,
-                bytes: crop.into_raw().into(),
+        // A busy clipboard or an unwritable folder does not stop the capture, but the UI is told
+        // so the user knows the clipboard still holds the old content or no file was written.
+        let clipboard_failed = arboard::Clipboard::new()
+            .and_then(|mut c| {
+                c.set_image(arboard::ImageData {
+                    width: cw as usize,
+                    height: ch as usize,
+                    bytes: crop.into_raw().into(),
+                })
             })
-        });
+            .is_err();
         let path = if save_to_folder {
             save_screenshot(&data_bytes, &screenshot_dir(&custom_dir), &stem, screenshot_format_ext(&format))
         } else {
             String::new()
         };
-        Ok((data_url, path))
+        let save_failed = save_to_folder && path.is_empty();
+        Ok((data_url, path, clipboard_failed, save_failed))
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -104,7 +109,7 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .clear();
-    let _ = app.emit("snip-captured", SnipResult { data_url, path, name, stem: stem_for_ui });
+    let _ = app.emit("snip-captured", SnipResult { data_url, path, name, stem: stem_for_ui, clipboard_failed, save_failed });
     Ok(())
 }
 

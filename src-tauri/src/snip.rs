@@ -469,6 +469,10 @@ pub(crate) struct SnipResult {
     pub(crate) name: String,
     // Matching file stem "Screenshot-<app?>-<timestamp>", reused when the editor saves.
     pub(crate) stem: String,
+    // The clipboard write failed (the clipboard still holds the old content).
+    pub(crate) clipboard_failed: bool,
+    // Folder saving is on but the file could not be written.
+    pub(crate) save_failed: bool,
 }
 
 // A selectable top-level window in stitched-image physical pixels.
