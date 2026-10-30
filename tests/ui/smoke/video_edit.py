@@ -528,6 +528,25 @@ def run(browser, tmp):
     VE.drag = null;
     """)
 
+    # 4046: undo never steps back past the floor through a replaced locked op.
+    failed += vprobe('floorprev', 'undo stops at an op that was below the undo floor', r"""
+    // 4046: a trim below the floor, edited once, undone twice.
+    const trim = { tool: 'trim', startMs: 1000, endMs: 5000 };
+    VE.ops = [trim];
+    VE.redo = [];
+    VE.floor = 1;
+    mod.pushReplacing((o) => o.tool === 'trim', { tool: 'trim', startMs: 2000, endMs: 5000 });
+    if (VE.ops.length !== 1 || VE.ops[0].startMs !== 2000) errs.push('4046: fixture: the replacement is not the only op');
+    mod.undo();
+    if (VE.ops.length !== 1 || VE.ops[0].startMs !== 1000) errs.push('4046: the first undo did not bring the old trim back: ' + JSON.stringify(VE.ops));
+    mod.undo();
+    if (VE.ops.length !== 1) errs.push('4046: a second undo removed the locked trim: ' + JSON.stringify(VE.ops));
+    mod.redo();
+    if (VE.ops.length !== 1 || VE.ops[0].startMs !== 2000) errs.push('4046: redo did not restore the edited trim: ' + JSON.stringify(VE.ops));
+    mod.undo();
+    if (VE.ops[0].startMs !== 1000) errs.push('4046: undo after redo did not step back to the old trim');
+    """)
+
     # The help dialog: F1 opens it, a section click swaps the text, the last section lists the registry.
     failed += vprobe('help', 'F1 opens the help, sections switch, shortcut list is complete', r"""
     const $ = (id) => document.getElementById(id);

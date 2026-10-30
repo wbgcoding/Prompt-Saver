@@ -413,6 +413,9 @@ export function pushOp(op, opts) {
 // instead of removing the operation. undo()/redo() walk this chain one link at a time.
 export function pushReplacing(match, op, opts) {
   const prev = VE.ops.find(match) || null;
+  // A replaced op below the floor was no longer undoable; stepping back to it later must not
+  // make it undoable again (see undo()).
+  const prevLocked = !!prev && VE.ops.indexOf(prev) < VE.floor;
   // The floor is a count-based boundary into VE.ops; removing entries below it
   // shifts every later index down, so it shrinks by that many (and only those) or
   // it would re-lock operations that were still undoable.
@@ -420,7 +423,7 @@ export function pushReplacing(match, op, opts) {
   VE.ops = VE.ops.filter((o) => !match(o));
   VE.floor = Math.max(0, VE.floor - lockedGone);
   if (prev && op.tool === "overlay" && op.z === undefined && prev.z !== undefined) op = { ...op, z: prev.z };
-  const next = prev ? { ...op, _prev: prev } : op;
+  const next = prev ? { ...op, _prev: prev, ...(prevLocked ? { _prevLocked: true } : {}) } : op;
   pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
 }
 
@@ -486,6 +489,8 @@ export function undo() {
     // value it replaced rather than removing the row outright, and keep the
     // full entry (chain intact) on the redo stack so redo can restore it.
     VE.ops[idx] = cur._prev;
+    // The restored op was locked when it was replaced: it stays, a second Undo stops at it.
+    if (cur._prevLocked) VE.floor = Math.max(VE.floor, idx + 1);
     VE.redo.push(cur);
   } else {
     VE.redo.push(VE.ops.pop());
@@ -505,6 +510,7 @@ export function redo() {
     // The matching undo left this slot holding next._prev: put the newer
     // value back in the same slot instead of appending a second row.
     VE.ops[VE.ops.length - 1] = next;
+    if (next._prevLocked) VE.floor = Math.min(VE.floor, VE.ops.length - 1);
   } else {
     VE.ops.push(next);
   }
