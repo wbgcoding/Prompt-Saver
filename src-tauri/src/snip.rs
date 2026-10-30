@@ -297,7 +297,7 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
             let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
-            } else if name.starts_with(&openedit_prefix) && is_stale(&e) {
+            } else if name.starts_with(&openedit_prefix) && is_stale(&e) && !openedit_dir_in_use(&name) {
                 let _ = fs::remove_dir_all(e.path());
             } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
@@ -316,6 +316,13 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
             }
         }
     }
+}
+
+// A working copy folder ends in the id of the process that opened it. The folder's own time is
+// set once at copy time, so an edit that runs for hours looks stale: while that process lives
+// (this one included) the copy is in use and stays.
+fn openedit_dir_in_use(name: &str) -> bool {
+    name.rsplit('-').next().and_then(|p| p.parse::<u32>().ok()).is_some_and(|pid| pid == std::process::id() || pid_is_alive(pid))
 }
 
 // Orderly exit: drop this process's own scratch files right away instead of

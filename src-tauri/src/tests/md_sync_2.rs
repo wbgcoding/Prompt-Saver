@@ -1251,3 +1251,22 @@ fn a_failed_write_outside_the_boot_window_still_gets_only_the_normal_retries() {
     assert!(!sync_write_again(2, false, &mut retries, &mut waited));
     assert_eq!(waited, 0);
 }
+
+// The working copy of a file opened for editing keeps its folder time from the moment it was
+// copied; the sweep must not take it away from an editor that is still running.
+#[test]
+fn sweep_stale_temp_files_keeps_working_copies_of_living_processes() {
+    let root = sweep_test_root("openedit");
+    let sub = root.join(brand::TEMP_DIR);
+    let mine = sub.join(format!("{}-openedit-20260101-1000-{}", brand::TEMP_PREFIX, std::process::id()));
+    let gone = sub.join(format!("{}-openedit-20260101-1000-4000000001", brand::TEMP_PREFIX));
+    for d in [&mine, &gone] {
+        fs::create_dir_all(d).unwrap();
+        fs::write(d.join("clip.mp4"), b"x").unwrap();
+        backdate(d, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+    }
+    sweep_stale_temp_files_in(&root);
+    assert!(mine.join("clip.mp4").exists(), "a long edit lost its source file");
+    assert!(!gone.exists(), "a copy whose process is gone is still swept");
+    let _ = fs::remove_dir_all(&root);
+}
