@@ -1138,6 +1138,33 @@ fn editor_draft_reads_an_old_unsealed_row() {
     assert_eq!((d.name.as_str(), d.text.as_str(), d.variants.as_str()), ("Old", "Old body", "[]"));
 }
 
+// A read-only instance (another machine owns the folder) reads edit states and drafts without
+// sealing or deleting anything in the owner's database.
+#[test]
+fn a_read_only_read_of_edit_state_and_draft_writes_nothing() {
+    let conn = edit_state_test_conn();
+    conn.execute(
+        "INSERT INTO edit_state VALUES('video:c:/clips/old.mp4', 'video', 'c:/clips/old.mp4', 1, 2, '{\"v\":1,\"t\":\"words\"}', 77)",
+        [],
+    )
+    .unwrap();
+    let (_, ops) = edit_state_read_with(&conn, "video", "c:/clips/old.mp4", 1, 2, false).unwrap();
+    assert!(ops.contains("words"));
+    let (id, ops_stored): (String, String) = conn.query_row("SELECT id, ops FROM edit_state", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert_eq!(id, "video:c:/clips/old.mp4", "the row keeps its legacy id");
+    assert!(!ops_stored.starts_with(ENC_PREFIX), "the row stays unsealed");
+
+    let conn = editor_drafts_test_conn();
+    conn.execute("INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','Old','Old body','[]',5)", []).unwrap();
+    assert_eq!(editor_draft_read_with(&conn, false).unwrap().text, "Old body");
+    let raw: String = conn.query_row("SELECT text FROM editor_drafts", [], |r| r.get(0)).unwrap();
+    assert_eq!(raw, "Old body", "the draft stays unsealed");
+    conn.execute("UPDATE editor_drafts SET name='enc:v1:AAAA', text='enc:v1:AAAA', variants='enc:v1:AAAA'", []).unwrap();
+    assert!(editor_draft_read_with(&conn, false).is_none());
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+    assert_eq!(count, 1, "an unreadable draft is not deleted from the owner's folder");
+}
+
 // Same upsert SQL as save_editor_draft, run directly against a bare
 // in-memory connection - the async command itself only exists to fetch its
 // own AppHandle-bound connection, no test harness for that here (same

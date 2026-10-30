@@ -99,7 +99,14 @@ pub(crate) fn rebase_edit_state(conn: &Connection, old: &Path, new: &Path) -> Re
 }
 
 // (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
+#[cfg(test)]
 pub(crate) fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
+    edit_state_read_with(conn, kind, target, size, mtime, true)
+}
+
+// `reseal` false is the read-only instance's read: a clear row is returned decrypted as it is and
+// nothing is written into a folder another machine owns.
+pub(crate) fn edit_state_read_with(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64, reseal: bool) -> Option<(String, String)> {
     for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
         let row = conn
             .query_row(
@@ -113,6 +120,9 @@ pub(crate) fn edit_state_read(conn: &Connection, kind: &str, target: &str, size:
             // A row stored in clear is sealed the first time it is read: rewritten under the hashed id
             // (the legacy row is dropped), keeping its timestamp so the retention clock does not restart.
             if !ops.starts_with(ENC_PREFIX) || !stored_target.starts_with(ENC_PREFIX) {
+                if !reseal {
+                    return Some((id, plain_ops));
+                }
                 let _ = edit_state_write(conn, kind, target, size, mtime, &plain_ops, updated_at);
                 let hashed = edit_state_id(kind, target);
                 return Some((hashed, plain_ops));
@@ -139,7 +149,10 @@ pub(crate) async fn save_edit_state(app: AppHandle, kind: String, target: String
 #[tauri::command]
 pub(crate) async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64) -> Result<Option<String>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let Some((id, ops)) = edit_state_read(&conn, &kind, &target, size, mtime) else { return Ok(None) };
+    // A read-only instance (another machine owns the folder) only reads: the re-seal and the
+    // discard below would land in the owner's database.
+    let may_write = !data_dir_write_blocked_quiet();
+    let Some((id, ops)) = edit_state_read_with(&conn, &kind, &target, size, mtime, may_write) else { return Ok(None) };
     // Malformed JSON or an unknown "v" must never reach the editor, which would try to replay
     // operations it cannot understand. Decided here so "usable" is defined in one place; the
     // caller gets an empty editor, and the discard is logged so real corruption stays visible.
@@ -149,7 +162,9 @@ pub(crate) async fn load_edit_state(app: AppHandle, kind: String, target: String
         // the log that sealing the row keeps out of the database.
         let shown = std::path::Path::new(&target).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         append_crash_log(&format!("load_edit_state: discarding unreadable saved state for {shown}"));
-        let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]);
+        if may_write {
+            let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]);
+        }
         return Ok(None);
     }
     Ok(Some(ops))
@@ -191,7 +206,7 @@ pub(crate) fn edit_state_asset_paths(ops: &str, own_dirs: &[PathBuf]) -> Vec<Str
 #[tauri::command]
 pub(crate) async fn allow_edit_state_files(app: AppHandle, state: State<'_, Db>, kind: String, target: String, size: i64, mtime: i64) -> Result<u32, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let Some((_, ops)) = edit_state_read(&conn, &kind, &target, size, mtime) else { return Ok(0) };
+    let Some((_, ops)) = edit_state_read_with(&conn, &kind, &target, size, mtime, !data_dir_write_blocked_quiet()) else { return Ok(0) };
     let own_dirs = own_storage_dirs(&app, &state);
     let paths = edit_state_asset_paths(&ops, &own_dirs);
     for p in &paths {
@@ -242,7 +257,14 @@ pub(crate) fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str,
     .map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
 pub(crate) fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
+    editor_draft_read_with(conn, true)
+}
+
+// `heal` false is the read-only instance's read: the unreadable draft is reported as none and the
+// clear one returned as it is, without touching the owner's database.
+pub(crate) fn editor_draft_read_with(conn: &Connection, heal: bool) -> Option<EditorDraft> {
     let (prompt_id, raw_name, raw_text, raw_variants, updated_at) = conn
         .query_row(
             "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
@@ -255,11 +277,13 @@ pub(crate) fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
     // machine) reads back empty: that is no draft, never an empty one to "restore".
     let sealed = [&raw_name, &raw_text, &raw_variants].iter().any(|v| v.starts_with(ENC_PREFIX));
     if sealed && name.is_empty() && text.is_empty() && variants.is_empty() {
-        let _ = conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []);
+        if heal {
+            let _ = conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []);
+        }
         return None;
     }
     // An old draft written in clear is sealed on this first read.
-    if ![&raw_name, &raw_text, &raw_variants].iter().all(|v| v.is_empty() || v.starts_with(ENC_PREFIX)) {
+    if heal && ![&raw_name, &raw_text, &raw_variants].iter().all(|v| v.is_empty() || v.starts_with(ENC_PREFIX)) {
         let _ = editor_draft_write(conn, &prompt_id, &name, &text, &variants, updated_at);
     }
     Some(EditorDraft { prompt_id, name, text, variants, updated_at })
@@ -275,7 +299,7 @@ pub(crate) async fn save_editor_draft(app: AppHandle, prompt_id: String, name: S
 #[tauri::command]
 pub(crate) async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDraft>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    Ok(editor_draft_read(&conn))
+    Ok(editor_draft_read_with(&conn, !data_dir_write_blocked_quiet()))
 }
 
 #[tauri::command]
@@ -362,6 +386,10 @@ pub(crate) fn sweep_edit_states_now(app: AppHandle) -> u32 {
 // folded into "nothing to purge", so the caller can tell which backups may still hold the data.
 #[tauri::command]
 pub(crate) async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<(usize, usize), String> {
+    // The scrub rewrites every snapshot: not in a folder another machine owns.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".to_string());
+    }
     Ok(purge_clip_inbox_from_backups_impl(&backups_dir(&app)))
 }
 
