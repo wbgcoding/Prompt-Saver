@@ -860,7 +860,9 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
         return Err("update signature invalid: download rejected".to_string());
     }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
-    // the installer/script at a predictable path (TOCTOU).
+    // the installer/script at a predictable path. The unique name does not stop a swap after
+    // the write, so each staged file stays open (no write or delete sharing) until the process
+    // exits; see `stage_file_locked`.
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -868,12 +870,13 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     let stage = std::env::temp_dir().join(format!("{}-update-{}-{}", brand::SLUG, std::process::id(), stamp));
     fs::create_dir_all(&stage).map_err(|e| format!("stage dir: {}", e))?;
     let installer = stage.join("setup.exe");
-    fs::write(&installer, &bytes).map_err(|e| format!("save installer: {}", e))?;
+    let held_installer = stage_file_locked(&installer, &bytes).map_err(|e| format!("save installer: {}", e))?;
     // The signature covers the installer bytes, so the version inside them is the signed one;
     // the tag in the URL is not. An older genuine installer re-published under a new tag must
     // not install as an update.
     #[cfg(windows)]
     if !installer_version_is_newer(crate::win_windows::file_version_of(&installer.to_string_lossy()).as_deref()) {
+        drop(held_installer);
         let _ = fs::remove_dir_all(&stage);
         return Err("this release is not newer than the installed version".to_string());
     }
@@ -882,7 +885,7 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     let app_exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let script = stage.join("update.cmd");
     let content = update_script_content(&installer, &app_exe)?;
-    fs::write(&script, content).map_err(|e| format!("save script: {}", e))?;
+    let held_script = stage_file_locked(&script, content.as_bytes()).map_err(|e| format!("save script: {}", e))?;
 
     let mut cmd = std::process::Command::new("cmd");
     #[cfg(windows)]
@@ -893,6 +896,52 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     }
     #[cfg(not(windows))]
     cmd.args(["/C", &script.to_string_lossy()]);
-    cmd.spawn().map_err(|e| format!("start installer: {}", e))?;
+    if let Err(e) = cmd.spawn() {
+        drop((held_installer, held_script));
+        let _ = fs::remove_dir_all(&stage);
+        return Err(format!("start installer: {}", e));
+    }
+    // The helper script starts the installer on its own schedule, so there is no moment this
+    // function can name as "the installer has started". The handles stay open for the rest of
+    // the process (the app quits right after this returns), which also keeps the files from
+    // being swapped while the script runs. Windows closes them when the app exits.
+    STAGED_FILES.lock().unwrap_or_else(|e| e.into_inner()).extend([held_installer, held_script]);
     Ok(())
 }
+
+// Staged update files kept open until the app exits (see `install_update_blocking`).
+static STAGED_FILES: std::sync::Mutex<Vec<fs::File>> = std::sync::Mutex::new(Vec::new());
+
+/// Writes a new file and returns it held open for reading with write and delete sharing denied,
+/// so no other process can change, replace or remove it while the handle lives. The file is
+/// created fresh (an existing one is an error, never overwritten). The writer is closed before
+/// the held handle opens, because a file open for writing cannot be run; a swap in that short
+/// gap is caught by comparing what the held handle reads against the bytes that were meant.
+pub(crate) fn stage_file_locked(path: &Path, bytes: &[u8]) -> std::io::Result<fs::File> {
+    use std::io::{Error, ErrorKind, Read, Write};
+    #[cfg(windows)]
+    use std::os::windows::fs::OpenOptionsExt;
+    let mut writer = fs::OpenOptions::new();
+    writer.write(true).create_new(true);
+    #[cfg(windows)]
+    writer.share_mode(FILE_SHARE_READ);
+    let mut w = writer.open(path)?;
+    w.write_all(bytes)?;
+    w.flush()?;
+    drop(w);
+    let mut reader = fs::OpenOptions::new();
+    reader.read(true);
+    #[cfg(windows)]
+    reader.share_mode(FILE_SHARE_READ);
+    let mut held = reader.open(path)?;
+    let mut back = Vec::with_capacity(bytes.len());
+    held.read_to_end(&mut back)?;
+    if back != bytes {
+        return Err(Error::new(ErrorKind::InvalidData, "staged file changed while it was written"));
+    }
+    Ok(held)
+}
+
+// Win32 FILE_SHARE_READ: other handles may read, but not write or delete.
+#[cfg(windows)]
+const FILE_SHARE_READ: u32 = 1;

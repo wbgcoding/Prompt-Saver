@@ -125,3 +125,24 @@ fn update_cmd_line_quotes_the_script_path_without_a_space() {
     assert!(update_cmd_line(Path::new(r#"C:\t\a"b.cmd"#)).is_err());
     assert!(update_cmd_line(Path::new(r"C:\t\%TEMP%\u.cmd")).is_err());
 }
+
+// A staged update file stays readable but cannot be rewritten, replaced or removed while the
+// held handle lives, and an existing file is never overwritten.
+#[cfg(windows)]
+#[test]
+fn a_staged_update_file_cannot_be_swapped_while_held() {
+    let dir = std::env::temp_dir().join(format!("ps-stage-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("setup.exe");
+    let held = stage_file_locked(&path, b"MZ-original").unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"MZ-original", "readers (the installer launch) still work");
+    assert!(fs::write(&path, b"MZ-evil").is_err(), "no rewrite while held");
+    assert!(fs::remove_file(&path).is_err(), "no delete while held");
+    assert!(fs::rename(&path, dir.join("moved.exe")).is_err(), "no rename while held");
+    assert_eq!(fs::read(&path).unwrap(), b"MZ-original");
+    assert!(stage_file_locked(&path, b"other").is_err(), "an existing file is never overwritten");
+    drop(held);
+    fs::remove_file(&path).expect("the file is free again once the handle is gone");
+    let _ = fs::remove_dir_all(&dir);
+}
