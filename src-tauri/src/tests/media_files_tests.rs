@@ -413,3 +413,18 @@ fn two_editor_copies_opened_in_the_same_second_never_share_a_folder() {
     assert_ne!(a, b);
     assert!(a.ends_with("-4242") && a.starts_with(&format!("{}-openedit-", brand::TEMP_PREFIX)), "the sweeps read the pid from the end: {a}");
 }
+
+// Structural: the network gate sits at the top of every command that stats or opens a
+// renderer-supplied path, ahead of the first file system call.
+#[test]
+fn path_commands_refuse_a_foreign_network_path_before_touching_it() {
+    let gate = "is_foreign_network_path(&path, &own_storage_dirs(";
+    let editor = source!("../media_files.rs");
+    let body = editor.split("pub(crate) async fn open_file_in_editor").nth(1).unwrap();
+    let (head, _) = body.split_once("PathBuf::from(&path)").unwrap();
+    assert!(head.contains(gate), "open_file_in_editor gates before the path is touched");
+    let drafts = source!("../drafts.rs");
+    let body = drafts.split("pub(crate) async fn stat_file").nth(1).unwrap();
+    let (head, _) = body.split_once("std::fs::metadata").unwrap();
+    assert!(head.contains(gate), "stat_file gates before the stat");
+}

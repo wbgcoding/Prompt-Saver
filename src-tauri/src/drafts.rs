@@ -9,7 +9,11 @@ use super::*;
 // The (size, mtime) pair save_edit_state/load_edit_state key on: a plain stat, cheap enough
 // to call on every open.
 #[tauri::command]
-pub(crate) async fn stat_file(path: String) -> Result<(i64, i64), String> {
+pub(crate) async fn stat_file(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(i64, i64), String> {
+    // A network spelling is refused on its text, before the stat would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &state)) {
+        return Err("source-not-allowed".to_string());
+    }
     let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
     let mtime = meta
         .modified()

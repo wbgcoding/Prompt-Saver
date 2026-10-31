@@ -153,6 +153,10 @@ pub(crate) fn is_editor_work_copy_in(temp_root: &Path, path: &Path) -> bool {
 // working folder (swept by sweep_stale_temp_files), which open_video_editor is pointed at.
 #[tauri::command]
 pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<OpenEditResult, String> {
+    // A network spelling is refused on its text, before is_file() would contact the host.
+    if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
+        return Err("source-not-allowed".to_string());
+    }
     let p = PathBuf::from(&path);
     if !p.is_file() {
         return Err("file-missing".to_string());
