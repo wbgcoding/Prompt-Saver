@@ -37,6 +37,7 @@ A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 | **Library tiles** | Switch the library from a list to big preview tiles, name below, same click/select/right-click behavior either way |
 | **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
 | **Archive** | Set a prompt aside without deleting it, hidden from the library and grid but still findable by search and included in export and backups |
+| **Trash** | A deleted prompt goes to a trash first: restore it or delete it for good, or let it clear itself after a retention period you choose (30 days by default, or never) |
 | **Private notes** | A notes field per prompt for context you keep but never copy, searchable and shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
@@ -55,6 +56,7 @@ A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 | **Rotation** | Give a prompt a list of texts instead of one: each copy serves the next rotation text, in order or shuffled, with a small badge showing where you are |
 | **Prompt hotkeys** | Give a prompt its own global key combination that copies, and optionally pastes, from any app, with a small keyboard badge on its tile |
 | **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window; a filter field at the top searches every prompt as you type |
+| **Quick launcher** | The global hotkey opens a small search window over any app: type to find a prompt, Enter copies it |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
 | **Folders** | Drag one floating button onto another, or one tile onto another, and they merge into a folder that opens in place |
 | **Chaining** | Combine several prompts into one clipboard entry, with a strip that shows what each picked step needs and fills before you start it; the expert menu sets what goes between two steps |
@@ -106,6 +108,7 @@ A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 | **Editor draft autosave** | The open editor saves its text every few seconds so a crash or a closed window never loses unsaved work; a save or cancel removes the draft, and the next start asks once whether to restore one it still finds |
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV, TXT or JSON export for the texts alone, picked from one Export button and a format dropdown; JSON also carries the full rotation texts of a prompt with rotation, tags, notes, hotkey and color, which CSV and TXT cannot. Import decides CSV or JSON from the file's own content, never its extension |
 | **Import from a folder** | Turns a folder of .md/.txt files into tiles, one per file, read only; subfolders become tags and a short first line becomes the note |
+| **Markdown folder sync** | Optional, off by default, beta: mirrors every prompt as its own readable `.md` file in a folder you pick and keeps both sides in sync. The files are plain text, unlike the sealed database |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
 | **Data folder lock** | Pointing the data folder at a synced folder (OneDrive, Dropbox, Google Drive, iCloud Drive, Nextcloud) shows a one-time warning about the risk of two computers writing to the same database at once. A small lock file then guards it: a second computer that finds another machine's fresh lock opens read-only instead and says so, until that lock frees up or goes stale and is taken over automatically |
 
