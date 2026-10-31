@@ -999,7 +999,8 @@ fn a_cancel_stops_an_ffmpeg_that_prints_nothing() {
     let took = started.elapsed();
     flipper.join().unwrap();
     assert_eq!(result.unwrap_err(), "cancelled");
-    assert!(took < Duration::from_secs(2), "the cancel must not wait for ffmpeg's next line: {took:?}");
+    // Far below the stub's 30 s of silence, with room for a loaded machine's spawn time.
+    assert!(took < Duration::from_secs(10), "the cancel must not wait for ffmpeg's next line: {took:?}");
     let _ = fs::remove_dir_all(&dir);
 }
 

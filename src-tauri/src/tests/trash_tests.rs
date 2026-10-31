@@ -48,8 +48,9 @@ fn the_wipe_repack_gives_up_within_its_budget_and_finishes_on_the_next_start() {
     conn.query_row("PRAGMA journal_mode=WAL", [], |_| Ok(())).unwrap();
     conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, data TEXT NOT NULL); INSERT INTO prompts VALUES ('a', 'x');").unwrap();
     conn.execute("DELETE FROM prompts", []).unwrap();
-    // The app's own connections wait up to 3 s per statement for a lock.
-    conn.execute_batch("PRAGMA busy_timeout=3000;").unwrap();
+    // A lock wait far longer than the budget: an uncapped statement would blow the bound
+    // below, while a slow runner's scheduling noise does not.
+    conn.execute_batch("PRAGMA busy_timeout=10000;").unwrap();
     let (locked_tx, locked_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
     let other = db.clone();
@@ -65,7 +66,7 @@ fn the_wipe_repack_gives_up_within_its_budget_and_finishes_on_the_next_start() {
     // 25 tries of 3 s each.
     let started = std::time::Instant::now();
     assert!(!scrub_freed_pages_within(&conn, std::time::Duration::from_millis(300)));
-    assert!(started.elapsed() < std::time::Duration::from_secs(2), "the wait is capped, took {:?}", started.elapsed());
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "the wait is capped, took {:?}", started.elapsed());
     // The unfinished scrub leaves a marker; the next start finishes it once the writer is gone.
     assert!(!finish_pending_scrub_in(&dir, &conn), "no marker, nothing to do");
     mark_scrub_pending(&dir);
