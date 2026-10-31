@@ -27,7 +27,7 @@ ALLOW = {
         "unexpected character in the graph", "unterminated link label",
     ],
     "an input only this app's own UI builds, never a user-typed value": [
-        "bad drop position", "bad height", "bad payload", "bad popover size", "bad values",
+        "bad drop position", "bad height", "bad width", "bad payload", "bad popover size", "bad values",
         "bad-action", "no window geometry", "invalid recording target", "invalid update source",
         "invalid number", "invalid OCR capability name", "unknown OCR capability name",
         "invalid speech capability name", "unknown speech capability name",
@@ -37,6 +37,10 @@ ALLOW = {
         "unknown scope {scope:?}, expected all, data or settings",
         "not a folder that can be removed", "the elevated script is too long for a command line",
         "unexpected PowerShell output shape", "invalid camera chunk",
+        "ffmpeg-consent-missing",
+    ],
+    "cannot happen with a 32-byte key; refuses instead of storing an empty ciphertext": [
+        "secret-seal-failed",
     ],
     "raw reason for the crash log or the technical details row, wrapped in a mapped code": [
         "serialize failed", "write failed ({:?})", "timeout",
