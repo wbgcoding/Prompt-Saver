@@ -756,6 +756,7 @@ export default {
     checkUpdate: "Caută actualizări",
     aboutTitle: "Despre",
     aboutRepo: "Pagina proiectului pe GitHub",
+    aboutPrivacy: "Confidențialitate",
     aboutLicenses: "Licențe ale componentelor terțe",
     licensesIntro: "{app} este construit cu componente open source. Lista de mai jos este generată din lista reală de dependențe de fiecare dată când aplicația este compilată.",
     licensesSearchPh: "Caută componente",

@@ -11,6 +11,7 @@ export function bindAbout() {
   $("about-close").addEventListener("click", closeAbout);
   $("about-ok").addEventListener("click", closeAbout);
   $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
+  $("about-privacy").addEventListener("click", () => invoke("open_repo", { page: "privacy" }).catch((e) => errToast(e)));
   aboutEl.addEventListener("pointerdown", (e) => {
     if (e.target === aboutEl) closeAbout();
   });

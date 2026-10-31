@@ -734,6 +734,7 @@ export default {
     checkUpdate: "Updates suchen",
     aboutTitle: "Über",
     aboutRepo: "Projektseite auf GitHub",
+    aboutPrivacy: "Datenschutz",
     aboutLicenses: "Lizenzen von Drittanbietern",
     licensesIntro: "{app} verwendet quelloffene Bestandteile. Die folgende Liste wird bei jedem Bauen der App aus der tatsächlichen Abhängigkeitsliste erzeugt.",
     licensesSearchPh: "Bestandteile durchsuchen",

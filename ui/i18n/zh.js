@@ -756,6 +756,7 @@ export default {
     checkUpdate: "检查更新",
     aboutTitle: "关于",
     aboutRepo: "GitHub上的项目页面",
+    aboutPrivacy: "隐私",
     aboutLicenses: "第三方许可证",
     licensesIntro: "{app} 使用了开源组件构建。下面的列表在每次构建应用时根据真实的依赖列表生成。",
     licensesSearchPh: "搜索组件",

@@ -756,6 +756,7 @@ export default {
     checkUpdate: "アップデートを確認",
     aboutTitle: "バージョン情報",
     aboutRepo: "GitHubのプロジェクトページ",
+    aboutPrivacy: "プライバシー",
     aboutLicenses: "サードパーティのライセンス",
     licensesIntro: "{app} はオープンソースのコンポーネントを使用しています。以下の一覧はアプリをビルドするたびに実際の依存関係リストから生成されます。",
     licensesSearchPh: "コンポーネントを検索",

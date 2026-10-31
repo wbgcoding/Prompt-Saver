@@ -1529,6 +1529,17 @@ LICENSES_PROBE = """
     await sleep(150);
     document.getElementById('about-btn').click();
     await sleep(150);
+    // privacy-link: About links to the privacy page through the project-page command.
+    const privacyBtn = document.getElementById('about-privacy');
+    if (!privacyBtn) errs.push('privacy-link: the About dialog has no privacy button');
+    else {
+      privacyBtn.click();
+      await sleep(80);
+      const opened = (window.__SMOKE_ARGS__ || []).filter(([c]) => c === 'open_repo').at(-1);
+      if (!opened || !opened[1] || opened[1].page !== 'privacy') {
+        errs.push('privacy-link: the privacy button did not open the privacy page: ' + JSON.stringify(opened));
+      }
+    }
     const openBtn = document.getElementById('about-licenses');
     if (!openBtn) {
       errs.push('451: the About dialog has no third-party licenses button');

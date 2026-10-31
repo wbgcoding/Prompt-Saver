@@ -756,6 +756,7 @@ export default {
     checkUpdate: "Güncellemeleri denetle",
     aboutTitle: "Hakkında",
     aboutRepo: "GitHub'daki proje sayfası",
+    aboutPrivacy: "Gizlilik",
     aboutLicenses: "Üçüncü taraf lisansları",
     licensesIntro: "{app} açık kaynaklı bileşenlerle oluşturulmuştur. Aşağıdaki liste, uygulama her derlendiğinde gerçek bağımlılık listesinden oluşturulur.",
     licensesSearchPh: "Bileşenlerde ara",

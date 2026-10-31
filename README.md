@@ -235,6 +235,8 @@ point the app's data folder at it, or copy the file next to the portable exe.
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
+What the app sends where (only the update check, downloads you approve and voice dictation): [PRIVACY.md](PRIVACY.md)
+
 ## License
 
 © 2026 BGCoding. You may modify Prompt Saver and share it, original or modified, free of charge for non-commercial use; commercial use needs written permission. Full terms: [LICENSE](LICENSE).

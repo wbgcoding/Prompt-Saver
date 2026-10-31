@@ -756,6 +756,7 @@ export default {
     checkUpdate: "Sprawdź aktualizacje",
     aboutTitle: "O programie",
     aboutRepo: "Strona projektu na GitHubie",
+    aboutPrivacy: "Prywatność",
     aboutLicenses: "Licencje zewnętrznych komponentów",
     licensesIntro: "{app} korzysta z komponentów open source. Poniższa lista jest generowana z rzeczywistej listy zależności przy każdym budowaniu aplikacji.",
     licensesSearchPh: "Szukaj komponentów",

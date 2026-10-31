@@ -309,6 +309,7 @@ pub(crate) fn reveal_launcher(app: &AppHandle) {
 pub(crate) fn open_repo(page: Option<String>) -> Result<(), String> {
     let url = match page.as_deref() {
         Some("releases") => format!("{}/releases", repo_url()),
+        Some("privacy") => format!("{}/blob/main/PRIVACY.md", repo_url()),
         _ => repo_url(),
     };
     let mut cmd = std::process::Command::new("cmd");

@@ -734,6 +734,7 @@ export default {
     checkUpdate: "Check for updates",
     aboutTitle: "About",
     aboutRepo: "Project page on GitHub",
+    aboutPrivacy: "Privacy",
     aboutLicenses: "Third-party licenses",
     licensesIntro: "{app} is built with open-source components. The list below is generated from the real dependency list every time the app is built.",
     licensesSearchPh: "Search components",
