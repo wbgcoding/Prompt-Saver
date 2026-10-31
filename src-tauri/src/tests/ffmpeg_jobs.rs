@@ -688,11 +688,18 @@ fn an_old_data_folder_ffmpeg_moves_only_when_it_is_the_pinned_build() {
     assert_eq!(fs::read(local.join("ffmpeg.exe")).unwrap(), bytes);
     assert!(!data.join("ffmpeg.exe").exists());
 
-    // A planted or damaged file under the same name is deleted, never moved.
+    // Any other file under the name is never moved to the per-user folder and no longer sits
+    // under a program name, but it is kept (it may be the user's own ffmpeg), not deleted.
     fs::write(data.join("ffprobe.exe"), b"something else").unwrap();
-    assert_eq!(migrate_old_media_tool(&data.join("ffprobe.exe"), &local, &want), OldToolFate::Dropped);
+    assert_eq!(migrate_old_media_tool(&data.join("ffprobe.exe"), &local, &want), OldToolFate::SetAside);
     assert!(!data.join("ffprobe.exe").exists());
     assert!(!local.join("ffprobe.exe").exists());
+    assert_eq!(fs::read(data.join("ffprobe.exe.unused")).unwrap(), b"something else");
+    // A second one never overwrites the first set-aside file.
+    fs::write(data.join("ffprobe.exe"), b"another one").unwrap();
+    assert_eq!(migrate_old_media_tool(&data.join("ffprobe.exe"), &local, &want), OldToolFate::SetAside);
+    assert_eq!(fs::read(data.join("ffprobe.exe.unused")).unwrap(), b"something else");
+    assert_eq!(fs::read(data.join("ffprobe.exe.unused2")).unwrap(), b"another one");
 
     // A copy already at the new place wins; the old one is removed.
     fs::write(data.join("ffmpeg.exe"), bytes).unwrap();

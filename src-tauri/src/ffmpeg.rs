@@ -370,6 +370,9 @@ pub(crate) enum OldToolFate {
     Absent,
     Moved,
     Dropped,
+    // Not the pinned build, so possibly the user's own: renamed so nothing searches it any more,
+    // never deleted.
+    SetAside,
     // Could not be read or moved right now (in use, disk error); tried again at the next start.
     Kept,
 }
@@ -377,7 +380,22 @@ pub(crate) enum OldToolFate {
 // An ffmpeg or ffprobe an earlier version downloaded into the data folder is no longer searched
 // there (that folder can be shared, so a planted program could run as the user). A copy whose
 // SHA-256 equals the pinned build moves to the per-user folder, so nobody downloads 100 MB again;
-// any other file under that name is deleted, and a copy already present at the new place wins.
+// any other file under that name might be the user's own ffmpeg, so it is only renamed out of
+// the way (see set_old_tool_aside), never deleted. A copy already present at the new place wins.
+// Renames `old` to "<name>.unused" (a numbered variant when that exists), in the same folder.
+// The file is then no longer found under a program name, yet nothing of the user's is lost.
+fn set_old_tool_aside(old: &Path) -> bool {
+    let Some(name) = old.file_name().map(|n| n.to_string_lossy().to_string()) else { return false };
+    let dir = old.parent().unwrap_or_else(|| Path::new("."));
+    let mut target = dir.join(format!("{name}.unused"));
+    let mut n = 2;
+    while target.exists() {
+        target = dir.join(format!("{name}.unused{n}"));
+        n += 1;
+    }
+    fs::rename(old, &target).is_ok()
+}
+
 pub(crate) fn migrate_old_media_tool(old: &Path, new_dir: &Path, want_hex: &str) -> OldToolFate {
     if !old.is_file() {
         return OldToolFate::Absent;
@@ -385,7 +403,7 @@ pub(crate) fn migrate_old_media_tool(old: &Path, new_dir: &Path, want_hex: &str)
     let Some(name) = old.file_name() else { return OldToolFate::Absent };
     let Ok(got) = sha256_file_hex(old) else { return OldToolFate::Kept };
     if !ct_eq(got.as_bytes(), want_hex.to_ascii_lowercase().as_bytes()) {
-        return if fs::remove_file(old).is_ok() { OldToolFate::Dropped } else { OldToolFate::Kept };
+        return if set_old_tool_aside(old) { OldToolFate::SetAside } else { OldToolFate::Kept };
     }
     let dest = new_dir.join(name);
     if dest.is_file() {
