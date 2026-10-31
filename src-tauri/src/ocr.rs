@@ -484,7 +484,8 @@ pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> 
     // The script travels on the command line, never as a file: there is no
     // path a same-user process could swap between the prompt and the read.
     let script = format!(
-        "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}}\r\n",
+        "{guard}try {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}}\r\n",
+        guard = elevated_target_guard(&dism_temp_dir(), &[&result_path]),
         name = ps_single_quote(name),
         logargs = dism_log_args(kind),
         result = ps_single_quote(&result_path.to_string_lossy()),
@@ -492,6 +493,20 @@ pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> 
     // A launch that never happened has nothing to poll for: drop the nonce
     // again so a later result file under that name cannot be believed.
     run_elevated_script(&script).inspect_err(|_| finish_request(kind, &tag))
+}
+
+// The opening of every elevated script: it stops (exit 1, nothing written) when the working
+// folder is missing or is a reparse point (a junction or symlink), or when a file it is about to
+// write already is one. The folder sits under %TEMP%, which the unelevated user controls, so
+// without this check a junction there could redirect the elevated write anywhere.
+pub(super) fn elevated_target_guard(dir: &Path, files: &[&Path]) -> String {
+    let mut items = vec![ps_single_quote(&dir.to_string_lossy())];
+    items.extend(files.iter().map(|f| ps_single_quote(&f.to_string_lossy())));
+    format!(
+        "$ErrorActionPreference = 'Stop'\r\nif (-not (Test-Path -LiteralPath {dir} -PathType Container)) {{ exit 1 }}\r\nforeach ($p in @({items})) {{ if ((Test-Path -LiteralPath $p) -and ((Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {{ exit 1 }} }}\r\n",
+        dir = items[0],
+        items = items.join(", "),
+    )
 }
 
 // The argument string that hands `script` to an elevated PowerShell on its own command
@@ -659,7 +674,8 @@ pub(super) fn elevate_capabilities(kind: CapKind) -> Result<(), String> {
     let _ = fs::remove_file(&result_path); // a stale list must never look fresh
     let _ = fs::remove_file(&tmp_path);
     let script = format!(
-        "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}} catch {{\r\n  @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}}\r\nMove-Item -LiteralPath {tmp} -Destination {result} -Force\r\n",
+        "{guard}try {{\r\n  Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}} catch {{\r\n  @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}}\r\nMove-Item -LiteralPath {tmp} -Destination {result} -Force\r\n",
+        guard = elevated_target_guard(&dism_temp_dir(), &[&tmp_path, &result_path]),
         filter = kind.filter(),
         logargs = dism_log_args(kind),
         tmp = ps_single_quote(&tmp_path.to_string_lossy()),

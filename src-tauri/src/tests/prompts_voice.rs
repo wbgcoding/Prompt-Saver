@@ -1431,3 +1431,61 @@ fn the_import_confirm_step_spends_the_picked_file_grant_once() {
     assert!(take_import_file_grant(&picked).is_err(), "a grant is spent once");
     assert!(take_import_file_grant(Path::new(r"\\host\share\x.json")).is_err());
 }
+
+// The elevated scripts' opening runs for real: a plain folder passes, a junction in its place
+// (what an unelevated user could plant in the shared temp area) and a junction as the file to
+// write both stop the script before it writes anything.
+#[cfg(windows)]
+#[test]
+fn the_elevated_script_refuses_a_junction_as_its_target() {
+    use std::os::windows::process::CommandExt;
+    let root = std::env::temp_dir().join(format!("ps-elevguard-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let (real, other, link) = (root.join("real"), root.join("other"), root.join("link"));
+    fs::create_dir_all(&real).unwrap();
+    fs::create_dir_all(&other).unwrap();
+    let made = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"]).arg(&link).arg(&other)
+        .creation_flags(0x0800_0000).output().expect("cmd runs");
+    assert!(made.status.success(), "the test junction could not be made");
+    // exit code of the guard followed by a marker write, so a pass is also proven by the marker.
+    let run = |dir: &Path, files: &[&Path]| -> bool {
+        let marker = root.join(format!("marker-{}", dir.file_name().unwrap().to_string_lossy()));
+        let _ = fs::remove_file(&marker);
+        let script = format!("{}Set-Content -LiteralPath '{}' -Value ok\r\n", ocr::elevated_target_guard(dir, files), marker.display());
+        let out = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &ocr::elevated_params(&script).unwrap().rsplit(' ').next().unwrap().to_string()])
+            .creation_flags(0x0800_0000).output().expect("powershell runs");
+        let wrote = marker.is_file();
+        assert_eq!(out.status.success(), wrote, "exit code and marker agree: {}", String::from_utf8_lossy(&out.stderr));
+        wrote
+    };
+    assert!(run(&real, &[&real.join("a.json.tmp"), &real.join("a.json")]), "a plain folder passes");
+    assert!(!run(&link, &[]), "a junction in place of the folder is refused");
+    assert!(!run(&root.join("missing"), &[]), "a missing folder is refused");
+    // A file path that is itself a link: a junction stands in for it here.
+    let file_link = real.join("a.json");
+    let _ = fs::remove_file(&file_link);
+    let made = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"]).arg(&file_link).arg(&other)
+        .creation_flags(0x0800_0000).output().expect("cmd runs");
+    assert!(made.status.success());
+    assert!(!run(&real, &[&real.join("a.json.tmp"), &file_link]), "a link as the file to write is refused");
+    let _ = std::process::Command::new("cmd").args(["/C", "rmdir"]).arg(&link).creation_flags(0x0800_0000).output();
+    let _ = std::process::Command::new("cmd").args(["/C", "rmdir"]).arg(&file_link).creation_flags(0x0800_0000).output();
+    let _ = fs::remove_dir_all(&root);
+}
+
+// Both elevated scripts start with that guard, before any write or DISM call.
+#[test]
+fn both_elevated_scripts_start_with_the_target_guard() {
+    let src = source!("../ocr.rs");
+    for (name, first_call) in [("pub(super) fn install_language", "Add-WindowsCapability"), ("pub(super) fn elevate_capabilities", "Get-WindowsCapability")] {
+        let body = src.split(name).nth(1).unwrap();
+        let script = &body[body.find("let script = format!(").unwrap()..];
+        let script = &script[..script.find("run_elevated_script").unwrap()];
+        assert!(script.contains("\"{guard}try {{"), "{name}: the guard opens the script");
+        assert!(script.contains("elevated_target_guard(&dism_temp_dir()"), "{name}");
+        assert!(script.find("{guard}").unwrap() < script.find(first_call).unwrap(), "{name}");
+    }
+}
