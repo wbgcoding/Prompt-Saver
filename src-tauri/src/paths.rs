@@ -43,6 +43,15 @@ fn portable_dir_usable(dir: &std::path::Path) -> bool {
     *USABLE.get_or_init(|| dir_is_writable(dir))
 }
 
+// The folder beside the exe when this is a portable run that can write there, else None.
+// Files that must leave no trace on the host (the error log) go here in portable mode.
+pub(crate) fn portable_base_dir() -> Option<PathBuf> {
+    if !is_portable() {
+        return None;
+    }
+    portable_data_dir().filter(|dir| portable_dir_usable(dir))
+}
+
 // Portable data lives directly beside the exe (no sub-folder) so a single
 // portable download stays self-contained and the store travels with it.
 pub(crate) fn portable_data_dir() -> Option<PathBuf> {

@@ -10,7 +10,7 @@ pub(crate) static ERROR_LOG_KEEP_BYTES: AtomicU64 = AtomicU64::new(256 * 1024);
 // value `append_crash_log` reads, not on a separate compile-time flag that could drift.
 pub(crate) const CRASH_LOG_DIR_ENV: &str = "PROMPT_SAVER_TEST_CRASH_LOG_DIR";
 
-// Where `append_crash_log` writes. `cargo test` must never touch the real file, and dozens
+// Where `append_crash_log` writes: beside the exe in portable mode, else %APPDATA%. `cargo test` must never touch the real file, and dozens
 // of call sites fire during unrelated tests, so the first call from a test binary seeds
 // `CRASH_LOG_DIR_ENV` to a per-process temp folder (the `ps-<name>test-<pid>` shape the
 // recording tests use) and later calls just read it; `Once` keeps the seeding race-free.
@@ -27,10 +27,11 @@ pub(crate) fn crash_log_path() -> PathBuf {
     }
     let dir = match std::env::var_os(CRASH_LOG_DIR_ENV) {
         Some(dir) => PathBuf::from(dir),
-        None => std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir)
-            .join(DATA_FOLDER),
+        // A portable run keeps its log beside the exe like the rest of its data, so it leaves
+        // nothing behind in the user profile of the machine it ran on.
+        None => crate::paths::portable_base_dir().unwrap_or_else(|| {
+            std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join(DATA_FOLDER)
+        }),
     };
     dir.join("error.log")
 }
