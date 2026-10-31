@@ -510,7 +510,7 @@ section(() => {
     e.focus = () => { if (e.className.includes("vars-choice-btn")) focused++; };
     return e;
   };
-  const sb = { document: { createElement: mkEl } };
+  const sb = { document: { createElement: mkEl }, fitOpenList() {} };
   vm.createContext(sb);
   vm.runInContext(extractBlock(src, "function buildChoice(") + "; this.buildChoice = buildChoice;", sb);
   sb.buildChoice(mkEl("div"), ["a", "b"], "a");

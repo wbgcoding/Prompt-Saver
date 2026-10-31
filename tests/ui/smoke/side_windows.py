@@ -828,6 +828,13 @@ VARS_PROBE = """
       choice.click();
       await sleep(120);
       if (list.classList.contains('hidden')) errs.push('the choice dropdown did not open');
+      // The open list in the last row must not end below the field list unseen: the
+      // window asks for the height it sticks out by.
+      const over = list.getBoundingClientRect().bottom - fields.getBoundingClientRect().bottom;
+      const lastFit = (window.__SMOKE_ARGS__ || []).filter(([c]) => c === 'var_window_fit').at(-1);
+      if (over > 0 && !(lastFit && lastFit[1].height >= window.innerHeight + over)) {
+        errs.push('the open dropdown sticks out ' + Math.round(over) + ' px and the window did not grow for it');
+      }
       const items = [...list.querySelectorAll('.vars-choice-item')];
       if (items.map(i => i.textContent).join(',') !== 'formal,casual,witty') {
         errs.push('the choice dropdown lists the wrong options');

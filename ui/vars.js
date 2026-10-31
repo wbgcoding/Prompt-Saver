@@ -75,12 +75,14 @@ function buildChoice(row, options, initial) {
       value = option;
       button.textContent = option;
       list.classList.add("hidden");
+      fitOpenList(list);
       button.focus(); // the focused item is hidden with the list: hand the focus back
     });
     list.appendChild(item);
   }
   button.addEventListener("click", () => {
     if (options.length > 1) list.classList.toggle("hidden");
+    fitOpenList(list);
   });
   wrap.append(button, list);
   row.appendChild(wrap);
@@ -174,6 +176,19 @@ function fitWindow() {
   invoke("var_window_fit", { height: needed, width }).catch(() => {});
 }
 
+// An open choice list hangs below its button; in the last rows it would end past the
+// field list and only show after scrolling. The window grows by what sticks out while
+// the list is open and goes back to the form's own height once it closes.
+function fitOpenList(list) {
+  if (list.classList.contains("hidden")) { fitWindow(); return; }
+  const over = list.getBoundingClientRect().bottom - fieldsEl.getBoundingClientRect().bottom;
+  if (over > 0) {
+    invoke("var_window_fit", { height: Math.ceil(window.innerHeight + over) + 2 })
+      .then(() => list.scrollIntoView({ block: "nearest" }))
+      .catch(() => {});
+  }
+}
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     e.preventDefault();
@@ -181,6 +196,7 @@ document.addEventListener("keydown", (e) => {
     const openList = document.querySelector(".vars-choice-list:not(.hidden)");
     if (openList) {
       openList.classList.add("hidden");
+      fitOpenList(openList);
       openList.parentElement?.querySelector("button")?.focus();
       return;
     }
@@ -222,7 +238,10 @@ document.body.addEventListener("mousedown", (e) => {
 // otherwise only picking an item or clicking its own button would.
 cardEl.addEventListener("mousedown", (e) => {
   for (const list of cardEl.querySelectorAll(".vars-choice-list:not(.hidden)")) {
-    if (!list.parentElement.contains(e.target)) list.classList.add("hidden");
+    if (!list.parentElement.contains(e.target)) {
+      list.classList.add("hidden");
+      fitOpenList(list);
+    }
   }
 });
 
