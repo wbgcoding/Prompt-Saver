@@ -824,6 +824,7 @@ pub fn run() {
             stats::usage_stats,
             stats::export_stats,
             stats::storage_breakdown,
+            stats::clear_error_log_file,
             stats::open_storage_folder,
             stats::retention_overview,
             trash::sweep_trash_now,

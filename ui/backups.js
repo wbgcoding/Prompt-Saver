@@ -157,6 +157,20 @@ export async function renderStoragePanel(root, force) {
       openBtn.addEventListener("click", () => invoke("open_storage_folder", { path: item.path }).catch((e) => errToast(e)));
       row.appendChild(openBtn);
     }
+    // The error log is the one row the user can empty here: it holds nothing the app needs.
+    if (item.key === "crash_log" && item.bytes > 0) {
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "ghost-btn storage-open-btn";
+      clearBtn.textContent = t("storageClearLog");
+      clearBtn.addEventListener("click", async () => {
+        const ok = await confirmDialog({ title: t("storageClearLogAsk"), message: t("storageClearLogInfo"), confirmLabel: t("storageClearLog"), danger: true });
+        if (!ok) return;
+        try { await invoke("clear_error_log_file"); } catch (e) { errToast(e); return; }
+        renderStoragePanel(root, true);
+      });
+      row.appendChild(clearBtn);
+    }
     list.appendChild(row);
   }
   body.appendChild(list);

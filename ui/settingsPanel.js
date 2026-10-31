@@ -247,6 +247,13 @@ export async function runImportFolder() {
 
 // "Everything" backup: prompts + all settings in one JSON file.
 export async function runExportAll() {
+  // Without a backup password the file is sealed with a key every copy of the app knows: say
+  // so before it is written, so nobody takes it for a protected file.
+  const hasPw = await invoke("has_backup_password").catch(() => true);
+  if (!hasPw) {
+    const ok = await confirmDialog({ title: t("exportNoPwTitle"), message: t("exportNoPwInfo"), confirmLabel: t("exportNoPwGo") });
+    if (!ok) return;
+  }
   try {
     await withDialog(() => invoke("export_all"));
   } catch (err) {

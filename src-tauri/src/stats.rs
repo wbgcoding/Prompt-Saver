@@ -604,6 +604,21 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
 // re-walk every folder every time; the "measure again" button passes force=true.
 pub(crate) static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(None);
 
+// Empties the error log on the user's request (storage panel). Taken under the log's own lock
+// so a line being written meanwhile is not torn; a missing file is already empty.
+#[tauri::command]
+pub(crate) fn clear_error_log_file() -> Result<(), String> {
+    let path = crash_log_path();
+    let _lock = CrashLogLock::acquire(&path);
+    match fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.to_string()),
+    }
+    *STORAGE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    Ok(())
+}
+
 // Opens a storage-breakdown row's own folder (or the data folder a takeover just moved to).
 // The path comes over IPC, so a network spelling outside the app's own folders is refused on
 // its text before Explorer or any stat sees it.

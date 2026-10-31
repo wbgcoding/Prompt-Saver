@@ -51,6 +51,7 @@
     "allow-usage-stats",
     "allow-export-stats",
     "allow-storage-breakdown",
+    "allow-clear-error-log-file",
     "allow-open-storage-folder",
     "allow-retention-overview",
     "allow-sweep-trash-now",
