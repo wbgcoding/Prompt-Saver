@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "音声入力を停止",
     voiceLangsManage: "音声入力の言語の管理…",
     voiceOnlineTitle: "オンライン認識を許可しますか？",
-    voiceOnlineInfo: "選択した言語にはオフラインパックがインストールされていません。代わりに Windows がオンラインで音声を認識し、音声を Microsoft に送信します。ここで同意した場合にのみ許可され、それ以降は記憶されます。",
+    voiceOnlineInfo: "音声入力には Microsoft のオンライン音声認識を使用します。音声入力中、音声は Microsoft に送信されます。許可すると、すべてのアプリに適用される Windows の設定「オンライン音声認識」もオンになります。エキスパートメニューの「オンライン認識を許可する」でいつでも取り消せます。Windows の設定は Windows のプライバシー設定で変更します。",
     voiceOnlineAllow: "許可",
     voiceDeniedMsg: "{app} にはマイクへのアクセス権がありません。",
     voiceOpenPrivacy: "マイクの設定を開く",

@@ -69,7 +69,7 @@ pub(crate) async fn voice_start(
         let online_ok = lock(&state).settings.ui_flags.get("voiceOnlineOk").copied().unwrap_or(false);
         let prepared =
             tauri::async_runtime::spawn_blocking(move || voice::prepare(lang, true)).await.map_err(|e| e.to_string());
-        let (resolved_lang, needs_online) = match prepared.and_then(|r| r) {
+        let resolved_lang = match prepared.and_then(|r| r) {
             Ok(v) => v,
             Err(e) => {
                 vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -77,9 +77,12 @@ pub(crate) async fn voice_start(
             }
         };
         // Never opens the microphone without consent: checked before the session thread (and Create())
-        // starts. A later 0x80045509 from Windows itself (declined at the OS level after voiceOnlineOk
-        // was set) is handled by the session as voice-privacy-off.
-        if needs_online && !online_ok {
+        // starts. Dictation always runs on Microsoft's online service, so the app's own consent
+        // (voiceOnlineOk) is required even when Windows' online speech setting is already on, and
+        // switching it off in the expert menu really withdraws it. A later 0x80045509 from Windows
+        // itself (declined at the OS level after voiceOnlineOk was set) is handled by the session as
+        // voice-privacy-off.
+        if !online_ok {
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err("voice-online-required".to_string());
         }

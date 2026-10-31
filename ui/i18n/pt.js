@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Parar de ditar",
     voiceLangsManage: "Gerenciar idiomas de ditado…",
     voiceOnlineTitle: "Permitir reconhecimento online?",
-    voiceOnlineInfo: "O idioma escolhido não tem um pacote offline instalado. Em vez disso, o Windows pode reconhecer sua fala online e enviar o áudio à Microsoft. Isso só é permitido depois da sua autorização aqui e será lembrado depois disso.",
+    voiceOnlineInfo: "O ditado usa o reconhecimento de fala online da Microsoft: enquanto você dita, o áudio é enviado à Microsoft. Ao permitir, a configuração do Windows “Reconhecimento de fala online” também é ativada e vale para todos os aplicativos. Você pode retirar a permissão a qualquer momento com “Permitir reconhecimento online” no menu avançado; a configuração do Windows é alterada nas configurações de privacidade do Windows.",
     voiceOnlineAllow: "Permitir",
     voiceDeniedMsg: "{app} não tem acesso ao microfone.",
     voiceOpenPrivacy: "Abrir configurações do microfone",

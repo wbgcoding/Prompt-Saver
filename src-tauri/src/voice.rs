@@ -142,12 +142,10 @@ pub(super) fn support() -> VoiceSupport {
 }
 
 // One spawn_blocking round trip for voice_start: resolves "auto"/an explicit
-// tag to a real installed BCP-47 tag AND reports the current online-consent
-// state together, so the command handler needs only one hop into COM.
-pub(super) fn prepare(lang: String, auto_pick: bool) -> Result<(String, bool), String> {
+// tag to a real installed BCP-47 tag.
+pub(super) fn prepare(lang: String, auto_pick: bool) -> Result<String, String> {
     ensure_winrt();
-    let resolved = resolve_lang(&lang, auto_pick)?;
-    Ok((resolved, !online_speech_accepted()))
+    resolve_lang(&lang, auto_pick)
 }
 
 // Runs on its own thread for the whole session. run_session reports a recoverable error via

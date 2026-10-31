@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Dicteren stoppen",
     voiceLangsManage: "Dicteertalen beheren…",
     voiceOnlineTitle: "Online herkenning toestaan?",
-    voiceOnlineInfo: "Voor de gekozen taal is geen offline pakket geïnstalleerd. Windows kan in plaats daarvan je spraak online herkennen, waarbij audio naar Microsoft wordt verzonden; dit is alleen toegestaan nadat je hier toestemming voor geeft en wordt daarna onthouden.",
+    voiceOnlineInfo: "Dicteren gebruikt de online spraakherkenning van Microsoft: terwijl je dicteert, wordt de audio naar Microsoft gestuurd. Als je dit toestaat, wordt ook de Windows-instelling ‘Online spraakherkenning’ ingeschakeld, die voor alle apps geldt. Je kunt je toestemming altijd intrekken met ‘Online herkenning toestaan’ in het expertmenu; de Windows-instelling wijzig je in de privacyinstellingen van Windows.",
     voiceOnlineAllow: "Toestaan",
     voiceDeniedMsg: "{app} heeft geen toegang tot de microfoon.",
     voiceOpenPrivacy: "Microfooninstellingen openen",

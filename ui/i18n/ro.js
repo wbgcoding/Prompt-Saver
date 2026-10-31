@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Oprește dictarea",
     voiceLangsManage: "Gestionează limbile de dictare…",
     voiceOnlineTitle: "Permiți recunoașterea online?",
-    voiceOnlineInfo: "Limba aleasă nu are instalat un pachet offline. Windows îți poate recunoaște vocea online, trimițând sunetul către Microsoft. Acest lucru este permis doar după ce îți dai acordul aici, iar alegerea este reținută pe viitor.",
+    voiceOnlineInfo: "Dictarea folosește recunoașterea vocală online de la Microsoft: cât timp dictezi, sunetul este trimis către Microsoft. Dacă permiți, se activează și setarea Windows „Recunoaștere vocală online”, valabilă pentru toate aplicațiile. Îți poți retrage acordul oricând cu „Permite recunoașterea online” din meniul expert; setarea Windows se schimbă din setările de confidențialitate Windows.",
     voiceOnlineAllow: "Permite",
     voiceDeniedMsg: "{app} nu are acces la microfon.",
     voiceOpenPrivacy: "Deschide setările microfonului",

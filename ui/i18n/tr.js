@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Dikte etmeyi durdur",
     voiceLangsManage: "Dikte dillerini yönet…",
     voiceOnlineTitle: "Çevrimiçi tanımaya izin verilsin mi?",
-    voiceOnlineInfo: "Seçilen dilin yüklü bir çevrimdışı paketi yok. Windows bunun yerine konuşmanızı çevrimiçi olarak tanıyabilir ve sesi Microsoft'a gönderebilir. Bu yalnızca burada izin verdiğinizde etkinleşir ve onayınız bundan sonra hatırlanır.",
+    voiceOnlineInfo: "Dikte, Microsoft'un çevrimiçi konuşma tanımasını kullanır: dikte ederken ses Microsoft'a gönderilir. İzin verdiğinizde tüm uygulamalar için geçerli olan “Çevrimiçi konuşma tanıma” Windows ayarı da açılır. İzni istediğiniz zaman uzman menüsündeki “Çevrimiçi tanımaya izin ver” ile geri alabilirsiniz; Windows ayarı Windows gizlilik ayarlarından değiştirilir.",
     voiceOnlineAllow: "İzin Ver",
     voiceDeniedMsg: "{app} mikrofona erişemiyor.",
     voiceOpenPrivacy: "Mikrofon ayarlarını aç",

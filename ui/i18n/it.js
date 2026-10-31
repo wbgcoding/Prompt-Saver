@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Interrompi dettatura",
     voiceLangsManage: "Gestisci lingue di dettatura…",
     voiceOnlineTitle: "Consenti il riconoscimento online?",
-    voiceOnlineInfo: "La lingua scelta non ha un pacchetto offline installato. Windows può invece riconoscere la tua voce online inviando l'audio a Microsoft. Ciò è consentito solo dopo la tua conferma qui e viene ricordato da allora.",
+    voiceOnlineInfo: "La dettatura usa il riconoscimento vocale online di Microsoft: mentre detti, l'audio viene inviato a Microsoft. Consentendolo si attiva anche l'impostazione di Windows «Riconoscimento vocale online», valida per tutte le app. Puoi revocare il consenso in qualsiasi momento con «Consenti il riconoscimento online» nel menu esperto; l'impostazione di Windows si cambia nelle impostazioni della privacy di Windows.",
     voiceOnlineAllow: "Consenti",
     voiceDeniedMsg: "{app} non ha accesso al microfono.",
     voiceOpenPrivacy: "Apri le impostazioni del microfono",

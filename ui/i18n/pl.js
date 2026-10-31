@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Zatrzymaj dyktowanie",
     voiceLangsManage: "Zarządzaj językami dyktowania…",
     voiceOnlineTitle: "Zezwolić na rozpoznawanie online?",
-    voiceOnlineInfo: "Wybrany język nie ma zainstalowanego pakietu offline. Windows może zamiast tego rozpoznawać Twoją mowę online, wysyłając dźwięk do firmy Microsoft; dozwolone tylko po wyrażeniu zgody tutaj, zapamiętywane od tego momentu.",
+    voiceOnlineInfo: "Dyktowanie korzysta z rozpoznawania mowy online firmy Microsoft: podczas dyktowania dźwięk jest wysyłany do firmy Microsoft. Zgoda włącza też ustawienie systemu Windows „Rozpoznawanie mowy online”, które dotyczy wszystkich aplikacji. Zgodę możesz w każdej chwili wycofać przełącznikiem „Zezwalaj na rozpoznawanie online” w menu eksperta; ustawienie systemu Windows zmienisz w ustawieniach prywatności systemu Windows.",
     voiceOnlineAllow: "Zezwól",
     voiceDeniedMsg: "{app} nie ma dostępu do mikrofonu.",
     voiceOpenPrivacy: "Otwórz ustawienia mikrofonu",

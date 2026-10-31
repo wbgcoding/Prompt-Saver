@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "停止听写",
     voiceLangsManage: "管理听写语言…",
     voiceOnlineTitle: "允许在线识别？",
-    voiceOnlineInfo: "所选语言没有安装离线包。Windows 可以转而进行在线语音识别，将音频发送给 Microsoft，仅在您在此处同意后才允许，并从那时起记住您的选择。",
+    voiceOnlineInfo: "听写使用 Microsoft 的在线语音识别：听写期间，音频会发送给 Microsoft。允许后，适用于所有应用的 Windows 设置“联机语音识别”也会打开。您可以随时通过专家菜单中的“允许在线识别”撤回同意；Windows 设置需在 Windows 隐私设置中更改。",
     voiceOnlineAllow: "允许",
     voiceDeniedMsg: "{app} 没有麦克风访问权限。",
     voiceOpenPrivacy: "打开麦克风设置",

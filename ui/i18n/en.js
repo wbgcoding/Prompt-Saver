@@ -184,7 +184,7 @@ export default {
     voiceStopTitle: "Stop dictating",
     voiceLangsManage: "Manage dictation languages…",
     voiceOnlineTitle: "Allow online recognition?",
-    voiceOnlineInfo: "The chosen language has no offline pack installed. Windows can recognize your speech online instead, sending audio to Microsoft. This is allowed only after you agree here, and is remembered from then on.",
+    voiceOnlineInfo: "Dictation uses Microsoft's online speech recognition: while you dictate, the audio is sent to Microsoft. Allowing it also turns on the Windows setting “Online speech recognition”, which applies to all apps. You can withdraw it at any time with “Allow online recognition” in the expert menu; the Windows setting is changed in the Windows privacy settings.",
     voiceOnlineAllow: "Allow",
     voiceDeniedMsg: "{app} has no microphone access.",
     voiceOpenPrivacy: "Open microphone settings",

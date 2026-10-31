@@ -207,7 +207,7 @@ export default {
     voiceStopTitle: "Detener dictado",
     voiceLangsManage: "Administrar idiomas de dictado…",
     voiceOnlineTitle: "¿Permitir reconocimiento en línea?",
-    voiceOnlineInfo: "El idioma elegido no tiene un paquete sin conexión instalado. Windows puede reconocer tu voz en línea en su lugar, enviando audio a Microsoft; solo se permite después de que lo apruebes aquí, y se recordará a partir de entonces.",
+    voiceOnlineInfo: "El dictado usa el reconocimiento de voz en línea de Microsoft: mientras dictas, el audio se envía a Microsoft. Al permitirlo también se activa la opción de Windows «Reconocimiento de voz en línea», que se aplica a todas las aplicaciones. Puedes retirar el permiso en cualquier momento con «Permitir reconocimiento en línea» en el menú experto; la opción de Windows se cambia en la configuración de privacidad de Windows.",
     voiceOnlineAllow: "Permitir",
     voiceDeniedMsg: "{app} no tiene acceso al micrófono.",
     voiceOpenPrivacy: "Abrir configuración del micrófono",

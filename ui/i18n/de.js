@@ -184,7 +184,7 @@ export default {
     voiceStopTitle: "Diktat beenden",
     voiceLangsManage: "Diktatsprachen verwalten…",
     voiceOnlineTitle: "Online-Erkennung erlauben?",
-    voiceOnlineInfo: "Für die gewählte Sprache ist kein Offline-Paket installiert. Windows kann stattdessen online erkennen und schickt dabei Audio an Microsoft. Das geschieht nur nach deiner Zustimmung hier und wird danach dauerhaft gemerkt.",
+    voiceOnlineInfo: "Das Diktat nutzt die Online-Spracherkennung von Microsoft: Während du diktierst, wird das Audio an Microsoft geschickt. Mit der Zustimmung wird auch die Windows-Einstellung „Online-Spracherkennung“ eingeschaltet, die für alle Apps gilt. Du kannst sie jederzeit mit „Online-Erkennung erlauben“ im Expertenmenü zurücknehmen; die Windows-Einstellung änderst du in den Datenschutzeinstellungen von Windows.",
     voiceOnlineAllow: "Erlauben",
     voiceDeniedMsg: "{app} hat keinen Zugriff auf das Mikrofon.",
     voiceOpenPrivacy: "Mikrofon-Einstellungen öffnen",
