@@ -32,6 +32,7 @@
     "allow-current-theme",
     "allow-discard-edit-state",
     "allow-download-ffmpeg",
+    "allow-grant-ffmpeg-download-consent",
     "allow-estimate-export-size",
     "allow-export-video",
     "allow-extract-still-frame",

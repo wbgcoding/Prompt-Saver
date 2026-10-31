@@ -761,3 +761,26 @@ fn bg_folder_open_only_for_a_recorded_target() {
     let cmd = cmd.split("open_explorer_at").next().unwrap();
     assert!(cmd.contains("is_recorded_bg_target") && cmd.contains("is_foreign_network_path"), "registry lookup and network gate both run before Explorer");
 }
+
+#[test]
+fn ffmpeg_download_needs_a_fresh_one_shot_consent() {
+    use std::sync::atomic::AtomicU64;
+    let slot = AtomicU64::new(0);
+    assert!(!take_ffmpeg_consent(&slot, 1_000), "no accepted dialog, no download");
+    slot.store(1_000, Ordering::SeqCst);
+    assert!(take_ffmpeg_consent(&slot, 1_500), "a fresh consent is accepted");
+    assert!(!take_ffmpeg_consent(&slot, 1_600), "and used up by the one download it allowed");
+    slot.store(1_000, Ordering::SeqCst);
+    assert!(!take_ffmpeg_consent(&slot, 1_000 + 120_001), "a stale consent expires");
+    assert!(!take_ffmpeg_consent(&slot, 1_000), "an expired one is gone too");
+    // The command checks it after claiming the download slot, before any network work.
+    let src = source!("../ffmpeg.rs");
+    let cmd = src.split("pub(crate) async fn download_ffmpeg").nth(1).unwrap();
+    let cmd = cmd.split("push_bg_op").next().unwrap();
+    assert!(cmd.contains("take_ffmpeg_consent(&FFMPEG_CONSENT_AT_MS"), "download_ffmpeg consumes the consent before starting");
+    // Only the confirm dialogs' accept paths grant it.
+    for (name, js) in [("expertMenu.js", source!("../../../ui/expertMenu.js")), ("video.js", source!("../../../ui/video.js"))] {
+        let at = js.find("grant_ffmpeg_download_consent").unwrap_or_else(|| panic!("{name} grants consent"));
+        assert!(js[..at].rfind("confirmDialog").is_some_and(|c| at - c < 600), "{name}: consent is granted right after the dialog");
+    }
+}

@@ -172,14 +172,36 @@ pub(crate) fn ffmpeg_install_dir() -> Option<PathBuf> {
     local_app_dir()
 }
 
-// Download, verify, extract and stage ffmpeg.exe. The frontend must already have obtained
-// explicit consent through `confirmDialog()`; this command is a plain mechanism with no
-// consent check, so the UI layer is the one place that decides when it may run. Progress is
+// How long an accepted download dialog stays valid for the download that follows it.
+const FFMPEG_CONSENT_TTL_MS: u64 = 120_000;
+// When the consent dialog was last accepted (ms since the epoch), 0 for none.
+static FFMPEG_CONSENT_AT_MS: AtomicU64 = AtomicU64::new(0);
+
+// Consumes a recorded consent: true only when one was recorded no longer than the validity
+// window before `now_ms`. One-shot, so every download needs its own accepted dialog.
+pub(crate) fn take_ffmpeg_consent(slot: &AtomicU64, now_ms: u64) -> bool {
+    let at = slot.swap(0, Ordering::SeqCst);
+    at != 0 && now_ms >= at && now_ms - at <= FFMPEG_CONSENT_TTL_MS
+}
+
+// Called by the confirm dialog's accept path (and nowhere else) right before the download
+// starts. A renderer that skips the dialog has no consent for download_ffmpeg to consume.
+#[tauri::command]
+pub(crate) fn grant_ffmpeg_download_consent() {
+    FFMPEG_CONSENT_AT_MS.store(crate::bg_ops::now_ms().max(1), Ordering::SeqCst);
+}
+
+// Download, verify, extract and stage ffmpeg.exe. The frontend asks through `confirmDialog()`
+// and records the answer with grant_ffmpeg_download_consent; the command refuses to start
+// without that one-shot consent. Progress is
 // reported via the "ffmpeg-download-progress" event ({downloaded, total}); a cancellation or
 // failure leaves nothing behind (nothing is written until the hash is verified).
 #[tauri::command]
 pub(crate) async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
     let _claim = FlagClaim::take(&FFMPEG_DOWNLOAD_RUNNING).ok_or_else(|| "ffmpeg-busy".to_string())?;
+    if !take_ffmpeg_consent(&FFMPEG_CONSENT_AT_MS, crate::bg_ops::now_ms()) {
+        return Err("ffmpeg-consent-missing".to_string());
+    }
     // Only the claim holder may clear a cancel request.
     FFMPEG_DOWNLOAD_CANCEL.store(false, Ordering::SeqCst);
     push_bg_op(&app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);

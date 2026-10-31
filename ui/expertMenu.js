@@ -2031,6 +2031,8 @@ export function bindExpertMenu() {
       danger: false,
     });
     if (!ok) return;
+    // The backend starts the download only after this recorded consent.
+    await invoke("grant_ffmpeg_download_consent").catch(() => {});
     await ffmpegRun(btn);
   };
 }

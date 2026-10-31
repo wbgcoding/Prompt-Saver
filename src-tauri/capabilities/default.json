@@ -175,6 +175,7 @@
     "allow-install-update",
     "allow-ffmpeg-status",
     "allow-download-ffmpeg",
+    "allow-grant-ffmpeg-download-consent",
     "allow-cancel-ffmpeg-download",
     "allow-set-taskbar-progress",
     "allow-list-bg-ops",

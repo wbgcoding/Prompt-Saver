@@ -948,6 +948,7 @@ pub fn run() {
             update::install_update,
             ffmpeg::ffmpeg_status,
             ffmpeg::download_ffmpeg,
+            ffmpeg::grant_ffmpeg_download_consent,
             ffmpeg::cancel_ffmpeg_download,
             bg_ops::set_taskbar_progress,
             bg_ops::list_bg_ops,

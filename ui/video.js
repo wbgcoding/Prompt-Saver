@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { copyTextChecked, fillVideoFormatSelect, fmtSizeCompact, makeHoldOrTapToggle, normRecFormat, numberField, numPopClosedByEscape, orderedInvoke, resolveLang, runFfmpegDownload, trapTabWithin } from "./floatShared.js";
+import { copyTextChecked, ffmpegDownloadActive, fillVideoFormatSelect, fmtSizeCompact, makeHoldOrTapToggle, normRecFormat, numberField, numPopClosedByEscape, orderedInvoke, resolveLang, runFfmpegDownload, trapTabWithin } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, buildShortcutRows, openShortcutsOverlay, closeShortcutsOverlay, letterCode } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -1586,8 +1586,21 @@ function updateScaleCurrent() {
 }
 
 // ---------------------------------------------------------------- panels + wiring
-$("ve-ffmpeg-get").addEventListener("click", (e) => {
-  runFfmpegDownload(e.currentTarget, {
+$("ve-ffmpeg-get").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  // A click on the running download cancels it; a new one asks first, like the expert menu.
+  if (!ffmpegDownloadActive()) {
+    const ok = await confirmDialog({
+      title: t("ffmpegOfferTitle"),
+      message: t("ffmpegOfferMsg"),
+      confirmLabel: t("ffmpegOfferConfirm"),
+      cancelLabel: t("cancel"),
+      danger: false,
+    });
+    if (!ok) return;
+    await invoke("grant_ffmpeg_download_consent").catch(() => {});
+  }
+  runFfmpegDownload(btn, {
     t,
     onDone: async () => {
       VE.ffmpeg = true;
