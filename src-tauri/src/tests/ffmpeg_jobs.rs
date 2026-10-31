@@ -736,3 +736,21 @@ fn every_progress_block_keeps_a_silent_looking_export_alive() {
     let run = src.split("pub(crate) fn run_ffmpeg_to_staged").nth(1).unwrap();
     assert!(run.contains("progress_tick(&line)"), "the reader thread classifies every line");
 }
+
+#[test]
+fn bg_folder_open_only_for_a_recorded_target() {
+    let mut ops: HashMap<String, BgOp> = HashMap::new();
+    let mut job = bg_op(OpPhase::Done);
+    job.target = Some(r"D:\Videos\clip.mp4".to_string());
+    ops.insert("convert-1".to_string(), job);
+    ops.insert("export-2".to_string(), bg_op(OpPhase::Running(10)));
+    assert!(is_recorded_bg_target(&ops, r"D:\Videos\clip.mp4"));
+    assert!(!is_recorded_bg_target(&ops, r"D:\Videos"), "only the exact recorded target counts");
+    assert!(!is_recorded_bg_target(&ops, r"\\evil-host\share"), "a path no job recorded is refused");
+    assert!(!is_recorded_bg_target(&HashMap::new(), r"D:\Videos\clip.mp4"));
+    // The command also refuses a recorded network target outside the app's own folders.
+    let src = source!("../bg_ops.rs");
+    let cmd = src.split("pub(crate) fn open_bg_op_folder").nth(1).unwrap();
+    let cmd = cmd.split("open_explorer_at").next().unwrap();
+    assert!(cmd.contains("is_recorded_bg_target") && cmd.contains("is_foreign_network_path"), "registry lookup and network gate both run before Explorer");
+}

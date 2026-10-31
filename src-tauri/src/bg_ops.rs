@@ -414,9 +414,21 @@ pub(crate) fn open_explorer_at(path: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-// Reveals the folder for a path already recorded as some job's own `target`.
+// Whether `path` is exactly the `target` some job in `ops` recorded. A renderer-supplied path
+// that no job produced is never opened.
+pub(crate) fn is_recorded_bg_target(ops: &HashMap<String, BgOp>, path: &str) -> bool {
+    ops.values().any(|o| o.target.as_deref() == Some(path))
+}
+
+// Reveals the folder for a path already recorded as some job's own `target`. A path no job
+// recorded is refused, and so is a network spelling outside the app's own folders (a share the
+// user chose as storage keeps working), decided on text before the file system is asked.
 #[tauri::command(async)]
-pub(crate) fn open_bg_op_folder(path: String) -> Result<(), String> {
+pub(crate) fn open_bg_op_folder(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(), String> {
+    let recorded = is_recorded_bg_target(&bg_ops().lock().unwrap_or_else(|e| e.into_inner()), &path);
+    if !recorded || is_foreign_network_path(&path, &own_storage_dirs(&app, &state)) {
+        return Err("folder not found".to_string());
+    }
     open_explorer_at(&path)
 }
 
