@@ -428,3 +428,14 @@ fn path_commands_refuse_a_foreign_network_path_before_touching_it() {
     let (head, _) = body.split_once("std::fs::metadata").unwrap();
     assert!(head.contains(gate), "stat_file gates before the stat");
 }
+
+// A windows-subsystem release build discards stderr, so a sidecar relocation failure goes to
+// the crash log instead.
+#[test]
+fn sidecar_relocation_failures_reach_the_crash_log() {
+    let src = source!("../media_files.rs");
+    let body = src.split("pub(crate) fn move_mic_sidecar_alongside").nth(1).unwrap();
+    let body = body.split("pub(crate) fn place_in_dir").next().unwrap();
+    assert!(!body.contains("eprintln!"), "stderr is lost in a release build");
+    assert_eq!(body.matches("append_crash_log(").count(), 3, "mic, key-overlay and camera failures are all logged");
+}

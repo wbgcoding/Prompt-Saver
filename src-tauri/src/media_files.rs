@@ -487,7 +487,7 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
         let new_sidecar = new_video.with_extension("mic.wav");
         if old_sidecar != new_sidecar {
             if let Err(e) = move_file(&old_sidecar, &new_sidecar) {
-                eprintln!("failed to relocate mic sidecar: {e}");
+                append_crash_log(&format!("failed to relocate mic sidecar: {e}"));
             }
         }
     }
@@ -500,7 +500,7 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
             let new_keys = sidecar_path(new_video, KEYS_SIDECAR_EXT);
             if old_keys != new_keys {
                 if let Err(e) = move_file(&old_keys, &new_keys) {
-                    eprintln!("failed to relocate key-overlay sidecar: {e}");
+                    append_crash_log(&format!("failed to relocate key-overlay sidecar: {e}"));
                 }
             }
         }
@@ -511,7 +511,7 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
         let new_cam = sidecar_path(new_video, CAM_SIDECAR_EXT);
         if old_cam != new_cam {
             if let Err(e) = move_file(&old_cam, &new_cam) {
-                eprintln!("failed to relocate camera sidecar: {e}");
+                append_crash_log(&format!("failed to relocate camera sidecar: {e}"));
             }
         }
     }
