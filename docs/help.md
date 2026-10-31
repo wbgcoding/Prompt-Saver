@@ -298,8 +298,8 @@ Text recognition and voice dictation both use Windows' own language packs and
 share one install dialog. The recognition-language dropdown offers a download
 the first time a chosen language has no pack installed; installing needs
 administrator rights, and Windows asks for them once through its own
-confirmation prompt. The dropdown's "Manage text recognition languages…" entry ("Manage
-dictation languages…" for dictation) reopens that
+confirmation prompt. The "Manage text recognition languages…" button below the language dropdown
+in the expert menu ("Manage dictation languages…" for dictation) reopens that
 same dialog any time, listing what's installed and what's available; on most
 systems listing needs no special rights, but on some Windows builds it does
 too, and the dialog offers to run the listing itself with administrator
@@ -1019,7 +1019,7 @@ Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Ka
 Löschen entfernt alle Daten und fragt vorher nach.
 
 **Einführungstour**: vier Schritte beim ersten Start, direkt nach den
-Beispielkacheln; sie ändert keine Einstellung. Escape oder „Überspringen" schließt
+Beispielkacheln; sie ändert keine Einstellung. Escape oder „Überspringen“ schließt
 sofort; nach Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit
 erneut aufrufbar über das Expertenmenü.
 
@@ -1174,8 +1174,8 @@ und im Kachel-Editor verwandelt Sprache in Text, über die Online-Spracherkennun
 von Microsoft: deine Sprachaufnahme geht während des Diktierens an Microsoft.
 Es startet erst, wenn du im Zustimmungsdialog der App einwilligst; dabei wird
 auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet.
-„Online-Erkennung erlauben“ auszuschalten zieht diese Zustimmung zurück. Gesprochene Satzzeichen-Wörter („Komma",
-„neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
+„Online-Erkennung erlauben“ auszuschalten zieht diese Zustimmung zurück. Gesprochene Satzzeichen-Wörter („Komma“,
+„neue Zeile“ …) werden zu echten Zeichen; „wörtlich“ vor einem Wort tippt es
 statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
 stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
 Windows-Sprachpaket (derselbe Dialog wie bei OCR).
@@ -1183,8 +1183,8 @@ Windows-Sprachpaket (derselbe Dialog wie bei OCR).
 **Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
 ersten Bedarf an; die Installation braucht Administratorrechte (übliche
-Windows-Bestätigung). „Sprachen der Texterkennung verwalten…" (bei der Spracheingabe
-„Diktatsprachen verwalten…") im Sprachen-Dropdown listet
+Windows-Bestätigung). „Sprachen der Texterkennung verwalten…“ (bei der Spracheingabe
+„Diktatsprachen verwalten…“) unter dem Sprach-Dropdown im Expertenmenü listet
 Installiertes und Verfügbares und startet Installation/Update erneut; das
 Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
 Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die
@@ -1267,7 +1267,7 @@ Zustimmung); eine installierte Version bringt es bereits mit. Eine
 fehlgeschlagene oder abgebrochene Umwandlung lässt die ursprüngliche
 MP4-Aufnahme immer unangetastet. Ein Fehlschlag nennt den eigentlichen Grund
 in Klartext (Datei unvollständig, kein Platz mehr und so weiter) statt einer
-rohen ffmpeg-Protokollzeile; eine zugeklappte Zeile „Technische Angaben"
+rohen ffmpeg-Protokollzeile; eine zugeklappte Zeile „Technische Angaben“
 darunter hält diese Zeile samt Kopier-Button für alle bereit, die sie brauchen.
 Ein Klick auf den Aufnahme-Button öffnet
 dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
@@ -1285,14 +1285,14 @@ folgt wieder von vorn. Systemton
 und Mikrofon (Gerät wählbar im Expertenmenü)
 werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der
 Aufnahme ab, laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur
-„verloren". Die beiden Ton-Buttons in der Leiste schalten Systemton und
+„verloren“. Die beiden Ton-Buttons in der Leiste schalten Systemton und
 Mikrofon während der Aufnahme sofort stumm, ohne die Spur zu beenden: eine
 stumme Quelle nimmt weiter Stille auf statt auszusetzen, lässt sich also
 innerhalb derselben Aufnahme wieder zuschalten, und die Leiste zeigt beim
 nächsten Öffnen wieder den zuletzt gewählten Zustand. Stopp führt in denselben
 Anheften/Speichern/Verwerfen-Dialog wie ein
 Screenshot; braucht das gewählte Format oder die Qualitätsstufe eine
-Umwandlung, zeigt der Dialog zuerst „Wird konvertiert…" (anklicken zum
+Umwandlung, zeigt der Dialog zuerst „Wird konvertiert…“ (anklicken zum
 Abbrechen) statt einer Vorschau; eine fehlgeschlagene oder abgebrochene
 Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
 Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
@@ -1301,7 +1301,7 @@ Aufräumen-Dialog im Aufnahmeordner (Expertenmenü) kann mehrere fertige
 Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
 Qualität und Zielordner für alle zusammen wählen. Die Aufnahmeordner-Zeile
 im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
-Platz sie belegen, mit einem „Aufräumen…"-Button daneben: 7, 30 oder 90 Tage
+Platz sie belegen, mit einem „Aufräumen…“-Button daneben: 7, 30 oder 90 Tage
 wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
 bestätigen. Gelöscht wird nie im Hintergrund, immer nur hier und nur nach
 Bestätigung. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90
@@ -1313,7 +1313,7 @@ nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt. Jede
 Taste wird angezeigt, auch getippter Text; ein fokussiertes Passwortfeld wird für
 diese Zeit ausgelassen und erscheint als Lücke, ohne dass das garantiert ist,
 da es davon abhängt, dass Windows das Feld richtig als Passwortfeld meldet.
-Ein Schalter „Nur Tastenkürzel" (im Expertenmenü, direkt neben der
+Ein Schalter „Nur Tastenkürzel“ (im Expertenmenü, direkt neben der
 Tastenanzeige) beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt
 oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende,
 Bild auf, Bild ab und F-Tasten, Buchstaben und Ziffern nie eingeschlossen,
@@ -1349,16 +1349,16 @@ Video-Editor, weil die Zeitleiste den Platz braucht, den der
 Screenshot-Editor nicht hat. Im Screenshot-Editor stehen Rückgängig,
 Wiederholen und Zoom links in der unteren Leiste. Im Video-Editor lässt sich
 außerdem ein zweites
-Video einfügen: „Video hinzufügen" bietet es entweder als weitere
+Video einfügen: „Video hinzufügen“ bietet es entweder als weitere
 Überlagerung (eigenes Rechteck, eigener Zeitbereich, eigene Lautstärke,
 zunächst stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am
 Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
 Auswählen einmal geprüft und bleibt sichtbar als fehlend markiert, falls sie
 später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
 (acht, einstellbar im Expertenmenü). Das Exportziel ist ein
-Eingabefeld, kein fester Name mehr: direkt hineintippen, oder „Exportieren nach…", um
+Eingabefeld, kein fester Name mehr: direkt hineintippen, oder „Exportieren nach…“, um
 nur den Ordner zu ändern und den Dateinamen zu behalten; nach einem fertigen
-Export verschiebt „Speichern unter…" das fertige Video an einen anderen Ort.
+Export verschiebt „Speichern unter…“ das fertige Video an einen anderen Ort.
 Ein Formatwechsel ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
 Die Schaltfläche „Kopieren“ daneben verzichtet ganz auf einen Namen: es
 exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
@@ -1409,7 +1409,7 @@ gibt den Pfeiltasten ihre gewohnte Aufgabe zurück.
 Ein Button in der Werkzeugleiste beider Editoren vergleicht mit der
 unbearbeiteten Aufnahme: gedrückt gehalten zeigt er das Original, solange er
 gehalten wird, ein Klick lässt diese Ansicht stehen, bis erneut geklickt wird.
-Dieselbe Taste V tut dasselbe, und eine kleine Marke „Original" erscheint,
+Dieselbe Taste V tut dasselbe, und eine kleine Marke „Original“ erscheint,
 solange es zu sehen ist, damit es nie für die Bearbeitung gehalten wird. Im
 Video-Editor blendet das nur Überlagerungen aus (Blenden und die Export-
 Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt
@@ -1421,7 +1421,7 @@ offline über die eigene Texterkennung von Windows. Ein Klick auf den Button
 in der Leiste liest einen Screenshot, ein Rechtsklick eine Bilddatei. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
 werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
-„Sprachpakete" unten).
+„Sprachpakete“ unten).
 
 **Farbpipette & Auswahlverlauf**: Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart.
@@ -1495,7 +1495,7 @@ auf, der in anderen Apps kopiert wurde, filterbar nach Herkunft.
 
 **System**: Updates, Tastatur-Navigation, Datenordner; mehrere Instanzen stehen in der Gruppe Fehlersuche.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
-das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
+das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …“,
 beides abschaltbar.
 Neben „Automatische Updates“ im Einstellungsfenster steht die Intervall-Auswahl, solange der
 Schalter an ist; „Automatische Updates“ auszuschalten schaltet die automatische Prüfung ab.
