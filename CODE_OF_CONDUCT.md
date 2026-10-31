@@ -18,8 +18,8 @@ part is expected to keep it that way.
 ## Reporting
 
 Use GitHub's **Report content** menu on the comment, issue or pull request and choose
-**Report to repository admins**. Reports are read privately. Security problems go through
-[`SECURITY.md`](SECURITY.md) instead.
+**Report abuse**; GitHub reviews it privately. The maintainer also moderates directly. Security
+problems go through [`SECURITY.md`](SECURITY.md) instead.
 
 ## Consequences
 
