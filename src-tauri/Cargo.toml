@@ -56,7 +56,7 @@ rusqlite = { version = "=0.41.1", features = ["bundled"] }
 pdfium-render = "=0.9.4"
 # Extract ffmpeg.exe from its downloaded release zip. Deflate only:
 # gyan.dev's archive needs no other compression method.
-zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "=9.1.0", default-features = false, features = ["deflate-flate2"] }
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "=5.4.3"
