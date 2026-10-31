@@ -1454,7 +1454,7 @@ fn the_elevated_script_refuses_a_junction_as_its_target() {
         let _ = fs::remove_file(&marker);
         let script = format!("{}Set-Content -LiteralPath '{}' -Value ok\r\n", ocr::elevated_target_guard(dir, files), marker.display());
         let out = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &ocr::elevated_params(&script).unwrap().rsplit(' ').next().unwrap().to_string()])
+            .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", ocr::elevated_params(&script).unwrap().rsplit(' ').next().unwrap()])
             .creation_flags(0x0800_0000).output().expect("powershell runs");
         let wrote = marker.is_file();
         assert_eq!(out.status.success(), wrote, "exit code and marker agree: {}", String::from_utf8_lossy(&out.stderr));

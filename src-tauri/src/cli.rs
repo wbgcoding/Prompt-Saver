@@ -180,9 +180,9 @@ fn sid_to_string(sid: &[u8]) -> Option<String> {
     }
     let authority = rest[..6].iter().fold(0u64, |acc, b| (acc << 8) | u64::from(*b));
     let mut out = format!("S-{revision}-{authority}");
-    for chunk in rest[6..].chunks_exact(4) {
+    for chunk in rest[6..].as_chunks::<4>().0 {
         out.push('-');
-        out.push_str(&u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]).to_string());
+        out.push_str(&u32::from_le_bytes(*chunk).to_string());
     }
     Some(out)
 }
