@@ -1045,7 +1045,6 @@ pub fn run() {
             clip::paste_into_previous,
             ocr_cmds::ocr_languages,
             ocr_cmds::ocr_image,
-            ocr_cmds::ocr_image_data,
             ocr_cmds::search_image_text,
             ocr_cmds::ocr_index_backfill,
             ocr_cmds::cancel_ocr_index_backfill,

@@ -1392,17 +1392,14 @@ fn the_ocr_temp_guard_exists_before_the_png_is_written() {
     }
 }
 
-// Structural fix, no red unit test: where the work runs cannot be observed from a unit test.
-#[cfg(windows)]
+// The screenshot editor's Recognize text button was removed; its data-URL command must not
+// come back as unused IPC surface that decodes renderer-supplied image data.
 #[test]
-fn the_ocr_data_url_is_decoded_on_the_blocking_pool() {
-    let src = source!("../ocr_cmds.rs");
-    let cmd = src.split("pub(crate) async fn ocr_image_data").nth(1).unwrap().split("fn decode_ocr_data_url").next().unwrap();
-    let spawn = cmd.find("spawn_blocking").expect("blocking pool");
-    let decode = cmd.find("decode_ocr_data_url(&data_url)").expect("decode call");
-    assert!(decode > spawn, "decoding must happen inside the blocking closure");
-    assert!(!cmd.contains("data_url_bytes("), "no decode before the pool");
-    assert!(crate::ocr_cmds::decode_ocr_data_url("data:image/png;base64,AAAA").is_err());
+fn the_unused_ocr_image_data_command_is_gone() {
+    assert!(!source!("../ocr_cmds.rs").contains("fn ocr_image_data"));
+    assert!(!source!("../lib.rs").contains("ocr_image_data"));
+    assert!(!include_str!("../../capabilities/default.json").contains("ocr-image-data"));
+    assert!(!include_str!("../../../tests/ui/tauri_stub.js").contains("ocr_image_data"));
 }
 
 // Structural fix, no red unit test: a panicking decoder inside the blocking pool cannot be

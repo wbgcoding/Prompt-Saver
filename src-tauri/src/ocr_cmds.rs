@@ -414,41 +414,6 @@ pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: b
     }
 }
 
-// Entry point for "Recognize text" in the screenshot editor, which runs on the capture already shown
-// there; at that point it exists only as a data URL (it may not be saved yet). Same shape as
-// copy_image_data for the screenshot editor.
-#[tauri::command]
-pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
-    // Same ceiling as the file-based path (check_import_size): this arrives over IPC with no
-    // on-disk size to check, so nothing else bounds the encoded, decoded and RGBA buffers below.
-    if !data_url_within_limit(&data_url, MAX_OCR_IMAGE_BYTES) {
-        return Err(format!(
-            "file is too large ({} MB); the limit is {} MB",
-            data_url.len() as u64 / (1024 * 1024),
-            MAX_OCR_IMAGE_BYTES / (1024 * 1024)
-        ));
-    }
-    let upscale_under_px = upscale_under_px.clamp(100, 800);
-    #[cfg(windows)]
-    {
-        // The base64 and image decode of a large capture is CPU work: it runs on the blocking
-        // pool together with the recognition, never on the async command worker.
-        tauri::async_runtime::spawn_blocking(move || {
-            let img = decode_ocr_data_url(&data_url)?;
-            ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang)
-        })
-        .await
-        .map_err(|e| e.to_string())?
-    }
-}
-
-// Data URL to RGBA pixels, the CPU-heavy half of ocr_image_data.
-#[cfg(windows)]
-pub(crate) fn decode_ocr_data_url(data_url: &str) -> Result<image::RgbaImage, String> {
-    let bytes = data_url_bytes(data_url);
-    Ok(decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8())
-}
-
 // Long enough for a real screenshot of text, short enough that a photo of a wall of text
 // cannot inflate the database.
 pub(crate) const OCR_INDEX_MAX_CHARS: usize = 20000;
