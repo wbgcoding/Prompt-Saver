@@ -262,3 +262,37 @@ fn json_imports_accept_a_file_with_a_byte_order_mark() {
     let backup = legacy_backup_text(format!("{bom}{{}}").into_bytes()).unwrap();
     assert_eq!(backup, "{}");
 }
+
+#[test]
+fn the_settings_only_export_leaves_the_vault_salt_and_verifier_out() {
+    let (mut settings, _, _) = vault_fixture();
+    settings.ui_texts.insert("copyFont".into(), "Consolas".into());
+    let payload = settings_only_payload(&settings);
+    assert!(!payload.ui_texts.contains_key(SECRET_SALT_KEY));
+    assert!(!payload.ui_texts.contains_key(SECRET_VERIFY_KEY));
+    assert!(payload.ui_texts.contains_key("copyFont"));
+}
+
+#[test]
+fn a_failed_seal_is_an_error_not_an_empty_ciphertext() {
+    let key = [7u8; 32];
+    assert!(secret_encrypt_with("text", &key, |_, _, _| None).is_err());
+    let sealed = secret_try_encrypt("text", &key).expect("seals");
+    assert_eq!(secret_decrypt(&sealed, &key).as_deref(), Ok("text"));
+}
+
+#[test]
+fn a_settings_import_path_needs_the_picker_grant() {
+    let dir = std::env::temp_dir().join(format!("ps-settings-grant-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("s.json");
+    std::fs::write(&file, "{}").unwrap();
+    assert!(take_settings_import_grant(&file, false).is_err(), "never picked");
+    grant_picked_dir(&file, "importFile");
+    assert!(take_settings_import_grant(&file, false).is_err(), "another purpose does not count");
+    grant_picked_dir(&file, SETTINGS_IMPORT_GRANT);
+    assert!(take_settings_import_grant(&file, true).is_ok());
+    assert!(take_settings_import_grant(&file, false).is_ok(), "the preview keeps it for the apply");
+    assert!(take_settings_import_grant(&file, false).is_err(), "spent once");
+    let _ = std::fs::remove_dir_all(&dir);
+}

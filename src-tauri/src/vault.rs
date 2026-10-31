@@ -214,15 +214,31 @@ pub(crate) fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32],
     Ok(key)
 }
 
-pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
+// Seals `plain` with `seal`; a failed seal is an error, never an empty ciphertext that would be
+// stored as an unrecoverable value.
+pub(crate) fn secret_encrypt_with(
+    plain: &str,
+    key: &[u8; 32],
+    seal: impl Fn(&[u8; 32], [u8; 12], &[u8]) -> Option<Vec<u8>>,
+) -> Result<String, String> {
     let mut nonce = [0u8; 12];
     os_random(&mut nonce);
-    let ct = aead_seal(key, nonce, plain.as_bytes()).unwrap_or_default();
+    let ct = seal(key, nonce, plain.as_bytes()).ok_or_else(|| "secret-seal-failed".to_string())?;
     let mut out = Vec::with_capacity(SECRET_MAGIC.len() + nonce.len() + ct.len());
     out.extend_from_slice(SECRET_MAGIC);
     out.extend_from_slice(&nonce);
     out.extend_from_slice(&ct);
-    base64_encode(&out)
+    Ok(base64_encode(&out))
+}
+
+pub(crate) fn secret_try_encrypt(plain: &str, key: &[u8; 32]) -> Result<String, String> {
+    secret_encrypt_with(plain, key, aead_seal)
+}
+
+// Infallible spelling for callers that cannot report an error. Sealing with a 32-byte key does
+// not fail in practice; if it ever did, stopping beats storing an unrecoverable value.
+pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
+    secret_try_encrypt(plain, key).expect("sealing with a 32-byte key")
 }
 
 // A wrong password and a corrupt ciphertext fail the same way (AEAD tag mismatch), so there
@@ -303,7 +319,7 @@ pub(crate) fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
 }
 
 // One derived key for the whole running session, forgotten on quit (never written anywhere)
-// and on an idle timeout (secretTimeoutMin, 15 minutes by default, 0 = only on quit). Every
+// and when the session lifetime since unlock ends (secretTimeoutMin, 15 minutes by default, 0 = only on quit). Every
 // confidential entry shares it; "own salt, own verification value" is per feature, not per
 // prompt.
 pub(crate) struct SecretSession {
@@ -328,7 +344,7 @@ pub(crate) fn secret_timeout_min(settings: &Settings) -> u32 {
         .clamp(0.0, 240.0) as u32
 }
 
-// None means locked: no session yet, or the idle timeout elapsed. A timeout of 0 means "until
+// None means locked: no session yet, or the session lifetime elapsed. A timeout of 0 means "until
 // quit" and is never checked here.
 pub(crate) fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
     let mut guard = SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner());
@@ -342,7 +358,7 @@ pub(crate) fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
     None
 }
 
-// Seconds until the idle timeout locks the session again; None = never (timeout 0). Pure, so
+// Seconds until the session lifetime since unlock ends and locks the session again; None = never (timeout 0). Pure, so
 // the arithmetic is testable without a clock.
 pub(crate) fn secret_relock_in_secs(timeout_min: u32, elapsed_secs: u64) -> Option<u64> {
     (timeout_min > 0).then(|| (timeout_min as u64 * 60).saturating_sub(elapsed_secs))
@@ -426,8 +442,8 @@ pub(crate) fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) ->
     }
     let mut out = p.clone();
     if secret {
-        out.text = secret_encrypt(&p.text, key);
-        out.variants = p.variants.iter().map(|v| secret_encrypt(v, key)).collect();
+        out.text = secret_try_encrypt(&p.text, key)?;
+        out.variants = p.variants.iter().map(|v| secret_try_encrypt(v, key)).collect::<Result<_, _>>()?;
         out.secret = true;
     } else {
         let (text, variants) = reveal_secret_text(p, Some(*key))?;
@@ -532,7 +548,7 @@ where
 }
 
 // The timeout is otherwise only noticed when something asks for the key. This wakes up when the
-// session is due and drops it then, so an idle app does not keep the key in memory for hours.
+// session is due and drops it then, so an app left alone does not keep the key in memory for hours.
 fn schedule_session_expiry(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
@@ -576,7 +592,7 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
         let mut salt = [0u8; 16];
         os_random(&mut salt);
         let key = derive_off_thread(&password, move |pw| secret_derive_key(pw, &salt)).await?;
-        let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
+        let verify = secret_try_encrypt(SECRET_VERIFY_MARKER, &key)?;
         let created = {
             let mut store = lock(&state);
             secret_vault_first_setup(&mut store.settings, &salt, verify, |s| save_settings(&app, s))?
@@ -787,7 +803,8 @@ pub(crate) struct SettingsOnlyExport {
 // The settings-only export copy. Everything an import would skip is left out
 // of the file too: the receiver's password hash and certificate, the sealed
 // backup password, network and machine switches. The vault's salt and
-// verifier stay in (not secrets).
+// verifier stay out too: the verifier is a ciphertext of a known marker, so a shared file
+// would hand out an offline password-guessing oracle.
 pub(crate) fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
     let mut payload = SettingsOnlyExport {
         ui_flags: settings.ui_flags.clone(),
@@ -796,7 +813,7 @@ pub(crate) fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
     };
     payload.ui_flags.retain(|k, _| !is_import_denied_flag(k));
     payload.ui_values.retain(|k, _| !is_import_denied_value(k));
-    payload.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    payload.ui_texts.retain(|k, _| !is_machine_text_key(k) && !is_vault_key(k));
     payload
 }
 
@@ -827,10 +844,28 @@ pub(crate) async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -
 
 #[tauri::command]
 pub(crate) async fn pick_settings_import_file(app: AppHandle) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || crate::floating::on_dialog_thread(move || file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string())).flatten())
+    let picked = tauri::async_runtime::spawn_blocking(move || crate::floating::on_dialog_thread(move || file_dialog(&app).add_filter("JSON", &["json"]).pick_file()).flatten())
         .await
         .ok()
-        .flatten()
+        .flatten()?;
+    // The pick is the consent to read this file: the preview and the apply step spend it.
+    grant_picked_dir(&picked, SETTINGS_IMPORT_GRANT);
+    Some(picked.display().to_string())
+}
+
+pub(crate) const SETTINGS_IMPORT_GRANT: &str = "settingsImportFile";
+
+// Spends the pick grant for the settings file the page names, so a path the renderer made up
+// never reaches the file system. `keep` records the grant again for the apply step that
+// follows the preview.
+pub(crate) fn take_settings_import_grant(path: &Path, keep: bool) -> Result<(), String> {
+    if !consume_granted_dir(path, SETTINGS_IMPORT_GRANT) {
+        return Err("bad-file".to_string());
+    }
+    if keep {
+        grant_picked_dir(path, SETTINGS_IMPORT_GRANT);
+    }
+    Ok(())
 }
 
 // A plain .json backup may have been re-saved by an editor that adds a byte-order mark.
@@ -1010,6 +1045,7 @@ pub(crate) fn strip_denied_import_keys(incoming: &mut SettingsOnlyExport) -> usi
 
 #[tauri::command]
 pub(crate) async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(usize, usize, usize), String> {
+    take_settings_import_grant(Path::new(&path), true)?;
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
     let mut incoming = parse_settings_only(&raw)?;
     let skipped = strip_denied_import_keys(&mut incoming);
@@ -1069,6 +1105,7 @@ pub(crate) fn refresh_after_import(app: &AppHandle, settings: &Settings) {
 
 #[tauri::command]
 pub(crate) async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
+    take_settings_import_grant(Path::new(&path), false)?;
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
     let mut incoming = parse_settings_only(&raw)?;
     strip_denied_import_keys(&mut incoming);
