@@ -1404,6 +1404,8 @@ export default {
     errUpdateRecordingActive: "Trwa nagrywanie. Zakończ je, a potem zainstaluj aktualizację.",
     errRestoreRecordingActive: "Trwa nagrywanie. Zakończ je, a potem przywróć kopię zapasową.",
     errUpdateJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem zainstaluj aktualizację.",
+    errDemoRecordingActive: "Trwa nagrywanie. Zakończ je, a potem przełącz tryb demo.",
+    errDemoJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem przełącz tryb demo.",
     errUpdatePortableManual: "To wersja przenośna. Strona wydania jest otwarta: pobierz nowy przenośny plik exe i zastąp nim ten.",
     errExportProgramFile: "Ten plik należy do programu i nie może być celem eksportu.",
     errBackupTooLarge: "Ta kopia zapasowa przekracza 512 MB i nie została przywrócona",

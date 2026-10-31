@@ -1404,6 +1404,8 @@ export default {
     errUpdateRecordingActive: "Una registrazione è in corso. Terminala, poi installa l'aggiornamento.",
     errRestoreRecordingActive: "Una registrazione è in corso. Terminala, poi ripristina il backup.",
     errUpdateJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi installa l'aggiornamento.",
+    errDemoRecordingActive: "Una registrazione è in corso. Terminala, poi cambia la modalità demo.",
+    errDemoJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi cambia la modalità demo.",
     errUpdatePortableManual: "Questa è la versione portatile. La pagina della release è aperta: scarica il nuovo exe portatile e sostituisci questo.",
     errExportProgramFile: "Quel file appartiene al programma e non può essere una destinazione di esportazione.",
     errBackupTooLarge: "Questo backup supera i 512 MB e non è stato ripristinato",

@@ -1404,6 +1404,8 @@ export default {
     errUpdateRecordingActive: "録画中です。録画を終えてから更新をインストールしてください。",
     errRestoreRecordingActive: "録画中です。録画を終えてからバックアップを復元してください。",
     errUpdateJobsRunning: "バックグラウンド処理がまだ実行中です。完了してから更新をインストールしてください。",
+    errDemoRecordingActive: "録画中です。録画を終えてからデモモードを切り替えてください。",
+    errDemoJobsRunning: "バックグラウンド処理がまだ実行中です。完了してからデモモードを切り替えてください。",
     errUpdatePortableManual: "これはポータブル版です。リリースページを開きました。新しいポータブル版の exe をダウンロードして、この exe と置き換えてください。",
     errExportProgramFile: "このファイルはプログラムの一部のため、書き出し先にできません。",
     errBackupTooLarge: "このバックアップは512MBを超えるため復元されませんでした",

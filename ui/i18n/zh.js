@@ -1404,6 +1404,8 @@ export default {
     errUpdateRecordingActive: "正在录制。请先结束录制，再安装更新。",
     errRestoreRecordingActive: "正在录制。请先结束录制，再恢复备份。",
     errUpdateJobsRunning: "后台任务仍在运行。请等它们完成后再安装更新。",
+    errDemoRecordingActive: "正在录制。请先结束录制，再切换演示模式。",
+    errDemoJobsRunning: "后台任务仍在运行。请等它们完成后再切换演示模式。",
     errUpdatePortableManual: "这是便携版。已打开发布页面：请下载新的便携版 exe 并替换当前文件。",
     errExportProgramFile: "该文件属于程序本身，不能作为导出目标。",
     errBackupTooLarge: "此备份超过 512 MB，未能恢复",

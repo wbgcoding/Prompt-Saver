@@ -1333,3 +1333,25 @@ fn an_old_trash_entry_without_a_free_size_still_restores() {
     assert_eq!(store.settings.float_scale.get("p3"), Some(&1.5));
     assert!(!store.settings.float_size.contains_key("p3"));
 }
+
+#[test]
+fn demo_switch_waits_for_a_recording_or_running_jobs() {
+    use crate::demo::demo_switch_blocker;
+    assert_eq!(demo_switch_blocker(false, false, 0), None);
+    assert_eq!(demo_switch_blocker(true, false, 0), Some("demo-recording-active"));
+    assert_eq!(demo_switch_blocker(false, true, 0), Some("demo-recording-active"), "a take that is just starting counts");
+    assert_eq!(demo_switch_blocker(false, false, 2), Some("demo-jobs-running"));
+    assert_eq!(demo_switch_blocker(true, false, 2), Some("demo-recording-active"), "the recording is named first");
+    // Both commands ask before building the sample store or touching the redirect.
+    let src = include_str!("../demo.rs").replace("\r\n", "\n");
+    for cmd in ["pub(crate) async fn enable_demo_mode", "pub(crate) async fn disable_demo_mode"] {
+        let body = src.split(cmd).nth(1).unwrap();
+        let head = body.split("other_instance_running").next().unwrap();
+        assert!(head.contains("demo_switch_blocked(&app)?"), "{cmd} is gated before any work");
+    }
+    // Every shown code has a toast text in each language.
+    let errors = include_str!("../../../ui/errors.js");
+    for (code, key) in [("demo-recording-active", "errDemoRecordingActive"), ("demo-jobs-running", "errDemoJobsRunning")] {
+        assert!(errors.contains(&format!("\"{code}\": \"{key}\"")), "{code} maps to a message key");
+    }
+}

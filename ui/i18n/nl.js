@@ -1404,6 +1404,8 @@ export default {
     errUpdateRecordingActive: "Er loopt een opname. Rond die af en installeer daarna de update.",
     errRestoreRecordingActive: "Er loopt een opname. Rond die af en herstel daarna de back-up.",
     errUpdateJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en installeer daarna de update.",
+    errDemoRecordingActive: "Er loopt een opname. Rond die af en wissel daarna de demomodus.",
+    errDemoJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en wissel daarna de demomodus.",
     errUpdatePortableManual: "Dit is de draagbare versie. De releasepagina is geopend: download de nieuwe draagbare exe en vervang deze.",
     errExportProgramFile: "Dat bestand hoort bij het programma en kan geen exportdoel zijn.",
     errBackupTooLarge: "Deze back-up is groter dan 512 MB en is niet hersteld",

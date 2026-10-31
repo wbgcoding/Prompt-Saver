@@ -1411,6 +1411,8 @@ export default {
     errUpdateRecordingActive: "A recording is running. Finish it, then install the update.",
     errRestoreRecordingActive: "A recording is running. Finish it, then restore the backup.",
     errUpdateJobsRunning: "Background jobs are still running. Let them finish, then install the update.",
+    errDemoRecordingActive: "A recording is running. Finish it, then switch the demo mode.",
+    errDemoJobsRunning: "Background jobs are still running. Let them finish, then switch the demo mode.",
     errUpdatePortableManual: "This is the portable version. The release page is open: download the new portable exe and replace this one.",
     errExportProgramFile: "That file belongs to the program and cannot be an export target.",
     errBackupTooLarge: "This backup is larger than 512 MB and was not restored",

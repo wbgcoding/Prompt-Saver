@@ -1404,6 +1404,8 @@ export default {
     errUpdateRecordingActive: "Uma gravação está em andamento. Termine-a e depois instale a atualização.",
     errRestoreRecordingActive: "Uma gravação está em andamento. Termine-a e depois restaure o backup.",
     errUpdateJobsRunning: "Ainda há tarefas em segundo plano. Aguarde o término e depois instale a atualização.",
+    errDemoRecordingActive: "Uma gravação está em andamento. Termine-a e depois alterne o modo demo.",
+    errDemoJobsRunning: "Ainda há tarefas em segundo plano. Aguarde o término e depois alterne o modo demo.",
     errUpdatePortableManual: "Esta é a versão portátil. A página da versão está aberta: baixe o novo exe portátil e substitua este.",
     errExportProgramFile: "Esse arquivo pertence ao programa e não pode ser um destino de exportação.",
     errBackupTooLarge: "Este backup ultrapassa 512 MB e não foi restaurado",

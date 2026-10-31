@@ -378,11 +378,30 @@ pub(crate) fn demo_flush_result(prompts_locked: bool, prompts: impl FnOnce() -> 
     }
 }
 
+// Both switches relaunch the app, which would cut a live recording short or abandon running
+// background jobs, so they wait, like the update install and a backup restore. The codes are
+// the demo switch's own so the toast can say which action is held back.
+pub(crate) fn demo_switch_blocker(recording: bool, switching: bool, jobs: usize) -> Option<&'static str> {
+    match crate::update::update_blocker(recording, switching, jobs) {
+        Some("recording-active") => Some("demo-recording-active"),
+        Some(_) => Some("demo-jobs-running"),
+        None => None,
+    }
+}
+
+fn demo_switch_blocked(app: &AppHandle) -> Result<(), String> {
+    match demo_switch_blocker(recording_active(app), REC_STARTING.load(Ordering::SeqCst), bg_ops_running_count()) {
+        Some(why) => Err(why.to_string()),
+        None => Ok(()),
+    }
+}
+
 // Switches to the bundled sample library, relaunching so every window loads it fresh (the
 // relaunch restore_backup uses for a full data swap). The real store is flushed first so
 // nothing pending is lost, then never touched again.
 #[tauri::command]
 pub(crate) async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>, lang: Option<String>) -> Result<(), String> {
+    demo_switch_blocked(&app)?;
     let canonical = default_data_dir(&app);
     // A real second process (see other_instance_running), not the allowMultipleInstances
     // setting: that flag lives inside the store about to be switched, so it is no evidence
@@ -403,6 +422,8 @@ pub(crate) async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>, lang:
             .await
             .map_err(|e| e.to_string())??;
     }
+    // Building the sample store takes a while; a take may have started meanwhile.
+    demo_switch_blocked(&app)?;
     {
         let store = lock(&state);
         demo_flush_result(store.prompts_locked, || save_prompts(&app, &store), || save_settings_paired(&app, &store.settings))?;
@@ -431,6 +452,7 @@ pub(crate) async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>, lang:
 // folder is not deleted, only abandoned until the next enable overwrites it.
 #[tauri::command]
 pub(crate) async fn disable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    demo_switch_blocked(&app)?;
     let canonical = default_data_dir(&app);
     if other_instance_running(&canonical) {
         return Err("demo-mode-multiple-instances".to_string());
