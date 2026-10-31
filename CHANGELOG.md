@@ -21,6 +21,8 @@ the introduction tour ship on; the screenshot editor is always on).
 
 ### Added
 
+- **A privacy page.** `PRIVACY.md` lists every case in which the app goes
+  online, who receives what and how to avoid it; About links to it.
 - **Eight more expert settings for things that were fixed values.** A switch
   and a color for the frame around a region recording (it still never appears
   in the video), a choice of what goes between two chained prompts (blank line,
