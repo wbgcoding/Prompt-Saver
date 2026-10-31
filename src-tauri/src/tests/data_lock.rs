@@ -1000,7 +1000,7 @@ fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
     // re-invoked as a child, kept alive by the sleep helper above.
     let exe = std::env::current_exe().unwrap();
     let mut child = std::process::Command::new(&exe)
-        .args(["tests::__sleep_helper_for_instance_test", "--exact", "--ignored", "--test-threads=1"])
+        .args(["tests::data_lock::__sleep_helper_for_instance_test", "--exact", "--ignored", "--test-threads=1"])
         .spawn()
         .unwrap();
     let other_pid = child.id();
