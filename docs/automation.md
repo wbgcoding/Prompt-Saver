@@ -8,13 +8,13 @@ Rust source, guess at a JSON shape, or ask a person what a command does.
 
 Prompt Saver has one way in for a program: the command line
 (`prompt-saver <command> ...`). It runs the same command set whether a
-window is open or not -- there is no separate "automation API" with its own
+window is open or not; there is no separate "automation API" with its own
 rules to learn.
 
 What it is not: a general-purpose scripting language, a way to reach another
 machine on the internet, or a way to skip the confirmation a destructive
 command normally needs. Every command that changes something still needs
-`--yes` -- nothing here is auto-confirmed just because a program is asking
+`--yes`: nothing here is auto-confirmed just because a program is asking
 instead of a person.
 
 ## Invocation
@@ -29,7 +29,7 @@ When no instance of the app is running, the launch runs the one command
 itself, headless, and exits. When one is running, the launch hands its argv
 to that instance over a local named pipe and prints whatever it answers.
 Either way exactly one process ever touches the database at a time, and the
-caller cannot tell the difference from the outside -- same exit codes, same
+caller cannot tell the difference from the outside: same exit codes, same
 stdout, same stderr, whether or not a window happens to be open.
 
 The first word decides what a launch is: nothing, `--minimized` or a file
@@ -58,7 +58,7 @@ instead of the plain tab-separated lines a person would read.
 
 ## Discovering the command set
 
-`prompt-saver describe` prints the same table below as JSON -- the
+`prompt-saver describe` prints the same table below as JSON: the
 authoritative, always-current list, straight from the binary itself rather
 than this file. A program that wants to stay correct across an update the
 person installs without rereading this page should call `describe` once at
@@ -144,7 +144,7 @@ success shape; an error never mixes JSON and plain text, see "Errors"):
 ## Errors
 
 An error is always printed to stderr as plain text, never JSON, even when
-`--json` was passed -- a script should read the exit code first and only
+`--json` was passed. A script should read the exit code first and only
 parse stdout as JSON once it is 0.
 
 | Exit code | Meaning |
@@ -174,7 +174,7 @@ A lock written by another computer counts as live until it has been seen unchang
 
 ## Examples
 
-Every example below uses placeholder ids/paths -- `p_demo01` is never a real
+Every example below uses placeholder ids/paths: `p_demo01` is never a real
 prompt id from any live database, and `C:\path\to\...` is never a path on a
 real machine.
 

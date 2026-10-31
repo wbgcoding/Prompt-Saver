@@ -13,7 +13,7 @@ tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
 prompts with rotation, a command line, a screenshot editor, offline text
-recognition (OCR), offline voice dictation, screen recording, a video editor,
+recognition (OCR), voice dictation, screen recording, a video editor,
 and a first-run introduction tour.
 Almost everything new is an expert-menu switch, most of it off until you turn it on
 (text recognition, voice dictation, screen recording, the video editor and
@@ -22,11 +22,11 @@ the introduction tour ship on; the screenshot editor is always on).
 ### Added
 
 - **Eight more expert settings for things that were fixed values.** A switch
-  and a colour for the frame around a region recording (it still never appears
+  and a color for the frame around a region recording (it still never appears
   in the video), a choice of what goes between two chained prompts (blank line,
   line break, space or nothing), how many recent searches the search window
   keeps (0 keeps none), how many results the quick launcher lists, and, for the
-  video editor, the starting outline width of a new text overlay, the colour of
+  video editor, the starting outline width of a new text overlay, the color of
   a pressed key in a new keys overlay and the starting volume of a newly
   inserted video overlay. Every default is the old fixed value.
 - **Command line.** `prompt-saver.exe <command> ...` runs the app as a
@@ -100,7 +100,7 @@ the introduction tour ship on; the screenshot editor is always on).
   a small grid, and hands a prompt back to the layout when you drag it out.
 - **Allow multiple instances** (expert menu, off by default): opens the door to
   running the app more than once at the same time, for example against two
-  different data folders side by side. Off keeps the usual behaviour: a second
+  different data folders side by side. Off keeps the usual behavior: a second
   launch just brings the first window forward. Takes effect after a restart.
 - **Quick launcher**: the global hotkey (**Ctrl+Alt+P** by default) now opens a
   small standalone search window instead of the main library: type to fuzzy-find
@@ -164,14 +164,14 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Diagrams in the help window**: five small hand-drawn diagrams (the way to
   copy a prompt, the three folder kinds, a placeholder's parts, the video
   editor timeline, a chain of steps) next to the articles they belong to,
-  drawn in the current theme's own colours instead of a screenshot that would
+  drawn in the current theme's own colors instead of a screenshot that would
   go stale with the next redesign. Off switches back to text only.
 - **Real button icons in the help text**: wherever an article names a button
   (screenshot, record, OCR, microphone, library, theme editor) the sentence
   now shows that button's actual icon, read live from the button itself so it
   always matches, instead of only the word.
 - **Twenty-one settings that were fixed constants are now expert values**: the
-  colour-history swatch size, the colour-picker loupe grid size, screenshot
+  color-history swatch size, the color-picker loupe grid size, screenshot
   quality and an optional capture delay, the rotation tooltip preview
   length, the Markdown-preview and
   syntax-highlight size caps, the version-history diff word cap and preview
@@ -218,9 +218,9 @@ the introduction tour ship on; the screenshot editor is always on).
   Installed packs can also be kept current automatically, with a quiet,
   cancelable notice when one needs an update.
 - **Voice dictation** (expert menu, on by default): a microphone button next
-  to the composer and in the editor turns speech into text through Windows'
-  own on-device recognizer, fully offline unless online recognition is
-  explicitly allowed. Text streams in as it's recognized; click the button
+  to the composer and in the editor turns speech into text through Microsoft's
+  online speech recognition, which receives your audio while you dictate and
+  only runs after you agree. Text streams in as it's recognized; click the button
   again, press Escape, or save/close the editor to stop. A spoken vocabulary
   of punctuation and formatting commands ("comma", "new line", "new
   paragraph", …) turns into real characters, capitalization follows
@@ -235,8 +235,8 @@ the introduction tour ship on; the screenshot editor is always on).
   flow included.
 - **Introduction tour** (expert menu, on by default): a four-step walkthrough
   on first launch, opened right after the example prompts are seeded so step
-  two already has a tile to point at: what the app is and that everything
-  stays offline, how to save and use a tile, organizing tiles and views,
+  two already has a tile to point at: what the app is and that your prompts
+  stay on this computer, how to save and use a tile, organizing tiles and views,
   then the library and search. It changes no setting. Step-by-step dots,
   ←/→ and Enter to navigate, Esc or "Skip" to leave any time; either asks to
   confirm first. Reopen it later from the settings dialog or the expert menu;
@@ -344,22 +344,22 @@ the introduction tour ship on; the screenshot editor is always on).
   in the video editor, for a menu to duplicate or delete it. A duplicate keeps
   the same values and time range and is offset slightly so it is easy to spot
   next to the original; the offset is adjustable. The video editor also
-  remembers the last colour, thickness, opacity and font size used for each
+  remembers the last color, thickness, opacity and font size used for each
   overlay kind and starts the next one of that kind from it, across restarts
   too, with an expert switch to turn that off again.
 - **Snapping while dragging, in both editors.** A shape (screenshot editor) or
   a crop box or overlay (video editor) now snaps to the image or frame edges,
-  its centre in both directions, and the edges and centre of every other shape
-  or overlay already placed. A thin accent-coloured guide line marks whichever
+  its center in both directions, and the edges and center of every other shape
+  or overlay already placed. A thin accent-colored guide line marks whichever
   line it caught, gone again the instant the drag ends. Holding Alt turns it
   off for that one drag; each editor keeps its own on/off switch, sharing one
   distance setting between them. The screenshot editor already snapped to the
-  image edges and centre before this; it now also catches other shapes.
+  image edges and center before this; it now also catches other shapes.
 - **Text outline, in both editors.** The text tool's background is now a
-  choice of none, a solid plate or an outline, so white or light-coloured
+  choice of none, a solid plate or an outline, so white or light-colored
   text stays readable on a light background too. Plate was the only option
   before; an expert setting picks the default and the outline width,
-  and its colour, black or white, follows the text colour for the best
+  and its color, black or white, follows the text color for the best
   contrast.
 - **Move a selected shape or overlay with the arrow keys.** Holding Ctrl
   resizes it instead of moving it, and Shift takes a bigger step; both step
@@ -476,7 +476,7 @@ the introduction tour ship on; the screenshot editor is always on).
   app translates. Copy the whole list or clear it from the same window. On by
   default, how many it keeps is adjustable, and switching it off keeps nothing.
 - **Reordering view tabs.** A tab's right-click menu gets "move further left"
-  and "move further right", greyed out at either end. Dragging works too: drop
+  and "move further right", grayed out at either end. Dragging works too: drop
   a tab in the middle of another to group them as before, drop it on the outer
   edge to move it there instead, with its own marker (a border for grouping, a
   bar between tabs for moving) so the two are never confused. A tab inside an
@@ -558,7 +558,7 @@ the introduction tour ship on; the screenshot editor is always on).
 - **JSON export and import for prompts**, alongside CSV and TXT: one Export
   button plus a format dropdown replaces the three separate buttons. JSON is
   the only one of the three that can carry a prompt's full rotation
-  texts, tags, notes, a hotkey and a colour without joining them into a
+  texts, tags, notes, a hotkey and a color without joining them into a
   single field. Import decides CSV or JSON from the file's own content, never
   its extension. Images stay out of all three, same as before.
 - **The recording control bar can be dragged to move it**, including onto
@@ -590,7 +590,7 @@ the introduction tour ship on; the screenshot editor is always on).
 
 - **A placed text box opens again.** Double-click a text box in the screenshot
   editor (with any tool) or press F2 on the one you just placed to correct it.
-  Size and colour can change while it is open, and one undo brings back the old
+  Size and color can change while it is open, and one undo brings back the old
   text.
 - **Window buttons in the screenshot editor.** The editor bar now has minimize and
   maximize/restore buttons next to the close button. Drag the bar or its title to move
@@ -635,7 +635,7 @@ the introduction tour ship on; the screenshot editor is always on).
   now wraps the letters you type instead of stretching across the picture, shows
   black text on white, and the text lands exactly where you typed it. Text
   starts black on a white backing (new choice "White" next to none, plate and
-  outline) and remembers its own colour apart from the other tools.
+  outline) and remembers its own color apart from the other tools.
 - **The screenshot editor's options stay put when you change a size.** Picking
   a stroke width or typing a number no longer rebuilds the options panel, so it
   does not jump and the keyboard focus stays in the field. Saving the last size
@@ -643,13 +643,13 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Screenshots stay sharp on scaled displays.** At 125 or 150 percent
   Windows scaling the editor's 100 percent view now shows one picture pixel per
   screen pixel instead of a stretched copy, and magnified pixels stay crisp. The
-  frozen picture behind the capture overlay keeps full colour detail, so
-  coloured text no longer smears.
+  frozen picture behind the capture overlay keeps full color detail, so
+  colored text no longer smears.
 - **Cropping a screenshot works by dragging the frame.** The crop tool starts
   with a frame around the whole picture; pull its edges or corners in to crop,
   and the view zooms to the result. Each drag is an undo step, and dragging
   the frame back out to the picture edge removes the crop again.
-- **Screenshot editor tool options open under the tool button.** Width, colour,
+- **Screenshot editor tool options open under the tool button.** Width, color,
   fill and the other fields of a tool no longer crowd the toolbar, which stays
   a single row; picking a tool, or clicking the active one again, opens its
   panel, and a press on the picture, an outside click or Escape closes it.
@@ -698,7 +698,7 @@ the introduction tour ship on; the screenshot editor is always on).
   and asks for the ones it is about to show, keeping the last 80 in memory. With
   500 prompts, 60 of them carrying a screenshot, one redraw moved 24 MB before and
   moves 0.3 MB now, and takes 26 ms instead of 67 ms. A picture that is still on
-  its way leaves the tile on its normal name-and-colour face and swaps itself in
+  its way leaves the tile on its normal name-and-color face and swaps itself in
   when it arrives, so nothing flickers.
 - Saving is far quicker in a large library. Renaming one prompt, dragging one tile
   or changing one tag used to rewrite and re-encrypt every stored prompt; now only
@@ -730,7 +730,7 @@ the introduction tour ship on; the screenshot editor is always on).
   the trash. No dialog jumps under the pointer any more.
 - The help page is split into chapters with a row of jump buttons, instead of one
   long list of twenty-five topics.
-- The colour-pick confirmation keeps its three formats on one line and marks the
+- The color-pick confirmation keeps its three formats on one line and marks the
   one already on the clipboard, instead of repeating it in the message and
   wrapping the rest onto a second row.
 - The expert menu's "only changed" filter is a button beside the search field
@@ -763,8 +763,8 @@ the introduction tour ship on; the screenshot editor is always on).
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.
 - Dragging one button, tab or tile onto another now shows what would happen: the
-  target dims behind a folder mark in the accent colour, the same gesture in all
-  three places and readable on any tile colour and in every theme.
+  target dims behind a folder mark in the accent color, the same gesture in all
+  three places and readable on any tile color and in every theme.
 - Tags are findable and look like the rest of the app: the editor's tag field has a
   handle that opens the list of tags you already have (as a proper dropdown, with
   a line inside it when there is nothing to offer instead of an error message) and
@@ -772,9 +772,9 @@ the introduction tour ship on; the screenshot editor is always on).
   above it, with clearing and managing set apart as actions.
 - The copy history reads like the library: same rows, same tags, a type chip
   where it is not plain text, and the timestamp as a quiet second line.
-- Dropdowns, colour popovers and context menus flip above their anchor when there
+- Dropdowns, color popovers and context menus flip above their anchor when there
   is no room below, and never open past the edge of the window.
-- The favourites section of the tray menu is on out of the box.
+- The favorites section of the tray menu is on out of the box.
 - The privacy switch that keeps the window out of screenshots is now phrased from
   your side and named **Allow screenshots of Prompt Saver**. It ships off, so the
   window still stays out of screen captures by default, but anyone whose screenshots
@@ -918,7 +918,7 @@ the introduction tour ship on; the screenshot editor is always on).
 - The chain button's tooltip now says what chain mode does, and the rotation
   switch has a tooltip of its own, so the two are easier to tell apart at a
   glance instead of only in the help.
-- The dark shadow behind white text on a coloured tile, folder or floating
+- The dark shadow behind white text on a colored tile, folder or floating
   button can now be switched off or dialed to a different strength in the
   expert menu, next to the black/white text switch.
 - **Saving a prompt with a large attachment no longer freezes the other
@@ -947,7 +947,7 @@ the introduction tour ship on; the screenshot editor is always on).
   pictures.
 - **Favorite tiles show a small star in their top-right corner.** It can be
   switched off in the expert menu under Favorites.
-- **Tile folders show how many tiles they hold and one colour dot per tile**
+- **Tile folders show how many tiles they hold and one color dot per tile**
   instead of tiny unreadable previews.
 - **An open tile folder dims the grid behind it and has a title row with
   rename and close buttons.** It sizes itself so every tile fits.
@@ -978,8 +978,8 @@ the introduction tour ship on; the screenshot editor is always on).
 - **The rotation switch is under Advanced options in the editor.** While rotation
   is on, the collapsed head shows a "Rotation" badge; the entry list still
   replaces the text field in place.
-- **A shorter colour row in the editor.** The rainbow swatch for a free colour moved
-  behind the "More colors" button; a prompt that already has a custom colour
+- **A shorter color row in the editor.** The rainbow swatch for a free color moved
+  behind the "More colors" button; a prompt that already has a custom color
   keeps it in the short row.
 - **Screenshot editor: the finish button is now called Done.** It says what
   it does, and Copy confirms with a short notice.
@@ -1082,7 +1082,7 @@ the introduction tour ship on; the screenshot editor is always on).
   comma are now 句点 and 読点.
 - **Many smaller fixes** in the recording bar, video editor, screenshot editor,
   library, placeholders, hotkeys, floating video buttons and the clipboard inbox,
-  plus better contrast for the favourite star, colour swatches and warnings.
+  plus better contrast for the favorite star, color swatches and warnings.
 
 - **Auto rotation works with placeholders.** A rotating prompt with Auto on and
   placeholders in its texts now asks for all of them once and advances on every
@@ -1160,7 +1160,7 @@ the introduction tour ship on; the screenshot editor is always on).
   still stored the dropped edits, and the next open offered them back. They are
   now forgotten.
 - **Back up now no longer starts two backups on a double click.** The button
-  stays greyed out until the backup is written.
+  stays grayed out until the backup is written.
 - **The screenshot editor lets go of old image sizes.** Every resize kept the
   picture from before it for as long as the editor stayed open. Only the steps
   Undo can still reach are kept now, and closing the editor frees the whole
@@ -1169,7 +1169,7 @@ the introduction tour ship on; the screenshot editor is always on).
   counting through a pause and showed more than the recording holds; it now
   freezes on pause and carries on from there.
 - **The recording dialog locks its actions while it converts.** Save, Save as,
-  Copy, Attach and Video editor are greyed out until the conversion is done, so
+  Copy, Attach and Video editor are grayed out until the conversion is done, so
   none of them can act on a file that is about to be replaced.
 - **A new screenshot no longer replaces unsaved editor work silently.** While
   the screenshot editor holds edits, a new capture asks whether to replace
@@ -1272,7 +1272,7 @@ the introduction tour ship on; the screenshot editor is always on).
   byte order mark or as UTF-16 are read.
 - **Markdown folder sync follows changes properly.** Open windows and the tray
   refresh when the sync imports something, a grid folder takes over the cell
-  and colour from the other machine instead of both machines rewriting its files
+  and color from the other machine instead of both machines rewriting its files
   forever, choosing the same folder under another spelling no longer deletes it,
   and a paused sync resumes as soon as you switch to a working folder.
 - **Restoring or importing entries takes the matching vault key along.**
@@ -1482,10 +1482,10 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Moving the data folder left a pending change behind.** If a database write had
   failed earlier, the fallback file holding that change was not copied to the new
   location and was then deleted with the old folder.
-- **The colour picker's history never appeared.** The last five picked colours now
+- **The color picker's history never appeared.** The last five picked colors now
   live in a strip of their own above the hint line, where they can actually be
   clicked; inside the loupe they moved away with the cursor.
-- **The editor's text box could be drawn over the colour swatches** once the
+- **The editor's text box could be drawn over the color swatches** once the
   placeholder helper above it was expanded.
 - **An unreadable recovery file could silently empty your whole library or
   settings** the next time anything saved. It is now left alone and logged
@@ -1538,7 +1538,7 @@ the introduction tour ship on; the screenshot editor is always on).
   already open.
 - Enter inside a choice-style placeholder field could confirm the dialog with a
   stale value, or do nothing at all on a single-option choice.
-- The colour-history strip's copy failures were silent, and a failed colour
+- The color-history strip's copy failures were silent, and a failed color
   pick reused an unrelated error message.
 - Some builds under a different product name still showed English fallback
   text before translations loaded, and Turkish mixed the loanword and the
@@ -1550,7 +1550,7 @@ the introduction tour ship on; the screenshot editor is always on).
   every dynamically created button; it now covers those too.
 - A closing dialog could re-enable the wrong dialog's Cancel button if a
   second one opened while the first was still closing.
-- Dragging a colour onto a grid folder redrew the entire grid on every
+- Dragging a color onto a grid folder redrew the entire grid on every
   pointer move.
 - The help text had the screen-capture-protection default backwards, and
   documented the wrong syntax for self-filling placeholders.
@@ -1558,7 +1558,7 @@ the introduction tour ship on; the screenshot editor is always on).
   rotation texts changed**: only entry 1 was ever compared, and
   restoring a version left the editor's still-open rotation entries in place,
   so the next save quietly overwrote what had just been restored. Prompts
-  with no visible text (images, files, colours) never showed version history
+  with no visible text (images, files, colors) never showed version history
   at all, even though a name change still creates a snapshot for them.
 - **The copy-text-size and screenshot/sync-folder path rows always showed
   as "changed"**, permanently offering an undo and matching the "only
@@ -1566,7 +1566,7 @@ the introduction tour ship on; the screenshot editor is always on).
   default of a different type.
 - **The backup-count and retention rows in the backup dialog had no undo
   arrow at all**, unlike every other expert setting, and the color palette's
-  reset button showed even when every colour was still the default.
+  reset button showed even when every color was still the default.
 - **Two expert-menu dropdowns paired side by side could look inconsistent**
   when one's label wrapped to a second line and the other's did not; the
   label now always sits above the field in that two-column layout instead.
@@ -1582,7 +1582,7 @@ the introduction tour ship on; the screenshot editor is always on).
   on every open.
 - The selected size in a floating pill's size picker always showed white text,
   even on themes where that made it hard to read; it now follows the theme's
-  own text colour like the rest of the menu.
+  own text color like the rest of the menu.
 - **Placing a prompt on the grid could silently do nothing** for a prompt that
   was already a member of a grid folder: the library's "add to layout" icon
   still offered it, since a folder member has no layout entry of its own.
@@ -1724,11 +1724,11 @@ the introduction tour ship on; the screenshot editor is always on).
 
 - **Main window, settings and screenshot editor fixes.** Dropping a tile on a
   folder now sends the folder to the cell the tile left, and the undo offer
-  stays with the view it was made in. Switching to the favourites grid clears
+  stays with the view it was made in. Switching to the favorites grid clears
   the grid selection. A folder's members behave like the tiles they stand for:
   a fast second click pastes, a click in chain mode adds the prompt to the
   chain, a missing file is flagged, and the prompt's own font, size and text
-  colour are used. The video folder numbers and the sync readout follow the
+  color are used. The video folder numbers and the sync readout follow the
   current folder and open, and a running language install stays busy when its dialog is
   reopened. A refused hotkey no longer leaves the field capturing the wrong
   combination, saving a new prompt without text keeps the dialog and what was
@@ -2036,7 +2036,7 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Calmer tiles.** Hovering a tile shows only its menu button; select through the menu or Ctrl+click.
 - **Tile menu.** Right-click now offers Copy, Favorite, Select and Start chain, every entry has an icon, entries are grouped, and Delete sits apart at the bottom in red.
 - **Clearer bar arrows.** The hide and show arrows of the bars now point onto a line, and each one is named after its bar (input bar, top bar).
-- **Disabled buttons look disabled.** A greyed-out main button, like Save with nothing typed, is now plain grey instead of a faded accent color.
+- **Disabled buttons look disabled.** A grayed-out main button, like Save with nothing typed, is now plain gray instead of a faded accent color.
 - **The input field names its shortcut.** The placeholder of the input field now says which keys save the prompt (Ctrl+Enter), in the language of the app.
 - **Grid folders look like tiles.** A folder in the grid is now a normal card with a flat 2 by 2 preview and its name at the bottom, instead of a smaller rounded plate.
 - **Cleaner help diagrams.** The placeholder diagram marks each part of the markup with a bracket that sits exactly under it, and the other help diagrams use larger labels and stay inside their frame.
@@ -2071,7 +2071,7 @@ the introduction tour ship on; the screenshot editor is always on).
   action under "Floating buttons & button folders", and the grid border, the view
   limit and the grid size limit under "Views and quick grid". Rows that only
   matter with a switch on now hide with it and step in under it, including the
-  colour pickers and the fixed-value list. The "Tiles & copying" group is now
+  color pickers and the fixed-value list. The "Tiles & copying" group is now
   just "Tiles".
 - **The safety backup before Reset settings and before Delete all data is now
   on by default**, and split into two separate switches so either case can be
@@ -2095,7 +2095,7 @@ the introduction tour ship on; the screenshot editor is always on).
   source, and a unit test pins every one of those values.
 - **The expert menu has a new "Capture" tab** for everything to do with
   capturing the screen: screenshots and their editor, text recognition, the
-  colour picker, screen recording and the video editor now have their own
+  color picker, screen recording and the video editor now have their own
   fine-grained groups there instead of sharing one long list under Features.
   No setting was removed or renamed, only regrouped, so every saved value keeps
   reading back exactly as before.
@@ -2112,7 +2112,7 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Chaining moved from the Copying group to Tiles & copying in the expert
   menu**, next to the other tile settings, so the chain icon on a tile is
   easier to find. No setting was removed or renamed, only regrouped.
-- White text on light colours gets a dark halo so it stays readable; the
+- White text on light colors gets a dark halo so it stays readable; the
   threshold for black text is unchanged. The halo now starts at 75 percent
   strength instead of 85 (the slider is unchanged).
 - The caution line in the expert menu now sits centered and in red at the top
@@ -2177,7 +2177,7 @@ the introduction tour ship on; the screenshot editor is always on).
   you used last; the twelve default-size sliders are gone.
 - **Expert menu regrouped.** Screen recording, while recording and camera
   recording are separate groups, the library splits into Search and Display,
-  colours and media moved into their neighbours, and the header's right-click
+  colors and media moved into their neighbours, and the header's right-click
   list only shows or hides buttons.
 - **Quick grid fields are off by default.** The columns and rows fields in the
   header are off by default; the grid size is set from the view tab's
@@ -2203,9 +2203,9 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Clearer danger buttons in the settings.** The two buttons at the bottom of the settings now say "Reset settings" and "Delete all data", and their tooltips say what is kept.
 - **Placeholders read as [name] in previews.** Library and history rows, search results, the trash, the quick launcher and the tile tooltip show `[name]` instead of the raw `{#{name}#}` text.
 - **Close after copy is a checkbox.** In the library header the option is a plain checkbox with its label instead of a button that looks like a tab.
-- **The colour filter lists only colours in use.** The library and the copy history show a dot for each colour a prompt really has, and hide the row when fewer than two colours are used.
+- **The color filter lists only colors in use.** The library and the copy history show a dot for each color a prompt really has, and hide the row when fewer than two colors are used.
 - **The archive chip says Archive.** The filter chip that shows archived prompts in the library carries its name instead of a small picture.
-- **Aligned titles in the library and the copy history.** Rows with a colour dot now start their title at the same place as rows with a picture or video thumbnail.
+- **Aligned titles in the library and the copy history.** Rows with a color dot now start their title at the same place as rows with a picture or video thumbnail.
 - **The count sits in the library tab.** The number of prompts (or "3 of 12" while a filter is on) is shown next to the Prompts and Copy history tab names instead of in the header.
 - **The expert menu grows with the window.** On a wide window the dialog opens up to 1280 pixels and the groups sit side by side; a narrow window keeps the single column.
 - **The expert menu tabs stay on one line.** On a narrow window the tab bar scrolls sideways instead of wrapping onto a second row.
@@ -2222,9 +2222,9 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Font and tile text size under Advanced options.** The two selects for a prompt's font and tile text size moved from under the name into the editor's Advanced options, which is now always there.
 - **The microphone sits next to the counter.** In the editor the dictation button is no longer a row of its own above the text: it sits at the right of the length counter, directly under the prompt text.
 - **A label over the prompt text.** The editor names the prompt text field with a visible "Prompt text" label; it is hidden for image and file prompts and while rotation is on.
-- **The prompt text comes first in the editor.** The text field now sits directly under the name; placeholders, rotation, the private note and the colours follow below it, and the note starts as a single line.
+- **The prompt text comes first in the editor.** The text field now sits directly under the name; placeholders, rotation, the private note and the colors follow below it, and the note starts as a single line.
 - **The note field explains itself in its placeholder.** The editor's note field says "Private note, never copied" as its placeholder; the extra tooltip that popped up over it when the editor opened is gone.
-- **A one-line colour row in the editor.** The editor shows no colour, the free picker, the colours your prompts already use and a "More colors" button that opens the whole palette.
+- **A one-line color row in the editor.** The editor shows no color, the free picker, the colors your prompts already use and a "More colors" button that opens the whole palette.
 - **The take-over question names the real button.** The portable take-over dialog now says which button leaves the portable version empty (for example "Start empty") instead of a Yes/No answer that did not match the buttons.
 - **"Do not ask again" starts unticked.** In the portable take-over dialog the box is no longer ticked beforehand, so leaving it alone asks again next time.
 - **Settings in titled sections.** The settings page is split into Appearance, Behavior, Data and System, each with its own heading and a thin line between them.
@@ -2237,9 +2237,9 @@ the introduction tour ship on; the screenshot editor is always on).
 - **Clearer recording hotkey rows.** The two switches now read "Stop recording with a hotkey" and "Pause recording with a hotkey", and the capture field under each is labelled "Key combination".
 - **The tile menu fits small windows.** Right-clicking a tile near the bottom of a small window now moves the menu up so every entry, down to Delete, is in view, instead of cutting the list off behind a scroll bar.
 - **Help names the right way to create a tile.** The first help article no longer points at the plus button, which creates a view; it says to double-click an empty cell or type into the box at the bottom and press Save.
-- **Light tile colours get dark text.** Orange, yellow, green, teal and light blue tiles (and the same colours on view tabs, folders and floating buttons) now show dark text by default, which reads better than white there; darker colours keep white text with its shadow. The same rule picks the glyph colour in the tray menu. A threshold you set yourself in the expert menu is kept.
+- **Light tile colors get dark text.** Orange, yellow, green, teal and light blue tiles (and the same colors on view tabs, folders and floating buttons) now show dark text by default, which reads better than white there; darker colors keep white text with its shadow. The same rule picks the glyph color in the tray menu. A threshold you set yourself in the expert menu is kept.
 - **Sizes use your language's number format.** File sizes in the backup list, the storage figures, the video export estimate and the recording bar now write the decimal separator of the UI language, for example "572,2 MB" in German instead of "572.2 MB".
-- **The Black & White theme is gone.** If you used it, the app switches to Light, and a custom theme built on it keeps its colours on a Light base.
+- **The Black & White theme is gone.** If you used it, the app switches to Light, and a custom theme built on it keeps its colors on a Light base.
 - **The preview keeps its size in a narrow video editor window.** The preview takes at least 40 % of the height and stays on top while the controls scroll below it.
 - **Grouped buttons in the video editor tool row.** The cut buttons are grouped, Fit is an icon and Export frame sits next to the frame number.
 - **Export is a button at the top of the video editor.** It sits in the title bar instead of being a third tab and opens the export settings.
@@ -2265,11 +2265,11 @@ the introduction tour ship on; the screenshot editor is always on).
 - **The font choice in Settings is now labelled Tile font.**
 - **Icon size moved from Settings to the expert menu** (Appearance, Sizes).
 - **German: one German word per thing throughout** (Tastenkürzel, Sicherung, Kurzinfo, Symbol, Design).
-- **The help is organised like the expert menu:** Basics, Features, Capture, Tiles, Appearance, Library & copy history, System & data.
+- **The help is organized like the expert menu:** Basics, Features, Capture, Tiles, Appearance, Library & copy history, System & data.
 - **Help texts are shorter:** one sentence per step, special cases on their own line.
 - **Tile folders and button folders are now simply folders.** One name and one switch in the expert menu; a tile folder and a button folder still stay separate.
 - **The archive shows itself as the tag it is.** The library chip carries the tag's name, and its switch moved next to the tag settings in the expert menu.
-- **The library no longer filters by tile colour.** Colours are for looks only; the type, favorite and tag filters stay.
+- **The library no longer filters by tile color.** Colors are for looks only; the type, favorite and tag filters stay.
 - **Placeholders have one short spelling.** {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. Prompts, history, trash and imports with the old {#{…}#} spelling are converted automatically.
 - Attachment preview size is a choice of short, medium or long instead of a slider.
 - **The expert menu reset sits in its own "Reset" group** at the end of the System tab: one full-width button with a line saying your prompts stay, found by the expert search.
