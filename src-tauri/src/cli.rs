@@ -152,8 +152,61 @@ fn attach_parent_console_if_needed() {
 // process uses it for the whole round trip, keeping control of its own exit code instead of
 // fighting the plugin's unconditional exit(0).
 
+// The pipe namespace is machine-wide, so the name carries the account's SID: another local user
+// cannot create the pipe first and receive this user's command line or answer its second-launch
+// ping. Client and server both go through `pipe_name`, so they always agree. If the SID cannot
+// be read, the plain name is used on both sides; the server-identity check still applies.
 fn pipe_name() -> String {
-    format!(r"\\.\pipe\{}-cli", crate::brand::IDENTIFIER)
+    static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| pipe_name_for(current_user_sid_string().as_deref())).clone()
+}
+
+fn pipe_name_for(sid: Option<&str>) -> String {
+    match sid {
+        Some(sid) => format!(r"\\.\pipe\{}-{}-cli", crate::brand::IDENTIFIER, sid),
+        None => format!(r"\\.\pipe\{}-cli", crate::brand::IDENTIFIER),
+    }
+}
+
+// The textual form (`S-1-5-21-...`) of a binary SID: revision, then the 48-bit big-endian
+// identifier authority, then each 32-bit little-endian sub-authority. `None` for anything that
+// is not a well-formed SID.
+fn sid_to_string(sid: &[u8]) -> Option<String> {
+    let (&revision, rest) = sid.split_first()?;
+    let (&count, rest) = rest.split_first()?;
+    let count = count as usize;
+    if revision != 1 || count == 0 || count > 15 || rest.len() != 6 + 4 * count {
+        return None;
+    }
+    let authority = rest[..6].iter().fold(0u64, |acc, b| (acc << 8) | u64::from(*b));
+    let mut out = format!("S-{revision}-{authority}");
+    for chunk in rest[6..].chunks_exact(4) {
+        out.push('-');
+        out.push_str(&u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]).to_string());
+    }
+    Some(out)
+}
+
+fn current_user_sid_string() -> Option<String> {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{GetLengthSid, GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
+        let mut needed = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut needed);
+        let mut buf = vec![0u8; needed as usize];
+        let got = needed != 0
+            && GetTokenInformation(token, TokenUser, Some(buf.as_mut_ptr().cast()), needed, &mut needed).is_ok();
+        let _ = CloseHandle(token);
+        if !got {
+            return None;
+        }
+        let sid = (*buf.as_ptr().cast::<TOKEN_USER>()).User.Sid;
+        let len = GetLengthSid(sid) as usize;
+        sid_to_string(std::slice::from_raw_parts(sid.0.cast::<u8>(), len))
+    }
 }
 
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;

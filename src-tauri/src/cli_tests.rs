@@ -1617,3 +1617,34 @@ fn the_backup_restore_scope_texts_match_what_the_parser_accepts() {
     }
     assert!(parse(&args(&["backup", "restore", "20260101-120000", "--scope", "data", "--yes"])).is_ok());
 }
+
+// ---- the pipe name is per account ----
+
+#[test]
+fn the_pipe_name_carries_the_account_sid() {
+    let a = pipe_name_for(Some("S-1-5-21-1-2-3-1001"));
+    let b = pipe_name_for(Some("S-1-5-21-1-2-3-1002"));
+    assert_ne!(a, b, "two accounts never share a pipe name");
+    assert!(a.starts_with(r"\\.\pipe\") && a.contains("S-1-5-21-1-2-3-1001") && a.ends_with("-cli"));
+    assert_ne!(pipe_name_for(None), a);
+    // Client and server both read the one derivation, and it is stable within a process.
+    assert_eq!(pipe_name(), pipe_name());
+    let sid = current_user_sid_string().expect("the test account has a SID");
+    assert!(sid.starts_with("S-1-5-"), "{sid}");
+    assert_eq!(pipe_name(), pipe_name_for(Some(&sid)));
+}
+
+#[test]
+fn a_binary_sid_is_written_in_its_textual_form() {
+    // S-1-5-21-1-2-3-1001: authority 5, five sub-authorities.
+    let mut sid = vec![1u8, 5, 0, 0, 0, 0, 0, 5];
+    for sub in [21u32, 1, 2, 3, 1001] {
+        sid.extend_from_slice(&sub.to_le_bytes());
+    }
+    assert_eq!(sid_to_string(&sid).as_deref(), Some("S-1-5-21-1-2-3-1001"));
+    assert_eq!(sid_to_string(&sid[..sid.len() - 1]), None, "a truncated SID is refused");
+    assert_eq!(sid_to_string(&[]), None);
+    let mut bad = sid.clone();
+    bad[0] = 2;
+    assert_eq!(sid_to_string(&bad), None, "an unknown revision is refused");
+}
