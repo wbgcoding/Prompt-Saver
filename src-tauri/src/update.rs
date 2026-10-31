@@ -787,6 +787,19 @@ pub(crate) fn update_script_content(installer: &Path, app_exe: &Path) -> Result<
     ))
 }
 
+/// Command line for `cmd.exe` that runs the staged script. The path is quoted by hand and the
+/// line is passed raw: Rust only quotes an argument that holds a space or tab, so a temp path
+/// with `&`, `^` or `(` but no space would otherwise be cut apart by cmd.exe. The line starts
+/// with `/D /C call`, so cmd never strips the quotes, and `/D` skips any AutoRun hook. A quote
+/// cannot be escaped and a percent sign would be expanded even inside quotes, so both are refused.
+pub(crate) fn update_cmd_line(script: &Path) -> Result<String, String> {
+    let t = script.to_string_lossy();
+    if t.contains(['"', '%', '\r', '\n']) {
+        return Err("invalid update source".to_string());
+    }
+    Ok(format!("/D /C call \"{t}\""))
+}
+
 // The blocking body of `install_update`, split out so it runs in spawn_blocking without an
 // AppHandle crossing the boundary.
 pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
@@ -872,12 +885,14 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     fs::write(&script, content).map_err(|e| format!("save script: {}", e))?;
 
     let mut cmd = std::process::Command::new("cmd");
-    cmd.args(["/C", &script.to_string_lossy()]);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        cmd.raw_arg(update_cmd_line(&script)?);
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    #[cfg(not(windows))]
+    cmd.args(["/C", &script.to_string_lossy()]);
     cmd.spawn().map_err(|e| format!("start installer: {}", e))?;
     Ok(())
 }

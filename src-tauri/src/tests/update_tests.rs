@@ -111,3 +111,17 @@ fn an_installer_must_carry_a_version_newer_than_this_app() {
     assert!(!installer_version_is_newer(Some("0.0.1")), "an older signed installer under a new tag is refused");
     assert!(!installer_version_is_newer(None), "an installer without a readable version is refused");
 }
+
+// cmd.exe splits an unquoted path at `&`, `^` and `(`, so the staged script path must reach it
+// quoted even when it holds no space (a short temp path under a user name containing `&`).
+#[test]
+fn update_cmd_line_quotes_the_script_path_without_a_space() {
+    let line = update_cmd_line(Path::new(r"C:\Users\A&B\Te^mp(x)\u\update.cmd")).unwrap();
+    assert_eq!(line, r#"/D /C call "C:\Users\A&B\Te^mp(x)\u\update.cmd""#);
+    // A path with a space is quoted the same way.
+    let line = update_cmd_line(Path::new(r"C:\Users\A B\update.cmd")).unwrap();
+    assert_eq!(line, r#"/D /C call "C:\Users\A B\update.cmd""#);
+    // A quote cannot be escaped and a percent sign would expand inside quotes: both refused.
+    assert!(update_cmd_line(Path::new(r#"C:\t\a"b.cmd"#)).is_err());
+    assert!(update_cmd_line(Path::new(r"C:\t\%TEMP%\u.cmd")).is_err());
+}
