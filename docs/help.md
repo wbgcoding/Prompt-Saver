@@ -263,9 +263,11 @@ several views.
 ### Voice dictation
 
 A microphone button on the composer and in the edit dialog turns
-speech into text using Windows' own on-device recognizer; nothing is uploaded
-unless online recognition is explicitly allowed (a one-time dialog asks the
-first time it's actually needed). Click to start: the button
+speech into text through Microsoft's online speech recognition, so your audio
+goes to Microsoft while you dictate. It starts only after you agree in the
+app's consent dialog, which also turns on online speech recognition in the
+Windows settings; switching off "Allow online recognition" withdraws that
+consent, and dictation asks again. Click to start: the button
 turns the accent color and pulses while listening, and its title switches from
 "Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
 prompt, or closing the window all end the session the same way. Text lands at
@@ -356,10 +358,9 @@ to arrive. What happens in either direction is fixed and never silent:
 Captures part or all of the screen straight into a new tile. Drag a region, or
 click a window to capture it whole, even a normally-protected one like the Task
 Manager. The app's own windows are hidden for the moment of capture so they never
-end up in the shot; the confirmation dialog then offers saving it as a tile, saving
-it as a file, or leaving it on the clipboard.
+end up in the shot. The shot is on the clipboard right away.
 
-Before that dialog, an editor opens on the capture: crop, a
+An editor then opens on the capture: crop, a
 freehand pen and highlighter marker, straight lines and arrows, rectangles and
 ellipses, text labels, numbered step markers, a pixelate tool for blurring out
 sensitive details, and a focus area that dims everything outside a chosen area,
@@ -465,7 +466,7 @@ captured up to that point.
 A recording that never reached its own stop path (a crash, a forced
 shutdown) leaves behind a file with no usable video track. The app checks
 for these in the background and removes them once they clear a short grace
-period, so a just-stopped recording that is still finalising is never
+period, so a just-stopped recording that is still finalizing is never
 touched; both the grace period and the check interval are adjustable in the
 expert menu (System tab, Troubleshooting group), alongside a manual "clean up now" action. A new install deletes
 unused recordings after 90 days (expert menu, 0 = keep forever).
@@ -815,8 +816,9 @@ mismatching checksum blocks the install instead of running an unverified
 file. Video export/conversion needs ffmpeg: an installed build ships it and
 never touches the network for it, while a portable build offers a one-time
 download only when a video feature actually needs it and only with your
-explicit consent, never automatically, never in the background. Two more
-things on that same short list are not update-related at all: opening the
+explicit consent, never automatically, never in the background. Voice
+dictation sends audio to Microsoft's online speech recognition, only after you
+agree. Two more things on that same short list are not update-related at all: opening the
 app's GitHub page from the About window or the version label hands the address to
 your default browser, and installing a text-recognition or dictation
 language pack (see below) has Windows itself fetch that pack online.
@@ -1168,8 +1170,11 @@ Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
 **Mehrere Ansichten.** Mehrere Rasterseiten.
 
 **Spracheingabe**: der Mikrofon-Button neben der Eingabeleiste
-und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
-eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
+und im Kachel-Editor verwandelt Sprache in Text, über die Online-Spracherkennung
+von Microsoft: deine Sprachaufnahme geht während des Diktierens an Microsoft.
+Es startet erst, wenn du im Zustimmungsdialog der App einwilligst; dabei wird
+auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet.
+„Online-Erkennung erlauben“ auszuschalten zieht diese Zustimmung zurück. Gesprochene Satzzeichen-Wörter („Komma",
 „neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
 statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
 stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
@@ -1565,7 +1570,8 @@ veröffentlichte Prüfsumme geprüft; fehlt sie oder passt sie nicht, wird die
 Installation abgebrochen statt eine ungeprüfte Datei auszuführen. Für
 Videoexport/-umwandlung wird ffmpeg gebraucht (siehe oben); eine installierte
 Version bringt es bereits mit, eine portable bietet nur bei Bedarf und nur
-mit Zustimmung einen einmaligen Download an. Zwei weitere Dinge auf dieser
+mit Zustimmung einen einmaligen Download an. Das Sprachdiktat schickt Ton an
+die Online-Spracherkennung von Microsoft, erst nach deiner Zustimmung. Zwei weitere Dinge auf dieser
 kurzen Liste haben mit Updates nichts zu tun: Ein Klick im Fenster „Über“ oder auf die
 Versionsanzeige öffnet die GitHub-Seite des Projekts im Standardbrowser, und
 die Installation eines Sprachpakets für Texterkennung oder Diktat (siehe
