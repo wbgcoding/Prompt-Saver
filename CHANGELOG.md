@@ -588,6 +588,10 @@ the introduction tour ship on; the screenshot editor is always on).
 
 ### Improved
 
+- **The fill-in window fits its form.** The window that asks for placeholder
+  values when you copy from outside the app is now fully opaque, only as wide
+  as its fields need, shows the focus frame of a field in full, and grows while
+  a choice list is open so its options never hide below the form.
 - **A placed text box opens again.** Double-click a text box in the screenshot
   editor (with any tool) or press F2 on the one you just placed to correct it.
   Size and color can change while it is open, and one undo brings back the old
@@ -1770,6 +1774,16 @@ the introduction tour ship on; the screenshot editor is always on).
 
 ### Security
 
+- **Hardening before release.** Updates start reliably even when the Windows
+  user name contains characters such as `&`, and the downloaded installer is
+  locked against changes until it runs. A shared settings file no longer
+  carries anything that would help guess your confidential-prompt password,
+  and importing settings only reads the file you picked. The command-line link
+  to the running app is private to your Windows account. Network paths are
+  refused in a few more places, the ffmpeg download only starts after you
+  agreed to it, a copy of ffmpeg you placed in the data folder yourself is set
+  aside instead of deleted, and demo mode cannot be switched while a recording
+  or a background job runs.
 - **Earlier versions of a confidential prompt are sealed too.** Making a prompt
   confidential now also seals its older saved versions, and versions of prompts
   that were already confidential are sealed the next time the vault is unlocked.

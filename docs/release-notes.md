@@ -63,7 +63,8 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 ### Also in this release
 
 - **Command line**: `prompt-saver.exe <command> ...` lists, copies, adds, edits, deletes and searches prompts, manages tags and views, exports, imports and backs up, and reads or writes a setting, talking to the running app when there is one. `--json` gives machine-readable output, anything that changes data needs `--yes`, and `prompt-saver.exe --help` lists every command.
-- **Signed updates**: the updater installs only an installer signed by the publisher and rejects anything else, even if the download page was tampered with.
+- **Signed updates**: the updater installs only an installer signed by the publisher and rejects anything else, even if the download page was tampered with. The downloaded installer is locked against changes until it runs, and the update starts reliably whatever characters your Windows user name contains.
+- **Fill-in window fits its form**: the window that asks for placeholder values is fully opaque, only as wide as its fields need, and grows while a choice list is open.
 - **Confidential prompts stay out of Win+V**: copying one keeps it out of the Windows clipboard history and the cloud clipboard.
 - **Each window only does its own job**: a side window such as the floating buttons can no longer delete data or move the data folder.
 - **Moving the data folder takes attachments and recordings along** and offers to clean up the old folder, naming what gets deleted.
