@@ -8,7 +8,8 @@ use super::*;
 // reserved names resolve to, what happens after the copy): this window is a form:
 // it pulls the pending payload, hands back the typed values, and closes.
 pub(crate) const VAR_WIN_LABEL: &str = "vars-0";
-pub(crate) const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
+pub(crate) const VAR_WIN_W: f64 = 340.0; // logical px; the opening width and the widest the form grows
+pub(crate) const VAR_WIN_MIN_W: f64 = 220.0; // logical px; the narrowest a measured form gets
 pub(crate) const VAR_ROW_H: f64 = 70.0;
 pub(crate) const VAR_WIN_CHROME: f64 = 104.0; // title + buttons + padding
 pub(crate) const VAR_WIN_MAX_H: f64 = 720.0; // the work area caps it further on small screens
@@ -196,26 +197,35 @@ pub(crate) fn var_window_result(app: AppHandle, pending: State<VarPrompt>, value
 
 // The rows estimate in var_window_rect is a guess (a remember switch, a long name or a
 // larger system font all add height). Once the form has rendered it reports the
-// height it really needs, in logical px, and the window grows or shrinks to that,
-// staying centred where it was and inside its monitor's work area.
+// height (and width) it really needs, in logical px, and the window grows or shrinks to
+// that, staying centred where it was and inside its monitor's work area.
 #[tauri::command]
-pub(crate) fn var_window_fit(app: AppHandle, height: f64) -> Result<(), String> {
+pub(crate) fn var_window_fit(app: AppHandle, height: f64, width: Option<f64>) -> Result<(), String> {
     let Some(win) = app.get_webview_window(VAR_WIN_LABEL) else { return Ok(()) };
     if !height.is_finite() || height <= 0.0 {
         return Err("bad height".to_string());
     }
+    if width.is_some_and(|w| !w.is_finite() || w <= 0.0) {
+        return Err("bad width".to_string());
+    }
     let dpi = win.scale_factor().unwrap_or(1.0);
     let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { return Ok(()) };
-    let (x, w, old_h) = (pos.x as f64, size.width as f64, size.height as f64);
-    let mid_y = pos.y as f64 + old_h / 2.0;
-    let work = work_rect_at(&app, x + w / 2.0, mid_y);
+    let (old_w, old_h) = (size.width as f64, size.height as f64);
+    let (mid_x, mid_y) = (pos.x as f64 + old_w / 2.0, pos.y as f64 + old_h / 2.0);
+    let work = work_rect_at(&app, mid_x, mid_y);
     let h = (height.min(VAR_WIN_MAX_H) * dpi).min(work.h).max(1.0);
-    if (h - old_h).abs() < 1.0 {
+    let w = width.map_or(old_w, |w| (var_fit_width(w) * dpi).min(work.w).max(1.0));
+    if (h - old_h).abs() < 1.0 && (w - old_w).abs() < 1.0 {
         return Ok(());
     }
-    let (x, y) = clamp_to_work(work, w, h, x, mid_y - h / 2.0);
+    let (x, y) = clamp_to_work(work, w, h, mid_x - w / 2.0, mid_y - h / 2.0);
     set_bounds_phys(&win, Rect { x, y, w, h });
     Ok(())
+}
+
+// The width the form measured, in logical px, kept between the floor and the opening width.
+pub(crate) fn var_fit_width(measured: f64) -> f64 {
+    measured.clamp(VAR_WIN_MIN_W, VAR_WIN_W)
 }
 
 // The {?@username} placeholder. The account name never reaches a log: it is

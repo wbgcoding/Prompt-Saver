@@ -617,7 +617,10 @@ body.vars-body {
   min-height: 0;
   padding: 12px;
   border-radius: 14px;
-  background: var(--menu-bg);
+  /* A form over another app must not let it show through: --menu-bg is a hair translucent
+     for the pills, and the same colour laid twice is fully opaque (custom theme colours
+     already are). */
+  background: linear-gradient(var(--menu-bg), var(--menu-bg)), var(--menu-bg);
   color: var(--menu-fg);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
 }
@@ -681,7 +684,8 @@ body.vars-body {
   font: inherit;
   font-size: 14px;
 }
-.vars-input:focus { outline: 2px solid var(--pill-bg); outline-offset: -1px; }
+/* The ring stays inside the field: the scrolling list clips anything past its left edge. */
+.vars-input:focus { outline: 2px solid var(--pill-bg); outline-offset: -2px; }
 /* Choice variables: the list is drawn INSIDE this window. A native <select> popup
    is its own OS window, and the blur it causes is what cancels the prompt. */
 .vars-choice { position: relative; }
@@ -698,7 +702,7 @@ body.vars-body {
   overflow-y: auto;
   padding: 4px;
   border-radius: 8px;
-  background: var(--menu-bg);
+  background: linear-gradient(var(--menu-bg), var(--menu-bg)), var(--menu-bg);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
 }
 .vars-choice-item {
@@ -743,6 +747,17 @@ body.vars-body {
   cursor: pointer;
 }
 .vars-btn:hover { background: var(--menu-line); }
+/* Measuring pass (vars.js fitWindow): the card at the width its content asks for, every
+   text field at one fixed width and a choice as wide as its longest option. */
+body.vars-measure .vars-card { flex: none; width: max-content; }
+body.vars-measure .vars-input { width: 200px; }
+body.vars-measure .vars-choice-btn { width: auto; min-width: 200px; }
+body.vars-measure .vars-choice-list.hidden {
+  display: flex !important;
+  position: static;
+  visibility: hidden;
+  max-height: none;
+}
 .vars-btn-primary {
   border-color: transparent;
   background: var(--pill-strong);

@@ -158,7 +158,8 @@ function render(data) {
 // The backend sized this window from a per-row guess. Measure what the form really
 // needs (everything outside the field list plus the list's full content) and ask for
 // exactly that, so a short form shows no scrollbar and a long one only scrolls once
-// the screen is full.
+// the screen is full. The width follows the content too (the backend keeps it between
+// its own floor and the opening width), so two short fields get a narrow window.
 function fitWindow() {
   const first = fieldsEl.firstElementChild;
   const last = fieldsEl.lastElementChild;
@@ -166,7 +167,11 @@ function fitWindow() {
     ? last.getBoundingClientRect().bottom - first.getBoundingClientRect().top
     : 0;
   const needed = Math.ceil(window.innerHeight - fieldsEl.clientHeight + content) + 2;
-  invoke("var_window_fit", { height: needed }).catch(() => {});
+  document.body.classList.add("vars-measure");
+  const pad = parseFloat(getComputedStyle(document.body).paddingLeft) || 0;
+  const width = Math.ceil(cardEl.getBoundingClientRect().width + 2 * pad);
+  document.body.classList.remove("vars-measure");
+  invoke("var_window_fit", { height: needed, width }).catch(() => {});
 }
 
 document.addEventListener("keydown", (e) => {

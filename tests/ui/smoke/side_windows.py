@@ -809,6 +809,13 @@ VARS_PROBE = """
     else if (!(fits[fits.length - 1][1].height >= needed)) {
       errs.push('the fit request ' + fits[fits.length - 1][1].height + ' is shorter than the form (' + needed + ')');
     }
+    // The width follows the content: this short form asks for less than the 340 px the
+    // window opens at, yet enough for both buttons side by side.
+    const fitW = fits.length ? fits[fits.length - 1][1].width : undefined;
+    const actions = document.querySelector('.vars-actions');
+    const buttonsW = [...actions.children].reduce((s, b) => s + b.offsetWidth, 0) + 6 + 2 * 12 + 2 * 6;
+    if (!(fitW < 340)) errs.push('the short form did not ask for a narrower window: ' + fitW);
+    else if (!(fitW >= buttonsW)) errs.push('the width request ' + fitW + ' is narrower than the buttons (' + buttonsW + ')');
     // The choice row must NOT be a native <select> - its OS popup would blur (and
     // therefore cancel) this window.
     if (rows[1] && rows[1].querySelector('select')) errs.push('a choice row uses a native select');
