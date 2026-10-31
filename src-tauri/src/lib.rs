@@ -255,6 +255,15 @@ pub fn run() {
     if let Some(code) = cli::dispatch_from_launch_args() {
         std::process::exit(code);
     }
+    // A portable run keeps the WebView2 profile (its caches hold rendered app content) beside the
+    // exe instead of in the user profile, so the folder it runs from is all it leaves behind.
+    // The variable overrides the folder Tauri passes to WebView2; it is set before any window
+    // exists, while this process is still single-threaded.
+    if let Some(dir) = paths::portable_base_dir() {
+        if std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", dir.join("WebView2"));
+        }
+    }
     // A plain second launch (double-click, autostart, the tray shortcut) settles here instead of
     // trusting the single-instance plugin below, which forwards and exits unconditionally and
     // cannot tell "the running instance brought up a window" from "the
