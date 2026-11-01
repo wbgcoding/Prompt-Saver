@@ -7,7 +7,6 @@
 A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 
 [![Latest release](https://img.shields.io/github/v/release/wbgcoding/Prompt-Saver?label=download&color=3b82f6)](../../releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/wbgcoding/Prompt-Saver/total?color=10b981)](../../releases)
 ![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4)
 ![Installer size](https://img.shields.io/badge/installer-~39%20MB-8b5cf6)
 
