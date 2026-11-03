@@ -268,7 +268,8 @@ pub(crate) fn backup_date_keys(name: &str) -> Option<(i64, i64, i64, i64)> {
     let m: i64 = it.next()?.parse().ok()?;
     let d: i64 = it.next()?.parse().ok()?;
     let days = days_from_civil(y, m, d);
-    Some((days, days.div_euclid(7), y * 12 + m, y))
+    // Weeks run Monday to Sunday: day 0 (1970-01-01) is a Thursday, hence the shift of three.
+    Some((days, (days + 3).div_euclid(7), y * 12 + m, y))
 }
 // Which of `names` (sorted oldest first) rotation throws away. Pure, so the retention rules
 // are testable without a disk full of folders.
