@@ -315,10 +315,10 @@ fn apply_taskbar_on_main(hwnd: isize, state: &str, value: Option<u8>) -> bool {
 
 // `op` names the reporting feature ("export", "convert", "ffmpeg-download", "backup",
 // "import"); `state` is "running" (with a 0-100 `value`), "indeterminate", "error", or
-// "done" (marks this operation's entry done, kept for bgDoneKeepMin minutes). `target` is an
-// optional destination file/folder for the header popover's "open folder" button; None
-// leaves a previously reported target unchanged. Every caller is expected to send "done" or
-// "error" eventually, also on its cancel/failure path: a taskbar icon stuck mid-progress is
+// "done" (marks this operation's entry done, kept for bgDoneKeepMin minutes). The command
+// takes no destination: the header popover's "open folder" button only opens a folder a Rust
+// job recorded itself (push_bg_op's `target`), never one a window names. Every caller is
+// expected to send "done" or "error" eventually, also on its cancel/failure path: a taskbar icon stuck mid-progress is
 // worse than none. The registry is updated regardless of the taskbarProgress switch, which
 // only controls the Windows icon.
 //
@@ -328,11 +328,11 @@ fn apply_taskbar_on_main(hwnd: isize, state: &str, value: Option<u8>) -> bool {
 // Async: a sync command runs on the main thread, and push_bg_op takes the store lock, which
 // a backup or import can hold for a long time.
 #[tauri::command]
-pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>, target: Option<String>) {
+pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>) {
     // This command's callers (backup, import, ...) run one instance at a time, so job id and
     // kind are the same string; export_video's push_bg_op calls give a batch one id each under
     // the shared kind "export".
-    push_bg_op(&app, &op, &op, &state, value, target);
+    push_bg_op(&app, &op, &op, &state, value, None);
 }
 
 // Updates the shared registry AND the real taskbar icon in one call --
