@@ -1121,7 +1121,7 @@ pub(crate) struct JournalEntry {
 pub(crate) fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
     const DAY: u64 = 86400;
     let today_bucket = now_secs() / DAY;
-    let start_bucket = today_bucket.saturating_sub(days as u64 - 1);
+    let start_bucket = today_bucket.saturating_sub((days as u64).saturating_sub(1));
     let mut counts: std::collections::HashMap<u64, usize> = std::collections::HashMap::new();
     if let Ok(mut stmt) = conn.prepare("SELECT ts / 86400, COUNT(*) FROM copy_log WHERE ts >= ?1 GROUP BY ts / 86400") {
         if let Ok(rows) = stmt.query_map(params![(start_bucket * DAY) as i64], |r| {
@@ -2109,18 +2109,14 @@ fn load_store_inner(app: &AppHandle) -> Store {
         let decrypt_fails = prompt_fails + trash_fails;
         // A row (prompts, trash or settings) could not be read back or decrypted: preserve the raw
         // DB and lock the affected writes (prompts_locked, SETTINGS_LOCKED).
-        if decrypt_fails > 0 || settings_unreadable {
-            keep_locked_backup(&dir, crate::copy::now_secs(), Some(&conn));
+        let store_locked = decrypt_fails > 0 || settings_unreadable;
+        if store_locked {
             append_crash_log(&format!(
                 "{} row(s) failed to load reliably (query error, unreadable row, or decrypt failure){}; \
                  writes locked, raw DB copied to data.db.locked.<time>.bak",
                 decrypt_fails,
                 if settings_unreadable { " (settings row included)" } else { "" }
             ));
-        } else {
-            // The lock is resolved. The copies may be the only pre-lock rows, so they stay for a
-            // while; the newest two and 90 days cap what they keep of rows purged since.
-            prune_locked_backups(&dir, crate::copy::now_secs());
         }
         SETTINGS_LOCKED.store(settings_unreadable, Ordering::Relaxed);
         let mut settings = settings_opt.clone().unwrap_or_default();
@@ -2128,7 +2124,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
         let mut settings_defaulted = settings_opt.is_none();
         // Empty DB but legacy JSON present: import it once. A corrupt settings row must not count
         // as "nothing here yet", or an unrelated legacy JSON file would paper over SETTINGS_LOCKED.
-        if prompts.is_empty() && settings_opt.is_none() && !settings_unreadable {
+        if prompts.is_empty() && settings_opt.is_none() && !settings_unreadable && decrypt_fails == 0 {
             let j_settings_r: SealedRead<Settings> = read_sealed_json(&dir.join("settings.json"));
             let j_prompts_r: SealedRead<Vec<Prompt>> = read_sealed_json(&dir.join("prompts.json"));
             // An unreadable legacy file (wrong Windows account, corruption) is not "nothing to
@@ -2225,6 +2221,17 @@ fn load_store_inner(app: &AppHandle) -> Store {
         acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
         // Only now is it known whether this process may write into the folder.
         let may_write = !DATA_DIR_READONLY.load(Ordering::Relaxed);
+        // These touch files in the folder, so they wait for the lock: a read-only instance
+        // writes and removes nothing there.
+        if may_write {
+            if store_locked {
+                keep_locked_backup(&dir, crate::copy::now_secs(), Some(&conn));
+            } else {
+                // The copies may be the only pre-lock rows, so they stay for a while; the newest
+                // two and 90 days cap what they keep of rows purged since.
+                prune_locked_backups(&dir, crate::copy::now_secs());
+            }
+        }
         apply_startup_writes(&dir, &mut conn, &store.written, startup, may_write);
         let migrated_log = migrate_copy_log_once(&mut conn, &mut store.settings, may_write);
         if may_write {
