@@ -1332,6 +1332,21 @@ fn trash_round_trip_keeps_the_free_pill_size() {
 }
 
 #[test]
+fn restoring_a_placement_over_a_live_id_takes_a_new_id() {
+    let mut store = placement_fixture();
+    let ids = vec!["p3".to_string()];
+    let snapshot = capture_placements(&store.settings, &ids);
+    move_batch_to_trash(&mut store, &ids, 100);
+    let mut twin = store.trash[0].clone();
+    twin.trashed_at = 0;
+    store.prompts.push(twin);
+    assert_eq!(restore_placed_core(&mut store, &snapshot, |_| true), Ok(1));
+    let same_id = store.prompts.iter().filter(|p| p.id == "p3").count();
+    assert_eq!(same_id, 1, "no second row with the live id");
+    assert!(store.trash.is_empty());
+}
+
+#[test]
 fn an_old_trash_entry_without_a_free_size_still_restores() {
     let old: PromptPlacement = serde_json::from_str(r#"{"id":"p3","float_scale":1.5}"#).expect("old snapshot parses");
     assert_eq!(old.float_size, None);

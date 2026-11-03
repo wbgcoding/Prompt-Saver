@@ -204,6 +204,7 @@ pub(crate) fn restore_placed_core(store: &mut Store, placements: &[PromptPlaceme
     let original_trash = store.trash.clone();
     let original_prompts = store.prompts.len();
     let mut restored: Vec<&PromptPlacement> = Vec::new();
+    let mut renamed = 0usize;
     for pl in placements {
         if restored.iter().any(|r| r.id == pl.id) {
             continue;
@@ -212,10 +213,20 @@ pub(crate) fn restore_placed_core(store: &mut Store, placements: &[PromptPlaceme
         let mut p = store.trash.remove(pos);
         p.trashed_at = 0;
         upgrade_prompt_placeholders(&mut p);
+        // A live prompt with this id (an older import brought it back) would make the write
+        // refuse a second row of that id for good: the restored copy takes a new id and comes
+        // back as a plain tile, since the old placement belongs to the id the live prompt holds.
+        if store.prompts.iter().any(|q| q.id == p.id) {
+            p.id = gen_id();
+            seat_restored_in_active_view(&mut store.settings, &p.id);
+            store.prompts.push(p);
+            renamed += 1;
+            continue;
+        }
         store.prompts.push(p);
         restored.push(pl);
     }
-    if restored.is_empty() {
+    if restored.is_empty() && renamed == 0 {
         return Err("not-found".into());
     }
     let restored_ids: std::collections::HashSet<String> = restored.iter().map(|r| r.id.clone()).collect();
@@ -267,7 +278,7 @@ pub(crate) fn restore_placed_core(store: &mut Store, placements: &[PromptPlaceme
         store.settings = original_settings;
         return Err("save-failed".into());
     }
-    Ok(restored.len())
+    Ok(restored.len() + renamed)
 }
 
 // A grid folder the delete dissolved (fewer than two members left) is rebuilt from its
