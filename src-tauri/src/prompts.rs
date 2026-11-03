@@ -866,7 +866,7 @@ pub(crate) async fn add_prompt(
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
-            name,
+            name: crate::md_sync::sync_clean_name(&name),
             text,
             color,
             image: image_value,
@@ -975,7 +975,7 @@ pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, e
             let prompt = Prompt {
                 id: gen_id(),
                 trashed_at: 0,
-                name: ex.name,
+                name: crate::md_sync::sync_clean_name(&ex.name),
                 text: ex.text,
                 color: String::new(),
                 show_image: !ex.image.is_empty(),
@@ -1610,6 +1610,7 @@ pub(crate) fn build_restored_prompt(source: &Prompt, version_name: &str, version
     let variants = sanitize_variants(version_variants.iter().map(|s| upgrade_placeholders(s)).collect());
     let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
     let name = if suffix.is_empty() { version_name.to_string() } else { format!("{version_name} {suffix}") };
+    let name = crate::md_sync::sync_clean_name(&name);
     Prompt {
         id: gen_id(),
         trashed_at: 0,

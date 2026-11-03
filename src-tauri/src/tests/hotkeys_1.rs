@@ -1328,6 +1328,8 @@ fn restore_version_as_new_keeps_the_source_and_starts_fresh_history() {
     let created = build_restored_prompt(&source, "Old name", "Old text".to_string(), variants.clone(), "(from 2026-01-01)");
     assert_eq!(source.text, original_text, "building the copy must never touch the source prompt");
     assert_eq!(created.name, "Old name (from 2026-01-01)");
+    let spaced = build_restored_prompt(&source, "  Old name ", "t".to_string(), Vec::new(), "");
+    assert_eq!(spaced.name, "Old name", "a restored copy is trimmed like any in-app save");
     assert_eq!(created.text, "Old text");
     assert_eq!(created.variants, variants);
     assert_eq!(created.color, source.color, "the colour marker comes from the current prompt, not the version");
