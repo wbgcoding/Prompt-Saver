@@ -326,12 +326,28 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
     );
 }
 
+// The advance behind rotation_commit. With the index the peek reported (`served`) it moves the
+// pointer only while it still points there, like copy_prompt does; a copy that landed between
+// the peek and this commit has moved it already, and a second advance would skip an entry.
+// Without an index (a caller that kept none) it advances unconditionally. True when it advanced.
+pub(crate) fn rotation_commit_core(p: &Prompt, settings: &mut Settings, served: Option<usize>) -> bool {
+    match served {
+        Some(served) => rotation_advance_if_served(p, settings, served),
+        None => {
+            rotation_advance(p, settings);
+            true
+        }
+    }
+}
+
 #[tauri::command(async)]
-pub(crate) fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
+pub(crate) fn rotation_commit(app: AppHandle, state: State<Db>, id: String, served: Option<usize>) {
     let mut store = lock(&state);
     if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
         let p = rotation_core(&store.prompts[pos]);
-        rotation_advance(&p, &mut store.settings);
+        if !rotation_commit_core(&p, &mut store.settings, served) {
+            return;
+        }
         // The hottest settings write in the app: this runs on every paste of an
         // auto-advancing prompt, so it is collected instead of hitting the disk.
         save_settings_soon();

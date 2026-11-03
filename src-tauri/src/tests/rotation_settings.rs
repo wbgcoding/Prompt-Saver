@@ -458,6 +458,22 @@ pub(super) fn commit(p: &Prompt, settings: &mut Settings, delay: &SettingsDelay)
 }
 
 #[test]
+fn a_commit_with_a_stale_peek_index_does_not_skip_an_entry() {
+    let mut p = sample_prompts().remove(0);
+    p.variants = vec!["b".into(), "c".into()]; // total = 3
+    let mut settings = Settings::default();
+    let peeked = rotation_position(&p, &settings).0;
+    // A copy of the same prompt lands between the peek and the commit.
+    assert!(rotation_commit_core(&p, &mut settings, Some(peeked)));
+    let after_copy = rotation_position(&p, &settings).0;
+    assert!(!rotation_commit_core(&p, &mut settings, Some(peeked)), "the pointer already moved on");
+    assert_eq!(rotation_position(&p, &settings).0, after_copy);
+    // No index: the old unconditional advance.
+    assert!(rotation_commit_core(&p, &mut settings, None));
+    assert_ne!(rotation_position(&p, &settings).0, after_copy);
+}
+
+#[test]
 fn a_burst_of_rotation_commits_costs_at_most_two_settings_writes() {
     let mut p = sample_prompts().remove(0);
     p.variants = vec!["b".into(), "c".into()]; // total = 3
