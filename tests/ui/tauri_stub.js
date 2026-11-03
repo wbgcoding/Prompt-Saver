@@ -1395,7 +1395,14 @@ const RESULTS = {
     const p = PROMPTS.find((x) => x.id === (a && a.id));
     if (!p) return null;
     const total = 1 + (p.variants || []).length;
-    const advance = () => { if (total > 1) ROTATE_POS.set(p.id, ((ROTATE_POS.get(p.id) || 0) + 1) % total); return null; };
+    // Like the backend: a commit carrying the peeked index only advances while the pointer
+    // still sits there.
+    const advance = () => {
+      const at = (ROTATE_POS.get(p.id) || 0) % total;
+      if (a.served != null && a.served !== at) return null;
+      if (total > 1) ROTATE_POS.set(p.id, (at + 1) % total);
+      return null;
+    };
     // A probe can make the commit land late, like a backend worker that has to
     // wait for the store lock while a later peek is already queued.
     if (window.__ROTATION_COMMIT_DELAY__) {

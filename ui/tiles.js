@@ -632,6 +632,7 @@ export const dragOutWired = new WeakSet();
 // dragOutText can stay synchronous: dataTransfer.setData only works inside dragstart, too
 // late to await a peek there.
 export const dragRotationPeek = new Map(); // prompt id -> peeked text
+const dragRotationIndex = new Map(); // prompt id -> peeked entry index, handed back on commit
 
 // What lands in the drop target. Placeholders stay as written: resolving them needs
 // the fill-in dialog, and no dialog can open while the OS drag loop holds the pointer.
@@ -656,7 +657,7 @@ export function armDragOut(el, e, getPrompt) {
     // Peek is read-only, so it is safe to fire on every arm; it normally resolves well before
     // dragstart (a real drag needs motion past the threshold first).
     if (p && (p.variants || []).length) {
-      invoke("rotation_peek", { id: p.id }).then((r) => { if (r) dragRotationPeek.set(p.id, r.text); }).catch(() => {});
+      invoke("rotation_peek", { id: p.id }).then((r) => { if (r) { dragRotationPeek.set(p.id, r.text); dragRotationIndex.set(p.id, r.index); } }).catch(() => {});
     }
   }
   if (on && !dragOutWired.has(el)) {
@@ -670,10 +671,11 @@ export function armDragOut(el, e, getPrompt) {
       // committing would advance whatever the pointer's real position is, not the dragged entry.
       if (p && (p.variants || []).length) {
         if (ev.dataTransfer.dropEffect !== "none" && dragRotationPeek.has(p.id)) {
-          invoke("rotation_commit", { id: p.id }).catch(() => {});
+          invoke("rotation_commit", { id: p.id, served: dragRotationIndex.get(p.id) }).catch(() => {});
           recordToolUsage("rotation_advance");
         }
         dragRotationPeek.delete(p.id);
+        dragRotationIndex.delete(p.id);
       }
     });
   }

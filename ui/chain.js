@@ -39,18 +39,18 @@ export function chainText() {
 // neither commits nor reports, and the picks it carried are committed by the push
 // that superseded it (an empty chain drops them).
 let chainPushSeq = 0;
-const chainPendingCommits = new Set();
-export function pushChainClipboard(commitId) {
+const chainPendingCommits = new Map(); // prompt id -> peeked entry index
+export function pushChainClipboard(commitId, served) {
   const seq = ++chainPushSeq;
   if (!chainSel.length) { chainPendingCommits.clear(); return; }
-  if (commitId) chainPendingCommits.add(commitId);
+  if (commitId) chainPendingCommits.set(commitId, served);
   serialInvoke("chain-clipboard", "copy_text", { text: chainText() })
     .then((ok) => {
       if (seq !== chainPushSeq || !ok) return;
       recordToolUsage("chain");
-      const ids = [...chainPendingCommits].filter((id) => chainSel.includes(id));
+      const commits = [...chainPendingCommits].filter(([id]) => chainSel.includes(id));
       chainPendingCommits.clear();
-      for (const id of ids) invoke("rotation_commit", { id }).catch(() => {});
+      for (const [id, served] of commits) invoke("rotation_commit", { id, served }).catch(() => {});
     })
     .catch((e) => { if (seq === chainPushSeq) errToast(e); });
 }
@@ -278,9 +278,10 @@ export async function toggleChainPick(p) {
     // to p.text (a stale/wrong entry), and committing anyway would advance the pointer's
     // REAL position.
     let peeked = false;
+    let peekedIndex;
     if ((p.variants || []).length) {
       const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
-      if (peek) { rawText = peek.text; peeked = true; }
+      if (peek) { rawText = peek.text; peeked = true; peekedIndex = peek.index; }
     }
     let text = rawText;
     if (varTokens(p, rawText).length) {
@@ -293,7 +294,7 @@ export async function toggleChainPick(p) {
     chainTexts.set(p.id, text);
     chainRaw.set(p.id, rawText);
     refreshChainUi();
-    pushChainClipboard(peeked ? p.id : null);
+    pushChainClipboard(peeked ? p.id : null, peekedIndex);
   } finally {
     chainPicking.delete(p.id);
   }
