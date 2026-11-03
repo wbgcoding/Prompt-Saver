@@ -396,6 +396,20 @@ fn a_failed_legacy_copy_leaves_no_database_and_can_retry() {
     let _ = fs::remove_dir_all(&root);
 }
 
+// A folder with a store, or one whose data was moved elsewhere (pointer file), is never refilled
+// from an old install.
+#[test]
+fn the_legacy_probe_skips_a_folder_with_a_store_or_a_pointer() {
+    let root = legacy_test_dir("probe");
+    assert!(legacy_probe_needed(&root), "an empty folder is probed");
+    fs::write(root.join("datapath"), b"D:\\elsewhere").unwrap();
+    assert!(!legacy_probe_needed(&root), "a pointer file ends the probe");
+    fs::remove_file(root.join("datapath")).unwrap();
+    fs::write(root.join("data.db"), b"rows").unwrap();
+    assert!(!legacy_probe_needed(&root), "an existing store ends the probe");
+    let _ = fs::remove_dir_all(&root);
+}
+
 // The text of one function, from its signature to the closing brace at column 0.
 fn fn_body<'a>(src: &'a str, signature: &str) -> &'a str {
     let at = src.find(signature).unwrap_or_else(|| panic!("{signature} not found"));

@@ -74,11 +74,22 @@ pub(crate) fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> 
     STORE_FILES.iter().any(|f| src.join(f).exists()).then_some(src)
 }
 
+// Whether the legacy folders are worth looking at for `new`. A store already there ends the
+// migration, and so does a "datapath" pointer: that folder's data lives elsewhere, and a
+// database removed from it on purpose (data wipe after a folder move) must not be refilled
+// from an old install.
+pub(crate) fn legacy_probe_needed(new: &std::path::Path) -> bool {
+    !new.join("data.db").exists() && !new.join("datapath").exists()
+}
+
 // One-time move of the store out of the old identifier-based folder (brand::LEGACY_DATA_FOLDER)
 // into DATA_FOLDER. Both the folder Tauri resolves and the frozen legacy name are tried, so
 // it survives a change in how app_data_dir is built.
 pub(crate) fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
-    if new.join("data.db").exists() {
+    // Probed once per process: the answer only changes through a copy made right here, and a
+    // failed copy is retried by the next start.
+    static PROBED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !legacy_probe_needed(new) || PROBED.swap(true, std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     let mut olds: Vec<PathBuf> = Vec::new();
