@@ -784,3 +784,13 @@ fn ffmpeg_download_needs_a_fresh_one_shot_consent() {
         assert!(js[..at].rfind("confirmDialog").is_some_and(|c| at - c < 600), "{name}: consent is granted right after the dialog");
     }
 }
+
+// A window must not be able to name the folder the header's "open folder" button opens: the
+// progress command carries no destination.
+#[test]
+fn the_window_facing_progress_command_takes_no_target() {
+    let src = include_str!("../bg_ops.rs").replace("\r\n", "\n");
+    let at = src.find("pub(crate) async fn set_taskbar_progress(").expect("command present");
+    let signature = &src[at..at + src[at..].find(") {").unwrap()];
+    assert!(!signature.contains("target"), "{signature}");
+}
