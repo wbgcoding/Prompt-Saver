@@ -276,3 +276,20 @@ fn the_file_version_comes_from_the_fixed_version_info() {
     assert!(parts[0] >= 6, "a Windows system file reports its real major version, got {v}");
     assert_eq!(ww::file_version_of("C:\\no\\such\\file.exe"), None);
 }
+
+#[test]
+fn a_fill_in_answer_from_a_replaced_window_is_dropped() {
+    use crate::var_prompt::{take_var_answer, var_window_envelope, VarAnswer};
+    let mut slot = Some((2u64, "{\"rows\":[]}".to_string()));
+    // The window pulls its request with the generation it must answer with.
+    let env: serde_json::Value = serde_json::from_str(&var_window_envelope(&slot)).unwrap();
+    assert_eq!(env["gen"], 2);
+    assert_eq!(env["payload"], "{\"rows\":[]}");
+    // The replaced window (generation 1) answers late: it neither fills nor empties the slot.
+    assert_eq!(take_var_answer(&mut slot, 1), VarAnswer::Stale);
+    assert!(slot.is_some());
+    assert_eq!(take_var_answer(&mut slot, 2), VarAnswer::Forward);
+    assert!(slot.is_none());
+    assert_eq!(take_var_answer(&mut slot, 2), VarAnswer::NothingPending);
+    assert_eq!(var_window_envelope(&slot), "");
+}

@@ -1454,7 +1454,7 @@ const RESULTS = {
   // F12: the standalone fill-in window. The main window hands over a request here;
   // the small window (vars.html) pulls it and answers.
   open_var_window: (a) => { window.__VAR_PAYLOAD__ = a && a.payload; return null; },
-  var_window_payload: () => JSON.stringify(varRequest()),
+  var_window_payload: () => JSON.stringify({ gen: 1, payload: JSON.stringify(varRequest()) }),
   var_window_result: (a) => { window.__VAR_RESULT__ = (a && a.values) ?? null; return null; },
   var_window_fit: () => null,
   // F25 pill folders: one folder with five members, so the closed icon has more

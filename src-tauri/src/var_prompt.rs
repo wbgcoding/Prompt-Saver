@@ -171,22 +171,58 @@ pub(crate) async fn open_var_window(
     Ok(())
 }
 
+// What the window pulls: the request together with its generation, which the window hands
+// back with its answer. Empty when nothing is pending.
+pub(crate) fn var_window_envelope(slot: &Option<(u64, String)>) -> String {
+    match slot {
+        Some((gen, payload)) => serde_json::json!({ "gen": gen, "payload": payload }).to_string(),
+        None => String::new(),
+    }
+}
+
+// How an answer from the window of generation `gen` meets the pending slot.
+#[derive(Debug, PartialEq)]
+pub(crate) enum VarAnswer {
+    // It answered the pending request: the slot is emptied, the answer is forwarded.
+    Forward,
+    // Nothing is pending (already answered or cancelled): only the window closes.
+    NothingPending,
+    // A newer request is pending: this answer belongs to a replaced window and is dropped.
+    Stale,
+}
+
+pub(crate) fn take_var_answer(slot: &mut Option<(u64, String)>, gen: u64) -> VarAnswer {
+    match slot.as_ref().map(|(g, _)| *g) {
+        Some(g) if g == gen => {
+            slot.take();
+            VarAnswer::Forward
+        }
+        Some(_) => VarAnswer::Stale,
+        None => VarAnswer::NothingPending,
+    }
+}
+
 // The window asks for its own request once it has booted (a push would race the
 // webview's first frame).
 #[tauri::command]
 pub(crate) fn var_window_payload(pending: State<VarPrompt>) -> String {
-    pending.lock().as_ref().map(|(_, p)| p.clone()).unwrap_or_default()
+    var_window_envelope(&pending.lock())
 }
 
-// Hand the typed values back to the main window (None = cancelled) and close.
+// Hand the typed values back to the main window (None = cancelled) and close. `gen` is the
+// generation the window pulled with its request: an answer from a window that was replaced
+// while it still closed must neither fill the new copy nor close the new window.
 #[tauri::command]
-pub(crate) fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<String>) -> Result<(), String> {
+pub(crate) fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<String>, gen: u64) -> Result<(), String> {
     if values.as_ref().is_some_and(|v| v.len() > VAR_PAYLOAD_MAX) {
         return Err("bad values".to_string());
     }
     // Take first: the close below fires Destroyed, which must not answer twice.
-    let waiting = pending.lock().take();
-    if waiting.is_some() {
+    let outcome = take_var_answer(&mut pending.lock(), gen);
+    if outcome == VarAnswer::Stale {
+        return Ok(());
+    }
+    if outcome == VarAnswer::Forward {
         let _ = app.emit_to("main", "vars-filled", values);
     }
     if let Some(win) = app.get_webview_window(VAR_WIN_LABEL) {
