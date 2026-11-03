@@ -1160,3 +1160,10 @@ fn restore_copy_history_keeps_a_copy_made_after_the_clear_as_the_newest() {
     let order: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
     assert_eq!(order, ["next", "mid", "b"]);
 }
+
+#[test]
+fn a_read_only_data_folder_unpacks_snapshots_into_the_local_temp_folder() {
+    let home = std::path::Path::new("shared-folder");
+    assert_eq!(unpack_dir(home, false), home);
+    assert_eq!(unpack_dir(home, true), std::env::temp_dir());
+}
