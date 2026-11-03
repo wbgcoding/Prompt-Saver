@@ -7,8 +7,8 @@ pub(crate) struct StatBar {
     pub(crate) name: String,
     pub(crate) count: u32,
 }
-// One day's copy count. `ts` is that day's UTC midnight (unix seconds); the frontend
-// formats dates with Intl, so no date crate is needed here.
+// One day's copy count. `ts` is that local day's midnight on the local civil timeline (unix
+// seconds shifted by the zone offset), so it prints as the user's calendar date.
 #[derive(Serialize)]
 pub(crate) struct DayCount {
     pub(crate) ts: u64,
@@ -246,6 +246,19 @@ impl StatsTxtLabels {
 }
 
 // A unix time in seconds as a calendar date (YYYY-MM-DD, readable in every language).
+// The local zone's offset from UTC in seconds (positive east), from the same wall clock the
+// backup names use, rounded to a quarter hour so the gap between the two clock reads vanishes.
+pub(crate) fn local_utc_offset_secs() -> i64 {
+    #[cfg(windows)]
+    {
+        if let Some(local) = crate::backups::stamp_secs(&local_stamp()) {
+            let raw = local - now_secs() as i64;
+            return (raw as f64 / 900.0).round() as i64 * 900;
+        }
+    }
+    0
+}
+
 pub(crate) fn stats_date(secs: u64) -> String {
     let (y, m, d) = crate::backups::civil_from_days((secs / 86_400) as i64);
     format!("{y:04}-{m:02}-{d:02}")
@@ -296,7 +309,7 @@ pub(crate) fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], to
 // dashboard's own button so the export action sits next to the data on screen.
 #[tauri::command]
 pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String, labels: Option<StatsTxtLabels>) -> Result<usize, String> {
-    let daily = db_conn(&app).map(|c| db_daily_copies(&c, 14)).unwrap_or_default();
+    let daily = db_conn(&app).map(|c| db_daily_copies(&c, 14, local_utc_offset_secs())).unwrap_or_default();
     let (entries, tools) = {
         let store = lock(&state);
         let entries = stats_export_entries(&store);

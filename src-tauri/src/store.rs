@@ -1116,15 +1116,17 @@ pub(crate) struct JournalEntry {
     pub(crate) ts: u64,
 }
 
-// Copy counts for the last `days` UTC days, oldest first, zero-filled: one GROUP BY by
-// day-since-epoch merged against a dense day range in Rust.
-pub(crate) fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
+// Copy counts for the last `days` days, oldest first, zero-filled: one GROUP BY by
+// day-since-epoch merged against a dense day range in Rust. `offset_secs` is the local offset
+// from UTC, so a day is the user's calendar day; each returned `ts` is that day's midnight on
+// the local civil timeline (it prints as the local date).
+pub(crate) fn db_daily_copies(conn: &Connection, days: u32, offset_secs: i64) -> Vec<DayCount> {
     const DAY: u64 = 86400;
-    let today_bucket = now_secs() / DAY;
+    let today_bucket = (now_secs() as i64 + offset_secs).max(0) as u64 / DAY;
     let start_bucket = today_bucket.saturating_sub((days as u64).saturating_sub(1));
     let mut counts: std::collections::HashMap<u64, usize> = std::collections::HashMap::new();
-    if let Ok(mut stmt) = conn.prepare("SELECT ts / 86400, COUNT(*) FROM copy_log WHERE ts >= ?1 GROUP BY ts / 86400") {
-        if let Ok(rows) = stmt.query_map(params![(start_bucket * DAY) as i64], |r| {
+    if let Ok(mut stmt) = conn.prepare("SELECT (ts + ?2) / 86400, COUNT(*) FROM copy_log WHERE ts >= ?1 GROUP BY (ts + ?2) / 86400") {
+        if let Ok(rows) = stmt.query_map(params![(start_bucket * DAY) as i64 - offset_secs, offset_secs], |r| {
             Ok((r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as usize))
         }) {
             counts.extend(rows.flatten());
