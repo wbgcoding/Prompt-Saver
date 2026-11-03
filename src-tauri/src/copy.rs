@@ -727,6 +727,24 @@ pub(crate) fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rus
     tx.commit()
 }
 
+// Folds the counters taken before a clear into the ones live now. A copy made between the clear
+// and the undo (the row restore keeps such a copy too) adds to the restored count and its
+// timestamp stays when it is the newer one.
+pub(crate) fn merge_restored_counters(
+    settings: &mut Settings,
+    usage: HashMap<String, u32>,
+    last_used: HashMap<String, u64>,
+) {
+    for (id, n) in usage {
+        let slot = settings.usage.entry(id).or_insert(0);
+        *slot = slot.saturating_add(n);
+    }
+    for (id, ts) in last_used {
+        let slot = settings.last_used.entry(id).or_insert(0);
+        *slot = (*slot).max(ts);
+    }
+}
+
 // Undo for "clear copy history": writes the row-level log and the two counter maps back.
 // The frontend holds the snapshot (read via recent_copies before the clear), so this only
 // replays what existed a moment ago, through the same insert clause a live copy uses, never
@@ -749,8 +767,7 @@ pub(crate) async fn restore_copy_history(
     }
     let saved = {
         let mut store = lock(&state);
-        store.settings.usage = usage;
-        store.settings.last_used = last_used;
+        merge_restored_counters(&mut store.settings, usage, last_used);
         save_settings(&app, &store.settings)
     };
     rebuild_tray(&app);
