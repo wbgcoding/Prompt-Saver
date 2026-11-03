@@ -780,7 +780,7 @@ fn daily_copies_are_zero_filled_and_bucketed() {
         db_append_copy(&conn, &CopyEntry { id: format!("c{i}"), ts: today - 2 * DAY + i }, 100, None).unwrap();
     }
     db_append_copy(&conn, &CopyEntry { id: "old".into(), ts: today - 20 * DAY }, 100, None).unwrap();
-    let daily = db_daily_copies(&conn, 14);
+    let daily = db_daily_copies(&conn, 14, 0);
     assert_eq!(daily.len(), 14, "must always return exactly `days` buckets");
     assert_eq!(daily.last().unwrap().ts, today, "the newest bucket is today");
     assert_eq!(daily.last().unwrap().count, 2);
@@ -793,7 +793,26 @@ fn daily_copies_are_zero_filled_and_bucketed() {
 fn daily_copies_with_zero_days_is_empty() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
-    assert!(db_daily_copies(&conn, 0).is_empty());
+    assert!(db_daily_copies(&conn, 0, 0).is_empty());
+}
+
+#[test]
+fn daily_copies_bucket_by_the_local_day() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
+    const DAY: u64 = 86400;
+    let offset = 2 * 3600i64; // two hours east of UTC
+    let local_today = (now_secs() as i64 + offset) as u64 / DAY * DAY;
+    // 00:00:30 local today, which is still the previous day in UTC.
+    let just_after_midnight = (local_today as i64 + 30 - offset) as u64;
+    db_append_copy(&conn, &CopyEntry { id: "a".into(), ts: just_after_midnight }, 100, None).unwrap();
+    // 23:59:00 local yesterday.
+    db_append_copy(&conn, &CopyEntry { id: "b".into(), ts: just_after_midnight - 91 }, 100, None).unwrap();
+    let daily = db_daily_copies(&conn, 3, offset);
+    assert_eq!(daily.len(), 3);
+    assert_eq!(daily[2].ts, local_today);
+    assert_eq!(daily[2].count, 1, "booked on the local day, not the UTC one");
+    assert_eq!(daily[1].count, 1);
 }
 
 #[test]
