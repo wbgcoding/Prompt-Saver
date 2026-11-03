@@ -514,6 +514,22 @@ fn a_failed_settings_save_rolls_the_tag_rename_back_on_disk_too() {
 }
 
 #[test]
+fn renaming_the_archive_tag_moves_the_archive_name_and_rolls_back() {
+    let mut p = test_prompt("p1");
+    p.tags = vec!["Archive".to_string()];
+    let mut store = secret_test_store(vec![p]);
+    store.settings.ui_texts.insert("archiveTag".to_string(), "Archive".to_string());
+    let failed = rename_tag_in_store(&mut store, "archive", "Old", "old", &mut |_| true, &mut |_| false);
+    assert!(failed.is_err());
+    assert_eq!(store.settings.ui_texts.get("archiveTag").map(String::as_str), Some("Archive"));
+    rename_tag_in_store(&mut store, "archive", "Old", "old", &mut |_| true, &mut |_| true).unwrap();
+    assert_eq!(store.settings.ui_texts.get("archiveTag").map(String::as_str), Some("Old"));
+    // Another tag's rename leaves the archive name alone.
+    rename_tag_in_store(&mut store, "other", "Else", "else", &mut |_| true, &mut |_| true).unwrap();
+    assert_eq!(store.settings.ui_texts.get("archiveTag").map(String::as_str), Some("Old"));
+}
+
+#[test]
 fn a_failed_settings_save_rolls_the_tag_delete_back_on_disk_too() {
     let mut p = test_prompt("p1");
     p.tags = vec!["Old".to_string(), "Keep".to_string()];

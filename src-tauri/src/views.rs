@@ -420,7 +420,17 @@ pub(crate) fn rename_tag_in_store(
     let original_old_color = store.settings.tag_colors.get(old_key).cloned();
     let original_new_color = store.settings.tag_colors.get(new_key).cloned();
     transfer_tag_color(&mut store.settings.tag_colors, old_key, new_key);
+    // The archive tag is known by name (ui_texts["archiveTag"]): renaming it has to move that
+    // name too, or every archived entry would stop counting as archived.
+    let original_archive = store.settings.ui_texts.get("archiveTag").cloned();
+    if original_archive.as_deref().is_some_and(|a| tag_key(a) == old_key) {
+        store.settings.ui_texts.insert("archiveTag".to_string(), new.to_string());
+    }
     if !save_settings_fn(&store.settings) {
+        match original_archive {
+            Some(a) => { store.settings.ui_texts.insert("archiveTag".to_string(), a); }
+            None => { store.settings.ui_texts.remove("archiveTag"); }
+        }
         match original_old_color {
             Some(c) => { store.settings.tag_colors.insert(old_key.to_string(), c); }
             None => { store.settings.tag_colors.remove(old_key); }
