@@ -828,6 +828,11 @@ pub(crate) async fn add_prompt(
     }
     let mut fp = file_path.unwrap_or_default();
     let mut ip = icon_path.unwrap_or_default();
+    // Before a byte is copied into the data folder: in a read-only instance the folder belongs to
+    // another machine, and the save would refuse after the copy had already landed there.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
+    }
     let mut staged_copies = StagedCopies::new();
     if store_files {
         let files_dir = data_dir(&app).join("files");
@@ -1254,6 +1259,10 @@ pub(crate) async fn update_prompt(
             // already holds is never asked again.
             return Err("source-not-allowed".to_string());
         }
+    }
+    // Same gate as add_prompt: nothing is copied into a folder this instance may not write to.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
     }
     let mut staged_copies = StagedCopies::new();
     let files_dir = store_dir.join("files");

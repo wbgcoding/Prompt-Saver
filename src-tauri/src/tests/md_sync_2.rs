@@ -742,6 +742,23 @@ fn add_and_update_prompt_do_the_slow_work_before_the_insert_lock() {
     }
 }
 
+// A read-only instance must refuse before a copy lands in the folder another machine owns.
+#[test]
+fn add_and_update_prompt_refuse_a_read_only_folder_before_staging() {
+    let src = production_sources();
+    let body = |from: &str, to: &str| {
+        let a = src.find(from).expect("start marker");
+        let b = a + src[a..].find(to).expect("end marker");
+        src[a..b].to_string()
+    };
+    for (from, to) in [("async fn add_prompt(", "// One example prompt as the frontend supplies it"), ("async fn update_prompt(", "// List a prompt's version snapshots")] {
+        let text = body(from, to);
+        let gate = text.find("data_dir_write_blocked(&app)").unwrap_or_else(|| panic!("{from} has no read-only gate"));
+        let stage = text.find("staged_copies.stage(").expect("staging call");
+        assert!(gate < stage, "{from} must check the read-only gate before staging a copy");
+    }
+}
+
 #[test]
 fn the_vault_reports_how_long_until_the_idle_timeout_locks_it() {
     assert_eq!(secret_relock_in_secs(15, 0), Some(900));
