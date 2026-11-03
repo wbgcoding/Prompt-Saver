@@ -28,6 +28,9 @@ let tooLongText = "";
 
 let rows = [];
 let answered = false;
+// The generation of the request this window pulled; the backend drops an answer that carries
+// an older one, so a window being replaced cannot fill the next copy.
+let requestGen = 0;
 
 // One answer, ever: the backend closes this window on the first call, and a blur
 // racing the click must not send a cancel after a confirm.
@@ -36,7 +39,7 @@ function answer(values) {
   answered = true;
   // If the call itself fails (backend not ready, IPC hiccup), un-stick the guard:
   // otherwise this window can never answer again and just sits there forever.
-  invoke("var_window_result", { values }).catch((e) => {
+  invoke("var_window_result", { values, gen: requestGen }).catch((e) => {
     answered = false;
     // The backend refuses an oversized answer; say so instead of sitting silent.
     if (String(e).includes("bad values") && tooLongText) {
@@ -249,7 +252,9 @@ cardEl.addEventListener("mousedown", (e) => {
 // webview's first frame.
 invoke("var_window_payload")
   .then((raw) => {
-    const data = raw ? JSON.parse(raw) : null;
+    const env = raw ? JSON.parse(raw) : null;
+    if (env) requestGen = env.gen;
+    const data = env ? JSON.parse(env.payload) : null;
     if (data) render(data);
     else answer(null);
   })
