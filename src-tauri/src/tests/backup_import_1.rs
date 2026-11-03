@@ -1128,3 +1128,32 @@ fn the_remove_examples_count_skips_examples_already_deleted_by_hand() {
     // dismiss itself still sees the missing id, which is harmless there
     assert_eq!(examples_still_pristine(&ids, &HashMap::new(), &prompts).len(), 3);
 }
+
+#[test]
+fn an_imported_name_is_trimmed_to_one_line_like_an_editor_save() {
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    let item = ImportedPrompt {
+        name: "  Work  Pack ".to_string(),
+        text: "body".to_string(),
+        color: String::new(),
+        font: String::new(),
+        font_size: 0,
+        file_path: String::new(),
+        pdf_page: 0,
+        icon_path: String::new(),
+        caption: String::new(),
+        caption_size: 0,
+        show_image: false,
+        copy_image: false,
+        image: String::new(),
+        tags: Vec::new(),
+        notes: String::new(),
+        variants: Vec::new(),
+        rotate_mode: String::new(),
+        favorite: false,
+        secret: false,
+    };
+    assert_eq!(append_imported_prompts(&mut store, vec![item]), 1);
+    assert_eq!(store.prompts[0].name, crate::md_sync::sync_clean_name("  Work  Pack "));
+    assert_eq!(store.prompts[0].name, store.prompts[0].name.trim());
+}

@@ -981,7 +981,8 @@ pub(crate) fn lenient_import_note(raw: &str) -> String {
 }
 
 // Clears every network path an imported row carries; the row itself stays.
-// Returns how many links were cut, so an import can tell the user.
+// Returns how many links were cut: a backup import reports that count; the prompt-file imports
+// (JSON, CSV, text) cut the links without a notice.
 pub(crate) fn clear_network_paths(p: &mut Prompt) -> usize {
     let mut n = 0;
     for f in [&mut p.file_path, &mut p.icon_path, &mut p.image] {
@@ -1031,7 +1032,9 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
-            name: item.name,
+            // Trimmed and one line, as on every in-app save, so a later sync round trip finds
+            // the name its file carries.
+            name: crate::md_sync::sync_clean_name(&item.name),
             text: item.text,
             // A colour from a file is held to the same #rrggbb-or-empty rule as an editor save,
             // or every later edit of the prompt would be refused.
