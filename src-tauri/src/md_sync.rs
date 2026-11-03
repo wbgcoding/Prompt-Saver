@@ -24,13 +24,13 @@ pub(crate) const SYNC_POLL_SECS: u64 = 5;
 // is alive, so a slow write by a running instance is never stolen, and a crashed
 // instance's lock is picked up as soon as the age passes.
 pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
-/// A lock written by another computer is judged by time alone, and given longer: its clock and
-/// the folder's sharing delay can disagree with ours by a good deal.
 /// How often a failed background write is tried again before it waits for the next save.
 pub(crate) const SYNC_WRITE_RETRIES: u32 = 3;
 /// How long a queued write waits for the first read of the folder (SyncState.booting) before it
 /// counts its refusals as failures like any other.
 pub(crate) const SYNC_BOOT_WAIT_SECS: u64 = 120;
+/// A lock written by another computer is judged by time alone, and given longer: its clock and
+/// the folder's sharing delay can disagree with ours by a good deal.
 pub(crate) const SYNC_LOCK_FOREIGN_STALE_SECS: u64 = 60;
 
 // After this many consecutive failed rounds (unreachable folder, unmounted share) the poll
@@ -115,8 +115,6 @@ pub(crate) fn sync_eligible(p: &Prompt) -> bool {
     sync_safe_id(&p.id) && !p.secret
 }
 
-// Refused rather than escaped: the id is also how the inbound half finds the prompt again,
-// so a rewritten name would orphan the file.
 // A synced prompt is typed text; 8 MB is far past any real one. A bigger file in the sync
 // folder is not ours and is skipped instead of being read every cycle.
 pub(crate) const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
@@ -141,6 +139,8 @@ pub(crate) fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
     Some(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
 }
 
+// Refused rather than escaped: the id is also how the inbound half finds the prompt again,
+// so a rewritten name would orphan the file.
 pub(crate) fn sync_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
