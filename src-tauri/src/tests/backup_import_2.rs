@@ -790,6 +790,13 @@ fn daily_copies_are_zero_filled_and_bucketed() {
 }
 
 #[test]
+fn daily_copies_with_zero_days_is_empty() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
+    assert!(db_daily_copies(&conn, 0).is_empty());
+}
+
+#[test]
 fn grouped_journal_row_id_and_timestamp_come_from_the_same_copy() {
     // A clock that went backwards (or timestamps switched off mid-run) makes
     // the newest row by rowid NOT the newest by ts. Picking both with separate
