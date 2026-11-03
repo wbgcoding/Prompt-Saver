@@ -156,10 +156,19 @@ fn a_failed_replacing_import_does_not_teach_the_map_about_unread_rows() {
 fn history_snapshots_of_a_confidential_entry_open_with_the_key_and_plain_ones_pass_through() {
     let key = [7u8; 32];
     let sealed = secret_encrypt("the real text", &key);
-    assert_eq!(reveal_if_sealed(&sealed, &key), "the real text");
-    assert_eq!(reveal_if_sealed("written before it was confidential", &key), "written before it was confidential");
-    // A different key opens nothing: the value comes back untouched, never as garbage text.
-    assert_eq!(reveal_if_sealed(&sealed, &[9u8; 32]), sealed);
+    assert_eq!(reveal_if_sealed(&sealed, &key), Ok("the real text".to_string()));
+    assert_eq!(reveal_if_sealed("written before it was confidential", &key), Ok("written before it was confidential".to_string()));
+    // A different key opens nothing: an error, never the ciphertext presented as text.
+    assert_eq!(reveal_if_sealed(&sealed, &[9u8; 32]), Err("secret-wrong-key".to_string()));
+}
+
+#[test]
+fn a_snapshot_sealed_under_another_key_is_refused_and_never_sealed_again() {
+    let (mine, other) = ([7u8; 32], [9u8; 32]);
+    let foreign = secret_encrypt("their text", &other);
+    assert_eq!(open_snapshot(&foreign, &[], Some(mine)), Err("secret-wrong-key".to_string()));
+    assert_eq!(open_snapshot("plain", &[foreign.clone()], Some(mine)), Err("secret-wrong-key".to_string()));
+    assert_eq!(secret_encrypt_if_plain(&foreign, &mine), foreign, "left exactly as stored");
 }
 
 #[test]

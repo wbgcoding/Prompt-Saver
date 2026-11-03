@@ -1467,11 +1467,21 @@ pub(crate) async fn list_versions(app: AppHandle, state: State<'_, Db>, prompt_i
     if secret && key.is_none() {
         return Err("secret-locked".to_string());
     }
-    let mut list = db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default();
-    for v in list.iter_mut() {
-        (v.text, v.variants) = open_snapshot(&v.text, &v.variants, key)?;
+    let list = db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default();
+    let mut opened = Vec::with_capacity(list.len());
+    for mut v in list {
+        match open_snapshot(&v.text, &v.variants, key) {
+            Ok((text, variants)) => {
+                (v.text, v.variants) = (text, variants);
+                opened.push(v);
+            }
+            // A snapshot sealed under another vault's key cannot be shown; it must not take the
+            // whole history down with it.
+            Err(e) if e == "secret-wrong-key" => {}
+            Err(e) => return Err(e),
+        }
     }
-    Ok(list)
+    Ok(opened)
 }
 
 // The library's "last edited" sort mode. A prompt missing from the map has
@@ -1559,8 +1569,10 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
             // ciphertext, the copy handed back is opened with the same key.
             if p.secret {
                 if let Some(key) = secret_key {
-                    clone.text = reveal_if_sealed(&clone.text, &key);
-                    clone.variants = clone.variants.iter().map(|v| reveal_if_sealed(v, &key)).collect();
+                    // Both values were sealed with this key a moment ago, so they open; the
+                    // fallback only keeps the type honest.
+                    clone.text = reveal_if_sealed(&clone.text, &key).unwrap_or_else(|_| clone.text.clone());
+                    clone.variants = clone.variants.iter().map(|v| reveal_if_sealed(v, &key).unwrap_or_else(|_| v.clone())).collect();
                 }
             }
             // A failed save rolls the live entry back, as in update_prompt, or the UI shows a restored

@@ -278,11 +278,14 @@ pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(S
 
 // A stored value read back for display or editing: sealed text is opened with the key,
 // anything else (a snapshot from before the entry became confidential, or plain text) is
-// returned as is. The inverse of secret_encrypt_if_plain.
-pub(crate) fn reveal_if_sealed(value: &str, key: &[u8; 32]) -> String {
+// returned as is. The inverse of secret_encrypt_if_plain. A value that has the sealed shape
+// but does not open with this key (it was sealed under another vault's key) is an error, never
+// text: it would otherwise be shown, restored or sealed a second time as ciphertext.
+pub(crate) fn reveal_if_sealed(value: &str, key: &[u8; 32]) -> Result<String, String> {
     match secret_decrypt(value, key) {
-        Ok(plain) => upgrade_placeholders(&plain),
-        Err(_) => value.to_string(),
+        Ok(plain) => Ok(upgrade_placeholders(&plain)),
+        Err(_) if looks_sealed(value) => Err("secret-wrong-key".to_string()),
+        Err(_) => Ok(value.to_string()),
     }
 }
 
@@ -300,7 +303,7 @@ pub(crate) fn looks_sealed(value: &str) -> bool {
 // snapshot passes through.
 pub(crate) fn open_snapshot(text: &str, variants: &[String], key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
     match key {
-        Some(k) => Ok((reveal_if_sealed(text, &k), variants.iter().map(|v| reveal_if_sealed(v, &k)).collect())),
+        Some(k) => Ok((reveal_if_sealed(text, &k)?, variants.iter().map(|v| reveal_if_sealed(v, &k)).collect::<Result<_, _>>()?)),
         None if looks_sealed(text) || variants.iter().any(|v| looks_sealed(v)) => Err("secret-locked".to_string()),
         None => Ok((text.to_string(), variants.to_vec())),
     }
@@ -311,7 +314,9 @@ pub(crate) fn open_snapshot(text: &str, variants: &[String], key: Option<[u8; 32
 // an entry that is confidential now: it keeps an already-encrypted value as is and encrypts a
 // plain one, so nothing lands on disk unencrypted under a confidential entry.
 pub(crate) fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
-    if secret_decrypt(value, key).is_ok() {
+    // Anything with the sealed shape stays as it is, also when this key cannot open it:
+    // sealing it again would bury it under a second layer nobody could read back.
+    if looks_sealed(value) {
         value.to_string()
     } else {
         secret_encrypt(value, key)
