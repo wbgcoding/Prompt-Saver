@@ -1557,7 +1557,9 @@ fn multi_a_lock_of_this_process_that_it_failed_to_remove_does_not_block_the_file
     let lock = sync_lock_path(&md);
     // The release could not remove the file and forgot the lock all the same.
     let text = fs::read_to_string(&lock).unwrap();
-    sync_state().locks.lock().unwrap().clear();
+    // Only this lock's entry: clearing the whole table would also drop locks that tests running
+    // in parallel hold, which then read as stale.
+    sync_state().locks.lock().unwrap().retain(|_, t| *t != text);
     assert!(lock.exists());
     assert!(!sync_lock_is_stale(&lock), "a young lock is left for the stale age");
     age_file(&lock, SYNC_LOCK_STALE_SECS + 5);
