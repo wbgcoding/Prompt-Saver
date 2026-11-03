@@ -64,6 +64,17 @@ pub(crate) struct BackupInfo {
     pub(crate) items: Vec<BackupPrompt>,
 }
 
+// Where an unpacked copy of a snapshot goes while it is read: beside it, unless the data folder
+// is one this instance may not write to (another machine owns it), then the local temp folder,
+// so a read-only view never leaves a file in a folder that is not ours.
+pub(crate) fn unpack_dir(home: &std::path::Path, blocked: bool) -> PathBuf {
+    if blocked {
+        std::env::temp_dir()
+    } else {
+        home.to_path_buf()
+    }
+}
+
 pub(crate) const BACKUP_COUNT_FILE: &str = "prompts.count";
 pub(crate) const BACKUP_NAMES_FILE: &str = "prompts.names.json";
 // The app version that made a snapshot; missing for one made before this note existed, read
@@ -82,7 +93,7 @@ pub(crate) fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
     let db = backup_db_file(folder)?;
     // A name of its own per call: two lists running at once must not truncate or remove each
     // other's unpacked copy.
-    let tmp = folder.join(format!("count.tmp-{}", gen_id()));
+    let tmp = unpack_dir(folder, data_dir_write_blocked_quiet()).join(format!("count.tmp-{}", gen_id()));
     let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
         if gunzip_to(&db, &tmp).is_err() {
             let _ = fs::remove_file(&tmp);
@@ -158,7 +169,7 @@ pub(crate) fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt>
         return items;
     }
     let Some(db) = backup_db_file(folder) else { return Vec::new() };
-    let tmp = folder.join(format!("names.tmp-{}", gen_id()));
+    let tmp = unpack_dir(folder, data_dir_write_blocked_quiet()).join(format!("names.tmp-{}", gen_id()));
     let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
         if gunzip_to(&db, &tmp).is_err() {
             let _ = fs::remove_file(&tmp);
@@ -1016,7 +1027,7 @@ pub(crate) async fn backup_contents(app: AppHandle, name: String) -> Result<Back
     let Some(backup_db) = backup_db_file(&folder) else {
         return Err("missing".into());
     };
-    let dir = data_dir(&app);
+    let dir = unpack_dir(&data_dir(&app), data_dir_write_blocked_quiet());
     // Off the async runtime: inflating the snapshot (up to its size cap) blocks.
     tauri::async_runtime::spawn_blocking(move || {
         let staged = stage_and_validate_backup(&backup_db, &dir)?;
