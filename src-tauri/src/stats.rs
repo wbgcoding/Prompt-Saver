@@ -603,9 +603,7 @@ pub(crate) async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, forc
         }
 
         let total_bytes = items.iter().map(|i| i.bytes).sum();
-        let fresh = StorageBreakdown { items, total_bytes, measured_at: now_secs() };
-        *STORAGE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
-        fresh
+        StorageBreakdown { items, total_bytes, measured_at: now_secs() }
     })
     .await
     .map_err(|e| e.to_string())?;
