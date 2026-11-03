@@ -458,6 +458,21 @@ pub(super) fn commit(p: &Prompt, settings: &mut Settings, delay: &SettingsDelay)
 }
 
 #[test]
+fn restoring_copy_history_keeps_a_copy_made_after_the_clear() {
+    let mut settings = Settings::default();
+    // After the clear: one new copy of "a" at 500.
+    settings.usage.insert("a".into(), 1);
+    settings.last_used.insert("a".into(), 500);
+    let usage = HashMap::from([("a".to_string(), 4u32), ("b".to_string(), 2)]);
+    let last_used = HashMap::from([("a".to_string(), 300u64), ("b".to_string(), 90)]);
+    merge_restored_counters(&mut settings, usage, last_used);
+    assert_eq!(settings.usage.get("a"), Some(&5));
+    assert_eq!(settings.usage.get("b"), Some(&2));
+    assert_eq!(settings.last_used.get("a"), Some(&500), "the newer stamp stays");
+    assert_eq!(settings.last_used.get("b"), Some(&90));
+}
+
+#[test]
 fn a_commit_with_a_stale_peek_index_does_not_skip_an_entry() {
     let mut p = sample_prompts().remove(0);
     p.variants = vec!["b".into(), "c".into()]; // total = 3
