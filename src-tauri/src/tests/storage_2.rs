@@ -227,6 +227,15 @@ fn backup_is_due_stays_false_right_after_a_backup_just_ran() {
 }
 
 #[test]
+fn backup_weeks_run_monday_to_sunday() {
+    let week = |d: &str| backup_date_keys(&format!("{d}_02-00-00")).unwrap().1;
+    // 2026-07-20 is a Monday, 2026-07-26 the Sunday after it.
+    assert_eq!(week("2026-07-20"), week("2026-07-26"));
+    assert_ne!(week("2026-07-19"), week("2026-07-20"), "Sunday ends the previous week");
+    assert_ne!(week("2026-07-26"), week("2026-07-27"));
+}
+
+#[test]
 fn retention_keeps_the_right_backups_and_never_all_of_them() {
     let names: Vec<String> = [
         "2024-03-01_02-00-00", // older year
