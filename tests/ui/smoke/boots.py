@@ -1627,7 +1627,7 @@ window.__EDITOR_DRAFT_FIXTURE__ = {
       const loadCalls = calls().filter((c) => c === 'load_editor_draft').length;
       if (loadCalls !== 1) errs.push('443: load_editor_draft was called ' + loadCalls + ' times at boot, expected exactly once');
 
-      document.getElementById('confirm-cancel').click(); // decline the restore
+      document.getElementById('confirm-alt').click(); // Discard: the explicit decline (a plain dismiss keeps the draft)
       await sleep(200);
       if (!cm.classList.contains('hidden')) errs.push('443: declining the recovery question left it open');
       if (!calls().includes('discard_editor_draft')) errs.push('443: declining the recovery question never discarded the draft');

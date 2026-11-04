@@ -617,7 +617,8 @@ FOLDER_PROBE = """
       const ring = getComputedStyle(document.getElementById('resize')).getPropertyValue('--rz').trim();
       if (!ring || parseFloat(ring) < 8) errs.push('the resize ring has no usable thickness: ' + ring);
       const before = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();
-      grip.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, screenX: 100, screenY: 100 }));
+      // Pressed on the bottom-right part of the ring: dragging outward from there grows the folder.
+      grip.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, screenX: 100, screenY: 100, clientX: window.innerWidth - 2, clientY: window.innerHeight - 2 }));
       window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, screenX: 148, screenY: 148 }));
       await sleep(60);
       const during = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();

@@ -656,7 +656,7 @@ section(() => {
 
 section(() => {
   const src = read("recordingTools.js");
-  const code = extractBlock(src, "export async function openVideoCleanup(").replace("export ", "");
+  const code = extractBlock(src, "async function openVideoCleanupRun(");
   const listeners = {};
   const mkEl = (id) => {
     const e = { id, value: "30", textContent: "", disabled: false, checked: false, children: [] };
@@ -683,7 +683,7 @@ section(() => {
     refreshVideoFolderInfo() {}, document: { createElement: () => mkEl("x") }, Number, String,
   };
   vm.createContext(sb);
-  vm.runInContext(code + String.fromCharCode(10) + "this.run = openVideoCleanup;", sb);
+  vm.runInContext(code + String.fromCharCode(10) + "this.run = openVideoCleanupRun;", sb);
   later(async () => {
     const done = sb.run("C:/rec");
     await new Promise((r) => setTimeout(r, 20));
