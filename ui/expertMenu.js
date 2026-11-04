@@ -789,6 +789,32 @@ export function dropdownRow(key) {
 // The reason line under recQuality/recFormat: the GIF format's fixed 30s cap (always shown)
 // and, when ffmpeg is missing, why the picked step/format cannot be produced plus an inline
 // offer to fetch it, on the control itself and not only in the help.
+// The ffmpeg download writes its progress into a button, but every expert-menu redraw replaces
+// the buttons. Progress therefore goes through this stand-in, which keeps the last label and
+// mirrors it onto every live download button; a freshly built button picks it up through
+// adoptFfmpegButton, so the progress and the cancel click survive a redraw.
+const ffmpegBtn = { text: "", title: "", attrs: new Map(), live: new Set() };
+function eachLiveFfmpegBtn(fn) {
+  for (const b of ffmpegBtn.live) {
+    if (b.isConnected) fn(b); else ffmpegBtn.live.delete(b);
+  }
+}
+const ffmpegBtnProxy = {
+  get textContent() { return ffmpegBtn.text; },
+  set textContent(v) { ffmpegBtn.text = v; eachLiveFfmpegBtn((b) => { b.textContent = v; }); },
+  get title() { return ffmpegBtn.title; },
+  set title(v) { ffmpegBtn.title = v; eachLiveFfmpegBtn((b) => { b.title = v; }); },
+  setAttribute(k, v) { ffmpegBtn.attrs.set(k, v); eachLiveFfmpegBtn((b) => b.setAttribute(k, v)); },
+  removeAttribute(k) { ffmpegBtn.attrs.delete(k); eachLiveFfmpegBtn((b) => b.removeAttribute(k)); },
+};
+function adoptFfmpegButton(btn) {
+  if (!ffmpegDownloadActive()) return;
+  ffmpegBtn.live.add(btn);
+  btn.textContent = ffmpegBtn.text;
+  btn.title = ffmpegBtn.title;
+  for (const [k, v] of ffmpegBtn.attrs) btn.setAttribute(k, v);
+}
+
 export function recFfmpegHintEl(key, sel) {
   const hint = document.createElement("div");
   hint.className = "expert-row-hint";
@@ -807,7 +833,9 @@ export function recFfmpegHintEl(key, sel) {
       btn.type = "button";
       btn.className = "ghost-btn expert-row-hint-btn";
       btn.textContent = t("ffmpegOfferConfirm");
+      btn.dataset.action = "ffmpeg-download";
       btn.addEventListener("click", () => EXPERT_ACTIONS["ffmpeg-download"]?.(btn));
+      adoptFfmpegButton(btn);
       hint.appendChild(btn);
     }
   };
@@ -1050,7 +1078,7 @@ export const EXPERT_PATHS = {
       await applySyncDir(dir);
     },
     // Back to the default folder is a folder change like any other, same question.
-    onReset: () => { applySyncDir(""); },
+    onReset: () => applySyncDir(""),
   },
   // Target for the recording result window's plain "Save"/"Copy". The raw capture stays in
   // <data>/recordings until one of those moves it here (or the window closes unsaved and it is deleted).
@@ -1829,6 +1857,7 @@ export function renderExpert() {
     box.appendChild(empty);
   }
   if (!stack.firstChild) stack.remove();
+  for (const b of box.querySelectorAll('button[data-action="ffmpeg-download"]')) adoptFfmpegButton(b);
   box.scrollTop = keepScroll;
 }
 
@@ -1896,7 +1925,9 @@ export async function resetExpertGroup(group, changed, count) {
     if (cfg.def === undefined) continue;
     await cfg.set(cfg.def);
   }
-  for (const key of changed.paths) EXPERT_PATHS[key].onReset?.();
+  // One at a time: a path reset may ask a question (the old sync folder), which must be answered
+  // before the done toast claims the category is back to its defaults.
+  for (const key of changed.paths) await EXPERT_PATHS[key].onReset?.();
   if (changed.palette) await savePalette(null); // does its own remap + refresh
   // Batched once for the whole category instead of per key: same reasoning as
   // onResetExpert()'s own full-reset refresh below.
@@ -2002,37 +2033,60 @@ export function bindExpertMenu() {
   // the user clicks the expert menu's action. Any video feature that shells out to ffmpeg should
   // call the same three commands (ffmpeg_status / download_ffmpeg / cancel_ffmpeg_download)
   // where it first finds ffmpeg missing.
-  const ffmpegRun = (btn) => runFfmpegDownload(btn, {
-    t,
-    onDone: () => {
-      ffmpegAvailable = true;
-      toast(t("ffmpegDownloadDone"));
-      renderExpert();
-    },
-    onError: errToast,
-  });
+  const ffmpegRun = (btn) => {
+    if (!ffmpegDownloadActive()) {
+      ffmpegBtn.text = btn.textContent;
+      ffmpegBtn.title = btn.title;
+      ffmpegBtn.attrs.clear();
+      ffmpegBtn.live = new Set([btn]);
+    }
+    const run = runFfmpegDownload(ffmpegBtnProxy, {
+      t,
+      onDone: () => {
+        ffmpegAvailable = true;
+        toast(t("ffmpegDownloadDone"));
+        renderExpert();
+      },
+      onError: errToast,
+    // Every live button got the clicked one's idle label back: redraw so each shows its own.
+    }).finally(() => { if (!ffmpegDownloadActive()) renderExpert(); });
+    // The clicked button may be gone already (a redraw during the consent question): redraw so a
+    // live one carries the progress.
+    if (!btn.isConnected) renderExpert();
+    return run;
+  };
+  // Set across the status and consent awaits, so a double click cannot queue a second offer.
+  let ffmpegOffering = false;
   EXPERT_ACTIONS["ffmpeg-download"] = async (btn) => {
     if (ffmpegDownloadActive()) {
       ffmpegRun(btn); // a click on the running download cancels it
       return;
     }
-    const found = await invoke("ffmpeg_status").catch(() => null);
-    ffmpegAvailable = !!found;
-    if (found) {
-      toast(t("ffmpegFoundMsg").replace("{path}", () => found));
-      renderExpert();
-      return;
+    if (ffmpegOffering) return;
+    ffmpegOffering = true;
+    try {
+      const found = await invoke("ffmpeg_status").catch(() => null);
+      ffmpegAvailable = !!found;
+      if (found) {
+        toast(t("ffmpegFoundMsg").replace("{path}", () => found));
+        renderExpert();
+        return;
+      }
+      const ok = await confirmDialog({
+        title: t("ffmpegOfferTitle"),
+        message: t("ffmpegOfferMsg"),
+        confirmLabel: t("ffmpegOfferConfirm"),
+        cancelLabel: t("cancel"),
+        danger: false,
+      });
+      if (!ok) return;
+      // The backend starts the download only after this recorded consent.
+      await invoke("grant_ffmpeg_download_consent").catch(() => {});
+      // The offer is over once the download runs: from here a click means cancel.
+      ffmpegOffering = false;
+      await ffmpegRun(btn);
+    } finally {
+      ffmpegOffering = false;
     }
-    const ok = await confirmDialog({
-      title: t("ffmpegOfferTitle"),
-      message: t("ffmpegOfferMsg"),
-      confirmLabel: t("ffmpegOfferConfirm"),
-      cancelLabel: t("cancel"),
-      danger: false,
-    });
-    if (!ok) return;
-    // The backend starts the download only after this recorded consent.
-    await invoke("grant_ffmpeg_download_consent").catch(() => {});
-    await ffmpegRun(btn);
   };
 }

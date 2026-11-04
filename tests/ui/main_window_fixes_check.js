@@ -1326,6 +1326,34 @@ section(() => {
   check(/doBatch\("delete", \{\}, ids\)/.test(lib) && /doGridBatch\("delete", \{\}, ids\)/.test(lib), "both delete buttons pass the captured ids");
 });
 
+// 74. The ffmpeg download progress survives an expert-menu redraw: a rebuilt button adopts the
+// running label, and the old (detached) one no longer receives writes.
+section(() => {
+  const em = read("expertMenu.js");
+  const a = em.indexOf("const ffmpegBtn = {");
+  const b = em.indexOf("export function recFfmpegHintEl");
+  check(a > 0 && b > a, "the progress stand-in is in expertMenu.js");
+  let active = false;
+  const sb = run(em.slice(a, b) + "\nthis.p = ffmpegBtnProxy; this.st = ffmpegBtn; this.adopt = adoptFfmpegButton;", { Map, Set, ffmpegDownloadActive: () => active });
+  const mkBtn = () => { const attrs = {}; return { isConnected: true, textContent: "Download", title: "", attrs, setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } }; };
+  const one = mkBtn();
+  sb.st.live = new Set([one]);
+  active = true;
+  sb.p.textContent = "Downloading 40%";
+  sb.p.setAttribute("aria-valuenow", "40");
+  check(one.textContent === "Downloading 40%" && one.attrs["aria-valuenow"] === "40", "progress lands on the live button");
+  one.isConnected = false;
+  const two = mkBtn();
+  sb.adopt(two);
+  check(two.textContent === "Downloading 40%" && two.attrs["aria-valuenow"] === "40", "a rebuilt button adopts the running progress");
+  sb.p.textContent = "Downloading 50%";
+  check(two.textContent === "Downloading 50%" && one.textContent === "Downloading 40%", "later progress goes to the live button only");
+  active = false;
+  const three = mkBtn();
+  sb.adopt(three);
+  check(three.textContent === "Download", "an idle redraw leaves the button alone");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
