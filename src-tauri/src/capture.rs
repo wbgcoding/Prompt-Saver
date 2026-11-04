@@ -119,15 +119,15 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
 // A crop smaller than this (either side) is upscaled before recognition.
 pub(crate) const OCR_UPSCALE_UNDER_PX: u32 = 300;
 
-pub(crate) fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
+pub(crate) fn ocr_settings_from(app: &AppHandle) -> (bool, String) {
     app.try_state::<Db>()
         .map(|s| {
             let g = s.lock().unwrap_or_else(|e| e.into_inner());
             let join = g.settings.ui_flags.get("ocrJoinLines").copied().unwrap_or(true);
             let lang = g.settings.ui_texts.get("ocrLang").cloned().unwrap_or_else(|| "auto".to_string());
-            (OCR_UPSCALE_UNDER_PX, join, lang, true)
+            (join, lang)
         })
-        .unwrap_or((OCR_UPSCALE_UNDER_PX, true, "auto".to_string(), true))
+        .unwrap_or((true, "auto".to_string()))
 }
 
 // The OCR counterpart to finalize_capture, used when set_snip_mode armed the session. A failed
@@ -141,10 +141,10 @@ pub(crate) async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, Snip
     if !snip_session_current(gen) {
         return Err("cancelled".to_string());
     }
-    let (upscale, join, lang, auto_pick) = ocr_settings_from(app);
+    let (join, lang) = ocr_settings_from(app);
     #[cfg(windows)]
     {
-        let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale, join, &lang, auto_pick))
+        let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, OCR_UPSCALE_UNDER_PX, join, &lang, true))
             .await
             .map_err(|e| e.to_string())??;
         if !snip_session_current(gen) {
@@ -171,20 +171,6 @@ pub(crate) fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, heig
         return None;
     }
     Some(image::imageops::crop_imm(img, x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32).to_image())
-}
-
-// Index of the monitor (x, y, width, height in global physical pixels) holding the
-// centre of the window rect; 0 when none does, so a window half off every screen
-// still crops against the primary capture as before.
-pub(crate) fn monitor_index_for_rect(monitors: &[(i32, i32, u32, u32)], wx: i32, wy: i32, ww: i32, wh: i32) -> usize {
-    let cx = wx as i64 + ww as i64 / 2;
-    let cy = wy as i64 + wh as i64 / 2;
-    monitors
-        .iter()
-        .position(|&(mx, my, mw, mh)| {
-            cx >= mx as i64 && cx < mx as i64 + mw as i64 && cy >= my as i64 && cy < my as i64 + mh as i64
-        })
-        .unwrap_or(0)
 }
 
 // Crop the frozen monitor capture at a physical-pixel rect.
@@ -308,6 +294,59 @@ pub(crate) fn occluders_above(id: u32, tx: i32, ty: i32, tw: i32, th: i32) -> Ve
     out
 }
 
+// A window's placement as GetWindowPlacement reports it.
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub(crate) struct WindowPlacementRaw {
+    length: u32,
+    flags: u32,
+    show_cmd: u32,
+    min_x: i32,
+    min_y: i32,
+    max_x: i32,
+    max_y: i32,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+#[cfg(windows)]
+pub(crate) fn window_placement(hwnd: isize) -> Option<WindowPlacementRaw> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowPlacement(hwnd: isize, wp: *mut WindowPlacementRaw) -> i32;
+    }
+    let mut wp = WindowPlacementRaw { length: std::mem::size_of::<WindowPlacementRaw>() as u32, ..Default::default() };
+    (unsafe { GetWindowPlacement(hwnd, &mut wp) } != 0).then_some(wp)
+}
+
+// How to bring a window back that was minimized out of `saved_show_cmd`: a maximized one goes
+// back to maximized (SW_SHOWMAXIMIZED), everything else is shown without taking focus.
+pub(crate) fn restore_show_cmd(saved_show_cmd: u32) -> u32 {
+    const SW_SHOWMAXIMIZED: u32 = 3;
+    const SW_SHOWNOACTIVATE: u32 = 4;
+    if saved_show_cmd == SW_SHOWMAXIMIZED { SW_SHOWMAXIMIZED } else { SW_SHOWNOACTIVATE }
+}
+
+// Puts a window back as it was before it was minimized for a capture. Plain ShowWindow would
+// restore a formerly maximized window to its normal rect and change the user's layout.
+#[cfg(windows)]
+pub(crate) fn restore_window_placement(hwnd: isize, saved: Option<WindowPlacementRaw>) {
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetWindowPlacement(hwnd: isize, wp: *const WindowPlacementRaw) -> i32;
+    }
+    if let Some(mut wp) = saved {
+        wp.show_cmd = restore_show_cmd(wp.show_cmd);
+        if unsafe { SetWindowPlacement(hwnd, &wp) } != 0 {
+            return;
+        }
+    }
+    show_window(hwnd, 4);
+}
+
 #[cfg(windows)]
 pub(crate) fn show_window(hwnd: isize, cmd: i32) {
     #[link(name = "user32")]
@@ -394,13 +433,9 @@ pub(crate) async fn capture_window(
         Some(r) => r,
         None => return Err("blocked".to_string()),
     };
-    // The frozen monitor the window sits on (by its centre), with that monitor's origin.
-    let (mon_idx, origin) = {
-        let g = state.0.lock().unwrap_or_else(|e| e.into_inner());
-        let rects: Vec<(i32, i32, u32, u32)> = g.iter().map(|c| (c.x, c.y, c.width, c.height)).collect();
-        let idx = monitor_index_for_rect(&rects, wx, wy, ww, wh);
-        (idx, g.get(idx).map(|c| (c.x, c.y)))
-    };
+    // The session holds one stitched capture of the whole virtual desktop (index 0) and its origin.
+    let mon_idx = 0;
+    let origin = state.0.lock().unwrap_or_else(|e| e.into_inner()).first().map(|c| (c.x, c.y));
 
     #[cfg(windows)]
     {
@@ -419,11 +454,11 @@ pub(crate) async fn capture_window(
 
         // 3. Workaround: minimize the covering windows, grab the cleared area live.
         const SW_SHOWMINNOACTIVE: i32 = 7;
-        const SW_SHOWNOACTIVATE: i32 = 4;
         if !snip_session_current(gen) {
             return Err("cancelled".to_string());
         }
         set_snip_overlay_hidden(&app, true);
+        let saved: Vec<Option<WindowPlacementRaw>> = occ.iter().map(|&o| window_placement(o)).collect();
         for &o in &occ {
             show_window(o, SW_SHOWMINNOACTIVE);
         }
@@ -431,8 +466,8 @@ pub(crate) async fn capture_window(
         // desktop recompose before grabbing.
         tokio::time::sleep(std::time::Duration::from_millis(if occ.is_empty() { 40 } else { 280 })).await;
         let grab = capture_screen_rect(wx, wy, ww, wh);
-        for &o in occ.iter().rev() {
-            show_window(o, SW_SHOWNOACTIVATE);
+        for (&o, p) in occ.iter().zip(saved).rev() {
+            restore_window_placement(o, p);
         }
         match grab {
             Some(im) if !capture_is_blank(&im) => {

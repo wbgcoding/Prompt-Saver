@@ -321,13 +321,10 @@ macro_rules! source {
 }
 
 #[test]
-fn window_capture_picks_the_monitor_under_its_centre() {
-    let mons = [(0, 0, 1920u32, 1080u32), (1920, 0, 1920, 1080), (-1280, 100, 1280, 1024)];
-    assert_eq!(monitor_index_for_rect(&mons, 100, 100, 800, 600), 0);
-    assert_eq!(monitor_index_for_rect(&mons, 2500, 200, 800, 600), 1);
-    assert_eq!(monitor_index_for_rect(&mons, -1000, 300, 600, 400), 2);
-    // A window nowhere near any screen keeps the primary capture.
-    assert_eq!(monitor_index_for_rect(&mons, 9000, 9000, 100, 100), 0);
+fn a_minimized_occluder_comes_back_maximized_only_when_it_was() {
+    assert_eq!(restore_show_cmd(3), 3);
+    assert_eq!(restore_show_cmd(1), 4);
+    assert_eq!(restore_show_cmd(2), 4);
 }
 
 // Structural fix (the overlay window cannot be built without a running app), so the check
