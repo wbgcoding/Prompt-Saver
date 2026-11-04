@@ -120,7 +120,7 @@ function safeTerms(v, field) {
   for (const lang of Object.keys(forms).sort()) {
     if (!/^[a-z]{2}$/.test(lang)) fail(`${field}.forms: "${lang}" is not a language code`);
     const map = forms[lang];
-    if (typeof map !== "object" || Array.isArray(map)) fail(`${field}.forms.${lang}: must be an object`);
+    if (typeof map !== "object" || map === null || Array.isArray(map)) fail(`${field}.forms.${lang}: must be an object`);
     const pairs = {};
     for (const from of Object.keys(map).sort((a, b) => b.length - a.length)) {
       pairs[word(from, `${field}.forms.${lang} key`)] = word(map[from], `${field}.forms.${lang}.${from}`);
