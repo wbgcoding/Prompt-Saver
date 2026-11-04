@@ -927,6 +927,14 @@ Section EarlyChecks
   ; Abort silent installer if downgrades is disabled
   !if "${ALLOWDOWNGRADES}" == "false"
   ${If} ${Silent}
+    ; The reinstall page never runs silently, so the installed version is compared here.
+    ReadRegStr $R0 SHCTX "${UNINSTKEY}" "DisplayVersion"
+    ${If} $R0 != ""
+      nsis_tauri_utils::SemverCompare "${VERSION}" $R0
+      Pop $R0
+    ${Else}
+      StrCpy $R0 0
+    ${EndIf}
     ; If downgrading
     ${If} $R0 = -1
       System::Call 'kernel32::AttachConsole(i -1)i.r0'
