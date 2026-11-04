@@ -1715,7 +1715,8 @@ $("ve-still").addEventListener("click", async () => {
     toast(errMessageLogged(err, t, "video"));
   } finally {
     // An export in progress keeps the button off on its own, so only a free editor re-enables it.
-    $("ve-still").disabled = !!VE.exporting;
+    // A missing ffmpeg (just noted above) keeps it off as well.
+    $("ve-still").disabled = !!VE.exporting || !VE.ffmpeg;
   }
 });
 
