@@ -4,7 +4,7 @@ use super::*;
 
 // Repositions a folder pill the way a mouse drag does, for the folder window's arrow-key move
 // (folder.js), which has no native OS drag to hand off to. The Moved handler on the folder
-// window (build_folder_window) persists the new position, as it does for a drag.
+// window (open_folder_window) persists the new position, as it does for a drag.
 #[tauri::command]
 pub(crate) async fn set_folder_position(app: AppHandle, id: String, x: f64, y: f64, clamp: Option<bool>) -> Result<(), String> {
     if [x, y].iter().all(|v: &f64| v.is_finite()) {
