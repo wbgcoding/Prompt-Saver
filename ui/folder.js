@@ -53,6 +53,9 @@ let openReq = 0;
 // has nothing to close); the blur is remembered and applied once the box arrived.
 let opening = false;
 let blurredWhileOpening = false;
+// The popover element the newest openPopover() call is bringing up, so a call it superseded
+// can tell its own, already un-hidden element apart from the winner's.
+let pendingEl = null;
 // Empty until the settings arrive, like the pill: every label reaches the screen
 // through the compact strings (the item word also through their fork-brand
 // substitution), never through an English literal here.
@@ -263,10 +266,15 @@ async function openPopover(kind) {
   const el = kind === "menu" ? menuEl : popEl;
   if (kind === "grid") renderGrid();
   el.classList.remove("hidden");
+  pendingEl = el;
   opening = true;
   blurredWhileOpening = false;
   try {
-    if (!(await layout(kind, el, token))) return;
+    if (!(await layout(kind, el, token))) {
+      // Superseded: a stale element would stay display:block over the winner and eat clicks.
+      if (el !== pendingEl) el.classList.add("hidden");
+      return;
+    }
     open = kind;
     if (blurredWhileOpening) { blurredWhileOpening = false; await closePopover(true); return; }
     // Let the browser see the start state before the transition runs. Re-check the token: a

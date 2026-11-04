@@ -30,7 +30,7 @@ function fakeEl() {
   const calls = [];
   const el = fakeEl();
   const sb = {
-    open: null, seq: 0, openReq: 0, opening: false, blurredWhileOpening: false,
+    open: null, seq: 0, openReq: 0, opening: false, blurredWhileOpening: false, pendingEl: null,
     animMs: 0, folderId: "f1", POP_GAP: 4, state: { scale: 1 },
     menuEl: fakeEl(), popEl: el, memberMenu: fakeEl(), iconEl: fakeEl(),
     document: { body: { classList: { add() {}, remove() {} }, dataset: {} } },
@@ -56,6 +56,25 @@ function fakeEl() {
   await p;
   if (sb.open !== null) problems.push("popover stayed open after a blur during opening");
   if (!calls.includes("collapse_float_folder")) problems.push("window was not collapsed again");
+
+  // A second openPopover() of the other kind while the first waits for its box: the
+  // superseded call must hide its own, already shown element and leave the winner's alone.
+  sb.open = null; sb.opening = false; sb.blurredWhileOpening = false;
+  const releases = [];
+  sb.invoke = (cmd) => {
+    if (cmd === "expand_float_folder") return new Promise((r) => releases.push(() => r({ side: "r", icon_x: 0, icon_y: 0, pop_x: 0, pop_y: 0 })));
+    return Promise.resolve();
+  };
+  sb.popEl.classList.add("hidden"); sb.menuEl.classList.add("hidden");
+  const pGrid = sb.openPopover("grid");
+  await Promise.resolve(); await Promise.resolve();
+  const pMenu = sb.openPopover("menu");
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  releases.forEach((r) => r());
+  await Promise.all([pGrid, pMenu]);
+  if (!sb.popEl.classList.contains("hidden")) problems.push("a superseded popover stayed shown");
+  if (sb.menuEl.classList.contains("hidden")) problems.push("the winning popover was hidden");
+  if (sb.open !== "menu") problems.push("the newer popover did not open");
   for (const x of problems) console.log("FAIL", x);
   console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
   process.exit(problems.length ? 1 : 0);
