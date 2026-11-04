@@ -2,7 +2,7 @@
 //
 // The updater accepts an installer only when "<installer>.sig" holds a valid Ed25519
 // signature over the installer's SHA-256 digest, made with the private key whose public
-// half is built into the app (UPDATE_PUBLIC_KEY in src-tauri/src/update.rs). The private
+// half is built into the app (UPDATE_PUBLIC_KEY_B64 in src-tauri/src/update.rs). The private
 // key lives outside the repository and is never printed.
 //
 //   node tools/sign_update.js init            create the key pair once, print the public key
