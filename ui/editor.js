@@ -499,6 +499,9 @@ export async function onModalSecretToggle() {
     if (String(e) === "secret-locked") toast(t("secretWrongPassword")); else errToast(e);
     return;
   }
+  // The editor was closed (or switched to another entry) while the vault answered: the backend
+  // change stands, there is just no dialog left to update.
+  if (!modalState || modalState.id !== id) return;
   modalState.secret = next;
   updateSecretToggleUi(modalState.mode, next, modalState.copyImage, modalState.filePath);
   await renderGrid();
@@ -661,7 +664,7 @@ export function focusModalText() {
 // Word-level diff between two texts via a classic LCS backtrack, no dependency. O(n*m) on word
 // count, so a pathologically huge text falls back to plain text (DIFF_WORD_CAP) instead of
 // freezing the editor when the history panel opens.
-export const DIFF_WORD_CAP = 4000;
+export const DIFF_WORD_CAP = 2000;
 export function diffWords(oldText, newText) {
   const tokenize = (s) => (s || "").split(/(\s+)/).filter((t) => t !== "");
   const a = tokenize(oldText);
@@ -1402,8 +1405,11 @@ export async function confirmModal() {
       return;
     }
     // save-failed has no hotkey involved: route it through the same message the persist-failed
-    // event uses instead of hotkeyMessage's fallback of showing the raw error code.
-    toast(errStr === "save-failed" ? t("persistFailed") : hotkeyMessage(errStr)); // keep the modal open so nothing typed is lost
+    // event uses. Any other non-hotkey error goes through the shared mapper (errToast), not
+    // hotkeyMessage's "hotkey failed" fallback. The modal stays open so nothing typed is lost.
+    if (HOTKEY_ERRORS[errStr]) toast(hotkeyMessage(errStr));
+    else if (errStr === "save-failed") toast(t("persistFailed"));
+    else errToast(err);
     // A binding the backend refused was never stored, so the field must not keep
     // showing it: drop it and name the reason where it was captured.
     if (HOTKEY_ERRORS[errStr] && hotkey) {
