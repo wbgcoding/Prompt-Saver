@@ -190,7 +190,8 @@ export function bindAbout() {
   updateModal.skip.addEventListener("click", async () => {
     const v = updateInfo?.version;
     if (!v) return;
-    try { await invoke("skip_version", { version: v }); } catch (err) { errToast(err); }
+    // A refused save keeps the notice: it would come back on the next start anyway.
+    try { await invoke("skip_version", { version: v }); } catch (err) { errToast(err); return; }
     updateInfo = null;
     setStatusText(updateVersion, "versionInstalled", "v", appVersion);
     updateVersion.classList.remove("update-avail");

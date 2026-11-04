@@ -1520,6 +1520,35 @@ section(() => {
   });
 });
 
+// 84. A failed skip_version keeps the update notice.
+section(() => {
+  const src = read("about.js");
+  const i = src.indexOf("updateModal.skip.addEventListener(\"click\", async () => {");
+  check(i > 0, "the skip handler exists");
+  const j = src.indexOf("updateModal.cancel.addEventListener", i);
+  const handler = src.slice(i, j);
+  later(async () => {
+    const go = async (fail) => {
+      const seen = { toasts: 0, closed: 0, info: "set" };
+      let fn;
+      const ctx = {
+        updateInfo: { version: "9.9.9" },
+        updateModal: { skip: { addEventListener: (_e, f) => { fn = f; } } },
+        invoke: async () => { if (fail) throw "no"; }, errToast: () => { seen.toasts++; },
+        setStatusText() {}, updateVersion: { classList: { remove() {} } }, appVersion: "1",
+        closeUpdateModal: () => { seen.closed++; }, toast() {}, t: (k) => k,
+      };
+      const sb = run("let updateInfo = ctx.updateInfo; const updateModal = ctx.updateModal;\n" + handler + "\nglobalThis.info = () => updateInfo;", { ...ctx, ctx });
+      await fn();
+      return { ...seen, info: sb.info() };
+    };
+    const bad = await go(true);
+    check(bad.toasts === 1 && bad.closed === 0 && bad.info !== null, "a failed save shows the error and keeps the notice");
+    const good = await go(false);
+    check(good.closed === 1 && good.info === null, "a saved skip clears the notice");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
