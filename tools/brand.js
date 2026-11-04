@@ -321,6 +321,7 @@ function stampManifests(root, b, current) {
     `$1gh release create v%npm_package_version% \\"src-tauri/target/release/${b.slug}.exe\\" ` +
       `\\"dist/${b.displayName}_%npm_package_version%_x64-setup.exe\\" ` +
       `\\"dist/${b.displayName}_%npm_package_version%_x64-setup.exe.sha256\\" ` +
+      `\\"dist/${b.displayName}_%npm_package_version%_x64-setup.exe.sig\\" ` +
       `--title \\"${b.displayName} %npm_package_version%\\" --notes-file docs/release-notes.md$2`,
     "package.json release:publish"
   );
