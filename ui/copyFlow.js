@@ -283,12 +283,16 @@ export function bindCopyFlow() {
     shiftChain = true;
     setChainMode(true);
   });
-  document.addEventListener("keyup", (e) => {
-    if (e.key !== "Shift" || !shiftChain) return;
+  const endShiftChain = () => {
+    if (!shiftChain) return;
     shiftChain = false;
     if (!chainSel.length) { setChainMode(false); return; }
     if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
-  });
+  };
+  document.addEventListener("keyup", (e) => { if (e.key === "Shift") endShiftChain(); });
+  // The keyup never arrives when the window loses focus while Shift is held
+  // (Alt+Tab, a system dialog), which would leave the chain stuck on.
+  window.addEventListener("blur", endShiftChain);
 }
 
 export function wireCopyFlow() {

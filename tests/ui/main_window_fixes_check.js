@@ -1427,6 +1427,21 @@ section(() => {
   check(/\.hotkeys-row"\)\?\.querySelector\("input"\)\?\.dataset\.hkRow/.test(list) && /input\.focus\(\)/.test(list), "the hotkey list refocuses the rebuilt row");
 });
 
+// 79. A window blur while Shift is held ends the Shift chain like the keyup would.
+section(() => {
+  const src = read("copyFlow.js");
+  const body = extractBlock(src, "const endShiftChain = () => {");
+  check(/window\.addEventListener\("blur", endShiftChain\)/.test(src), "blur ends the Shift chain");
+  const calls = [];
+  const sb = run("let shiftChain = true; let chainSel = [];\n" + body + "\nglobalThis.end = endShiftChain; globalThis.state = () => shiftChain;", {
+    setChainMode: (v) => calls.push(["mode", v]), flag: () => true, setChainLock: () => calls.push(["lock"]), chainSel: [],
+  });
+  sb.end();
+  check(sb.state() === false && calls.length === 1 && calls[0][0] === "mode" && calls[0][1] === false, "an empty chain is switched off");
+  sb.end();
+  check(calls.length === 1, "a second call without a held Shift does nothing");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
