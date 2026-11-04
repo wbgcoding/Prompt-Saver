@@ -53,8 +53,9 @@ pub(crate) fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync)
 const SLAB: usize = 1 << 18;
 
 // Cuts `data` into slabs of about 256 KiB, each a whole multiple of `unit` elements, and runs
-// `f` on every slab, spread over up to one thread per core. A trailing partial unit (if
-// `data.len()` is not a multiple of `unit`) rides along in the last slab.
+// `f` on every slab, spread over up to one thread per core. What is left past the last whole slab
+// (a short remainder, including a trailing partial unit when `data.len()` is not a multiple of
+// `unit`) runs as one more call on the calling thread while the workers take the slabs.
 pub(crate) fn par_slabs_mut<T: Send>(data: &mut [T], unit: usize, f: impl Fn(&mut [T]) + Sync) {
     let unit = unit.max(1);
     let slab = (SLAB / unit).max(1) * unit;
