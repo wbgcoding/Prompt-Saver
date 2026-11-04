@@ -1172,6 +1172,21 @@ fn a_maximized_window_keeps_its_normal_bounds() {
     assert!(!g.maximized);
     assert_eq!((g.x, g.y, g.width, g.height), (120, 90, 820, 540));
 }
+// A move or resize that found the store busy is kept aside (the newest of each kind) and lands
+// with the next merge, so the last geometry of a drag survives.
+#[test]
+fn a_geometry_event_held_back_by_a_busy_store_is_merged_later() {
+    let mut s = Settings { window: Some(WindowGeom { x: 1, y: 2, width: 800, height: 600, maximized: false }), ..Default::default() };
+    hold_geom_event(GeomEvent::Moved(10, 20, false));
+    hold_geom_event(GeomEvent::Moved(30, 40, false));
+    hold_geom_event(GeomEvent::Resized(900, 700, false));
+    merge_pending_geom(&mut s);
+    let g = s.window.unwrap();
+    assert_eq!((g.x, g.y, g.width, g.height), (30, 40, 900, 700), "the newest of each kind wins");
+    let before = (g.x, g.y);
+    merge_pending_geom(&mut s);
+    assert_eq!((s.window.unwrap().x, s.window.unwrap().y), before, "nothing is applied twice");
+}
 #[test]
 fn old_saved_geometry_without_the_flag_loads_as_not_maximized() {
     let g: WindowGeom = serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).unwrap();

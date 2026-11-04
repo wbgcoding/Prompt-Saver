@@ -93,7 +93,7 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
         WindowEvent::Moved(p) => {
             if p.x > -30000 && p.y > -30000 && main_is_visible(&handle2) {
                 let maximized = main_is_maximized(&handle2);
-                update_geom(&handle2, |g| geom_after_move(g, p.x, p.y, maximized));
+                update_geom(&handle2, GeomEvent::Moved(p.x, p.y, maximized));
             }
         }
         WindowEvent::Resized(s) => {
@@ -106,9 +106,7 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                     .unwrap_or(1.0);
                 let logical = s.to_logical::<f64>(scale);
                 let maximized = main_is_maximized(&handle2);
-                update_geom(&handle2, |g| {
-                    geom_after_resize(g, logical.width.round() as u32, logical.height.round() as u32, maximized)
-                });
+                update_geom(&handle2, GeomEvent::Resized(logical.width.round() as u32, logical.height.round() as u32, maximized));
             }
         }
         WindowEvent::ThemeChanged(_) => {
@@ -188,7 +186,8 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                 std::thread::sleep(Duration::from_millis(200));
             });
             if let Some(state) = handle2.try_state::<Db>() {
-                let store = state.lock().unwrap_or_else(|e| e.into_inner());
+                let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
+                merge_pending_geom(&mut store.settings);
                 save_settings(&handle2, &store.settings);
             }
             voice_shutdown(&handle2);
@@ -439,11 +438,12 @@ pub(crate) fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<Window
     centered_on_primary(main, width, height)
 }
 
-// Whether the main window is maximized right now (false when it cannot be asked).
+// Whether the main window is visible right now (false when it cannot be asked).
 fn main_is_visible(handle: &AppHandle) -> bool {
     handle.get_webview_window("main").and_then(|w| w.is_visible().ok()).unwrap_or(false)
 }
 
+// Whether the main window is maximized right now (false when it cannot be asked).
 fn main_is_maximized(handle: &AppHandle) -> bool {
     handle.get_webview_window("main").and_then(|w| w.is_maximized().ok()).unwrap_or(false)
 }
@@ -466,25 +466,60 @@ pub(crate) fn geom_after_resize(g: &mut WindowGeom, width: u32, height: u32, max
     }
 }
 
+// One move or resize of the main window, as the event reported it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum GeomEvent {
+    Moved(i32, i32, bool),
+    Resized(u32, u32, bool),
+}
+
+fn apply_geom_event(g: &mut WindowGeom, ev: GeomEvent) {
+    match ev {
+        GeomEvent::Moved(x, y, maximized) => geom_after_move(g, x, y, maximized),
+        GeomEvent::Resized(w, h, maximized) => geom_after_resize(g, w, h, maximized),
+    }
+}
+
+// The latest move and the latest resize that found the store busy, waiting for the next event or
+// the final save to carry them in.
+static PENDING_GEOM: Mutex<(Option<GeomEvent>, Option<GeomEvent>)> = Mutex::new((None, None));
+
+// Applies what a busy store made update_geom hold back. Call with the store held.
+pub(crate) fn merge_pending_geom(settings: &mut Settings) {
+    let (moved, resized) = std::mem::take(&mut *PENDING_GEOM.lock().unwrap_or_else(|e| e.into_inner()));
+    for ev in [moved, resized].into_iter().flatten() {
+        let mut g = settings.window.unwrap_or(WindowGeom { x: 0, y: 0, width: 0, height: 0, maximized: false });
+        apply_geom_event(&mut g, ev);
+        settings.window = Some(g);
+    }
+}
+
 // Persist a partial geometry update in memory (flushed to disk on close).
-pub(crate) fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
+pub(crate) fn update_geom(handle: &AppHandle, ev: GeomEvent) {
     if let Some(state) = handle.try_state::<Db>() {
         // try_lock, never block: this runs on the event-loop thread for every move/
-        // resize tick. If the store is busy (e.g. a backup VACUUM holds the lock), skip
-        // this update: the next move/resize event carries the current geometry anyway.
+        // resize tick. If the store is busy (e.g. a backup VACUUM holds the lock), the event
+        // is kept aside and merged by the next update or the save when the window closes, so
+        // the last geometry of a drag is not lost.
         let mut store = match state.try_lock() {
             Ok(g) => g,
             Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
-            Err(std::sync::TryLockError::WouldBlock) => return,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                hold_geom_event(ev);
+                return;
+            }
         };
-        let mut g = store.settings.window.unwrap_or(WindowGeom {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-            maximized: false,
-        });
-        f(&mut g);
+        merge_pending_geom(&mut store.settings);
+        let mut g = store.settings.window.unwrap_or(WindowGeom { x: 0, y: 0, width: 0, height: 0, maximized: false });
+        apply_geom_event(&mut g, ev);
         store.settings.window = Some(g);
+    }
+}
+
+pub(crate) fn hold_geom_event(ev: GeomEvent) {
+    let mut slot = PENDING_GEOM.lock().unwrap_or_else(|e| e.into_inner());
+    match ev {
+        GeomEvent::Moved(..) => slot.0 = Some(ev),
+        GeomEvent::Resized(..) => slot.1 = Some(ev),
     }
 }
