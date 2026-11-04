@@ -205,19 +205,6 @@ function readCurrentBrand(root) {
 
 // ---------- generated files ----------
 
-// assetProtocol deny list of src-tauri/tauri.conf.json: store files and secrets the
-// webview must never read. No brand value in it, so every brand stamps the same list.
-const ASSET_DENY = [
-  "**/data.db*",
-  "**/settings.json",
-  "**/settings.tmp",
-  "**/prompts.json",
-  "**/prompts.tmp",
-  "**/*.psb",
-  "**/backups/**",
-  "**/error.log",
-];
-
 const rs = (v) => JSON.stringify(String(v)); // values are pre-validated; this only quotes
 
 function brandRs(b) {
@@ -341,18 +328,13 @@ function stampManifests(root, b, current) {
   mainRs = sub(mainRs, /^    [a-z0-9_]+_lib::run\(\);$/m, `    ${b.slug.replace(/-/g, "_")}_lib::run();`, "main.rs");
   write(mainPath, mainRs);
 
-  // tauri.conf.json: product name, identifier, window title, asset-protocol denies.
+  // tauri.conf.json: product name, identifier, window title. The asset-protocol deny list
+  // carries no brand value and stays exactly as the config has it.
   const confPath = path.join(root, "src-tauri", "tauri.conf.json");
   let conf = read(confPath);
   conf = sub(conf, /^(  "productName": ")[^"]*(")/m, `$1${b.displayName}$2`, "tauri.conf productName");
   conf = sub(conf, /^(  "identifier": ")[^"]*(")/m, `$1${b.identifier}$2`, "tauri.conf identifier");
   conf = sub(conf, /^(        "title": ")[^"]*(")/m, `$1${b.displayName}$2`, "tauri.conf window title");
-  conf = sub(
-    conf,
-    /"deny": \[[^\]]*\]/,
-    `"deny": [${ASSET_DENY.map((e) => JSON.stringify(e)).join(", ")}]`,
-    "tauri.conf assetProtocol deny"
-  );
   write(confPath, conf);
 
   // Lock files name this crate/package too. They are keyed by the OLD slug, so
