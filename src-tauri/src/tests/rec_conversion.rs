@@ -755,7 +755,7 @@ fn placing_or_discarding_a_part_waits_for_its_background_crop() {
     let disc = &disc[..disc.find("discard_recording_parts_in(").unwrap()];
     assert!(disc.contains("wait_for_interim_crops"));
     let quit = &mf[mf.find("wait_for_part_saves(REC_PARTS_QUIT_WAIT)").unwrap()..];
-    let quit = &quit[..quit.find("place_recording_parts(&mut parts").unwrap()];
+    let quit = &quit[..quit.find("with_parts_outside_lock(&REC_RESULT_PARTS").unwrap()];
     assert!(quit.contains("wait_for_interim_crops"));
 }
 
