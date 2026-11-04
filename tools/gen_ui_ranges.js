@@ -6,8 +6,9 @@
 //   node tools/gen_ui_ranges.js --check    fail when the file is out of date
 //
 // Re-run it whenever an expert value is added, removed or gets a new min or max.
-// Entries with an `options` list are selects: they are emitted apart from the
-// sliders, with their option list. An entry with `stops` takes its first and last stop as the range.
+// Selects live in the separate EXPERT_SELECTS export and are emitted apart from the
+// sliders, with their option list; an EXPERT_VALUES entry with `options` is an error.
+// An entry with `stops` takes its first and last stop as the range.
 "use strict";
 
 const fs = require("fs");
@@ -44,7 +45,7 @@ async function render() {
   const cfg = await loadConfig();
   const rows = [];
   for (const [key, e] of Object.entries(cfg.EXPERT_VALUES)) {
-    if (e.options) continue;
+    if (e.options) throw new Error(`${key}: an options list belongs in EXPERT_SELECTS, not EXPERT_VALUES`);
     let min;
     let max;
     if (Array.isArray(e.stops) && e.stops.length) {
