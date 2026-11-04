@@ -773,7 +773,7 @@ export function wireManagement() {
   };
   // Reads every picture that has none yet, one at a time: progress, the
   // running badge and cancel all come from the shared background-jobs popover
-  // (see BG_OP_CANCEL_CMD/bgOpLabel above), so this only has to start the job.
+  // (see BG_OP_CANCEL_CMD and bgOpLabel in bgOps.js), so this only has to start the job.
   EXPERT_ACTIONS["ocr-index-backfill"] = async () => {
     try {
       await invoke("ocr_index_backfill");
