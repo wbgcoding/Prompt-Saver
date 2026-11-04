@@ -322,6 +322,12 @@ pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_pa
         .map_err(|e| e.to_string())?
 }
 
+// How long the mic mux may run: ten minutes plus two minutes per GiB it has to copy, so a long
+// recording on a slow disk is not killed halfway.
+pub(crate) fn mux_timeout(total_bytes: u64) -> Duration {
+    Duration::from_secs(600 + 120 * (total_bytes >> 30))
+}
+
 pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbps: u32) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
@@ -341,7 +347,13 @@ pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::piped());
-    let output = output_in_job(&mut cmd, Duration::from_secs(600)).map_err(|e| tool_run_error("ffmpeg", &e))?;
+    let timeout = mux_timeout(fs::metadata(video).map(|m| m.len()).unwrap_or(0) + fs::metadata(sidecar).map(|m| m.len()).unwrap_or(0));
+    // A spawn error or the timeout leaves the partly written staged file behind; nothing else
+    // journals or sweeps `.mux-` names.
+    let output = output_in_job(&mut cmd, timeout).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        tool_run_error("ffmpeg", &e)
+    })?;
     if !output.status.success() || !staged.is_file() {
         let _ = fs::remove_file(&staged);
         let tail: String =
@@ -1959,6 +1971,8 @@ pub(crate) async fn open_video_editor(
         tauri::WindowEvent::Destroyed => {
             VE_CLOSE_READY.store(false, Ordering::SeqCst);
             VE_CLOSING_OK.store(false, Ordering::SeqCst);
+            // A quit that was waiting on the editor must not outlive it and close the next one.
+            VE_QUIT_AFTER_CLOSE.store(false, Ordering::SeqCst);
             release_pending_editor_requests();
             FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
         }

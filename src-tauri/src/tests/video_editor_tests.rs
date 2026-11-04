@@ -633,3 +633,20 @@ fn the_export_disk_probes_skip_a_network_destination_on_text() {
         assert!(body.find("is_network_path(").unwrap() < body.find("free_space_bytes(").unwrap(), "{name}: text gate first");
     }
 }
+
+#[test]
+fn the_mic_mux_timeout_grows_with_the_bytes_it_copies() {
+    assert_eq!(mux_timeout(0), Duration::from_secs(600));
+    assert_eq!(mux_timeout((1 << 30) - 1), Duration::from_secs(600));
+    assert_eq!(mux_timeout(3 << 30), Duration::from_secs(600 + 360));
+}
+
+#[test]
+fn the_editor_close_flags_are_all_cleared_when_its_window_is_destroyed() {
+    let src = source!("../video_editor.rs");
+    let at = src.find("tauri::WindowEvent::Destroyed => {").unwrap();
+    let body = &src[at..at + 500];
+    for flag in ["VE_CLOSE_READY", "VE_CLOSING_OK", "VE_QUIT_AFTER_CLOSE"] {
+        assert!(body.contains(&format!("{flag}.store(false")), "{flag} must be reset on Destroyed");
+    }
+}
