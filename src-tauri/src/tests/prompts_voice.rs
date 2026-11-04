@@ -1516,3 +1516,15 @@ fn a_held_path_is_inside_the_store_whatever_its_casing() {
     assert!(!path_is_inside("C:/Data/App/files-old/a.png", files));
     assert!(!path_is_inside("C:/Pics/a.png", files));
 }
+
+#[test]
+fn a_hypothesis_always_counts_as_speech_even_without_partial_text() {
+    let src = include_str!("../voice.rs").replace("\r\n", "\n");
+    let at = src.find(".HypothesisGenerated(").expect("the hypothesis handler is always registered");
+    let before = &src[..at];
+    assert!(!before.trim_end().ends_with("if interim {"), "registration must not depend on the partial-text flag");
+    let body = &src[at..at + 700];
+    let touch = body.find("= Instant::now()").expect("the idle clock is touched");
+    let gate = body.find("if interim {").expect("only the emit is gated");
+    assert!(touch < gate);
+}

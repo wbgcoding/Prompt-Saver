@@ -206,19 +206,23 @@ fn run_session(
     // reports status 7 on its own.
     let requested_reason: Arc<Mutex<Option<&'static str>>> = Arc::new(Mutex::new(None));
 
-    if interim {
+    // Registered whether or not partial text is shown: a hypothesis is also proof the person is
+    // still talking, and the idle watchdog must not stop a long sentence that has no result yet.
+    {
         let app2 = app.clone();
         let last2 = last_activity.clone();
         // A failure here must fail the session up front like every other WinRT setup call: otherwise
-        // recording would start with partial results never reaching the window.
+        // recording would start with the idle clock blind to speech in progress.
         recognizer
             .HypothesisGenerated(&TypedEventHandler::new(
                 move |_sender: Ref<SpeechRecognizer>, args: Ref<SpeechRecognitionHypothesisGeneratedEventArgs>| {
-                    if let Some(args) = args.as_ref() {
-                        if let Ok(h) = args.Hypothesis() {
-                            if let Ok(text) = h.Text() {
-                                *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-                                let _ = app2.emit("voice-partial", VoiceTextEvent { id, token, text: text.to_string() });
+                    *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+                    if interim {
+                        if let Some(args) = args.as_ref() {
+                            if let Ok(h) = args.Hypothesis() {
+                                if let Ok(text) = h.Text() {
+                                    let _ = app2.emit("voice-partial", VoiceTextEvent { id, token, text: text.to_string() });
+                                }
                             }
                         }
                     }
