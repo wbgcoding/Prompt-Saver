@@ -1408,6 +1408,25 @@ section(() => {
   check(/await saveFolder\(now, \{ color: hex \}\)\)\) await renderGrid\(\)/.test(src), "a failed colour save refetches and redraws the grid");
 });
 
+// 78. The plus key becomes a name the backend parser accepts (never a bare "+" that the
+// separator splits), prettyAccel shows it readably, and the hotkey list returns the focus to
+// the row it rebuilt.
+section(() => {
+  const hk = read("hotkeys.js");
+  const sb = run(extractBlock(hk, "export function accelFromEvent(").replace("export ", "") + "\n"
+    + "const MOD_LABELS = { CommandOrControl: () => 'Ctrl', Shift: () => 'Shift' };\n"
+    + hk.slice(hk.indexOf("// Key names the backend parser"), hk.indexOf("export function prettyAccel(")) + "\n"
+    + extractBlock(hk, "export function prettyAccel(").replace("export ", ""), {});
+  const ev = (o) => ({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...o });
+  check(sb.accelFromEvent(ev({ ctrlKey: true, shiftKey: true, key: "+", code: "Equal" })) === "CommandOrControl+Shift+Equal", "a typed plus maps to Equal");
+  check(sb.accelFromEvent(ev({ ctrlKey: true, key: "+", code: "NumpadAdd" })) === "CommandOrControl+NumpadAdd", "the numpad plus maps to NumpadAdd");
+  check(sb.accelFromEvent(ev({ ctrlKey: true, key: "p" })) === "CommandOrControl+P", "a letter stays a letter");
+  check(sb.prettyAccel("CommandOrControl+Shift+Equal") === "Ctrl + Shift + =", "prettyAccel shows Equal as the character");
+  check(sb.prettyAccel("CommandOrControl+NumpadAdd") === "Ctrl + Num +", "prettyAccel shows the numpad plus");
+  const list = extractBlock(hk, "export function renderHotkeysList(");
+  check(/\.hotkeys-row"\)\?\.querySelector\("input"\)\?\.dataset\.hkRow/.test(list) && /input\.focus\(\)/.test(list), "the hotkey list refocuses the rebuilt row");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

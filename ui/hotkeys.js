@@ -16,6 +16,9 @@ export function accelFromEvent(e) {
   let key = e.key;
   if (key === " ") key = "Space";
   else if (key.startsWith("Arrow")) key = key.slice(5);
+  // A typed "+" would be split apart by the "+" separator and refused by the backend parser, which
+  // names the plus key "Equal" (the same key as "=", Windows VK_OEM_PLUS) or "NumpadAdd".
+  else if (key === "+") key = e.code === "NumpadAdd" ? "NumpadAdd" : "Equal";
   else if (key.length === 1) key = key.toUpperCase();
   return [...mods, key].join("+");
 }
@@ -29,9 +32,11 @@ export const MOD_LABELS = {
   Alt: () => "Alt", Option: () => "Alt",
   Super: () => "Win", Meta: () => "Win", Command: () => "Win", Cmd: () => "Win",
 };
+// Key names the backend parser spells out that read better as the character on the key.
+const KEY_LABELS = { Equal: "=", NumpadAdd: "Num +" };
 export function prettyAccel(accel) {
   if (!accel) return "";
-  return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : p)).join(" + ");
+  return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : KEY_LABELS[p] || p)).join(" + ");
 }
 
 // ---- Per-prompt hotkey (editor row) ----
@@ -316,6 +321,9 @@ export function renderHotkeysList() {
   const filtered = rows.filter(hit);
   // Rebuilding removes the focused row input without a blur, so the capture switch would stay
   // on and every global hotkey stay unregistered; end it here instead.
+  // The row that had the focus gets it back on its new input (a commit rebuilds the list under
+  // the user's hands), which also takes the capture switch up again like a click would.
+  const focused = box.contains(document.activeElement) ? document.activeElement.closest(".hotkeys-row")?.querySelector("input")?.dataset.hkRow : null;
   if (box.contains(document.activeElement)) hotkeyCapture(false);
   box.innerHTML = "";
   if (!filtered.length) {
@@ -338,6 +346,7 @@ export function renderHotkeysList() {
     input.readOnly = true;
     input.placeholder = t("hotkeyPh");
     input.value = prettyAccel(r.accel);
+    input.dataset.hkRow = `${r.kind}:${r.id ?? ""}`;
     row.append(name, input);
     box.appendChild(row);
     bindHotkeyField(input, {
@@ -350,6 +359,7 @@ export function renderHotkeysList() {
       try { input.value = prettyAccel(await kindDef.onCommit("", r.id)); }
       catch (err) { toast(hotkeyMessage(String(err))); }
     });
+    if (focused && input.dataset.hkRow === focused) input.focus();
   }
 }
 
