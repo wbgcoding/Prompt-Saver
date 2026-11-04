@@ -180,6 +180,27 @@ fn a_busy_store_is_skipped_by_the_event_loop_lock_and_a_poisoned_one_is_taken_ov
     assert_eq!(*try_lock_ignoring_poison(&m).unwrap(), 5);
 }
 
+// The session-end flush waits a bounded time for a busy store and never longer.
+#[test]
+fn the_session_end_lock_waits_a_bounded_time_and_gives_up() {
+    let m = std::sync::Arc::new(Mutex::new(1));
+    let held = m.lock().unwrap();
+    let t = Instant::now();
+    assert!(try_lock_within(&m, Duration::from_millis(60)).is_none(), "a held store is skipped");
+    assert!(t.elapsed() >= Duration::from_millis(60) && t.elapsed() < Duration::from_secs(2));
+    drop(held);
+    assert_eq!(*try_lock_within(&m, Duration::from_millis(60)).unwrap(), 1);
+    // A holder that lets go inside the budget is waited for.
+    let m2 = m.clone();
+    let holder = std::thread::spawn(move || {
+        let _g = m2.lock().unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+    });
+    std::thread::sleep(Duration::from_millis(20));
+    assert!(try_lock_within(&m, Duration::from_secs(3)).is_some());
+    holder.join().unwrap();
+}
+
 #[test]
 fn a_locked_settings_row_counts_as_written_for_a_pair_but_a_real_failure_does_not() {
     assert!(settings_pair_written(true, false));

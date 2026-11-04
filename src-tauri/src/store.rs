@@ -1715,6 +1715,36 @@ pub(crate) fn flush_settings_now(app: &AppHandle) {
     }
 }
 
+// The flush for a Windows session end: the system waits only a few seconds for the answer, so
+// the store lock is tried for a bounded time instead of waited on. A store still busy after that
+// (a backup or import holding it) is left alone; its own save writes the settings when it ends.
+// Geometry the window handler had to hold back is merged first so the write carries it.
+pub(crate) fn flush_settings_for_session_end(app: &AppHandle) {
+    if !SETTINGS_DELAY.owed() {
+        return;
+    }
+    if let Some(state) = app.try_state::<Db>() {
+        if let Some(mut store) = try_lock_within(&state, Duration::from_millis(1500)) {
+            merge_pending_geom(&mut store.settings);
+            flush_settings(app, &store.settings);
+        }
+    }
+}
+
+// try_lock polled until the budget runs out; None when the mutex stayed held.
+pub(crate) fn try_lock_within<T>(m: &Mutex<T>, budget: Duration) -> Option<std::sync::MutexGuard<'_, T>> {
+    let start = Instant::now();
+    loop {
+        if let Some(g) = try_lock_ignoring_poison(m) {
+            return Some(g);
+        }
+        if start.elapsed() >= budget {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 // One round of the timer thread's flush job.
 pub(crate) fn settings_flush_tick(app: &AppHandle) {
     if !SETTINGS_DELAY.due() {

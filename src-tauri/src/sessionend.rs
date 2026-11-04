@@ -84,7 +84,7 @@ unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> 
                         finish_recording(&app);
                     }
                 }
-                super::flush_settings_now(&app);
+                super::flush_settings_for_session_end(&app);
             }
         });
     }
