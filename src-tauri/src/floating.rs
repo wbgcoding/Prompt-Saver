@@ -1333,6 +1333,15 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
     }
 }
 
+/// Records one pill's size factor and drops its hand-dragged box (a size button always wins over
+// one). None, with nothing stored, when no prompt has this id; else whether the prompt is a picture.
+pub(crate) fn store_float_scale(store: &mut Store, id: &str, scale: f64) -> Option<bool> {
+    let is_img = store.prompts.iter().find(|p| p.id == id).map(is_image_prompt)?;
+    store.settings.float_scale.insert(id.to_string(), scale);
+    store.settings.float_size.remove(id);
+    Some(is_img)
+}
+
 // Size factor of one pill; persists the choice. resize=false leaves the
 // window alone (the menu flow sizes it itself, avoiding a visible jump).
 #[tauri::command]
@@ -1346,11 +1355,12 @@ pub(crate) async fn set_float_scale(
     let scale = if scale.is_finite() { scale.clamp(FLOAT_SCALE_MIN, FLOAT_SCALE_MAX) } else { 1.0 };
     let is_img = {
         let mut store = lock(&state);
-        store.settings.float_scale.insert(id.clone(), scale);
-        // A size button always wins over a hand-dragged box.
-        store.settings.float_size.remove(&id);
+        // A stale id (the prompt was deleted meanwhile) must not leave an orphan entry behind.
+        let Some(is_img) = store_float_scale(&mut store, &id, scale) else {
+            return Ok(());
+        };
         save_settings(&app, &store.settings);
-        store.prompts.iter().find(|p| p.id == id).map(is_image_prompt).unwrap_or(false)
+        is_img
     };
     if resize.unwrap_or(true) {
         if let Some(win) = app.get_webview_window(&flabel(&id)) {

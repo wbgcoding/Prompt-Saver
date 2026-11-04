@@ -1158,6 +1158,17 @@ fn screen_identity_differs_by_name_even_at_the_same_bounds() {
     assert_eq!(a, screen_identity("Dell-1", 1920, 0, 1920, 1080));
 }
 
+#[test]
+fn a_float_scale_is_stored_only_for_an_existing_prompt() {
+    let mut store = Store { prompts: vec![Prompt { id: "p1".into(), ..Default::default() }], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    store.settings.float_size.insert("p1".into(), [300.0, 80.0]);
+    assert_eq!(store_float_scale(&mut store, "gone", 1.5), None);
+    assert!(store.settings.float_scale.is_empty(), "no orphan entry for an unknown id");
+    assert_eq!(store_float_scale(&mut store, "p1", 1.5), Some(false));
+    assert_eq!(store.settings.float_scale.get("p1"), Some(&1.5));
+    assert!(store.settings.float_size.is_empty(), "a size button wins over a dragged box");
+}
+
 // The identity is stored in settings (Pos.screen). It comes from the standard library hasher, whose
 // output Rust does not promise to keep across releases. These values are what saved positions hold
 // today: if a toolchain change alters them this fails the build, because every saved pill and
