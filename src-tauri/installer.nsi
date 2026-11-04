@@ -598,7 +598,7 @@ FunctionEnd
 !insertmacro MUI_UNPAGE_INSTFILES
 
 ;Languages
-; Explicit list (mirrors bundle.windows.nsis.languages in tauri.conf.json).
+; Explicit list: a superset of bundle.windows.nsis.languages in tauri.conf.json.
 ; Turkish/Korean/Romanian stock NSIS files lack the MultiUser install-mode
 ; strings, so we pre-define them right before those languages load: the
 ; English fallback then finds them defined and stays silent (no compile
