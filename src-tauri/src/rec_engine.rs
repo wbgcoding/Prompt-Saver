@@ -632,6 +632,14 @@ impl AudioQueueShared {
         }
         out
     }
+    // Takes at most `max` queued samples without padding, a whole number of frames, for the
+    // last write at stop time: silence added there would lengthen the track.
+    pub(crate) fn drain_available(&self, max: usize) -> Vec<i16> {
+        let mut q = self.samples.lock().unwrap_or_else(|e| e.into_inner());
+        let ch = REC_AUDIO_CHANNELS as usize;
+        let n = q.len().min(max) / ch * ch;
+        q.drain(..n).collect()
+    }
     pub(crate) fn mark_lost(&self) {
         self.lost.store(true, std::sync::atomic::Ordering::Relaxed);
     }

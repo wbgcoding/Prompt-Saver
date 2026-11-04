@@ -1234,3 +1234,13 @@ fn saving_the_parts_does_not_hold_the_shared_list_lock() {
     let left: Vec<String> = shared.lock().unwrap().iter().map(|p| p.path.clone()).collect();
     assert_eq!(left, vec!["b".to_string(), "c".to_string()]);
 }
+
+#[test]
+fn audio_queue_drain_available_takes_whole_frames_and_never_pads() {
+    let ch = REC_AUDIO_CHANNELS as usize;
+    let q = AudioQueueShared::new();
+    assert!(q.drain_available(100).is_empty());
+    q.push(&vec![5i16; ch * 3 + 1]);
+    assert_eq!(q.drain_available(ch * 2 + 1).len(), ch * 2);
+    assert_eq!(q.drain_available(100).len(), ch);
+}

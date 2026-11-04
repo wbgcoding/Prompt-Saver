@@ -502,6 +502,14 @@ pub(crate) fn mic_wav_writer_loop(
             break;
         }
     }
+    // What arrived after the last tick belongs to the recording too: without it the sidecar ends
+    // up to one tick short of the main track.
+    if started && !clock.is_paused() {
+        let tail = queue.drain_available(samples_per_tick);
+        if !tail.is_empty() && writer.write_samples(&tail).is_err() {
+            queue.mark_lost();
+        }
+    }
     if let Err(e) = writer.finish() {
         append_crash_log(&format!("recording: mic sidecar finish failed: {e}"));
     }
