@@ -203,7 +203,14 @@ pub(crate) fn show_app_windows(app: &AppHandle, labels: &[String]) {
 pub(crate) fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
-            let _ = if hidden { win.hide() } else { win.show() };
+            if hidden {
+                let _ = win.hide();
+            } else {
+                // Comes back only to show an error, and a window put back maximized after the
+                // grab took the focus: Esc and the other keys must reach the overlay again.
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
         }
     }
 }
