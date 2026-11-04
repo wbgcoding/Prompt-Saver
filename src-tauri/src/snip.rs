@@ -1704,6 +1704,7 @@ pub(crate) fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std:
 // first failure. `landed` is set as soon as ANY of them arrived: a half-copied
 // destination is no longer the store the caller has in memory, and a caller that
 // keeps using the old one would write it straight over the files that did arrive.
+#[cfg(test)]
 pub(crate) fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
     copy_store_files_from(src, dst, landed, false, &mut Vec::new())
 }
