@@ -1910,8 +1910,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
                 // "NaN", "inf" and "1e999" parse as numbers but cannot be stored: they are written as null
                 // and the whole settings block fails to load.
                 let Some(n) = crate::clamp_ui_value(key, n) else {
-                    return Outcome::err(4, format!("{key} needs a finite number
-"));
+                    return Outcome::err(4, format!("{key} needs a finite number\n"));
                 };
                 s.ui_values.insert(key.to_string(), n);
             } else {
