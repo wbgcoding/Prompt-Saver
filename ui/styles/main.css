@@ -5209,7 +5209,6 @@ body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
 button.tag-chip { cursor: pointer; transition: border-color var(--transition), background var(--transition); }
 button.tag-chip:hover { border-color: var(--accent); }
 .tag-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-.tag-action { color: var(--muted); }
 
 .tag-dot {
   flex: 0 0 auto;
