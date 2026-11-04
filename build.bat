@@ -160,15 +160,31 @@ if errorlevel 1 (
         echo [INFO] %APP_NAME%.exe is running. The new build is next to it as %APP_NAME%.new.exe and will be swapped in on the next build.
     )
 )
-if defined INSTALLER copy /y "%INSTALLER%" "%DIST%\" >nul
+rem The installer is copied into dist\ first and both sidecars are made from that copy, so the
+rem hash and signature always describe the exact file that gets uploaded. Sidecars left by an
+rem earlier build of the same version are removed first: a failed step then leaves none behind
+rem instead of an old one that no longer matches.
+set "DIST_SETUP="
+if defined INSTALLER for %%I in ("%INSTALLER%") do set "DIST_SETUP=%DIST%\%%~nxI"
+if defined DIST_SETUP (
+    del /q "!DIST_SETUP!.sha256" "!DIST_SETUP!.sig" 2>nul
+    copy /y "%INSTALLER%" "!DIST_SETUP!" >nul
+    if errorlevel 1 (
+        echo [WARN] Could not copy the installer into dist. No hash or signature was made for it.
+        set "DIST_SETUP="
+    )
+)
 rem SHA-256 sidecar for the installer (the auto-updater verifies "<installer>.sha256"
 rem before running the download). Upload it alongside the installer on the GitHub release.
-if defined INSTALLER for %%I in ("%INSTALLER%") do powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 '%%~fI').Hash.ToLower(); [IO.File]::WriteAllText('%DIST%\%%~nxI.sha256', $h)"
+if defined DIST_SETUP (
+    powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 '%DIST_SETUP%').Hash.ToLower(); [IO.File]::WriteAllText('%DIST_SETUP%.sha256', $h)"
+    if errorlevel 1 echo [WARN] Checksum not written - the installer cannot be published as an update.
+)
 rem Signature sidecar: the updater also needs "<installer>.sig", made with the signing key
 rem outside the repo (tools\sign_update.js). Without the key the build still finishes, but
 rem that installer cannot be published as an update.
-if defined INSTALLER for %%I in ("%INSTALLER%") do (
-    node "%~dp0tools\sign_update.js" sign "%DIST%\%%~nxI"
+if defined DIST_SETUP (
+    node "%~dp0tools\sign_update.js" sign "%DIST_SETUP%"
     if errorlevel 1 echo [WARN] Installer not signed - it cannot be published as an update.
 )
 rem pdfium.dll is compiled INTO the exe (see pdfium_lib_path in images.rs) and unpacked
