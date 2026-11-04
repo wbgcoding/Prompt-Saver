@@ -1157,3 +1157,16 @@ fn an_imported_name_is_trimmed_to_one_line_like_an_editor_save() {
     assert_eq!(store.prompts[0].name, crate::md_sync::sync_clean_name("  Work  Pack "));
     assert_eq!(store.prompts[0].name, store.prompts[0].name.trim());
 }
+
+#[test]
+fn a_long_repetitive_text_still_matches_its_short_twin() {
+    // 100 characters but a single distinct trigram: the size bound is over trigram sets, so the
+    // pair is compared (Dice 1.0) instead of being skipped for its character lengths.
+    let mut a = test_prompt("a");
+    a.text = "a".repeat(100);
+    let mut b = test_prompt("b");
+    b.text = "aaa".into();
+    let others = vec![&b];
+    let hit = find_similar_prompt(&a, &others, 90.0);
+    assert_eq!(hit.map(|h| h.id), Some("b".to_string()));
+}

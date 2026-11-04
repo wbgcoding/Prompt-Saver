@@ -845,8 +845,9 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
         return Ok(Vec::new());
     }
     let grams: Vec<Set<[char; 3]>> = crate::parallel::par_map(&items, |(_, s)| dup_trigrams(s));
-    // Normalized lengths, so a pair that cannot reach the threshold is skipped before any set work.
-    let lens: Vec<usize> = items.iter().map(|(_, s)| s.chars().count()).collect();
+    // Distinct-trigram counts, so a pair that cannot reach the threshold is skipped before the
+    // intersection is counted.
+    let lens: Vec<usize> = grams.iter().map(|g| g.len()).collect();
     let edges: Vec<(usize, usize, f64)> = crate::parallel::par_map_indexed(n, |i| {
         let gi = &grams[i];
         let mut local = Vec::new();
@@ -927,10 +928,11 @@ pub(crate) struct SimilarHit {
     pub(crate) name: String,
 }
 
-// Whether two normalized lengths could clear `thr` under trigram Dice similarity. Dice
-// never exceeds 2*min/(min+max), even with the shorter fully inside the longer, so a pair
-// whose lengths differ enough is provably impossible and skipped before paying for
-// dup_trigrams on it.
+// Whether two trigram-set sizes could clear `thr` under trigram Dice similarity. Dice is
+// 2*shared/(|A|+|B|) and the shared count cannot exceed the smaller set, so it never exceeds
+// 2*min/(min+max); a pair whose set sizes differ enough is provably impossible and skipped
+// before the intersection is counted. The bound is over distinct trigrams, not characters: a
+// long repetitive text has few of them, so a character-length bound would wrongly skip it.
 pub(crate) fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
     if a == 0 || b == 0 {
         return false;
@@ -950,11 +952,12 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
     let thr = (threshold / 100.0).clamp(0.5, 1.0);
     let base = if !target.text.is_empty() { target.text.as_str() } else { target.name.as_str() };
     let target_norm = normalize_dup(base);
-    let target_len = target_norm.chars().count();
-    if target_len < 3 {
+    let target_chars = target_norm.chars().count();
+    if target_chars < 3 {
         return None;
     }
     let target_grams = dup_trigrams(&target_norm);
+    let target_len = target_grams.len();
     let mut best: Option<(SimilarHit, f64)> = None;
     for p in others {
         if start.elapsed() > SIMILAR_HINT_BUDGET {
@@ -963,10 +966,14 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
         let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
         let norm = normalize_dup(base);
         let len = norm.chars().count();
-        if len < 3 || !dup_length_could_match(target_len, len, thr) {
+        if len < 3 {
             continue;
         }
-        let d = dup_dice(&target_grams, &dup_trigrams(&norm));
+        let grams = dup_trigrams(&norm);
+        if !dup_length_could_match(target_len, grams.len(), thr) {
+            continue;
+        }
+        let d = dup_dice(&target_grams, &grams);
         if d >= thr && best.as_ref().is_none_or(|(_, b)| d > *b) {
             best = Some((
                 SimilarHit { id: p.id.clone(), name: stats_display_name(p) },
