@@ -96,6 +96,8 @@ async function main() {
   // The permission answer arrives, no device exists, so the "no camera" notice shows.
   if (listeners["camera-permission-ready"]) listeners["camera-permission-ready"]();
   await tick();
+  // A notice shown on the idle status strip (take kept, write failed) survives a language switch.
+  els["cam-status-text"].textContent = "take kept at C:/rec/x.webm";
   settings.language = "de";
   expect("language-changed listener registered", typeof listeners["language-changed"], "function");
   if (listeners["language-changed"]) listeners["language-changed"]("de");
@@ -106,6 +108,7 @@ async function main() {
   expect("after the switch (de): close aria-label", closeBtn.getAttribute("aria-label"), I18N.de.close);
   expect("after the switch (de): pause title", pauseBtn.title, I18N.de.recBarPause);
   expect("after the switch (de): silent option", els["cam-audio-select"].options[0] && els["cam-audio-select"].options[0].textContent, I18N.de.cameraAudioNone);
+  expect("after the switch (de): idle status notice kept", els["cam-status-text"].textContent, "take kept at C:/rec/x.webm");
   expect("after the switch (de): no-device text", els["cam-no-device"].textContent, I18N.de.cameraNoDevice);
 
   if (problems.length) {

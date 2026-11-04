@@ -622,7 +622,8 @@ function applyTexts() {
     el.setAttribute("aria-label", text);
   }
   applyPauseState();
-  setStatus(statusState);
+  // An idle strip may hold a notice (take kept, write failed, error); redrawing it would erase it.
+  if (statusState !== "idle") setStatus(statusState);
   const silent = audioSelect.options[0];
   if (silent && silent.value === "") silent.textContent = t("cameraAudioNone");
   if (!noDeviceEl.classList.contains("hidden")) noDeviceEl.textContent = t("cameraNoDevice");
