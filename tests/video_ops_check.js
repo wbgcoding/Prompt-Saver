@@ -890,7 +890,7 @@ const pending = [];
     let handler = null, calls = 0, release = null;
     const still = { disabled: false, addEventListener: (_, fn) => { handler = fn; } };
     const sb = {
-      $: () => still, VE: { src: "a.mp4", playhead: 120, exporting: false }, t: (k) => k, toast: () => {}, noteFfmpeg: () => {}, errMessageLogged: () => "",
+      $: () => still, VE: { src: "a.mp4", playhead: 120, exporting: false, ffmpeg: true }, t: (k) => k, toast: () => {}, noteFfmpeg: () => {}, errMessageLogged: () => "",
       invoke: () => { calls++; return new Promise((res) => { release = res; }); },
     };
     vm.createContext(sb);
@@ -900,6 +900,19 @@ const pending = [];
     expect("a second click on the still button starts no second extraction", calls === 1 && still.disabled === true, String(calls));
     release("x");
     pending.push(first.then(() => expect("the still button is usable again afterwards", still.disabled === false)));
+  }
+  // A failure that reports ffmpeg missing leaves the button off (noteFfmpeg sets VE.ffmpeg = false).
+  {
+    let handler = null;
+    const still = { disabled: false, addEventListener: (_, fn) => { handler = fn; } };
+    const sb = {
+      $: () => still, VE: { src: "a.mp4", playhead: 120, exporting: false, ffmpeg: true }, t: (k) => k, toast: () => {}, errMessageLogged: () => "",
+      noteFfmpeg: () => { sb.VE.ffmpeg = false; still.disabled = true; },
+      invoke: () => Promise.reject("ffmpeg-missing"),
+    };
+    vm.createContext(sb);
+    vm.runInContext(extractBlock("still", '$("ve-still").addEventListener("click", async () => {') + ");", sb);
+    pending.push(handler().then(() => expect("the still button stays off when ffmpeg turned out missing", still.disabled === true)));
   }
   // Marking in/out outside the kept part says why instead of doing nothing.
   {

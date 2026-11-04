@@ -106,7 +106,7 @@ async function checkEditState(path, myGen) {
   }
   // Rust already filters an unreadable "v" before this ever arrives; this local
   // check costs nothing and keeps this function correct even if that changes.
-  if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.ops)) return;
+  if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.ops) || !parsed.ops.length) return; // nothing to restore: no prompt
   // The dialog's title, message and buttons are t() calls made once at open time; opening before
   // loadTexts() has landed would freeze raw i18n keys into a modal that never re-renders.
   if (!TXT_READY) await textsReady;
