@@ -657,6 +657,7 @@ export async function restoreBackup(name) {
   if (!ok) return;
   const dataOn = $("confirm-cb-data").checked;
   const settingsOn = $("confirm-cb-settings").checked;
+  if (!dataOn && !settingsOn) return; // nothing chosen: never fall through to a settings restore
   const scope = dataOn && settingsOn ? "all" : dataOn ? "data" : "settings";
   // No extra backup here: the restore itself takes a safety snapshot first, and
   // one more made with the same keep count would rotate the chosen snapshot away.

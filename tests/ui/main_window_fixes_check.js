@@ -1497,6 +1497,29 @@ section(() => {
   check(sb.on() === false && removed.join() === "pointerup,pointercancel", "ending clears the flag and both listeners");
 });
 
+// 83. A restore with neither box checked restores nothing.
+section(() => {
+  const src = read("backups.js");
+  const fn = extractBlock(src, "export async function restoreBackup(name) {").replace("export ", "");
+  later(async () => {
+    const run1 = async (data, settings) => {
+      const calls = [];
+      const sb = run(fn + "\nglobalThis.go = restoreBackup;", {
+        t: (k) => k, confirmDialog: async () => true,
+        $: (id) => ({ checked: id === "confirm-cb-data" ? data : settings }),
+        withTaskbarBusy: async (_k, f) => f(), invoke: async (c, a) => { calls.push([c, a.scope]); },
+        val: () => 5, errToast() {},
+      });
+      await sb.go("snap");
+      return calls;
+    };
+    check((await run1(false, false)).length === 0, "neither checked: no restore call");
+    check((await run1(true, false))[0][1] === "data", "data only keeps scope data");
+    check((await run1(false, true))[0][1] === "settings", "settings only keeps scope settings");
+    check((await run1(true, true))[0][1] === "all", "both keeps scope all");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
