@@ -120,9 +120,10 @@ export function pickTileFolderColor(f, anchor) {
     }
     clearTimeout(folderColorTimer);
     // Re-read the folder on write: the settings object was replaced in between.
-    folderColorTimer = setTimeout(() => {
+    folderColorTimer = setTimeout(async () => {
       const now = folderById(f.id);
-      if (now) saveFolder(now, { color: hex });
+      // A refused write already toasted: show the colour the store kept, not the painted one.
+      if (now && !(await saveFolder(now, { color: hex }))) await renderGrid(); // no skipFetch: refetch the stored state
     }, 300);
   });
 }

@@ -1401,6 +1401,13 @@ section(() => {
   });
 });
 
+// 77. A refused folder colour write redraws from the stored state (renderGrid without skipFetch).
+section(() => {
+  const gf = read("gridFolders.js");
+  const src = extractBlock(gf, "export function pickTileFolderColor(");
+  check(/await saveFolder\(now, \{ color: hex \}\)\)\) await renderGrid\(\)/.test(src), "a failed colour save refetches and redraws the grid");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
