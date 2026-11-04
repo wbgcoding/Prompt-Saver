@@ -691,18 +691,36 @@ static ELEVATION_REQUEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(windows)]
 #[test]
-fn ocr_elevated_capabilities_result_survives_a_truncated_read() {
+fn ocr_elevated_capabilities_result_treats_an_unparseable_file_as_a_final_error() {
     let _serial = ELEVATION_REQUEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let nonce = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
     let path = ocr::caps_result_path(ocr::CapKind::Ocr, &nonce);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    std::fs::write(&path, b"{\"Name\":\"Language.OC").unwrap(); // deliberately truncated JSON
+    // The file only ever appears through an atomic move, so garbage is the answer, not a partial write.
+    std::fs::write(&path, b"{\"Name\":\"Language.OC").unwrap();
     let result = ocr::elevated_capabilities_result(ocr::CapKind::Ocr);
-    assert!(matches!(result, Ok(None)));
-    assert!(path.exists(), "a truncated/unparseable read must leave the file for the next poll, not discard it");
-    let _ = std::fs::remove_file(&path);
+    assert!(result.is_err());
+    assert!(!path.exists(), "a final result is cleared so the dialog stops polling");
+    assert!(ocr::pending_nonce(ocr::CapKind::Ocr, ocr::CAPS_TAG).is_none(), "the request ends with it");
+}
+
+#[cfg(windows)]
+#[test]
+fn ocr_elevated_capabilities_result_reads_an_empty_file_as_an_empty_list() {
+    let _serial = ELEVATION_REQUEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let nonce = ocr::start_request(ocr::CapKind::Speech, ocr::CAPS_TAG);
+    let path = ocr::caps_result_path(ocr::CapKind::Speech, &nonce);
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    std::fs::write(&path, "\u{feff}".as_bytes()).unwrap(); // a byte-order mark and nothing else
+    match ocr::elevated_capabilities_result(ocr::CapKind::Speech) {
+        Ok(Some(caps)) => assert!(caps.is_empty()),
+        _ => panic!("expected an empty list"),
+    }
+    assert!(!path.exists());
 }
 
 #[cfg(windows)]

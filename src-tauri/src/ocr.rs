@@ -459,7 +459,7 @@ pub(super) fn start_request(kind: CapKind, tag: &str) -> String {
         .insert(nonce_key(kind, tag), nonce.clone());
     nonce
 }
-fn pending_nonce(kind: CapKind, tag: &str) -> Option<String> {
+pub(super) fn pending_nonce(kind: CapKind, tag: &str) -> Option<String> {
     pending_nonces().lock().unwrap_or_else(|e| e.into_inner()).get(&nonce_key(kind, tag)).cloned()
 }
 fn finish_request(kind: CapKind, tag: &str) {
@@ -688,9 +688,10 @@ pub(super) fn elevate_capabilities(kind: CapKind) -> Result<(), String> {
 // successful list also fills the cache the normal query fills, so the install allowlist
 // works unchanged.
 //
-// The file is deleted only on a definite terminal outcome (a parseable error or list); an
-// empty or unparseable read counts as not ready, since the result may be mid-write.
-// Mirrors install_result.
+// The file appears only through that atomic move, so once it exists it is the final answer: an
+// empty file is a listing that matched nothing (an empty list), and one that does not parse is an
+// error. Every outcome deletes the file and ends the request. install_result differs: its file
+// is written in place and can be caught half written.
 pub(super) fn elevated_capabilities_result(kind: CapKind) -> Result<Option<Vec<OcrCap>>, String> {
     // No nonce means no elevated listing of ours is in flight.
     let Some(nonce) = pending_nonce(kind, CAPS_TAG) else { return Ok(None) };
@@ -701,17 +702,12 @@ pub(super) fn elevated_capabilities_result(kind: CapKind) -> Result<Option<Vec<O
     };
     // Windows PowerShell's `Out-File -Encoding utf8` writes a byte-order mark.
     let text = text.trim_start_matches('\u{feff}').trim().to_string();
-    if text.is_empty() {
-        return Ok(None);
-    }
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
         if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
             let _ = fs::remove_file(&path);
             finish_request(kind, CAPS_TAG);
             return Err(err.to_string());
         }
-    } else {
-        return Ok(None); // not valid JSON (yet) -- leave it for the next poll
     }
     let caps = match caps_from_json(kind, &text) {
         Ok(c) => c,
