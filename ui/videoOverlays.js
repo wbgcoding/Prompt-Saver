@@ -335,7 +335,8 @@ export function renderOverlayList() {
 
 // The armed cross falls back after this long, like the confirm buttons of the main window.
 const OV_DISARM_MS = 3000;
-const OV_X_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+// Shared by every overlay and clip row.
+export const OV_X_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
 
 // The cross at the end of an overlay row. One click arms it (the cross turns into "Remove?" for
 // a moment), the second click removes the overlay, which Ctrl+Z brings back.
@@ -393,7 +394,7 @@ export function renderClipList() {
     const del = document.createElement("button");
     del.type = "button";
     del.className = "icon-btn ve-op-del";
-    del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+    del.innerHTML = OV_X_SVG;
     del.title = t("veOpRemove");
     del.setAttribute("aria-label", `${t("veOpRemove")}: ${op.name}`);
     del.addEventListener("click", () => removeOps((o) => o === op));
@@ -718,7 +719,7 @@ export function renderOverlayEditor() {
       [["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
       op.back, (v) => { commitOverlay(op, { back: v }); renderOverlayEditor(); }), (o) => o.back)));
     if (op.back === "outline") {
-      box.appendChild(fieldRow(t("veOvTextOutline"), ovTrack("outlinePx", numberInput(op.outlinePx ?? 3, 1, 12, 1, (v) => commitOverlay(op, { outlinePx: v }), [1, 2, 3, 4, 6, 8]), (o) => String(o.outlinePx))));
+      box.appendChild(fieldRow(t("veOvTextOutline"), ovTrack("outlinePx", numberInput(op.outlinePx ?? 3, 1, 12, 1, (v) => commitOverlay(op, { outlinePx: v }), [1, 2, 3, 4, 6, 8]), (o) => String(o.outlinePx ?? 3))));
     }
   }
 

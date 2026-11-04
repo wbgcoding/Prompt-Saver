@@ -20,7 +20,7 @@ import { stripFormatExt } from "./exportName.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
-import { markedRange, centeredRect, addAlignedCameraOverlay, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor } from "./videoOverlays.js";
+import { markedRange, centeredRect, addAlignedCameraOverlay, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor, OV_X_SVG } from "./videoOverlays.js";
 import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
@@ -676,7 +676,7 @@ function renderOps() {
     const del = document.createElement("button");
     del.type = "button";
     del.className = "icon-btn ve-op-del";
-    del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+    del.innerHTML = OV_X_SVG;
     del.title = t("veOpRemove");
     del.setAttribute("aria-label", `${t("veOpRemove")}: ${opLabel(op)}`);
     del.addEventListener("click", () => deleteOp(op));
