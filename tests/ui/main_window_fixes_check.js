@@ -917,7 +917,7 @@ section(() => {
     const calls = [];
     const sb = run(set + "\n" + fn, {
       invoke: async (cmd) => { calls.push(cmd); return cmd === "rotation_peek" ? { text: "x" } : {}; },
-      resolveVars: async (x) => x, recordToolUsage() {},
+      resolveVars: async (x) => x, recordToolUsage() {}, readyForCopy: async (x) => x,
     });
     const p = { id: "a", text: "t", variants: ["v"] };
     const slow = async () => { await new Promise((r) => setTimeout(r, 5)); return true; };

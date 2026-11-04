@@ -1387,27 +1387,38 @@ export async function batchExport(format, ids) {
 // silently, the rest go through the dialog. Returns false if the copy failed or the user
 // cancelled. The single copy entry point for every path that skips the dialog's own
 // double-click handling (grid, library, journal).
-export async function copyResolved(p) {
-  // Confidential and the vault has no key right now: ask for it first, as for a click on a
-  // locked tile. A cancelled or wrong password fails the copy like any cancelled copy.
-  // The cached copy can say "unlocked" after the backend dropped the key (idle timeout), so
-  // ask the backend before trusting it and fall back to the locked path.
+// The vault re-check every copy path shares (copyResolved, and peekResolveCommit for the
+// placeholder, formatted and hotkey copies): a confidential prompt whose vault has no key right
+// now asks for it first, as for a click on a locked tile. The cached copy can say "unlocked"
+// after the backend dropped the key (idle timeout, or a sleep that held the relock timer), so
+// the backend is asked before the cached text is trusted. Resolves to the prompt to copy (a
+// fresh copy when the grid was refetched) or null when the copy must not go on (cancelled or
+// wrong password). `beforeAsk` runs just before a password question, for a caller whose window
+// may be hidden.
+export async function readyForCopy(p, beforeAsk) {
   if (p.secret && !p.locked) {
     const st = await invoke("secret_vault_status").catch(() => null);
     if (st && !st.unlocked) {
       await renderGrid();
       const now = prompts.find((x) => x.id === p.id);
-      if (!now) return false;
+      if (!now) return null;
       p = now;
     }
   }
   if (p.locked) {
-    if (!(await ensureSecretVaultUnlocked())) return false;
+    await beforeAsk?.();
+    if (!(await ensureSecretVaultUnlocked())) return null;
     await renderGrid(); // pulls the now-decrypted text into `prompts`
     const fresh = prompts.find((x) => x.id === p.id);
-    if (!fresh || fresh.locked) return false;
+    if (!fresh || fresh.locked) return null;
     p = fresh;
   }
+  return p;
+}
+
+export async function copyResolved(p) {
+  p = await readyForCopy(p);
+  if (!p) return false;
   // Rotating prompt: peek the entry copy_prompt would use, resolve variables on that text, and
   // commit only once the copy reaches the clipboard, so a cancelled variable dialog never burns
   // an entry.
@@ -1428,6 +1439,7 @@ export async function copyResolved(p) {
     // (which copy through copy_prompt).
     const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
     return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch((e) => { errToast(e); return false; }), {
+      vaultChecked: true,
       resolve: (raw) => (varTokens(p, raw).length ? resolveVars(raw) : raw),
     });
   }

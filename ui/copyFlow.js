@@ -7,7 +7,7 @@ import { renderMarkdown } from "./markdown.js";
 import { activeView, favLayoutMap, layoutOf } from "./views.js";
 import { chainLock, chainMode, chainSel, onChainClick, setChainLock, setChainMode, toggleChainPick } from "./chain.js";
 import { autoPasteNow, showCopied } from "./tiles.js";
-import { copyResolved } from "./library.js";
+import { copyResolved, readyForCopy } from "./library.js";
 import { recordToolUsage } from "./management.js";
 
 // Record a copy for the history/usage journal (the backend honours the privacy flag).
@@ -48,12 +48,18 @@ export function markCopied(id) {
 // cancelled placeholder window or a failed copy burns no entry; a failed peek falls
 // back to the stored text and must not be followed by a commit). `afterResolve` runs
 // right after the placeholders are answered, cancelled or not. Resolves to copyFn's
-// result, false when cancelled.
+// result, false when cancelled. A confidential prompt first goes through the same vault
+// re-check as every other copy (readyForCopy) unless the caller already did (`vaultChecked`);
+// `beforeAsk` is passed on for a password question raised while the window is hidden.
 // Rotating prompts being copied right now: a second activation (double press, hotkey during a
 // click) would peek the same entry and then advance the rotation twice, skipping an entry that
 // was never copied, so it is dropped while the first one runs.
 const rotatingInFlight = new Set();
 export async function peekResolveCommit(p, copyFn, opts) {
+  if (!opts?.vaultChecked) {
+    p = await readyForCopy(p, opts?.beforeAsk);
+    if (!p) return false;
+  }
   const afterResolve = opts?.afterResolve;
   const resolve = opts?.resolve ?? resolveVars;
   const rotating = (p.variants || []).length > 0;
@@ -228,7 +234,10 @@ export async function copyOutsideApp(p, paste) {
   const ok = await peekResolveCommit(
     p,
     (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
-    { afterResolve: () => { varsPasteRequested = false; } }, // a second press only upgrades copies started in the window
+    {
+      afterResolve: () => { varsPasteRequested = false; }, // a second press only upgrades copies started in the window
+      beforeAsk: () => invoke("focus_main_window").catch(() => {}), // a vault password is asked in the main window
+    },
   );
   if (ok) {
     recordCopy(p.id);

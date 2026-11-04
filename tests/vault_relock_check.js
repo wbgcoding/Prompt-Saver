@@ -59,7 +59,12 @@ function sandbox(status) {
   vm.createContext(sb);
   vm.runInContext("let vaultRelockTimer = 0; let vaultRelockAt = 0; let vaultRelockAsking = false;", sb);
   vm.runInContext(extractBlock("async function armVaultRelock() {"), sb);
+  vm.runInContext(extractBlock("async function readyForCopy(p, beforeAsk) {"), sb);
   vm.runInContext(extractBlock("async function copyResolved(p) {"), sb);
+  // The placeholder, formatted and hotkey copies share the same re-check through this.
+  sb.resolveVars = async (x) => x;
+  sb.recordToolUsage = () => {};
+  vm.runInContext("const rotatingInFlight = new Set();\n" + extractBlock("async function peekResolveCommit(p, copyFn, opts) {"), sb);
   return sb;
 }
 
@@ -117,6 +122,21 @@ const live = (sb) => sb.timers.filter((t) => t.live);
     check("live key: no refetch", sb.renders, 0);
     check("live key: no password question", sb.unlockAsked, 0);
     check("live key: copied", [ok, sb.calls.includes("copy_prompt")], [true, true]);
+  }
+  // Every copy path re-checks, not only copyResolved: a placeholder copy of a confidential
+  // prompt after the key expired asks for the password first.
+  {
+    const sb = sandbox({ unlocked: false, configured: true, remaining_secs: null });
+    let copied = 0;
+    const ok = await sb.peekResolveCommit(sb.prompts[0], async () => { copied++; return true; });
+    check("peek copy, expired key: the password is asked for", sb.unlockAsked, 1);
+    check("peek copy, expired key: nothing is copied", [ok, copied], [false, 0]);
+    let asked = 0;
+    await sb.peekResolveCommit(sb.prompts[0], async () => true, { beforeAsk: () => { asked++; } });
+    check("peek copy: the caller hook runs before the password question", asked, 1);
+    const live = sandbox({ unlocked: true, configured: true, remaining_secs: 100 });
+    const ok2 = await live.peekResolveCommit(live.prompts[0], async () => true);
+    check("peek copy, live key: copied without a question", [ok2, live.unlockAsked], [true, 0]);
   }
 
   for (const p of problems) console.log("FAIL", p);

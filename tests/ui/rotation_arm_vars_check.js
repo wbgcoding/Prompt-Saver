@@ -24,6 +24,7 @@ const code = [
   "const rotatingInFlight = new Set();",
   extractBlock("async function resolveVarsList("),
   extractBlock("async function peekResolveCommit("),
+  extractBlock("async function readyForCopy("),
   extractBlock("async function copyResolved("),
 ].join("\n");
 
