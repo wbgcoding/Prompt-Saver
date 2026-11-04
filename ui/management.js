@@ -317,9 +317,20 @@ export async function scanDupes(opts = {}) {
 }
 // Deletes every OTHER member of the group, keeping only `keepId`; reachable only from the
 // compare view (one button per column, see renderCompareView).
+// The compare view stays open across the awaits, so a second click on the other column would
+// delete the kept side too: one run at a time.
+let keepOneBusy = false;
 export async function keepOneDup(group, keepId) {
   const remove = group.members.filter((m) => m.id !== keepId).map((m) => m.id);
-  if (!remove.length) return;
+  if (!remove.length || keepOneBusy) return;
+  keepOneBusy = true;
+  try {
+    await keepOneDupRun(remove);
+  } finally {
+    keepOneBusy = false;
+  }
+}
+async function keepOneDupRun(remove) {
   const placements = await invoke("placement_snapshot", { ids: remove }).catch(() => null);
   try {
     const gone = new Set(remove);
@@ -466,7 +477,17 @@ export function renderCompareView() {
 // Overwrites `target` with `source`'s name/text/colour/image: the normal
 // update_prompt path, so it snapshots the overwritten side into its own version
 // history first (see update_prompt) instead of silently discarding it.
+let takeSideBusy = false; // a double click would write the same version snapshot twice
 export async function takeCompareSide(target, source) {
+  if (takeSideBusy) return;
+  takeSideBusy = true;
+  try {
+    await takeCompareSideRun(target, source);
+  } finally {
+    takeSideBusy = false;
+  }
+}
+async function takeCompareSideRun(target, source) {
   let updated;
   try {
     updated = await invoke("update_prompt", {

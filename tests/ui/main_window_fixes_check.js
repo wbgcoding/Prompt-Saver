@@ -1372,6 +1372,35 @@ section(() => {
   });
 });
 
+// 76. The compare view's keep-one and take-side actions run once per click burst.
+section(() => {
+  const mg = read("management.js");
+  let runs = 0, release;
+  const gate = () => new Promise((r) => { release = r; });
+  const sb = run("let keepOneBusy = false; let takeSideBusy = false;\n"
+    + extractBlock(mg, "export async function keepOneDup(").replace("export ", "") + "\n"
+    + extractBlock(mg, "export async function takeCompareSide(").replace("export ", ""), {
+    keepOneDupRun: async () => { runs++; await gate(); },
+    takeCompareSideRun: async () => { runs++; await gate(); },
+  });
+  later(async () => {
+    const group = { members: [{ id: "a" }, { id: "b" }] };
+    const first = sb.keepOneDup(group, "a");
+    await sb.keepOneDup(group, "b");
+    check(runs === 1, "a second keep click during the first is ignored");
+    release(); await first;
+    await Promise.resolve();
+    const again = sb.keepOneDup(group, "b");
+    check(runs === 2, "keep works again once the first finished");
+    release(); await again;
+    runs = 0;
+    const t1 = sb.takeCompareSide({}, {});
+    await sb.takeCompareSide({}, {});
+    check(runs === 1, "a second take click during the first is ignored");
+    release(); await t1;
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
