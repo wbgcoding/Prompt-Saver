@@ -348,28 +348,14 @@ Function PageLeaveReinstall
     Goto reinst_uninstall
   ${EndIf}
 
-  ; $R0 holds whether same(0)/upgrading(1)/downgrading(-1) version
+  ; Only a downgrade gets this far: the other cases left above.
   ; $R1 holds the radio buttons state:
   ;   1 => first choice was selected
   ;   0 => second choice was selected
-  ${If} $R0 = 0 ; Same version, proceed
-    ${If} $R1 = 1              ; User chose to add/reinstall
-      Goto reinst_done
-    ${Else}                    ; User chose to uninstall
-      Goto reinst_uninstall
-    ${EndIf}
-  ${ElseIf} $R0 = 1 ; Upgrading
-    ${If} $R1 = 1              ; User chose to uninstall
-      Goto reinst_uninstall
-    ${Else}
-      Goto reinst_done         ; User chose NOT to uninstall
-    ${EndIf}
-  ${ElseIf} $R0 = -1 ; Downgrading
-    ${If} $R1 = 1              ; User chose to uninstall
-      Goto reinst_uninstall
-    ${Else}
-      Goto reinst_done         ; User chose NOT to uninstall
-    ${EndIf}
+  ${If} $R1 = 1                ; User chose to uninstall
+    Goto reinst_uninstall
+  ${Else}
+    Goto reinst_done           ; User chose NOT to uninstall
   ${EndIf}
 
   reinst_uninstall:
