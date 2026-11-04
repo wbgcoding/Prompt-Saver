@@ -4,7 +4,7 @@
 // text, never touches a character already sitting in the sentence, and only
 // capitalizes a word right after a mark IT just inserted.
 //
-// Loaded as a plain script (like floatShared.js), so everything here is a
+// Loaded as a plain script (like search.js and chainvars.js), so everything here is a
 // bare function/const in module scope. The guarded export at the bottom
 // makes it directly testable from Node without affecting the window build.
 
