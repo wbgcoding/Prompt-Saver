@@ -803,10 +803,10 @@ fn daily_copies_bucket_by_the_local_day() {
     const DAY: u64 = 86400;
     let offset = 2 * 3600i64; // two hours east of UTC
     let local_today = (now_secs() as i64 + offset) as u64 / DAY * DAY;
-    // 00:00:30 local today, which is still the previous day in UTC.
+    // Half a minute past local midnight, which is still the previous day in UTC.
     let just_after_midnight = (local_today as i64 + 30 - offset) as u64;
     db_append_copy(&conn, &CopyEntry { id: "a".into(), ts: just_after_midnight }, 100, None).unwrap();
-    // 23:59:00 local yesterday.
+    // A minute before local midnight, the day before.
     db_append_copy(&conn, &CopyEntry { id: "b".into(), ts: just_after_midnight - 91 }, 100, None).unwrap();
     let daily = db_daily_copies(&conn, 3, offset);
     assert_eq!(daily.len(), 3);
