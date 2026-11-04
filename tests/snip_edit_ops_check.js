@@ -33,7 +33,11 @@ function sandbox() {
     snipEditFit() {}, snipEditDrawCropOverlayLive() {}, snipEditFullCropRect: () => ({ x: 0, y: 0, w: 10, h: 10 }),
     snipEditSetTool(id) { sb.tools.push(id); },
     SNIP_TOOLS: [{ id: "rect", key: "r" }],
-    snipEdit: { classList: { contains: () => false } },
+    snipEditCropIsFull: (r) => r.w === 10 && r.h === 10,
+    cropCommits: 0, snipEditCropCommit() { sb.cropCommits++; },
+    snipColorPop: { name: "color" }, snipScalePop: { name: "scale" },
+    trapTabWithin(container) { sb.trapped = container.name || "editor"; },
+    snipEdit: { name: "editor", classList: { contains: () => false } },
     snipCtxPop: { classList: { contains: () => true } },
     snipEditTextInput: {}, document: { activeElement: null },
     $: () => ({ classList: { contains: () => true } }),
@@ -164,6 +168,37 @@ function sandbox() {
   check("Ctrl+V: no original toggle", sb.pressed, 0);
   sb.snipEditKeydown(ev({ tagName: "BODY" }, "v"));
   check("plain V: original toggle", sb.pressed, 1);
+}
+// Enter with the crop tool: a box the pointer release already committed closes the editor; a
+// box that differs from the crop op (or has none yet) is committed first.
+{
+  const sb = sandbox();
+  const ev = (key, extra = {}) => ({ key, target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...extra });
+  sb.SE.tool = "crop";
+  sb.SE.cropRect = { x: 1, y: 1, w: 5, h: 5 };
+  sb.SE.ops = [{ tool: "crop", rect: { x: 1, y: 1, w: 5, h: 5 } }];
+  sb.snipEditKeydown(ev("Enter"));
+  check("Enter with a committed crop: applies", [sb.applied, sb.cropCommits], [true, 0]);
+  sb.applied = false;
+  sb.SE.cropRect = { x: 2, y: 1, w: 5, h: 5 };
+  sb.snipEditKeydown(ev("Enter"));
+  check("Enter with a changed crop box: commits, no apply", [sb.applied, sb.cropCommits], [false, 1]);
+  sb.SE.ops = [];
+  sb.snipEditKeydown(ev("Enter"));
+  check("Enter with an uncommitted crop box: commits, no apply", [sb.applied, sb.cropCommits], [false, 2]);
+}
+// Tab stays inside the open size or colour popover, which live on the body outside the editor.
+{
+  const sb = sandbox();
+  const tab = { key: "Tab", target: { tagName: "BODY" }, preventDefault() {}, shiftKey: false };
+  sb.snipEditKeydown(tab);
+  check("Tab with no popover: trapped in the editor", sb.trapped, "editor");
+  sb.scalePopOpen = true;
+  sb.snipEditKeydown(tab);
+  check("Tab with the size popover open: trapped in it", sb.trapped, "scale");
+  sb.snipColorPopIsOpen = () => true;
+  sb.snipEditKeydown(tab);
+  check("Tab with the colour popover open: trapped in it", sb.trapped, "color");
 }
 // A nudge folded into the entry below the top is a new edit: it ends the redo branch.
 {

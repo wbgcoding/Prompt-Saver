@@ -1766,7 +1766,12 @@ export function initSnipEditor() {
       if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
       if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
     }
-    if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
+    // The size and colour popovers sit on document.body too, so the Tab trap stays inside the
+    // one that is open instead of pulling focus out of its fields.
+    if (e.key === "Tab") {
+      trapTabWithin(snipColorPopIsOpen() ? snipColorPop : snipScalePopIsOpen() ? snipScalePop : snipEdit, e);
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
@@ -1794,8 +1799,13 @@ export function initSnipEditor() {
     if (e.key === "F2" && SE.lastNudged && SE.lastNudged.tool === "text") { e.preventDefault(); snipEditEditText(SE.lastNudged); return; }
     if (e.key === "Enter") {
       e.preventDefault();
-      // The untouched full-image box is no crop, so Enter then closes the editor.
-      if (SE.tool === "crop" && SE.cropRect && !snipEditCropIsFull(SE.cropRect)) { snipEditCropCommit(); return; }
+      // The untouched full-image box is no crop, so Enter then closes the editor. So does a box
+      // the pointer release already committed: Enter only has something to commit when the box
+      // differs from the crop op.
+      if (SE.tool === "crop" && SE.cropRect && !snipEditCropIsFull(SE.cropRect)) {
+        const committed = SE.ops.find((o) => o.tool === "crop");
+        if (!committed || JSON.stringify(committed.rect) !== JSON.stringify(SE.cropRect)) { snipEditCropCommit(); return; }
+      }
       snipEditApply();
       return;
     }
