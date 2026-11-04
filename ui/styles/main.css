@@ -4100,7 +4100,11 @@ body.drag-over::after {
    switch grid's left column ends (and the third starts where its right column starts). */
 #impexp-field .export-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 16px; }
 #impexp-field .export-row .ghost-btn { white-space: normal; line-height: 20px; }
-#impexp-field .export-row .export-pair > .ghost-btn { white-space: nowrap; }
+/* A long word such as "Exportieren" cannot wrap inside its button, so when the pair is too narrow
+   the format select drops under the button instead of running into it. */
+#impexp-field .export-row .export-pair { flex-wrap: wrap; }
+#impexp-field .export-row .export-pair > .ghost-btn { flex: 1 1 auto; min-width: min-content; white-space: normal; }
+#impexp-field .export-row .export-pair > select { flex: 1 1 auto; }
 @media (max-width: 468px) {
   #impexp-field .export-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
