@@ -561,3 +561,20 @@ fn a_running_snip_session_keeps_its_mode_when_another_is_requested() {
     let cmd = src.split("pub(crate) fn set_snip_mode").nth(1).unwrap().split("pub(crate) fn snip_mode_after_request").next().unwrap();
     assert!(cmd.contains("SNIP_ACTIVE.load"), "the command must consult the running session");
 }
+
+#[test]
+fn save_screenshot_gives_up_when_the_folder_cannot_exist() {
+    let blocker = std::env::temp_dir().join(format!("{}-shotblock-{}", brand::TEMP_PREFIX, std::process::id()));
+    let _ = fs::remove_file(&blocker);
+    fs::write(&blocker, b"a file where the folder would have to be").unwrap();
+    assert_eq!(save_screenshot(b"x", &blocker.join("sub"), "Screenshot-x", "png"), "");
+    let _ = fs::remove_file(&blocker);
+}
+
+#[test]
+fn an_old_working_copy_is_swept_even_when_its_process_id_is_alive() {
+    let name = format!("{}-openedit-abc-{}", brand::TEMP_PREFIX, std::process::id());
+    assert!(openedit_dir_in_use(&name, None));
+    assert!(openedit_dir_in_use(&name, Some(Duration::from_secs(3600))));
+    assert!(!openedit_dir_in_use(&name, Some(OPENEDIT_HARD_CAP)));
+}

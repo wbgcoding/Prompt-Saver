@@ -292,12 +292,12 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
             let name = e.file_name().to_string_lossy().to_string();
             let is_ours = name.starts_with(&ocr_prefix) || name.starts_with(&voice_prefix);
             let is_ocr_png = is_ours && name.ends_with(".png");
-            // Result files of the two elevated PowerShell runs (install, list) and the DISM log. Each
-            // script deletes itself, so a .ps1 here was left by a hard kill.
-            let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
+            // Result files of the two elevated PowerShell runs (install, list), the unfinished
+            // temp of a listing result, and the DISM log.
+            let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".json.tmp") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
-            } else if name.starts_with(&openedit_prefix) && is_stale(&e) && !openedit_dir_in_use(&name) {
+            } else if name.starts_with(&openedit_prefix) && is_stale(&e) && !openedit_dir_in_use(&name, entry_age(&e)) {
                 let _ = fs::remove_dir_all(e.path());
             } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
@@ -320,9 +320,19 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
 
 // A working copy folder ends in the id of the process that opened it. The folder's own time is
 // set once at copy time, so an edit that runs for hours looks stale: while that process lives
-// (this one included) the copy is in use and stays.
-fn openedit_dir_in_use(name: &str) -> bool {
+// (this one included) the copy is in use and stays. Past a hard cap it goes anyway, since a
+// recycled process id of an unrelated program would otherwise keep it for good.
+pub(crate) const OPENEDIT_HARD_CAP: Duration = Duration::from_secs(7 * 24 * 3600);
+
+pub(crate) fn openedit_dir_in_use(name: &str, age: Option<Duration>) -> bool {
+    if age.is_some_and(|a| a >= OPENEDIT_HARD_CAP) {
+        return false;
+    }
     name.rsplit('-').next().and_then(|p| p.parse::<u32>().ok()).is_some_and(|pid| pid == std::process::id() || pid_is_alive(pid))
+}
+
+fn entry_age(e: &fs::DirEntry) -> Option<Duration> {
+    e.metadata().and_then(|m| m.modified()).ok().and_then(|t| SystemTime::now().duration_since(t).ok())
 }
 
 // Orderly exit: drop this process's own scratch files right away instead of
@@ -1203,9 +1213,8 @@ pub(crate) async fn snip_background(preview: State<'_, SnipPreview>, index: usiz
 }
 
 #[tauri::command]
-pub(crate) fn snip_cancel(app: AppHandle, state: State<SnipState>) {
+pub(crate) fn snip_cancel(app: AppHandle) {
     close_all_snip(&app);
-    state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
 // The recording overlay's window click or region drag resolved to a target: close the
@@ -1217,7 +1226,6 @@ pub(crate) fn snip_cancel(app: AppHandle, state: State<SnipState>) {
 #[tauri::command]
 pub(crate) fn recorder_target_picked(
     app: AppHandle,
-    state: State<SnipState>,
     kind: String,
     id: u32,
     x: i32,
@@ -1246,7 +1254,6 @@ pub(crate) fn recorder_target_picked(
         payload["forSwitch"] = serde_json::json!(true);
     }
     close_all_snip(&app);
-    state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let _ = app.emit("recorder-target-picked", payload);
     Ok(())
 }
@@ -1265,7 +1272,7 @@ pub(crate) fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(
     }
     const MONITOR_DEFAULTTONEAREST: u32 = 2;
 
-    let rect = RectI { left: x, top: y, right: x + w as i32, bottom: y + h as i32 };
+    let rect = RectI { left: x, top: y, right: x.saturating_add(i32::try_from(w).unwrap_or(i32::MAX)), bottom: y.saturating_add(i32::try_from(h).unwrap_or(i32::MAX)) };
     let hmon = unsafe { MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST) };
     if hmon == 0 {
         return Err("could not resolve a monitor for this region".to_string());
@@ -1328,8 +1335,10 @@ pub(crate) fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, e
                     String::new()
                 };
             }
-            // Taken, or a directory of that name (PermissionDenied): try the next suffix.
-            Err(_) => continue,
+            // Taken, or a directory of that name (PermissionDenied): try the next suffix. Any
+            // other error (missing or unwritable folder) will not change with another name.
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::PermissionDenied) => continue,
+            Err(_) => return String::new(),
         }
     }
     String::new()
