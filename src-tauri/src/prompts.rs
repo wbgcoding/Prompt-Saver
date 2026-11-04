@@ -178,15 +178,15 @@ pub(crate) fn apply_view_batch_action(
                 return Ok(());
             };
             let before = settings.views.clone();
-            let (cols, rows) = (settings.views[vidx].cols, settings.views[vidx].rows);
-            let key = grid_key(cols, rows);
-            let layout = settings.views[vidx].layouts.entry(key).or_default();
             if action == "removeView" {
-                for id in ids {
-                    layout.remove(id);
-                }
-                settings.views[vidx].members.retain(|m| !ids.contains(m));
+                // Every grid size the view has had, like the source side of a move: a placement
+                // left in another size would come back when the grid is switched. No empty layout
+                // entry is created for a size that never had one.
+                strip_ids_from_view(&mut settings.views[vidx], ids);
             } else {
+                let (cols, rows) = (settings.views[vidx].cols, settings.views[vidx].rows);
+                let key = grid_key(cols, rows);
+                let layout = settings.views[vidx].layouts.entry(key).or_default();
                 if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
                     let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
                     // The empty layout entry created above must not linger to be saved later.

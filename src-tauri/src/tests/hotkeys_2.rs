@@ -1370,3 +1370,24 @@ fn a_refused_batch_leaves_no_empty_layout_behind() {
         assert!(settings.views[1].members.is_empty(), "{action}: no member may be added");
     }
 }
+
+#[test]
+fn removing_from_a_view_strips_every_grid_size_and_adds_no_empty_layout() {
+    let mut settings = Settings::default();
+    let mut view = test_view("home");
+    view.cols = 2;
+    view.rows = 1;
+    view.members = vec!["a".to_string(), "b".to_string()];
+    view.layouts.insert(grid_key(3, 1), HashMap::from([("a".to_string(), [0, 0]), ("b".to_string(), [1, 0])]));
+    settings.views = vec![view];
+
+    let ids: Vec<String> = vec!["a".to_string()];
+    let result = apply_view_batch_action(&mut settings, "removeView", &ids, "home", "", |_s| true);
+
+    assert!(result.is_ok());
+    let view = &settings.views[0];
+    assert_eq!(view.members, vec!["b".to_string()]);
+    assert!(!view.layouts[&grid_key(3, 1)].contains_key("a"));
+    assert_eq!(view.layouts[&grid_key(3, 1)].get("b"), Some(&[1, 0]));
+    assert!(!view.layouts.contains_key(&grid_key(2, 1)), "no empty layout for the current size");
+}
