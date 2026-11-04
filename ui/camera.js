@@ -519,24 +519,8 @@ document.addEventListener("keyup", (e) => {
   if (e.code === "Space" && isRecording() && tag !== "SELECT" && tag !== "INPUT") e.preventDefault();
 });
 
-// The window has no OS titlebar; dragging the status strip moves it, same
-// startDragging() pattern the recording bar uses (WebView2 ignores the CSS
-// app-region property Electron apps rely on).
-const titlebar = document.querySelector(".cam-titlebar");
-const DRAG_THRESHOLD = 4;
-let dragStart = null;
-titlebar.addEventListener("mousedown", (e) => {
-  if (e.button !== 0 || e.target.closest("button")) return;
-  dragStart = { x: e.screenX, y: e.screenY };
-});
-window.addEventListener("mousemove", async (e) => {
-  if (!dragStart) return;
-  if (e.buttons === 0) { dragStart = null; return; }
-  if (Math.abs(e.screenX - dragStart.x) < DRAG_THRESHOLD && Math.abs(e.screenY - dragStart.y) < DRAG_THRESHOLD) return;
-  dragStart = null;
-  await appWin.startDragging();
-});
-window.addEventListener("mouseup", () => { dragStart = null; });
+// The window has no OS titlebar; the status strip carries data-tauri-drag-region="deep"
+// in camera.html, which is the only drag mechanism here.
 
 // The permission event and the saved settings (camera, frame rate, resolution)
 // arrive in either order; the first preview waits for both, so it never opens the
