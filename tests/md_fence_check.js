@@ -32,5 +32,8 @@ for (const lang of ["rust", "js", "py", "sql", "bash", "css"]) {
   check(`${lang}: a real number is still wrapped`, /<span class="hl-num">12<\/span>/.test(sb.hlCode("x &#39;a 12", lang)), true);
 }
 
+// A token that starts at index 0 with an entity keeps its colour.
+check("a leading entity string is still wrapped", /<span class="hl-str">/.test(sb.hlCode("&quot;use strict&quot;", "js")), true);
+
 if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
 console.log("md_fence_check: ok");

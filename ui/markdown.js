@@ -102,6 +102,7 @@ export const HL_RE = Object.fromEntries(Object.entries(HL_RULES).map(([id, def])
 // The index just past the character entity ("&#39;", "&amp;") that position `i` sits
 // inside (after its "&"), or 0 when it is not inside one.
 function entityEndAround(s, i) {
+  if (i <= 0) return 0; // lastIndexOf with a negative start would clamp to 0 and find the entity at the very start
   const amp = s.lastIndexOf("&", i - 1);
   if (amp < 0 || i - amp > 8) return 0;
   const m = /^&#?\w+;/.exec(s.slice(amp, amp + 10));
