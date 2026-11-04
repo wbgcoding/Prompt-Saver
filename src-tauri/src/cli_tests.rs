@@ -1703,3 +1703,10 @@ fn a_binary_sid_is_written_in_its_textual_form() {
     bad[0] = 2;
     assert_eq!(sid_to_string(&bad), None, "an unknown revision is refused");
 }
+
+#[test]
+fn a_write_refusal_names_the_unreadable_part() {
+    assert!(locked_write_message(true).contains("failed to decrypt"));
+    assert!(locked_write_message(false).contains("settings"));
+    assert!(!locked_write_message(false).contains("decrypt"));
+}

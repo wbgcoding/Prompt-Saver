@@ -74,6 +74,16 @@ pub(super) fn unreadable_store_message(cmd: &Cmd, prompts_locked: bool, settings
     unreadable.then_some("the store could not be read completely (the database did not open or a row failed to decrypt)\n")
 }
 
+/// Why a write to a locked store is refused: failed rows or an unreadable database, or only a
+// settings row that could not be read.
+pub(super) fn locked_write_message(rows_unreadable: bool) -> &'static str {
+    if rows_unreadable {
+        "the store has rows that failed to decrypt; writes are refused until that is resolved\n"
+    } else {
+        "the settings could not be read; writes are refused until that is resolved\n"
+    }
+}
+
 // Gives back the data-folder claim a standalone run made, so the folder is free for the app or
 // another machine the moment the command is done. Only a lock that still carries this
 // process's claim id is removed.
@@ -159,7 +169,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     }
 
     if is_mutating(&cmd) && store.prompts_locked {
-        errln(format_args!("the store has rows that failed to decrypt; writes are refused until that is resolved\n"));
+        errln(format_args!("{}", locked_write_message(health.rows_unreadable)));
         return 3;
     }
     if let Some(msg) = unreadable_store_message(&cmd, health.rows_unreadable, health.settings_ok) {
@@ -325,13 +335,19 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
         if crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || crate::SETTINGS_LOCKED.load(Ordering::Relaxed) {
             return (3, String::new(), "the store refused the write (locked or unavailable)\n".to_string());
         }
-        let state: tauri::State<Db> = app.state();
-        let done = if key == "autostart" {
-            crate::set_autostart(app.clone(), state, on).map(|_| ())
-        } else {
-            crate::set_always_on_top(app.clone(), state, on);
-            Ok(())
-        };
+        // Both handlers take the store lock and write files and the registry: off the async runtime.
+        let worker = app.clone();
+        let done = tauri::async_runtime::spawn_blocking(move || {
+            let state: tauri::State<Db> = worker.state();
+            if key == "autostart" {
+                crate::set_autostart(worker.clone(), state, on).map(|_| ())
+            } else {
+                crate::set_always_on_top(worker.clone(), state, on);
+                Ok(())
+            }
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
         return match done {
             Ok(()) => {
                 let _ = tauri::Emitter::emit_to(app, "main", "store-synced", ());
