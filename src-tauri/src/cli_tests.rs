@@ -1427,6 +1427,40 @@ fn describe_json_is_valid_json_listing_every_manifest_entry_once() {
     assert!(parsed["exit_codes"]["4"].as_str().unwrap().contains("refused"));
 }
 
+// MUTATING_COMMAND_NAMES feeds the manifest and is_mutating() decides the refusal at run time:
+// the two lists must agree for every command the manifest names.
+#[test]
+fn the_manifest_mutating_flag_matches_is_mutating_for_every_entry() {
+    for (name, sub) in MANIFEST_ENTRIES {
+        let full = match sub {
+            Some(s) => format!("{name} {s}"),
+            None => (*name).to_string(),
+        };
+        let extra: &[&str] = match full.as_str() {
+            "list" | "version" | "tag list" | "view list" | "backup create" | "backup list" => &[],
+            "get" | "copy" | "delete" | "restore" | "view remove" | "search" | "export" | "import" | "view add" => &["x"],
+            "add" => &["--name", "n", "--text", "t"],
+            "edit" => &["x", "--name", "n"],
+            "tag add" | "tag remove" => &["x", "t"],
+            "backup restore" => &["2024-01-01_00-00-00"],
+            "settings get" => &["theme"],
+            "settings set" => &["theme", "dark"],
+            other => panic!("add sample arguments for the new manifest entry {other:?}"),
+        };
+        let mut argv = vec![(*name).to_string()];
+        if let Some(s) = sub {
+            argv.push((*s).to_string());
+        }
+        argv.extend(extra.iter().map(|s| (*s).to_string()));
+        let cmd = match parse(&argv) {
+            Ok(Parsed::Run(c)) => c,
+            _ => panic!("{argv:?} must parse as a command"),
+        };
+        let listed = command_manifest().into_iter().find(|c| c.name == full).unwrap().mutating;
+        assert_eq!(listed, is_mutating(&cmd), "manifest flag for {full:?} disagrees with is_mutating");
+    }
+}
+
 // The path docs/gen_automation_doc.py and docs/automation_doc_check.py
 // also read (relative to the crate root, two levels up from src-tauri).
 fn manifest_fixture_path() -> PathBuf {
