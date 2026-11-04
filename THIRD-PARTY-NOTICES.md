@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
+This file is generated at build time from the real dependency manifests (`cargo tree` for the Rust crates, `cargo metadata` for their licenses, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
 218 components are listed below, one row per name, sorted by name; a name that ships in several versions lists them all.
 

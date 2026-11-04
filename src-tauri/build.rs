@@ -276,7 +276,8 @@ fn generate_third_party_notices() {
                     "see the crate's own LICENSE file".to_string()
                 } else {
                     panic!(
-                        "crate `{} {}` has no `license` field and no `license_file`; add an                          override for it in third-party-manual.json before shipping",
+                        "crate `{} {}` has no `license` field and no `license_file`; add an \
+                         override for it in third-party-manual.json before shipping",
                         pkg.name, pkg.version
                     );
                 }
@@ -359,7 +360,7 @@ fn write_notices_markdown(manifest_dir: &str, entries: &[Entry]) {
     md.push_str("# Third-Party Notices\n\n");
     md.push_str(
         "This file is generated at build time from the real dependency manifests \
-         (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it \
+         (`cargo tree` for the Rust crates, `cargo metadata` for their licenses, plus the hand-maintained non-Rust parts) so it \
          can never drift from what actually ships. Do not edit it by hand; edit \
          `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. \
          The same list is shown in the app itself, in About > Third-party licenses.\n\n",
