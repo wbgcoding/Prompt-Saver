@@ -644,7 +644,8 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
     let dest = recording_dir(&custom);
     // A Save from the result dialog may still be copying earlier parts: let it finish first, or
     // the exit would kill the copy and leave the parts in staging for the sweep.
-    if !wait_for_part_saves(REC_PARTS_QUIT_WAIT) {
+    let saves_done = wait_for_part_saves(REC_PARTS_QUIT_WAIT);
+    if !saves_done {
         append_crash_log("quit: a recording part save was still running");
     }
     let src = Path::new(&take.path);
@@ -656,8 +657,13 @@ pub(crate) fn save_take_on_quit(app: &AppHandle, take: &RecordingStoppedPayload)
     if !wait_for_interim_crops(&REC_INTERIM_CROPS, REC_PARTS_QUIT_WAIT) {
         append_crash_log("quit: a part crop was still running");
     }
-    let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    let (_, failed) = place_recording_parts(&mut parts, &allowed, &dest);
+    // A save that is still running owns the parts, and waiting on it again would hang the exit.
+    if !saves_done {
+        return;
+    }
+    // Taken out of the shared list for the copy, like the dialog's Save, so the list lock is not
+    // held while a part crosses drives.
+    let failed = with_parts_outside_lock(&REC_RESULT_PARTS, |parts| place_recording_parts(parts, &allowed, &dest).1);
     if failed > 0 {
         append_crash_log(&format!("quit: {failed} recording part(s) not saved"));
     }

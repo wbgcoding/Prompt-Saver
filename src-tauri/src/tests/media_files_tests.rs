@@ -391,7 +391,12 @@ fn move_file_copies_only_after_a_cross_device_rename_error() {
     let body = &src[src.find("pub(crate) fn move_file(").unwrap()..];
     let body = &body[..body.find("\n}\n").unwrap()];
     assert!(body.contains("raw_os_error() != Some(CROSS_DEVICE_ERROR)"), "other rename errors are returned");
-    assert!(body.contains("let _ = fs::remove_file(dst);"), "a failed source remove undoes the copy");
+    assert!(body.contains("copy_then_remove(src, dst)"));
+    let copy = &src[src.find("pub(crate) fn copy_then_remove(").unwrap()..];
+    let copy = &copy[..copy.find("
+}
+").unwrap()];
+    assert!(copy.contains("let _ = fs::remove_file(dst);"), "a failed source remove undoes the copy");
 }
 
 #[test]
@@ -460,4 +465,14 @@ fn the_cross_device_move_lands_the_file_whole_and_leaves_no_temp_copy() {
     assert!(!other.exists());
     assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_quit_save_copies_the_parts_without_holding_the_shared_list() {
+    let src = source!("../media_files.rs");
+    let at = src.find("pub(crate) fn save_take_on_quit(").unwrap();
+    let end = at + src[at..].find("\n}\n").unwrap();
+    let body = &src[at..end];
+    assert!(body.contains("with_parts_outside_lock(&REC_RESULT_PARTS"));
+    assert!(!body.contains("REC_RESULT_PARTS.lock()"));
 }
