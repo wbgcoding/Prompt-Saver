@@ -680,7 +680,8 @@ pub(crate) fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect)
 }
 
 // A screen's identity: name, resolution and virtual-desktop offset, hashed to a short
-// stable string. The name is part of the hash so a different physical monitor landing at
+// string that is saved with every pill position. Do not change the hash: a different value
+// would park every saved pill once. A test pins the current output. The name is part of the hash so a different physical monitor landing at
 // an old one's position never compares equal.
 pub(crate) fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> String {
     use std::hash::{Hash, Hasher};

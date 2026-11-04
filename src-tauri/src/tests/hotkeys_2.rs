@@ -1158,6 +1158,16 @@ fn screen_identity_differs_by_name_even_at_the_same_bounds() {
     assert_eq!(a, screen_identity("Dell-1", 1920, 0, 1920, 1080));
 }
 
+// The identity is stored in settings (Pos.screen). It comes from the standard library hasher, whose
+// output Rust does not promise to keep across releases. These values are what saved positions hold
+// today: if a toolchain change alters them this fails the build, because every saved pill and
+// folder would otherwise park on the main screen once after the update.
+#[test]
+fn screen_identity_keeps_the_value_saved_positions_hold() {
+    assert_eq!(screen_identity("Dell-1", 1920, 0, 1920, 1080), "8c5356d20a9be2b0");
+    assert_eq!(screen_identity("", 0, 0, 1366, 768), "6aa3c1701a34d531");
+}
+
 #[test]
 fn resolve_float_spot_parks_a_position_outside_every_current_screen() {
     let screens = vec![("main".to_string(), 0, 0, 1920, 1080)];
