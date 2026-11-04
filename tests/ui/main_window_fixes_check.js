@@ -1549,6 +1549,12 @@ section(() => {
   });
 });
 
+// 85. An unreadable pill video still sizes the pill, like a broken image does.
+section(() => {
+  const src = read("floating.js");
+  check(/videoEl\.onloadedmetadata = \(\) =>\s*onRatio\([^)]*\);\s*videoEl\.onerror = \(\) => onRatio\(1\);/.test(src), "the video branch has an error fallback");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
