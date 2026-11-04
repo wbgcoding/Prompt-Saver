@@ -1159,6 +1159,22 @@ fn screen_identity_differs_by_name_even_at_the_same_bounds() {
 }
 
 #[test]
+fn a_dragged_position_lands_only_on_a_pill_or_folder_that_exists() {
+    let mut s = Settings::default();
+    s.floating.insert("p1".into(), Pos::default());
+    s.float_folders.push(FloatFolder { id: "f1".into(), name: String::new(), pos: Pos::default(), scale: 1.0, members: Vec::new() });
+    let spot = Pos { x: 40, y: 50, screen: "s".into() };
+    apply_float_pos(&mut s, "p1", false, spot.clone());
+    apply_float_pos(&mut s, "f1", true, spot.clone());
+    apply_float_pos(&mut s, "gone", false, spot.clone());
+    apply_float_pos(&mut s, "gone", true, spot);
+    assert_eq!((s.floating["p1"].x, s.floating["p1"].y), (40, 50));
+    assert_eq!((s.float_folders[0].pos.x, s.float_folders[0].pos.y), (40, 50));
+    assert_eq!(s.floating.len(), 1, "no entry for an unknown pill");
+    assert_eq!(s.float_folders.len(), 1);
+}
+
+#[test]
 fn a_float_scale_is_stored_only_for_an_existing_prompt() {
     let mut store = Store { prompts: vec![Prompt { id: "p1".into(), ..Default::default() }], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
     store.settings.float_size.insert("p1".into(), [300.0, 80.0]);

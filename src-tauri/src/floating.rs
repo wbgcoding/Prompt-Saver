@@ -410,13 +410,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
                     return;
                 }
                 let screen = screen_id_at(&app2, p.x, p.y);
-                if let Some(state) = app2.try_state::<Db>() {
-                    if let Ok(mut store) = state.try_lock() {
-                        if store.settings.floating.contains_key(&pid) {
-                            store.settings.floating.insert(pid.clone(), Pos { x: p.x, y: p.y, screen });
-                        }
-                    }
-                }
+                record_float_pos(&app2, &pid, false, Pos { x: p.x, y: p.y, screen });
                 mark_parked(&app2, &pid, false);
             }
             WindowEvent::Destroyed => {
@@ -425,6 +419,77 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
             }
             _ => {}
         });
+    }
+}
+
+// Positions a drag produced while the store was busy, waiting for a worker thread to store them:
+// id -> (is a folder, position). Only the latest position of an id is kept.
+static PENDING_FLOAT_POS: Mutex<Option<HashMap<String, (bool, Pos)>>> = Mutex::new(None);
+static FLOAT_POS_WORKER: AtomicBool = AtomicBool::new(false);
+
+// Writes a pill's or folder's dragged position into the store. Fires for every pixel of a drag, so
+// it never waits on the store here: when a backup or index run holds it, the position is queued and
+// a worker thread stores the latest one as soon as the store frees up. Without that the last spot
+// of a drag could be lost and the pill would jump back on the next start.
+fn record_float_pos(app: &AppHandle, id: &str, is_folder: bool, pos: Pos) {
+    let Some(state) = app.try_state::<Db>() else { return };
+    match state.try_lock() {
+        Ok(mut store) => {
+            // Under the store lock: a queued older spot of this id must not land after this one.
+            if let Some(map) = PENDING_FLOAT_POS.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+                map.remove(id);
+            }
+            apply_float_pos(&mut store.settings, id, is_folder, pos);
+        }
+        Err(std::sync::TryLockError::Poisoned(e)) => {
+            apply_float_pos(&mut e.into_inner().settings, id, is_folder, pos);
+        }
+        Err(std::sync::TryLockError::WouldBlock) => {
+            let start = {
+                let mut pending = PENDING_FLOAT_POS.lock().unwrap_or_else(|e| e.into_inner());
+                pending.get_or_insert_with(HashMap::new).insert(id.to_string(), (is_folder, pos));
+                !FLOAT_POS_WORKER.swap(true, Ordering::SeqCst)
+            };
+            if start {
+                let app2 = app.clone();
+                std::thread::spawn(move || drain_pending_float_pos(&app2));
+            }
+        }
+    };
+}
+
+// The worker behind record_float_pos: waits for the store, stores every queued position, and
+// ends once nothing is queued. The emptiness check and the worker flag change under one lock, so
+// a position queued meanwhile always finds a worker.
+fn drain_pending_float_pos(app: &AppHandle) {
+    loop {
+        {
+            let pending = PENDING_FLOAT_POS.lock().unwrap_or_else(|e| e.into_inner());
+            if pending.as_ref().is_none_or(|m| m.is_empty()) {
+                FLOAT_POS_WORKER.store(false, Ordering::SeqCst);
+                return;
+            }
+        }
+        let Some(state) = app.try_state::<Db>() else {
+            FLOAT_POS_WORKER.store(false, Ordering::SeqCst);
+            return;
+        };
+        let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
+        let batch = PENDING_FLOAT_POS.lock().unwrap_or_else(|e| e.into_inner()).as_mut().map(std::mem::take).unwrap_or_default();
+        for (id, (is_folder, pos)) in batch {
+            apply_float_pos(&mut store.settings, &id, is_folder, pos);
+        }
+    }
+}
+
+// Stores one dragged position for a pill or folder that still exists.
+pub(crate) fn apply_float_pos(settings: &mut Settings, id: &str, is_folder: bool, pos: Pos) {
+    if is_folder {
+        if let Some(f) = settings.float_folders.iter_mut().find(|f| f.id == id) {
+            f.pos = pos;
+        }
+    } else if settings.floating.contains_key(id) {
+        settings.floating.insert(id.to_string(), pos);
     }
 }
 
@@ -1084,14 +1149,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
                 let icon_x = p.x + off.x.round() as i32;
                 let icon_y = p.y + off.y.round() as i32;
                 let screen = screen_id_at(&app2, icon_x, icon_y);
-                if let Some(state) = app2.try_state::<Db>() {
-                    // Fires for every pixel of a drag: never block the move loop.
-                    if let Ok(mut store) = state.try_lock() {
-                        if let Some(f) = store.settings.float_folders.iter_mut().find(|f| f.id == fid) {
-                            f.pos = Pos { x: icon_x, y: icon_y, screen };
-                        }
-                    }
-                }
+                record_float_pos(&app2, &fid, true, Pos { x: icon_x, y: icon_y, screen });
                 mark_parked(&app2, &fid, false);
             }
             WindowEvent::Destroyed => {
