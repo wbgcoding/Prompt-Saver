@@ -77,7 +77,7 @@ fn an_update_signature_must_match_the_digest_and_the_key() {
 #[test]
 fn update_script_escapes_percent_and_refuses_quotes() {
     let s = update_script_content(Path::new("C:\\t\\%TEMP%\\setup.exe"), Path::new("C:\\a\\x.exe")).unwrap();
-    assert!(s.contains("\"C:\\t\\%%TEMP%%\\setup.exe\" /S"));
+    assert!(s.contains("\"C:\\t\\%%TEMP%%\\setup.exe\" /S /UPDATE\r\n"));
     assert!(s.contains("del \"%~f0\""));
     // The unique stage folder does not stay behind in the temp folder.
     assert!(s.trim_end().ends_with("rmdir \"C:\\t\\%%TEMP%%\""));
@@ -145,4 +145,13 @@ fn a_staged_update_file_cannot_be_swapped_while_held() {
     drop(held);
     fs::remove_file(&path).expect("the file is free again once the handle is gone");
     let _ = fs::remove_dir_all(&dir);
+}
+
+// A pre-release suffix is cut off its component, so a tag such as "2.1.5-rc1" is read as 2.1.5
+// instead of 2.1.0.
+#[test]
+fn a_pre_release_suffix_does_not_zero_its_component() {
+    assert!(version_newer("2.1.5-rc1", "2.1.4"));
+    assert!(!version_newer("2.1.5-rc1", "2.1.5"));
+    assert!(!version_newer("2.1.4", "2.1.5-rc1"));
 }

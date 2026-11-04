@@ -65,7 +65,11 @@ pub(crate) fn fetch_latest() -> Option<(String, String, String)> {
 
 pub(crate) fn version_newer(latest: &str, current: &str) -> bool {
     let parse = |s: &str| -> Vec<u64> {
-        s.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+        // A "-rc1" style suffix is cut off each component, so "2.1.5-rc1" reads as 2.1.5
+        // (a pre-release ranks equal to its final, which only matters if one is ever published).
+        s.split('.')
+            .map(|p| p.split(|c: char| !c.is_ascii_digit()).next().unwrap_or("").parse().unwrap_or(0))
+            .collect()
     };
     // Compare component-wise, zero-padding the shorter version, so "1.9" and
     // "1.9.0" rank equal instead of one being treated as newer.
@@ -260,7 +264,6 @@ pub(crate) fn apply_flag_effects(app: &AppHandle, key: &str, enabled: bool) {
 // activation backup takes as long as the library is large.
 #[tauri::command(async)]
 pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
-    let is_clip = key == "clipWatcher";
     let is_hotkeys = key == "promptHotkeys";
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
     let is_folders = key == "folders";
@@ -332,7 +335,6 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     apply_flag_effects(&app, &key, enabled);
     // The window itself always runs (started at boot) because the auto-advance session needs
     // it; the toggle only changes what on_clipboard_update does with each event, checked live.
-    let _ = is_clip;
     // Switching the feature off unregisters every prompt accelerator but keeps
     // the stored ones, so switching it back on restores them all.
     if is_hotkeys {
@@ -703,7 +705,12 @@ pub(crate) fn update_blocker(recording: bool, switching: bool, jobs: usize) -> O
     }
 }
 
-// Download the installer to %TEMP%, run it fully silent (/S), restart the
+// `update_blocker` over the live recording and job state.
+fn update_blocker_now(app: &AppHandle) -> Option<&'static str> {
+    update_blocker(recording_active(app), REC_STARTING.load(Ordering::SeqCst), bg_ops_running_count())
+}
+
+// Download the installer to %TEMP%, run it fully silent (/S /UPDATE), restart the
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
@@ -715,7 +722,7 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
         std::process::Command::new("explorer").arg(page).spawn().map_err(|e| e.to_string())?;
         return Err("portable-update-manual".to_string());
     }
-    if let Some(why) = update_blocker(recording_active(&app), REC_STARTING.load(Ordering::SeqCst), bg_ops_running_count()) {
+    if let Some(why) = update_blocker_now(&app) {
         return Err(why.to_string());
     }
     // Only our own release assets under the exact pinned repo path: not any github.com URL.
@@ -731,7 +738,12 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
     }
     // Download, verify and stage the installer on a blocking worker so none of
     // it occupies the async runtime; only `url` (an owned String) moves in.
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> { install_update_blocking(url) })
+    // A recording or export can start during the download, so the check runs again right
+    // before the helper script is launched.
+    let recheck_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        install_update_blocking(url, || update_blocker_now(&recheck_app))
+    })
         .await
         .map_err(|e| e.to_string())??;
 
@@ -782,8 +794,11 @@ pub(crate) fn update_script_content(installer: &Path, app_exe: &Path) -> Result<
     // The stage folder goes last, on the line that also removes the script itself (the line is
     // already read, so it still runs); the working folder is moved away from it first.
     let stage = quoted(installer.parent().unwrap_or(installer))?;
+    // /UPDATE is the installer's update mode: it keeps the user's shortcuts and autostart entry
+    // as they are instead of removing and re-creating them, and skips the pages a silent run
+    // never shows anyway.
     Ok(format!(
-        "@echo off\r\n\"{inst}\" /S\r\nstart \"\" \"{exe}\"\r\ndel \"{inst}\"\r\ncd /d \"%TEMP%\"\r\ndel \"%~f0\" & rmdir \"{stage}\"\r\n"
+        "@echo off\r\n\"{inst}\" /S /UPDATE\r\nstart \"\" \"{exe}\"\r\ndel \"{inst}\"\r\ncd /d \"%TEMP%\"\r\ndel \"%~f0\" & rmdir \"{stage}\"\r\n"
     ))
 }
 
@@ -800,9 +815,12 @@ pub(crate) fn update_cmd_line(script: &Path) -> Result<String, String> {
     Ok(format!("/D /C call \"{t}\""))
 }
 
-// The blocking body of `install_update`, split out so it runs in spawn_blocking without an
-// AppHandle crossing the boundary.
-pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
+// The blocking body of `install_update`, split out so it runs in spawn_blocking. `blocker`
+// is asked once more right before the helper script starts.
+pub(crate) fn install_update_blocking(
+    url: String,
+    blocker: impl Fn() -> Option<&'static str>,
+) -> Result<(), String> {
     let resp = download_agent().get(&url)
         .header("User-Agent", brand::USER_AGENT)
         .call()
@@ -886,6 +904,14 @@ pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     let script = stage.join("update.cmd");
     let content = update_script_content(&installer, &app_exe)?;
     let held_script = stage_file_locked(&script, content.as_bytes()).map_err(|e| format!("save script: {}", e))?;
+
+    // Last look before the installer ends the app: a recording or export started during the
+    // download must not be cut short.
+    if let Some(why) = blocker() {
+        drop((held_installer, held_script));
+        let _ = fs::remove_dir_all(&stage);
+        return Err(why.to_string());
+    }
 
     let mut cmd = std::process::Command::new("cmd");
     #[cfg(windows)]
