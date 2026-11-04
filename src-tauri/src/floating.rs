@@ -1546,7 +1546,10 @@ pub(crate) async fn set_float_bounds(
 ) -> Result<(), String> {
     if [x, y, width, height].iter().all(|v| v.is_finite()) {
         if let Some(win) = app.get_webview_window(&flabel(&id)) {
-            let free = float_size_of(&lock(&state).settings, &id).is_some();
+            // Never waits for the store: the menu and the arrow-key nudge call this on every
+            // step, and a backup holding the store must not freeze the pill. A busy store
+            // allows the smaller free-size minimum for this one call.
+            let free = crate::try_lock_ignoring_poison(&state).is_none_or(|s| float_size_of(&s.settings, &id).is_some());
             let w = width.clamp(FLOAT_MIN_W, FLOAT_MAX_SIDE);
             let h = height.clamp(float_min_height(free), FLOAT_MAX_SIDE);
             // OPT-IN, and only the pill menu asks for it: that placement picks a side that fits and
