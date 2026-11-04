@@ -1169,8 +1169,10 @@ async function mirrorBatch(action, ids, extra = {}) {
   return true;
 }
 
-export async function doGridBatch(action, extra = {}) {
-  const ids = [...gridSelected];
+// `onIds` pins the ids a caller already captured (a delete snapshots placements first, and a tile
+// ticked during that wait must not be deleted unrecorded); without it the current selection is used.
+export async function doGridBatch(action, extra = {}, onIds = null) {
+  const ids = onIds ? [...onIds] : [...gridSelected];
   if (!ids.length) return false;
   if (!(await mirrorBatch(action, ids, extra))) return false;
   clearGridSelection();
@@ -1193,8 +1195,9 @@ export async function doGridMove(targetViewId) {
 
 // Returns whether the batch went through, so a caller showing its own "done" toast never
 // reports success over a failure batchErrorToast already surfaced.
-export async function doBatch(action, extra = {}) {
-  const ids = [...libSelected];
+// `onIds` pins the ids a caller already captured, as in doGridBatch.
+export async function doBatch(action, extra = {}, onIds = null) {
+  const ids = onIds ? [...onIds] : [...libSelected];
   if (!ids.length) return false;
   const idset = new Set(ids);
   if (!(await mirrorBatch(action, ids, extra))) return false;
@@ -1571,11 +1574,11 @@ export function bindLibrary() {
   });
   $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value, [...libSelected]));
   $("lib-batch-delete").addEventListener("click", async () => {
-    const n = libSelected.size;
-    if (!n) return;
     const ids = [...libSelected];
+    const n = ids.length;
+    if (!n) return;
     const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
-    if (await doBatch("delete")) {
+    if (await doBatch("delete", {}, ids)) {
       undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
     }
   });
@@ -1605,11 +1608,11 @@ export function bindLibrary() {
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
   $("grid-batch-export").addEventListener("click", () => batchExport($("grid-batch-format").value, [...gridSelected]));
   $("grid-batch-delete").addEventListener("click", async () => {
-    const n = gridSelected.size;
-    if (!n) return;
     const ids = [...gridSelected];
+    const n = ids.length;
+    if (!n) return;
     const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
-    if (await doGridBatch("delete")) {
+    if (await doGridBatch("delete", {}, ids)) {
       undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
     }
   });

@@ -1305,6 +1305,27 @@ section(() => {
   check(/modalSession\+\+/.test(close), "closeModal bumps the editor session");
 });
 
+// 73. A batch delete works on the ids it snapshotted placements for, not on a selection that
+// grew during the snapshot wait.
+section(() => {
+  const lib = read("library.js");
+  const sent = [];
+  const gridSelected = new Set(["a", "b"]);
+  const sb = run(extractBlock(lib, "export async function doGridBatch(").replace("export ", ""), {
+    gridSelected, mirrorBatch: async (action, ids) => { sent.push(ids.join()); return true; },
+    clearGridSelection() {}, renderGrid: async () => {},
+  });
+  later(async () => {
+    await sb.doGridBatch("delete", {}, ["a", "b"].filter(() => { gridSelected.add("c"); return true; }));
+    check(sent[0] === "a,b", "the grid batch uses the pinned ids");
+    await sb.doGridBatch("favorite", { favorite: true });
+    check(sent[1] === "a,b,c", "without pinned ids the live selection is used");
+  });
+  const libSrc = extractBlock(lib, "export async function doBatch(");
+  check(/onIds \? \[\.\.\.onIds\]/.test(libSrc), "the library batch accepts pinned ids");
+  check(/doBatch\("delete", \{\}, ids\)/.test(lib) && /doGridBatch\("delete", \{\}, ids\)/.test(lib), "both delete buttons pass the captured ids");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
