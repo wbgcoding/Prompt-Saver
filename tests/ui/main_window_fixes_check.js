@@ -1281,6 +1281,30 @@ section(() => {
   });
 });
 
+// 72. A text attachment whose preview read fails shows the unreadable note, not a blank frame;
+// closeModal ends the editor session so a late reply cannot land in it.
+section(() => {
+  const ed = read("editor.js");
+  const src = extractBlock(ed, "export async function renderAttachTextPreview(").replace("export ", "");
+  const el = () => { const s = new Set(["hidden"]); return { textContent: "x", classList: { add: (c) => s.add(c), remove: (c) => s.delete(c), toggle: (c, on) => (on ? s.add(c) : s.delete(c)), contains: (c) => s.has(c) } }; };
+  const modal = { textAttachPreview: el(), textAttachContent: el(), textAttachTruncated: el(), textAttachUnreadable: el() };
+  const sb = run(src, {
+    modal, flag: () => true, TEXT_PREVIEW_EXT: /\.(txt|md|json|csv)$/i, modalSession: 1, modalState: { filePath: "a.txt" },
+    ATTACH_PREVIEW_KB: { s: 1 }, EXPERT_DROPDOWNS: { attachPreviewSize: { get: () => "s" } },
+    invoke: async () => { throw new Error("gone"); },
+  });
+  later(async () => {
+    await sb.renderAttachTextPreview("a.txt");
+    check(!modal.textAttachUnreadable.classList.contains("hidden"), "a failed text preview shows the unreadable note");
+    modal.textAttachUnreadable.classList.add("hidden");
+    sb.invoke = async () => { sb.modalSession = 2; throw new Error("gone"); };
+    await sb.renderAttachTextPreview("a.txt");
+    check(modal.textAttachUnreadable.classList.contains("hidden"), "a failed preview of a replaced editor stays quiet");
+  });
+  const close = extractBlock(ed, "export function closeModal(");
+  check(/modalSession\+\+/.test(close), "closeModal bumps the editor session");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

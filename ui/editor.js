@@ -1179,7 +1179,9 @@ export async function renderAttachTextPreview(path) {
   try {
     result = await invoke("attachment_text_preview", { path, maxKb: ATTACH_PREVIEW_KB[EXPERT_DROPDOWNS.attachPreviewSize.get()] });
   } catch (_) {
-    return; // not a text-preview extension after all, or the file vanished mid-read
+    // Not a text-preview extension after all, or the file vanished mid-read: say so, never a blank frame.
+    if (session === modalSession && modalState?.filePath === path) modal.textAttachUnreadable.classList.remove("hidden");
+    return;
   }
   if (session !== modalSession || modalState?.filePath !== path) return; // a later modal already took over
   if (!result || !result.readable) {
@@ -1242,6 +1244,7 @@ export function closeModal() {
   closeTagSuggest();
   closeTagPop();
   modal.root.classList.add("hidden");
+  modalSession++; // a late reply for the closed editor must not write into it
   // Removing the attribute alone neither stops the playback nor releases the file.
   modal.video.pause();
   modal.video.removeAttribute("src");
@@ -1672,7 +1675,7 @@ export function bindEditor() {
   });
   modal.notesText.addEventListener("input", () => autoGrow(modal.notesText));
   modal.text.addEventListener("input", scheduleLenCounter); // live length readout
-  modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
+  modal.text.addEventListener("input", scheduleMdPreview);  // live preview (short timer, see scheduleMdPreview)
   modal.text.addEventListener("input", scheduleFitText);    // the field follows its content
   // Same 60 ms settle as the preview: a long prompt is not rescanned for placeholders per key.
   let varsTimer = 0;
