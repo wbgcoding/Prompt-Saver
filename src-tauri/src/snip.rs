@@ -1696,17 +1696,40 @@ pub(crate) fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std:
 // destination is no longer the store the caller has in memory, and a caller that
 // keeps using the old one would write it straight over the files that did arrive.
 pub(crate) fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
-    copy_store_files_from(src, dst, landed, false)
+    copy_store_files_from(src, dst, landed, false, &mut Vec::new())
 }
 
 // The same for a store another process may be writing to (the installed app running in the
 // tray): data.db is read through a connection with VACUUM INTO, a consistent snapshot that holds
 // the rows still in its -wal file, instead of a file copy that can be torn or miss them.
 pub(crate) fn copy_live_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
-    copy_store_files_from(src, dst, landed, true)
+    copy_store_files_from(src, dst, landed, true, &mut Vec::new())
 }
 
-fn copy_store_files_from(src: &Path, dst: &Path, landed: &mut bool, live: bool) -> Result<(), String> {
+// Copies `from` to `to` through a sibling temp name and renames it into place, so `to` is
+// either the old file or the whole new one, never a truncated copy a later run could take for
+// a library. The temp is removed on every failure.
+fn copy_file_atomic(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut name = to.file_name().unwrap_or_default().to_os_string();
+    name.push(".copying");
+    let tmp = to.with_file_name(name);
+    let _ = fs::remove_file(&tmp);
+    let placed = fs::copy(from, &tmp).and_then(|_| fs::rename(&tmp, to));
+    if placed.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    placed
+}
+
+// `placed` collects the names of the files that arrived, so a caller that owns the whole
+// destination can take them back out again after a later failure.
+fn copy_store_files_from(
+    src: &Path,
+    dst: &Path,
+    landed: &mut bool,
+    live: bool,
+    placed: &mut Vec<&'static str>,
+) -> Result<(), String> {
     for f in STORE_FILES {
         let from = src.join(f);
         if !from.exists() {
@@ -1720,15 +1743,31 @@ fn copy_store_files_from(src: &Path, dst: &Path, landed: &mut bool, live: bool) 
                 .and_then(|c| c.busy_timeout(std::time::Duration::from_secs(3)).map(|_| c))
                 .and_then(|c| c.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map(|_| ()))
                 .map_err(|e| e.to_string());
-            let copied = snap.and_then(|_| fs::copy(&tmp, dst.join(f)).map(|_| ()).map_err(|e| e.to_string()));
+            let copied = snap.and_then(|_| copy_file_atomic(&tmp, &dst.join(f)).map_err(|e| e.to_string()));
             let _ = fs::remove_file(&tmp);
             copied?;
         } else {
-            fs::copy(&from, dst.join(f)).map_err(|e| e.to_string())?;
+            copy_file_atomic(&from, &dst.join(f)).map_err(|e| e.to_string())?;
         }
         *landed = true;
+        placed.push(f);
     }
     Ok(())
+}
+
+// The store copy of a data folder move. The target held no data.db (otherwise the move adopts
+// it), so on a failure everything that arrived is taken back out: a leftover data.db would be
+// adopted by the retry as the user's library.
+fn copy_store_files_or_undo(src: &Path, dst: &Path) -> Result<(), String> {
+    let mut landed = false;
+    let mut placed = Vec::new();
+    let copied = copy_store_files_from(src, dst, &mut landed, false, &mut placed);
+    if copied.is_err() {
+        for f in placed {
+            let _ = fs::remove_file(dst.join(f));
+        }
+    }
+    copied
 }
 
 // Folds the WAL into data.db. A busy answer (another connection still reads an old
@@ -1916,8 +1955,7 @@ pub(crate) fn move_store_dir(
             }
             copy_dir_all(&from, &new.join(sub)).map_err(|e| format!("copy {sub}/: {e}"))?;
         }
-        let mut landed = false;
-        copy_store_files(current, new, &mut landed).map_err(|e| format!("copy store: {}", e))?;
+        copy_store_files_or_undo(current, new).map_err(|e| format!("copy store: {}", e))?;
         // Bring the local backup history along, or the Backup panel shows no snapshots at the new
         // location while the old backups/ folder is offered for deletion. Best-effort; the store
         // copy above is the critical part.

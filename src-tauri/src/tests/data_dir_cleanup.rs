@@ -111,6 +111,25 @@ fn a_failed_media_copy_aborts_before_the_pointer_is_written() {
 }
 
 #[test]
+fn a_failed_store_copy_leaves_no_library_for_a_retry_to_adopt() {
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = media_test_dir("storeundo");
+    let (current, new, pointer) = (root.join("old"), root.join("new"), root.join("pointer"));
+    touch(&current.join("data.db"));
+    touch(&current.join("settings.json"));
+    // A folder where settings.json has to go: the copy fails after data.db has arrived.
+    fs::create_dir_all(new.join("settings.json")).unwrap();
+    fs::create_dir_all(&pointer).unwrap();
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let moved = move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || Ok(()));
+    assert!(moved.is_err());
+    assert!(!new.join("data.db").exists(), "what landed must be taken back out");
+    assert!(!new.join("data.db.copying").exists() && !new.join("settings.json.copying").exists());
+    assert!(!pointer.join("datapath").exists());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn a_target_inside_the_media_folders_is_refused() {
     let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = media_test_dir("inside");
