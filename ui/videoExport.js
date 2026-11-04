@@ -188,7 +188,6 @@ export async function startExport(toClipboard) {
   const rev = VE.rev;
   const src = VE.src;
   const stillHere = () => VE.loadGen === gen;
-  VE.exporting = true;
   exportRun = { gen, total };
   syncExportButton();
   $("ve-export-start").disabled = true;
