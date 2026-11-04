@@ -74,6 +74,11 @@ function keysGridRects(rows, rect) {
   return out;
 }
 
+// The sidecar stores the raw keyboard-hook code, which names the left or right modifier
+// (0xA0-0xA5), while the grid presets list the generic Shift/Ctrl/Alt (0x10-0x12).
+const SIDED_MODIFIER = { 0xa0: 0x10, 0xa1: 0x10, 0xa2: 0x11, 0xa3: 0x11, 0xa4: 0x12, 0xa5: 0x12 };
+const generalVk = (vk) => SIDED_MODIFIER[vk] ?? vk;
+
 // Every [down, up] span for one key across the whole sidecar, held visible for holdMs past
 // release; a key still down when the log ends stays visible until the last known timestamp
 // plus the hold, never forever.
@@ -82,7 +87,7 @@ function keyPressSpans(vk, holdMs) {
   const spans = [];
   let downT = null;
   for (const e of events) {
-    if (e.vk !== vk) continue;
+    if (generalVk(e.vk) !== vk) continue;
     if (e.down) { if (downT == null) downT = e.t_ms; } else if (downT != null) { spans.push([downT, e.t_ms + holdMs]); downT = null; }
   }
   if (downT != null) {

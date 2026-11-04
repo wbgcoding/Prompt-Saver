@@ -672,6 +672,17 @@ async function exportIdleCheck() {
   const crowded = run("buildKeysFilters(__wide)");
   const sizeOf = (list, ch) => Number((list.find((f) => f.startsWith("drawtext") && f.endsWith(`text='${ch}'`)).match(/fontsize=(\d+)/) || [])[1]);
   expect("a long label is smaller than a letter on the same keys", sizeOf(crowded, "Space") < sizeOf(crowded, "A"), `${sizeOf(crowded, "Space")} vs ${sizeOf(crowded, "A")}`);
+  // A left or right modifier in the sidecar lights the generic Shift/Ctrl/Alt key of a grid preset.
+  const keptSidecar = sb.VE.keySidecar;
+  sb.VE.keySidecar = { hold_ms: 400, events: [
+    { vk: 0xa0, down: true, t_ms: 2000 }, { vk: 0xa0, down: false, t_ms: 2300 },
+    { vk: 0xa3, down: true, t_ms: 3000 }, { vk: 0xa3, down: false, t_ms: 3100 },
+    { vk: 0x41, down: true, t_ms: 4000 }, { vk: 0x41, down: false, t_ms: 4100 },
+  ] };
+  expect("a left Shift event lights the generic Shift key", JSON.stringify(run("keyPressSpans(0x10, 400)")) === "[[2000,2700]]", JSON.stringify(run("keyPressSpans(0x10, 400)")));
+  expect("a right Ctrl event lights the generic Ctrl key", JSON.stringify(run("keyPressSpans(0x11, 400)")) === "[[3000,3500]]", JSON.stringify(run("keyPressSpans(0x11, 400)")));
+  expect("a modifier event does not light a letter key", JSON.stringify(run("keyPressSpans(0x41, 400)")) === "[[4000,4500]]");
+  sb.VE.keySidecar = keptSidecar;
   // An empty custom pick draws nothing, and the preview says so.
   sb.__empty = { ...sb.__op, preset: "custom", keys: [] };
   expect("an empty custom pick adds no filter", run("buildKeysFilters(__empty)").length === 0);
