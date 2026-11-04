@@ -62,10 +62,21 @@ pub(crate) fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u
 // (conversion deletes the mp4), a sidecar, or the first continuation part. The local-time stamp
 // repeats at the clock's fall-back hour, and a taken stem would let the new take overwrite the
 // kept take's mic and key sidecars or replace its converted file.
+// Any continuation part of the take (`<stem>_part<N>.<ext>`), whichever of them are left: a
+// user may have deleted part 2 and kept part 3.
+fn has_continuation_part(dir: &Path, stem: &str) -> bool {
+    let prefix = format!("{stem}_part");
+    let Ok(entries) = fs::read_dir(dir) else { return false };
+    entries.flatten().any(|e| {
+        let name = e.file_name().to_string_lossy().to_string();
+        name.strip_prefix(&prefix).is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+    })
+}
+
 fn rec_stem_taken(dir: &Path, stem: &str) -> bool {
     let video = |name: String| VIDEO_FORMATS.iter().any(|ext| dir.join(format!("{name}.{ext}")).exists());
     video(stem.to_string())
-        || video(format!("{stem}_part2"))
+        || has_continuation_part(dir, stem)
         || dir.join(format!("{stem}.mic.wav")).exists()
         || dir.join(format!("{stem}.{KEYS_SIDECAR_EXT}")).exists()
         || dir.join(format!("{stem}.{CAM_SIDECAR_EXT}")).exists()

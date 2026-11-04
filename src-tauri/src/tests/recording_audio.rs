@@ -1157,7 +1157,7 @@ fn a_new_recording_keeps_clear_of_a_converted_take_and_its_sidecars() {
     let name = rec_filename(2026, 10, 25, 2, 30, 0);
     // A converted take leaves no mp4, only the new container and its sidecars.
     let stem = "rec-2026-10-25_023000";
-    for tail in [".webm", ".mic.wav", ".keys.json", "_part2.mp4"] {
+    for tail in [".webm", ".mic.wav", ".keys.json", "_part2.mp4", "_part3.mp4"] {
         let leftover = format!("{stem}{tail}");
         fs::write(root.join(&leftover), b"x").unwrap();
         assert_eq!(free_rec_path(&root, &name), root.join(format!("{stem}-2.mp4")), "{leftover} must keep the stem taken");
