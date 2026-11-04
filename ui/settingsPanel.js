@@ -280,22 +280,11 @@ export async function runImportAll() {
   // the user back through the file picker.
   let password = null;
   let asked = false;
+  let res = null;
   for (;;) {
     try {
-      const res = await withTaskbarBusy("import", () => invoke("import_all", { path, password, scope }));
-      await reloadEverything();
-      let msg = t("importAllDone").replace("{f}", () => res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
-      // A hotkey the restore could not keep is named, never silently dropped.
-      if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", Number(res.dropped_hotkeys).toLocaleString(LANG));
-      // The file's own backup password is a foreign-machine DPAPI blob and was
-      // discarded: say so, or a following export silently ships unprotected.
-      if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
-      // Confidential entries left in the trash were sealed with the vault key this import replaced.
-      if (res.vault_mismatch) msg += "\n" + t("importVaultMismatch");
-      // Links to files on other machines are never restored; the count tells the user why a file is gone.
-      if (res.network_links_removed) msg += "\n" + t("importNetworkLinksRemoved").replace("{n}", Number(res.network_links_removed).toLocaleString(LANG));
-      await infoDialog(t("backupImport"), msg);
-      return;
+      res = await withTaskbarBusy("import", () => invoke("import_all", { path, password, scope }));
+      break;
     } catch (err) {
       const m = String(err);
       if (!/password/i.test(m)) {
@@ -315,6 +304,20 @@ export async function runImportAll() {
       if (password === null) return; // dismissed
     }
   }
+  // The restore went through. A failure while redrawing is its own problem and must not read
+  // as a failed import (or ask for a password and import the file again).
+  try { await reloadEverything(); } catch (err) { errToast(err); }
+  let msg = t("importAllDone").replace("{f}", () => res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
+  // A hotkey the restore could not keep is named, never silently dropped.
+  if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", Number(res.dropped_hotkeys).toLocaleString(LANG));
+  // The file's own backup password is a foreign-machine DPAPI blob and was
+  // discarded: say so, or a following export silently ships unprotected.
+  if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
+  // Confidential entries left in the trash were sealed with the vault key this import replaced.
+  if (res.vault_mismatch) msg += "\n" + t("importVaultMismatch");
+  // Links to files on other machines are never restored; the count tells the user why a file is gone.
+  if (res.network_links_removed) msg += "\n" + t("importNetworkLinksRemoved").replace("{n}", Number(res.network_links_removed).toLocaleString(LANG));
+  await infoDialog(t("backupImport"), msg);
 }
 
 // Portable start with an installed copy's store present: offer to adopt it. Runs after

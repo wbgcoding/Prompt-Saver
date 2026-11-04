@@ -1354,6 +1354,24 @@ section(() => {
   check(three.textContent === "Download", "an idle redraw leaves the button alone");
 });
 
+// 75. A redraw failure after a successful restore is no "import failed" and never re-imports.
+section(() => {
+  const sp = read("settingsPanel.js");
+  const calls = [], infos = [], errs = [];
+  const sb = run(extractBlock(sp, "export async function runImportAll(").replace("export ", ""), {
+    withDialog: (f) => f(), $: () => ({ checked: true }), LANG: "en", LOCK_SVG: "", t: (k) => k, Number,
+    invoke: async (cmd) => { calls.push(cmd); return cmd === "pick_backup_file" ? "p.zip" : { name: "n", count: 1 }; },
+    confirmDialog: async () => true, withTaskbarBusy: async (_k, f) => f(),
+    reloadEverything: async () => { throw new Error("redraw password boom"); },
+    infoDialog: async (title) => { infos.push(title); }, errToast: (e) => errs.push(String(e)),
+  });
+  later(async () => {
+    await sb.runImportAll();
+    check(calls.filter((c) => c === "import_all").length === 1, "the file is imported once");
+    check(infos.join() === "backupImport" && errs.length === 1, "a redraw failure is a toast and the success summary still shows");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
