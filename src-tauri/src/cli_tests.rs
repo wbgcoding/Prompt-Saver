@@ -833,6 +833,27 @@ fn backup_create_then_list_finds_the_new_snapshot() {
     assert_eq!(rows.len(), 1);
 }
 
+// A full restore replaces the database, so the old journal files go with it. (A selective
+// restore leaves them alone; SQLite itself folds or drops them when it closes the live file.)
+#[test]
+fn a_full_restore_removes_the_old_journal_files() {
+    let tmp = TempDir::new("restore-journal");
+    let mut conn = db_conn_at(tmp.path()).expect("open store");
+    let mut written = WrittenRows::new();
+    db_write_prompts(&mut conn, &[], &mut written).ok();
+    drop(conn);
+    let store = fixture_store();
+    let created = cmd_backup_create(&store, tmp.path(), Some(5), true);
+    assert_eq!(created.code, 0, "stderr: {}", created.stderr);
+    let name = serde_json::from_str::<serde_json::Value>(created.stdout.trim()).unwrap()["name"].as_str().unwrap().to_string();
+    let wal = tmp.path().join("data.db-wal");
+    let shm = tmp.path().join("data.db-shm");
+    std::fs::write(&wal, b"journal").unwrap();
+    std::fs::write(&shm, b"index").unwrap();
+    restore_backup_standalone(tmp.path(), &name, 5, "all", &store.settings).unwrap();
+    assert!(!wal.exists() && !shm.exists());
+}
+
 #[test]
 fn backup_restore_is_refused_without_yes_at_the_launch_dispatch_level() {
     // The refusal for backup restore happens before either caller (live or

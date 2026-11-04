@@ -1776,13 +1776,15 @@ fn restore_backup_standalone(dir: &Path, name: &str, keep: usize, scope: &str, s
             let _ = std::fs::remove_file(&staged);
             return Err(e.to_string());
         }
+        // The old journal files belong to the replaced database; a selective restore keeps the
+        // live database, so its journal may hold committed rows and stays.
+        let _ = std::fs::remove_file(dir.join("data.db-wal"));
+        let _ = std::fs::remove_file(dir.join("data.db-shm"));
     } else {
         let result = restore_selective(&target, &staged, scope);
         let _ = std::fs::remove_file(&staged);
         result?;
     }
-    let _ = std::fs::remove_file(dir.join("data.db-wal"));
-    let _ = std::fs::remove_file(dir.join("data.db-shm"));
     // A restore that brings settings may have switched the picture-text index off while the
     // prompts that stay still carry its text.
     if scope != "data" {
