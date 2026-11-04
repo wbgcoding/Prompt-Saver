@@ -701,8 +701,8 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
 }
 
 // List recognition-language capabilities. Usually no elevated rights are needed, but some
-// Windows builds throw ERROR_ELEVATION_REQUIRED even for this read-only query; see the
-// HResult check in ocr::fetch_capabilities, which surfaces it as "ocr-caps-need-elevation".
+// Windows builds throw ERROR_ELEVATION_REQUIRED even for this read-only query; ocr::fetch_capabilities
+// turns any listing failure into "ocr-caps-need-elevation" so the dialog can offer the elevated route.
 // `force` bypasses the in-memory cache (OCR_LANG_CACHE_H hours); the cache is what
 // ocr_install_language's whitelist check validates against, so a name can never be installed
 // without having been enumerated.
