@@ -546,6 +546,7 @@ fn purge_clip_inbox_from_backups_scrubs_every_snapshot() {
     let (purged, failed) = purge_clip_inbox_from_backups_impl(&dir);
     assert_eq!(purged, 2, "only A and B actually had clip_inbox rows to remove");
     assert_eq!(failed, 1, "D could not be opened and must be reported, not silently treated as clean");
+    assert!(!folder_d.join("purge.tmp").exists(), "a failed unpack leaves no staged copy behind");
 
     let unpacked_a = dir.join("check_a.db");
     gunzip_to(&folder_a.join("data.db.gz"), &unpacked_a).unwrap();

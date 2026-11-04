@@ -429,6 +429,8 @@ pub(crate) fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usiz
                 // Could not even look inside: count as a failure, since it might hold exactly what this scrubs.
                 Err(_) => {
                     failed += 1;
+                    // The half-written copy holds clip text in plain form: it must not stay.
+                    let _ = fs::remove_file(&staged_tmp);
                     continue;
                 }
             }
