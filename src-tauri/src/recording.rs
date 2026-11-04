@@ -54,7 +54,7 @@ enum CaptureItem {
 
 fn resolve_capture_item(target: RecTarget) -> Result<CaptureItem, String> {
     match target {
-        RecTarget::Monitor(0) => Ok(CaptureItem::Monitor(Monitor::primary().map_err(|e| e.to_string())?)),
+        RecTarget::Monitor(0) | RecTarget::Region { monitor: 0, .. } => Ok(CaptureItem::Monitor(Monitor::primary().map_err(|e| e.to_string())?)),
         RecTarget::Monitor(h) | RecTarget::Region { monitor: h, .. } => {
             Ok(CaptureItem::Monitor(Monitor::from_raw_hmonitor(h as *mut std::ffi::c_void)))
         }
