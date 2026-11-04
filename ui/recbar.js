@@ -390,7 +390,7 @@ window.addEventListener("mousemove", async (e) => {
   if (Math.abs(e.screenX - dragStart.x) < DRAG_THRESHOLD && Math.abs(e.screenY - dragStart.y) < DRAG_THRESHOLD) return;
   dragStart = null;
   invoke("rec_bar_mark_moved").catch(() => {});
-  await appWin.startDragging();
+  await appWin.startDragging().catch(() => {});
 });
 window.addEventListener("mouseup", () => { dragStart = null; });
 
