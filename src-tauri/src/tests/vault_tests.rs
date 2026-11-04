@@ -167,7 +167,7 @@ fn a_snapshot_sealed_under_another_key_is_refused_and_never_sealed_again() {
     let (mine, other) = ([7u8; 32], [9u8; 32]);
     let foreign = secret_encrypt("their text", &other);
     assert_eq!(open_snapshot(&foreign, &[], Some(mine)), Err("secret-wrong-key".to_string()));
-    assert_eq!(open_snapshot("plain", &[foreign.clone()], Some(mine)), Err("secret-wrong-key".to_string()));
+    assert_eq!(open_snapshot("plain", std::slice::from_ref(&foreign), Some(mine)), Err("secret-wrong-key".to_string()));
     assert_eq!(secret_encrypt_if_plain(&foreign, &mine), foreign, "left exactly as stored");
 }
 
