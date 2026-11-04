@@ -97,7 +97,7 @@ tests/automation_doc_check.py` fails the build if someone forgets.
 | `view list` | `prompt-saver view list [--json]` | no | List every view. |
 | `view add` | `prompt-saver view add <name> [--color #rrggbb] --yes` | yes (needs `--yes`) | Add a new, empty view. Prints its new id. |
 | `view remove` | `prompt-saver view remove <id> --yes` | yes (needs `--yes`) | Remove a view (refused for the last remaining one). |
-| `search` | `prompt-saver search <query> [--tag NAME] [--json]` | no | Case-insensitive search over name, text, notes and tags. |
+| `search` | `prompt-saver search <query> [--tag NAME] [--json]` | no | Case-insensitive search over name, text, notes and tags (text of confidential prompts excluded). |
 | `export` | `prompt-saver export <path> [--format json\|csv\|txt] [--ids a,b,c] [--yes]` | no | Write prompts to a file. --yes is only needed to overwrite an existing file. |
 | `import` | `prompt-saver import <path> --yes` | yes (needs `--yes`) | Append prompts read from a file this app exported. |
 | `backup create` | `prompt-saver backup create [--keep N] [--json]` | no | Snapshot the store now. Prints the new backup's name. |

@@ -80,7 +80,7 @@
   {
     "name": "search",
     "usage": "prompt-saver search <query> [--tag NAME] [--json]",
-    "description": "Case-insensitive search over name, text, notes and tags.",
+    "description": "Case-insensitive search over name, text, notes and tags (text of confidential prompts excluded).",
     "mutating": false
   },
   {

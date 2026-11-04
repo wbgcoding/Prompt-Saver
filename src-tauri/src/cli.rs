@@ -1968,7 +1968,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("view", Some("list")) => "prompt-saver view list [--json]\n\nList every view.".to_string(),
         ("view", Some("add")) => "prompt-saver view add <name> [--color #rrggbb] --yes\n\nAdd a new, empty view. Prints its new id.".to_string(),
         ("view", Some("remove")) => "prompt-saver view remove <id> --yes\n\nRemove a view (refused for the last remaining one).".to_string(),
-        ("search", _) => "prompt-saver search <query> [--tag NAME] [--json]\n\nCase-insensitive search over name, text, notes and tags.".to_string(),
+        ("search", _) => "prompt-saver search <query> [--tag NAME] [--json]\n\nCase-insensitive search over name, text, notes and tags (text of confidential prompts excluded).".to_string(),
         ("export", _) => "prompt-saver export <path> [--format json|csv|txt] [--ids a,b,c] [--yes]\n\nWrite prompts to a file. --yes is only needed to overwrite an existing file.".to_string(),
         ("import", _) => "prompt-saver import <path> --yes\n\nAppend prompts read from a file this app exported.".to_string(),
         ("backup", None) => "prompt-saver backup create [--keep N] [--json]\nprompt-saver backup list [--json]\nprompt-saver backup restore <name> [--scope all|data|settings] [--keep N] --yes".to_string(),
