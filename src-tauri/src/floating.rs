@@ -1464,6 +1464,7 @@ pub(crate) fn float_min_height(free_size: bool) -> f64 {
 // Set a floating window's position AND size together (logical px). Used by the
 // edge/corner resize so the grabbed edge tracks the cursor 1:1.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn set_float_bounds(
     app: AppHandle,
     state: State<'_, Db>,
