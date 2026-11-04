@@ -469,7 +469,21 @@ pub(crate) fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io
     if err.raw_os_error() != Some(CROSS_DEVICE_ERROR) {
         return Err(err);
     }
-    fs::copy(src, dst)?;
+    copy_then_remove(src, dst)
+}
+
+// The cross-device half of move_file, apart so a test can run it on one volume.
+pub(crate) fn copy_then_remove(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    // Copied to a hidden sibling first and renamed onto dst, so a copy cut short (disk full, a
+    // dropped drive) never leaves a truncated file at the final name for a scan to pick up.
+    let mut temp_name = std::ffi::OsString::from(".");
+    temp_name.push(dst.file_name().unwrap_or_default());
+    temp_name.push(".moving");
+    let temp = dst.with_file_name(temp_name);
+    if let Err(e) = fs::copy(src, &temp).and_then(|_| fs::rename(&temp, dst)) {
+        let _ = fs::remove_file(&temp);
+        return Err(e);
+    }
     if let Err(e) = fs::remove_file(src) {
         let _ = fs::remove_file(dst);
         return Err(e);

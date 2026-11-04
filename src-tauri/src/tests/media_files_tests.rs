@@ -439,3 +439,25 @@ fn sidecar_relocation_failures_reach_the_crash_log() {
     assert!(!body.contains("eprintln!"), "stderr is lost in a release build");
     assert_eq!(body.matches("append_crash_log(").count(), 3, "mic, key-overlay and camera failures are all logged");
 }
+
+#[test]
+fn the_cross_device_move_lands_the_file_whole_and_leaves_no_temp_copy() {
+    let dir = std::env::temp_dir().join(format!("ps-move-copy-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("a.mp4");
+    let dst = dir.join("b.mp4");
+    fs::write(&src, b"take").unwrap();
+    copy_then_remove(&src, &dst).unwrap();
+    assert_eq!(fs::read(&dst).unwrap(), b"take");
+    assert!(!src.exists());
+    let names: Vec<_> = fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert_eq!(names.len(), 1, "no hidden temp left behind: {names:?}");
+    // A missing source fails without leaving a half file at the destination.
+    let missing = dir.join("none.mp4");
+    let other = dir.join("c.mp4");
+    assert!(copy_then_remove(&missing, &other).is_err());
+    assert!(!other.exists());
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+    let _ = fs::remove_dir_all(&dir);
+}
