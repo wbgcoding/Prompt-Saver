@@ -147,7 +147,9 @@ document.addEventListener("keydown", (e) => {
 
 // Grace period: the backend shows the window and only then takes focus, and a blur fired
 // in that hand-off would close it before anything was on screen.
-const OPENED_AT = Date.now();
+// Stamped again right before launcher_ready: boot can take long after the script loaded,
+// and the grace has to start when the backend actually shows the window.
+let OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
   const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
@@ -231,6 +233,7 @@ async function boot() {
   searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
   bootDone = true;
   // Everything is in place: the backend may show this window and give it the focus now.
+  OPENED_AT = Date.now();
   invoke("launcher_ready").catch(() => {});
 }
 boot();

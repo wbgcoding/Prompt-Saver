@@ -1576,6 +1576,13 @@ section(() => {
   check(Math.abs(mk({ ...base, sx: -1, sy: 1 }, { screenX: 550, screenY: 500 }) - 0.5) < 1e-9, "left edge inward shrinks");
 });
 
+// 87. The launcher's blur grace starts when the window is handed over, not at script load.
+section(() => {
+  const src = read("launcher.js");
+  check(/let OPENED_AT = Date\.now\(\);/.test(src), "OPENED_AT can be restamped");
+  check(/OPENED_AT = Date\.now\(\);\s*invoke\("launcher_ready"\)/.test(src), "it is restamped right before launcher_ready");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
