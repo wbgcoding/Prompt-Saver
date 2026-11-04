@@ -1207,3 +1207,18 @@ fn float_recall_queries_monitors_before_taking_the_store_lock() {
         assert!(q_at < lock_at, "{q} must run before the store lock is taken");
     }
 }
+
+// The tray menu's inputs come from a snapshot taken under a try-lock (or, on a busy store, on a
+// worker): the custom window needs no plan, the native menu does.
+#[test]
+fn the_tray_inputs_skip_the_plan_for_the_custom_window() {
+    let mut prompts = sample_prompts();
+    prompts[0].favorite = true;
+    let mut store = Store { prompts, trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    store.settings.ui_flags.insert(TRAY_CUSTOM_MENU_KEY.to_string(), true);
+    let (_, plan, custom, _) = tray_inputs(&store);
+    assert!(custom && plan.is_empty());
+    store.settings.ui_flags.insert(TRAY_CUSTOM_MENU_KEY.to_string(), false);
+    let (_, plan, custom, _) = tray_inputs(&store);
+    assert!(!custom && !plan.is_empty(), "the native menu is built from a plan");
+}

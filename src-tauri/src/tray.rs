@@ -362,25 +362,42 @@ pub(crate) fn tray_rebuild_due(custom: bool, sections_wanted: bool, extras_insta
     }
 }
 
+// What the tray menu is built from: language, entries, custom-window flag, recording rows flag.
+type TrayInputs = (&'static str, Vec<(TraySection, Vec<TrayEntry>)>, bool, bool);
+
+pub(crate) fn tray_inputs(store: &Store) -> TrayInputs {
+    let custom = tray_custom_menu_on(&store.settings);
+    // The custom window needs no plan: skip the sort and the label allocations.
+    let plan = if custom {
+        Vec::new()
+    } else {
+        let cfg = tray_cfg(&store.settings);
+        tray_plan(&store.prompts, &store.settings.last_used, &cfg)
+    };
+    (resolve_lang(&store.settings.language), plan, custom, tray_rec_entries_on(&store.settings))
+}
+
 // Build the tray menu from the current store and install it. The store lock is
 // dropped before the first menu call: building a menu while holding it is the
-// classic deadlock shape here.
+// classic deadlock shape here. Callers include the event-loop thread, so a busy store (a
+// backup or import) never makes this wait: a worker thread takes the turn instead.
 pub(crate) fn apply_tray_menu(app: &AppHandle) {
-    let (lang, plan, custom, rec_entries_on) = match app.try_state::<Db>() {
-        Some(state) => {
-            let store = lock(&state);
-            let custom = tray_custom_menu_on(&store.settings);
-            // The custom window needs no plan: skip the sort and the label allocations.
-            let plan = if custom {
-                Vec::new()
-            } else {
-                let cfg = tray_cfg(&store.settings);
-                tray_plan(&store.prompts, &store.settings.last_used, &cfg)
-            };
-            (resolve_lang(&store.settings.language), plan, custom, tray_rec_entries_on(&store.settings))
+    let Some(state) = app.try_state::<Db>() else { return };
+    let inputs = try_lock_ignoring_poison(&state).map(|store| tray_inputs(&store));
+    match inputs {
+        Some(inputs) => install_tray_menu(app, inputs),
+        None => {
+            let app2 = app.clone();
+            std::thread::spawn(move || {
+                let Some(state) = app2.try_state::<Db>() else { return };
+                let inputs = tray_inputs(&lock(&state));
+                install_tray_menu(&app2, inputs);
+            });
         }
-        None => return,
-    };
+    }
+}
+
+fn install_tray_menu(app: &AppHandle, (lang, plan, custom, rec_entries_on): TrayInputs) {
     if custom {
         TRAY_EXTRAS.store(false, Ordering::SeqCst); // no native extras remain once the popup is detached
         // The custom window's content is prepared fresh (tray_open_prep) on every right-click, so
