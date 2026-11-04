@@ -179,7 +179,11 @@ export function rowsForScope(scope, t, lang) {
   const rows = [];
   for (const entry of SHORTCUTS) {
     if (!entry.scopes.some((s) => scopes.includes(s))) continue;
-    if (entry.action.endsWith("Alt")) continue; // shown as part of the primary action's row
+    // An alt binding is folded into its primary's row, unless it carries a description of its own.
+    if (entry.action.endsWith("Alt")) {
+      const primary = SHORTCUTS.find((s) => s.action === entry.action.slice(0, -3));
+      if (primary && primary.descKey === entry.descKey) continue;
+    }
     if (seen.has(entry.descKey)) continue;
     seen.add(entry.descKey);
     const keys = KEYS_TEXT[entry.action] ? t(KEYS_TEXT[entry.action]) : formatKeys(entry, lang);
