@@ -464,6 +464,22 @@ fn rotate_log_file_keeps_the_newest_lines_and_drops_only_the_oldest() {
     let _ = fs::remove_file(&path);
 }
 
+// A known folder reaches the scrubber without its closing separator, so the placeholder
+// leaves the separator in place instead of gluing itself to the next name.
+#[test]
+fn a_known_folder_loses_its_trailing_separator_before_scrubbing() {
+    assert_eq!(without_trailing_separator(PathBuf::from("C:\\Users\\x\\Temp\\")), PathBuf::from("C:\\Users\\x\\Temp"));
+    assert_eq!(without_trailing_separator(PathBuf::from("C:/a/b/")), PathBuf::from("C:/a/b"));
+    assert_eq!(without_trailing_separator(PathBuf::from("C:\\")), PathBuf::from("C:\\"), "a drive root keeps its separator");
+    assert_eq!(without_trailing_separator(PathBuf::from("C:\\a")), PathBuf::from("C:\\a"));
+    for (dir, _) in known_path_placeholders() {
+        let s = dir.to_string_lossy().into_owned();
+        assert!(s.len() < 3 || !s.ends_with(['\\', '/']), "{s}");
+    }
+    let dirs = [(without_trailing_separator(PathBuf::from("C:\\Users\\x\\Temp\\")), "<temp>")];
+    assert_eq!(replace_known_dirs("open C:\\Users\\x\\Temp\\name.txt", &dirs), "open <temp>\\name.txt");
+}
+
 // A file already under the cap must be left completely alone: rotation is
 // only for a log that actually outgrew its budget.
 #[test]

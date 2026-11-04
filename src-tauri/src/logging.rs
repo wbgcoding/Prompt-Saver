@@ -141,6 +141,13 @@ pub(crate) fn with_crash_log_lock<T>(path: &Path, f: impl FnOnce() -> T) -> T {
 // `with_crash_log_lock`. This variant runs inside `append_crash_log`'s own lock and must
 // not acquire it twice; `rotate_log_file` is the self-locking wrapper.
 pub(crate) fn rotate_log_file_locked(path: &Path, cap: usize) {
+    // The size comes from the metadata first: a log under the cap is never read into memory,
+    // and this runs before every appended line.
+    match fs::metadata(path) {
+        Ok(m) if m.len() <= cap as u64 => return,
+        Ok(_) => {}
+        Err(_) => return,
+    }
     let Ok(contents) = fs::read(path) else { return };
     if contents.len() <= cap {
         return;
@@ -223,8 +230,21 @@ pub(crate) fn known_path_placeholders() -> Vec<(PathBuf, &'static str)> {
     if let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
         out.push((home, "<user>"));
     }
+    let mut out: Vec<(PathBuf, &'static str)> = out.into_iter().map(|(p, tag)| (without_trailing_separator(p), tag)).collect();
     out.sort_by_key(|(p, _)| std::cmp::Reverse(p.as_os_str().len()));
     out
+}
+
+// The temp folder comes back from the OS with a closing backslash. Left on, the placeholder
+// would swallow the separator and glue itself to the next name ("<temp>name"). A bare drive
+// root keeps its separator: "C:" alone would match every "C:" in a line.
+pub(crate) fn without_trailing_separator(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    let trimmed = s.trim_end_matches(['\\', '/']);
+    if trimmed.len() == s.len() || trimmed.len() < 3 {
+        return p;
+    }
+    PathBuf::from(trimmed)
 }
 
 // Case-insensitive substring replace that keeps byte offsets valid across the
@@ -411,9 +431,7 @@ pub(crate) fn error_log_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("errorLog") != Some(&false) // on by default
 }
 
-// Same privacy bar as the crash log (`scrub_log_line`): a path collapses to its file name.
-// No caller passes prompt content, but a stray long string is collapsed to a short stand-in
-// so a future call site cannot leak one by accident.
+// Longest error text kept whole; see `scrub_error_log_text`.
 pub(crate) const ERROR_LOG_TEXT_MAX_CHARS: usize = 160;
 
 // The crash-log line for a panic. A panic message can carry user data, quoted or not (a slice on
@@ -427,6 +445,9 @@ pub(crate) fn panic_log_line(location: Option<(&str, u32, u32)>, payload: &str) 
     }
 }
 
+// Same privacy bar as the crash log (`scrub_log_line`): a path collapses to its file name.
+// No caller passes prompt content, but a stray long string is collapsed to a short stand-in
+// so a future call site cannot leak one by accident.
 pub(crate) fn scrub_error_log_text(s: &str) -> String {
     let path_clean = scrub_log_line(s);
     if path_clean.chars().count() > ERROR_LOG_TEXT_MAX_CHARS {
