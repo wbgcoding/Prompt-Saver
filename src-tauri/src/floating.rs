@@ -1416,7 +1416,7 @@ pub(crate) async fn resize_float_media(
     let free = float_size_of(&lock(&state).settings, &id).is_some();
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
         if width.is_finite() && height.is_finite() {
-            let min_h = if free { FLOAT_MIN_H } else { 48.0 };
+            let min_h = float_min_height(free);
             let w = width.clamp(48.0, 4000.0);
             let h = height.clamp(min_h, 4000.0);
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
@@ -1455,11 +1455,18 @@ pub(crate) fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64
     )
 }
 
+// The least height a floating window may be given: a pill with a hand-dragged size can be as low
+// as FLOAT_MIN_H, an automatically sized one never goes under 48.
+pub(crate) fn float_min_height(free_size: bool) -> f64 {
+    if free_size { FLOAT_MIN_H } else { 48.0 }
+}
+
 // Set a floating window's position AND size together (logical px). Used by the
 // edge/corner resize so the grabbed edge tracks the cursor 1:1.
 #[tauri::command]
 pub(crate) async fn set_float_bounds(
     app: AppHandle,
+    state: State<'_, Db>,
     id: String,
     x: f64,
     y: f64,
@@ -1469,8 +1476,9 @@ pub(crate) async fn set_float_bounds(
 ) -> Result<(), String> {
     if [x, y, width, height].iter().all(|v| v.is_finite()) {
         if let Some(win) = app.get_webview_window(&flabel(&id)) {
-            let w = width.clamp(48.0, 8000.0);
-            let h = height.clamp(48.0, 8000.0);
+            let free = float_size_of(&lock(&state).settings, &id).is_some();
+            let w = width.clamp(FLOAT_MIN_W, FLOAT_MAX_SIDE);
+            let h = height.clamp(float_min_height(free), FLOAT_MAX_SIDE);
             // OPT-IN, and only the pill menu asks for it: that placement picks a side that fits and
             // falls back to "below" when none does. Every other caller has already worked out its exact
             // box (a live edge-resize computes the origin from the size it is about to set), and clamping
