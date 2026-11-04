@@ -56,8 +56,8 @@ const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
 let rotateVariants = 0;
 let rotateInfo = null; // { index, pos, total } once known
-let rotateReq = 0; // bumped on every primeRotateBadge call, so an in-flight peek
-                    // A superseded primeRotateBadge call's in-flight peek must not overwrite a newer result.
+let rotateReq = 0; // bumped on every primeRotateBadge call, so a superseded
+                    // call's in-flight peek cannot overwrite a newer result.
 const rotateBadgeEl = document.getElementById("rotate-badge");
 
 function renderRotateBadge() {
@@ -814,7 +814,7 @@ window.addEventListener("mousemove", async (e) => {
   // drag.
   if (!videoEl.classList.contains("hidden")) pauseByApp();
   // The whole window moves: an open menu rides along with the pill.
-  await appWin.startDragging();
+  await appWin.startDragging().catch(() => {});
 });
 
 window.addEventListener("mouseup", async () => {
