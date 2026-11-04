@@ -1465,6 +1465,25 @@ section(() => {
   check(r.log.length === 0, "focus already moved elsewhere is left alone");
 });
 
+// 81. The video cleanup dialog ignores a second open while it is up.
+section(() => {
+  const src = read("recordingTools.js");
+  const fn = extractBlock(src, "export async function openVideoCleanup(dir) {").replace("export ", "");
+  later(async () => {
+    let runs = 0, release;
+    const gate = new Promise((r) => { release = r; });
+    const sb = run("let videoCleanupOpen = false;\n" + fn + "\nglobalThis.open = openVideoCleanup;", {
+      openVideoCleanupRun: async () => { runs++; await gate; },
+    });
+    const first = sb.open("d");
+    await sb.open("d");
+    check(runs === 1, "the second open is ignored while the first is up");
+    release(); await first;
+    await sb.open("d");
+    check(runs === 2, "the dialog opens again after it closed");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

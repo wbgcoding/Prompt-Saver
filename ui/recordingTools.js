@@ -9,7 +9,16 @@ import { refreshVideoFolderInfo } from "./expertMenu.js";
 // confirmation" flow for the recordingDir cleanup button in the expert menu. Preview and the
 // real delete share the same backend scan, and the delete also receives the
 // listed names, so only files that were shown (and are still stale) get removed.
+// A second open while the first is still up would rebind every handler of the one dialog
+// and leave the first call waiting forever, so a repeat open is ignored.
+let videoCleanupOpen = false;
 export async function openVideoCleanup(dir) {
+  if (videoCleanupOpen) return;
+  videoCleanupOpen = true;
+  try { await openVideoCleanupRun(dir); } finally { videoCleanupOpen = false; }
+}
+
+async function openVideoCleanupRun(dir) {
   const box = $("video-cleanup-modal");
   const ageSel = $("video-cleanup-age");
   const summary = $("video-cleanup-summary");
