@@ -479,6 +479,18 @@ fn rotate_log_file_leaves_a_file_under_the_cap_untouched() {
     let _ = fs::remove_file(&path);
 }
 
+// One line longer than the cap has no line break in its tail: the tail is kept as is rather
+// than the whole log being emptied.
+#[test]
+fn rotate_log_file_keeps_the_tail_of_a_single_overlong_line() {
+    let path = std::env::temp_dir().join(format!("ps-crashlog-rotate-oneline-test-{}", std::process::id()));
+    fs::write(&path, "x".repeat(100) + "END").unwrap();
+    rotate_log_file(&path, 10);
+    let after = fs::read_to_string(&path).unwrap();
+    assert_eq!(after, "xxxxxxxEND");
+    let _ = fs::remove_file(&path);
+}
+
 // A line appended while a rotation is under way must never be lost. Proven
 // with a real second thread rather than a mocked lock: this thread holds the
 // crash log's own lock first (standing in for a truncation already in

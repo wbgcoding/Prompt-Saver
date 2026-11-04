@@ -150,7 +150,9 @@ pub(crate) fn rotate_log_file_locked(path: &Path, cap: usize) {
         .iter()
         .position(|&b| b == b'\n')
         .map(|i| cut_from + i + 1)
-        .unwrap_or(contents.len());
+        // One line longer than the cap has no break to cut at; keeping its tail beats emptying
+        // the log.
+        .unwrap_or(cut_from);
     let _ = write_bytes_atomic(path, &contents[start..]);
 }
 
