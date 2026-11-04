@@ -65,7 +65,7 @@ if (cmd === "init") {
   fs.writeFileSync(`${file}.sig`, sig.toString("base64"));
   console.log(`signed ${path.basename(file)}`);
 } else if (cmd === "verify") {
-  if (!file || !fs.existsSync(`${file}.sig`)) fail("usage: verify <installer> (needs <installer>.sig)");
+  if (!file || !fs.existsSync(file) || !fs.existsSync(`${file}.sig`)) fail("usage: verify <installer> (needs the installer and <installer>.sig)");
   const pub = crypto.createPublicKey({
     key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), builtInPublicKey()]),
     format: "der",
