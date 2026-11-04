@@ -141,11 +141,13 @@ async function main() {
   const pending = els["continue-btn"].h.click();
   await tick(700);
   expect("continue gap: bar not hidden", calls.includes("hide_rec_bar"), false);
+  expect("continue gap: Pause, Stop and Cancel wait for the switch", btns().join(), "true,true,true");
   const before = calls.filter((c) => c === "recording_status").length;
   continueDone();
   await pending;
   await tick(700);
   expect("continue gap: bar not hidden after the switch", calls.includes("hide_rec_bar"), false);
+  expect("continue gap: Pause, Stop and Cancel are back after the switch", btns().join(), "false,false,false");
   if (calls.filter((c) => c === "recording_status").length <= before) problems.push("continue gap: poll stopped");
 
   // Keys, once the user clicked into the bar: Space pauses then resumes, Escape

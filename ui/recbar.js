@@ -160,8 +160,11 @@ function applyHotkeyWarn(stopOk, pauseOk) {
 // room for; free space recovering does not make the warning untrue.
 let lastDiskLow = null;
 function applyDiskLow(diskLow) {
-  if (!diskLow || !tx) return;
+  if (!diskLow) return;
+  // Kept even while the texts are still loading: the backend reports this once, and the
+  // text load re-applies it.
   lastDiskLow = diskLow;
+  if (!tx) return;
   const [mb, min] = diskLow;
   const label = tx("recDiskLow").replace("{mb}", String(mb)).replace("{min}", String(min));
   diskWarnEl.classList.remove("hidden");
@@ -307,8 +310,9 @@ pauseBtn.addEventListener("click", async () => {
 continueBtn.addEventListener("click", async () => {
   if (continueBtn.disabled) return;
   continueBtn.disabled = true;
-  // Stop and Cancel would find no session while the switch holds it out of the
+  // Pause, Stop and Cancel would find no session while the switch holds it out of the
   // state, so they wait for the switch to end.
+  pauseBtn.disabled = true;
   stopBtn.disabled = true;
   cancelBtn.disabled = true;
   continuing = true;
@@ -333,6 +337,7 @@ continueBtn.addEventListener("click", async () => {
     continuing = false;
     continueSeq++;
     if (!stopped) {
+      pauseBtn.disabled = false;
       stopBtn.disabled = false;
       cancelBtn.disabled = false;
     }
