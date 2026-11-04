@@ -914,6 +914,14 @@ pub(crate) fn export_request_refusal(own_dirs: &[PathBuf], dest_path: &str, medi
     }
 }
 
+// The file the export writes is named by the destination alone, while ffmpeg encodes to the
+// requested format. A destination ending in another extension (or none) would hold a file whose
+// content does not match its name, so the extension must equal the format. The editor always
+// sends it that way.
+pub(crate) fn export_dest_ext_matches_format(dest: &Path, format: &str) -> bool {
+    dest.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(format))
+}
+
 pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     let Ok(src_canon) = fs::canonicalize(src) else { return false };
     let dest_parent = dest.parent().unwrap_or_else(|| Path::new("."));
@@ -1138,7 +1146,7 @@ pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: Expo
     if !file_name_ok {
         return Err("export destination not recognized".to_string());
     }
-    if export_dest_is_same_as_src(&dst, &src) {
+    if export_dest_is_same_as_src(&dst, &src) || !export_dest_ext_matches_format(&dst, &req.format) {
         return Err("export destination not recognized".to_string());
     }
     if !export_dest_dir_is_authorized(&app, &state, &dst, &src) {
@@ -1350,7 +1358,7 @@ pub(crate) async fn export_recordings_batch(
             failed += 1;
             continue;
         }
-        if !export_dest_is_usable(&PathBuf::from(&item.dest_path), &item_src) {
+        if !export_dest_is_usable(&PathBuf::from(&item.dest_path), &item_src) || !export_dest_ext_matches_format(Path::new(&item.dest_path), &format) {
             failed += 1;
             continue;
         }

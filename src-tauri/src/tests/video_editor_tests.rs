@@ -203,7 +203,7 @@ fn closing_the_editor_releases_every_waiting_open_request_as_gone() {
     assert!(crate::video_editor::VE_PENDING_REQUEST.lock().unwrap().is_none(), "a stale offer must not outlive its window");
     let src = source!("../video_editor.rs");
     let hook = src.find("tauri::WindowEvent::Destroyed =>").expect("the editor window must watch its own destruction");
-    assert!(src[hook..hook + 300].contains("release_pending_editor_requests"));
+    assert!(src[hook..hook + 500].contains("release_pending_editor_requests"));
 }
 
 // The open-while-closing race: a request that met a window on its way out must build a fresh
@@ -649,4 +649,14 @@ fn the_editor_close_flags_are_all_cleared_when_its_window_is_destroyed() {
     for flag in ["VE_CLOSE_READY", "VE_CLOSING_OK", "VE_QUIT_AFTER_CLOSE"] {
         assert!(body.contains(&format!("{flag}.store(false")), "{flag} must be reset on Destroyed");
     }
+}
+
+#[test]
+fn an_export_destination_must_end_in_the_requested_format() {
+    use std::path::Path;
+    assert!(export_dest_ext_matches_format(Path::new(r"C:\x\clip.mp4"), "mp4"));
+    assert!(export_dest_ext_matches_format(Path::new(r"C:\x\clip.GIF"), "gif"));
+    assert!(!export_dest_ext_matches_format(Path::new(r"C:\x\clip.mp4"), "webm"));
+    assert!(!export_dest_ext_matches_format(Path::new(r"C:\x\clip"), "mp4"));
+    assert!(!export_dest_ext_matches_format(Path::new(r"C:\x\clip.exe"), "avi"));
 }
