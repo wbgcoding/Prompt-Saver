@@ -356,9 +356,13 @@ export function gsRender() {
 let gsRenderPending = false;
 export const gsRenderDebounced = debounced(() => { gsRenderPending = false; gsRender(); });
 
+// The element that had focus before the overlay opened, so closing hands focus back.
+let gsOpener = null;
+
 export async function openGlobalSearch() {
   if (gsOpen) return;
   gsOpen = true;
+  gsOpener = document.activeElement;
   gsQuery = "";
   gsExpanded = new Set();
   gsResetImageHits();
@@ -376,6 +380,14 @@ export function closeGlobalSearch() {
   if (!gsOpen) return;
   gsOpen = false;
   $("global-search").classList.add("hidden");
+  // Focus would otherwise fall to the body once the hidden overlay drops it. A hit's own
+  // action runs after this and may still move focus where it wants.
+  const back = gsOpener;
+  gsOpener = null;
+  const cur = document.activeElement;
+  if (back?.isConnected && back !== document.body && (!cur || cur === document.body || $("global-search").contains(cur))) {
+    try { back.focus({ preventScroll: true }); } catch {}
+  }
 }
 
 export function toggleGlobalSearch() {

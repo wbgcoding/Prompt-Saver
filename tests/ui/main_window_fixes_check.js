@@ -1442,6 +1442,29 @@ section(() => {
   check(calls.length === 1, "a second call without a held Shift does nothing");
 });
 
+// 80. Closing the global search hands focus back to where it was, unless a hit moved it.
+section(() => {
+  const src = read("globalSearch.js");
+  check(/gsOpener = document\.activeElement;/.test(src), "opening remembers the focused element");
+  const fn = extractBlock(src, "export function closeGlobalSearch() {").replace("export ", "");
+  const mk = (activeIs) => {
+    const log = [];
+    const opener = { isConnected: true, focus: () => { log.push("opener"); doc.activeElement = opener; } };
+    const overlayInner = {};
+    const overlay = { classList: { add() {} }, contains: (n) => n === overlayInner };
+    const doc = { body: {}, activeElement: null };
+    doc.activeElement = activeIs === "overlay" ? overlayInner : activeIs === "other" ? { x: 1 } : doc.body;
+    const sb = run("let gsOpen = true; let gsOpener = opener;\n" + fn + "\nglobalThis.close = closeGlobalSearch;", { opener, document: doc, $: () => overlay });
+    return { sb, log };
+  };
+  let r = mk("overlay"); r.sb.close();
+  check(r.log.join() === "opener", "focus inside the overlay returns to the opener");
+  r = mk("body"); r.sb.close();
+  check(r.log.join() === "opener", "focus lost to the body returns to the opener");
+  r = mk("other"); r.sb.close();
+  check(r.log.length === 0, "focus already moved elsewhere is left alone");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
