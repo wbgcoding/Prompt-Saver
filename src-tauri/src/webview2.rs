@@ -178,9 +178,12 @@ pub(crate) fn install_webview2_runtime() -> bool {
     }
     let _cleanup = RemoveDir(dir.clone());
     let path = dir.join("MicrosoftEdgeWebview2Setup.exe");
-    if fs::write(&path, &bytes).is_err() {
-        return false;
-    }
+    // Held open with write and delete sharing denied from here until the installer has run, so
+    // nothing can swap the file between the signature check and the start.
+    let _held = match stage_file_locked(&path, &bytes) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
     // Integrity: only Microsoft's own chain-trust-signed bootstrapper is run. There is no
     // published hash to check it against, so Authenticode with the signer pinned to Microsoft is
     // the fail-closed gate.
