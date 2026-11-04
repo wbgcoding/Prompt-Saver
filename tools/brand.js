@@ -672,4 +672,4 @@ function main(argv) {
 }
 
 if (require.main === module) main(process.argv.slice(2));
-else module.exports = { loadBrand, stampPinTest };
+else module.exports = { loadBrand };
