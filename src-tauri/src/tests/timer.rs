@@ -1319,3 +1319,11 @@ fn the_locked_database_copy_is_removed_and_nothing_else() {
     remove_locked_backup(&root); // already gone: harmless
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_view_colour_is_a_hex_value_or_nothing() {
+    assert_eq!(clean_view_color(" #A1B2C3 "), "#a1b2c3");
+    assert_eq!(clean_view_color(""), "");
+    assert_eq!(clean_view_color("red"), "");
+    assert_eq!(clean_view_color("#12345"), "");
+}

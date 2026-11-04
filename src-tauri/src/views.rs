@@ -298,6 +298,12 @@ pub(crate) fn valid_tag_color(color: &str) -> Result<String, String> {
     }
 }
 
+// A view colour is held to the same #rrggbb-or-empty rule as every other colour in the app
+// (remap_colors only matches an exact hex); anything else comes back as no colour.
+pub(crate) fn clean_view_color(color: &str) -> String {
+    valid_tag_color(color).unwrap_or_default()
+}
+
 // Swap one tag key for a new name across every prompt. Renaming onto a tag a prompt
 // already carries merges the two instead of duplicating it. Returns whether anything
 // changed, so an unused name costs no write.
@@ -583,7 +589,7 @@ pub(crate) fn add_view(app: AppHandle, state: State<Db>, name: String, color: St
         cols: default_cols(),
         rows: default_rows(),
         layouts: HashMap::new(),
-        color: color.trim().to_string(),
+        color: clean_view_color(&color),
         members: Vec::new(),
         sync_ids: Vec::new(),
     };
@@ -616,7 +622,7 @@ pub(crate) fn rename_view(app: AppHandle, state: State<Db>, id: String, name: St
 pub(crate) fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -> Settings {
     let mut store = lock(&state);
     if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) {
-        view.color = color.trim().to_string();
+        view.color = clean_view_color(&color);
     }
     save_settings(&app, &store.settings);
     webview_settings(&store.settings)
