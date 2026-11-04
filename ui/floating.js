@@ -483,7 +483,9 @@ function applyPrompt(p) {
         userPaused = false; // and an old user pause does not carry over to it
         videoEl.onloadedmetadata = () =>
           onRatio(videoEl.videoWidth / videoEl.videoHeight);
-        videoEl.onerror = () => onRatio(1); // unreadable video: still size the pill
+        // Unreadable video: still size the pill. A decode error after the size is known
+        // keeps that size.
+        videoEl.onerror = () => { if (!videoEl.videoWidth) onRatio(1); };
       } else if (videoEl.videoWidth) {
         onRatio(videoEl.videoWidth / videoEl.videoHeight);
       }

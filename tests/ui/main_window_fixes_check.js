@@ -1549,10 +1549,11 @@ section(() => {
   });
 });
 
-// 85. An unreadable pill video still sizes the pill, like a broken image does.
+// 85. An unreadable pill video still sizes the pill, like a broken image does; a decode
+// error after the size is known keeps that size.
 section(() => {
   const src = read("floating.js");
-  check(/videoEl\.onloadedmetadata = \(\) =>\s*onRatio\([^)]*\);\s*videoEl\.onerror = \(\) => onRatio\(1\);/.test(src), "the video branch has an error fallback");
+  check(/videoEl\.onloadedmetadata = \(\) =>\s*onRatio\([^)]*\);[\s\S]{0,200}?videoEl\.onerror = \(\) => \{ if \(!videoEl\.videoWidth\) onRatio\(1\); \};/.test(src), "the video branch has an error fallback that keeps a known size");
 });
 
 // 86. Dragging the left or top edge outward grows the folder instead of shrinking it.
