@@ -794,3 +794,21 @@ fn the_window_facing_progress_command_takes_no_target() {
     let signature = &src[at..at + src[at..].find(") {").unwrap()];
     assert!(!signature.contains("target"), "{signature}");
 }
+
+#[test]
+fn only_a_stale_journal_lock_is_taken_over() {
+    let root = std::env::temp_dir().join(format!("{}-test-journal-lock-{}", brand::SLUG, std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let lock = root.join("export-staging.lock");
+    assert!(!take_over_stale_lock(&lock), "no lock, nothing to take over");
+    fs::write(&lock, b"").unwrap();
+    assert!(!take_over_stale_lock(&lock) && lock.exists(), "a fresh lock stays");
+    let old = SystemTime::now() - Duration::from_secs(60);
+    fs::OpenOptions::new().write(true).open(&lock).unwrap().set_modified(old).unwrap();
+    assert!(take_over_stale_lock(&lock), "a lock past ten seconds is taken over");
+    assert!(!lock.exists());
+    let leftovers = fs::read_dir(&root).unwrap().count();
+    assert_eq!(leftovers, 0, "the renamed lock is removed too");
+    let _ = fs::remove_dir_all(&root);
+}

@@ -898,6 +898,31 @@ pub(crate) fn journal_write(journal: &Path, lines: &[String]) {
     }
 }
 
+// Clears a journal lock older than ten seconds, true when it did. The lock is first renamed to
+// a name of its own, so of two processes that both judged it stale only one can win the rename,
+// and the loser can no longer delete the fresh lock the winner creates next. A lock that turns
+// out fresh after all (it was replaced between the check and the rename) is linked back.
+pub(crate) fn take_over_stale_lock(lock: &Path) -> bool {
+    let age_of = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+    let stale = |p: &Path| age_of(p).is_some_and(|age| age > Duration::from_secs(10));
+    if !stale(lock) {
+        return false;
+    }
+    let mut name = lock.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".stale-{}", std::process::id()));
+    let taken = lock.with_file_name(name);
+    if fs::rename(lock, &taken).is_err() {
+        return false;
+    }
+    if stale(&taken) {
+        let _ = fs::remove_file(&taken);
+        return true;
+    }
+    let _ = fs::hard_link(&taken, lock);
+    let _ = fs::remove_file(&taken);
+    false
+}
+
 // Read-modify-write across processes: the in-process mutex covers threads, a create-new lock
 // file covers a second local instance. A lock older than ten seconds belongs to a dead run
 // and is taken over; if it cannot be had within a second the change runs unlocked rather than
@@ -911,14 +936,7 @@ pub(crate) fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
             held = true;
             break;
         }
-        let stale = fs::metadata(&lock)
-            .and_then(|m| m.modified())
-            .ok()
-            .and_then(|t| t.elapsed().ok())
-            .is_some_and(|age| age > Duration::from_secs(10));
-        if stale {
-            let _ = fs::remove_file(&lock);
-        } else {
+        if !take_over_stale_lock(&lock) {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
