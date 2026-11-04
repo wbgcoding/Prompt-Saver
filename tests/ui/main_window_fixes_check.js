@@ -1484,6 +1484,19 @@ section(() => {
   });
 });
 
+// 82. The seek slider stops scrubbing on a release anywhere, or a cancelled pointer.
+section(() => {
+  const src = read("media.js");
+  const body = extractBlock(src, "const endScrub = () => {");
+  check(/seek\.addEventListener\("pointerdown", \(\) => \{\s*scrubbing = true;\s*window\.addEventListener\("pointerup", endScrub\);\s*window\.addEventListener\("pointercancel", endScrub\);/.test(src), "press arms a window release and cancel");
+  const removed = [];
+  const sb = run("let scrubbing = true;\n" + body + "\nglobalThis.end = endScrub; globalThis.on = () => scrubbing;", {
+    window: { removeEventListener: (n) => removed.push(n) },
+  });
+  sb.end();
+  check(sb.on() === false && removed.join() === "pointerup,pointercancel", "ending clears the flag and both listeners");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

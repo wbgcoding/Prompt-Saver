@@ -91,8 +91,18 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
   const time = document.createElement("span");
   time.className = "media-time";
   let scrubbing = false;
-  seek.addEventListener("pointerdown", () => (scrubbing = true));
-  seek.addEventListener("pointerup", () => (scrubbing = false));
+  // The release can land outside the slider (or be cancelled), so it is watched on the
+  // window; otherwise the slider would stay frozen and stop following the playback.
+  const endScrub = () => {
+    scrubbing = false;
+    window.removeEventListener("pointerup", endScrub);
+    window.removeEventListener("pointercancel", endScrub);
+  };
+  seek.addEventListener("pointerdown", () => {
+    scrubbing = true;
+    window.addEventListener("pointerup", endScrub);
+    window.addEventListener("pointercancel", endScrub);
+  });
   seek.addEventListener("input", () => {
     // Guard against Infinity/NaN duration (still-loading or streamed video):
     // assigning a non-finite currentTime throws.
