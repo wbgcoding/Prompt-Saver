@@ -20,7 +20,9 @@ TRACKED_GLOBS = [
     "ui/styles/*.css",
     "tools/*.js",
     "build.bat",
-    "installer.nsi",
+    "src-tauri/build.rs",
+    "src-tauri/installer.nsi",
+    "src-tauri/Cargo.toml",
 ]
 
 # Comment syntax per file type: (line marker, block open, block close).
@@ -31,6 +33,7 @@ COMMENT_SYNTAX = {
     ".html": (None, "<!--", "-->"),
     ".nsi": (";", "/*", "*/"),
     ".bat": ("rem ", None, None),
+    ".toml": ("#", None, None),
 }
 
 # "// 51:", "// 90-94:", "// 123.3:" -- a plan item wearing a colon.
