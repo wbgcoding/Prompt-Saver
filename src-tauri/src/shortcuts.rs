@@ -390,16 +390,24 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
     // A binding stored by an older version can be one the blocklist now refuses.
     // It is never registered again, so the stored string is cleared here: otherwise
     // the editor keeps showing a hotkey that does nothing.
-    let (plan, mut dropped, mut app_ok, mut voice_ok, mut rec_stop_ok, mut rec_pause_ok) = match app.try_state::<Db>() {
+    let (plan, mut refused, mut app_ok, mut voice_ok, mut rec_stop_ok, mut rec_pause_ok, seen_prompt_keys) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let per_prompt = store.settings.ui_flags.get("promptHotkeys") != Some(&false);
-            let stale: Vec<String> = store
-                .prompts
-                .iter()
-                .filter(|p| !p.hotkey.trim().is_empty() && parse_accel(&p.hotkey).is_none())
-                .map(|p| p.id.clone())
-                .collect();
+            // The stored strings are carried along: the clear later in this pass only touches a
+            // slot that still holds the very value that was refused, never one the user has
+            // typed in the meantime.
+            let mut refused = RefusedHotkeys {
+                prompts: store
+                    .prompts
+                    .iter()
+                    .filter(|p| !p.hotkey.trim().is_empty() && parse_accel(&p.hotkey).is_none())
+                    .map(|p| (p.id.clone(), p.hotkey.clone()))
+                    .collect(),
+                ..Default::default()
+            };
+            let seen_prompt_keys: std::collections::HashMap<String, String> =
+                store.prompts.iter().map(|p| (p.id.clone(), p.hotkey.clone())).collect();
             let app_ok = store.settings.hotkey.trim().is_empty()
                 || parse_accel(&store.settings.hotkey).is_some();
             // Registered only while both the feature and its own opt-in flag are on; switching either
@@ -427,13 +435,16 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
             let rec_pause_ok = !rec_pause_on
                 || store.settings.rec_pause_hotkey.trim().is_empty()
                 || parse_accel(&store.settings.rec_pause_hotkey).is_some();
+            refused.app = Some(store.settings.hotkey.clone());
+            refused.voice = Some(store.settings.voice_hotkey.clone());
             (
                 hotkey_plan(&store.settings.hotkey, voice_hotkey, rec_stop_hotkey, rec_pause_hotkey, &store.prompts, per_prompt),
-                stale,
+                refused,
                 app_ok,
                 voice_ok,
                 rec_stop_ok,
                 rec_pause_ok,
+                seen_prompt_keys,
             )
         }
         None => return true,
@@ -446,7 +457,10 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
             live.push((sc, owner));
         } else {
             match owner {
-                HotkeyOwner::Prompt(id) => dropped.push(id),
+                HotkeyOwner::Prompt(id) => {
+                    let key = seen_prompt_keys.get(&id).cloned().unwrap_or_default();
+                    refused.prompts.push((id, key));
+                }
                 HotkeyOwner::App => app_ok = false,
                 HotkeyOwner::Voice => voice_ok = false,
                 HotkeyOwner::RecStop => rec_stop_ok = false,
@@ -460,13 +474,29 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
     VOICE_HOTKEY_OK.store(voice_ok, std::sync::atomic::Ordering::Relaxed);
     REC_STOP_HOTKEY_OK.store(rec_stop_ok, std::sync::atomic::Ordering::Relaxed);
     REC_PAUSE_HOTKEY_OK.store(rec_pause_ok, std::sync::atomic::Ordering::Relaxed);
-    if !app_ok || !voice_ok || !dropped.is_empty() {
+    if !app_ok || !voice_ok || !refused.prompts.is_empty() {
+        if !app_ok {
+            refused.app_refused = true;
+        }
+        if !voice_ok {
+            refused.voice_refused = true;
+        }
         if let Some(state) = app.try_state::<Db>() {
             let mut store = lock(&state);
-            clear_refused_hotkeys(&mut store, app_ok, voice_ok, &dropped, &mut |st| save_prompts(app, st), &mut |st| save_settings_paired(app, &st.settings));
+            clear_refused_hotkeys(&mut store, &refused, &mut |st| save_prompts(app, st), &mut |st| save_settings_paired(app, &st.settings));
         }
     }
     app_ok
+}
+
+// What one rearm pass refused: the stored strings as they were when the plan was made.
+#[derive(Default)]
+pub(crate) struct RefusedHotkeys {
+    pub app: Option<String>,
+    pub app_refused: bool,
+    pub voice: Option<String>,
+    pub voice_refused: bool,
+    pub prompts: Vec<(String, String)>,
 }
 
 // Clears the refused hotkeys from the store and writes the result. The clear stays only when
@@ -475,41 +505,47 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
 // rearm simply refuses the key again, so a persistent write failure repeats this quietly.
 pub(crate) fn clear_refused_hotkeys(
     store: &mut Store,
-    app_ok: bool,
-    voice_ok: bool,
-    dropped: &[String],
+    refused: &RefusedHotkeys,
     save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
     save_settings_fn: &mut dyn FnMut(&Store) -> bool,
 ) -> bool {
     let old_hotkey = store.settings.hotkey.clone();
     let old_voice = store.settings.voice_hotkey.clone();
-    let old_prompt_keys: Vec<(String, String)> = store
+    // A slot is cleared only while it still holds the refused string.
+    let clear_app = refused.app_refused && refused.app.as_deref() == Some(store.settings.hotkey.as_str());
+    let clear_voice = refused.voice_refused && refused.voice.as_deref() == Some(store.settings.voice_hotkey.as_str());
+    let old_prompt_keys: Vec<(String, String)> = refused
         .prompts
         .iter()
-        .filter(|p| dropped.contains(&p.id))
-        .map(|p| (p.id.clone(), p.hotkey.clone()))
+        .filter(|(id, key)| store.prompts.iter().any(|p| &p.id == id && &p.hotkey == key))
+        .cloned()
         .collect();
-    if !app_ok {
+    if clear_app {
         store.settings.hotkey = String::new();
     }
-    if !voice_ok {
+    if clear_voice {
         store.settings.voice_hotkey = String::new();
     }
-    for p in store.prompts.iter_mut().filter(|p| dropped.contains(&p.id)) {
-        p.hotkey = String::new();
+    for p in store.prompts.iter_mut() {
+        if old_prompt_keys.iter().any(|(id, key)| &p.id == id && &p.hotkey == key) {
+            p.hotkey = String::new();
+        }
     }
-    let prompts_written = dropped.is_empty() || save_prompts_fn(store);
+    if !clear_app && !clear_voice && old_prompt_keys.is_empty() {
+        return true;
+    }
+    let prompts_written = old_prompt_keys.is_empty() || save_prompts_fn(store);
     if prompts_written && save_settings_fn(store) {
         return true;
     }
     store.settings.hotkey = old_hotkey;
     store.settings.voice_hotkey = old_voice;
-    for (id, key) in old_prompt_keys {
-        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-            p.hotkey = key;
+    for (id, key) in &old_prompt_keys {
+        if let Some(p) = store.prompts.iter_mut().find(|p| &p.id == id) {
+            p.hotkey = key.clone();
         }
     }
-    if prompts_written && !dropped.is_empty() && !save_prompts_fn(store) {
+    if prompts_written && !old_prompt_keys.is_empty() && !save_prompts_fn(store) {
         append_crash_log("persist failed: the undo of a cleared hotkey could not be written");
     }
     append_crash_log("persist failed: a refused hotkey could not be cleared in the store");
