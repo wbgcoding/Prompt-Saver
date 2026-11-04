@@ -1489,3 +1489,12 @@ fn both_elevated_scripts_start_with_the_target_guard() {
         assert!(script.find("{guard}").unwrap() < script.find(first_call).unwrap(), "{name}");
     }
 }
+
+#[test]
+fn a_held_path_is_inside_the_store_whatever_its_casing() {
+    let files = std::path::Path::new("C:/Users/x/AppData/Roaming/App/files");
+    assert!(path_is_inside("c:/users/x/appdata/roaming/app/FILES/a_b.png", files));
+    assert!(path_is_inside(r"C:\Users\x\AppData\Roaming\App\files\a_b.png", files));
+    assert!(!path_is_inside("C:/Users/x/AppData/Roaming/App/files-old/a.png", files));
+    assert!(!path_is_inside("C:/Users/x/Pictures/a.png", files));
+}

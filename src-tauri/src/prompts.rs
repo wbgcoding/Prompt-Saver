@@ -257,6 +257,16 @@ pub(crate) fn fold_path(path: &str) -> String {
     path.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase()
 }
 
+// Whether a path sits inside a folder, judged the way Windows does: case and slash spelling
+// never matter, and "files-old" is not inside "files".
+pub(crate) fn path_is_inside(path: &str, dir: &std::path::Path) -> bool {
+    let mut base = fold_path(&dir.to_string_lossy());
+    if !base.ends_with('\\') {
+        base.push('\\');
+    }
+    fold_path(path).starts_with(&base)
+}
+
 pub(crate) fn pending_key(path: &str) -> String {
     fold_path(path)
 }
@@ -312,7 +322,7 @@ pub(crate) fn store_attached_file_in(files_dir: &std::path::Path, path: &str, st
         return String::new();
     }
     let src = std::path::Path::new(path);
-    if src.starts_with(files_dir) || !src.is_file() {
+    if path_is_inside(path, files_dir) || !src.is_file() {
         return path.to_string();
     }
     if fs::create_dir_all(files_dir).is_err() {
