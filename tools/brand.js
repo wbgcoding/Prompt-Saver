@@ -579,7 +579,8 @@ function pruneBrands(dst, b) {
 function prepareOut(dir) {
   if (typeof dir !== "string" || !dir || dir.includes("\0")) fail("--out needs a directory");
   const abs = path.resolve(dir);
-  if (abs === ROOT || (abs + path.sep).startsWith(ROOT + path.sep)) {
+  const fold = (p) => (process.platform === "win32" ? p.toLowerCase() : p);
+  if (fold(abs) === fold(ROOT) || fold(abs + path.sep).startsWith(fold(ROOT + path.sep))) {
     fail("--out must point outside this repo");
   }
   if (fs.existsSync(abs)) {
