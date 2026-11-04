@@ -1770,7 +1770,6 @@ export function initSnipEditor() {
     if (e.key === "Escape") {
       e.preventDefault();
       if (numPopClosedByEscape(e)) return; // that Escape only dismissed a preset list
-      if (!snipCtxPop.classList.contains("hidden")) { closeSnipCtxPop(); return; }
       if (!colorPop.classList.contains("hidden")) { closeColorPop(); return; }
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (snipScalePopIsOpen()) { closeSnipScalePop(); return; }
