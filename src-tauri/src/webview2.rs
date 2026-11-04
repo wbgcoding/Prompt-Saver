@@ -21,9 +21,10 @@ pub(crate) fn ensure_webview2() -> bool {
         // that fails (offline/blocked), fall back to opening the download page.
         if install_webview2_runtime() {
             // The runtime exists now, but this process started without it:
-            // relaunch so a fresh instance loads the webview.
+            // relaunch so a fresh instance loads the webview. The arguments are passed on,
+            // so a start with a command line does the same thing the second time.
             if let Ok(exe) = std::env::current_exe() {
-                let _ = std::process::Command::new(exe).spawn();
+                let _ = std::process::Command::new(exe).args(std::env::args_os().skip(1)).spawn();
             }
         } else {
             use std::os::windows::process::CommandExt;
