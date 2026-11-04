@@ -1029,3 +1029,13 @@ fn copy_prompt_advances_only_if_the_pointer_still_sits_on_the_served_entry() {
     assert!(body.contains("rotation_advance_if_served("));
     assert!(!body.contains("rotation_advance(&p"));
 }
+
+#[test]
+fn a_render_reads_the_last_input_before_the_clock() {
+    let src = include_str!("../clipwatch.rs").replace("\r\n", "\n");
+    let at = src.find("fn handle_render_format()").unwrap();
+    let body = &src[at..at + 900];
+    let input = body.find("let last_input = last_input_tick();").unwrap();
+    let clock = body.find("let now = tick();").unwrap();
+    assert!(input < clock, "an input between the reads must not make last_input newer than now");
+}

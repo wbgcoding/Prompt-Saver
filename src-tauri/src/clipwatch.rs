@@ -525,9 +525,11 @@ fn open_and_promise(hwnd: isize, is_first: bool, attempt: u32) {
 // was a real paste, and whether to keep tracking, is judged in a posted message (handle_judge),
 // so the Db lock and the UI emit never run on the pasting app's clock.
 fn handle_render_format() {
+    // The last input is read before the clock: an event landing between the two reads would
+    // otherwise be newer than "now", and the unsigned gap would wrap to a huge value.
+    let last_input = last_input_tick();
     let now = tick();
     let self_read = SELF_READ.load(Ordering::Acquire);
-    let last_input = last_input_tick();
     let has_app = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).is_some();
 
     let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
