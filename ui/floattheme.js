@@ -1,4 +1,4 @@
-// Theme mapping for the small always-on-top windows (pills and pill folders). They carry
+// Theme mapping for the small always-on-top windows (pills, pill folders and the other satellite windows). They carry
 // their OWN tokens (floating.css), so a custom theme's colours are mapped onto them; a
 // floating button follows the main window's palette instead of the base theme's.
 import { hexLuminance, INK_CROSSOVER, inkFor, themeColorScheme } from "./floatShared.js";
