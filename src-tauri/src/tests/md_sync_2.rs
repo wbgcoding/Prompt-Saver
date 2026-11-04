@@ -1340,3 +1340,15 @@ fn a_lock_sighting_ends_once_its_date_is_sane_again() {
     assert!(!sync_state().lock_sighted.lock().unwrap().contains_key(&key), "a sane date drops the sighting");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_lock_file_whose_host_name_is_all_digits_still_names_its_process() {
+    let here = local_host_name();
+    let own = format!("{here}\n4242\n99\n");
+    assert_eq!(sync_lock_holder(&own), SyncLockHolder::Here { pid: 4242, since_ns: 99 });
+    // A numeric computer name on another machine: three lines, so not the one-line old format.
+    assert_eq!(sync_lock_holder("1234\n4242\n99\n"), SyncLockHolder::Elsewhere);
+    assert_eq!(sync_lock_holder("1234\n"), SyncLockHolder::Elsewhere, "the old pid-only format");
+    assert_eq!(sync_lock_holder("1234\n4242\n"), SyncLockHolder::Unreadable);
+    assert_eq!(sync_lock_holder(""), SyncLockHolder::Unreadable);
+}

@@ -75,12 +75,14 @@ pub(crate) enum SyncLockHolder {
 }
 
 pub(crate) fn sync_lock_holder(text: &str) -> SyncLockHolder {
-    let mut lines = text.lines().map(str::trim);
-    let Some(first) = lines.next() else { return SyncLockHolder::Unreadable };
-    if first.parse::<u32>().is_ok() && lines.next().is_none() {
+    // Counted before anything is read: a computer name made only of digits must not be taken for
+    // the old one-line format, nor lose its process line to the check.
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let Some(&first) = lines.first() else { return SyncLockHolder::Unreadable };
+    if lines.len() == 1 && first.parse::<u32>().is_ok() {
         return SyncLockHolder::Elsewhere;
     }
-    let (Some(pid), Some(since)) = (lines.next().and_then(|l| l.parse::<u32>().ok()), lines.next().and_then(|l| l.parse::<u128>().ok())) else {
+    let (Some(pid), Some(since)) = (lines.get(1).and_then(|l| l.parse::<u32>().ok()), lines.get(2).and_then(|l| l.parse::<u128>().ok())) else {
         return SyncLockHolder::Unreadable;
     };
     if first.is_empty() {
