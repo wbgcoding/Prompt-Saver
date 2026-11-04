@@ -109,7 +109,7 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
     if (Number.isFinite(video.duration)) video.currentTime = (seek.value / 1000) * video.duration;
   });
   video.addEventListener("timeupdate", () => {
-    if (!scrubbing && Number.isFinite(video.duration)) {
+    if (!scrubbing && Number.isFinite(video.duration) && video.duration > 0) {
       seek.value = Math.round((video.currentTime / video.duration) * 1000);
     }
     time.textContent = `${fmtTime(video.currentTime)} / ${fmtTime(video.duration)}`;
