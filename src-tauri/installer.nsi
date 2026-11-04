@@ -359,12 +359,9 @@ Function PageLeaveReinstall
   ${EndIf}
 
   reinst_uninstall:
-    ; 95: HideWindow/BringToFront used to bracket the ExecWait below -- the old
-    ; uninstaller runs with /S (no window of its own to overlap), so all that
-    ; did was make the whole installer vanish for as long as the uninstall
-    ; took, reading as "the installer closed" instead of "still working".
-    ; The window now just stays up and on top the entire time; the header
-    ; changes so it is visible that something is happening.
+    ; The old uninstaller runs with /S and has no window of its own, so this
+    ; window stays up and on top for the whole uninstall; the header says what
+    ; it is waiting on, so it never looks like the installer closed.
     !insertmacro MUI_HEADER_TEXT "$(removingPrevious)" ""
     DetailPrint "$(removingPrevious)"
     ClearErrors
@@ -375,8 +372,8 @@ Function PageLeaveReinstall
     ${Else}
       ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
       ${If} $4 == ""
-        ; 95: an empty product-location key must not turn into an empty _?=
-        ; suffix -- that lets the uninstaller's own ExecWait return instantly
+        ; An empty product-location key must not turn into an empty _?=
+        ; suffix, which lets the uninstaller's own ExecWait return instantly
         ; while it is still deleting files in the background, so the fresh
         ; install below can start writing into the same folder mid-delete.
         ; Fall back to the uninstall key's own InstallLocation, then to this
@@ -849,9 +846,8 @@ LangString dataDirKeep ${LANG_ROMANIAN} "Păstrează datele mele (recomandat)"
 LangString dataDirDelete ${LANG_ROMANIAN} "Șterge și datele mele"
 LangString dataDirFolderLabel ${LANG_ROMANIAN} "Folder:"
 
-; 95: header shown while the previous version is silently removed during an
-; upgrade/reinstall (reinst_uninstall) -- the window itself stays visible and
-; on top the whole time now, this just says what it is waiting on.
+; Header shown while the previous version is silently removed during an
+; upgrade or reinstall (reinst_uninstall).
 LangString removingPrevious ${LANG_ENGLISH} "Removing the previous version"
 LangString removingPrevious ${LANG_GERMAN} "Vorherige Version wird entfernt"
 LangString removingPrevious ${LANG_SPANISH} "Eliminando la versión anterior"
