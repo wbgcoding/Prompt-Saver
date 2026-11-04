@@ -84,7 +84,8 @@ SECTION = """\
         const efr = (ef.closest('.select-picker, .select-wrap') || ef).getBoundingClientRect();
         const efShown = efr.width ? efr : ef.getBoundingClientRect();
         if (!document.querySelector('#impexp-field .export-pair #export-btn')) out.errors.push('726: export-btn is not inside the export pair');
-        if (!(efShown.left >= eb726.right - 1)) out.errors.push('726: the export format is not right of the Export button: ' + Math.round(efShown.left) + ' vs ' + Math.round(eb726.right));
+        // Right of the button, or wrapped under it when the pair has no room for both in one line.
+        if (!(efShown.left >= eb726.right - 1 || efShown.top >= eb726.bottom - 1)) out.errors.push('726: the export format is not right of the Export button: ' + Math.round(efShown.left) + ' vs ' + Math.round(eb726.right));
         if (!(eb726.left >= ifb.right - 1 || eb726.top >= ifb.bottom - 1)) out.errors.push('726: the Export button is not after Import');
       }
       if (document.getElementById('export-all') || document.getElementById('import-all')) out.errors.push('settings: the old save/import backup buttons are still in the settings row');

@@ -662,7 +662,7 @@ def run(browser, tmp):
     if (tabs[4].getAttribute('aria-selected') !== 'true' || tabs[1].getAttribute('aria-selected') !== 'false') errs.push('help: aria-selected does not follow the click');
     if (!document.querySelector('#shortcuts-modal-list .ve-help-p')) errs.push('help: the overlays section has no text');
     tabs[8].click(); await sleep(40);
-    const want = new Set(SHORTCUTS.filter((e) => e.scopes.includes('videoEditor') && !e.action.endsWith('Alt')).map((e) => e.descKey)).size;
+    const want = new Set(SHORTCUTS.filter((e) => e.scopes.includes('videoEditor') && !(e.action.endsWith('Alt') && (SHORTCUTS.find((s) => s.action === e.action.slice(0, -3)) || {}).descKey === e.descKey)).map((e) => e.descKey)).size;
     const rows = document.querySelectorAll('#shortcuts-modal-list .shortcuts-row');
     if (rows.length !== want || want < 15) errs.push('help: shortcut section has ' + rows.length + ' rows, registry has ' + want);
     const keysOf = [...rows].map((r) => r.querySelector('.shortcuts-row-keys').textContent);

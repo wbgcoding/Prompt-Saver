@@ -844,7 +844,7 @@ def run(browser, tmp):
     if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
     else {
       await baTool('crop'); await baCropTo(60, 30, 140, 90);
-      baKey('Enter'); await sleep(80);
+      await sleep(80); // the last edge drag already committed the crop; Enter would now apply the editor
       let img = await baExport();
       if (!img || img.w !== 80 || img.h !== 60) errs.push('592: fixture: the crop did not export 80x60, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
       // each dragged edge is one crop step
@@ -889,7 +889,7 @@ def run(browser, tmp):
     if (!(await baOpen(''))) { errs.push('593: the editor did not open'); }
     else {
       await baTool('crop'); await baCropTo(60, 30, 140, 90);
-      baKey('Enter'); await sleep(80);
+      await sleep(80); // the last edge drag already committed the crop; Enter would now apply the editor
       await baTool('arrow');
       await baScale50();
       await baTool('crop');
@@ -984,7 +984,7 @@ def run(browser, tmp):
         await sleep(60);
       };
       await baTool('crop'); await baCropTo(10, 10, 190, 110);
-      baKey('Enter'); await sleep(80);
+      await sleep(80); // the last edge drag already committed the crop; Enter would now apply the editor
       await baTool('text');
       await baText(30, 90, 'AAA'); await baText(120, 90, 'BBB');
       const pop = await baCtx(32, 94);
