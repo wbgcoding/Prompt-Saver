@@ -1445,3 +1445,15 @@ fn a_failed_settings_save_after_clearing_history_restores_the_counters() {
     assert_eq!(clear_history_and_save(|| true, |c| c.usage.is_empty(), &mut s), (true, true));
     assert!(s.usage.is_empty() && s.last_used.is_empty());
 }
+
+#[test]
+fn a_key_past_the_cutoff_is_a_gap_in_the_stop_time_drain_too() {
+    use crate::keylog::past_cutoff;
+    assert!(!past_cutoff(100, None));
+    assert!(!past_cutoff(99, Some(100)));
+    assert!(past_cutoff(100, Some(100)));
+    let src = include_str!("../keylog.rs").replace("\r\n", "\n");
+    let at = src.find("for raw in pending {").unwrap();
+    let head = &src[at..at + 120];
+    assert!(head.contains("past_cutoff(raw.t_ms, final_cutoff)"), "the drain at stop applies the cutoff");
+}

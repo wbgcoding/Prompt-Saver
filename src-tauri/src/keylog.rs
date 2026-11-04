@@ -346,7 +346,7 @@ fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool, id: KeyId, shortcuts
 }
 
 // Everything at or after the part-switch instant belongs to the next part.
-fn past_cutoff(t_ms: u64, cutoff: Option<u64>) -> bool {
+pub(crate) fn past_cutoff(t_ms: u64, cutoff: Option<u64>) -> bool {
     cutoff.is_some_and(|c| t_ms >= c)
 }
 
@@ -1040,8 +1040,11 @@ fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cu
     // Leftover keys must not each cost a live UIA timeout while the user waits for the
     // recording to stop; verdict_at_stop honors a check that already completed but never
     // starts a new one.
+    // Read once: stop sets the cutoff before it closes the channel, and a key queued past it is a
+    // gap here exactly as resolve_pending would have made it.
+    let final_cutoff = *cutoff.lock().unwrap_or_else(|e| e.into_inner());
     for raw in pending {
-        let gap = if raw.forced_gap {
+        let gap = if raw.forced_gap || past_cutoff(raw.t_ms, final_cutoff) {
             true
         } else {
             let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
