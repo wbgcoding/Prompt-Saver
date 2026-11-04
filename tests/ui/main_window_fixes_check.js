@@ -1255,6 +1255,32 @@ section(() => {
   check(!/gate *:/.test(entry), "the tour-open action is not gated on the automatic-open switch");
 });
 
+// 71. Crash-draft recovery: only the explicit Discard deletes the draft; a dismiss keeps it.
+section(() => {
+  const main = read("main.js");
+  const src = extractBlock(main, "async function maybeOfferEditorDraftRecovery(");
+  const draft = { updatedAt: 1, name: "n", text: "body", promptId: "neu", variants: null };
+  const mk = (answer) => {
+    const calls = [];
+    const sb = run(src, {
+      val: () => 30, LANG: "en", t: (k) => k, Array,
+      invoke: async (cmd) => { calls.push(cmd); return cmd === "load_editor_draft" ? draft : undefined; },
+      confirmDialog: async (o) => { calls.push("altLabel:" + o.altLabel); return answer; },
+      openModal: () => calls.push("open"), promptToModal: (p) => p,
+    });
+    return { sb, calls };
+  };
+  later(async () => {
+    for (const [answer, expectDiscard, expectOpen] of [[false, false, false], [true, false, true], ["alt", true, false]]) {
+      const { sb, calls } = mk(answer);
+      await sb.maybeOfferEditorDraftRecovery();
+      check(calls.includes("discard_editor_draft") === expectDiscard, `draft answer ${answer}: discard call is ${expectDiscard}`);
+      check(calls.includes("open") === expectOpen, `draft answer ${answer}: editor opens is ${expectOpen}`);
+      check(calls.includes("altLabel:draftRecoverDiscard"), "Discard is the alt choice");
+    }
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

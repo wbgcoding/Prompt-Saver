@@ -456,8 +456,8 @@ async function maybeAskUpdateConsent(sealWarned) {
 }
 
 // A crash draft from a previous session, asked about exactly once at the next
-// start (never again on later editor opens this same session). "No" removes
-// it right away rather than leaving it to resurface on the next launch too.
+// start (never again on later editor opens this same session). Only the explicit
+// Discard removes it; a dismiss (Escape, backdrop, Cancel) keeps it for the next launch.
 async function maybeOfferEditorDraftRecovery() {
   if (val("editorDraftSecs") <= 0) return;
   let draft = null;
@@ -470,13 +470,11 @@ async function maybeOfferEditorDraftRecovery() {
     title: t("draftRecoverTitle"),
     message: t("draftRecoverBody").replace("{time}", () => when).replace("{preview}", () => preview),
     confirmLabel: t("draftRecoverRestore"),
-    cancelLabel: t("draftRecoverDiscard"),
+    altLabel: t("draftRecoverDiscard"),
     danger: false,
   });
-  if (!restore) {
-    await invoke("discard_editor_draft").catch(() => {});
-    return;
-  }
+  if (restore === "alt") await invoke("discard_editor_draft").catch(() => {});
+  if (restore !== true) return;
   // The draft always stores its entries list, so "[]" means the user removed every extra entry;
   // only a legacy row with no list at all (null) falls back to the saved prompt's entries.
   let variants = null;
