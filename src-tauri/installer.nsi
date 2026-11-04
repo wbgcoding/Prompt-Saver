@@ -646,12 +646,10 @@ FunctionEnd
 ; Location + portable page strings (DE + EN match the bundled installer languages).
 LangString dirTitle ${LANG_ENGLISH} "Choose location"
 LangString dirInfo ${LANG_ENGLISH} "Select the folder to install ${PRODUCTNAME} into:"
-LangString portableSubtitle ${LANG_ENGLISH} "Where and how to install ${PRODUCTNAME}"
 LangString portableCheck ${LANG_ENGLISH} "Portable installation"
 LangString portableInfo ${LANG_ENGLISH} "Portable mode skips the Start menu, registry entries and the uninstaller; the app is simply placed in the folder above. Leave unchecked for a normal installation."
 LangString dirTitle ${LANG_GERMAN} "Speicherort wählen"
 LangString dirInfo ${LANG_GERMAN} "Wählen Sie den Ordner für die Installation von ${PRODUCTNAME}:"
-LangString portableSubtitle ${LANG_GERMAN} "Wohin und wie ${PRODUCTNAME} installiert wird"
 LangString portableCheck ${LANG_GERMAN} "Portable Installation"
 LangString portableInfo ${LANG_GERMAN} "Der portable Modus verzichtet auf Startmenü, Registry-Einträge und den Deinstaller; die App wird einfach im oben gewählten Ordner abgelegt. Für eine normale Installation nicht ankreuzen."
 
