@@ -25,9 +25,16 @@ const BRANDS = path.join(ROOT, "brands");
 
 // ---------- helpers ----------
 
-const read = (p) => fs.readFileSync(p, "utf8");
+// Every stamping step only stages its result; flush() writes the lot once all of them have
+// passed their checks, so a failing step can never leave a half-stamped tree behind.
+const staged = new Map();
+const read = (p) => (staged.has(p) ? staged.get(p) : fs.readFileSync(p, "utf8"));
+const write = (p, s) => void staged.set(p, s);
 // Explicit UTF-8 without BOM: i18n.js and the docs carry CJK/Cyrillic/Devanagari.
-const write = (p, s) => fs.writeFileSync(p, s, { encoding: "utf8" });
+function flush() {
+  for (const [p, s] of staged) fs.writeFileSync(p, s, { encoding: "utf8" });
+  staged.clear();
+}
 
 function fail(msg) {
   console.error("brand: " + msg);
@@ -596,6 +603,13 @@ function prepareOut(dir) {
 
 // ---------- icons ----------
 
+const tauriCli = () => path.join(ROOT, "node_modules", "@tauri-apps", "cli", "tauri.js");
+
+// The one thing stampIcons can still fail on, checked before anything is written.
+function checkIcons(regenerate) {
+  if (regenerate && !fs.existsSync(tauriCli())) fail("--icons needs the Tauri CLI: run `npm install` first");
+}
+
 function stampIcons(root, b, regenerate) {
   fs.copyFileSync(path.join(ROOT, b.icon), path.join(root, "ui", "assets", "icon.svg"));
   fs.copyFileSync(path.join(ROOT, b.installerIcon), path.join(root, "ui", "assets", "installer-icon.svg"));
@@ -607,8 +621,7 @@ function stampIcons(root, b, regenerate) {
   // The Tauri CLI is invoked through node directly (not `npm run tauri`): no shell
   // is involved, so nothing from the config can be read as a command, and there is
   // no `--` for npm to swallow the path argument with.
-  const cli = path.join(ROOT, "node_modules", "@tauri-apps", "cli", "tauri.js");
-  if (!fs.existsSync(cli)) fail("--icons needs the Tauri CLI: run `npm install` first");
+  const cli = tauriCli();
   const icons = path.join(root, "src-tauri", "icons");
   const run = (svg, outDir) =>
     execFileSync(process.execPath, [cli, "icon", path.join(ROOT, svg), "-o", outDir], {
@@ -659,6 +672,8 @@ function main(argv) {
   stampBuildFiles(root, b);
   stampPinTest(root, b);
   stampDocs(root, current, b, flags.includes("--changelog"), !!out || flags.includes("--docs"));
+  checkIcons(flags.includes("--icons"));
+  flush();
   stampIcons(root, b, flags.includes("--icons"));
   if (out) pruneBrands(root, b);
 
