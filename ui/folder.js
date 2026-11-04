@@ -449,7 +449,13 @@ window.addEventListener("mousedown", (e) => {
   // own press would swallow the gesture. rz-hole covers the centre, so only a press
   // on the edge lands here.
   if (e.target.closest("#rz-catch")) {
-    gripDrag = { x: e.screenX, y: e.screenY, scale: state.scale };
+    // Which side of the window centre the press landed on: dragging that edge outward
+    // (away from the centre) grows the folder, so the sign flips on the left and top.
+    gripDrag = {
+      x: e.screenX, y: e.screenY, scale: state.scale,
+      sx: e.clientX < window.innerWidth / 2 ? -1 : 1,
+      sy: e.clientY < window.innerHeight / 2 ? -1 : 1,
+    };
     gripPainted = 0; // the first move of a new grab always draws
     document.body.classList.add("resizing");
     e.preventDefault();
@@ -480,8 +486,8 @@ function gripResize(e) {
   if (!gripDrag) return;
   // The larger of the two axes wins, so a mostly-horizontal or mostly-vertical drag
   // both work; FOLDER_BOX is the icon's size at scale 1, which turns pixels into scale.
-  const dx = e.screenX - gripDrag.x;
-  const dy = e.screenY - gripDrag.y;
+  const dx = (e.screenX - gripDrag.x) * gripDrag.sx;
+  const dy = (e.screenY - gripDrag.y) * gripDrag.sy;
   const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
   const next = Math.min(3, Math.max(0.5, gripDrag.scale + delta / FOLDER_BOX));
   if (Math.abs(next - state.scale) < 0.01) return;

@@ -1555,6 +1555,27 @@ section(() => {
   check(/videoEl\.onloadedmetadata = \(\) =>\s*onRatio\([^)]*\);\s*videoEl\.onerror = \(\) => onRatio\(1\);/.test(src), "the video branch has an error fallback");
 });
 
+// 86. Dragging the left or top edge outward grows the folder instead of shrinking it.
+section(() => {
+  const src = read("folder.js");
+  check(/sx: e\.clientX < window\.innerWidth \/ 2 \? -1 : 1/.test(src) && /sy: e\.clientY < window\.innerHeight \/ 2 \? -1 : 1/.test(src), "the press side is stored");
+  const fn = extractBlock(src, "function gripResize(e) {");
+  const mk = (drag, e) => {
+    const sb = run("let gripDrag = " + JSON.stringify(drag) + "; let gripPainted = 0; let gripSave = 0; const GRIP_PAINT_MS = 16; const FOLDER_BOX = 100;\n"
+      + fn + "\nglobalThis.go = gripResize;", {
+      state: { scale: drag.scale }, performance: { now: () => 1e6 }, gripPaint() {}, requestAnimationFrame: () => 1,
+      invoke: async () => {}, folderId: "f", Math,
+    });
+    sb.go(e);
+    return sb.state.scale;
+  };
+  const base = { x: 500, y: 500, scale: 1 };
+  check(Math.abs(mk({ ...base, sx: 1, sy: 1 }, { screenX: 550, screenY: 500 }) - 1.5) < 1e-9, "right edge outward grows");
+  check(Math.abs(mk({ ...base, sx: -1, sy: 1 }, { screenX: 450, screenY: 500 }) - 1.5) < 1e-9, "left edge outward grows");
+  check(Math.abs(mk({ ...base, sx: 1, sy: -1 }, { screenX: 500, screenY: 450 }) - 1.5) < 1e-9, "top edge outward grows");
+  check(Math.abs(mk({ ...base, sx: -1, sy: 1 }, { screenX: 550, screenY: 500 }) - 0.5) < 1e-9, "left edge inward shrinks");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
