@@ -422,6 +422,7 @@ export function closeLightbox() {
   $("lightbox").classList.add("hidden");
   const vid = $("lightbox-video");
   vid.pause?.(); vid.removeAttribute("src");
+  vid.load?.(); // drops the loaded media so the stream is released, not just hidden
   $("lightbox-img").removeAttribute("src");
 }
 export function wireLightbox() {
