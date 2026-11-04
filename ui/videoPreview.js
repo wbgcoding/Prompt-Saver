@@ -109,6 +109,13 @@ $("ve-stage").addEventListener("wheel", (e) => {
   applyPreviewTransform();
 }, { passive: false });
 
+// A video that plays once has nothing left to show once its footage ended; the export drops
+// it there too instead of freezing the last frame.
+function overlaySpent(op, now) {
+  return op.kind === "video" && !op.loop && op.videoDurationMs > 0
+    && outMs(clamp(now, 0, VE.dur)) > videoOverlayWindowOutMs(op).endOut;
+}
+
 // Clicking the picture picks the overlay under the pointer: the one drawn on top among those
 // showing at the playhead. The pointer is in source pixels and `tol` is the slack, also in
 // source pixels, that makes a thin frame border or a short text line easy to hit. A frame is
@@ -119,7 +126,7 @@ export function overlayAt(point, tol) {
   const stack = overlayStack();
   for (let i = stack.length - 1; i >= 0; i--) {
     const op = stack[i];
-    if (now < op.startMs || now > op.endMs) continue;
+    if (now < op.startMs || now > op.endMs || overlaySpent(op, now)) continue;
     let box = null;
     if (op.kind === "text") {
       const lines = String(op.text || "").split("\n");
@@ -370,11 +377,7 @@ export function renderOverlayLive(vb) {
   const stack = overlayStack();
   for (const op of stack) {
     const prev = VE.liveEls.get(op.id);
-    // A video that plays once has nothing left to show once its footage ended; the export drops
-    // it there too instead of freezing the last frame.
-    const spent = op.kind === "video" && !op.loop && op.videoDurationMs > 0
-      && outMs(clamp(now, 0, VE.dur)) > videoOverlayWindowOutMs(op).endOut;
-    if (now < op.startMs || now > op.endMs || spent) {
+    if (now < op.startMs || now > op.endMs || overlaySpent(op, now)) {
       if (prev) {
         prev.hidden = true;
         // A hidden inserted video would otherwise keep decoding off screen.
