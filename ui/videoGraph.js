@@ -63,16 +63,17 @@ function videoOverlayEnable(op) {
   return `enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`;
 }
 
-// A finite repeat count rather than an unbounded loop: deterministic ffmpeg
+// A finite read count rather than an unbounded loop: deterministic ffmpeg
 // behaviour, and it needs no guess at a buffer size large enough to hold the
-// whole thing. Native speed only: a video overlay's own clock is never
-// adjusted to match a "speed" op on the main timeline.
+// whole thing. The movie filter's loop option is the TOTAL number of reads (default 1),
+// so it is only written when the clip must be read more than once. Native speed only: a
+// video overlay's own clock is never adjusted to match a "speed" op on the main timeline.
 function videoOverlayLoopArg(op) {
   if (!op.loop || !op.videoDurationMs) return "";
   const { aOut, endOut } = videoOverlayWindowOutMs(op);
   const neededMs = endOut - aOut;
-  const count = Math.max(0, Math.ceil(neededMs / op.videoDurationMs) - 1);
-  return count > 0 ? `:loop=${count}` : "";
+  const count = Math.ceil(neededMs / op.videoDurationMs);
+  return count > 1 ? `:loop=${count}` : "";
 }
 
 // atempo only accepts 0.5-2.0 per stage, so a larger factor is split across

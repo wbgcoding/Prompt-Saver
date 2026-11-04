@@ -186,8 +186,11 @@ expect("double frame preview puts its outline inside the border", src.includes("
   expect("overlay window at native speed is unchanged", endOf([overlay]) === 8);
   sb.VE = baseState([{ tool: "speed", rate: 2 }]);
   const looping = Object.assign({}, overlay, { loop: true, videoDurationMs: 3000 });
-  // 20 s source at 2x = 10 s of output, repeated 3 s footage: 4 plays = loop count 3.
-  expect("loop count follows the output window", vm.runInContext("videoOverlayLoopArg", sb)(looping) === ":loop=3", vm.runInContext("videoOverlayLoopArg", sb)(looping));
+  // 20 s source at 2x = 10 s of output, repeated 3 s footage: 4 reads = loop=4.
+  expect("loop count follows the output window", vm.runInContext("videoOverlayLoopArg", sb)(looping) === ":loop=4", vm.runInContext("videoOverlayLoopArg", sb)(looping));
+  // A clip that already covers the window is read once: no loop option at all (loop=1 is the default).
+  const fits = Object.assign({}, looping, { videoDurationMs: 12000 });
+  expect("a clip longer than the window needs no loop option", vm.runInContext("videoOverlayLoopArg", sb)(fits) === "");
 }
 
 // A movie= source is not autorotated by ffmpeg (only a `-i` input is), so a clip or video overlay
