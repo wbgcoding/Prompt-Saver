@@ -56,11 +56,22 @@ pub(crate) fn external_window_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> 
     Some((r.left, r.top, r.right, r.bottom))
 }
 
+// A minimized window reports a rect far off-screen (about -32000), which must never place the bar.
+#[cfg(windows)]
+pub(crate) fn window_is_minimized(hwnd: isize) -> bool {
+    #[link(name = "user32")]
+    extern "system" {
+        fn IsIconic(hwnd: isize) -> i32;
+    }
+    unsafe { IsIconic(hwnd) != 0 }
+}
+
 #[cfg(windows)]
 pub(crate) fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monitor: isize) {
     let size = win.outer_size().unwrap_or(PhysicalSize::new(320, 56));
     if target_kind == "window" {
-        if let Some((left, top, right, _bottom)) = external_window_rect(hwnd_or_monitor) {
+        let rect = if window_is_minimized(hwnd_or_monitor) { None } else { external_window_rect(hwnd_or_monitor) };
+        if let Some((left, top, right, _bottom)) = rect {
             let x = (right - size.width as i32 - 12).max(left);
             let y = top + 12;
             let _ = win.set_position(PhysicalPosition::new(x, y));
@@ -151,7 +162,8 @@ pub(crate) fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
             }
             continue;
         }
-        if REC_BAR_FOLLOWING.load(Ordering::SeqCst) {
+        // While the recorded window is minimized the bar stays where it is, reachable.
+        if REC_BAR_FOLLOWING.load(Ordering::SeqCst) && !window_is_minimized(hwnd) {
             position_rec_bar(&win, "window", hwnd);
         }
     });
