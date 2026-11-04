@@ -219,7 +219,9 @@ pub(crate) fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), 
             fs::write(&backup, b"").map_err(|e| e.to_string())?;
         }
     }
-    fs::write(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+    // Written through a temp file and renamed: a cut-off pointer would send a custom data folder
+    // back to the empty canonical one.
+    write_bytes_atomic(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -359,7 +361,7 @@ pub(crate) fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
     if prev.trim().is_empty() {
         let _ = fs::remove_file(&pointer);
     } else {
-        fs::write(&pointer, prev.as_bytes()).map_err(|e| e.to_string())?;
+        write_bytes_atomic(&pointer, prev.as_bytes()).map_err(|e| e.to_string())?;
     }
     let _ = fs::remove_file(&backup);
     Ok(())
