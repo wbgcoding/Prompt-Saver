@@ -1054,11 +1054,13 @@ const pending = [];
     { tool: "crop", rect: { x: 0, y: 0, w: 1920, h: 1080 } },
   ];
   const sb = {
-    VE: { playhead: 1000, ops: mkOps(), selOv: null },
+    VE: { playhead: 1000, ops: mkOps(), selOv: null, dur: 20000 },
     opsOf: (tool) => sb.VE.ops.filter((o) => o.tool === tool),
+    outMs: (ms) => ms,
+    clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)),
   };
   vm.createContext(sb);
-  vm.runInContext(["const overlayStack = () => opsOf('overlay').sort((a, b) => (a.z || 0) - (b.z || 0));", extractBlock("overlayAt", "function overlayAt(point, tol) {")].join("\n"), sb);
+  vm.runInContext(["const overlayStack = () => opsOf('overlay').sort((a, b) => (a.z || 0) - (b.z || 0));", extractBlock("videoOverlayWindowOutMs", "function videoOverlayWindowOutMs(op) {"), extractBlock("overlaySpent", "function overlaySpent(op, now) {"), extractBlock("overlayAt", "function overlayAt(point, tol) {")].join("\n"), sb);
   const at = (x, y, tol = 6) => { sb.__p = { x, y }; const r = vm.runInContext("overlayAt(__p, " + tol + ")", sb); return r ? r.id : null; };
   expect("where two overlays overlap, the one on top is picked", at(300, 200) === "B", String(at(300, 200)));
   expect("outside the upper one the lower one is picked", at(150, 120) === "A", String(at(150, 120)));
@@ -1076,6 +1078,14 @@ const pending = [];
   sb.VE.ops = mkOps();
   sb.VE.ops.find((o) => o.id === "A").z = 5;
   expect("a higher z wins over a later list position", at(300, 200) === "A", String(at(300, 200)));
+  // A video that plays once is gone after its footage ended, even inside its time range.
+  sb.VE.ops = [{ tool: "overlay", id: "V", kind: "video", startMs: 0, endMs: 10000, videoDurationMs: 2000, loop: false, rect: { x: 0, y: 0, w: 400, h: 300 } }];
+  sb.VE.playhead = 1000;
+  expect("a playing once video is picked while its footage runs", at(100, 100) === "V");
+  sb.VE.playhead = 5000;
+  expect("a playing once video is not picked after its footage ended", at(100, 100) === null);
+  sb.VE.ops[0].loop = true;
+  expect("a looping video stays pickable for its whole range", at(100, 100) === "V");
 }
 
 // Selecting by click and by list row share one function; the click does not move the playhead,
