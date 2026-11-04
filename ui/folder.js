@@ -537,7 +537,7 @@ window.addEventListener("mousemove", async (e) => {
   iconDrag.moved = true;
   iconEl.classList.add("dragging");
   await closePopover(true); // the grid would ride along on a window move
-  await appWin.startDragging();
+  await appWin.startDragging().catch(() => {});
 });
 
 window.addEventListener("mouseup", () => {
