@@ -41,10 +41,18 @@ pub(crate) fn drive_label(path: &std::path::Path) -> String {
     }
 }
 
-// Bitrate times time, with a flat surcharge for the active audio track(s) (matches
-// REC_AUDIO_KBPS): good enough for a warning message, not a byte-exact prediction.
-pub(crate) fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_active: bool) -> u64 {
-    let total_kbps = video_kbps as u64 + if audio_active { 192 } else { 0 };
+// Audio bytes written per second of recording, in kbps: one AAC track (REC_AUDIO_KBPS) for any
+// active source, plus the uncompressed 16-bit PCM mic sidecar when both sources are on.
+pub(crate) fn recording_audio_kbps(system: bool, mic: bool) -> u32 {
+    let aac = if system || mic { REC_AUDIO_KBPS } else { 0 };
+    let sidecar = if system && mic { REC_AUDIO_SAMPLE_RATE * REC_AUDIO_CHANNELS * 16 / 1000 } else { 0 };
+    aac + sidecar
+}
+
+// Bitrate times time, with the audio surcharge from recording_audio_kbps: good enough for a
+// warning message, not a byte-exact prediction.
+pub(crate) fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_kbps: u32) -> u64 {
+    let total_kbps = video_kbps as u64 + audio_kbps as u64;
     let bytes_per_sec = (total_kbps * 1000) / 8;
     if bytes_per_sec == 0 {
         return 0;
@@ -60,12 +68,12 @@ pub(crate) struct RecDiskWarning {
 }
 
 // Pure so the threshold decision has a unit test beyond the AppHandle/Db wiring.
-pub(crate) fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f64, video_kbps: u32, audio_active: bool) -> Option<RecDiskWarning> {
+pub(crate) fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f64, video_kbps: u32, audio_kbps: u32) -> Option<RecDiskWarning> {
     let free_mb = free_bytes / (1024 * 1024);
     if free_mb as f64 >= warn_mb {
         return None;
     }
-    Some(RecDiskWarning { drive, free_mb, est_seconds: estimate_recording_seconds_remaining(free_bytes, video_kbps, audio_active) })
+    Some(RecDiskWarning { drive, free_mb, est_seconds: estimate_recording_seconds_remaining(free_bytes, video_kbps, audio_kbps) })
 }
 
 // Free space below this many MB triggers the low-disk warning.
@@ -78,15 +86,15 @@ pub(crate) const REC_AUDIO_KBPS: u32 = 192;
 pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
     let dir = data_dir(&app).join("recordings");
     let free = free_space_bytes(&dir).ok()?;
-    let (warn_mb, video_kbps, audio_active) = {
+    let (warn_mb, video_kbps, audio_kbps) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         (
             REC_DISK_WARN_MB,
             g.settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32,
-            g.settings.ui_flags.get("recAudioSystem") != Some(&false) || g.settings.ui_flags.get("recAudioMic") != Some(&false),
+            recording_audio_kbps(g.settings.ui_flags.get("recAudioSystem") != Some(&false), g.settings.ui_flags.get("recAudioMic") != Some(&false)),
         )
     };
-    recording_disk_warning(drive_label(&dir), free, warn_mb, video_kbps, audio_active)
+    recording_disk_warning(drive_label(&dir), free, warn_mb, video_kbps, audio_kbps)
 }
 
 #[derive(serde::Serialize)]
@@ -176,34 +184,27 @@ pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::Au
     // both ship on too: the mic is captured by default into its own track (see start()'s
     // both_active path) but is not audible until the user brings it up in the editor. A stored
     // user value (including an explicit opt-out) wins either way.
-    let audio = {
-        let g = db.lock().unwrap_or_else(|e| e.into_inner());
-        recording::AudioConfig {
-            system: g.settings.ui_flags.get("recAudioSystem") != Some(&false),
-            mic: g.settings.ui_flags.get("recAudioMic") != Some(&false),
-            mic_device_id: g.settings.ui_texts.get("recMicDevice").cloned().unwrap_or_default(),
-            kbps: REC_AUDIO_KBPS,
-        }
+    let g = db.lock().unwrap_or_else(|e| e.into_inner());
+    let audio = recording::AudioConfig {
+        system: g.settings.ui_flags.get("recAudioSystem") != Some(&false),
+        mic: g.settings.ui_flags.get("recAudioMic") != Some(&false),
+        mic_device_id: g.settings.ui_texts.get("recMicDevice").cloned().unwrap_or_default(),
+        kbps: REC_AUDIO_KBPS,
     };
-    let show_cursor = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("recCursor") != Some(&false);
+    let show_cursor = g.settings.ui_flags.get("recCursor") != Some(&false);
     // The quality step (small/high/lossless) only picks the slider's default in the UI; the
     // native H.264 encoder always takes this bitrate as is. "Lossless" is produced afterward by
     // convert_recording's CRF-0 re-encode, so this value's size barely matters for that step (see
     // the recQuality tooltip).
-    let video_kbps =
-        db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32;
+    let video_kbps = g.settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32;
     // Every monitor is capped to this fps regardless of its refresh rate unless overridden here;
     // a 60/144Hz screen would otherwise always record at 30.
-    let video_fps =
-        db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recFps").copied().unwrap_or(30.0).clamp(10.0, 60.0) as u32;
+    let video_fps = g.settings.ui_values.get("recFps").copied().unwrap_or(30.0).clamp(10.0, 60.0) as u32;
     // The canvas a Window recording uses. It defaults to the window's own size (resize-unsafe)
     // rather than every display; the "every display" candidate chain is opt-in via this setting,
     // offered the first time a recording hits the resize problem (see the recording-captured
     // payload's resize_crop_at_ms). No expert-menu row yet (a future menu writes it directly).
-    let canvas_mode = {
-        let raw = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
-        sanitize_canvas_mode(&raw).to_string()
-    };
+    let canvas_mode = sanitize_canvas_mode(g.settings.ui_texts.get("recCanvasMode").map(String::as_str).unwrap_or("window")).to_string();
     // One fixed ceiling governs both the width and the height of the canvas.
     let canvas_ceiling = (REC_CANVAS_MAX_PX, REC_CANVAS_MAX_PX);
     // The mid-recording disk-space watch's threshold; check_recording_disk_space uses the same
@@ -211,8 +212,8 @@ pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::Au
     let disk_warn_mb = REC_DISK_WARN_MB;
     // Optional safety nets, both off (0) unless the user sets them. Unrelated to recMaxMb's older
     // display-only ETA threshold (see rec_size_eta), which keeps its own 8000 default.
-    let max_min = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recMaxMin").copied().unwrap_or(0.0).max(0.0);
-    let max_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recMaxMb").copied().unwrap_or(0.0).max(0.0);
+    let max_min = g.settings.ui_values.get("recMaxMin").copied().unwrap_or(0.0).max(0.0);
+    let max_mb = g.settings.ui_values.get("recMaxMb").copied().unwrap_or(0.0).max(0.0);
     (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
 }
 

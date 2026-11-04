@@ -292,21 +292,30 @@ fn estimate_recording_seconds_remaining_uses_bitrate_times_time() {
     // 8000 kbps = 1,000,000 bytes/sec with no audio: 10,000,000 bytes
     // should buy exactly 10 seconds, an exact match like the export
     // formula test above, not just "roughly right".
-    assert_eq!(estimate_recording_seconds_remaining(10_000_000, 8000, false), 10);
+    assert_eq!(estimate_recording_seconds_remaining(10_000_000, 8000, 0), 10);
 }
 
 #[test]
 fn estimate_recording_seconds_remaining_adds_the_audio_surcharge() {
     // Same free space either way: the higher combined bitrate with
     // audio active must buy strictly fewer seconds than video alone.
-    let with_audio = estimate_recording_seconds_remaining(10_000_000, 8000, true);
-    let without_audio = estimate_recording_seconds_remaining(10_000_000, 8000, false);
+    let with_audio = estimate_recording_seconds_remaining(10_000_000, 8000, REC_AUDIO_KBPS);
+    let without_audio = estimate_recording_seconds_remaining(10_000_000, 8000, 0);
     assert!(with_audio < without_audio);
 }
 
 #[test]
+fn both_audio_sources_add_the_uncompressed_mic_sidecar_to_the_estimate() {
+    assert_eq!(recording_audio_kbps(false, false), 0);
+    assert_eq!(recording_audio_kbps(true, false), REC_AUDIO_KBPS);
+    assert_eq!(recording_audio_kbps(false, true), REC_AUDIO_KBPS);
+    // 48 kHz stereo 16-bit PCM is 1536 kbps on top of the AAC track.
+    assert_eq!(recording_audio_kbps(true, true), REC_AUDIO_KBPS + 1536);
+}
+
+#[test]
 fn estimate_recording_seconds_remaining_never_divides_by_zero() {
-    assert_eq!(estimate_recording_seconds_remaining(10_000_000, 0, false), 0);
+    assert_eq!(estimate_recording_seconds_remaining(10_000_000, 0, 0), 0);
 }
 
 // ---- Recording start: a second claim during the check-then-act gap ----
@@ -554,9 +563,9 @@ fn affinity_readback_is_compared_against_the_wanted_state() {
 fn recording_disk_warning_fires_only_below_the_threshold() {
     let mb = 1024 * 1024;
     // Free space at or above the threshold: no warning.
-    assert!(recording_disk_warning("C:".to_string(), 500 * mb, 500.0, 8000, false).is_none());
+    assert!(recording_disk_warning("C:".to_string(), 500 * mb, 500.0, 8000, 0).is_none());
     // Below it: a warning, carrying the drive and free space through untouched.
-    let warn = recording_disk_warning("D:".to_string(), 100 * mb, 500.0, 8000, false).expect("must warn");
+    let warn = recording_disk_warning("D:".to_string(), 100 * mb, 500.0, 8000, 0).expect("must warn");
     assert_eq!(warn.drive, "D:");
     assert_eq!(warn.free_mb, 100);
 }

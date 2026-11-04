@@ -5,7 +5,7 @@ use super::{
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
     scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
-    estimate_recording_seconds_remaining, active_tick_secs, DISK_CHECK_SECS, UsedAreaTracker,
+    estimate_recording_seconds_remaining, recording_audio_kbps, active_tick_secs, DISK_CHECK_SECS, UsedAreaTracker,
 };
 use crate::keylog;
 use std::fs;
@@ -644,7 +644,7 @@ fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
 #[allow(clippy::too_many_arguments)]
 fn spawn_disk_watch(
     shared: Arc<RecFeederShared>, clock: Arc<RecordClock>, output_path: PathBuf, warn_mb: f64, max_min: f64, max_mb: f64,
-    video_kbps: u32, audio_active: bool,
+    video_kbps: u32, audio_kbps: u32,
 ) {
     let spawned = thread::Builder::new().name("rec-disk-watch".into()).spawn(move || {
         let warn_bytes = (warn_mb.max(1.0) * 1024.0 * 1024.0) as u64;
@@ -680,7 +680,7 @@ fn spawn_disk_watch(
                 // The softer, non-stopping notice: fires once, well above the critical threshold.
                 if free < warn_bytes {
                     let free_mb = free / (1024 * 1024);
-                    let est_min = estimate_recording_seconds_remaining(free, video_kbps, audio_active) / 60;
+                    let est_min = estimate_recording_seconds_remaining(free, video_kbps, audio_kbps) / 60;
                     shared.note_disk_low(free_mb, est_min);
                 }
             }
@@ -854,7 +854,7 @@ fn start_inner(
         clock.pause();
     }
     let shared = Arc::new(RecFeederShared::new());
-    spawn_disk_watch(shared.clone(), clock.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, audio_active);
+    spawn_disk_watch(shared.clone(), clock.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, recording_audio_kbps(audio.system, audio.mic));
     let mut guard = StartGuard::new({
         let shared = shared.clone();
         move || shared.request_stop()
