@@ -222,7 +222,7 @@ function loadTexts() {
       snipErrMessage = errMessageLogged;
       if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : recordMode ? T.recHint : T.hint;
     })
-    .catch(() => {});
+    .catch(() => { i18nLoaded = false; }); // a failed load is retried by the next session
 }
 listen("language-changed", () => { if (i18nLoaded) loadTexts(); });
 
