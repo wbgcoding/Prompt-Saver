@@ -542,16 +542,3 @@ pub(crate) async fn remove_folder_member(
     sync_float_windows(&app);
     Ok(())
 }
-
-// Persist the per-prompt video player state (volume, mute, loop).
-// Async: can fire while scrubbing; keep the settings write off the UI thread.
-#[tauri::command]
-pub(crate) async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volume: u32, muted: bool, looped: bool) -> Result<(), String> {
-    let mut store = lock(&state);
-    store
-        .settings
-        .video_prefs
-        .insert(id, VideoPrefs { volume: volume.min(100), muted, looped });
-    save_settings(&app, &store.settings);
-    Ok(())
-}

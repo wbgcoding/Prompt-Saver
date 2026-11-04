@@ -759,6 +759,18 @@ fn add_and_update_prompt_refuse_a_read_only_folder_before_staging() {
     }
 }
 
+// A stale id from the player must not leave an orphan entry in the settings.
+#[test]
+fn set_video_prefs_ignores_an_id_no_prompt_has() {
+    let src = production_sources();
+    let a = src.find("async fn set_video_prefs(").expect("command");
+    let body = &src[a..a + src[a..].find("
+}
+").expect("end")];
+    let check = body.find("store.prompts.iter().any(|p| p.id == id)").expect("existence check");
+    assert!(check < body.find(".video_prefs").expect("insert"), "the id is checked before the insert");
+}
+
 #[test]
 fn the_vault_reports_how_long_until_the_idle_timeout_locks_it() {
     assert_eq!(secret_relock_in_secs(15, 0), Some(900));

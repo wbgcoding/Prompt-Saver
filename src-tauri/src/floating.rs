@@ -1360,6 +1360,23 @@ pub(crate) async fn set_float_scale(
     Ok(())
 }
 
+// Persist the per-prompt video player state (volume, mute, loop).
+// Async: can fire while scrubbing; keep the settings write off the UI thread.
+#[tauri::command]
+pub(crate) async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volume: u32, muted: bool, looped: bool) -> Result<(), String> {
+    let mut store = lock(&state);
+    // A stale id (the prompt was deleted meanwhile) must not leave an orphan entry behind.
+    if !store.prompts.iter().any(|p| p.id == id) {
+        return Ok(());
+    }
+    store
+        .settings
+        .video_prefs
+        .insert(id, VideoPrefs { volume: volume.min(100), muted, looped });
+    save_settings(&app, &store.settings);
+    Ok(())
+}
+
 // Text pills grow with their label: the frontend measures the text and requests
 // the matching window box (width and height, kept pill-shaped so it never rounds
 // into a circle).
@@ -1436,6 +1453,45 @@ pub(crate) fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64
         (w * s).round() as i32,
         (h * s).round() as i32,
     )
+}
+
+// Set a floating window's position AND size together (logical px). Used by the
+// edge/corner resize so the grabbed edge tracks the cursor 1:1.
+#[tauri::command]
+pub(crate) async fn set_float_bounds(
+    app: AppHandle,
+    id: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    clamp: Option<bool>,
+) -> Result<(), String> {
+    if [x, y, width, height].iter().all(|v| v.is_finite()) {
+        if let Some(win) = app.get_webview_window(&flabel(&id)) {
+            let w = width.clamp(48.0, 8000.0);
+            let h = height.clamp(48.0, 8000.0);
+            // OPT-IN, and only the pill menu asks for it: that placement picks a side that fits and
+            // falls back to "below" when none does. Every other caller has already worked out its exact
+            // box (a live edge-resize computes the origin from the size it is about to set), and clamping
+            // would move the window out from under the cursor near a screen edge.
+            let (x, y) = if clamp.unwrap_or(false) {
+                let dpi = win.scale_factor().unwrap_or(1.0);
+                let work = work_rect_at(&app, x * dpi, y * dpi);
+                let (cx, cy) = clamp_to_work(work, w * dpi, h * dpi, x * dpi, y * dpi);
+                (cx / dpi, cy / dpi)
+            } else {
+                (x, y)
+            };
+            #[cfg(windows)]
+            if set_float_bounds_native(&win, x, y, w, h) {
+                return Ok(());
+            }
+            let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        }
+    }
+    Ok(())
 }
 
 // ---- Free edge/corner resize ----
