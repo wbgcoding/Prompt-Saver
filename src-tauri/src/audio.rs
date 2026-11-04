@@ -21,7 +21,7 @@ const WAVE_FORMAT_IEEE_FLOAT: u16 = 3;
 const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: windows::core::GUID =
     windows::core::GUID::from_u128(0x00000003_0000_0010_8000_00AA00389B71);
-use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED};
 use windows::core::HRESULT;
 
 // AUDCLNT_E_DEVICE_INVALIDATED, from mmreg/audioclient.h: not exposed as
@@ -37,17 +37,28 @@ pub struct MicDevice {
 // failure yields an empty list, so a broken audio stack falls back to the default device.
 pub fn list_mic_devices() -> Vec<MicDevice> {
     let mut out = Vec::new();
+    // S_OK and S_FALSE both add a reference that this call must give back; a thread already in
+    // another apartment mode (RPC_E_CHANGED_MODE) added none.
+    let com_ref = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).is_ok() };
+    list_mic_devices_into(&mut out);
+    if com_ref {
+        unsafe { CoUninitialize() };
+    }
+    out
+}
+
+// Kept apart so every COM object is dropped before the caller's CoUninitialize.
+fn list_mic_devices_into(out: &mut Vec<MicDevice>) {
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let Ok(enumerator) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else {
-            return out;
+            return;
         };
         let Ok(collection): windows::core::Result<IMMDeviceCollection> =
             enumerator.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE)
         else {
-            return out;
+            return;
         };
-        let Ok(count) = collection.GetCount() else { return out };
+        let Ok(count) = collection.GetCount() else { return };
         for i in 0..count {
             let Ok(device) = collection.Item(i) else { continue };
             let Ok(id_ptr) = device.GetId() else { continue };
@@ -57,7 +68,6 @@ pub fn list_mic_devices() -> Vec<MicDevice> {
             out.push(MicDevice { id, name });
         }
     }
-    out
 }
 
 unsafe fn device_friendly_name(device: &IMMDevice) -> Option<String> {
@@ -68,6 +78,13 @@ unsafe fn device_friendly_name(device: &IMMDevice) -> Option<String> {
     let name = s.to_string().unwrap_or_default();
     windows::Win32::System::Com::CoTaskMemFree(Some(s.0 as *const _));
     Some(name)
+}
+
+// Whether a captured packet adds to the timeline. A packet flagged silent may come with no data
+// pointer at all, and dropping it would cut that stretch of silence out of the track and shift
+// everything after it.
+pub(crate) fn packet_has_audio(has_data: bool, num_frames: u32, silent: bool) -> bool {
+    num_frames > 0 && (silent || has_data)
 }
 
 fn open_endpoint(flow: EDataFlow, device_id: &str) -> windows::core::Result<IMMDevice> {
@@ -130,8 +147,8 @@ pub fn spawn_capture(
                         let mut num_frames = 0u32;
                         let mut flags = 0u32;
                         capture_client.GetBuffer(&mut data_ptr, &mut num_frames, &mut flags, None, None)?;
-                        if !data_ptr.is_null() && num_frames > 0 {
-                            let is_silent = flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0;
+                        let is_silent = flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0;
+                        if packet_has_audio(!data_ptr.is_null(), num_frames, is_silent) {
                             let n = (num_frames * in_channels) as usize;
                             let floats: Vec<f32> = if is_silent {
                                 vec![0.0; n]

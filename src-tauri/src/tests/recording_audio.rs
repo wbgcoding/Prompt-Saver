@@ -1244,3 +1244,12 @@ fn audio_queue_drain_available_takes_whole_frames_and_never_pads() {
     assert_eq!(q.drain_available(ch * 2 + 1).len(), ch * 2);
     assert_eq!(q.drain_available(100).len(), ch);
 }
+
+#[test]
+fn a_silent_packet_without_a_data_pointer_still_counts_toward_the_timeline() {
+    use crate::audio::packet_has_audio;
+    assert!(packet_has_audio(true, 480, false));
+    assert!(packet_has_audio(false, 480, true), "silent packets may carry no pointer");
+    assert!(!packet_has_audio(false, 480, false), "a non-silent packet needs its data");
+    assert!(!packet_has_audio(true, 0, true), "an empty packet adds nothing");
+}
