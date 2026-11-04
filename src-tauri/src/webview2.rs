@@ -17,8 +17,9 @@ pub(crate) fn ensure_webview2() -> bool {
         .set_buttons(rfd::MessageButtons::YesNo)
         .show();
     if answer == rfd::MessageDialogResult::Yes {
-        // Try a silent download + install of the official Evergreen runtime; if
-        // that fails (offline/blocked), fall back to opening the download page.
+        // Try to download and install the official Evergreen runtime (the installer shows its
+        // own progress window); if that fails (offline/blocked), fall back to opening the
+        // download page.
         if install_webview2_runtime() {
             // The runtime exists now, but this process started without it:
             // relaunch so a fresh instance loads the webview. The arguments are passed on,
