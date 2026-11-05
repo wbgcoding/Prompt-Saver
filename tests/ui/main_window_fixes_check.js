@@ -1584,6 +1584,22 @@ section(() => {
   check(/OPENED_AT = Date\.now\(\);\s*invoke\("launcher_ready"\)/.test(src), "it is restamped right before launcher_ready");
 });
 
+// 88. An expert reset shows what the backend kept (retention windows, keys), not empty maps.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function onResetExpert(").replace("export ", "");
+  later(async () => {
+    const settings = { ui_flags: { a: true }, ui_values: { historyDays: 0, b: 1 }, ui_texts: { c: "x" } };
+    const sb = run(fn, {
+      settings, EXPERT_RESET_KEEP: [], flag: () => false, errToast() {}, loadPalette() {}, refreshColorUI() {}, applyFlags() {},
+      renderExpert() {}, syncSettingsControls() {}, refreshFavViewUi() {}, renderViews() {}, renderGrid: async () => {}, toast() {}, t: (k) => k,
+      invoke: async (cmd) => (cmd === "get_settings" ? { ui_values: { historyDays: 0 }, ui_texts: { salt: "s" } } : undefined),
+    });
+    await sb.onResetExpert();
+    check(settings.ui_values.historyDays === 0 && !("b" in settings.ui_values) && settings.ui_texts.salt === "s" && !("c" in settings.ui_texts), "a finished expert reset shows the values and texts the backend kept");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

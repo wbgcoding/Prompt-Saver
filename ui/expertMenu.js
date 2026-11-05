@@ -1960,6 +1960,14 @@ export async function onResetExpert() {
   }
   if (!refused) {
     try {
+      // The reset keeps some values and texts (retention windows, keys): read what it left.
+      const left = await invoke("get_settings");
+      settings.ui_values = left.ui_values || {};
+      settings.ui_texts = left.ui_texts || {};
+    } catch (err) {
+      errToast(err);
+    }
+    try {
       for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
     } catch (err) {
       errToast(err);
