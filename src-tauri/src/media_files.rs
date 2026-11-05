@@ -1042,36 +1042,65 @@ pub(crate) fn is_bare_filename(name: &str) -> bool {
     !name.is_empty() && std::path::Path::new(name).file_name().is_some_and(|f| f == std::ffi::OsStr::new(name))
 }
 
-// The recordings-folder dialog's listing of what sits in the trash waiting out its retention
-// window; same shape and extension filter as video_folder_stats/video_folder_cleanup_preview.
-pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<VideoFolderFile> {
-    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
-        return Vec::new();
-    }
-    let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
-    let Ok(entries) = fs::read_dir(&trash) else { return Vec::new() };
-    let mut out = Vec::new();
+// One entry of the "Recently discarded" list. `staging` marks a take discarded from the app's
+// own <data>/recordings folder (a fresh unsaved take) rather than from the recording folder, so
+// the two trash folders may hold the same name and the caller can still address the right one.
+#[derive(Serialize)]
+pub(crate) struct DiscardedRecording {
+    pub(crate) name: String,
+    pub(crate) size: u64,
+    pub(crate) staging: bool,
+}
+
+// The staging folder's trash is a separate source only when it is not the recording folder
+// itself (a custom recordingDir may point at it).
+fn staging_is_separate(configured: &Path, staging: &Path) -> bool {
+    !path_matches_configured_dir(staging, configured)
+}
+
+fn list_trash_into(trash: &Path, staging: bool, out: &mut Vec<DiscardedRecording>) {
+    let Ok(entries) = fs::read_dir(trash) else { return };
     for e in entries.flatten() {
         let path = e.path();
         if !is_video_folder_file(&path) { continue; }
         let Ok(meta) = e.metadata() else { continue };
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        out.push(VideoFolderFile { name, size: meta.len() });
+        out.push(DiscardedRecording { name, size: meta.len(), staging });
+    }
+}
+
+// The recordings-folder dialog's listing of what sits in the trash waiting out its retention
+// window; same extension filter as video_folder_stats/video_folder_cleanup_preview. It lists
+// the recording folder's own trash and the staging folder's one, where an unsaved take lands.
+pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path, staging: &Path) -> Vec<DiscardedRecording> {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    list_trash_into(&std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR), false, &mut out);
+    if staging_is_separate(configured, staging) {
+        list_trash_into(&staging.join(crate::stats::DISCARD_SUBDIR), true, &mut out);
     }
     out
 }
 
 #[tauri::command(async)]
-pub(crate) fn list_discarded_recordings(state: State<'_, Db>, dir: String) -> Vec<VideoFolderFile> {
-    list_discarded_recordings_impl(&dir, &configured_recording_dir(&state))
+pub(crate) fn list_discarded_recordings(app: AppHandle, state: State<'_, Db>, dir: String) -> Vec<DiscardedRecording> {
+    list_discarded_recordings_impl(&dir, &configured_recording_dir(&state), &data_dir(&app).join("recordings"))
 }
 
-pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured: &Path) -> bool {
+pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, from_staging: bool, configured: &Path, staging: &Path) -> bool {
     if !is_bare_filename(name) {
         return false;
     }
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return false;
+    }
+    if from_staging && staging_is_separate(configured, staging) {
+        // A take from the staging folder joins the recording folder under a name that never
+        // overwrites anything, with its sidecars, like Save does.
+        let src = staging.join(crate::stats::DISCARD_SUBDIR).join(name);
+        return src.is_file() && place_in_dir(&src, std::path::Path::new(dir)).is_ok();
     }
     let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
     let src = trash.join(name);
@@ -1098,19 +1127,19 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
 }
 
 #[tauri::command(async)]
-pub(crate) fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) -> bool {
-    restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
+pub(crate) fn restore_discarded_recording(app: AppHandle, state: State<'_, Db>, dir: String, name: String, staging: Option<bool>) -> bool {
+    restore_discarded_recording_impl(&dir, &name, staging.unwrap_or(false), &configured_recording_dir(&state), &data_dir(&app).join("recordings"))
 }
 
-pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configured: &Path) -> bool {
+pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, from_staging: bool, configured: &Path, staging: &Path) -> bool {
     if !is_bare_filename(name) {
         return false;
     }
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return false;
     }
-    let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
-    let path = trash.join(name);
+    let base = if from_staging && staging_is_separate(configured, staging) { staging } else { std::path::Path::new(dir) };
+    let path = base.join(crate::stats::DISCARD_SUBDIR).join(name);
     if !path.is_file() {
         return false;
     }
@@ -1122,8 +1151,8 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
 }
 
 #[tauri::command]
-pub(crate) fn delete_discarded_recording_now(state: State<'_, Db>, dir: String, name: String) -> bool {
-    delete_discarded_recording_now_impl(&dir, &name, &configured_recording_dir(&state))
+pub(crate) fn delete_discarded_recording_now(app: AppHandle, state: State<'_, Db>, dir: String, name: String, staging: Option<bool>) -> bool {
+    delete_discarded_recording_now_impl(&dir, &name, staging.unwrap_or(false), &configured_recording_dir(&state), &data_dir(&app).join("recordings"))
 }
 
 // Called by the frontend once the first render + text fit is complete.

@@ -694,6 +694,54 @@ section(() => {
   });
 });
 
+// A discarded take from the staging folder is restored and purged with its source flag, so a name
+// held by both trash folders reaches the right one.
+section(() => {
+  const src = read("recordingTools.js");
+  const code = extractBlock(src, "async function openVideoCleanupRun(");
+  const calls = [];
+  const mkEl = (id) => {
+    const e = { id, value: "30", textContent: "", disabled: false, checked: false, children: [], listeners: {} };
+    e.classList = { add() {}, remove() {}, toggle() {} };
+    e.appendChild = (c) => { e.children.push(c); return c; };
+    e.append = (...c) => { e.children.push(...c); };
+    e.addEventListener = (n, fn) => { e.listeners[n] = fn; };
+    e.removeEventListener = () => {};
+    Object.defineProperty(e, "innerHTML", { get: () => "", set: () => { e.children = []; } });
+    return e;
+  };
+  const els = {};
+  const sb = {
+    $: (id) => (els[id] = els[id] || mkEl(id)),
+    invoke: async (cmd, args) => {
+      if (cmd === "video_folder_cleanup_preview") return [];
+      if (cmd === "list_discarded_recordings") return [{ name: "rec-a.mp4", size: 1, staging: false }, { name: "rec-a.mp4", size: 2, staging: true }];
+      calls.push([cmd, args]);
+      return true;
+    },
+    errToast() {}, toast() {}, t: (k) => k, LANG: "en", fmtBytes: () => "1 B", confirmDialog: async () => true,
+    refreshVideoFolderInfo() {}, document: { createElement: () => mkEl("x") }, Number, String,
+  };
+  vm.createContext(sb);
+  vm.runInContext(code + String.fromCharCode(10) + "this.run = openVideoCleanupRun;", sb);
+  later(async () => {
+    const done = sb.run("C:/rec");
+    await new Promise((r) => setTimeout(r, 20));
+    const rows = els["video-cleanup-discarded-list"].children;
+    check(rows.length === 2, "both discard sources are listed");
+    const buttons = (row) => row.children.find((c) => c.children.length === 2).children;
+    for (const row of rows) {
+      await buttons(row)[0].listeners.click();
+      await buttons(row)[1].listeners.click();
+    }
+    const flags = calls.map(([c, a]) => c + ":" + a.name + ":" + a.staging).join(" ");
+    check(flags === "restore_discarded_recording:rec-a.mp4:false delete_discarded_recording_now:rec-a.mp4:false restore_discarded_recording:rec-a.mp4:true delete_discarded_recording_now:rec-a.mp4:true", "restore and delete carry the source flag: " + flags);
+    els["video-cleanup-confirm"].listeners.click && els["video-cleanup-confirm"].listeners.click();
+    (els["video-cleanup-close"].onclick || els["video-cleanup-close"].listeners.click || (() => {}))();
+    await Promise.race([done, new Promise((r) => setTimeout(r, 50))]);
+  });
+});
+
 section(() => {
   const ro = read("i18n/ro.js");
   const keys = ["tileFolderNew", "tileFolderNameMsg", "tileFolderPickSecond", "tileFolderNamePh", "tileFolderDefaultName", "tileFolderRename", "tileFolderColor", "tileFolderDissolve", "tileFolderCount", "errFolderNeedsTwo", "errMaxFolders", "errFolderNameTooLong", "errNotInFolder", "errNotFolderMember"];

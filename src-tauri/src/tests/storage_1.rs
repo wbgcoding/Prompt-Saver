@@ -654,7 +654,7 @@ fn restore_discarded_recording_moves_the_file_back_to_its_original_folder() {
     fs::create_dir_all(&trash).unwrap();
     fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
     let dir_s = dir.to_string_lossy().to_string();
-    assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
+    assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", false, &dir, &dir));
     assert!(dir.join("rec-x.mp4").is_file());
     assert!(!trash.join("rec-x.mp4").exists());
     let _ = fs::remove_dir_all(&dir);
@@ -668,7 +668,7 @@ fn restore_discarded_recording_brings_the_key_overlay_sidecar_back_too() {
     fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
     fs::write(trash.join("rec-x.keys.json"), b"{}").unwrap();
     let dir_s = dir.to_string_lossy().to_string();
-    assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
+    assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", false, &dir, &dir));
     assert!(dir.join("rec-x.keys.json").is_file(), "the key-overlay sidecar must travel with its recording");
     assert!(!trash.join("rec-x.keys.json").exists());
     let _ = fs::remove_dir_all(&dir);
@@ -682,7 +682,7 @@ fn restore_discarded_recording_never_overwrites_a_file_already_at_the_old_spot()
     fs::write(trash.join("rec-x.mp4"), b"discarded copy").unwrap();
     fs::write(dir.join("rec-x.mp4"), b"a newer recording already took this name").unwrap();
     let dir_s = dir.to_string_lossy().to_string();
-    assert!(!restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
+    assert!(!restore_discarded_recording_impl(&dir_s, "rec-x.mp4", false, &dir, &dir));
     assert_eq!(fs::read(dir.join("rec-x.mp4")).unwrap(), b"a newer recording already took this name");
     assert!(trash.join("rec-x.mp4").is_file(), "the discarded copy must stay put, not vanish on a failed restore");
     let _ = fs::remove_dir_all(&dir);
@@ -695,7 +695,7 @@ fn delete_discarded_recording_now_removes_it_for_good() {
     fs::create_dir_all(&trash).unwrap();
     fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
     let dir_s = dir.to_string_lossy().to_string();
-    assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", &dir));
+    assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", false, &dir, &dir));
     assert!(!trash.join("rec-x.mp4").exists());
     let _ = fs::remove_dir_all(&dir);
 }
@@ -708,7 +708,7 @@ fn delete_discarded_recording_now_removes_its_key_overlay_sidecar_too() {
     fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
     fs::write(trash.join("rec-x.keys.json"), b"{}").unwrap();
     let dir_s = dir.to_string_lossy().to_string();
-    assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", &dir));
+    assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", false, &dir, &dir));
     assert!(!trash.join("rec-x.keys.json").exists(), "a purge for good must not leave the key-overlay sidecar behind");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -880,9 +880,9 @@ fn discarded_recording_commands_refuse_a_dir_that_is_not_the_configured_recordin
     fs::write(foreign_trash.join("rec-x.mp4"), b"video").unwrap();
     let foreign_s = foreign.to_string_lossy().to_string();
 
-    assert!(list_discarded_recordings_impl(&foreign_s, &configured).is_empty(), "a foreign folder's trash must never be listed");
-    assert!(!restore_discarded_recording_impl(&foreign_s, "rec-x.mp4", &configured), "a foreign folder must never be restored from");
-    assert!(!delete_discarded_recording_now_impl(&foreign_s, "rec-x.mp4", &configured), "a foreign folder must never be deleted from");
+    assert!(list_discarded_recordings_impl(&foreign_s, &configured, &configured).is_empty(), "a foreign folder's trash must never be listed");
+    assert!(!restore_discarded_recording_impl(&foreign_s, "rec-x.mp4", false, &configured, &configured), "a foreign folder must never be restored from");
+    assert!(!delete_discarded_recording_now_impl(&foreign_s, "rec-x.mp4", false, &configured, &configured), "a foreign folder must never be deleted from");
     assert!(foreign_trash.join("rec-x.mp4").is_file(), "the file in the foreign folder must survive untouched");
 
     let _ = fs::remove_dir_all(&configured);
@@ -1286,4 +1286,59 @@ fn csv_round_trip_keeps_text_that_starts_with_an_apostrophe_and_a_formula_char()
     }
     // A file written before this rule guarded only real formula starts with one quote.
     assert_eq!(parse_csv("\"'=1+1\";\"'x\"")[0], vec!["=1+1".to_string(), "'x".to_string()]);
+}
+
+// A fresh unsaved take is discarded from <data>/recordings into that folder's own trash, not the
+// recording folder's. The dialog must list it, restore it into the recording folder and purge it.
+#[test]
+fn discarded_staging_takes_are_listed_restored_and_deleted_from_their_own_trash() {
+    let root = std::env::temp_dir().join(format!("ps-discard-staging-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let configured = root.join("videos");
+    let staging = root.join("data").join("recordings");
+    let own_trash = configured.join("verworfen");
+    let stage_trash = staging.join("verworfen");
+    fs::create_dir_all(&own_trash).unwrap();
+    fs::create_dir_all(&stage_trash).unwrap();
+    fs::write(own_trash.join("rec-a.mp4"), b"own").unwrap();
+    fs::write(stage_trash.join("rec-a.mp4"), b"staged").unwrap();
+    fs::write(stage_trash.join("rec-b.mp4"), b"staged-b").unwrap();
+    fs::write(stage_trash.join("rec-b.keys.json"), b"{}").unwrap();
+    let dir_s = configured.to_string_lossy().to_string();
+
+    let listed = list_discarded_recordings_impl(&dir_s, &configured, &staging);
+    let mut keys: Vec<(String, bool)> = listed.iter().map(|f| (f.name.clone(), f.staging)).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        vec![("rec-a.mp4".to_string(), false), ("rec-a.mp4".to_string(), true), ("rec-b.mp4".to_string(), true)],
+        "both trash folders are listed and told apart"
+    );
+
+    // Same name in both trashes: the staging flag picks the staged one, placed under a free name.
+    fs::write(configured.join("rec-b.mp4"), b"taken").unwrap();
+    assert!(restore_discarded_recording_impl(&dir_s, "rec-b.mp4", true, &configured, &staging));
+    assert_eq!(fs::read(configured.join("rec-b.mp4")).unwrap(), b"taken", "an existing recording is never overwritten");
+    assert_eq!(fs::read(configured.join("rec-b (2).mp4")).unwrap(), b"staged-b");
+    assert!(configured.join("rec-b (2).keys.json").is_file(), "the sidecar follows the restored take");
+    assert!(!stage_trash.join("rec-b.mp4").exists());
+    assert!(!restore_discarded_recording_impl(&dir_s, "rec-nope.mp4", true, &configured, &staging));
+    assert!(!restore_discarded_recording_impl(&dir_s, "../x.mp4", true, &configured, &staging), "bare filenames only");
+
+    assert!(delete_discarded_recording_now_impl(&dir_s, "rec-a.mp4", true, &configured, &staging));
+    assert!(!stage_trash.join("rec-a.mp4").exists());
+    assert_eq!(fs::read(own_trash.join("rec-a.mp4")).unwrap(), b"own", "the other trash keeps its same-named file");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn discarded_staging_trash_is_not_listed_twice_when_it_is_the_recording_folder() {
+    let root = std::env::temp_dir().join(format!("ps-discard-staging-same-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let trash = root.join("verworfen");
+    fs::create_dir_all(&trash).unwrap();
+    fs::write(trash.join("rec-a.mp4"), b"x").unwrap();
+    let dir_s = root.to_string_lossy().to_string();
+    assert_eq!(list_discarded_recordings_impl(&dir_s, &root, &root).len(), 1);
+    let _ = fs::remove_dir_all(&root);
 }
