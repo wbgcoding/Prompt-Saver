@@ -273,7 +273,11 @@ pub(crate) fn occluders_above(id: u32, tx: i32, ty: i32, tw: i32, th: i32) -> Ve
     let mut found = false;
     unsafe {
         let mut h = GetTopWindow(0);
-        while h != 0 {
+        // GW_HWNDNEXT is unreliable while windows are reordered; a cycle must not spin forever.
+        for _ in 0..4096 {
+            if h == 0 {
+                break;
+            }
             if h as u32 == id {
                 found = true;
                 break; // everything after the target sits behind it
