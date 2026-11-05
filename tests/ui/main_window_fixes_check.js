@@ -589,12 +589,12 @@ section(() => {
 section(() => {
   const src = read("expertMenu.js");
   const persist = extractBlock(src, "export async function persistUiText(").replace("export ", "");
-  const reset = extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
+  const reset = extractBlock(src, "async function afterFlagWrite(") + "\n" + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
   const make = (fail, settings) => {
     const toasts = [];
     const sb = run([persist, reset].join("\n"), {
       settings, invoke: async () => { if (fail) throw new Error("denied"); }, errToast: (e) => toasts.push(String(e.message || e)),
-      EXPERT_BULK_NEVER: [], shipsOn: () => true, applyFlags() {}, applyValues() {}, fitAllTiles() {}, refreshTiles: async () => {},
+      toast() {}, t: (k) => k, offerClipInboxCleanup: async () => {}, EXPERT_BULK_NEVER: [], shipsOn: () => true, applyFlags() {}, applyValues() {}, fitAllTiles() {}, refreshTiles: async () => {},
       renderGrid: async () => {}, renderExpert() {}, TILE_DOM_FLAGS: new Set(), EXPERT_VALUES: { gap: { def: 9 } }, EXPERT_SELECTS: {}, EXPERT_DROPDOWNS: {},
     });
     return { sb, toasts };
@@ -1619,6 +1619,43 @@ section(() => {
     });
     await sb.clipInbox();
     check(log.includes("err:boom") && !log.some((l) => l.startsWith("toast:")) && !log.includes("clip_inbox_clear"), "a failed inbox listing shows the error and clears nothing");
+  });
+});
+
+// 91. A reset flag write owes what the row's own switch owes: the refusal message, the restart
+// hint for a second instance, the clipboard inbox cleanup offer once its watcher is off.
+section(() => {
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "async function afterFlagWrite(") + "\n"
+    + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "") + "\n"
+    + extractBlock(src, "export async function resetExpertGroup(").replace("export ", "")
+    + ";globalThis.api = { resetOneExpertValue, resetExpertGroup };";
+  const mk = (refuse) => {
+    const log = [];
+    const sb = run(code, {
+      settings: { ui_flags: {}, ui_values: {} }, EXPERT_BULK_NEVER: [], TILE_DOM_FLAGS: new Set(), EXPERT_VALUES: {}, EXPERT_SELECTS: {}, EXPERT_DROPDOWNS: {}, EXPERT_PATHS: {},
+      shipsOn: (k) => k === "allowMultipleInstances",
+      invoke: async (cmd, a) => { if (refuse && cmd === "set_ui_flag") throw refuse; },
+      errToast: (e) => log.push("err:" + e), toast: (m) => log.push("toast:" + m), t: (k) => k,
+      offerClipInboxCleanup: async () => { log.push("inbox"); },
+      applyFlags() {}, applyValues() {}, renderViews() {}, renderGrid: async () => {}, fitAllTiles() {}, renderExpert() {}, savePalette: async () => {},
+      confirmDialog: async () => true,
+    });
+    return { api: sb.api, log };
+  };
+  later(async () => {
+    let r = mk();
+    await r.api.resetOneExpertValue("flags", "allowMultipleInstances", () => {});
+    check(r.log.includes("toast:toastRestartNeeded"), "resetting allowMultipleInstances gives the restart hint");
+    r = mk();
+    await r.api.resetOneExpertValue("flags", "clipWatcher", () => {});
+    check(r.log.includes("inbox"), "resetting clipWatcher to off offers the inbox cleanup");
+    r = mk("sync-backup-failed: x");
+    await r.api.resetOneExpertValue("flags", "promptSync", () => {});
+    check(r.log.includes("toast:syncBackupFailed") && !r.log.includes("inbox"), "a refused reset shows the row's own message");
+    r = mk();
+    await r.api.resetExpertGroup({ title: "g" }, { flags: ["allowMultipleInstances", "clipWatcher"], values: [], selects: [], dropdowns: [], paths: [], palette: false }, 2);
+    check(r.log.includes("toast:toastRestartNeeded") && r.log.includes("inbox"), "a category reset owes the same side effects");
   });
 });
 
