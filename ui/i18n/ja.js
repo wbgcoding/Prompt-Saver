@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "データフォルダは読み取り専用です",
     dataDirReadOnlyRowNote: "{host} が現在このデータフォルダのロックを保持しています。このロックが解放されるか古くなるまで、ここで変更した内容は保存されません。",
     dataDirReadOnlyBanner: "読み取り専用: {host} が現在このデータフォルダを使用しています。ここでの変更は保存されません。",
+    dataDirUnreachableBanner: "データフォルダ {dir} にアクセスできません。このセッションでは既定のフォルダを使用し、変更はそこに保存されます。",
     demoModeBanner: "デモモード: これはサンプルデータであり、あなたのデータではありません",
     demoModeOffConfirm: "元に戻すと自分のデータに戻ります。デモモード中に変更した内容は破棄されます。",
     demoModeOffConfirmOk: "元に戻す",

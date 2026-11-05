@@ -747,6 +747,7 @@ export default {
     dataDirReadOnlyRow: "Datenordner ist schreibgeschützt",
     dataDirReadOnlyRowNote: "{host} hält gerade die Sperre für diesen Datenordner. Änderungen hier werden nicht gespeichert, bis diese Sperre freigegeben wird oder veraltet.",
     dataDirReadOnlyBanner: "Schreibgeschützt: {host} verwendet diesen Datenordner gerade. Änderungen hier werden nicht gespeichert.",
+    dataDirUnreachableBanner: "Dein Datenordner {dir} ist nicht erreichbar. Diese Sitzung nutzt stattdessen den Standardordner, Änderungen werden dort gespeichert.",
     demoModeBanner: "Vorführmodus: Das sind Beispieldaten, nicht deine eigenen",
     demoModeOffConfirm: "Das Zurückschalten kehrt zu deinen eigenen Daten zurück. Was im Vorführmodus geändert wurde, geht dabei verloren.",
     demoModeOffConfirmOk: "Zurückschalten",

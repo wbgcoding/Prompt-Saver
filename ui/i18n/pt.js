@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "A pasta de dados é somente leitura",
     dataDirReadOnlyRowNote: "{host} mantém agora o bloqueio desta pasta de dados. Nada alterado aqui será salvo até que esse bloqueio seja liberado ou fique obsoleto.",
     dataDirReadOnlyBanner: "Somente leitura: {host} está usando esta pasta de dados agora. As alterações feitas aqui não serão salvas.",
+    dataDirUnreachableBanner: "Não foi possível acessar sua pasta de dados {dir}. Esta sessão usa a pasta padrão e as alterações são salvas lá.",
     demoModeBanner: "Modo de demonstração: estes são dados de exemplo, não os seus",
     demoModeOffConfirm: "Voltar atrás retorna aos seus próprios dados. O que foi alterado durante o modo de demonstração é descartado.",
     demoModeOffConfirmOk: "Voltar",

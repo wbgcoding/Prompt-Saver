@@ -747,6 +747,7 @@ export default {
     dataDirReadOnlyRow: "Data folder is read-only",
     dataDirReadOnlyRowNote: "{host} currently holds the lock on this data folder. Nothing changed here will be saved until that lock is released or goes stale.",
     dataDirReadOnlyBanner: "Read-only: {host} is currently using this data folder. Changes made here will not be saved.",
+    dataDirUnreachableBanner: "Your data folder {dir} could not be reached. This session uses the default folder instead, and changes are saved there.",
     demoModeBanner: "Demo mode: this is sample data, not yours",
     demoModeOffConfirm: "Switching back returns to your own data. Anything changed during demo mode is discarded.",
     demoModeOffConfirmOk: "Switch back",

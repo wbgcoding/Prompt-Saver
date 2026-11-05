@@ -155,18 +155,72 @@ pub(crate) fn is_portable() -> bool {
         .unwrap_or(true)
 }
 
-// Shared by data_dir() and the command line's headless resolver below: a
-// "datapath" pointer file in the canonical dir can redirect the store to a
-// user-chosen folder (expert menu); anything missing or invalid falls back to
-// the canonical dir, so data is never lost.
+// What the "datapath" pointer file in the canonical dir names.
+pub(crate) enum DataRedirect {
+    // No pointer, or an empty one.
+    None,
+    Reachable(PathBuf),
+    // A path that is not a directory right now (a removed drive, an offline share).
+    Unreachable(PathBuf),
+}
+
+pub(crate) fn read_datapath_redirect(base: &Path) -> DataRedirect {
+    let Ok(s) = fs::read_to_string(base.join("datapath")) else { return DataRedirect::None };
+    if s.trim().is_empty() {
+        return DataRedirect::None;
+    }
+    let p = PathBuf::from(s.trim());
+    if p.is_dir() {
+        DataRedirect::Reachable(p)
+    } else {
+        DataRedirect::Unreachable(p)
+    }
+}
+
+// Set once this process has resolved the store to a custom folder. From then on an
+// unreachable pointer keeps resolving to that path, so writes fail and persist-failed
+// reports it, instead of landing in a fresh store in the canonical folder.
+static RAN_ON_CUSTOM_DIR: AtomicBool = AtomicBool::new(false);
+// The custom folder the pointer named when the app started without reaching it and fell
+// back to the canonical folder. The session stays there even if the folder turns up again
+// (the loaded state is the canonical one); a pointer to any other folder ends that.
+static SKIPPED_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+pub(crate) fn unreachable_data_dir() -> Option<String> {
+    SKIPPED_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|p| p.to_string_lossy().into_owned())
+}
+
+// The resolution rule behind data_dir(): a "datapath" pointer file in the canonical dir can
+// redirect the store to a user-chosen folder (expert menu). `pinned` = the process already
+// used a custom folder: an unreachable one is then returned as it is. Otherwise (startup)
+// it falls back to the canonical dir and the second value names the folder that was
+// skipped. The pointer file itself is never written here.
+pub(crate) fn resolve_datapath_with(base: PathBuf, pinned: bool, skipped: Option<&Path>) -> (PathBuf, Option<PathBuf>) {
+    match read_datapath_redirect(&base) {
+        DataRedirect::None => (base, None),
+        DataRedirect::Reachable(p) if skipped == Some(p.as_path()) => (base, Some(p)),
+        DataRedirect::Reachable(p) => (p, None),
+        DataRedirect::Unreachable(p) if pinned => (p, None),
+        DataRedirect::Unreachable(p) => (base, Some(p)),
+    }
+}
+
+// Shared by data_dir() and the command line's headless resolver below.
 pub(crate) fn resolve_datapath_redirect(base: PathBuf) -> PathBuf {
-    if let Ok(s) = fs::read_to_string(base.join("datapath")) {
-        let p = PathBuf::from(s.trim());
-        if !s.trim().is_empty() && p.is_dir() {
-            return p;
+    let mut slot = SKIPPED_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner());
+    let pinned = RAN_ON_CUSTOM_DIR.load(Ordering::Relaxed);
+    let (dir, skipped) = resolve_datapath_with(base.clone(), pinned, slot.as_deref());
+    if skipped.is_some() {
+        if slot.is_none() {
+            *slot = skipped;
+        }
+    } else {
+        *slot = None;
+        if dir != base {
+            RAN_ON_CUSTOM_DIR.store(true, Ordering::Relaxed);
         }
     }
-    base
+    dir
 }
 
 // Effective store location: the canonical dir, redirected by a valid "datapath" file.
@@ -197,7 +251,9 @@ pub(crate) fn default_data_dir_headless() -> PathBuf {
 }
 
 pub(crate) fn data_dir_headless() -> PathBuf {
-    resolve_datapath_redirect(default_data_dir_headless())
+    // Pinned: a command line run never writes to the canonical store when the custom
+    // folder is missing, it fails against the missing folder instead.
+    resolve_datapath_with(default_data_dir_headless(), true, None).0
 }
 
 // The store's JSON files (the DB-write fallback and the legacy pre-SQLite format) hold full

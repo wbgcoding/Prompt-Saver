@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "Datamap is alleen-lezen",
     dataDirReadOnlyRowNote: "{host} houdt nu de vergrendeling van deze datamap. Niets dat hier wordt gewijzigd, wordt opgeslagen totdat die vergrendeling wordt vrijgegeven of verouderd raakt.",
     dataDirReadOnlyBanner: "Alleen-lezen: {host} gebruikt deze datamap op dit moment. Wijzigingen die hier worden gemaakt, worden niet opgeslagen.",
+    dataDirUnreachableBanner: "Je datamap {dir} is niet bereikbaar. Deze sessie gebruikt de standaardmap en wijzigingen worden daar opgeslagen.",
     demoModeBanner: "Demomodus: dit zijn voorbeeldgegevens, niet de jouwe",
     demoModeOffConfirm: "Terugschakelen herstelt je eigen gegevens. Wat tijdens de demomodus is gewijzigd, wordt daarbij verworpen.",
     demoModeOffConfirmOk: "Terugschakelen",

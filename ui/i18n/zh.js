@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "数据文件夹为只读",
     dataDirReadOnlyRowNote: "{host} 目前持有此数据文件夹的锁。在此处所做的任何更改都不会被保存，直到该锁被释放或过期。",
     dataDirReadOnlyBanner: "只读：{host} 目前正在使用此数据文件夹。此处所做的更改不会被保存。",
+    dataDirUnreachableBanner: "无法访问您的数据文件夹 {dir}。本会话改用默认文件夹，更改将保存在那里。",
     demoModeBanner: "演示模式：这些是示例数据，不是你的数据",
     demoModeOffConfirm: "切回后会恢复你自己的数据。演示模式期间所做的更改都会被丢弃。",
     demoModeOffConfirmOk: "切回",

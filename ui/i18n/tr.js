@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "Veri klasörü salt okunur",
     dataDirReadOnlyRowNote: "{host} şu anda bu veri klasörünün kilidini tutuyor. Bu kilit serbest bırakılana veya eskiyene kadar burada değiştirilen hiçbir şey kaydedilmeyecek.",
     dataDirReadOnlyBanner: "Salt okunur: {host} şu anda bu veri klasörünü kullanıyor. Burada yapılan değişiklikler kaydedilmeyecek.",
+    dataDirUnreachableBanner: "Veri klasörün {dir} erişilemiyor. Bu oturum varsayılan klasörü kullanıyor ve değişiklikler orada kaydedilir.",
     demoModeBanner: "Tanıtım modu: bunlar örnek veriler, seninkiler değil",
     demoModeOffConfirm: "Geri dönmek kendi verilerinizi geri getirir. Tanıtım modundayken değiştirilen her şey atılır.",
     demoModeOffConfirmOk: "Geri dön",

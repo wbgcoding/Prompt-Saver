@@ -907,17 +907,25 @@ let dataDirMoving = false;
 // Whether another machine's fresh lock on the data folder makes this process read-only, and
 // which machine. Decided once at load (or right after set_data_dir points at a new folder);
 // nothing changes it mid-session, so a poll at those two moments is enough.
-export let dataDirLockStatus = { readOnly: false, otherHost: null };
+export let dataDirLockStatus = { readOnly: false, otherHost: null, unreachableDir: null };
 export async function refreshDataDirLock() {
-  dataDirLockStatus = (await invoke("data_dir_lock_status").catch(() => null)) || { readOnly: false, otherHost: null };
+  dataDirLockStatus = (await invoke("data_dir_lock_status").catch(() => null)) || { readOnly: false, otherHost: null, unreachableDir: null };
   renderDataDirReadOnlyBanner();
   if (!$("settings-expert").classList.contains("hidden")) renderExpert();
 }
 // The persistent line in the window itself, not only the expert-menu notice below: a user who
 // never opens the expert menu still has to know their edits are not being saved.
 export function renderDataDirReadOnlyBanner() {
+  // A custom folder that could not be reached at start: told for the whole session, since
+  // the edits made meanwhile land in the default folder.
+  const lost = $("data-dir-unreachable-banner");
+  if (lost) {
+    const dir = dataDirLockStatus.unreachableDir;
+    if (dir) setStatusText($("data-dir-unreachable-text"), "dataDirUnreachableBanner", "dir", dir);
+    lost.classList.toggle("hidden", !dir);
+  }
   const banner = $("data-dir-readonly-banner");
-  if (!banner) return;
+  if (!banner) { syncBannerStack(); return; }
   if (!dataDirLockStatus.readOnly) { banner.classList.add("hidden"); syncBannerStack(); return; }
   setStatusText($("data-dir-readonly-text"), "dataDirReadOnlyBanner", "host", dataDirLockStatus.otherHost || "?");
   banner.classList.remove("hidden");
@@ -926,7 +934,7 @@ export function renderDataDirReadOnlyBanner() {
 
 // One slot above the grid for every notice: only the most important active one
 // shows, a counter beside it steps through the rest. Highest priority first.
-export const BANNER_PRIORITY = ["data-dir-readonly-banner", "demo-mode-banner", "grid-overflow", "examples-banner"];
+export const BANNER_PRIORITY = ["data-dir-unreachable-banner", "data-dir-readonly-banner", "demo-mode-banner", "grid-overflow", "examples-banner"];
 export let bannerFront = 0; // which of the active notices is showing (index, wraps)
 export let bannerActiveKey = ""; // joined ids of the active set the index belongs to
 export function bannerIsActive(id) {

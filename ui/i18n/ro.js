@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "Folderul de date este doar pentru citire",
     dataDirReadOnlyRowNote: "{host} deține în prezent blocarea acestui folder de date. Nimic modificat aici nu va fi salvat până când acea blocare este eliberată sau devine învechită.",
     dataDirReadOnlyBanner: "Doar pentru citire: {host} folosește acum acest folder de date. Modificările făcute aici nu vor fi salvate.",
+    dataDirUnreachableBanner: "Folderul tău de date {dir} nu poate fi accesat. Această sesiune folosește folderul implicit, iar modificările se salvează acolo.",
     demoModeBanner: "Mod demonstrativ: acestea sunt date de exemplu, nu ale tale",
     demoModeOffConfirm: "Revenirea readuce propriile date. Ce a fost schimbat în modul demonstrativ este abandonat.",
     demoModeOffConfirmOk: "Revino",

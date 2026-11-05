@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "La cartella dati è di sola lettura",
     dataDirReadOnlyRowNote: "{host} detiene ora il blocco su questa cartella dati. Nulla di modificato qui verrà salvato finché quel blocco non viene rilasciato o diventa obsoleto.",
     dataDirReadOnlyBanner: "Sola lettura: {host} sta usando questa cartella dati in questo momento. Le modifiche fatte qui non verranno salvate.",
+    dataDirUnreachableBanner: "Impossibile raggiungere la tua cartella dati {dir}. Questa sessione usa la cartella predefinita e le modifiche vengono salvate lì.",
     demoModeBanner: "Modalità dimostrativa: questi sono dati di esempio, non i tuoi",
     demoModeOffConfirm: "Tornare indietro ripristina i tuoi dati. Ciò che è stato modificato durante la modalità dimostrativa viene scartato.",
     demoModeOffConfirmOk: "Torna indietro",

@@ -524,6 +524,9 @@ impl Drop for ReloadSaveBlock {
 pub(crate) struct DataDirLockStatus {
     pub(crate) read_only: bool,
     pub(crate) other_host: Option<String>,
+    // The custom data folder the app could not reach at startup, so this session runs on
+    // the default folder.
+    pub(crate) unreachable_dir: Option<String>,
 }
 
 // Polled once at startup to fill the persistent read-only banner before the first render.
@@ -532,6 +535,7 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
     DataDirLockStatus {
         read_only: DATA_DIR_READONLY.load(Ordering::Relaxed),
         other_host: DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        unreachable_dir: unreachable_data_dir(),
     }
 }
 

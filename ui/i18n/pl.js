@@ -769,6 +769,7 @@ export default {
     dataDirReadOnlyRow: "Folder danych jest tylko do odczytu",
     dataDirReadOnlyRowNote: "{host} trzyma teraz blokadę tego folderu danych. Nic zmienione tutaj nie zostanie zapisane, dopóki ta blokada nie zostanie zwolniona lub nie stanie się nieaktualna.",
     dataDirReadOnlyBanner: "Tylko do odczytu: {host} korzysta teraz z tego folderu danych. Zmiany dokonane tutaj nie zostaną zapisane.",
+    dataDirUnreachableBanner: "Nie można uzyskać dostępu do Twojego folderu danych {dir}. Ta sesja używa folderu domyślnego, a zmiany są w nim zapisywane.",
     demoModeBanner: "Tryb pokazowy: to są przykładowe dane, nie twoje",
     demoModeOffConfirm: "Powrót przywraca twoje własne dane. To, co zmieniono w trybie pokazowym, zostaje odrzucone.",
     demoModeOffConfirmOk: "Wróć",
