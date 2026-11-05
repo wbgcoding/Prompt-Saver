@@ -228,6 +228,37 @@ later(async () => {
   check(log.length === 4, "a vanished prompt copies nothing");
 });
 
+// copyFlow.js arrow-key navigation: grid-folder cells are part of the walk, Enter opens one and
+// hands the focus to its first member.
+later(async () => {
+  const src = read("copyFlow.js");
+  const from = src.indexOf("// The cells the arrow keys walk");
+  if (from < 0) { check(false, "arrow-key walk includes folder cells (kbNavMap missing)"); return; }
+  const code = src.slice(from, src.indexOf("// A copy swallowed by the cooldown")).replace(/export /g, "");
+  const cellEl = (col, row) => ({ dataset: { col: String(col), row: String(row) } });
+  const folderTile = { dataset: { folderId: "f1" }, closest: () => cellEl(1, 0) };
+  const focused = [];
+  const opened = [];
+  const member = { focus: () => focused.push("member") };
+  const sandbox = run("const FOLDER_KEY = 'folder:'; const kbElOf = () => folderTile; let kbFocus = null;\n" + code + "\n;globalThis.walk = (dc, dr, start) => { kbFocus = start; moveKbFocus(dc, dr); return kbFocus; }; globalThis.act = activateKbFocus;", {
+    folderTile,
+    favView: false, favLayoutMap: () => ({}), layoutOf: () => ({ a: [0, 0], b: [2, 0] }), activeView: () => ({}),
+    gridEl: { querySelectorAll: () => [folderTile] },
+    document: { querySelector: () => member },
+    focusTile: (id) => focused.push(id),
+    folderById: (id) => ({ id }), openTileFolderPop: (f) => opened.push(f.id),
+    activateTile: (id) => opened.push("tile:" + id),
+  });
+  sandbox.walk(1, 0, "a");
+  sandbox.walk(1, 0, "folder:f1");
+  check(focused.join() === "folder:f1,b", `the right arrow walks a, folder, b, got ${focused}`);
+  focused.length = 0;
+  sandbox.act("folder:f1");
+  check(opened.join() === "f1" && focused.join() === "member", `Enter opens the folder and focuses its first member, got ${opened} ${focused}`);
+  sandbox.act("a");
+  check(opened.join() === "f1,tile:a", "Enter on a prompt still copies it");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
