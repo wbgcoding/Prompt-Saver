@@ -1487,3 +1487,30 @@ fn apply_hotkey_restores_the_previous_value_and_rearms_when_refused() {
     assert!(body.contains("restore_previous("), "a refusal puts the previous hotkey back");
     assert!(body.contains("rearm_hotkeys_exact(app);\n    }\n    Err(HK_CONFLICT"), "and re-arms it");
 }
+
+// The capture state lives in the backend: a rearm during a capture registers nothing, and
+// hiding the main window ends a capture its page can no longer end.
+#[test]
+fn a_rearm_leaves_the_hotkeys_off_while_a_field_is_capturing() {
+    let src = include_str!("../shortcuts.rs").replace("\r\n", "\n");
+    let at = src.find("fn rearm_hotkeys_once(").expect("rearm_hotkeys_once");
+    let end = src[at..].find("\n}\n").map(|e| at + e).unwrap();
+    let body = &src[at..end];
+    let skip = body.find("if hotkey_capture_active() {").expect("rearm checks the capture state");
+    let unreg = body.find("gs.unregister_all()").expect("unregister");
+    assert!(skip < unreg, "the check comes before anything is registered");
+    assert!(body.matches("hotkey_capture_active()").count() >= 2, "and again after registering, for a capture that began meanwhile");
+    let cmd = &src[src.find("fn set_hotkey_capture(").unwrap()..];
+    assert!(cmd.starts_with("fn set_hotkey_capture(app: AppHandle, active: bool) -> Result<(), String> {\n    CAPTURE_ACTIVE.store(active"));
+    let win = include_str!("../main_window.rs").replace("\r\n", "\n");
+    let hide = win.find("w.hide()").expect("hide on close");
+    assert!(win[..hide].contains("end_hotkey_capture("), "closing to the tray ends the capture");
+}
+
+#[test]
+fn the_capture_flag_is_read_through_one_accessor() {
+    CAPTURE_ACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(hotkey_capture_active());
+    CAPTURE_ACTIVE.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert!(!hotkey_capture_active());
+}

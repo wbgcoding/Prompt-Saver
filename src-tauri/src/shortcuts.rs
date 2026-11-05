@@ -449,6 +449,10 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
         }
         None => return true,
     };
+    if hotkey_capture_active() {
+        unregister_everything(app);
+        return true;
+    }
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut live = Vec::with_capacity(plan.len());
@@ -470,6 +474,10 @@ fn rearm_hotkeys_once(app: &AppHandle) -> bool {
     }
     if let Some(targets) = app.try_state::<HotkeyTargets>() {
         *targets.0.lock().unwrap_or_else(|e| e.into_inner()) = live;
+    }
+    // A capture that began while this pass was registering takes everything off again.
+    if hotkey_capture_active() {
+        unregister_everything(app);
     }
     VOICE_HOTKEY_OK.store(voice_ok, std::sync::atomic::Ordering::Relaxed);
     REC_STOP_HOTKEY_OK.store(rec_stop_ok, std::sync::atomic::Ordering::Relaxed);
@@ -651,14 +659,38 @@ pub(crate) fn trigger_rec_pause_hotkey(app: &AppHandle) {
 // delivers a registered combination to the owning process instead of the focused
 // window, so the field would never see the key press: the user just watches the
 // prompt behind it get copied and gets no error at all.
+// The backend owns the state: any rearm that runs while it is set (a prompt save, an import, a
+// tray action) leaves the hotkeys off, and only the end of the capture brings them back.
+pub(crate) static CAPTURE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn hotkey_capture_active() -> bool {
+    CAPTURE_ACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn unregister_everything(app: &AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let _ = app.global_shortcut().unregister_all();
+    if let Some(t) = app.try_state::<HotkeyTargets>() {
+        t.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
+// Ends a capture the page can no longer end itself (its window is being hidden) and brings the
+// hotkeys back. Off the calling thread: registering hops to the main thread.
+pub(crate) fn end_hotkey_capture(app: &AppHandle) {
+    if CAPTURE_ACTIVE.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            rearm_hotkeys(&app);
+        });
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn set_hotkey_capture(app: AppHandle, active: bool) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    CAPTURE_ACTIVE.store(active, std::sync::atomic::Ordering::SeqCst);
     if active {
-        let _ = app.global_shortcut().unregister_all();
-        if let Some(t) = app.try_state::<HotkeyTargets>() {
-            t.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
-        }
+        unregister_everything(&app);
     } else {
         rearm_hotkeys(&app);
     }

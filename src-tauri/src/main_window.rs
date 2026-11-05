@@ -148,6 +148,8 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                 api.prevent_close();
                 // Hide instead of quitting; a hidden window never keeps listening.
                 voice_shutdown(&handle2);
+                // A hidden window never sends the end of a capture its focused field began.
+                crate::shortcuts::end_hotkey_capture(&handle2);
                 if let Some(w) = handle2.get_webview_window("main") {
                     let _ = w.hide();
                 }
