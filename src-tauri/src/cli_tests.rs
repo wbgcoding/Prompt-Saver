@@ -1334,12 +1334,37 @@ fn a_non_unicode_argument_never_panics_the_launch() {
 
 #[test]
 fn a_show_ping_answer_counts_only_when_the_main_thread_was_reached() {
-    let ok = serde_json::to_vec(&show_ping_response(true)).unwrap();
-    let not_reached = serde_json::to_vec(&show_ping_response(false)).unwrap();
+    let ok = serde_json::to_vec(&show_ping_response(true, false)).unwrap();
+    let not_reached = serde_json::to_vec(&show_ping_response(false, false)).unwrap();
     assert!(show_ping_proves_life(&ok));
     assert!(!show_ping_proves_life(&not_reached), "a failed liveness proof must not end the new launch");
     assert!(!show_ping_proves_life(b"not json"));
     assert!(!show_ping_proves_life(b""));
+}
+
+#[test]
+fn an_exiting_instance_answers_with_its_own_code_and_is_no_proof_of_life() {
+    assert_eq!(show_ping_response(false, true).code, 2);
+    assert_eq!(show_ping_response(true, true).code, 2, "an exit under way wins over a reached main thread");
+    let exiting = serde_json::to_vec(&show_ping_response(false, true)).unwrap();
+    let hung = serde_json::to_vec(&show_ping_response(false, false)).unwrap();
+    let ok = serde_json::to_vec(&show_ping_response(true, false)).unwrap();
+    assert!(!show_ping_proves_life(&exiting), "an exiting instance shows no window");
+    assert!(show_ping_says_exiting(&exiting));
+    assert!(!show_ping_says_exiting(&hung) && !show_ping_says_exiting(&ok));
+    assert!(!show_ping_says_exiting(b"not json") && !show_ping_says_exiting(b""));
+}
+
+#[test]
+fn a_second_launch_waits_for_an_exiting_instance_and_ends_only_a_silent_one() {
+    assert!(wait_instead_of_terminate(true));
+    assert!(!wait_instead_of_terminate(false));
+}
+
+#[test]
+fn waiting_for_a_process_that_cannot_be_opened_reports_not_gone() {
+    // pid 0 is the idle process: it cannot be opened for waiting.
+    assert!(!wait_for_process_exit(0, 10));
 }
 
 // ---- output to a reader that has gone ----
@@ -1571,6 +1596,71 @@ fn taking_a_flag_does_not_leak_the_remaining_arguments() {
     assert_eq!(take_flag_value(&mut a, "--tag").unwrap().as_deref(), Some("x"));
     assert_eq!(a.items, vec!["rest".to_string()]);
 }
+// ---- a theme or language set from the command line repaints the open windows ----
+
+#[test]
+fn only_theme_and_language_settings_repaint_open_windows() {
+    assert_eq!(setting_repaint("theme"), Some(SettingRepaint::Theme));
+    assert_eq!(setting_repaint("language"), Some(SettingRepaint::Language));
+    for other in ["autostart", "alwaysOnTop", "smartSort", "Theme", ""] {
+        assert_eq!(setting_repaint(other), None, "{other} needs no repaint");
+    }
+}
+
+#[test]
+fn the_cli_theme_and_language_repaint_reuses_the_apps_own_push() {
+    let callers = include_str!("cli_callers.rs");
+    assert!(callers.contains("crate::theme::push_theme("), "theme goes through the app's own theme push");
+    assert!(callers.contains("crate::trash::announce_language("), "language goes through the app's own announce");
+    let trash = include_str!("trash.rs");
+    let set_language = &trash[trash.find("pub(crate) fn set_language").unwrap()..];
+    assert!(set_language.contains("announce_language(&app, resolved)"), "the settings dialog uses the same announce");
+}
+
+// ---- a flag name inside another flag's value, and the `--` end-of-flags marker ----
+
+fn parsed_add(items: &[&str]) -> (String, String, Vec<String>) {
+    match parse(&args(items)).unwrap_or_else(|e| panic!("expected {items:?} to parse: {e}")) {
+        Parsed::Run(Cmd::Add { name, text, tags, .. }) => (name, text, tags),
+        _ => panic!("expected an add command"),
+    }
+}
+
+#[test]
+fn a_flag_name_inside_another_flags_value_is_not_taken_as_a_flag() {
+    let (name, text, _) = parsed_add(&["add", "--text", "--name", "--name", "X"]);
+    assert_eq!((name.as_str(), text.as_str()), ("X", "--name"));
+    let (name, text, tags) = parsed_add(&["add", "--tags", "--text", "--text", "T", "--name", "N"]);
+    assert_eq!((name.as_str(), text.as_str(), tags.as_slice()), ("N", "T", &["--text".to_string()][..]));
+    // A boolean flag spelled as a value stays a value.
+    match parse(&args(&["list", "--tag", "--json"])).unwrap() {
+        Parsed::Run(Cmd::List { tag, json, .. }) => assert_eq!((tag.as_deref(), json), (Some("--json"), false)),
+        _ => panic!("expected list"),
+    }
+}
+
+#[test]
+fn a_bare_double_dash_ends_the_flags() {
+    match parse(&args(&["search", "--json", "--", "--json"])).unwrap() {
+        Parsed::Run(Cmd::Search { query, json, .. }) => assert_eq!((query.as_str(), json), ("--json", true)),
+        _ => panic!("expected search"),
+    }
+    match parse(&args(&["search", "--", "--tag"])).unwrap() {
+        Parsed::Run(Cmd::Search { query, tag, .. }) => assert_eq!((query.as_str(), tag), ("--tag", None)),
+        _ => panic!("expected search"),
+    }
+    match parse(&args(&["settings", "set", "--yes", "k", "--", "--v"])).unwrap() {
+        Parsed::Run(Cmd::SettingsSet { key, value, confirmed }) => assert_eq!((key.as_str(), value.as_str(), confirmed), ("k", "--v", true)),
+        _ => panic!("expected settings set"),
+    }
+    // Without the marker a flag-shaped query is still refused, and a marker with nothing behind it
+    // or with a stray extra argument keeps its meaning.
+    parse_err(&["search", "--json"]);
+    parse_err(&["search", "--"]);
+    parse_err(&["search", "q", "--", "extra"]);
+    assert!(parse(&args(&["search", "q", "--"])).is_ok());
+}
+
 // ---- an old placeholder spelling is upgraded on write ----
 
 #[test]

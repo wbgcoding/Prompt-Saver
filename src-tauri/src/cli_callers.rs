@@ -282,6 +282,22 @@ pub(super) fn os_backed_toggle(cmd: &Cmd) -> Option<(&'static str, Result<bool, 
     Some((key, value.parse::<bool>().map_err(|_| ())))
 }
 
+// The settings a window shows without reading the store again: a changed value has to be pushed to
+// the open windows the way the app's own theme and language switches do.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub(super) enum SettingRepaint {
+    Theme,
+    Language,
+}
+
+pub(super) fn setting_repaint(key: &str) -> Option<SettingRepaint> {
+    match key {
+        "theme" => Some(SettingRepaint::Theme),
+        "language" => Some(SettingRepaint::Language),
+        _ => None,
+    }
+}
+
 pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, restart: &mut bool) -> (i32, String, String) {
     let parsed = match parse(&argv) {
         Ok(p) => p,
@@ -359,6 +375,10 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
 
     // The store lock, the command and its save all block (file reads, VACUUM, compression), so the
     // whole run happens on a blocking worker, never on an async one.
+    let repaint = match &cmd {
+        Cmd::SettingsSet { key, .. } => setting_repaint(key),
+        _ => None,
+    };
     let worker = app.clone();
     let ran = tauri::async_runtime::spawn_blocking(move || {
         let app = &worker;
@@ -421,6 +441,15 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
     };
     if let Some((key, on)) = flag_set {
         crate::apply_flag_effects(app, &key, on);
+    }
+    if let (Some(what), 0, true) = (repaint, outcome.code, outcome.mutated_settings) {
+        let settings = lock(&app.state::<Db>()).settings.clone();
+        match what {
+            SettingRepaint::Theme => {
+                crate::theme::push_theme(app, &settings);
+            }
+            SettingRepaint::Language => crate::trash::announce_language(app, crate::resolve_lang(&settings.language)),
+        }
     }
     if outcome.code == 0 && (outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
         // The windows, armed hotkeys and tray still hold what they read before this command: tell

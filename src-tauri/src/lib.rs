@@ -589,7 +589,11 @@ pub fn run() {
             let start_hidden = std::env::args().any(|a| a == "--minimized");
 
             // Capture exclusion is re-read fresh from Db state inside build_main_window itself.
-            if let Ok(main) = build_main_window(&handle) {
+            let built = build_main_window(&handle);
+            if let Err(e) = &built {
+                append_crash_log(&format!("startup: could not build the main window: {e}"));
+            }
+            if let Ok(main) = built {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
@@ -1144,6 +1148,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app, event| {
+            // Before anything slow: a second launch must see an exit under way and wait for it.
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                cli::mark_exiting();
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 // A recording part save that is still copying across drives finishes first
                 // (bounded), so the exit never leaves its parts in staging.
