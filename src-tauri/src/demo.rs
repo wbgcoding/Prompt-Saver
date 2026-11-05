@@ -161,7 +161,7 @@ pub(crate) fn demo_settings(has_video: bool, lang: &str) -> Settings {
 // unrelated folder at that path is left alone.
 pub(crate) fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Result<(), String> {
     if dir.is_dir() && !dir.join(DEMO_MARKER_FILE).is_file() {
-        return Err("a folder already exists at the demo data path and was not created by demo mode; refusing to touch it".to_string());
+        return Err("demo-folder-foreign".to_string());
     }
     // Delete every entry except the marker one at a time rather than remove_dir_all on the
     // folder: a locked file (data.db held open elsewhere) fails one removal and leaves the

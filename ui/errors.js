@@ -45,6 +45,7 @@ export const ERROR_MSG_KEYS = {
   "jobs-running": "errUpdateJobsRunning",
   "demo-recording-active": "errDemoRecordingActive",
   "demo-jobs-running": "errDemoJobsRunning",
+  "demo-folder-foreign": "errDemoFolderForeign",
   "ffmpeg-busy": "ffmpegDownloadBusy",
   "save-failed": "persistFailed",
   "refused: that path belongs to the program files": "errExportProgramFile",

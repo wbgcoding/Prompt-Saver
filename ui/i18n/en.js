@@ -1414,6 +1414,7 @@ export default {
     errUpdateJobsRunning: "Background jobs are still running. Let them finish, then install the update.",
     errDemoRecordingActive: "A recording is running. Finish it, then switch the demo mode.",
     errDemoJobsRunning: "Background jobs are still running. Let them finish, then switch the demo mode.",
+    errDemoFolderForeign: "A folder named prompt-saver-demo already exists next to your data and was not created by demo mode. Rename or remove it, then try again.",
     errUpdatePortableManual: "This is the portable version. The release page is open: download the new portable exe and replace this one.",
     errExportProgramFile: "That file belongs to the program and cannot be an export target.",
     errBackupTooLarge: "This backup is larger than 512 MB and was not restored",

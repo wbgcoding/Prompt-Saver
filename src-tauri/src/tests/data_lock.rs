@@ -1120,7 +1120,7 @@ fn build_demo_store_refuses_to_wipe_an_unmarked_existing_folder() {
     std::fs::write(&sentinel, b"a user's own file, nothing to do with demo mode").unwrap();
 
     let result = build_demo_store(&dir, None, "de");
-    assert!(result.is_err(), "an existing, unmarked folder must never be wiped: {result:?}");
+    assert_eq!(result, Err("demo-folder-foreign".to_string()), "an existing, unmarked folder must never be wiped");
     assert!(sentinel.exists(), "the user's own file must survive");
 
     let _ = std::fs::remove_dir_all(&dir);
