@@ -1080,6 +1080,11 @@ async function libIconAction(icon, id) {
   }
 }
 function bindLibraryList(list) {
+  // Backs up the sentinel observer: a scroll near the end draws the next page even if the
+  // observer's notification is late.
+  list.addEventListener("scroll", () => {
+    if (libShown < libItems.length && list.scrollHeight - list.scrollTop - list.clientHeight < 600) appendLibRows();
+  }, { passive: true });
   // Every row gets the same actions menu a grid tile has; the image and video editors are
   // entries of it.
   list.addEventListener("contextmenu", (e) => {
