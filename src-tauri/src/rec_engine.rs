@@ -442,10 +442,73 @@ pub(crate) fn audio_f32_to_i16(sample: f32) -> i16 {
     (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
 }
 
-// Down/up-mixes an interleaved f32 buffer from `in_channels` to `out_channels` (mono ->
-// stereo duplicates the channel; N>2 -> stereo keeps the first two) and resamples to
-// `out_rate` with linear interpolation, which is adequate for speech and system audio.
-// Returns interleaved i16 PCM at `out_channels`/`out_rate`.
+// Down/up-mixes interleaved f32 packets from `in_channels` to `out_channels` (mono -> stereo
+// duplicates the channel; N>2 -> stereo keeps the first two) and resamples to `out_rate` with
+// linear interpolation, which is adequate for speech and system audio. One instance lives per
+// capture thread and carries its position across packets: the output frame count follows the
+// rate ratio exactly over a long take, and the interpolation runs through each packet boundary
+// from the previous packet's last frame. Returns interleaved i16 PCM at `out_channels`/`out_rate`.
+pub(crate) struct AudioResampler {
+    in_channels: u32,
+    in_rate: u32,
+    out_channels: u32,
+    out_rate: u32,
+    // Output frames produced and input frames consumed in earlier packets: the next output
+    // frame sits at source position out_count * in_rate / out_rate, exact in integers.
+    out_count: u64,
+    consumed: u64,
+    prev: Vec<f32>,
+}
+
+impl AudioResampler {
+    pub(crate) fn new(in_channels: u32, in_rate: u32, out_channels: u32, out_rate: u32) -> Self {
+        Self { in_channels, in_rate, out_channels, out_rate, out_count: 0, consumed: 0, prev: Vec::new() }
+    }
+
+    pub(crate) fn convert(&mut self, samples: &[f32]) -> Vec<i16> {
+        if self.in_channels == 0 || self.out_channels == 0 || self.in_rate == 0 || self.out_rate == 0 {
+            return Vec::new();
+        }
+        let oc_n = self.out_channels as usize;
+        let in_frames = samples.len() / self.in_channels as usize;
+        // Channel-adapt first, in f32, one row per output channel.
+        let mut adapted = vec![0f32; in_frames * oc_n];
+        for frame in 0..in_frames {
+            for oc in 0..oc_n {
+                let ic = if self.in_channels == 1 { 0 } else { oc.min(self.in_channels as usize - 1) };
+                adapted[frame * oc_n + oc] = samples[frame * self.in_channels as usize + ic];
+            }
+        }
+        if self.in_rate == self.out_rate {
+            return adapted.into_iter().map(audio_f32_to_i16).collect();
+        }
+        if in_frames == 0 {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        loop {
+            let num = self.out_count * self.in_rate as u64;
+            let i0 = (num / self.out_rate as u64) as i64 - self.consumed as i64;
+            // The pair (i0, i0 + 1) must both be known; the rest waits for the next packet.
+            if i0 + 1 > in_frames as i64 - 1 {
+                break;
+            }
+            let frac = (num % self.out_rate as u64) as f32 / self.out_rate as f32;
+            for oc in 0..oc_n {
+                let a = if i0 < 0 { self.prev[oc] } else { adapted[i0 as usize * oc_n + oc] };
+                let b = adapted[(i0 + 1) as usize * oc_n + oc];
+                out.push(audio_f32_to_i16(a + (b - a) * frac));
+            }
+            self.out_count += 1;
+        }
+        self.consumed += in_frames as u64;
+        self.prev = adapted[(in_frames - 1) * oc_n..].to_vec();
+        out
+    }
+}
+
+// One packet through a fresh resampler, for the tests that only look at a single buffer.
+#[cfg(test)]
 pub(crate) fn audio_convert_to_target(
     samples: &[f32],
     in_channels: u32,
@@ -453,37 +516,7 @@ pub(crate) fn audio_convert_to_target(
     out_channels: u32,
     out_rate: u32,
 ) -> Vec<i16> {
-    if in_channels == 0 || out_channels == 0 || in_rate == 0 {
-        return Vec::new();
-    }
-    let in_frames = samples.len() / in_channels as usize;
-    // Channel-adapt first, in f32, one row per output channel.
-    let mut adapted = vec![0f32; in_frames * out_channels as usize];
-    for frame in 0..in_frames {
-        for oc in 0..out_channels as usize {
-            let ic = if in_channels == 1 { 0 } else { oc.min(in_channels as usize - 1) };
-            adapted[frame * out_channels as usize + oc] = samples[frame * in_channels as usize + ic];
-        }
-    }
-    if in_rate == out_rate {
-        return adapted.into_iter().map(audio_f32_to_i16).collect();
-    }
-    // Linear-interpolation resample, per output channel.
-    let out_frames = ((in_frames as u64) * out_rate as u64 / in_rate as u64) as usize;
-    let mut out = vec![0i16; out_frames * out_channels as usize];
-    for frame in 0..out_frames {
-        let src_pos = frame as f64 * in_rate as f64 / out_rate as f64;
-        let i0 = src_pos.floor() as usize;
-        let frac = (src_pos - i0 as f64) as f32;
-        let i1 = (i0 + 1).min(in_frames.saturating_sub(1));
-        let i0 = i0.min(in_frames.saturating_sub(1));
-        for oc in 0..out_channels as usize {
-            let a = adapted[i0 * out_channels as usize + oc];
-            let b = adapted[i1 * out_channels as usize + oc];
-            out[frame * out_channels as usize + oc] = audio_f32_to_i16(a + (b - a) * frac);
-        }
-    }
-    out
+    AudioResampler::new(in_channels, in_rate, out_channels, out_rate).convert(samples)
 }
 
 // Sums two equal-length interleaved i16 buffers (both sources active) with saturating

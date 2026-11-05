@@ -383,6 +383,29 @@ fn the_verified_pdfium_copy_is_remembered_after_the_first_check() {
     assert_eq!(body.matches("PDFIUM_VERIFIED.set(").count(), 2);
 }
 
+// Structural fix, no red unit test: the unpack needs a live app handle and a race to show.
+#[test]
+fn the_first_pdfium_unpack_is_serialized_and_runs_off_the_async_worker() {
+    let src = source!("../images.rs");
+    let body = &src[src.find("pub(crate) fn pdfium_lib_path").unwrap()..];
+    let lock = body.find("PDFIUM_UNPACK.lock()").expect("unpack lock");
+    let write = body.find("fs::write(&cached").expect("unpack write");
+    assert!(lock < write, "the lock is taken before the file is written");
+    let cmd = &src[src.find("async fn pdf_preview(").unwrap()..];
+    let blocking = cmd.find("spawn_blocking").unwrap();
+    assert!(blocking < cmd.find("pdfium_lib_path(").unwrap(), "the 7 MB check belongs on the blocking worker");
+}
+
+// Structural fix, no red unit test: a z-order cycle cannot be provoked from a test.
+#[test]
+fn the_z_order_walk_is_bounded() {
+    let src = source!("../capture.rs");
+    let walk = &src[src.find("GetTopWindow(0)").unwrap()..];
+    let walk = &walk[..walk.find("GetWindow(h, GW_HWNDNEXT)").unwrap()];
+    assert!(walk.contains("for _ in 0..4096"), "the walk over windows needs an iteration cap");
+    assert!(!walk.contains("while h != 0"));
+}
+
 // Structural fix, no red unit test: install_permission_handler cannot be made to fail in a test.
 #[test]
 fn a_camera_window_without_its_permission_handler_is_destroyed() {

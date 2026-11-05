@@ -1788,6 +1788,7 @@ export default {
     valRecMaxMb: "Parar por tamanho de arquivo",
     tipRecMaxMb: "Encerra a gravação de forma limpa quando o arquivo atinge esse tamanho, sem perder o que já foi gravado. Zero desativa o limite.",
     recStoppedByLimit: "A gravação terminou no limite configurado. Tudo até esse ponto foi salvo.",
+    recSourceLost: "A fonte da gravação foi perdida. A gravação foi salva.",
     recDiskLow: "Restam apenas {mb} MB nesta unidade. Isso corresponde a cerca de {min} minutos de gravação.",
     flagNumFieldWheel: "A roda do mouse altera o valor",
     tipNumFieldWheel: "Com o ponteiro sobre um campo numérico, a roda aumenta ou diminui o valor. Desative esta opção se você costuma passar por estes campos ao rolar a página.",

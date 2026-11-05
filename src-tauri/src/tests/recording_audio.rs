@@ -170,6 +170,47 @@ fn audio_convert_to_target_resamples_to_the_requested_rate() {
     assert_eq!(out.len(), 4); // 2 frames * 2 channels
 }
 
+fn sine_mono(frames: usize, rate: u32) -> Vec<f32> {
+    (0..frames).map(|i| 0.5 * (2.0 * std::f64::consts::PI * 440.0 * i as f64 / rate as f64).sin() as f32).collect()
+}
+
+#[test]
+fn a_resampler_carried_across_packets_matches_one_pass_over_the_whole_signal() {
+    for in_rate in [44_100u32, 96_000] {
+        let signal = sine_mono(in_rate as usize, in_rate);
+        let whole = audio_convert_to_target(&signal, 1, in_rate, 2, REC_AUDIO_SAMPLE_RATE);
+        let mut r = AudioResampler::new(1, in_rate, 2, REC_AUDIO_SAMPLE_RATE);
+        let mut chunked = Vec::new();
+        let mut at = 0usize;
+        for size in [441usize, 480, 333, 1024, 97].iter().cycle() {
+            if at >= signal.len() {
+                break;
+            }
+            let end = (at + size).min(signal.len());
+            chunked.extend(r.convert(&signal[at..end]));
+            at = end;
+        }
+        assert_eq!(chunked, whole, "{in_rate} Hz: a packet boundary must not change a sample");
+        let max_step = chunked.chunks(2).map(|f| f[0] as i32).collect::<Vec<_>>().windows(2).map(|w| (w[1] - w[0]).abs()).max().unwrap();
+        assert!(max_step < 1_000, "{in_rate} Hz: a 440 Hz sine steps at most ~950, got {max_step}");
+    }
+}
+
+#[test]
+fn a_resampler_keeps_the_rate_ratio_over_ten_seconds_of_packets() {
+    let in_rate = 44_100u32;
+    let packet = 440usize; // 478.9 output frames each
+    let mut r = AudioResampler::new(1, in_rate, 2, REC_AUDIO_SAMPLE_RATE);
+    let chunk = sine_mono(packet, in_rate);
+    let mut out_frames = 0usize;
+    for _ in 0..1003 {
+        out_frames += r.convert(&chunk).len() / 2;
+    }
+    let expected = 1003 * packet * REC_AUDIO_SAMPLE_RATE as usize / in_rate as usize; // about 10 s
+    // A per-packet floor would lose almost one output frame per packet (about 1000 over this run).
+    assert!(expected - out_frames <= 2, "got {out_frames}, expected {expected}");
+}
+
 #[test]
 fn audio_convert_to_target_empty_input_never_panics() {
     assert!(audio_convert_to_target(&[], 2, 48_000, 2, 48_000).is_empty());
@@ -927,6 +968,42 @@ fn the_first_frame_instant_is_kept_for_the_key_overlay_clock() {
     assert!(shared.has_first_frame());
 }
 
+#[test]
+fn a_lost_monitor_source_stops_the_take_with_its_own_code() {
+    let shared = RecFeederShared::new();
+    crate::recording::note_capture_source_lost(&shared, false);
+    assert_eq!(shared.peek_encode_error().as_deref(), Some("capture-source-lost"));
+    assert!(shared.is_stopping());
+}
+
+#[test]
+fn a_closed_window_source_or_a_take_already_stopping_is_left_alone() {
+    let window = RecFeederShared::new();
+    crate::recording::note_capture_source_lost(&window, true);
+    assert!(window.peek_encode_error().is_none() && !window.is_stopping());
+    let stopping = RecFeederShared::new();
+    stopping.request_stop();
+    crate::recording::note_capture_source_lost(&stopping, false);
+    assert!(stopping.peek_encode_error().is_none(), "a normal stop must not turn into an error");
+}
+
+#[test]
+fn the_capture_handler_reports_a_closed_source() {
+    let rec = source!("../recording.rs");
+    let handler = rec.split("impl GraphicsCaptureApiHandler for RecHandler").nth(1).unwrap().split("\n}\n").next().unwrap();
+    assert!(handler.contains("fn on_closed(") && handler.contains("note_capture_source_lost("));
+    let capture_js = source!("../../../ui/capture.js");
+    assert!(capture_js.contains("\"capture-source-lost\""));
+}
+
+#[test]
+fn the_first_video_frame_is_marked_for_a_take_without_audio() {
+    let shared = RecFeederShared::new();
+    crate::recording::note_first_video_frame(&shared);
+    assert!(shared.has_first_frame());
+    assert!(shared.first_frame_mono_ms().is_some());
+}
+
 // Structural: the capture and the feeder run on real devices, so the wiring is pinned in the source.
 #[test]
 fn the_key_overlay_clock_is_moved_to_the_first_frame_from_both_sides() {
@@ -934,7 +1011,15 @@ fn the_key_overlay_clock_is_moved_to_the_first_frame_from_both_sides() {
     let drain = rec.split("fn drain_pending_frames(").nth(1).unwrap().split("
 }
 ").next().unwrap();
-    assert!(drain.contains("keylog::rebase_start("), "the feeder must move the overlay clock when the first frame arrives");
+    assert!(drain.contains("note_first_video_frame("), "the feeder must move the overlay clock when the first frame arrives");
+    let video_only = rec.split("fn feeder_loop(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(video_only.contains("note_first_video_frame("), "a take without audio must mark its first frame too");
+    let helper = rec.split("fn note_first_video_frame(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(helper.contains("keylog::rebase_start(") && helper.contains("mark_first_frame("));
     let cmds = source!("../rec_cmds.rs");
     assert_eq!(cmds.matches("recording::align_key_overlay_start(").count(), 2, "start and continue must both align a late-installed capture");
 }

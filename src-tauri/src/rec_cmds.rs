@@ -174,10 +174,7 @@ pub(crate) fn resolve_recording_target(
 }
 
 // Everything but the target that start_recording reads from the settings store to build one
-// recording::start() call, pulled out so finish_and_continue_recording reopens with the same
-// resolved settings instead of a duplicated block that could drift. Settings are re-read fresh
-// on purpose: a value the user changed while recording (bitrate, mic device, canvas mode, ...)
-// takes effect from the next part, as it would at the first start_recording call.
+// recording::start() call. A continued part reuses the running session's values instead.
 #[cfg(windows)]
 pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64, f64, f64) {
     // recCursor ships on; only an explicit false switches it off. recAudioSystem and recAudioMic

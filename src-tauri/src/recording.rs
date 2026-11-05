@@ -250,10 +250,27 @@ impl GraphicsCaptureApiHandler for RecHandler {
         }
         Ok(())
     }
+
+    fn on_closed(&mut self) -> Result<(), Self::Error> {
+        // A window target is watched by the control bar, and a live switch closes its old
+        // handler on purpose; only a monitor or region source going away ends here.
+        note_capture_source_lost(&self.shared, self.placement.is_some());
+        Ok(())
+    }
+}
+
+/// A monitor or region capture whose source vanished (display unplugged, mode change): the take
+/// stops through the usual stop path with a code the main window turns into a notice.
+pub(crate) fn note_capture_source_lost(shared: &RecFeederShared, window_target: bool) {
+    if window_target || shared.is_stopping() {
+        return;
+    }
+    shared.set_encode_error("capture-source-lost".to_string());
+    shared.request_stop();
 }
 
 // audio_kbps None disables the encoder's audio track (no active source); Some(kbps) enables
-// it at the fixed target format (48 kHz stereo 16-bit AAC) that audio_convert_to_target
+// it at the fixed target format (48 kHz stereo 16-bit AAC) that AudioResampler
 // and the feeder's audio tick already produce.
 fn build_encoder(
     width: u32, height: u32, path: &Path, audio_kbps: Option<u32>, video_kbps: u32, video_fps: u32,
@@ -296,6 +313,9 @@ fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
     // which the encoder must never see.
     let mut last_sent: Option<i64> = None;
     while let Some(item) = shared.pop_or_stop() {
+        if last_sent.is_none() {
+            note_first_video_frame(&shared);
+        }
         let ts = strictly_increasing_ts(&mut last_sent, item.ts);
         if let Err(e) = encoder.send_frame_buffer(&item.bytes, ts) {
             append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
@@ -308,6 +328,14 @@ fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
         append_crash_log(&format!("recording: encoder finish failed: {e}"));
         shared.set_encode_error(e.to_string());
     }
+}
+
+/// The video track starts at its first frame: records that instant and moves the key overlay
+/// clock to it.
+pub(crate) fn note_first_video_frame(shared: &RecFeederShared) {
+    let at = keylog::mono_ms();
+    shared.mark_first_frame(at);
+    keylog::rebase_start(at);
 }
 
 /// Returns `ts`, or one tick past the last sent timestamp when `ts` would not
@@ -336,10 +364,7 @@ fn drain_pending_frames(
     while let Some(item) = shared.try_pop() {
         if !*video_started {
             *video_started = true;
-            let at = keylog::mono_ms();
-            shared.mark_first_frame(at);
-            // The video track starts at this frame: the key overlay counts from here too.
-            keylog::rebase_start(at);
+            note_first_video_frame(shared);
             for q in queues {
                 q.clear();
             }

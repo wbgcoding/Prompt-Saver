@@ -1795,6 +1795,7 @@ export default {
     valRecMaxMb: "Stop at file size",
     tipRecMaxMb: "Ends the recording once the file reaches this size, cleanly and without losing what was recorded. Zero switches the limit off.",
     recStoppedByLimit: "Recording ended at the limit you set. Everything up to that point was saved.",
+    recSourceLost: "Recording source lost. The recording was saved.",
     recDiskLow: "Only {mb} MB left on this drive. That is roughly {min} minutes of recording.",
     flagNumFieldWheel: "Mouse wheel changes the value",
     tipNumFieldWheel: "With the pointer over a number field the wheel counts up and down. Switch it off if you scroll past these fields a lot.",

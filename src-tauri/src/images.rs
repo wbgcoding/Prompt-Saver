@@ -352,6 +352,7 @@ static PDFIUM_VERIFIED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new(
 // read only) no other process can write, rename or delete the file, so the bytes compared
 // are the bytes the loader later maps.
 static PDFIUM_HOLD: std::sync::OnceLock<fs::File> = std::sync::OnceLock::new();
+static PDFIUM_UNPACK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 // Opens `path` so that others may read it but not write, rename or delete it, reads it from
 // that very handle and returns the handle only when the content equals `expected`.
@@ -378,6 +379,12 @@ pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
         return Some(found);
     }
+    if let Some(done) = PDFIUM_VERIFIED.get().filter(|p| p.exists()) {
+        return Some(done.clone());
+    }
+    // Two first-time previews must not unpack at once: one holds the verified copy open (read
+    // only) while the other tries to write it, or reads it half written.
+    let _unpack = PDFIUM_UNPACK.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(done) = PDFIUM_VERIFIED.get().filter(|p| p.exists()) {
         return Some(done.clone());
     }
@@ -422,8 +429,8 @@ pub(crate) async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>)
     if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
         return None;
     }
-    let lib = pdfium_lib_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let lib = pdfium_lib_path(&app)?;
         let bindings = Pdfium::bind_to_library(lib).ok()?;
         let pdfium = Pdfium::new(bindings);
         let document = pdfium.load_pdf_from_file(&path, None).ok()?;

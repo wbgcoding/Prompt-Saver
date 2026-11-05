@@ -1788,6 +1788,7 @@ export default {
     valRecMaxMb: "Stoppen bij bestandsgrootte",
     tipRecMaxMb: "Beëindigt de opname netjes zodra het bestand deze grootte bereikt, zonder dat het opgenomen materiaal verloren gaat. Nul schakelt de limiet uit.",
     recStoppedByLimit: "Opname beëindigd bij de ingestelde limiet. Alles tot dat punt is opgeslagen.",
+    recSourceLost: "Opnamebron verloren. De opname is opgeslagen.",
     recDiskLow: "Er is nog maar {mb} MB over op dit station. Dat is ongeveer {min} minuten opname.",
     flagNumFieldWheel: "Muiswiel verandert de waarde",
     tipNumFieldWheel: "Met de muisaanwijzer boven een getalveld telt het wiel omhoog en omlaag. Schakel dit uit als je vaak langs deze velden scrolt.",

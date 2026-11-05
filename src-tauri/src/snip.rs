@@ -221,11 +221,16 @@ pub(crate) fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
 pub(crate) static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
 pub(crate) static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
+// The process id keeps a second running instance from writing or deleting this one's preview.
+pub(crate) fn snip_preview_name(pid: u32, seq: u64) -> String {
+    format!("{}-snip-{}-{}.jpg", brand::TEMP_PREFIX, pid, seq)
+}
+
 // None when the file could not be written or when the session `gen` belongs to is
 // gone: a stale encode must never replace (and delete) the newer session's preview.
 pub(crate) fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
     let seq = SNIP_PREVIEW_SEQ.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, seq));
+    let path = std::env::temp_dir().join(snip_preview_name(std::process::id(), seq));
     let mut slot = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner());
     if SNIP_GEN.load(Ordering::SeqCst) != gen {
         return None;
