@@ -372,7 +372,9 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
     let (pw, ph) = free_size.unwrap_or_else(|| pill_dims(is_image_prompt(prompt), scale));
     // Spots and `taken` are physical pixels, the window sizes logical ones.
     let dpi = main_scale_factor(app);
-    let (x, y, parked) = resolve_float_spot(&pos, pw * dpi, ph * dpi, &screen_snapshot(app), taken);
+    let screens = screen_snapshot(app);
+    let park_work = park_work_rect(app, &screens);
+    let (x, y, parked) = resolve_float_spot(&pos, pw * dpi, ph * dpi, &screens, park_work, taken);
     taken.push(Rect { x, y, w: pw * dpi, h: ph * dpi });
     mark_parked(app, &prompt.id, parked);
 
@@ -808,7 +810,10 @@ pub(crate) fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
 // A `pos.screen` of "" (saved before the field existed) falls back to plain coordinate
 // containment, so an upgrade never parks an unmoved button. Once a screen id is recorded,
 // only that exact screen counts as home; a different monitor covering the same point parks.
-pub(crate) fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], taken: &[Rect]) -> (f64, f64, bool) {
+//
+// `park_work` is the main screen's work area (the screen minus the task bar), the rectangle a
+// parked box is placed in; without one the whole main screen is used.
+pub(crate) fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], park_work: Option<Rect>, taken: &[Rect]) -> (f64, f64, bool) {
     if screens.is_empty() {
         // A failed monitor probe must never look like "every screen is gone".
         return (pos.x as f64, pos.y as f64, false);
@@ -821,7 +826,7 @@ pub(crate) fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRec
         return (pos.x as f64, pos.y as f64, false);
     }
     let (mx, my, mw, mh) = (screens[0].1, screens[0].2, screens[0].3, screens[0].4);
-    let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
+    let work = park_work.unwrap_or(Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 });
     let wish = Rect { x: work.x, y: work.y, w, h };
     let (x, y) = spread_free_positions(std::slice::from_ref(&wish), taken, work)
         .into_iter()
@@ -1078,6 +1083,12 @@ pub(crate) fn work_rect_at(app: &AppHandle, x: f64, y: f64) -> Rect {
     }
 }
 
+// The work area of the first (main) screen of a snapshot, where parked and recalled boxes are
+// placed so none lands under the task bar. None when the snapshot is empty.
+fn park_work_rect(app: &AppHandle, screens: &[ScreenRect]) -> Option<Rect> {
+    screens.first().map(|(_, x, y, ..)| work_rect_at(app, *x as f64 + 1.0, *y as f64 + 1.0))
+}
+
 // Move and resize in one OS call, in physical pixels (two calls leave a visibly wrong
 // intermediate frame).
 pub(crate) fn set_bounds_phys(win: &tauri::WebviewWindow, r: Rect) {
@@ -1110,7 +1121,9 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
     };
     let side = folder_box(folder.scale);
     let dpi = main_scale_factor(app); // physical spots, logical size
-    let (x, y, parked) = resolve_float_spot(&folder.pos, side * dpi, side * dpi, &screen_snapshot(app), taken);
+    let screens = screen_snapshot(app);
+    let park_work = park_work_rect(app, &screens);
+    let (x, y, parked) = resolve_float_spot(&folder.pos, side * dpi, side * dpi, &screens, park_work, taken);
     taken.push(Rect { x, y, w: side * dpi, h: side * dpi });
     mark_parked(app, &folder.id, parked);
 
@@ -1259,11 +1272,8 @@ pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result
     // Monitor and window queries wait for the main thread, so they run before
     // the store lock is taken: the main thread may be waiting on that lock.
     let screens = screen_snapshot(&app);
-    let (main_id, mx, my, mw, mh) = screens
-        .first()
-        .cloned()
-        .unwrap_or((String::new(), 0, 0, 1920, 1080));
-    let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
+    let main_id = screens.first().map(|s| s.0.clone()).unwrap_or_default();
+    let work = park_work_rect(&app, &screens).unwrap_or(Rect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 });
     // The work area is in physical pixels, the box sizes in logical ones: scale
     // them by the main screen's own factor, as the folder dissolve does.
     let dpi = main_scale_factor(&app);
