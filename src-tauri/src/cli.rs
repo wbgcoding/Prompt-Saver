@@ -481,17 +481,19 @@ async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedP
         // exit handlers) is no proof of life, and an answer of success would end the new launch
         // without any window. The wait re-checks the exit flag, so an exit that starts after the
         // closure was queued is still reported as an exit; the launch side enforces its own timeout.
-        while queued {
-            match tokio::time::timeout(std::time::Duration::from_millis(50), &mut rx).await {
-                Ok(r) => {
-                    reached = r.is_ok();
-                    break;
+        if queued {
+            loop {
+                match tokio::time::timeout(std::time::Duration::from_millis(50), &mut rx).await {
+                    Ok(r) => {
+                        reached = r.is_ok();
+                        break;
+                    }
+                    Err(_) if EXITING.load(Ordering::SeqCst) => {
+                        exiting = true;
+                        break;
+                    }
+                    Err(_) => {}
                 }
-                Err(_) if EXITING.load(Ordering::SeqCst) => {
-                    exiting = true;
-                    break;
-                }
-                Err(_) => {}
             }
         }
     }
