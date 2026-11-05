@@ -25,7 +25,7 @@ function makeEl(id) {
     addEventListener: (t, f) => { (handlers[t] ||= new Set()).add(f); },
     removeEventListener: (t, f) => { handlers[t]?.delete(f); },
     fire: (t) => { for (const f of [...(handlers[t] || [])]) f({ target: null }); },
-    setAttribute() {}, appendChild() {}, focus() { doc.activeElement = this; }, select() {},
+    attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, appendChild() {}, focus() { doc.activeElement = this; }, select() {},
     querySelector: () => null,
   };
 }
@@ -85,6 +85,17 @@ const open = (name) => confirmDialog({ title: name, message: "m", confirmLabel: 
   check("a dialog opened right after an answer shows in the same tick", title(), "G");
   els["confirm-cancel"].fire("click");
   check("G answered no", await g, false);
+
+  // The reveal eye names its next action for a screen reader too, and follows the toggle.
+  const h = confirmDialog({ title: "H", message: "m", confirmLabel: "ok", input: {} });
+  const eye = els["confirm-input-eye"];
+  check("the eye title at open", eye.title, "showPassword");
+  check("the eye aria-label at open", eye.attrs["aria-label"], "showPassword");
+  eye.fire("click");
+  check("the eye title after reveal", eye.title, "hidePassword");
+  check("the eye aria-label after reveal", eye.attrs["aria-label"], "hidePassword");
+  els["confirm-cancel"].fire("click");
+  await h;
 
   if (problems.length) {
     console.log("dialog_queue_check: FAIL\n  " + problems.join("\n  "));

@@ -99,8 +99,8 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
     openType = field.type;
     field.placeholder = input.placeholder || "";
     eye.innerHTML = input.copy ? COPY_SVG : EYE_SVG;
-    eye.title = input.copy ? t("copy") : "";
-    eye.setAttribute("aria-label", input.copy ? t("copy") : t("showPassword"));
+    eye.title = t(input.copy ? "copy" : "showPassword");
+    eye.setAttribute("aria-label", eye.title);
     eye.classList.toggle("hidden", field.type !== "password" && !input.copy);
     // Native browser completion from the given list (e.g. existing tag names), wired only
     // when the caller passes one.
@@ -166,6 +166,8 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
         return;
       }
       field.type = field.type === "password" ? "text" : "password";
+      eye.title = t(field.type === "password" ? "showPassword" : "hidePassword");
+      eye.setAttribute("aria-label", eye.title);
     };
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
