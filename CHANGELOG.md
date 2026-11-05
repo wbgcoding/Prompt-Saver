@@ -4,7 +4,51 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
 
-## 3.1.0 (unreleased)
+## 3.2.0 (unreleased, provisional number)
+
+A maintenance release: a full pass over the code fixed many small faults in
+saving, backups, recordings, the editors and the installer.
+
+### Fixed
+
+- **Data and backups.** Undoing a cleared copy history no longer counts the
+  copies twice, an undone delete gets a new id when its old one is taken again,
+  a selective backup restore keeps the journal, a restore with neither scope
+  box checked does nothing, a failed backup unpack leaves no staged copy
+  behind, and moving the data folder to another drive no longer re-imports the
+  old store or loses files when the move fails.
+- **Saving under load.** Window positions, pill positions and the tray menu no
+  longer wait on or lose changes while the store is busy, a failed prompt save
+  shows the real error, and prompt names are trimmed on import and restore like
+  in the editor.
+- **Recordings and dictation.** Silent microphone stretches are kept, the
+  microphone tail is written before the file closes, the time estimate counts
+  the microphone track, the recording bar stays put while minimized, a region
+  on the first monitor records the right screen, and speech keeps dictation
+  from timing out.
+- **Screenshot and video editors.** Enter in crop mode and Tab with a popover
+  open work again, scrubbing stops when the mouse is released outside the seek
+  bar, the still-frame button stays off without ffmpeg, a zero opacity halo
+  stays invisible, a covered window that was maximized is maximized again after
+  the shot, and the snip overlay gets focus when it returns with an error.
+- **Main window and floating buttons.** A floating button whose video fails to
+  load still gets a size, folders grow when dragged out at the left or top
+  edge, hotkeys accept the plus key, global search returns focus where it
+  started, the compare view ignores double clicks, the crash draft stays
+  unless you choose Discard, and the Data export buttons wrap instead of
+  overlapping.
+- **Updates and installer.** Skipping a version keeps the update notice when
+  saving the choice fails, silent installs refuse a downgrade, and the app
+  starts with its original command line after installing WebView2.
+
+### Security
+
+- **Confidential prompts** are checked against the vault on every copy path,
+  and snapshots sealed with another vault key are refused.
+- **Export targets** must match the chosen format, and a read-only folder is
+  refused before an attachment is copied into it.
+
+## 3.1.0 (2026-10-31)
 
 New in 3.1: tags, custom themes, folders for grid tiles, view tabs and
 floating buttons, self-filling and choice placeholders, a markdown preview with
