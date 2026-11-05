@@ -521,6 +521,19 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   if (toastEl.matches(":hover")) { toastHovered = true; pauseToast(); }
 }
 
+// Dialogs closed with Escape hand focus back to what opened them (the editor does the same
+// with its own opener); the opener is taken while the dialog is still closed.
+const dialogOpeners = new WeakMap();
+export function rememberOpener(el) {
+  if (el.classList.contains("hidden")) dialogOpeners.set(el, document.activeElement);
+}
+export function hideRestoringFocus(el) {
+  el.classList.add("hidden");
+  const opener = dialogOpeners.get(el);
+  dialogOpeners.delete(el);
+  if (opener?.isConnected && opener !== document.body) opener.focus?.();
+}
+
 // An unprompted notice: shown with the long notice lifetime, and only once the window is
 // actually visible (a start into the tray would otherwise let it expire unseen).
 export function noticeToast(msg) {

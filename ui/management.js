@@ -1,5 +1,5 @@
 // Statistics, duplicate finder, compare view, trash, error log.
-import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, rememberOpener, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
 import { applyFlags, applyValues, jumpToExpertSetting, renderExpert, rowResetBtn } from "./expertMenu.js";
 import { loadPalette, refreshColorUI } from "./theme.js";
@@ -228,6 +228,7 @@ export function jumpToPrompt(name) {
 
 // ---- Duplicate finder ----
 export async function openDupes() {
+  rememberOpener($("dupes-modal"));
   $("dupes-modal").classList.remove("hidden");
   await scanDupes();
 }
@@ -564,6 +565,7 @@ export async function maybeShowSimilarHint(id) {
 // only place it can come back from or be purged for good.
 export let trashList = [];
 export async function openTrash() {
+  rememberOpener($("trash-modal"));
   $("trash-modal").classList.remove("hidden");
   try { trashList = await invoke("list_trash"); } catch (e) { errToast(e); trashList = []; }
   renderTrashList();

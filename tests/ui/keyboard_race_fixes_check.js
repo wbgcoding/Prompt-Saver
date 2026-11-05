@@ -331,6 +331,40 @@ later(async () => {
   check(/\.media-sound:focus-within \.media-vol-pop[^{]*\{[^}]*visibility:\s*visible/.test(css), "the volume popup is visible on :focus-within");
 });
 
+// main.js + core.js: Escape on about, dupes, trash and help gives focus back to the opener.
+later(async () => {
+  const main = read("main.js");
+  for (const id of ['$("about-modal")', '$("dupes-modal")', '$("trash-modal")', "helpEl"]) {
+    check(main.includes(`hideRestoringFocus(${id})`), `Escape closes ${id} through hideRestoringFocus`);
+  }
+  const core = read("core.js");
+  const a = core.indexOf("const dialogOpeners");
+  if (a === -1) { check(false, "dialog opener memory missing"); return; }
+  const code = (core.slice(a, core.indexOf("// An unprompted notice")).replace(/export /g, "")) + "\n;globalThis.api = { rememberOpener, hideRestoringFocus };";
+  const log = [];
+  const el = (name, connected = true) => ({ name, isConnected: connected, focus: () => log.push("focus:" + name) });
+  const dlg = () => { const h = new Set(["hidden"]); return { classList: { contains: (c) => h.has(c), add: (c) => h.add(c), remove: (c) => h.delete(c) } }; };
+  const doc = { activeElement: null, body: el("body") };
+  const sandbox = run(code, { document: doc, WeakMap });
+  const { rememberOpener, hideRestoringFocus } = sandbox.api;
+  const d = dlg();
+  doc.activeElement = el("btn");
+  rememberOpener(d);
+  d.classList.remove("hidden");
+  doc.activeElement = el("inside");
+  rememberOpener(d); // already open: must not overwrite the opener
+  hideRestoringFocus(d);
+  check(d.classList.contains("hidden") && log.join() === "focus:btn", `focus returns to the opener, got ${log}`);
+  log.length = 0;
+  hideRestoringFocus(d);
+  check(log.length === 0, "the opener is used once");
+  const d2 = dlg();
+  doc.activeElement = el("gone", false);
+  rememberOpener(d2); d2.classList.remove("hidden");
+  hideRestoringFocus(d2);
+  check(log.length === 0, "a removed opener is skipped");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
