@@ -744,13 +744,16 @@ pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String,
 // claim its members in normalize_tile_folders' one-folder-per-prompt rule and starve a new
 // folder.
 pub(crate) fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[String]) -> Result<(), String> {
-    if settings.views.len() <= 1 {
+    // Counts views with another id, not entries: two views sharing the id would otherwise
+    // both go and leave the list empty.
+    if !settings.views.iter().any(|v| v.id != id) {
         return Err("cannot delete the last view".to_string());
     }
     settings.views.retain(|v| v.id != id);
     if settings.active_view == id {
-        let first_id = settings.views[0].id.clone();
-        settings.active_view.clone_from(&first_id);
+        if let Some(first) = settings.views.first() {
+            settings.active_view = first.id.clone();
+        }
     }
     let view_ids: Vec<String> = settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut settings.tile_folders, prompt_ids, &view_ids);

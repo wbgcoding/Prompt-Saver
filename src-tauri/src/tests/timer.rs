@@ -489,6 +489,24 @@ fn deleting_a_view_also_drops_its_grid_folders() {
 }
 
 #[test]
+fn views_sharing_an_id_cannot_empty_the_list() {
+    let mut settings = Settings {
+        views: vec![test_view("a"), test_view("a"), test_view("b")],
+        active_view: "a".to_string(),
+        ..Settings::default()
+    };
+    settings.migrate();
+    let ids: std::collections::HashSet<_> = settings.views.iter().map(|v| v.id.clone()).collect();
+    assert_eq!(ids.len(), 3, "a later duplicate id must be replaced");
+    assert_eq!(settings.views[0].id, "a");
+
+    // Built by hand, past normalize: the guard alone must keep one view.
+    let mut raw = Settings { views: vec![test_view("a"), test_view("a")], active_view: "a".to_string(), ..Settings::default() };
+    assert!(remove_view_from_settings(&mut raw, "a", &[]).is_err());
+    assert_eq!(raw.views.len(), 2);
+}
+
+#[test]
 fn a_failed_settings_save_rolls_the_tag_rename_back_on_disk_too() {
     let mut p = test_prompt("p1");
     p.tags = vec!["Old".to_string()];

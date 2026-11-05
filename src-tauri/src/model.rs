@@ -1247,6 +1247,13 @@ impl Settings {
         // ceilings the commands enforce must hold: a hand-edited backup with cols near u32::MAX
         // would make the grid renderer build billions of cells and the window never paint again.
         self.views.truncate(MAX_VIEWS);
+        // A later view reusing an id would be deleted together with the first one.
+        let mut seen_view_ids = std::collections::HashSet::new();
+        for v in self.views.iter_mut() {
+            while !seen_view_ids.insert(v.id.clone()) {
+                v.id = gen_id();
+            }
+        }
         for v in self.views.iter_mut() {
             v.cols = v.cols.clamp(GRID_MIN, GRID_MAX);
             v.rows = v.rows.clamp(GRID_MIN, GRID_MAX);
