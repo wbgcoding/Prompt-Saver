@@ -995,6 +995,8 @@ def run(browser, tmp):
         // discarding the crop drops it from the list, every index behind it moves
         await baTool('crop');
         baKey('Escape'); await sleep(80);
+        await baUndo(); // the discard is an undo step of its own
+        await sleep(60);
         const drawn = [];
         const orig = CanvasRenderingContext2D.prototype.fillText;
         CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
