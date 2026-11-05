@@ -1768,6 +1768,26 @@ section(() => {
   check(/langUpdateNotice\(e\.payload, "voiceLangsManage", openVoiceLangsModal, "voice_lang_snooze"/.test(src), "the voice notice opens the voice dialog");
 });
 
+// 97. The recording start countdown can be cancelled: Escape while it runs, and a Cancel action on
+// its toast; Escape does nothing when no countdown runs.
+section(() => {
+  const src = read("capture.js");
+  const code = "let recCountdownTimer = 7;\n" + extractBlock(src, "function cancelRecCountdown(") + "\n"
+    + extractBlock(src, "function recCountdownEscape(") + ";globalThis.api = { recCountdownEscape, cancelRecCountdown, timer: () => recCountdownTimer };";
+  const log = [];
+  const sb = run(code, { clearTimeout: (id) => log.push("clear:" + id), hideToast: () => log.push("hide") });
+  const key = (k) => ({ key: k, preventDefault: () => log.push("prevent") });
+  sb.api.recCountdownEscape(key("Enter"));
+  check(log.length === 0 && sb.api.timer() === 7, "other keys leave the countdown alone");
+  sb.api.recCountdownEscape(key("Escape"));
+  check(log.join() === "prevent,clear:7,hide" && sb.api.timer() === 0, "Escape stops the countdown and closes its toast");
+  log.length = 0;
+  sb.api.recCountdownEscape(key("Escape"));
+  check(log.length === 0, "Escape without a countdown does nothing");
+  check(/toast\(t\("recCountdownToast"\)[^\n]*onClick: cancelRecCountdown/.test(src), "the countdown toast carries a Cancel action");
+  check(/document\.addEventListener\("keydown", recCountdownEscape\)/.test(src), "the Escape handler is registered");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

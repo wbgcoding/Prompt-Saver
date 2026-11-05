@@ -160,6 +160,15 @@ export function bindCapture() {
     clearTimeout(recCountdownTimer);
     recCountdownTimer = 0;
   }
+  // Escape stops a running start countdown (the toast's Cancel button does the same); outside
+  // a countdown the key is left alone.
+  function recCountdownEscape(e) {
+    if (e.key !== "Escape" || !recCountdownTimer) return;
+    e.preventDefault();
+    cancelRecCountdown();
+    hideToast();
+  }
+  document.addEventListener("keydown", recCountdownEscape);
   listen("recorder-target-picked", async (e) => {
     const p = e.payload || {};
     // A pick made from the running recording's own bar switches its target; recbar.js handles
@@ -216,7 +225,7 @@ export function bindCapture() {
     let n = Math.round(val("recCountdownS"));
     if (n <= 0) { await startNow(); return; }
     const tick = () => {
-      toast(t("recCountdownToast").replace("{n}", () => n));
+      toast(t("recCountdownToast").replace("{n}", () => n), n > 0 ? { label: t("cancel"), onClick: cancelRecCountdown } : null);
       n -= 1;
       if (n < 0) { recCountdownTimer = 0; startNow(); return; }
       recCountdownTimer = setTimeout(tick, 1000);
