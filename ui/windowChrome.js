@@ -17,7 +17,7 @@ export function applyI18n() {
   // The placeholder stays short so the field keeps one line in a small window; the save
   // shortcut is built from the shortcut table and lives in the tooltip and accessible name.
   inputEl.placeholder = t("promptPhComposer");
-  const composerTip = t("composerTip").replace("{keys}", () => keysLabel("mainCreate", LANG));
+  const composerTip = t("composerTip").replace("{keys}", () => keysLabel("mainCreate", LANG, t));
   inputEl.title = composerTip;
   inputEl.setAttribute("aria-label", composerTip);
   // A shortcut-bearing element gets its tooltip built from SHORTCUTS (base

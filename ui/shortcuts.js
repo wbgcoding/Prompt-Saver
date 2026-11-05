@@ -110,7 +110,15 @@ const CODE_LABELS = {
   Home: "Home", End: "End",
   Arrows: "↑↓←→",
 };
-function codeLabel(code) {
+// The named keys a translator can word: the code's label, looked up through the caller's `t`.
+const CODE_KEY_NAMES = {
+  Space: (t) => t("keySpace"),
+  ArrowLeft: (t) => t("keyLeft"), ArrowRight: (t) => t("keyRight"),
+  ArrowUp: (t) => t("keyUp"), ArrowDown: (t) => t("keyDown"),
+  Home: (t) => t("keyHome"), End: (t) => t("keyEnd"),
+};
+function codeLabel(code, t) {
+  if (t && CODE_KEY_NAMES[code]) return CODE_KEY_NAMES[code](t);
   if (CODE_LABELS[code]) return CODE_LABELS[code];
   if (code.startsWith("Key")) return code.slice(3);
   if (code.startsWith("Digit")) return code.slice(5);
@@ -118,18 +126,19 @@ function codeLabel(code) {
 }
 
 const MOD_ORDER = ["ctrl", "shift", "alt"];
-function modLabel(mod, lang) {
-  if (mod === "ctrl") return lang === "de" ? "Strg" : "Ctrl";
-  if (mod === "shift") return "Shift";
-  if (mod === "alt") return "Alt";
+function modLabel(mod, lang, t) {
+  if (mod === "ctrl") return t ? t("keyCtrl") : lang === "de" ? "Strg" : "Ctrl";
+  if (mod === "shift") return t ? t("keyShift") : "Shift";
+  if (mod === "alt") return t ? t("keyAlt") : "Alt";
   return mod;
 }
 
-// "Ctrl+Shift+Z" / "Strg+Z" / "V": the key half of the tooltip, never
-// translated except the "Strg" abbreviation above.
-export function formatKeys(entry, lang) {
-  const mods = MOD_ORDER.filter((m) => (entry.mods || []).includes(m)).map((m) => modLabel(m, lang));
-  return [...mods, codeLabel(entry.code)].join("+");
+// "Ctrl+Shift+Z" / "Strg+Umschalt+Z" / "V": the key half of the tooltip. With the caller's
+// translator the modifiers and the named keys follow the UI language; without one (the
+// launcher, which has no i18n of its own) the English names stay, only Ctrl becomes "Strg" in German.
+export function formatKeys(entry, lang, t) {
+  const mods = MOD_ORDER.filter((m) => (entry.mods || []).includes(m)).map((m) => modLabel(m, lang, t));
+  return [...mods, codeLabel(entry.code, t)].join("+");
 }
 
 function findEntry(action) {
@@ -138,9 +147,9 @@ function findEntry(action) {
 
 // The key combo of one action as text ("Ctrl+Enter", "Strg+Enter"), for a
 // sentence that names the shortcut instead of a tooltip.
-export function keysLabel(action, lang) {
+export function keysLabel(action, lang, t) {
   const entry = findEntry(action);
-  return entry ? formatKeys(entry, lang) : "";
+  return entry ? formatKeys(entry, lang, t) : "";
 }
 
 // A tooltip already ending in "(<something>)" (optionally followed by "." or "。") carries
@@ -159,7 +168,7 @@ export function withShortcut(el, action, t, lang) {
   const entry = findEntry(action);
   if (!entry || !el) return el;
   const base = stripTrailingHint(t(entry.descKey));
-  el.title = `${base} (${formatKeys(entry, lang)})`;
+  el.title = `${base} (${formatKeys(entry, lang, t)})`;
   el.dataset.shortcutAction = action;
   return el;
 }
@@ -186,7 +195,7 @@ export function rowsForScope(scope, t, lang) {
     }
     if (seen.has(entry.descKey)) continue;
     seen.add(entry.descKey);
-    const keys = KEYS_TEXT[entry.action] ? t(KEYS_TEXT[entry.action]) : formatKeys(entry, lang);
+    const keys = KEYS_TEXT[entry.action] ? t(KEYS_TEXT[entry.action]) : formatKeys(entry, lang, t);
     rows.push({ desc: stripTrailingHint(t(entry.descKey)), keys });
   }
   return rows;

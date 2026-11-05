@@ -149,6 +149,15 @@ async function main() {
   expect("letterCode Cyrillic", shortcuts.letterCode({ key: "я", code: "KeyZ" }), "KeyZ");
   expect("letterCode non-letter", shortcuts.letterCode({ key: "Enter", code: "Enter" }), "Enter");
 
+  // ---- key names follow the caller's translator; without one the English names stay
+  const de = { keyCtrl: "Strg", keyShift: "Umschalt", keyAlt: "Alt", keyLeft: "Links", keySpace: "Leertaste" };
+  const tde = (k) => de[k] || k;
+  expect("formatKeys: translated modifiers and named key", shortcuts.formatKeys({ code: "ArrowLeft", mods: ["ctrl", "shift"] }, "de", tde), "Strg+Umschalt+Links");
+  expect("formatKeys: translated space", shortcuts.formatKeys({ code: "Space", mods: [] }, "de", tde), "Leertaste");
+  expect("formatKeys: a letter stays the letter", shortcuts.formatKeys({ code: "KeyZ", mods: ["ctrl"] }, "de", tde), "Strg+Z");
+  expect("formatKeys: no translator keeps the English names", shortcuts.formatKeys({ code: "ArrowLeft", mods: ["shift"] }, "de"), "Shift+Left");
+  expect("formatKeys: no translator, German Ctrl", shortcuts.formatKeys({ code: "KeyZ", mods: ["ctrl"] }, "de"), "Strg+Z");
+
   if (problems.length) {
     console.error("shared_helpers_check: FAILED\n  " + problems.join("\n  "));
     process.exit(1);
