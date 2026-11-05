@@ -2,6 +2,7 @@
 import { $, DRAG_THRESHOLD, errToast, flag, gridEl, invoke, prompts, serialInvoke, settings, t } from "./core.js";
 import { resolveVars, varTokens } from "./promptVars.js";
 import { recordToolUsage } from "./management.js";
+import { readyForCopy } from "./library.js";
 
 // ---- Prompt chaining ----
 // The chain button turns several TEXT buttons into one clipboard copy: click it, then
@@ -259,8 +260,9 @@ export function startChainStepDrag(down, row, list) {
 export const chainPicking = new Set();
 export async function toggleChainPick(p) {
   if (!isTextPrompt(p)) return; // only text buttons chain
-  if (chainPicking.has(p.id)) return;
-  chainPicking.add(p.id);
+  const pickId = p.id;
+  if (chainPicking.has(pickId)) return;
+  chainPicking.add(pickId);
   try {
     const i = chainSel.indexOf(p.id);
     if (i >= 0) {
@@ -271,6 +273,9 @@ export async function toggleChainPick(p) {
       pushChainClipboard();
       return;
     }
+    // A locked confidential prompt carries no text: ask for the vault first, as a copy does.
+    p = await readyForCopy(p);
+    if (!p) return;
     // Rotating prompt: peek the entry a copy would use (never consumes), resolve
     // {?variables} on THAT text, right when the button is picked into the chain.
     let rawText = p.text || p.name || "";
@@ -296,7 +301,7 @@ export async function toggleChainPick(p) {
     refreshChainUi();
     pushChainClipboard(peeked ? p.id : null, peekedIndex);
   } finally {
-    chainPicking.delete(p.id);
+    chainPicking.delete(pickId);
   }
 }
 
