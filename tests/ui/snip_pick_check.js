@@ -38,12 +38,28 @@ try {
   check("an Error object with that message maps too", text(new Error("ocr-no-language")), "NO-LANG");
   check("any other error uses the default text", text("blocked"), undefined);
   check("a cancelled session shows nothing", text("cancelled"), null);
+  // A colour pick that fails after a newer session started must not paint into that session.
+  const shown = [];
+  const pctx = vm.createContext({
+    pickBusy: false, cur: { x: 1, y: 2 }, sessionSeq: 0, T: { pickFailed: "FAILED" },
+    saveZoom() {}, showError: (m) => shown.push(m),
+    invoke: () => { pctx.sessionSeq++; return Promise.reject(new Error("boom")); },
+  });
+  vm.runInContext(extract("snipErrorText"), pctx);
+  vm.runInContext(extract("pickHere").replace("function pickHere", "this.pickHere = async function"), pctx);
+  pctx.pickHere().then(() => {
+    check("a stale pick error is not shown", shown, []);
+    finish();
+  });
 } catch (e) {
   problems.push(String(e && e.message || e));
 }
 
-if (problems.length) {
-  console.error(problems.join("\n"));
-  process.exit(1);
+function finish() {
+  if (problems.length) {
+    console.error(problems.join("\n"));
+    process.exit(1);
+  }
+  console.log("snip_pick_check: ok");
 }
-console.log("snip_pick_check: ok");
+if (problems.length) finish();

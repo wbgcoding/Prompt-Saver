@@ -586,13 +586,16 @@ function renderHistory() {
 async function pickHere() {
   if (pickBusy || !cur) return;
   pickBusy = true;
+  const tok = sessionSeq;
   saveZoom(); // the overlay is about to close; a pending debounce would be lost
   try {
     // The backend records the picked colour in its own history (it is the side that
     // knows what really reached the clipboard); the next session reads it back.
     await invoke("pick_color", { x: cur.x, y: cur.y });
-  } catch {
+  } catch (err) {
+    if (tok !== sessionSeq) return; // cancelled: a newer session owns the state now
     pickBusy = false;
+    if (snipErrorText(err, T) === null) return;
     showError(T.pickFailed); // a color-pick failure, not a window-capture one
   }
 }
@@ -677,6 +680,7 @@ window.addEventListener("mouseup", async (e) => {
     const w = Math.abs(e.clientX - s.x);
     const h = Math.abs(e.clientY - s.y);
     busy = true;
+    const tok = sessionSeq;
     try {
       // A click (no real drag): a window under it records that window, empty
       // desktop/taskbar records that whole monitor: same semantics as the
@@ -701,8 +705,9 @@ window.addEventListener("mouseup", async (e) => {
         });
       }
     } catch (err) {
+      if (tok !== sessionSeq) return;
       busy = false;
-      showError(targetPickErrorText(err));
+      if (snipErrorText(err, T) !== null) showError(targetPickErrorText(err));
     }
     return;
   }
