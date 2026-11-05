@@ -296,6 +296,9 @@ fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
     // which the encoder must never see.
     let mut last_sent: Option<i64> = None;
     while let Some(item) = shared.pop_or_stop() {
+        if last_sent.is_none() {
+            note_first_video_frame(&shared);
+        }
         let ts = strictly_increasing_ts(&mut last_sent, item.ts);
         if let Err(e) = encoder.send_frame_buffer(&item.bytes, ts) {
             append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
@@ -308,6 +311,14 @@ fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
         append_crash_log(&format!("recording: encoder finish failed: {e}"));
         shared.set_encode_error(e.to_string());
     }
+}
+
+/// The video track starts at its first frame: records that instant and moves the key overlay
+/// clock to it.
+pub(crate) fn note_first_video_frame(shared: &RecFeederShared) {
+    let at = keylog::mono_ms();
+    shared.mark_first_frame(at);
+    keylog::rebase_start(at);
 }
 
 /// Returns `ts`, or one tick past the last sent timestamp when `ts` would not
@@ -336,10 +347,7 @@ fn drain_pending_frames(
     while let Some(item) = shared.try_pop() {
         if !*video_started {
             *video_started = true;
-            let at = keylog::mono_ms();
-            shared.mark_first_frame(at);
-            // The video track starts at this frame: the key overlay counts from here too.
-            keylog::rebase_start(at);
+            note_first_video_frame(shared);
             for q in queues {
                 q.clear();
             }

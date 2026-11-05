@@ -927,6 +927,14 @@ fn the_first_frame_instant_is_kept_for_the_key_overlay_clock() {
     assert!(shared.has_first_frame());
 }
 
+#[test]
+fn the_first_video_frame_is_marked_for_a_take_without_audio() {
+    let shared = RecFeederShared::new();
+    crate::recording::note_first_video_frame(&shared);
+    assert!(shared.has_first_frame());
+    assert!(shared.first_frame_mono_ms().is_some());
+}
+
 // Structural: the capture and the feeder run on real devices, so the wiring is pinned in the source.
 #[test]
 fn the_key_overlay_clock_is_moved_to_the_first_frame_from_both_sides() {
@@ -934,7 +942,15 @@ fn the_key_overlay_clock_is_moved_to_the_first_frame_from_both_sides() {
     let drain = rec.split("fn drain_pending_frames(").nth(1).unwrap().split("
 }
 ").next().unwrap();
-    assert!(drain.contains("keylog::rebase_start("), "the feeder must move the overlay clock when the first frame arrives");
+    assert!(drain.contains("note_first_video_frame("), "the feeder must move the overlay clock when the first frame arrives");
+    let video_only = rec.split("fn feeder_loop(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(video_only.contains("note_first_video_frame("), "a take without audio must mark its first frame too");
+    let helper = rec.split("fn note_first_video_frame(").nth(1).unwrap().split("
+}
+").next().unwrap();
+    assert!(helper.contains("keylog::rebase_start(") && helper.contains("mark_first_frame("));
     let cmds = source!("../rec_cmds.rs");
     assert_eq!(cmds.matches("recording::align_key_overlay_start(").count(), 2, "start and continue must both align a late-installed capture");
 }
