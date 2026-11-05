@@ -681,3 +681,21 @@ fn a_dead_mic_mux_leftover_is_swept_like_a_staged_export() {
     assert!(!dead.exists(), "a dead process's staged mux is removed at start");
     let _ = fs::remove_dir_all(&root);
 }
+
+// A late seek past the last decodable frame exits cleanly with no picture (a container longer than
+// its video stream). That one slot reuses the previous thumbnail instead of failing the strip.
+#[test]
+fn a_filmstrip_slot_without_a_frame_reuses_the_previous_thumbnail() {
+    let dir = std::env::temp_dir().join(format!("ps-filmstrip-gap-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let prev = dir.join("thumb-0000.jpg");
+    let gap = dir.join("thumb-0001.jpg");
+    fs::write(&prev, b"jpg").unwrap();
+    assert!(crate::video_editor::reuse_previous_thumb(Some(&prev), &gap));
+    assert_eq!(fs::read(&gap).unwrap(), b"jpg");
+    let first = dir.join("thumb-first.jpg");
+    assert!(!crate::video_editor::reuse_previous_thumb(None, &first), "the first slot has nothing to reuse");
+    assert!(!first.exists());
+    let _ = fs::remove_dir_all(&dir);
+}

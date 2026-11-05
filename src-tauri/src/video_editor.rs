@@ -435,6 +435,12 @@ pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32)
         .map_err(|e| e.to_string())?
 }
 
+// A slot whose seek produced no frame shows the previous slot's picture instead of failing the
+// whole strip; the first slot has nothing to borrow.
+pub(crate) fn reuse_previous_thumb(prev: Option<&Path>, slot: &Path) -> bool {
+    prev.is_some_and(|prev| prev.is_file() && fs::copy(prev, slot).is_ok())
+}
+
 // One short seek-and-grab ffmpeg call per thumbnail rather than a single
 // `-vf select` pass: a recording's variable frame rate (WGC capture never
 // guarantees CFR) makes frame-index-based selection unreliable, while a
@@ -478,7 +484,11 @@ pub(crate) fn generate_filmstrip_blocking(
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
             let status = status_in_job(&mut cmd, Duration::from_secs(20)).map_err(|e| tool_run_error("ffmpeg", &e))?;
-            if !status.success() || !p.is_file() {
+            if !status.success() {
+                return Err("thumbnail extraction failed".to_string());
+            }
+            // A clean exit without a picture: the seek landed past the last decodable frame.
+            if !p.is_file() && !reuse_previous_thumb(i.checked_sub(1).map(|j| out[j].as_path()), p) {
                 return Err("thumbnail extraction failed".to_string());
             }
         }
