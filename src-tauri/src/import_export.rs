@@ -981,8 +981,7 @@ pub(crate) fn lenient_import_note(raw: &str) -> String {
 }
 
 // Clears every network path an imported row carries; the row itself stays.
-// Returns how many links were cut: a backup import reports that count; the prompt-file imports
-// (JSON, CSV, text) cut the links without a notice.
+// Returns how many links were cut: every import (backup, JSON, CSV, text) reports that count.
 pub(crate) fn clear_network_paths(p: &mut Prompt) -> usize {
     let mut n = 0;
     for f in [&mut p.file_path, &mut p.icon_path, &mut p.image] {
@@ -1009,21 +1008,34 @@ pub(crate) fn count_network_links(prompts: &[Prompt]) -> usize {
 // trust (not held by the store before, not inside one of `roots`) is marked untrusted in the
 // settings: the caller saves them whenever `untrusted_paths` differs from before the call.
 pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>, roots: &[PathBuf]) -> usize {
-    let pre_import = crate::asset_scope::trusted_stored_keys(store);
-    let first_new = store.prompts.len();
-    let count = append_imported_rows(store, items);
-    let ids: Vec<String> = store.prompts[first_new..].iter().map(|p| p.id.clone()).collect();
-    crate::asset_scope::distrust_foreign_paths(store, &ids, &pre_import, roots);
-    count
+    append_imported_counted(store, items, roots).count
 }
 
-fn append_imported_rows(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
+// What a prompt-file import did: the prompts it added and the links to files on other machines
+// it cut from them (a backup restore reports the same count). The page reads both fields.
+#[derive(Serialize, Default, Debug, PartialEq)]
+pub(crate) struct ImportOutcome {
+    pub(crate) count: usize,
+    pub(crate) network_links_removed: usize,
+}
+
+pub(crate) fn append_imported_counted(store: &mut Store, items: Vec<ImportedPrompt>, roots: &[PathBuf]) -> ImportOutcome {
+    let pre_import = crate::asset_scope::trusted_stored_keys(store);
+    let first_new = store.prompts.len();
+    let counts = append_imported_rows(store, items);
+    let ids: Vec<String> = store.prompts[first_new..].iter().map(|p| p.id.clone()).collect();
+    crate::asset_scope::distrust_foreign_paths(store, &ids, &pre_import, roots);
+    counts
+}
+
+fn append_imported_rows(store: &mut Store, items: Vec<ImportedPrompt>) -> ImportOutcome {
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
         .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
         .collect();
     let mut count = 0usize;
+    let mut removed = 0usize;
     // Grows while importing so tags introduced by the file itself also settle on one casing.
     let mut known = canonical_tags(&store.prompts);
     for item in items {
@@ -1087,11 +1099,11 @@ fn append_imported_rows(store: &mut Store, items: Vec<ImportedPrompt>) -> usize 
             secret,
         };
         let mut prompt = prompt;
-        clear_network_paths(&mut prompt);
+        removed += clear_network_paths(&mut prompt);
         store.prompts.push(prompt);
         count += 1;
     }
-    count
+    ImportOutcome { count, network_links_removed: removed }
 }
 
 // Persists an import that appended prompts after `before_len`: the settings first when the
@@ -1127,7 +1139,7 @@ pub(crate) fn take_import_file_grant(path: &std::path::Path) -> Result<(), Strin
 // `hash` is that preview's digest of the file; a mismatch means it changed after the
 // preview and the import is refused.
 #[tauri::command]
-pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<usize, String> {
+pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<ImportOutcome, String> {
     take_import_file_grant(std::path::Path::new(&path))?;
     let bytes = read_file_capped(std::path::Path::new(&path), MAX_IMPORT_BYTES)?;
     if import_file_hash(&bytes) != hash {
@@ -1141,7 +1153,7 @@ pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: S
     let before_len = store.prompts.len(); // everything imported is appended after this
     let marks_before = store.settings.untrusted_paths.clone();
     let roots = crate::asset_scope::attachment_source_roots(&app, &store.settings);
-    let count = append_imported_prompts(&mut store, data.prompts, &roots);
+    let outcome = append_imported_counted(&mut store, data.prompts, &roots);
     // A failed save must not report N prompts imported for a write that never
     // reached disk: an appended tail is trivial to roll back exactly. The marks go first, so a
     // restart can never find an imported path without its mark.
@@ -1152,7 +1164,7 @@ pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: S
     drop(store);
     push_theme(&app, &settings);
     rebuild_tray(&app);
-    Ok(count)
+    Ok(outcome)
 }
 
 // ---- Import from a folder of .md/.txt files ----
@@ -1326,7 +1338,7 @@ pub(crate) async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, 
 // preview is skipped silently instead of failing the batch; with no single hash for a
 // folder of files, "reviewed, then acted on" is enforced per file.
 #[tauri::command]
-pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, dir: String, rel_paths: Vec<String>) -> Result<usize, String> {
+pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, dir: String, rel_paths: Vec<String>) -> Result<ImportOutcome, String> {
     let base = Path::new(&dir);
     if !consume_granted_dir(base, "importFolder") {
         return Err("dir-not-picked".to_string());
@@ -1354,7 +1366,7 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     let before_len = store.prompts.len();
     let marks_before = store.settings.untrusted_paths.clone();
     let roots = crate::asset_scope::attachment_source_roots(&app, &store.settings);
-    let count = append_imported_prompts(&mut store, items, &roots);
+    let outcome = append_imported_counted(&mut store, items, &roots);
     if !save_imported(&app, &mut store, before_len, marks_before) {
         return Err("save-failed".into());
     }
@@ -1362,7 +1374,7 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     drop(store);
     push_theme(&app, &settings);
     rebuild_tray(&app);
-    Ok(count)
+    Ok(outcome)
 }
 
 // A path from the frontend is only ever joined onto the chosen folder when it stays

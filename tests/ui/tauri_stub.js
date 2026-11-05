@@ -835,7 +835,7 @@ const RESULTS = {
   // the argument fails loudly instead of silently importing.
   import_prompts: (a) => {
     if (!a || !a.hash) throw new Error("import_prompts stub called without hash");
-    return 2; // New A + New C from the preview fixture above
+    return { count: 2, network_links_removed: 0 }; // New A + New C from the preview fixture above
   },
   // 446: a folder import picks a folder, then previews every .md/.txt file
   // found in it -- one plain note, one in a tagged subfolder, one too big to read.
@@ -850,7 +850,7 @@ const RESULTS = {
   }),
   import_folder_files: (a) => {
     if (!a || !Array.isArray(a.relPaths)) throw new Error("import_folder_files stub called without relPaths");
-    return a.relPaths.length;
+    return { count: a.relPaths.length, network_links_removed: 0 };
   },
   // Saving an edited screenshot answers with the new path; deleting the unedited file succeeds.
   save_screenshot_now: () => "C:/shots/saved.png",

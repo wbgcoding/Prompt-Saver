@@ -124,6 +124,13 @@ export async function runImportPreview() {
   });
   return confirmed ? { path: preview.path, hash: preview.hash } : null;
 }
+// The toast after a prompt-file import: how many came in, and, when the file named links to
+// files on other machines, that those links were cut (the same notice a backup restore gives).
+function importedMessage(res) {
+  let msg = t("imported").replace("{n}", Number(res.count).toLocaleString(LANG));
+  if (res.network_links_removed) msg += " " + t("importNetworkLinksRemoved").replace("{n}", Number(res.network_links_removed).toLocaleString(LANG));
+  return msg;
+}
 export async function runImport() {
   const picked = await runImportPreview();
   if (!picked) return;
@@ -131,11 +138,11 @@ export async function runImport() {
     // No withDialog: import_prompts re-reads the picked file and opens no native dialog
     // (preview_import does). hash is preview_import's digest of that file; import_prompts
     // refuses if the file changed since the preview.
-    const count = await withTaskbarBusy("import", () => invoke("import_prompts", { path: picked.path, hash: picked.hash }));
-    if (count == null) return;
+    const res = await withTaskbarBusy("import", () => invoke("import_prompts", { path: picked.path, hash: picked.hash }));
+    if (res == null) return;
     // The import adds prompts only; settings, views and layout stay untouched.
     await renderGrid(); // refreshes prompts AND settings
-    toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
+    toast(importedMessage(res));
     maybeDupImportToast();
   } catch (err) {
     if (String(err) === "import-changed") toast(t("importChanged"));
@@ -235,10 +242,10 @@ export async function runImportFolder() {
   const relPaths = [...checks.entries()].filter(([, cb]) => cb.checked).map(([rel]) => rel);
   if (!relPaths.length) return;
   try {
-    const count = await withTaskbarBusy("import", () => invoke("import_folder_files", { dir: preview.dir, relPaths }));
-    if (count == null) return;
+    const res = await withTaskbarBusy("import", () => invoke("import_folder_files", { dir: preview.dir, relPaths }));
+    if (res == null) return;
     await renderGrid(true);
-    toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
+    toast(importedMessage(res));
     maybeDupImportToast();
   } catch {
     toast(t("importFolderFailed"));

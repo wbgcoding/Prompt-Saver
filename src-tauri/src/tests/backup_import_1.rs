@@ -1048,7 +1048,9 @@ fn imported_rows_never_keep_a_network_path() {
         favorite: false,
         secret: false,
     };
-    assert_eq!(append_imported_prompts(&mut store, vec![item], &[]), 1);
+    // The cut links are counted (file, icon and image) so the import can say why a file is gone.
+    let counted = crate::import_export::append_imported_counted(&mut store, vec![item], &[]);
+    assert_eq!((counted.count, counted.network_links_removed), (1, 3));
     let p = &store.prompts[0];
     assert!(p.file_path.is_empty() && p.icon_path.is_empty() && p.image.is_empty());
     assert_eq!(p.name, "Pack", "the row itself stays");

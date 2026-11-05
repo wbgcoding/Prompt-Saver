@@ -40,6 +40,8 @@ saving, backups, recordings, the editors and the installer.
 - **Updates and installer.** Skipping a version keeps the update notice when
   saving the choice fails, silent installs refuse a downgrade, and the app
   starts with its original command line after installing WebView2.
+- **Prompt file imports.** Importing a prompt file now tells you how many links
+  to files on other machines were removed, as a backup restore already did.
 
 ### Security
 
