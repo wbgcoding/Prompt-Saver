@@ -1407,6 +1407,7 @@ export default {
     errUpdateJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en installeer daarna de update.",
     errDemoRecordingActive: "Er loopt een opname. Rond die af en schakel daarna de demomodus om.",
     errDemoJobsRunning: "Er lopen nog achtergrondtaken. Wacht tot ze klaar zijn en schakel daarna de demomodus om.",
+    errDemoFolderForeign: "Naast je gegevens staat al een map met de naam prompt-saver-demo die niet door de demomodus is gemaakt. Hernoem of verwijder de map en probeer het opnieuw.",
     errUpdatePortableManual: "Dit is de draagbare versie. De releasepagina is geopend: download de nieuwe draagbare exe en vervang deze.",
     errExportProgramFile: "Dat bestand hoort bij het programma en kan geen exportdoel zijn.",
     errBackupTooLarge: "Deze back-up is groter dan 512 MB en is niet hersteld",

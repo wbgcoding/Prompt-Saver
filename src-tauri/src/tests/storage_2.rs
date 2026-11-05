@@ -1391,7 +1391,7 @@ fn demo_switch_waits_for_a_recording_or_running_jobs() {
     }
     // Every shown code has a toast text in each language.
     let errors = include_str!("../../../ui/errors.js");
-    for (code, key) in [("demo-recording-active", "errDemoRecordingActive"), ("demo-jobs-running", "errDemoJobsRunning")] {
+    for (code, key) in [("demo-recording-active", "errDemoRecordingActive"), ("demo-jobs-running", "errDemoJobsRunning"), ("demo-folder-foreign", "errDemoFolderForeign")] {
         assert!(errors.contains(&format!("\"{code}\": \"{key}\"")), "{code} maps to a message key");
     }
 }

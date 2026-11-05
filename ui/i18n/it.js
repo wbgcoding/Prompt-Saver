@@ -1407,6 +1407,7 @@ export default {
     errUpdateJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi installa l'aggiornamento.",
     errDemoRecordingActive: "Una registrazione è in corso. Terminala, poi cambia la modalità demo.",
     errDemoJobsRunning: "Ci sono ancora attività in background. Attendi che finiscano, poi cambia la modalità demo.",
+    errDemoFolderForeign: "Accanto ai tuoi dati esiste già una cartella chiamata prompt-saver-demo che non è stata creata dalla modalità demo. Rinominala o eliminala e riprova.",
     errUpdatePortableManual: "Questa è la versione portatile. La pagina della release è aperta: scarica il nuovo exe portatile e sostituisci questo.",
     errExportProgramFile: "Quel file appartiene al programma e non può essere una destinazione di esportazione.",
     errBackupTooLarge: "Questo backup supera i 512 MB e non è stato ripristinato",

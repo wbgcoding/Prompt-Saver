@@ -1407,6 +1407,7 @@ export default {
     errUpdateJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem zainstaluj aktualizację.",
     errDemoRecordingActive: "Trwa nagrywanie. Zakończ je, a potem przełącz tryb demo.",
     errDemoJobsRunning: "Zadania w tle jeszcze trwają. Poczekaj, aż się zakończą, a potem przełącz tryb demo.",
+    errDemoFolderForeign: "Obok Twoich danych istnieje już folder o nazwie prompt-saver-demo, który nie został utworzony przez tryb demo. Zmień jego nazwę lub usuń go i spróbuj ponownie.",
     errUpdatePortableManual: "To wersja przenośna. Strona wydania jest otwarta: pobierz nowy przenośny plik exe i zastąp nim ten.",
     errExportProgramFile: "Ten plik należy do programu i nie może być celem eksportu.",
     errBackupTooLarge: "Ta kopia zapasowa przekracza 512 MB i nie została przywrócona",

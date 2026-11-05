@@ -111,6 +111,20 @@ fn a_rearm_retries_and_the_render_answer_leaves_the_judging_to_a_posted_message(
     assert!(!render.contains("emit_rotation_changed"));
 }
 
+// The render answers run on the pasting app's clock: none of them may wait for the Db lock.
+#[test]
+fn the_render_paths_ask_the_vault_without_the_db_lock() {
+    let src = source!("../clipwatch.rs");
+    let live = &src[src.find("fn vault_is_live").unwrap()..];
+    let live = &live[..live.find("\n}\n").unwrap()];
+    assert!(!live.contains("lock(") && !live.contains("state::<Db>"), "the vault probe must not touch the store");
+    for name in ["fn handle_render_format", "fn handle_render_all", "fn handle_app_end"] {
+        let body = &src[src.find(name).unwrap()..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(!body.contains("vault_is_live()"), "{name} must pass the timeout kept in the session");
+    }
+}
+
 #[test]
 fn a_force_end_with_a_busy_clipboard_keeps_the_text_for_the_next_render() {
     let src = source!("../clipwatch.rs");

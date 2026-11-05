@@ -1237,3 +1237,10 @@ fn the_tray_inputs_skip_the_plan_for_the_custom_window() {
     let (_, plan, custom, _) = tray_inputs(&store);
     assert!(!custom && !plan.is_empty(), "the native menu is built from a plan");
 }
+
+// The Portuguese UI is Brazilian, so the tooltip uses the same wording (not "A gravar").
+#[test]
+fn the_portuguese_recording_tooltip_is_brazilian() {
+    assert_eq!(tray_recording_label("pt"), "Gravando…");
+    assert_eq!(tray_recording_label("xx"), "Recording…");
+}

@@ -1407,6 +1407,7 @@ export default {
     errUpdateJobsRunning: "Aún hay tareas en segundo plano. Espera a que terminen y luego instala la actualización.",
     errDemoRecordingActive: "Hay una grabación en curso. Termínala y luego cambia el modo demo.",
     errDemoJobsRunning: "Aún hay tareas en segundo plano. Espera a que terminen y luego cambia el modo demo.",
+    errDemoFolderForeign: "Ya existe una carpeta llamada prompt-saver-demo junto a tus datos que no creó el modo demo. Cámbiale el nombre o elimínala y vuelve a intentarlo.",
     errUpdatePortableManual: "Esta es la versión portátil. La página de la versión está abierta: descarga el nuevo exe portátil y reemplaza este.",
     errExportProgramFile: "Ese archivo pertenece al programa y no puede ser un destino de exportación.",
     errBackupTooLarge: "Esta copia de seguridad supera los 512 MB y no se restauró",

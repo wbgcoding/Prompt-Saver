@@ -1407,6 +1407,7 @@ export default {
     errUpdateJobsRunning: "Încă rulează sarcini în fundal. Așteaptă să se termine, apoi instalează actualizarea.",
     errDemoRecordingActive: "O înregistrare este în curs. Încheie-o, apoi comută modul demo.",
     errDemoJobsRunning: "Încă rulează sarcini în fundal. Așteaptă să se termine, apoi comută modul demo.",
+    errDemoFolderForeign: "Lângă datele tale există deja un folder numit prompt-saver-demo, care nu a fost creat de modul demo. Redenumește-l sau șterge-l și încearcă din nou.",
     errUpdatePortableManual: "Aceasta este versiunea portabilă. Pagina versiunii este deschisă: descarcă noul exe portabil și înlocuiește-l pe acesta.",
     errExportProgramFile: "Acel fișier aparține programului și nu poate fi o țintă de export.",
     errBackupTooLarge: "Această copie de rezervă depășește 512 MB și nu a fost restaurată",

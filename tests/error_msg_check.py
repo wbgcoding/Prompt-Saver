@@ -58,8 +58,7 @@ ALLOW = {
         '"{raw}" is relative to a drive; give the full path with a backslash after the drive letter',
         "could not open the restored store", "could not write the restored store",
     ],
-    "demo mode switch, only reachable from the command line": [
-        "a folder already exists at the demo data path and was not created by demo mode; refusing to touch it",
+    "demo mode switch, a rare setup failure the Expert menu shows as the generic message": [
         "could not prepare the demo store",
     ],
 }

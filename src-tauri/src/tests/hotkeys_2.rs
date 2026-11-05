@@ -1199,7 +1199,7 @@ fn screen_identity_keeps_the_value_saved_positions_hold() {
 fn resolve_float_spot_parks_a_position_outside_every_current_screen() {
     let screens = vec![("main".to_string(), 0, 0, 1920, 1080)];
     let pos = Pos { x: 5000, y: 5000, screen: "gone-monitor".to_string() };
-    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, None, &[]);
     assert!(parked);
     // Landed inside the main screen's work area, not at the stale coordinates.
     assert!(x >= 0.0 && x + 200.0 <= 1920.0);
@@ -1209,10 +1209,22 @@ fn resolve_float_spot_parks_a_position_outside_every_current_screen() {
 }
 
 #[test]
+fn a_parked_box_lands_in_the_work_area_not_under_the_task_bar() {
+    let screens = vec![("main".to_string(), 0, 0, 1920, 1080)];
+    let pos = Pos { x: 5000, y: 5000, screen: "gone-monitor".to_string() };
+    // A task bar of 48 px along the top and 100 px along the left.
+    let work = Rect { x: 100.0, y: 48.0, w: 1820.0, h: 1032.0 };
+    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, Some(work), &[]);
+    assert!(parked);
+    assert!(x >= 100.0 && y >= 48.0, "({x}, {y}) is under the task bar");
+    assert!(x + 200.0 <= 1920.0 && y + 80.0 <= 1080.0);
+}
+
+#[test]
 fn resolve_float_spot_returns_home_once_the_same_screen_identity_reappears() {
     let screens = vec![("dell-1".to_string(), 1920, 0, 1920, 1080)];
     let pos = Pos { x: 2500, y: 100, screen: "dell-1".to_string() };
-    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, None, &[]);
     assert!(!parked);
     assert_eq!((x, y), (2500.0, 100.0));
 }
@@ -1223,7 +1235,7 @@ fn resolve_float_spot_stays_parked_for_a_different_identity_at_the_same_bounds()
     // pill used to live on, but a different name: not the screen it left.
     let screens = vec![("dell-3".to_string(), 1920, 0, 1920, 1080)];
     let pos = Pos { x: 2500, y: 100, screen: "dell-1".to_string() };
-    let (_, _, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+    let (_, _, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, None, &[]);
     assert!(parked);
 }
 
@@ -1234,7 +1246,7 @@ fn resolve_float_spot_trusts_plain_coordinates_for_a_position_saved_before_scree
     // has not actually moved.
     let screens = vec![("dell-1".to_string(), 0, 0, 1920, 1080)];
     let pos = Pos { x: 100, y: 100, screen: String::new() };
-    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, None, &[]);
     assert!(!parked);
     assert_eq!((x, y), (100.0, 100.0));
 }
@@ -1242,7 +1254,7 @@ fn resolve_float_spot_trusts_plain_coordinates_for_a_position_saved_before_scree
 #[test]
 fn resolve_float_spot_never_parks_on_a_failed_monitor_probe() {
     let pos = Pos { x: 5000, y: 5000, screen: "dell-1".to_string() };
-    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &[], &[]);
+    let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &[], None, &[]);
     assert!(!parked);
     assert_eq!((x, y), (5000.0, 5000.0));
 }

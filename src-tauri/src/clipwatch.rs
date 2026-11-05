@@ -43,6 +43,8 @@ struct AutoSession {
     // A confidential entry: its decrypted text may only be delivered while the
     // vault key is still live.
     secret: bool,
+    // The vault timeout read at arm time, so a render never needs the Db lock to ask the vault.
+    secret_timeout_min: u32,
     armed_at: u32,
     session_start: u32,
     last_paste: u32,
@@ -401,13 +403,8 @@ pub(crate) fn deliverable_text(secret: bool, vault_live: bool, text: &str) -> &s
 }
 
 // True while the vault key for confidential prompts is still held.
-fn vault_is_live() -> bool {
-    let app = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    app.as_ref().is_some_and(|app| {
-        let state = app.state::<Db>();
-        let store = lock(&state);
-        super::secret_session_key(super::secret_timeout_min(&store.settings)).is_some()
-    })
+fn vault_is_live(timeout_min: u32) -> bool {
+    super::secret_session_key(timeout_min).is_some()
 }
 
 // Drives the tile badge's is-auto class.
@@ -538,7 +535,7 @@ fn handle_render_format() {
         unsafe { set_unicode_text("") };
         return;
     };
-    if session.secret && !vault_is_live() {
+    if session.secret && !vault_is_live(session.secret_timeout_min) {
         // The vault timed out since this text was decrypted: hand the paste
         // nothing, and end the session so no later render can leak it either.
         let id = session.id.clone();
@@ -665,9 +662,9 @@ fn handle_judge() {
 // before the owner window (or the whole process) goes away. Unlike RENDERFORMAT
 // we must open the clipboard ourselves, and this never counts as a paste.
 fn handle_render_all(hwnd: isize) {
-    let session = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| (s.text.clone(), s.secret));
-    let Some((text, secret)) = session else { return };
-    let live = !secret || vault_is_live();
+    let session = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| (s.text.clone(), s.secret, s.secret_timeout_min));
+    let Some((text, secret, timeout_min)) = session else { return };
+    let live = !secret || vault_is_live(timeout_min);
     unsafe {
         if OpenClipboard(hwnd) != 0 {
             set_unicode_text(deliverable_text(secret, live, &text));
@@ -699,7 +696,7 @@ fn handle_destroy_clipboard() {
 // marked as ending, and the open is retried; a paste render arriving meanwhile delivers the
 // text itself, so the promise already on the clipboard never answers with nothing.
 fn handle_app_end(hwnd: isize, attempt: u32) {
-    let (text, secret, id, epoch) = {
+    let (text, secret, timeout_min, id, epoch) = {
         let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
         let Some(session) = g.as_mut() else { return };
         if attempt == 0 {
@@ -707,7 +704,7 @@ fn handle_app_end(hwnd: isize, attempt: u32) {
         } else if !session.ending {
             return; // a newer session replaced the one this retry belonged to
         }
-        (session.text.clone(), session.secret, session.id.clone(), session.epoch)
+        (session.text.clone(), session.secret, session.secret_timeout_min, session.id.clone(), session.epoch)
     };
     if attempt == 0 {
         emit_active(&id, false);
@@ -717,7 +714,7 @@ fn handle_app_end(hwnd: isize, attempt: u32) {
             OWN_EMPTY.store(true, Ordering::Release);
             EmptyClipboard();
             OWN_EMPTY.store(false, Ordering::Release);
-            let live = !secret || vault_is_live();
+            let live = !secret || vault_is_live(timeout_min);
             set_unicode_text(deliverable_text(secret, live, &text));
             if secret {
                 set_private_markers();
@@ -743,7 +740,7 @@ fn handle_app_end(hwnd: isize, attempt: u32) {
 // Called from the normal copy path (put_text) once a prompt is judged auto-eligible.
 // `resolved` is the frontend's once-per-copy placeholder resolution; empty for a prompt
 // without placeholders, where each render falls back to the raw rotation_next() text.
-pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool) {
+pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool, secret_timeout_min: u32) {
     note_own(text);
     let old_id = {
         let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
@@ -753,6 +750,7 @@ pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool) {
             resolved,
             text: text.to_string(),
             secret,
+            secret_timeout_min,
             armed_at: 0,
             session_start: 0,
             last_paste: 0,

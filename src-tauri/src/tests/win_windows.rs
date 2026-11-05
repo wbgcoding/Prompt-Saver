@@ -293,3 +293,21 @@ fn a_fill_in_answer_from_a_replaced_window_is_dropped() {
     assert_eq!(take_var_answer(&mut slot, 2), VarAnswer::NothingPending);
     assert_eq!(var_window_envelope(&slot), "");
 }
+
+#[test]
+fn the_paste_target_skips_shell_surfaces_and_own_windows() {
+    for class in [
+        "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "XamlExplorerHostIslandWindow",
+        "MultitaskingViewFrame", "TaskSwitcherWnd", "Progman", "WorkerW", "ForegroundStaging",
+    ] {
+        assert!(ww::is_shell_surface(class, "explorer", false), "{class}");
+    }
+    assert!(ww::is_shell_surface("Notepad", "notepad", true), "this program's own window");
+    for host in ["StartMenuExperienceHost", "SearchHost", "SearchApp", "ShellExperienceHost"] {
+        assert!(ww::is_shell_surface("Windows.UI.Core.CoreWindow", host, false), "{host}");
+    }
+    // An ordinary app, and a store app that happens to use the same window class.
+    assert!(!ww::is_shell_surface("Notepad", "notepad", false));
+    assert!(!ww::is_shell_surface("Chrome_WidgetWin_1", "chrome", false));
+    assert!(!ww::is_shell_surface("Windows.UI.Core.CoreWindow", "calculator", false));
+}
