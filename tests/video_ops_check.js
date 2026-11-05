@@ -479,12 +479,22 @@ async function cameraOverlayRaceCheck() {
   const sb2 = makeSandbox({
     invoke: (cmd) => Promise.resolve(cmd === "probe_extra_video_source" ? { duration_ms: 5000, has_audio: false } : null),
     even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r, newId: () => "cam1",
-    afterOpsChanged: () => {},
+    afterOpsChanged: () => {}, OV_MIN_MS: 100,
   });
   sb2.VE = baseState([]);
   Object.assign(sb2.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
   await vm.runInContext("addAlignedCameraOverlay", sb2)("C:/cam.mp4", 1);
   expect("a camera overlay of the current load is added", sb2.VE.ops.some((o) => o.path === "C:/cam.mp4"));
+  // A sidecar start at or past the screen recording's end gives no usable overlay.
+  const sb3 = makeSandbox({
+    invoke: (cmd) => Promise.resolve(cmd === "probe_extra_video_source" ? { duration_ms: 5000, has_audio: false } : { overlay_start_ms: 19950 }),
+    even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r, newId: () => "cam1",
+    afterOpsChanged: () => {}, OV_MIN_MS: 100,
+  });
+  sb3.VE = baseState([]);
+  Object.assign(sb3.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
+  await vm.runInContext("addAlignedCameraOverlay", sb3)("C:/cam.mp4", 1);
+  expect("a camera overlay starting at the very end is skipped", sb3.VE.ops.length === 0 && sb3.VE.selOv === null, JSON.stringify(sb3.VE.ops));
 }
 
 // An export that finishes after another recording was opened in the editor must
@@ -1197,6 +1207,24 @@ const pending = [];
   expect("undo reaches back only the cap", sb.VE.ops.length === 4 && sb.VE.ops.some((o) => o.tool === "trim"), JSON.stringify(sb.VE.ops.map((o) => o.tool)));
 }
 
+// A re-edit passes a spread of the live op, which may carry an older `_prevLocked`. The flag must
+// describe only the predecessor of this edit, or undo raises the floor and blocks a valid step.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  const a = { tool: "crop", rect: { x: 0, y: 0, w: 10, h: 10 } };
+  sb.VE = Object.assign(baseState([a]), { floor: 1, redo: [], undoMax: 50 });
+  const run = (code) => vm.runInContext(code, sb);
+  run("pushReplacing")((o) => o.tool === "crop", { tool: "crop", rect: { x: 1, y: 1, w: 10, h: 10 } });
+  const b = sb.VE.ops[0];
+  expect("the first replacement records its locked predecessor", b._prevLocked === true && sb.VE.floor === 0, String(sb.VE.floor));
+  run("pushReplacing")((o) => o.tool === "crop", { ...b, rect: { x: 2, y: 2, w: 10, h: 10 } });
+  expect("a re-edit of an unlocked op carries no stale lock flag", !sb.VE.ops[0]._prevLocked, String(sb.VE.ops[0]._prevLocked));
+  run("undo()");
+  expect("undoing the re-edit does not raise the floor", sb.VE.floor === 0, String(sb.VE.floor));
+  run("undo()");
+  expect("the earlier replacement can still be undone", sb.VE.ops[0].rect.x === 0 && sb.VE.floor === 1, JSON.stringify(sb.VE.ops[0]) + " floor " + sb.VE.floor);
+}
+
 // A live overlay video that is removed from the timeline is released like one cleared with the
 // layer: source dropped, so the decoder and the file handle do not linger until collection.
 {
@@ -1224,24 +1252,6 @@ const pending = [];
   sb.$ = (id) => (fields[id] = fields[id] || { value: "" });
   sb.persistExportSettings = () => {};
   sb.updateExportNote = () => {};
-// A re-edit passes a spread of the live op, which may carry an older `_prevLocked`. The flag must
-// describe only the predecessor of this edit, or undo raises the floor and blocks a valid step.
-{
-  const sb = makeSandbox({ afterOpsChanged() {} });
-  const a = { tool: "crop", rect: { x: 0, y: 0, w: 10, h: 10 } };
-  sb.VE = Object.assign(baseState([a]), { floor: 1, redo: [], undoMax: 50 });
-  const run = (code) => vm.runInContext(code, sb);
-  run("pushReplacing")((o) => o.tool === "crop", { tool: "crop", rect: { x: 1, y: 1, w: 10, h: 10 } });
-  const b = sb.VE.ops[0];
-  expect("the first replacement records its locked predecessor", b._prevLocked === true && sb.VE.floor === 0, String(sb.VE.floor));
-  run("pushReplacing")((o) => o.tool === "crop", { ...b, rect: { x: 2, y: 2, w: 10, h: 10 } });
-  expect("a re-edit of an unlocked op carries no stale lock flag", !sb.VE.ops[0]._prevLocked, String(sb.VE.ops[0]._prevLocked));
-  run("undo()");
-  expect("undoing the re-edit does not raise the floor", sb.VE.floor === 0, String(sb.VE.floor));
-  run("undo()");
-  expect("the earlier replacement can still be undone", sb.VE.ops[0].rect.x === 0 && sb.VE.floor === 1, JSON.stringify(sb.VE.ops[0]) + " floor " + sb.VE.floor);
-}
-
   run(extractBlock("applyPreset", "function applyPreset(format, quality, downscale) {"));
   run("applyPreset('mp4', 'small', '720')");
   expect("the chat preset on a smaller source keeps the source size", scaleOp() === null, JSON.stringify(scaleOp()));

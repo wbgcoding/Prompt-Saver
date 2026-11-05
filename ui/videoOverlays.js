@@ -136,6 +136,8 @@ export async function addAlignedCameraOverlay(path, gen) {
     // never a missing overlay.
   }
   if (VE.loadGen !== gen) return;
+  // A sidecar start at or past the end would leave an overlay shorter than the minimum.
+  if (startMs > VE.dur - OV_MIN_MS) return;
   const durationMs = Number(probe.duration_ms) || 0;
   const w = even(VE.w * 0.3), h = even(VE.h * 0.3);
   const margin = even(Math.min(VE.w, VE.h) * 0.03);
