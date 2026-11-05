@@ -12,7 +12,7 @@ import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, fmtUnit, fmtUnitName, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
-import { reloadEverything, syncSettingsControls } from "./settingsPanel.js";
+import { fillScaleSelect, reloadEverything, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import { closeBackups } from "./backups.js";
 import { varFixedListRow } from "./editor.js";
@@ -358,6 +358,12 @@ async function afterFlagWrite(key, enabled, accepted, err) {
   if (key === "clipWatcher" && !enabled) await offerClipInboxCleanup();
 }
 
+// What a value write owes beyond the write: the settings dialog's scale select shows the new
+// scale.
+async function afterValueWrite(key) {
+  if (key === "uiScale") fillScaleSelect("ui-scale", "uiScale");
+}
+
 export async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags" && EXPERT_BULK_NEVER.includes(key)) return;
   if (kind === "flags") {
@@ -392,6 +398,7 @@ export async function resetOneExpertValue(kind, key, after) {
     }
     applyValues();
     await refreshTiles(key);
+    await afterValueWrite(key);
   } else if (kind === "dropdowns") {
     const cfg = EXPERT_DROPDOWNS[key];
     await cfg.set(cfg.def);
@@ -530,8 +537,7 @@ export async function commitValue(key, value) {
   }
   applyValues();
   await refreshTiles(key);
-  // The relock refetch is timed from the old timeout: a render asks the backend again.
-  if (key === "secretTimeoutMin") await renderGrid(true);
+  await afterValueWrite(key);
   // Fires once on release, not per drag frame: same "no flash mid-drag" reason
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
   // An off-at-zero value that crossed zero opens or closes the rows gated on it.
@@ -1952,6 +1958,7 @@ export async function resetExpertGroup(group, changed, count) {
   await renderGrid(true);
   fitAllTiles();
   for (const [key, enabled, failure] of flagWrites) await afterFlagWrite(key, enabled, failure === undefined, failure);
+  for (const key of [...changed.values, ...changed.selects]) await afterValueWrite(key);
   toast(t("expertResetGroupDone"));
   renderExpert();
 }

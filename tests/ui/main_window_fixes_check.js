@@ -331,10 +331,11 @@ section(() => {
   const code = [
     "const offAtZeroWas = {};\nconst valueBeforeDrag = {};\nlet liveRenderQueued = false;\nlet expertOnlyChanged = false;",
     extractBlock(em, "export function previewValue(").replace("export ", ""),
+    extractBlock(em, "async function afterValueWrite("),
     extractBlock(em, "export async function commitValue(").replace("export ", ""),
   ].join("\n");
   const sb = run(code, {
-    EXPERT_VALUES: {}, settings, val: (k) => settings.ui_values[k] || 0,
+    EXPERT_VALUES: {}, settings, val: (k) => settings.ui_values[k] || 0, fillScaleSelect() {},
     applyValues: () => {}, refreshTiles: async () => {}, renderGrid: async () => {}, renderExpert: () => { rendered++; }, syncRowReset: () => {},
     requestAnimationFrame: () => 0, errToast: (e) => toasts.push(String(e)),
     invoke: async () => { if (fail) throw new Error("locked"); },
@@ -589,7 +590,7 @@ section(() => {
 section(() => {
   const src = read("expertMenu.js");
   const persist = extractBlock(src, "export async function persistUiText(").replace("export ", "");
-  const reset = extractBlock(src, "async function afterFlagWrite(") + "\n" + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
+  const reset = extractBlock(src, "async function afterFlagWrite(") + "\n" + extractBlock(src, "async function afterValueWrite(") + "\n" + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
   const make = (fail, settings) => {
     const toasts = [];
     const sb = run([persist, reset].join("\n"), {
@@ -1626,7 +1627,8 @@ section(() => {
 // hint for a second instance, the clipboard inbox cleanup offer once its watcher is off.
 section(() => {
   const src = read("expertMenu.js");
-  const code = extractBlock(src, "async function afterFlagWrite(") + "\n"
+  check(/afterValueWrite\(key\)/.test(extractBlock(src, "export async function commitValue(")), "the expert slider commit runs the value side effects");
+  const code = extractBlock(src, "async function afterFlagWrite(") + "\n" + extractBlock(src, "async function afterValueWrite(") + "\n"
     + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "") + "\n"
     + extractBlock(src, "export async function resetExpertGroup(").replace("export ", "")
     + ";globalThis.api = { resetOneExpertValue, resetExpertGroup };";
@@ -1656,6 +1658,26 @@ section(() => {
     r = mk();
     await r.api.resetExpertGroup({ title: "g" }, { flags: ["allowMultipleInstances", "clipWatcher"], values: [], selects: [], dropdowns: [], paths: [], palette: false }, 2);
     check(r.log.includes("toast:toastRestartNeeded") && r.log.includes("inbox"), "a category reset owes the same side effects");
+  });
+});
+
+// 92. The settings dialog's scale select follows the scale: after a settings re-sync and after the
+// expert menu changes or resets the scale value.
+section(() => {
+  check(/fillScaleSelect\("ui-scale", "uiScale"\)/.test(extractBlock(read("settingsPanel.js"), "export function syncSettingsControls(")), "syncSettingsControls refills the scale select");
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "async function afterValueWrite(") + "\n"
+    + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "")
+    + ";globalThis.api = { resetOneExpertValue };";
+  later(async () => {
+    const calls = [];
+    const sb = run(code, {
+      settings: { ui_values: { uiScale: 150 } }, EXPERT_BULK_NEVER: [], EXPERT_VALUES: { uiScale: { def: 100 } }, EXPERT_SELECTS: {},
+      invoke: async () => {}, errToast() {}, applyValues() {}, refreshTiles: async () => {}, renderExpert() {},
+      fillScaleSelect: (id, key) => calls.push(id + ":" + key),
+    });
+    await sb.api.resetOneExpertValue("values", "uiScale", () => {});
+    check(calls.join() === "ui-scale:uiScale", "resetting the scale refills the settings scale select");
   });
 });
 

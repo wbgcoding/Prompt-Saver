@@ -768,6 +768,7 @@ export function syncSettingsControls() {
     $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
     $("opt-autoupdate").checked = settings.auto_update !== false;
     fillUpdateIntervalSelect();
+    fillScaleSelect("ui-scale", "uiScale");
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     applyTileStyle();
