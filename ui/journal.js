@@ -361,9 +361,10 @@ export function renderJournal() {
   body.innerHTML = "";
   const copyAgain = (p) => async () => {
     if (copyOnCooldown(p.id)) return; // same prompt copied moments ago
-    if (await copyResolved(p)) {
+    const copied = {};
+    if (await copyResolved(p, copied)) {
       await recordCopy(p.id); // await: the log must refetch AFTER the copy is recorded
-      toastCopied(p);
+      toastCopied(p, copied.text);
       assignSettings(await invoke("get_settings"));
       await loadJournal();
     }

@@ -33,9 +33,10 @@ export let gsHistoryLog = []; // recent_copies, refetched each time the overlay 
 // to a result picked here.
 export async function gsCopyPrompt(p) {
   if (copyOnCooldown(p.id)) return;
-  if (!(await copyResolved(p))) return;
+  const copied = {};
+  if (!(await copyResolved(p, copied))) return;
   recordCopy(p.id);
-  toastCopied(p);
+  toastCopied(p, copied.text);
 }
 
 // Recognized picture text for the overlay's own query. Owned here: the library keeps its own
@@ -56,7 +57,20 @@ export async function gsRefreshImageHits() {
   // An answer for an older query, or one that lands after the overlay closed, is dropped.
   if (!gsOpen || q !== gsQuery.trim().toLowerCase()) return;
   gsImageHits = { query: q, ids: new Set(ids) };
-  if (ids.length) gsRender();
+  if (ids.length) gsRender(true);
+}
+
+// The preview reads the whole body, so `sub` is built only for a row that is really drawn: a
+// short query can match thousands of prompts while the list shows a handful. `id` is the
+// hit's identity across re-renders.
+function gsPromptHit(p) {
+  return {
+    id: p.id,
+    label: p.name || "",
+    get sub() { return varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80); },
+    color: p.color,
+    run: () => gsCopyPrompt(p),
+  };
 }
 
 // Reuses the library's scoring (computeLibSearchScore). It reads the module-level
@@ -77,12 +91,7 @@ export function gsPromptHits(q) {
   } finally {
     assignLibQuery(saved);
   }
-  return scored.map(({ p }) => ({
-    label: p.name || "",
-    sub: varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80),
-    color: p.color,
-    run: () => gsCopyPrompt(p),
-  }));
+  return scored.map(({ p }) => gsPromptHit(p));
 }
 
 // The copy history has no text of its own to search: each entry is just an id
@@ -107,12 +116,7 @@ export function gsHistoryHits(q) {
   } finally {
     assignLibQuery(saved);
   }
-  return scored.map(({ p }) => ({
-    label: p.name || "",
-    sub: varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80),
-    color: p.color,
-    run: () => gsCopyPrompt(p),
-  }));
+  return scored.map(({ p }) => gsPromptHit(p));
 }
 
 // A prompt's attached file (p.file_path) is the only per-prompt attachment in the data
@@ -124,6 +128,7 @@ export function gsAttachmentHits(q) {
   return prompts
     .filter((p) => p.file_path && p.file_path.toLowerCase().includes(ql))
     .map((p) => ({
+      id: p.id,
       label: p.name || p.file_path.split(/[\\/]/).pop(),
       sub: p.file_path,
       color: p.color,
@@ -135,7 +140,7 @@ export function gsViewHits(q) {
   const ql = q.toLowerCase();
   return (settings.views || [])
     .filter((v) => (v.name || "").toLowerCase().includes(ql))
-    .map((v) => ({ label: v.name || "", sub: "", color: v.color, run: () => switchToView(v.id) }));
+    .map((v) => ({ id: v.id, label: v.name || "", sub: "", color: v.color, run: () => switchToView(v.id) }));
 }
 
 // Walks both settings surfaces: SETTINGS_DIRECTORY (normal page, toolbar, library dialog,
@@ -299,7 +304,12 @@ export function gsActivate(hit) {
   hit.run();
 }
 
-export function gsRender() {
+const gsHitId = (group, hit) => `${group.key}:${hit.id ?? hit.label}`;
+// `keep` puts the highlight back where the user had it after a re-render that is not a new
+// query (late picture hits, "show more"): true = the row that is active now, or the identity
+// of the row to land on.
+export function gsRender(keep = null) {
+  const keepId = keep === true ? gsFlatRows[gsActive]?.id : keep;
   const box = $("gs-results");
   const empty = $("gs-empty");
   box.innerHTML = "";
@@ -336,19 +346,21 @@ export function gsRender() {
     for (const hit of shown) {
       const row = gsRow(hit.label, hit.sub, hit.color, () => gsActivate(hit));
       box.appendChild(row);
-      gsFlatRows.push({ el: row, run: () => gsActivate(hit) });
+      gsFlatRows.push({ el: row, run: () => gsActivate(hit), id: gsHitId(group, hit) });
     }
     if (!expanded && hits.length > limit) {
-      const run = () => { gsExpanded.add(group.key); gsRender(); };
+      // Expanding lands on the first row it reveals, the one the user was heading for.
+      const run = () => { gsExpanded.add(group.key); gsRender(gsHitId(group, hits[limit])); };
       const row = gsRow(t("globalSearchMore").replace("{n}", String(hits.length - limit)), "", "", run);
       row.classList.add("gs-more-row");
       box.appendChild(row);
-      gsFlatRows.push({ el: row, run });
+      gsFlatRows.push({ el: row, run, id: `${group.key}:more` });
     }
   }
   empty.classList.toggle("hidden", any);
   if (!any) empty.textContent = t("globalSearchNoResults");
-  gsSetActive(gsFlatRows.length ? 0 : -1);
+  const at = keepId ? gsFlatRows.findIndex((r) => r.id === keepId) : -1;
+  gsSetActive(at >= 0 ? at : gsFlatRows.length ? 0 : -1);
   gsRefreshImageHits();
 }
 // True from a keystroke until its render ran, so Enter can render first instead of

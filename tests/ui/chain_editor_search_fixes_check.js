@@ -169,7 +169,8 @@ section(() => {
     for (const [kind, w, val] of fields) if ((val || "").toLowerCase().includes(q) && w * 100 > best) { best = w * 100; field = kind; }
     return best ? { score: best, field } : { score: 0 };
   };
-  const sandbox = run(extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
+  const hitCode = src.includes("function gsPromptHit(") ? extractBlock(src, "function gsPromptHit(") + "\n" : "";
+  const sandbox = run(hitCode + extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
     libQuery: "",
     assignLibQuery: (v) => { sandbox.libQuery = v; },
     gsImageHits: { query: "", ids: new Set() },
@@ -185,6 +186,29 @@ section(() => {
   });
   const labels = sandbox.hits("report").map((h) => h.label).sort().join();
   check(labels === "Beta,Delta report,Gamma", `a file-path-only prompt stays out of the prompt group, got ${labels}`);
+});
+
+// globalSearch.js gsPromptHits: the body preview is built for the rows that are drawn, not for
+// every match.
+section(() => {
+  const src = read("globalSearch.js");
+  let previews = 0;
+  const store = Array.from({ length: 2000 }, (_, i) => ({ id: "g" + i, name: "Note " + i, text: "body " + i, file_path: "" }));
+  const hitCode = src.includes("function gsPromptHit(") ? extractBlock(src, "function gsPromptHit(") + "\n" : "";
+  const sandbox = run(hitCode + extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
+    libQuery: "",
+    assignLibQuery: (v) => { sandbox.libQuery = v; },
+    gsImageHits: { query: "", ids: new Set() },
+    computeLibSearchScore: () => ({ score: 1, field: "name" }),
+    varPreview: (s) => { previews++; return s; },
+    gsCopyPrompt: () => {},
+    prompts: store,
+  });
+  const hits = sandbox.hits("no");
+  check(hits.length === 2000, `every match is listed, got ${hits.length}`);
+  hits.slice(0, 8).forEach((h) => h.sub);
+  check(previews === 8, `only the shown rows build a preview, got ${previews}`);
+  check(hits[3].sub === "body 3" && hits[3].id === "g3", "a drawn row still carries its preview and identity");
 });
 
 // globalSearch.js gsHelpHits: the article tip is searchable, like the help dialog's own search.
@@ -225,22 +249,29 @@ section(() => {
 
 // library.js computeLibSearchScore: a caller can hand in its own recognized-text hits, and the
 // library's own set stays untouched.
-section(() => {
+const scoreSandbox = (extra = {}) => {
   const src = read("library.js");
-  const sandbox = run(extractBlock(src, "export function computeLibSearchScore(").replace("export ", "") + "\n;globalThis.score = computeLibSearchScore;", {
+  const code = src.slice(src.includes("const libFieldCache") ? src.indexOf("const libFieldCache") : src.indexOf("// Whether a prompt satisfies"), src.indexOf("// Fills `el` with")).replace(/export /g, "");
+  return run(code + "\n;globalThis.score = computeLibSearchScore;", {
     libQuery: "sunset",
     imageHitQuery: "",
     imageHitIds: new Set(),
     parseSearchQuery: (raw) => ({ rest: raw, conditions: [] }),
-    searchConditionMet: () => true,
     tagsOn: () => false,
     notesOn: () => false,
+    tagKey: (s) => String(s).toLowerCase(),
+    extractVars: () => [],
+    parseVar: (s) => ({ name: s }),
     flag: () => true,
     fuzzyTokens: (s) => s.split(/[^\p{L}\p{N}]+/u).filter(Boolean),
     fuzzyMaxTyposFor: () => 0,
     fuzzyWordHit: (a, b) => a === b,
     optFlag: () => true,
+    ...extra,
   });
+};
+section(() => {
+  const sandbox = scoreSandbox();
   const p = { id: "p1", name: "Beach", text: "waves", file_path: "", variants: [] };
   check(sandbox.score(p).score === 0, "no hit set, no image match");
   const own = { query: "sunset", ids: new Set(["p1"]) };
@@ -248,6 +279,112 @@ section(() => {
   check(r.score > 0 && r.fromImage === true, `a handed-in hit set matches, got ${JSON.stringify(r)}`);
   check(sandbox.score(p, { query: "other", ids: new Set(["p1"]) }).score === 0, "a hit set for another query is ignored");
   check(sandbox.imageHitIds.size === 0 && sandbox.imageHitQuery === "", "the library's own hit state is untouched");
+});
+
+// library.js computeLibSearchScore: the query is parsed once per query text, not once per
+// prompt, and a prompt's lowercased fields follow an edit instead of going stale.
+section(() => {
+  let parses = 0, tokenized = 0;
+  const real = require(path.join(uiDir, "search.js"));
+  const sandbox = scoreSandbox({
+    libQuery: "zebra -cat",
+    parseSearchQuery: (raw) => { parses++; return real.parseSearchQuery(raw); },
+    fuzzyTokens: (s) => { tokenized++; return s.split(/[^\p{L}\p{N}]+/u).filter(Boolean); },
+  });
+  const list = Array.from({ length: 50 }, (_, i) => ({ id: "x" + i, name: "Item " + i, text: i % 2 ? "a ZEBRA here" : "plain", file_path: "", variants: [] }));
+  const hits = () => list.filter((p) => sandbox.score(p).score > 0).length;
+  check(hits() === 25, "the matching half is found");
+  hits();
+  check(parses === 1, `the query is parsed once for ${list.length * 2} scorings, got ${parses}`);
+  sandbox.libQuery = "horse";
+  check(hits() === 0 && parses === 2, `a new query text is parsed again, got ${parses}`);
+  sandbox.libQuery = "zebra";
+  const edited = list[1];
+  check(sandbox.score(edited).score > 0, "before the edit the prompt matches");
+  edited.text = "now a lion";
+  check(sandbox.score(edited).score === 0, "an edited prompt is scored on its new text");
+  edited.variants = ["second zebra entry"];
+  const r = sandbox.score(edited);
+  check(r.score > 0 && r.entryIndex === 1, `an added rotation entry is found, got ${JSON.stringify(r)}`);
+  sandbox.libQuery = "zbra";
+  const before = tokenized;
+  sandbox.score(list[3]); sandbox.score(list[3]);
+  const once = tokenized - before;
+  sandbox.score(list[3]);
+  check(tokenized - before === once, "a prompt's words are split once per field, not on every scoring");
+});
+
+// library.js makeTileImgObserver: a tile that scrolls into view finds its prompt through the
+// per-render id map, not by scanning the whole store for every row.
+section(() => {
+  const src = read("library.js");
+  const code = extractBlock(src, "export function makeTileImgObserver(").replace("export ", "");
+  let scans = 0;
+  const store = Array.from({ length: 300 }, (_, i) => ({ id: "t" + i }));
+  const orig = store.find.bind(store);
+  store.find = (fn) => { scans++; return orig(fn); };
+  let observerCb = null;
+  const swapped = [];
+  const mkRow = (id) => ({ dataset: { id }, querySelector: () => ({ replaceWith: (n) => swapped.push([id, n]) }) });
+  const sandbox = run(code + "\n;globalThis.make = makeTileImgObserver;", {
+    prompts: store,
+    libById: new Map(store.map((p) => [p.id, p])),
+    IntersectionObserver: function (cb) { observerCb = cb; },
+    _tileImgObs: { unobserve: () => {} },
+    mediaThumb: (p) => "thumb:" + p.id,
+    thumbEl: (p) => p,
+    libThumbCache: {},
+  });
+  sandbox.make(null);
+  observerCb([299, 150, 7].map((i) => ({ isIntersecting: true, target: mkRow("t" + i) })));
+  check(swapped.map((x) => x[1]).join() === "thumb:t299,thumb:t150,thumb:t7", `each entering tile gets its own thumbnail, got ${swapped.map((x) => x[1]).join()}`);
+  check(scans === 0, `the store is not scanned per tile, got ${scans} scans`);
+});
+
+// library.js maybeBackfillMediaMeta: unmeasured media is measured a few at a time, and a batch
+// repaints once instead of once per answer.
+later(async () => {
+  const src = read("library.js");
+  const code = src.slice(src.indexOf("export const mediaMetaBackfilled"), src.indexOf("// ---- Additive type filters")).replace(/export /g, "");
+  let inFlight = 0, peak = 0, calls = 0, timers = 0, repaints = 0;
+  const store = Array.from({ length: 10 }, (_, i) => ({ id: "m" + i, file_path: "C:/v" + i + ".mp4" }));
+  const sandbox = run(code + "\n;globalThis.fill = maybeBackfillMediaMeta;", {
+    flag: () => true,
+    prompts: store,
+    libraryEl: { classList: { contains: () => false } },
+    invoke: async (cmd, args) => {
+      calls++; inFlight++; peak = Math.max(peak, inFlight);
+      await tick(); await tick();
+      inFlight--;
+      return { media_duration_ms: 1000 };
+    },
+    setTimeout: (fn) => { timers++; fn(); return timers; },
+    clearTimeout: () => {},
+  });
+  const rerender = () => { repaints++; };
+  for (const p of store.slice()) sandbox.fill(p, rerender);
+  for (let i = 0; i < 40; i++) await tick();
+  check(calls === 10, `every unmeasured row is measured, got ${calls} calls`);
+  check(peak <= 3, `at most 3 measurements run at once, peak was ${peak}`);
+  check(store.every((p) => p.media_duration_ms === 1000), "every answer lands on its prompt");
+  check(timers <= 4 && repaints === timers, `one repaint per batch, got ${timers} repaints for 10 answers`);
+});
+
+// library.js toastCopied: the count is what was copied (a rotation entry, filled variables),
+// the stored text only when the caller passes nothing.
+section(() => {
+  const src = read("library.js");
+  const shown = [];
+  const sandbox = run(extractBlock(src, "export function toastCopied(").replace("export ", "") + "\n;globalThis.say = toastCopied;", {
+    toast: (m) => shown.push(m),
+    t: (k) => (k === "copiedChars" ? "{n} chars" : "copied"),
+    LANG: "en",
+  });
+  const p = { text: "template {?who} with a long body" };
+  sandbox.say(p, "Dear Ana");
+  sandbox.say(p);
+  sandbox.say({ text: "" }, "");
+  check(shown.join("|") === "8 chars|32 chars|copied", `the toast counts the copied text, got ${shown.join("|")}`);
 });
 
 // globalSearch.js gsRefreshImageHits: one lookup per query, stale answers dropped.

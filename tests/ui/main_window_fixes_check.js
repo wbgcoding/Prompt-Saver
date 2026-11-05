@@ -91,7 +91,7 @@ section(() => {
 // 3. Add to layout never picks a folder's cell.
 section(() => {
   const lib = read("library.js");
-  const at = lib.indexOf("lib-add");
+  const at = lib.indexOf("classList.contains(\"lib-add\")");
   const seg = lib.slice(at, at + 1500);
   check(/foldersOfView\(view\.id\)/.test(seg) && seg.indexOf("foldersOfView") < seg.indexOf("firstFree("), "add-to-layout must count folder cells as occupied before firstFree");
 });

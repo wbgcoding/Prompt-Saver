@@ -58,7 +58,7 @@ function make({ armResult = true, filled = { who: "Ana", tone: "kind" } } = {}) 
       calls.push([cmd, args]);
       if (cmd === "rotation_arm_session") return armResult;
       if (cmd === "rotation_peek") return { text: "Hi {?who}" };
-      if (cmd === "copy_text") return true;
+      if (cmd === "copy_text" || cmd === "copy_prompt") return true;
       return null;
     },
   };
@@ -104,6 +104,26 @@ const prompt = { id: "p1", text: "Hi {?who}", variants: ["Be {?tone}, {?who}", "
     const s = make();
     await s.copyResolved({ ...prompt, rotate_auto: false });
     check("without Auto no session is armed", s.calls.some(([c]) => c === "rotation_arm_session"), false);
+  }
+  {
+    // The caller can ask what really reached the clipboard (the toast counts it).
+    const s = make();
+    const armed = {};
+    await s.copyResolved({ ...prompt }, armed);
+    check("armed session reports the filled first entry", armed.text, "Hi Ana");
+    const peeked = {};
+    const s2 = make({ armResult: false });
+    await s2.copyResolved({ ...prompt }, peeked);
+    check("a rotating copy reports the entry that was copied", peeked.text, "Hi Ana");
+    const filled = {};
+    await make().copyResolved({ id: "p2", text: "Dear {?who}, thanks a lot", variants: [] }, filled);
+    check("filled variables are counted, not the template", filled.text, "Dear Ana, thanks a lot");
+    const plain = {};
+    await make().copyResolved({ id: "p3", text: "plain text", variants: [] }, plain);
+    check("a plain prompt reports its text", plain.text, "plain text");
+    const cancelled = {};
+    await make({ filled: null }).copyResolved({ ...prompt }, cancelled);
+    check("a cancelled copy reports nothing", cancelled.text, undefined);
   }
   if (problems.length) {
     console.log(problems.join("\n"));

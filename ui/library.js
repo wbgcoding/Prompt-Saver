@@ -1,5 +1,5 @@
 // The prompt library: search, filters, batch selection, list and tile rendering.
-import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, DRAG_THRESHOLD, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, makeKeyboardActivatable, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, DRAG_THRESHOLD, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
@@ -201,20 +201,42 @@ function scheduleBackfillRepaint(rerender) {
     if (!libraryEl.classList.contains("hidden")) rerender();
   }, 120));
 }
+// Measured a few at a time, so a library of unmeasured media does not fire one backend call per
+// row at once; each batch repaints once when it is done.
+const BACKFILL_BATCH = 3;
+const backfillQueue = [];
+let backfillBusy = false;
+async function measureOne({ p, rerender }) {
+  try {
+    const updated = await invoke("backfill_media_meta", { id: p.id });
+    if (!updated) return null;
+    const idx = prompts.findIndex((x) => x.id === p.id);
+    if (idx === -1) return null;
+    prompts[idx] = { ...prompts[idx], ...updated };
+    return rerender;
+  } catch {
+    return null; // best-effort -- a failed catch-up just tries again next session
+  }
+}
+async function drainBackfill() {
+  if (backfillBusy) return;
+  backfillBusy = true;
+  try {
+    while (backfillQueue.length) {
+      const done = await Promise.all(backfillQueue.splice(0, BACKFILL_BATCH).map(measureOne));
+      for (const rerender of new Set(done.filter(Boolean))) scheduleBackfillRepaint(rerender);
+    }
+  } finally {
+    backfillBusy = false;
+  }
+}
 export function maybeBackfillMediaMeta(p, rerender) {
   if (!flag("mediaMetaBackfill") || mediaMetaBackfilled.has(p.id)) return;
   if (p.media_duration_ms || p.media_width || p.media_size_bytes) return; // already measured
   if (!p.file_path && !p.icon_path) return; // nothing to measure
   mediaMetaBackfilled.add(p.id);
-  invoke("backfill_media_meta", { id: p.id })
-    .then((updated) => {
-      if (!updated) return;
-      const idx = prompts.findIndex((x) => x.id === p.id);
-      if (idx === -1) return;
-      prompts[idx] = { ...prompts[idx], ...updated };
-      scheduleBackfillRepaint(rerender);
-    })
-    .catch(() => {}); // best-effort -- a failed catch-up just tries again next session
+  backfillQueue.push({ p, rerender });
+  drainBackfill();
 }
 
 // ---- Additive type filters, shared by the library and the copy history ----
@@ -279,6 +301,36 @@ export function libSearchScore(p) {
   libScoreCache.set(p.id, res);
   return res;
 }
+// Lowercased searchable fields of one prompt, kept while its text stays the same: a keystroke
+// re-scores every prompt, and lowercasing every body (or tokenizing it in fuzzy mode) each time
+// is what made a big store lag. Keyed by the prompt object and re-checked against the source
+// strings, so an edited prompt is never read stale.
+const libFieldCache = new WeakMap();
+function sameList(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+function libFieldsOf(p) {
+  const tOn = tagsOn(), nOn = notesOn();
+  const variants = p.variants || [], tags = p.tags || [];
+  let e = libFieldCache.get(p);
+  if (e && e.name === p.name && e.text === p.text && e.file === p.file_path && e.notes === p.notes
+    && e.tOn === tOn && e.nOn === nOn && sameList(e.variants, variants) && sameList(e.tags, tags)) return e;
+  // entryIndex says which entry a body-field match came from (0 = p.text, 1+ =
+  // variants[entryIndex-1]), so a rotating prompt is findable by any entry and the row can show
+  // the one that matched. The fourth element names the field, so a row can say where its hit
+  // came from.
+  const fields = [[(p.name || "").toLowerCase(), 3, -1, "name"], [(p.text || "").toLowerCase(), 1, 0, "text"], [(p.file_path || "").toLowerCase(), 1, -1, "file"]];
+  variants.forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1, "variant"]));
+  // A tag is a deliberate label, so it ranks between the name and the body.
+  if (tOn && tags.length) fields.push([tags.join(" ").toLowerCase(), 2, -1, "tags"]);
+  // A note is private context, so it matches but ranks below the prompt body.
+  if (nOn && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1, "notes"]);
+  e = { name: p.name, text: p.text, file: p.file_path, notes: p.notes, tOn, nOn, variants: variants.slice(), tags: tags.slice(), fields, words: [], varNames: null };
+  libFieldCache.set(p, e);
+  return e;
+}
 // Whether a prompt satisfies one tag:/var: condition from the search query. tag: matches a
 // tag's identity (tagKey) case-insensitively, not as a substring (the plain search already
 // does that). var: matches a placeholder's name, read as the variable dialog reads it (VAR_RE
@@ -288,58 +340,68 @@ export function searchConditionMet(c, p) {
   if (c.prefix === "tag") {
     hit = (p.tags || []).some((name) => tagKey(name) === tagKey(c.value));
   } else {
-    const names = [p.text, ...(p.variants || [])].flatMap((t) => extractVars(t || ""));
-    hit = names.some((tok) => parseVar(tok).name.toLowerCase() === c.value);
+    const e = libFieldsOf(p);
+    if (!e.varNames) e.varNames = [p.text, ...(p.variants || [])].flatMap((t) => extractVars(t || "")).map((tok) => parseVar(tok).name.toLowerCase());
+    hit = e.varNames.includes(c.value);
   }
   return c.neg ? !hit : hit;
+}
+// The query side of the score, parsed once per query text instead of once per prompt.
+let libQueryMemo = null;
+function libQueryContext() {
+  const raw = libQuery.trim().toLowerCase();
+  const fuzzy = !!flag("fuzzySearch");
+  if (libQueryMemo && libQueryMemo.raw === raw && libQueryMemo.fuzzy === fuzzy) return libQueryMemo;
+  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard conditions pulled
+  // out first: a prompt that fails one is out whatever the rest of the query would score.
+  const ctx = { raw, fuzzy, conditions: [], rest: "", excludes: [], q: "", qWords: [] };
+  if (raw) {
+    const parsed = parseSearchQuery(raw);
+    ctx.conditions = parsed.conditions;
+    ctx.rest = parsed.rest;
+    // A "-word" term excludes any prompt whose searchable text contains it, checked across
+    // every field first.
+    const terms = parsed.rest.split(/\s+/).filter(Boolean);
+    const isExclude = (t) => t.length > 1 && t[0] === "-";
+    ctx.excludes = terms.filter(isExclude).map((t) => t.slice(1));
+    ctx.q = terms.filter((t) => !isExclude(t)).join(" ");
+    // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
+    // clean words (scripts without spaces, e.g. CJK, stay one token: substring wins).
+    if (fuzzy && ctx.q) ctx.qWords = fuzzyTokens(ctx.q);
+  }
+  libQueryMemo = ctx;
+  return ctx;
 }
 // `imageHits` ({ query, ids }) lets another search surface bring its own recognized-text hits
 // instead of the library's; left out, the library's own lookup is used.
 export function computeLibSearchScore(p, imageHits = null) {
-  const rawInput = libQuery.trim().toLowerCase();
+  const ctx = libQueryContext();
+  const rawInput = ctx.raw;
   if (!rawInput) return { score: 1, fuzzy: false, entryIndex: 0 };
-  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard conditions pulled
-  // out first: a prompt that fails one is out whatever the rest of the query would score.
-  const { rest, conditions } = parseSearchQuery(rawInput);
-  if (conditions.length && !conditions.every((c) => searchConditionMet(c, p))) {
+  if (ctx.conditions.length && !ctx.conditions.every((c) => searchConditionMet(c, p))) {
     return { score: 0, fuzzy: false, entryIndex: 0 };
   }
-  const raw = rest;
-  if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 }; // only tag:/var: terms given
-  // entryIndex says which entry a body-field match came from (0 = p.text, 1+ =
-  // variants[entryIndex-1]), so a rotating prompt is findable by any entry and the row can show
-  // the one that matched. The fourth element names the field, so a row can say where its hit
-  // came from.
-  const fields = [[(p.name || "").toLowerCase(), 3, -1, "name"], [(p.text || "").toLowerCase(), 1, 0, "text"], [(p.file_path || "").toLowerCase(), 1, -1, "file"]];
-  (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1, "variant"]));
-  // A tag is a deliberate label, so it ranks between the name and the body.
-  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1, "tags"]);
-  // A note is private context, so it matches but ranks below the prompt body.
-  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1, "notes"]);
-  // A "-word" term excludes any prompt whose searchable text contains it, checked across every
-  // field first.
-  const terms = raw.split(/\s+/).filter(Boolean);
-  const isExclude = (t) => t.length > 1 && t[0] === "-";
-  const excludes = terms.filter(isExclude).map((t) => t.slice(1));
-  if (excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false, entryIndex: 0 };
-  const q = terms.filter((t) => !isExclude(t)).join(" ");
+  if (!ctx.rest) return { score: 1, fuzzy: false, entryIndex: 0 }; // only tag:/var: terms given
+  const entry = libFieldsOf(p);
+  const fields = entry.fields;
+  if (ctx.excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false, entryIndex: 0 };
+  const q = ctx.q;
   if (!q) return { score: 1, fuzzy: false, entryIndex: 0 }; // exclusion-only query matches everything not excluded
   let best = 0, bestEntry = 0, bestKind = "";
-  for (const [val, w, entry, kind] of fields) {
+  for (const [val, w, entryAt, kind] of fields) {
     if (val && val.includes(q)) {
       const s = (val.startsWith(q) ? 120 : 100) * w;
-      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; bestKind = kind; }
+      if (s > best) { best = s; bestEntry = entryAt >= 0 ? entryAt : 0; bestKind = kind; }
     }
   }
   if (best) return { score: best, fuzzy: false, entryIndex: bestEntry, field: bestKind, q };
-  if (!flag("fuzzySearch")) return { score: 0, fuzzy: false, entryIndex: 0 };
-  // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
-  // clean words (scripts without spaces, e.g. CJK, stay one token: substring wins).
-  const qWords = fuzzyTokens(q);
+  if (!ctx.fuzzy) return { score: 0, fuzzy: false, entryIndex: 0 };
+  const qWords = ctx.qWords;
   if (!qWords.length) return { score: 0, fuzzy: false, entryIndex: 0 };
-  for (const [val, w, entry, kind] of fields) {
+  for (let i = 0; i < fields.length; i++) {
+    const [val, w, entryAt, kind] = fields[i];
     if (!val) continue;
-    const words = fuzzyTokens(val);
+    const words = entry.words[i] || (entry.words[i] = fuzzyTokens(val));
     let matched = 0;
     for (const qw of qWords) {
       const max = fuzzyMaxTyposFor(qw);
@@ -347,7 +409,7 @@ export function computeLibSearchScore(p, imageHits = null) {
     }
     if (matched === qWords.length) {
       const s = 40 * w;
-      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; bestKind = kind; }
+      if (s > best) { best = s; bestEntry = entryAt >= 0 ? entryAt : 0; bestKind = kind; }
     }
   }
   if (best) return { score: best, fuzzy: true, entryIndex: bestEntry, field: bestKind, q };
@@ -729,7 +791,7 @@ export function makeTileImgObserver(root) {
       _tileImgObs.unobserve(row);
       const placeholder = row.querySelector(".lib-tile-placeholder");
       if (!placeholder) continue;
-      const p = prompts.find((x) => x.id === row.dataset.id);
+      const p = libById.get(row.dataset.id);
       if (p) placeholder.replaceWith(mediaThumb(p, thumbEl(p, libThumbCache)));
     }
   }, { root, rootMargin: "300px" });
@@ -760,6 +822,10 @@ export function renderLibrary() {
   libScoreCache.clear(); // fresh scores each render (query / prompt content may have changed)
   fillLibrarySort();
   syncLibraryCols();
+  libMoreObs?.disconnect();
+  libMoreObs = null;
+  libItems = [];
+  libShown = 0;
   if (_libObs) _libObs.disconnect();
   _libObs = makeVideoObserver();
   _activeVidObs = _libObs;
@@ -805,187 +871,260 @@ export function renderLibrary() {
   // would show as addable although renderGrid skips ids listed in a folder's members.
   for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
   libDisplayOrder = items.map((p) => p.id); // Range-select uses display order
+  libById = new Map(prompts.map((p) => [p.id, p]));
+  libItems = items;
+  libShown = 0;
+  libCtx = { tilesMode, placed, hasQuery: !!libQuery.trim() };
+  appendLibRows();
+}
+
+// Rows are built a page at a time: a 10000-prompt library would otherwise build 10000 rows on
+// every keystroke. libDisplayOrder keeps the whole order, so select-all and range select reach
+// rows that are not on screen yet; a row built later picks its selected state up from libSelected.
+const LIB_PAGE = 200;
+let libItems = [];   // the filtered, sorted prompts of the current render
+let libShown = 0;    // how many of them have rows
+let libCtx = null;
+let libById = new Map();
+let libMoreObs = null;
+function appendLibRows() {
+  const list = $("library-list");
+  libMoreObs?.disconnect();
+  libMoreObs = null;
+  list.querySelector(":scope > .lib-more")?.remove();
+  const end = Math.min(libItems.length, libShown + LIB_PAGE);
   // Batch through a fragment; appending into the live list forced a reflow per row.
   const frag = document.createDocumentFragment();
-  for (const p of items) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "lib-item";
-    row.dataset.id = p.id; // In-place selection toggle finds the row by id
-    // Dim rows that only matched via the typo-tolerant tier.
-    if (libQuery.trim() && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
-    // Selection state (the checkbox is a CSS ::before shown while the list has .selecting, so
-    // toggling select mode never re-renders).
-    if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
-    row.title = libSelectMode ? "" : t("copy");
-    const rowTimes = tileTimeLines(p.id);
-    if (rowTimes) row.dataset.tipTimes = rowTimes;
-    const rowMedia = mediaTipLine(p);
-    if (rowMedia) row.dataset.tipMedia = rowMedia;
-
-    const body = document.createElement("span");
-    body.className = "lib-body";
-    const name = document.createElement("span");
-    name.className = "lib-name";
-    name.textContent = libLabel(p);
-    // A search hit inside entry 2+ shows that entry (why the row matched) plus a small
-    // "n/total" tag naming it.
-    const hitEntry = libQuery.trim() ? libSearchScore(p).entryIndex : 0;
-    const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
-    // file_path still wins over a variant hit: a file/image prompt never has variants (the
-    // editor gates rotation to text-only prompts).
-    const text = document.createElement("span");
-    text.className = "lib-text";
-    text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
-    // Literal hits are marked in the name and the preview; a typo-tolerant or picture hit has
-    // no substring to mark. A hit that only lives in the private note gets a label instead.
-    const scoreHit = libQuery.trim() ? libSearchScore(p) : null;
-    const markQ = scoreHit && !scoreHit.fuzzy && !scoreHit.fromImage ? scoreHit.q : "";
-    if (markQ) {
-      markHits(name, libLabel(p), markQ);
-      markHits(text, text.textContent, markQ);
-    }
-    const nameRow = document.createElement("span");
-    nameRow.className = "lib-name-row";
-    nameRow.appendChild(name);
-    body.appendChild(nameRow);
-    if (hitVariant != null) {
-      const tag = document.createElement("span");
-      tag.className = "lib-rotate-tag";
-      tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
-      body.appendChild(tag);
-    }
-    // Otherwise this hit would look like a random match, since neither the name nor the body
-    // contains the query.
-    if (libQuery.trim() && libSearchScore(p).fromImage) {
-      const imgTag = document.createElement("span");
-      imgTag.className = "lib-image-hit-tag";
-      imgTag.textContent = t("libFoundInImage");
-      body.appendChild(imgTag);
-    }
-    if (scoreHit && scoreHit.field === "notes" && !scoreHit.fuzzy) {
-      const noteTag = document.createElement("span");
-      noteTag.className = "lib-note-hit-tag";
-      noteTag.textContent = t("libFoundInNote");
-      body.appendChild(noteTag);
-    }
-    body.appendChild(text);
-    // Tags are small flat labels beside the name, not controls: at most three, then "+N".
-    if (tagsOn() && (p.tags || []).length) {
-      const marks = document.createElement("span");
-      marks.className = "lib-tag-marks";
-      const mark = (label, colorOf) => {
-        const m = document.createElement("span");
-        m.className = "tag-mark";
-        m.textContent = label;
-        const c = colorOf ? tagColor(colorOf) : "";
-        if (c) {
-          m.style.setProperty("--chip-color", c);
-          m.classList.add("tag-colored");
-        }
-        marks.appendChild(m);
-      };
-      for (const tn of p.tags.slice(0, 3)) mark(tn, tn);
-      if (p.tags.length > 3) mark(`+${p.tags.length - 3}`, "");
-      nameRow.appendChild(marks);
-    }
-
-    // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot. In tiles mode a
-    // not-yet-visible row gets a placeholder that _tileImgObs swaps for the real thumbnail.
-    if (tilesMode) {
-      const placeholder = document.createElement("span");
-      placeholder.className = "lib-thumb lib-tile-placeholder dot";
-      if (p.color) placeholder.style.background = p.color;
-      row.appendChild(placeholder);
-      _tileImgObs.observe(row);
-    } else {
-      row.appendChild(mediaThumb(p, thumbEl(p, libThumbCache)));
-    }
-    row.appendChild(body);
-    maybeBackfillMediaMeta(p, renderLibrary);
-
-    // Every row gets the same actions menu a grid tile has; the image and video editors are
-    // entries of it.
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openCtx(p.id, e.clientX, e.clientY);
-    });
-
-    row.addEventListener("pointerdown", (e) => {
-      if (libSelectMode) return; // no drag while multi-selecting
-      if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav, .lib-delete")) return;
-      const out = armDragOut(row, e, () => prompts.find((x) => x.id === p.id));
-      assignDrag({ id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out });
-    });
-    // Add-to-view icon (leftmost of the action group): place on the current layout.
-    if (!placed.has(p.id)) {
-      const add = document.createElement("span");
-      add.className = "icon-btn lib-add";
-      add.title = t("addToLayout");
-      putIcon(add, GRID_PLUS);
-      add.addEventListener("pointerdown", (e) => e.stopPropagation());
-      add.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const view = activeView();
-        const occupied = new Map(
-          Object.entries(layoutOf(view)).map(([id, c]) => [cellKey(...c), id])
-        );
-        // A folder's cell is not in the layout, but placing a tile onto it is refused.
-        for (const f of foldersOfView(view.id)) occupied.set(cellKey(...(f.cell || [0, 0])), f.id);
-        const free = firstFree(occupied, view.cols, view.rows);
-        if (!free) { toast(t("gridFull")); return; }
-        await placeTile(p.id, free[0], free[1]);
-        renderLibrary();
-      });
-      makeKeyboardActivatable(add);
-      row.appendChild(add);
-    }
-    // Star (middle): mark/unmark this prompt as a favorite (feature-gated).
-    if (flag("favorites")) {
-      const fav = document.createElement("span");
-      fav.className = "icon-btn lib-fav" + (p.favorite ? " active" : "");
-      fav.textContent = "★";
-      fav.title = t(p.favorite ? "favoriteRemove" : "favoriteAdd");
-      fav.addEventListener("pointerdown", (e) => e.stopPropagation());
-      fav.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await toggleFavoritePrompt(p);
-      });
-      makeKeyboardActivatable(fav);
-      row.appendChild(fav);
-    }
-    const edit = document.createElement("span");
-    edit.className = "icon-btn lib-edit";
-    edit.title = t("edit");
-    putIcon(edit, ICON_EDIT);
-    edit.addEventListener("pointerdown", (e) => e.stopPropagation());
-    edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
-    makeKeyboardActivatable(edit);
-    row.appendChild(edit);
-
-    const del = document.createElement("span");
-    del.className = "icon-btn lib-delete";
-    del.title = t("delete");
-    putIcon(del, ICON_TRASH);
-    del.addEventListener("pointerdown", (e) => e.stopPropagation());
-    del.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (!(await trashPromptWithUndo(p.id, p.name))) return;
-      assignPrompts(prompts.filter((x) => x.id !== p.id));
-      renderLibrary();
-      await renderGrid(); // the tile (or its folder) is gone from the grid as well
-    });
-    makeKeyboardActivatable(del);
-    row.appendChild(del);
-
-    row.addEventListener("click", (e) => {
-      if (libSelectMode) { toggleLibSelect(p.id, e.shiftKey); return; }
-      libraryCopy(p);
-    });
-    frag.appendChild(row);
-  }
+  for (let i = libShown; i < end; i++) frag.appendChild(buildLibRow(libItems[i], libCtx));
+  libShown = end;
   list.appendChild(frag);
+  if (libShown >= libItems.length) return;
+  const more = document.createElement("div");
+  more.className = "lib-more";
+  more.style.gridColumn = "1 / -1";
+  more.style.height = "1px";
+  list.appendChild(more);
+  libMoreObs = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) appendLibRows();
+  }, { root: list, rootMargin: "600px 0px" });
+  libMoreObs.observe(more);
+}
+
+function buildLibRow(p, { tilesMode, placed, hasQuery }) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "lib-item";
+  row.dataset.id = p.id; // In-place selection toggle finds the row by id
+  // Dim rows that only matched via the typo-tolerant tier.
+  if (hasQuery && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
+  // Selection state (the checkbox is a CSS ::before shown while the list has .selecting, so
+  // toggling select mode never re-renders).
+  if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
+  row.title = libSelectMode ? "" : t("copy");
+  const rowTimes = tileTimeLines(p.id);
+  if (rowTimes) row.dataset.tipTimes = rowTimes;
+  const rowMedia = mediaTipLine(p);
+  if (rowMedia) row.dataset.tipMedia = rowMedia;
+
+  const body = document.createElement("span");
+  body.className = "lib-body";
+  const name = document.createElement("span");
+  name.className = "lib-name";
+  name.textContent = libLabel(p);
+  // A search hit inside entry 2+ shows that entry (why the row matched) plus a small
+  // "n/total" tag naming it.
+  const hitEntry = hasQuery ? libSearchScore(p).entryIndex : 0;
+  const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
+  // file_path still wins over a variant hit: a file/image prompt never has variants (the
+  // editor gates rotation to text-only prompts).
+  const text = document.createElement("span");
+  text.className = "lib-text";
+  text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
+  // Literal hits are marked in the name and the preview; a typo-tolerant or picture hit has
+  // no substring to mark. A hit that only lives in the private note gets a label instead.
+  const scoreHit = hasQuery ? libSearchScore(p) : null;
+  const markQ = scoreHit && !scoreHit.fuzzy && !scoreHit.fromImage ? scoreHit.q : "";
+  if (markQ) {
+    markHits(name, libLabel(p), markQ);
+    markHits(text, text.textContent, markQ);
+  }
+  const nameRow = document.createElement("span");
+  nameRow.className = "lib-name-row";
+  nameRow.appendChild(name);
+  body.appendChild(nameRow);
+  if (hitVariant != null) {
+    const tag = document.createElement("span");
+    tag.className = "lib-rotate-tag";
+    tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
+    body.appendChild(tag);
+  }
+  // Otherwise this hit would look like a random match, since neither the name nor the body
+  // contains the query.
+  if (hasQuery && libSearchScore(p).fromImage) {
+    const imgTag = document.createElement("span");
+    imgTag.className = "lib-image-hit-tag";
+    imgTag.textContent = t("libFoundInImage");
+    body.appendChild(imgTag);
+  }
+  if (scoreHit && scoreHit.field === "notes" && !scoreHit.fuzzy) {
+    const noteTag = document.createElement("span");
+    noteTag.className = "lib-note-hit-tag";
+    noteTag.textContent = t("libFoundInNote");
+    body.appendChild(noteTag);
+  }
+  body.appendChild(text);
+  // Tags are small flat labels beside the name, not controls: at most three, then "+N".
+  if (tagsOn() && (p.tags || []).length) {
+    const marks = document.createElement("span");
+    marks.className = "lib-tag-marks";
+    const mark = (label, colorOf) => {
+      const m = document.createElement("span");
+      m.className = "tag-mark";
+      m.textContent = label;
+      const c = colorOf ? tagColor(colorOf) : "";
+      if (c) {
+        m.style.setProperty("--chip-color", c);
+        m.classList.add("tag-colored");
+      }
+      marks.appendChild(m);
+    };
+    for (const tn of p.tags.slice(0, 3)) mark(tn, tn);
+    if (p.tags.length > 3) mark(`+${p.tags.length - 3}`, "");
+    nameRow.appendChild(marks);
+  }
+
+  // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot. In tiles mode a
+  // not-yet-visible row gets a placeholder that _tileImgObs swaps for the real thumbnail.
+  if (tilesMode) {
+    const placeholder = document.createElement("span");
+    placeholder.className = "lib-thumb lib-tile-placeholder dot";
+    if (p.color) placeholder.style.background = p.color;
+    row.appendChild(placeholder);
+    _tileImgObs.observe(row);
+  } else {
+    row.appendChild(mediaThumb(p, thumbEl(p, libThumbCache)));
+  }
+  row.appendChild(body);
+  maybeBackfillMediaMeta(p, renderLibrary);
+
+  // Add-to-view icon (leftmost of the action group): place on the current layout.
+  if (!placed.has(p.id)) {
+    const add = document.createElement("span");
+    add.className = "icon-btn lib-add";
+    add.title = t("addToLayout");
+    putIcon(add, GRID_PLUS);
+    libIconKeyable(add);
+    row.appendChild(add);
+  }
+  // Star (middle): mark/unmark this prompt as a favorite (feature-gated).
+  if (flag("favorites")) {
+    const fav = document.createElement("span");
+    fav.className = "icon-btn lib-fav" + (p.favorite ? " active" : "");
+    fav.textContent = "★";
+    fav.title = t(p.favorite ? "favoriteRemove" : "favoriteAdd");
+    libIconKeyable(fav);
+    row.appendChild(fav);
+  }
+  const edit = document.createElement("span");
+  edit.className = "icon-btn lib-edit";
+  edit.title = t("edit");
+  putIcon(edit, ICON_EDIT);
+  libIconKeyable(edit);
+  row.appendChild(edit);
+
+  const del = document.createElement("span");
+  del.className = "icon-btn lib-delete";
+  del.title = t("delete");
+  putIcon(del, ICON_TRASH);
+  libIconKeyable(del);
+  row.appendChild(del);
+
+  return row;
+}
+
+// The row actions are plain spans inside the row's own button, so they reach the keyboard here
+// and the pointer/click/context-menu behaviour of every row goes through the delegated listeners
+// bindLibraryList puts on the list.
+const LIB_ICON_SEL = ".lib-add, .lib-edit, .lib-fav, .lib-delete";
+function libIconKeyable(el) {
+  el.tabIndex = 0;
+  el.setAttribute("role", "button");
+}
+function libRowOf(e) {
+  const row = e.target.closest?.(".lib-item");
+  return row && $("library-list").contains(row) ? row : null;
+}
+async function libIconAction(icon, id) {
+  const p = libById.get(id);
+  if (!p) return;
+  if (icon.classList.contains("lib-add")) {
+    const view = activeView();
+    const occupied = new Map(
+      Object.entries(layoutOf(view)).map(([pid, c]) => [cellKey(...c), pid])
+    );
+    // A folder's cell is not in the layout, but placing a tile onto it is refused.
+    for (const f of foldersOfView(view.id)) occupied.set(cellKey(...(f.cell || [0, 0])), f.id);
+    const free = firstFree(occupied, view.cols, view.rows);
+    if (!free) { toast(t("gridFull")); return; }
+    await placeTile(p.id, free[0], free[1]);
+    renderLibrary();
+  } else if (icon.classList.contains("lib-fav")) {
+    await toggleFavoritePrompt(p);
+  } else if (icon.classList.contains("lib-edit")) {
+    editPrompt(p.id);
+  } else if (icon.classList.contains("lib-delete")) {
+    if (!(await trashPromptWithUndo(p.id, p.name))) return;
+    assignPrompts(prompts.filter((x) => x.id !== p.id));
+    renderLibrary();
+    await renderGrid(); // the tile (or its folder) is gone from the grid as well
+  }
+}
+function bindLibraryList(list) {
+  // Backs up the sentinel observer: a scroll near the end draws the next page even if the
+  // observer's notification is late.
+  list.addEventListener("scroll", () => {
+    if (libShown < libItems.length && list.scrollHeight - list.scrollTop - list.clientHeight < 600) appendLibRows();
+  }, { passive: true });
+  // Every row gets the same actions menu a grid tile has; the image and video editors are
+  // entries of it.
+  list.addEventListener("contextmenu", (e) => {
+    const row = libRowOf(e);
+    if (!row) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openCtx(row.dataset.id, e.clientX, e.clientY);
+  });
+  list.addEventListener("pointerdown", (e) => {
+    const row = libRowOf(e);
+    if (!row) return;
+    if (e.target.closest(LIB_ICON_SEL)) { e.stopPropagation(); return; }
+    if (libSelectMode) return; // no drag while multi-selecting
+    if (e.button !== 0) return;
+    const id = row.dataset.id;
+    const out = armDragOut(row, e, () => prompts.find((x) => x.id === id));
+    assignDrag({ id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out });
+  });
+  list.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const icon = e.target.closest?.(LIB_ICON_SEL);
+    if (!icon || !libRowOf(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    icon.click();
+  });
+  list.addEventListener("click", (e) => {
+    const row = libRowOf(e);
+    if (!row) return;
+    const icon = e.target.closest(LIB_ICON_SEL);
+    if (icon) {
+      e.stopPropagation();
+      libIconAction(icon, row.dataset.id);
+      return;
+    }
+    if (libSelectMode) { toggleLibSelect(row.dataset.id, e.shiftKey); return; }
+    const p = libById.get(row.dataset.id);
+    if (p) libraryCopy(p);
+  });
 }
 
 // ---- Batch operations ----
@@ -1211,6 +1350,8 @@ export async function doBatch(action, extra = {}, onIds = null) {
       if (idset.has(row.dataset.id)) row.remove();
     }
     libDisplayOrder = libDisplayOrder.filter((x) => !idset.has(x));
+    libItems = libItems.filter((p) => !idset.has(p.id));
+    libShown = Math.min(libShown, libItems.length);
     // Only the ids that were sent: a row picked while the call was pending stays selected.
     for (const id of ids) libSelected.delete(id);
     if (idset.has(libLastId)) libLastId = null;
@@ -1416,9 +1557,16 @@ export async function readyForCopy(p, beforeAsk) {
   return p;
 }
 
-export async function copyResolved(p) {
+// Resolves a prompt (vault, variables, rotation) and copies it. `out`, when given, receives the
+// text that reached the clipboard, so a caller can count what was really copied.
+export async function copyResolved(p, out = null) {
   p = await readyForCopy(p);
   if (!p) return false;
+  const copyText = async (text, extra) => {
+    const ok = await invoke("copy_text", { text, ...extra }).catch((e) => { errToast(e); return false; });
+    if (ok && out) out.text = text;
+    return ok;
+  };
   // Rotating prompt: peek the entry copy_prompt would use, resolve variables on that text, and
   // commit only once the copy reaches the clipboard, so a cancelled variable dialog never burns
   // an entry.
@@ -1431,6 +1579,7 @@ export async function copyResolved(p) {
       if (!resolved) return false;
       if (await invoke("rotation_arm_session", { id: p.id, resolved }).catch(() => false)) {
         recordToolUsage("rotation_advance");
+        if (out) out.text = resolved[0];
         return true;
       }
     }
@@ -1438,7 +1587,7 @@ export async function copyResolved(p) {
     // without it the Auto switch would do nothing on this path, unlike the floating buttons
     // (which copy through copy_prompt).
     const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
-    return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch((e) => { errToast(e); return false; }), {
+    return peekResolveCommit(p, (text) => copyText(text, { id: armId }), {
       vaultChecked: true,
       resolve: (raw) => (varTokens(p, raw).length ? resolveVars(raw) : raw),
     });
@@ -1446,15 +1595,18 @@ export async function copyResolved(p) {
   if (varTokens(p).length) {
     const text = await resolveVars(p.text);
     if (text === null) return false;
-    return invoke("copy_text", { text }).catch((e) => { errToast(e); return false; });
+    return copyText(text);
   }
-  return invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
+  const ok = await invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
+  if (ok && out) out.text = p.text || "";
+  return ok;
 }
 
 // A blink says "something happened"; the character count says the whole prompt reached the
-// clipboard, the doubt a long one leaves.
-export function toastCopied(p) {
-  const n = (p?.text || "").length;
+// clipboard, the doubt a long one leaves. `text` is what was really copied (a rotation entry,
+// filled variables); left out, the stored text is counted.
+export function toastCopied(p, text) {
+  const n = (text ?? p?.text ?? "").length;
   toast(n > 0 ? t("copiedChars").replace("{n}", n.toLocaleString(LANG)) : t("copied"));
 }
 
@@ -1463,9 +1615,10 @@ export async function libraryCopy(p) {
   // (copyResolved) so variables are asked before copy and auto-paste.
   if (!dialogTokens(p, await peekRotatedText(p)).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
-  if (!(await copyResolved(p))) return;
+  const copied = {};
+  if (!(await copyResolved(p, copied))) return;
   recordCopy(p.id);
-  toastCopied(p);
+  toastCopied(p, copied.text);
   if (flag("closeAfterCopy")) hideLibrary();
 }
 
@@ -1481,6 +1634,7 @@ export function syncLibraryCols() {
 }
 
 export function bindLibrary() {
+  bindLibraryList($("library-list"));
   $("library-btn").addEventListener("click", async () => {
     const preset = libPresetQuery ?? "";
     libPresetQuery = null;
