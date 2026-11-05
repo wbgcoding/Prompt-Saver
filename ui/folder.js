@@ -322,16 +322,18 @@ async function reflow() {
 
 // `notice` replaces "Copied!" when an auto-paste was refused: the text is on the clipboard
 // either way, and the member must not stay silent about the paste.
+const flashTimers = new Map();
 function flash(id, notice) {
   const tile = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"]`);
   const ok = tile && tile.querySelector(".member-ok");
   if (tile) {
     if (notice && ok) ok.textContent = notice;
     tile.classList.add("copied");
-    setTimeout(() => {
+    clearTimeout(flashTimers.get(id));
+    flashTimers.set(id, setTimeout(() => {
       tile.classList.remove("copied");
       if (ok) ok.textContent = TXT.copied;
-    }, COPIED_MS);
+    }, COPIED_MS));
   }
   if (copyPrefs.copySoundOn) playCopySound(copyPrefs.copySoundVolume);
   const live = document.getElementById("live");
