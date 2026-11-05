@@ -1535,6 +1535,7 @@ export async function editPrompt(id) {
     if (!(await confirmDiscardIfDirty())) return;
     closeModal();
   }
+  const session = modalSession;
   let p;
   try {
     p = await invoke("get_prompt", { id });
@@ -1548,7 +1549,8 @@ export async function editPrompt(id) {
       return;
     }
   }
-  if (p) {
+  // Another editor session opened while the fetch or the unlock dialog was pending: keep it.
+  if (p && session === modalSession) {
     openModal({ ...promptToModal(p), mode: "edit", id });
   }
 }

@@ -104,6 +104,29 @@ later(async () => {
   gate.resolve(); await a; await b;
 });
 
+// editor.js editPrompt: an editor opened while the fetch is pending is not overwritten.
+later(async () => {
+  const code = extractBlock(read("editor.js"), "export async function editPrompt").replace(/export /g, "");
+  const gate = deferred();
+  const opened = [];
+  const sandbox = run("let modalSession = 0;\n" + code + "\n;globalThis.edit = editPrompt; globalThis.bump = () => { modalSession++; };", {
+    modalState: null,
+    confirmDiscardIfDirty: async () => true, closeModal() {},
+    invoke: async () => { await gate.promise; return { id: "x" }; },
+    ensureSecretVaultUnlocked: async () => true, errToast() {},
+    promptToModal: (p) => p,
+    openModal: (m) => opened.push(m.id),
+  });
+  const first = sandbox.edit("x");
+  await tick();
+  sandbox.bump();
+  gate.resolve(); await first;
+  check(opened.length === 0, `an editor opened meanwhile is kept, got ${opened}`);
+  gate.resolve();
+  await sandbox.edit("x");
+  check(opened.length === 1, "an undisturbed fetch still opens the editor");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
