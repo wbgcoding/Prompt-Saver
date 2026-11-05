@@ -187,6 +187,26 @@ later(async () => {
   check(!!pos && arr[pos.name] === "NAME" && arr[pos.text] === "TEXT" && String(arr[pos.entries]) === "ENTRIES" && arr[pos.rotateMode] === "MODE", `restore positions match the snapshot layout, got ${JSON.stringify(pos)}`);
 });
 
+// views.js renderGrid: of two overlapping fetching renders the older answer never overwrites the newer.
+later(async () => {
+  const src = read("views.js");
+  const from = src.indexOf("let renderGridSeq") >= 0 ? src.indexOf("let renderGridSeq") : src.indexOf("export async function renderGrid");
+  const code = src.slice(from, src.indexOf("  armVaultRelock();\n  if (favView", from)).replace(/export /g, "") + "}";
+  const gates = [deferred(), deferred()];
+  let n = 0;
+  const sandbox = run(code + "\n;globalThis.go = renderGrid;", {
+    hideTileTip() {}, invoke: () => gates[n++].promise, errToast() {},
+    assignPrompts: (v) => { sandbox.state = v; }, assignSettings() {}, updateExamplesBanner: async () => {},
+    settings: {}, prompts: [],
+  });
+  const a = sandbox.go(); const b = sandbox.go();
+  gates[1].resolve({ prompts: "new", settings: {} });
+  await tick();
+  gates[0].resolve({ prompts: "old", settings: {} });
+  await a; await b;
+  check(sandbox.state === "new", `the newest snapshot stays, got ${sandbox.state}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");

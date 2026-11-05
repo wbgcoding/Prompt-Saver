@@ -305,15 +305,26 @@ async function armVaultRelock() {
   }, at - Date.now());
 }
 
+// A fetching render takes a number before its await: an answer that is no longer the newest
+// is dropped (the newer fetch carries the newer state) and that render waits for it instead.
+let renderGridSeq = 0;
+let renderGridNewest = Promise.resolve();
 // skipFetch: caller already updated the local state (drag/hide hot path).
 export async function renderGrid(skipFetch = false) {
   hideTileTip(); // the hovered tile may be replaced by this render
   if (!skipFetch) {
-    try {
+    const gen = ++renderGridSeq;
+    const fetched = (async () => {
       const s = await invoke("get_state");
+      if (gen !== renderGridSeq) return;
       assignPrompts(s.prompts);
       assignSettings(s.settings);
       await updateExamplesBanner(); // re-evaluate on every real fetch, not just at startup
+    })();
+    renderGridNewest = fetched;
+    try {
+      await fetched;
+      if (gen !== renderGridSeq) await renderGridNewest.catch(() => {});
     } catch (e) {
       // IPC hiccup: keep the last good state instead of throwing into the global handler and
       // leaving a half-rendered grid.
