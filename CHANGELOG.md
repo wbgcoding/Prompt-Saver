@@ -35,8 +35,9 @@ saving, backups, recordings, the editors and the installer.
   load still gets a size, folders grow when dragged out at the left or top
   edge, hotkeys accept the plus key, global search returns focus where it
   started, the compare view ignores double clicks, the crash draft stays
-  unless you choose Discard, and the Data export buttons wrap instead of
-  overlapping.
+  unless you choose Discard, the Data export buttons wrap instead of
+  overlapping, and a choice placeholder in the fill-in window shows a drop-down
+  arrow like every other list.
 - **Updates and installer.** Skipping a version keeps the update notice when
   saving the choice fails, silent installs refuse a downgrade, and the app
   starts with its original command line after installing WebView2.
