@@ -155,7 +155,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | tao | 0.37.2 | Apache-2.0 |
 | tauri | 2.12.5 | Apache-2.0 OR MIT |
 | tauri-plugin-global-shortcut | 2.4.1 | Apache-2.0 OR MIT |
-| tauri-plugin-single-instance | 2.5.4 | Apache-2.0 OR MIT |
+| tauri-plugin-single-instance | 2.5.5 | Apache-2.0 OR MIT |
 | tauri-runtime | 2.12.2 | Apache-2.0 OR MIT |
 | tauri-runtime-wry | 2.12.3 | Apache-2.0 OR MIT |
 | tauri-utils | 2.10.2 | Apache-2.0 OR MIT |
@@ -217,7 +217,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | zeroize | 1.9.1 | Apache-2.0 OR MIT |
 | zerotrie | 0.2.5 | Unicode-3.0 |
 | zerovec | 0.11.9 | Unicode-3.0 |
-| zip | 9.1.0 | MIT |
+| zip | 9.1.3 | MIT |
 | zmij | 1.0.23 | MIT |
 | zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib |
