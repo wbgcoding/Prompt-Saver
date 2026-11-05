@@ -1699,6 +1699,22 @@ section(() => {
   });
 });
 
+// 94. Clearing an expert-menu hotkey: a refused clear keeps the old text and says why.
+section(() => {
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "export async function clearHotkeyField(").replace("export ", "")
+    + ";globalThis.api = { clearHotkeyField };";
+  later(async () => {
+    const toasts = [];
+    const sb = run(code, { prettyAccel: (a) => a, hotkeyMessage: (e) => "msg:" + e, toast: (m) => toasts.push(m) });
+    const input = { value: "F9" };
+    await sb.api.clearHotkeyField(input, { onCommit: async () => { throw "hotkey-system"; } });
+    check(input.value === "F9" && toasts.join() === "msg:hotkey-system", "a refused clear keeps the old hotkey text and shows the reason");
+    await sb.api.clearHotkeyField(input, { onCommit: async (a) => a });
+    check(input.value === "" && toasts.length === 1, "an accepted clear empties the field");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

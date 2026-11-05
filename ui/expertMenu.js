@@ -13,7 +13,7 @@ import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, fmtUnit, fmtUnitName, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { fillScaleSelect, reloadEverything, syncSettingsControls } from "./settingsPanel.js";
-import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
+import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, hotkeyMessage, prettyAccel } from "./hotkeys.js";
 import { closeBackups } from "./backups.js";
 import { varFixedListRow } from "./editor.js";
 import { openVideoCleanup } from "./recordingTools.js";
@@ -1587,6 +1587,11 @@ export const HOTKEY_ROW_DEFS = {
   recStopHotkey: { slot: "recStop", current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
   recPauseHotkey: { slot: "recPause", current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
 };
+// The field shows what the clear really left: a refused clear (the backend keeps the old hotkey
+// registered) keeps the old text and says why.
+export async function clearHotkeyField(input, def) {
+  try { input.value = prettyAccel(await def.onCommit("")); } catch (err) { toast(hotkeyMessage(String(err))); }
+}
 export function hotkeyRow(key, labelKey) {
   const def = HOTKEY_ROW_DEFS[key];
   const row = document.createElement("div");
@@ -1609,10 +1614,7 @@ export function hotkeyRow(key, labelKey) {
   input.value = prettyAccel(def.current());
   wrap.append(input);
   row.append(head, wrap);
-  hotkeyClearX(input, async () => {
-    try { await def.onCommit(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    input.value = "";
-  });
+  hotkeyClearX(input, () => clearHotkeyField(input, def));
   bindHotkeyField(input, { slot: def.slot, current: def.current, onCommit: def.onCommit });
   return withTip(row, key);
 }
