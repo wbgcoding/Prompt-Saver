@@ -474,14 +474,14 @@ pub(crate) fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -
     Ok(())
 }
 
-// Clears the expert flags, values and texts. The texts that are keys rather than
-// preferences stay: the backup password and
-// the vault's salt and verifier (the confidential prompts are sealed with it).
+// Clears the expert flags, values and texts. What a full reset keeps stays: the retention
+// windows that keep longer than the default, the backup password and the vault's salt and
+// verifier (the confidential prompts are sealed with it).
 pub(crate) fn reset_expert_settings(settings: &mut Settings) {
+    let fresh = settings_after_reset(settings);
     settings.ui_flags.clear();
-    settings.ui_values.clear();
-    let kept = settings_after_reset(settings).ui_texts;
-    settings.ui_texts = kept;
+    settings.ui_values = fresh.ui_values;
+    settings.ui_texts = fresh.ui_texts;
 }
 
 // Clear all expert overrides back to the shipped defaults.

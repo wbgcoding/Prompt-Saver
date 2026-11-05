@@ -12,8 +12,8 @@ import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, fmtUnit, fmtUnitName, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
-import { reloadEverything, syncSettingsControls } from "./settingsPanel.js";
-import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
+import { fillScaleSelect, reloadEverything, syncSettingsControls } from "./settingsPanel.js";
+import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, hotkeyMessage, prettyAccel } from "./hotkeys.js";
 import { closeBackups } from "./backups.js";
 import { varFixedListRow } from "./editor.js";
 import { openVideoCleanup } from "./recordingTools.js";
@@ -339,6 +339,33 @@ export function syncRowReset(kind, key) {
   const btn = document.querySelector(`.expert-row-reset[data-expert-kind="${kind}"][data-expert-key="${key}"]`);
   if (btn) btn.classList.toggle("hidden", !isRowChanged(kind, key));
 }
+// What a flag write owes beyond the write itself, shared by the row's switch, the per-row reset
+// and the category reset: the message for a refused write, the restart hint and the offer to
+// clear the clipboard inbox once its watcher is off.
+async function afterFlagWrite(key, enabled, accepted, err) {
+  if (!accepted) {
+    const msg = String(err);
+    if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
+    else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
+    else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
+    else if (msg === "save-failed") toast(t("persistFailed"));
+    else errToast(err);
+    return;
+  }
+  // Read once at process start (before the builder exists): flipping it live
+  // cannot change which guard is already running.
+  if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
+  if (key === "clipWatcher" && !enabled) await offerClipInboxCleanup();
+}
+
+// What a value write owes beyond the write: the settings dialog's scale select shows the new
+// scale, and the grid's relock refetch is timed from the old secret timeout, so a render asks the
+// backend again. `rerender` is off for a caller that renders the grid itself afterwards.
+async function afterValueWrite(key, rerender = true) {
+  if (key === "uiScale") fillScaleSelect("ui-scale", "uiScale");
+  if (key === "secretTimeoutMin" && rerender) await renderGrid(true);
+}
+
 export async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags" && EXPERT_BULK_NEVER.includes(key)) return;
   if (kind === "flags") {
@@ -346,15 +373,17 @@ export async function resetOneExpertValue(kind, key, after) {
     const had = Object.prototype.hasOwnProperty.call(settings.ui_flags || {}, key);
     const before = settings.ui_flags?.[key];
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    let failure;
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
+      failure = err;
       const back = { ...(settings.ui_flags || {}) };
       if (had) back[key] = before; else delete back[key];
       settings.ui_flags = back;
-      errToast(err);
     }
     applyFlags();
+    await afterFlagWrite(key, enabled, failure === undefined, failure);
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true); else fitAllTiles();
   } else if (kind === "values" || kind === "selects") {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
@@ -371,6 +400,7 @@ export async function resetOneExpertValue(kind, key, after) {
     }
     applyValues();
     await refreshTiles(key);
+    await afterValueWrite(key);
   } else if (kind === "dropdowns") {
     const cfg = EXPERT_DROPDOWNS[key];
     await cfg.set(cfg.def);
@@ -437,28 +467,19 @@ export function flagRow(key) {
       if (!ok) { input.checked = false; return; }
     }
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    let accepted = true;
+    let failure;
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
-      accepted = false;
+      failure = err;
       // The backend refused to switch the feature on (e.g. prompt sync whose safety backup or first
       // folder write failed) and left the flag off; the switch has to follow, since a checkbox
       // showing a state the store lacks is worse than the error.
-      const msg = String(err);
-      if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
-      else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
-      else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
-      else if (msg === "save-failed") toast(t("persistFailed"));
-      else errToast(err);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
       input.checked = !enabled;
     }
-    // Read once at process start (before the builder exists): flipping it live
-    // cannot change which guard is already running.
-    if (key === "allowMultipleInstances" && accepted) toast(t("toastRestartNeeded"));
     applyFlags();
-    if (key === "clipWatcher" && !enabled && accepted) await offerClipInboxCleanup();
+    await afterFlagWrite(key, enabled, failure === undefined, failure);
     // "only changed" must recompute after every flag, not just gating ones: the row set depends on
     // this flag's own value.
     if (GATING_FLAGS.has(key) || expertOnlyChanged) renderExpert();
@@ -518,8 +539,7 @@ export async function commitValue(key, value) {
   }
   applyValues();
   await refreshTiles(key);
-  // The relock refetch is timed from the old timeout: a render asks the backend again.
-  if (key === "secretTimeoutMin") await renderGrid(true);
+  await afterValueWrite(key);
   // Fires once on release, not per drag frame: same "no flash mid-drag" reason
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
   // An off-at-zero value that crossed zero opens or closes the rows gated on it.
@@ -1567,6 +1587,11 @@ export const HOTKEY_ROW_DEFS = {
   recStopHotkey: { slot: "recStop", current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
   recPauseHotkey: { slot: "recPause", current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
 };
+// The field shows what the clear really left: a refused clear (the backend keeps the old hotkey
+// registered) keeps the old text and says why.
+export async function clearHotkeyField(input, def) {
+  try { input.value = prettyAccel(await def.onCommit("")); } catch (err) { toast(hotkeyMessage(String(err))); }
+}
 export function hotkeyRow(key, labelKey) {
   const def = HOTKEY_ROW_DEFS[key];
   const row = document.createElement("div");
@@ -1589,10 +1614,7 @@ export function hotkeyRow(key, labelKey) {
   input.value = prettyAccel(def.current());
   wrap.append(input);
   row.append(head, wrap);
-  hotkeyClearX(input, async () => {
-    try { await def.onCommit(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    input.value = "";
-  });
+  hotkeyClearX(input, () => clearHotkeyField(input, def));
   bindHotkeyField(input, { slot: def.slot, current: def.current, onCommit: def.onCommit });
   return withTip(row, key);
 }
@@ -1892,19 +1914,22 @@ export async function resetExpertGroup(group, changed, count) {
     confirmLabel: t("expertReset"),
   });
   if (!ok) return;
+  const flagWrites = [];
   for (const key of changed.flags.filter((k) => !EXPERT_BULK_NEVER.includes(k))) {
     const enabled = shipsOn(key);
     const had = Object.prototype.hasOwnProperty.call(settings.ui_flags || {}, key);
     const before = settings.ui_flags?.[key];
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    let failure;
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
+      failure = err;
       const back = { ...(settings.ui_flags || {}) };
       if (had) back[key] = before; else delete back[key];
       settings.ui_flags = back;
-      errToast(err);
     }
+    flagWrites.push([key, enabled, failure]);
   }
   for (const key of [...changed.values, ...changed.selects]) {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
@@ -1936,6 +1961,8 @@ export async function resetExpertGroup(group, changed, count) {
   renderViews();
   await renderGrid(true);
   fitAllTiles();
+  for (const [key, enabled, failure] of flagWrites) await afterFlagWrite(key, enabled, failure === undefined, failure);
+  for (const key of [...changed.values, ...changed.selects]) await afterValueWrite(key, false);
   toast(t("expertResetGroupDone"));
   renderExpert();
 }
@@ -1959,6 +1986,14 @@ export async function onResetExpert() {
     errToast(err);
   }
   if (!refused) {
+    try {
+      // The reset keeps some values and texts (retention windows, keys): read what it left.
+      const left = await invoke("get_settings");
+      settings.ui_values = left.ui_values || {};
+      settings.ui_texts = left.ui_texts || {};
+    } catch (err) {
+      errToast(err);
+    }
     try {
       for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
     } catch (err) {

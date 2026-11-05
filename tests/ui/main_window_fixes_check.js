@@ -331,10 +331,11 @@ section(() => {
   const code = [
     "const offAtZeroWas = {};\nconst valueBeforeDrag = {};\nlet liveRenderQueued = false;\nlet expertOnlyChanged = false;",
     extractBlock(em, "export function previewValue(").replace("export ", ""),
+    extractBlock(em, "async function afterValueWrite("),
     extractBlock(em, "export async function commitValue(").replace("export ", ""),
   ].join("\n");
   const sb = run(code, {
-    EXPERT_VALUES: {}, settings, val: (k) => settings.ui_values[k] || 0,
+    EXPERT_VALUES: {}, settings, val: (k) => settings.ui_values[k] || 0, fillScaleSelect() {},
     applyValues: () => {}, refreshTiles: async () => {}, renderGrid: async () => {}, renderExpert: () => { rendered++; }, syncRowReset: () => {},
     requestAnimationFrame: () => 0, errToast: (e) => toasts.push(String(e)),
     invoke: async () => { if (fail) throw new Error("locked"); },
@@ -589,12 +590,12 @@ section(() => {
 section(() => {
   const src = read("expertMenu.js");
   const persist = extractBlock(src, "export async function persistUiText(").replace("export ", "");
-  const reset = extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
+  const reset = extractBlock(src, "async function afterFlagWrite(") + "\n" + extractBlock(src, "async function afterValueWrite(") + "\n" + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "");
   const make = (fail, settings) => {
     const toasts = [];
     const sb = run([persist, reset].join("\n"), {
       settings, invoke: async () => { if (fail) throw new Error("denied"); }, errToast: (e) => toasts.push(String(e.message || e)),
-      EXPERT_BULK_NEVER: [], shipsOn: () => true, applyFlags() {}, applyValues() {}, fitAllTiles() {}, refreshTiles: async () => {},
+      toast() {}, t: (k) => k, offerClipInboxCleanup: async () => {}, EXPERT_BULK_NEVER: [], shipsOn: () => true, applyFlags() {}, applyValues() {}, fitAllTiles() {}, refreshTiles: async () => {},
       renderGrid: async () => {}, renderExpert() {}, TILE_DOM_FLAGS: new Set(), EXPERT_VALUES: { gap: { def: 9 } }, EXPERT_SELECTS: {}, EXPERT_DROPDOWNS: {},
     });
     return { sb, toasts };
@@ -1582,6 +1583,209 @@ section(() => {
   const src = read("launcher.js");
   check(/let OPENED_AT = Date\.now\(\);/.test(src), "OPENED_AT can be restamped");
   check(/OPENED_AT = Date\.now\(\);\s*invoke\("launcher_ready"\)/.test(src), "it is restamped right before launcher_ready");
+});
+
+// 88. An expert reset shows what the backend kept (retention windows, keys), not empty maps.
+section(() => {
+  const src = read("expertMenu.js");
+  const fn = extractBlock(src, "export async function onResetExpert(").replace("export ", "");
+  later(async () => {
+    const settings = { ui_flags: { a: true }, ui_values: { historyDays: 0, b: 1 }, ui_texts: { c: "x" } };
+    const sb = run(fn, {
+      settings, EXPERT_RESET_KEEP: [], flag: () => false, errToast() {}, loadPalette() {}, refreshColorUI() {}, applyFlags() {},
+      renderExpert() {}, syncSettingsControls() {}, refreshFavViewUi() {}, renderViews() {}, renderGrid: async () => {}, toast() {}, t: (k) => k,
+      invoke: async (cmd) => (cmd === "get_settings" ? { ui_values: { historyDays: 0 }, ui_texts: { salt: "s" } } : undefined),
+    });
+    await sb.onResetExpert();
+    check(settings.ui_values.historyDays === 0 && !("b" in settings.ui_values) && settings.ui_texts.salt === "s" && !("c" in settings.ui_texts), "a finished expert reset shows the values and texts the backend kept");
+  });
+});
+
+// 89. The tour help names only the route that exists: the settings dialog has no tour entry.
+section(() => {
+  const src = read("help.js");
+  check(!/reopen it from the settings dialog/.test(src) && !/Später: über den Einstellungsdialog/.test(src), "the tour help does not send people to the settings dialog");
+  check(/Later: reopen it with the expert menu's/.test(src) && /Später: über die Aktion/.test(src), "the tour help names the expert menu action");
+});
+
+// 90. A failed clipboard inbox listing is reported, not shown as an empty inbox.
+section(() => {
+  const src = read("backups.js");
+  const fn = extractBlock(src, "clipInbox: async () => {").replace("clipInbox:", "const clipInbox =");
+  later(async () => {
+    const log = [];
+    const sb = run(fn + ";globalThis.clipInbox = clipInbox;", {
+      invoke: async (cmd) => { log.push(cmd); if (cmd === "clip_inbox_list") throw new Error("boom"); },
+      errToast: (e) => log.push("err:" + e.message), toast: (m) => log.push("toast:" + m), undoToast() {}, restoreClipInbox() {}, t: (k) => k,
+    });
+    await sb.clipInbox();
+    check(log.includes("err:boom") && !log.some((l) => l.startsWith("toast:")) && !log.includes("clip_inbox_clear"), "a failed inbox listing shows the error and clears nothing");
+  });
+});
+
+// 91. A reset flag write owes what the row's own switch owes: the refusal message, the restart
+// hint for a second instance, the clipboard inbox cleanup offer once its watcher is off.
+section(() => {
+  const src = read("expertMenu.js");
+  check(/afterValueWrite\(key\)/.test(extractBlock(src, "export async function commitValue(")), "the expert slider commit runs the value side effects");
+  const code = extractBlock(src, "async function afterFlagWrite(") + "\n" + extractBlock(src, "async function afterValueWrite(") + "\n"
+    + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "") + "\n"
+    + extractBlock(src, "export async function resetExpertGroup(").replace("export ", "")
+    + ";globalThis.api = { resetOneExpertValue, resetExpertGroup };";
+  const mk = (refuse) => {
+    const log = [];
+    const sb = run(code, {
+      settings: { ui_flags: {}, ui_values: {} }, EXPERT_BULK_NEVER: [], TILE_DOM_FLAGS: new Set(), EXPERT_VALUES: {}, EXPERT_SELECTS: {}, EXPERT_DROPDOWNS: {}, EXPERT_PATHS: {},
+      shipsOn: (k) => k === "allowMultipleInstances",
+      invoke: async (cmd, a) => { if (refuse && cmd === "set_ui_flag") throw refuse; },
+      errToast: (e) => log.push("err:" + e), toast: (m) => log.push("toast:" + m), t: (k) => k,
+      offerClipInboxCleanup: async () => { log.push("inbox"); },
+      applyFlags() {}, applyValues() {}, renderViews() {}, renderGrid: async () => {}, fitAllTiles() {}, renderExpert() {}, savePalette: async () => {},
+      confirmDialog: async () => true,
+    });
+    return { api: sb.api, log };
+  };
+  later(async () => {
+    let r = mk();
+    await r.api.resetOneExpertValue("flags", "allowMultipleInstances", () => {});
+    check(r.log.includes("toast:toastRestartNeeded"), "resetting allowMultipleInstances gives the restart hint");
+    r = mk();
+    await r.api.resetOneExpertValue("flags", "clipWatcher", () => {});
+    check(r.log.includes("inbox"), "resetting clipWatcher to off offers the inbox cleanup");
+    r = mk("sync-backup-failed: x");
+    await r.api.resetOneExpertValue("flags", "promptSync", () => {});
+    check(r.log.includes("toast:syncBackupFailed") && !r.log.includes("inbox"), "a refused reset shows the row's own message");
+    r = mk();
+    await r.api.resetExpertGroup({ title: "g" }, { flags: ["allowMultipleInstances", "clipWatcher"], values: [], selects: [], dropdowns: [], paths: [], palette: false }, 2);
+    check(r.log.includes("toast:toastRestartNeeded") && r.log.includes("inbox"), "a category reset owes the same side effects");
+  });
+});
+
+// 92. The settings dialog's scale select follows the scale: after a settings re-sync and after the
+// expert menu changes or resets the scale value.
+section(() => {
+  check(/fillScaleSelect\("ui-scale", "uiScale"\)/.test(extractBlock(read("settingsPanel.js"), "export function syncSettingsControls(")), "syncSettingsControls refills the scale select");
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "async function afterValueWrite(") + "\n"
+    + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "")
+    + ";globalThis.api = { resetOneExpertValue };";
+  later(async () => {
+    const calls = [];
+    const sb = run(code, {
+      settings: { ui_values: { uiScale: 150 } }, EXPERT_BULK_NEVER: [], EXPERT_VALUES: { uiScale: { def: 100 } }, EXPERT_SELECTS: {},
+      invoke: async () => {}, errToast() {}, applyValues() {}, refreshTiles: async () => {}, renderExpert() {},
+      fillScaleSelect: (id, key) => calls.push(id + ":" + key),
+    });
+    await sb.api.resetOneExpertValue("values", "uiScale", () => {});
+    check(calls.join() === "ui-scale:uiScale", "resetting the scale refills the settings scale select");
+  });
+});
+
+// 93. Resetting the secret timeout re-renders the grid like a slider change does.
+section(() => {
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "async function afterValueWrite(") + "\n"
+    + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "")
+    + ";globalThis.api = { resetOneExpertValue };";
+  later(async () => {
+    let renders = 0;
+    const sb = run(code, {
+      settings: { ui_values: { secretTimeoutMin: 30 } }, EXPERT_BULK_NEVER: [], EXPERT_VALUES: { secretTimeoutMin: { def: 5 } }, EXPERT_SELECTS: {},
+      invoke: async () => {}, errToast() {}, applyValues() {}, refreshTiles: async () => {}, renderExpert() {}, fillScaleSelect() {},
+      renderGrid: async () => { renders++; },
+    });
+    await sb.api.resetOneExpertValue("values", "secretTimeoutMin", () => {});
+    check(renders === 1, "resetting secretTimeoutMin renders the grid again");
+  });
+});
+
+// 94. Clearing an expert-menu hotkey: a refused clear keeps the old text and says why.
+section(() => {
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "export async function clearHotkeyField(").replace("export ", "")
+    + ";globalThis.api = { clearHotkeyField };";
+  later(async () => {
+    const toasts = [];
+    const sb = run(code, { prettyAccel: (a) => a, hotkeyMessage: (e) => "msg:" + e, toast: (m) => toasts.push(m) });
+    const input = { value: "F9" };
+    await sb.api.clearHotkeyField(input, { onCommit: async () => { throw "hotkey-system"; } });
+    check(input.value === "F9" && toasts.join() === "msg:hotkey-system", "a refused clear keeps the old hotkey text and shows the reason");
+    await sb.api.clearHotkeyField(input, { onCommit: async (a) => a });
+    check(input.value === "" && toasts.length === 1, "an accepted clear empties the field");
+  });
+});
+
+// 95. The import previews take keyboard focus when they open (confirm, or Cancel while confirm is
+// disabled) and hand it back to the opener when they close.
+section(() => {
+  const src = read("settingsPanel.js");
+  const code = extractBlock(src, "function focusPreview(") + ";globalThis.api = { focusPreview };";
+  const mk = (disabled) => {
+    const log = [];
+    const confirm = { disabled, focus: () => log.push("confirm") };
+    const cancel = { focus: () => log.push("cancel") };
+    const opener = { isConnected: true, focus: () => log.push("opener") };
+    const sb = run(code, { document: { activeElement: opener } });
+    return { log, confirm, cancel, opener, back: sb.api.focusPreview(confirm, cancel) };
+  };
+  let r = mk(false);
+  check(r.log.join() === "confirm", "an import preview focuses its confirm button");
+  r.back();
+  check(r.log.join() === "confirm,opener", "closing an import preview hands focus back");
+  r = mk(true);
+  check(r.log.join() === "cancel", "a preview with nothing to import focuses Cancel");
+  r = mk(false);
+  r.opener.isConnected = false;
+  r.back();
+  check(r.log.join() === "confirm", "focus is not returned to an opener that is gone");
+  check(/focusPreview\(confirmBtn, \$\("import-preview-cancel"\)\)/.test(extractBlock(src, "export async function runImportPreview(")), "the import preview uses focusPreview");
+  check(/focusPreview\(confirmBtn, \$\("import-folder-cancel"\)\)/.test(extractBlock(src, "export async function runImportFolder(")), "the folder import uses focusPreview");
+});
+
+// 96. The language-pack update notices offer the manage dialog as their action and put the snooze
+// under "Later" instead of "Cancel".
+section(() => {
+  const src = read("capture.js");
+  const code = extractBlock(src, "function langUpdateNotice(") + ";globalThis.api = { langUpdateNotice };";
+  const log = [];
+  let shown;
+  const sb = run(code, {
+    t: (k) => k, toast: (...a) => { shown = a; }, hideToast: () => log.push("hide"),
+    invoke: (c) => { log.push("invoke:" + c); return Promise.resolve(); },
+  });
+  const manage = () => log.push("manage");
+  sb.api.langUpdateNotice([{ label: "German" }], "ocrLangsManage", manage, "ocr_lang_snooze", 5000);
+  const [msg, action, tint, chips, ms] = shown;
+  check(action.label === "ocrLangsManage" && action.onClick === manage, "the notice action opens the manage dialog");
+  check(chips.length === 1 && chips[0].label === "later" && ms === 5000, "the snooze sits under Later");
+  action.onClick();
+  check(log.join() === "manage", "the manage action does not snooze");
+  chips[0].onClick();
+  check(log.slice(1).join() === "hide,invoke:ocr_lang_snooze", "Later closes the toast and snoozes");
+  shown = undefined;
+  sb.api.langUpdateNotice([], "ocrLangsManage", manage, "ocr_lang_snooze", 5000);
+  check(shown === undefined, "an empty list shows nothing");
+  check(/langUpdateNotice\(e\.payload, "voiceLangsManage", openVoiceLangsModal, "voice_lang_snooze"/.test(src), "the voice notice opens the voice dialog");
+});
+
+// 97. The recording start countdown can be cancelled: Escape while it runs, and a Cancel action on
+// its toast; Escape does nothing when no countdown runs.
+section(() => {
+  const src = read("capture.js");
+  const code = "let recCountdownTimer = 7;\n" + extractBlock(src, "function cancelRecCountdown(") + "\n"
+    + extractBlock(src, "function recCountdownEscape(") + ";globalThis.api = { recCountdownEscape, cancelRecCountdown, timer: () => recCountdownTimer };";
+  const log = [];
+  const sb = run(code, { clearTimeout: (id) => log.push("clear:" + id), hideToast: () => log.push("hide") });
+  const key = (k) => ({ key: k, preventDefault: () => log.push("prevent") });
+  sb.api.recCountdownEscape(key("Enter"));
+  check(log.length === 0 && sb.api.timer() === 7, "other keys leave the countdown alone");
+  sb.api.recCountdownEscape(key("Escape"));
+  check(log.join() === "prevent,clear:7,hide" && sb.api.timer() === 0, "Escape stops the countdown and closes its toast");
+  log.length = 0;
+  sb.api.recCountdownEscape(key("Escape"));
+  check(log.length === 0, "Escape without a countdown does nothing");
+  check(/toast\(t\("recCountdownToast"\)[^\n]*onClick: cancelRecCountdown/.test(src), "the countdown toast carries a Cancel action");
+  check(/document\.addEventListener\("keydown", recCountdownEscape\)/.test(src), "the Escape handler is registered");
 });
 
 let guard;

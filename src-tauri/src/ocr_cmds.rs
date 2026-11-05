@@ -786,7 +786,7 @@ pub(crate) fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
     }
 }
 
-// The "Cancel" on the background update notice defers the next automatic notice by
+// The "Later" button on the background update notice defers the next automatic notice by
 // OCR_LANG_SNOOZE_H hours so the user is not re-nagged on every restart. It does not touch
 // the check cadence; a manual check (ocr_capabilities(force: true)) is unaffected.
 #[tauri::command(async)]
@@ -876,7 +876,7 @@ pub(crate) fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind
 
 // Language-pack timings, one set per kind (both kinds use the same values): how long a
 // checked capability list is trusted, how often the background watcher looks for updates, and
-// how long "Cancel" on the update notice defers the next notice, all in hours.
+// how long "Later" on the update notice defers the next notice, all in hours.
 pub(crate) const OCR_LANG_CACHE_H: f64 = 24.0;
 pub(crate) const VOICE_LANG_CACHE_H: f64 = 24.0;
 #[cfg(windows)]
@@ -990,7 +990,7 @@ pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
     if let Some(s) = app.try_state::<Db>() {
         let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
         lang_save_snapshots(&mut store.settings, kind, &new_snapshots);
-        // Persist the next-due time so a user who dismisses the notice any way other than "Cancel"
+        // Persist the next-due time so a user who dismisses the notice any way other than "Later"
         // (lang_snooze) is not re-nagged on every start; the in-process cadence resets on launch.
         let next = now + (lang_check_hours(kind) * 3600.0) as u64;
         store.settings.ui_texts.insert(lang_next_check_key(kind), next.to_string());

@@ -43,6 +43,18 @@ saving, backups, recordings, the editors and the installer.
   starts with its original command line after installing WebView2.
 - **Prompt file imports.** Importing a prompt file now tells you how many links
   to files on other machines were removed, as a backup restore already did.
+- **Settings dialog and expert menu.** Resetting the expert menu keeps the
+  longer retention windows, a category reset shows the same notices as a single
+  switch, resetting the scale or secret timeout updates the open dialog and
+  grid, a refused hotkey clear keeps its old text and says why, the password
+  eye button follows its state, and shortcut tooltips are translated.
+- **Import and clipboard inbox.** The import previews take keyboard focus and
+  give it back, a failed clipboard inbox read shows the error instead of
+  "nothing to clean up", and a batch export into the recordings folder no longer
+  writes over its own sources.
+- **Recording.** Escape or the toast's Cancel button stops the start countdown,
+  and the language update notices open the manage dialog, with the snooze under
+  "Later".
 
 ### Security
 

@@ -879,6 +879,20 @@ fn reset_expert_keeps_the_keys_and_drops_the_preferences() {
 }
 
 #[test]
+fn reset_expert_keeps_the_retention_windows_that_keep_longer() {
+    let mut s = Settings::default();
+    s.ui_values.insert("historyDays".to_string(), 0.0);
+    s.ui_values.insert("recordingRetentionDays".to_string(), 365.0);
+    s.ui_values.insert("trashRetentionDays".to_string(), 7.0);
+    s.ui_values.insert("trayRecentN".to_string(), 9.0);
+    reset_expert_settings(&mut s);
+    assert_eq!(s.ui_values.get("historyDays"), Some(&0.0), "forever stays forever");
+    assert_eq!(s.ui_values.get("recordingRetentionDays"), Some(&365.0));
+    assert!(!s.ui_values.contains_key("trashRetentionDays"), "a shorter window falls back to the default");
+    assert!(!s.ui_values.contains_key("trayRecentN"));
+}
+
+#[test]
 fn reset_settings_keeps_the_backup_password() {
     // Mirrors what reset_settings does with the store's settings. The sealed
     // backup password must survive: without it every password-protected

@@ -1,5 +1,5 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errText, errToast, flag, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errText, errToast, flag, hideToast, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -7,10 +7,22 @@ import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
 import { initSnipEditor } from "./snipEditor.js";
-import { ocrErrToast, openOcrLangsModal } from "./dictation.js";
+import { ocrErrToast, openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
 
 // ---- Colour-pick history popover (right-click on #picker-btn) ----
 export const pickHistoryPop = document.createElement("div");
+
+// The background watcher's "language packs can be updated" toast, shared by OCR and voice: the
+// action opens the manage dialog, "Later" snoozes the next automatic notice.
+function langUpdateNotice(due, manageKey, openManage, snoozeCmd, ms) {
+  due = due || [];
+  if (!due.length) return;
+  const msg = due.length === 1
+    ? t("ocrLangUpdateOne").replace("{lang}", () => due[0].label)
+    : t("ocrLangUpdateMany").replace("{n}", String(due.length));
+  const later = { label: t("later"), onClick: () => { hideToast(); invoke(snoozeCmd).catch(() => {}); } };
+  toast(msg, { label: t(manageKey), onClick: openManage }, "", [later], ms);
+}
 
 export function closePickHistoryPop() { pickHistoryPop.classList.add("hidden"); }
 
@@ -148,6 +160,15 @@ export function bindCapture() {
     clearTimeout(recCountdownTimer);
     recCountdownTimer = 0;
   }
+  // Escape stops a running start countdown (the toast's Cancel button does the same); outside
+  // a countdown the key is left alone.
+  function recCountdownEscape(e) {
+    if (e.key !== "Escape" || !recCountdownTimer) return;
+    e.preventDefault();
+    cancelRecCountdown();
+    hideToast();
+  }
+  document.addEventListener("keydown", recCountdownEscape);
   listen("recorder-target-picked", async (e) => {
     const p = e.payload || {};
     // A pick made from the running recording's own bar switches its target; recbar.js handles
@@ -204,7 +225,7 @@ export function bindCapture() {
     let n = Math.round(val("recCountdownS"));
     if (n <= 0) { await startNow(); return; }
     const tick = () => {
-      toast(t("recCountdownToast").replace("{n}", () => n));
+      toast(t("recCountdownToast").replace("{n}", () => n), n > 0 ? { label: t("cancel"), onClick: cancelRecCountdown } : null);
       n -= 1;
       if (n < 0) { recCountdownTimer = 0; startNow(); return; }
       recCountdownTimer = setTimeout(tick, 1000);
@@ -864,35 +885,11 @@ export function bindCapture() {
   listen("ocr-captured", (e) => showOcrResult(e.payload));
   // A background thread found installed language packs that need updating (a version change,
   // or Windows dropped one after a feature update). Only a notice: the backend never
-  // auto-installs, so an ignored toast is a complete no-op. Cancel snoozes the next automatic
-  // check.
-  listen("ocr-lang-update-due", (e) => {
-    const due = e.payload || [];
-    if (!due.length) return;
-    const msg = due.length === 1
-      ? t("ocrLangUpdateOne").replace("{lang}", () => due[0].label)
-      : t("ocrLangUpdateMany").replace("{n}", String(due.length));
-    toast(
-      msg,
-      { label: t("cancel"), onClick: () => invoke("ocr_lang_snooze").catch(() => {}) },
-      "", null,
-      OCR_LANG_NOTICE_MS,
-    );
-  });
+  // auto-installs, so an ignored toast is a complete no-op. The action opens the manage dialog
+  // where the update is started; "Later" snoozes the next automatic check.
+  listen("ocr-lang-update-due", (e) => langUpdateNotice(e.payload, "ocrLangsManage", openOcrLangsModal, "ocr_lang_snooze", OCR_LANG_NOTICE_MS));
   // Same background-watcher notice, for voice language packs.
-  listen("voice-lang-update-due", (e) => {
-    const due = e.payload || [];
-    if (!due.length) return;
-    const msg = due.length === 1
-      ? t("ocrLangUpdateOne").replace("{lang}", () => due[0].label)
-      : t("ocrLangUpdateMany").replace("{n}", String(due.length));
-    toast(
-      msg,
-      { label: t("cancel"), onClick: () => invoke("voice_lang_snooze").catch(() => {}) },
-      "", null,
-      VOICE_LANG_NOTICE_MS,
-    );
-  });
+  listen("voice-lang-update-due", (e) => langUpdateNotice(e.payload, "voiceLangsManage", openVoiceLangsModal, "voice_lang_snooze", VOICE_LANG_NOTICE_MS));
 
   $("ocr-modal-copy").addEventListener("click", () => {
     const text = $("ocr-result-text").value;

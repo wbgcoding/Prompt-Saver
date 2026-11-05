@@ -35,7 +35,14 @@ section(() => {
   check(new Set(names.map((n) => n.toLowerCase())).size === names.length, "every batch output name is unique");
   check(names[1] === "rec (2).mp4" && names[2] === "REC (3).mp4", "later clashes get a numbered suffix");
   check(names[3] === "other.mp4", "a file without a clash keeps its name");
-  check(/batchDestNames\(names, format\)/.test(src), "the batch export builds its destinations with batchDestNames");
+  check(/batchDestNames\(names, format, batchReservedNames\(dir, destDir, names\)\)/.test(src), "the batch export builds its destinations with batchDestNames and the reserved source names");
+  // Back into the source folder with an unchanged format: no output may take its own source's name.
+  const sb2 = run(extractBlock(src, "export function batchDestNames(").replace("export ", "") + extractBlock(src, "export function batchReservedNames(").replace("export ", ""), {});
+  const reserved = sb2.batchReservedNames("D:\\Rec\\", "d:/rec", ["a.mp4", "b.mkv"]);
+  check(reserved.length === 2, "the same folder in another spelling reserves the source names");
+  check(sb2.batchReservedNames("D:\\Rec", "D:\\Other", ["a.mp4"]).length === 0, "another folder reserves nothing");
+  const back = sb2.batchDestNames(["a.mp4", "b.mkv"], "mp4", reserved);
+  check(back[0] === "a (2).mp4" && back[1] === "b.mp4", "an export into the source folder never overwrites a source: " + JSON.stringify(back));
 });
 
 // Video editor: a second "load" request queued behind the first confirm must not discard the

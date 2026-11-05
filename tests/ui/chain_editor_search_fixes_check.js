@@ -113,12 +113,15 @@ later(async () => {
   check(opened.length === 0, "a preview does not open over a dialog opened meanwhile");
 });
 
-// expertMenu.js: the restart hint belongs to an accepted switch only (the handler is a closure
-// over the row, so the one source line is read).
-section(() => {
-  const line = read("expertMenu.js").split("\n").find((l) => l.includes('key === "allowMultipleInstances"') && l.includes("toastRestartNeeded"));
-  check(!!line, "restart toast line not found");
-  check(!!line && /&&\s*accepted\b/.test(line), "the restart toast is not gated on an accepted switch");
+// expertMenu.js afterFlagWrite: the restart hint belongs to an accepted switch only.
+later(async () => {
+  const code = extractBlock(read("expertMenu.js"), "async function afterFlagWrite(") + ";globalThis.api = { afterFlagWrite };";
+  const toasts = [];
+  const sb = run(code, { t: (k) => k, toast: (m) => toasts.push(m), errToast() {}, offerClipInboxCleanup: async () => {} });
+  await sb.api.afterFlagWrite("allowMultipleInstances", true, false, "save-failed");
+  check(!toasts.includes("toastRestartNeeded"), "the restart toast is not gated on an accepted switch");
+  await sb.api.afterFlagWrite("allowMultipleInstances", true, true);
+  check(toasts.includes("toastRestartNeeded"), "an accepted switch shows the restart toast");
 });
 
 // theme.js previewThemeDraft: native controls follow the draft's base, like applyTheme.

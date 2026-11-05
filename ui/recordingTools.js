@@ -156,8 +156,10 @@ const BATCH_KBPS_SMALL = 4000;
 // Output file names of a batch: the source name with the new extension, plus a " (2)", " (3)"
 // suffix on every later file that would land on a name already taken in the same batch
 // ("rec.mp4" and "rec.mkv" both exported to mp4). Compared case-insensitively like the disk.
-export function batchDestNames(names, format) {
-  const taken = new Set();
+// `reserved` are names already there that no output may take (the sources, when the export
+// goes back into the folder they came from: an output over its own source is refused).
+export function batchDestNames(names, format, reserved = []) {
+  const taken = new Set(reserved.map((n) => n.toLowerCase()));
   return names.map((name) => {
     const stem = name.replace(/\.[^.]+$/, "");
     let candidate = `${stem}.${format}`;
@@ -165,6 +167,13 @@ export function batchDestNames(names, format) {
     taken.add(candidate.toLowerCase());
     return candidate;
   });
+}
+
+// The source names an export into `destDir` must not reuse: all of them when it goes back
+// into the folder they came from (same folder in any slash, case or trailing-slash spelling).
+export function batchReservedNames(dir, destDir, names) {
+  const key = (p) => String(p).replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+  return key(dir) === key(destDir) ? names : [];
 }
 
 // One small dialog for exporting several finished recordings at once: format, quality,
@@ -220,7 +229,7 @@ export async function runBatchExportRecordings(dir, names) {
     const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), cancelLabel: t("cancel") });
     if (!proceed) return;
   }
-  const destNames = batchDestNames(names, format);
+  const destNames = batchDestNames(names, format, batchReservedNames(dir, destDir, names));
   const items = names.map((name, i) => ({
     src_path: `${dir}\\${name}`,
     dest_path: `${destDir}\\${destNames[i]}`,

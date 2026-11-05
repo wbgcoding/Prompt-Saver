@@ -47,7 +47,7 @@ export const HELP_CONTENT = {
       whatItIs: "A four-step walkthrough of the basics, shown once automatically right after the example tiles are created.",
       howTo: [
         "First launch: opens on its own, right after the example prompts are seeded.",
-        "Later: reopen it from the settings dialog, or the expert menu's \"Show the introduction again\" action.",
+        "Later: reopen it with the expert menu's \"Show the introduction again\" action.",
         "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time; Escape shows an Undo notice that reopens the tour.",
       ],
       whatHappens:
@@ -781,7 +781,7 @@ export const HELP_CONTENT = {
       whatItIs: "Eine Einführung in vier Schritten, die direkt nach dem Erstellen der Beispiel-Kacheln einmal automatisch angezeigt wird.",
       howTo: [
         "Beim ersten Start: öffnet sich direkt nach dem Anlegen der Beispiel-Prompts automatisch.",
-        "Später: über den Einstellungsdialog oder die Aktion „Einführung erneut zeigen“ im Expertenmenü erneut öffnen.",
+        "Später: über die Aktion „Einführung erneut zeigen“ im Expertenmenü erneut öffnen.",
         "←/→ oder die Punkte wechseln zwischen den Schritten, Enter fährt fort.",
         "Escape oder „Überspringen“ beendet die Einführung jederzeit; Escape zeigt dazu eine Meldung mit Rückgängig, die sie wieder öffnet.",
       ],
