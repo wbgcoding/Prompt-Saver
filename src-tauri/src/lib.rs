@@ -1144,6 +1144,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app, event| {
+            // Before anything slow: a second launch must see an exit under way and wait for it.
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                cli::mark_exiting();
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 // A recording part save that is still copying across drives finishes first
                 // (bounded), so the exit never leaves its parts in staging.

@@ -21,7 +21,7 @@ use crate::{
     Store, WrittenRows, MAX_IMPORT_BYTES,
 };
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager};
 
 #[path = "cli_callers.rs"]
@@ -464,31 +464,77 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
 // the launch side's patience, and a slow window is not a hung process. Reaching the closure
 // is the liveness proof.
 async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer, app: &AppHandle) {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let app2 = app.clone();
-    let queued = app
-        .run_on_main_thread(move || {
-            let _ = tx.send(());
-            show_main(&app2);
-        })
-        .is_ok();
-    // The closure never running (an event loop already closed while the process is still in its
-    // exit handlers) is no proof of life, and an answer of success would end the new launch
-    // without any window.
-    let reached = queued && rx.await.is_ok(); // no timeout here -- the launch-side ping enforces its own
-    let resp = show_ping_response(reached);
+    // An orderly exit is answered from here, not from the main thread: that thread is busy in the
+    // exit handler (part saves, settings and sync flush) and would never reach the closure below.
+    let mut exiting = EXITING.load(Ordering::SeqCst);
+    let mut reached = false;
+    if !exiting {
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        let app2 = app.clone();
+        let queued = app
+            .run_on_main_thread(move || {
+                let _ = tx.send(());
+                show_main(&app2);
+            })
+            .is_ok();
+        // The closure never running (an event loop already closed while the process is still in its
+        // exit handlers) is no proof of life, and an answer of success would end the new launch
+        // without any window. The wait re-checks the exit flag, so an exit that starts after the
+        // closure was queued is still reported as an exit; the launch side enforces its own timeout.
+        while queued {
+            match tokio::time::timeout(std::time::Duration::from_millis(50), &mut rx).await {
+                Ok(r) => {
+                    reached = r.is_ok();
+                    break;
+                }
+                Err(_) if EXITING.load(Ordering::SeqCst) => {
+                    exiting = true;
+                    break;
+                }
+                Err(_) => {}
+            }
+        }
+    }
+    let resp = show_ping_response(reached, exiting);
     if let Ok(bytes) = serde_json::to_vec(&resp) {
         let _ = write_frame(pipe, &bytes).await;
     }
 }
 
-fn show_ping_response(reached_main_thread: bool) -> PipeResponse {
-    PipeResponse { code: if reached_main_thread { 0 } else { 1 }, stdout: String::new(), stderr: String::new() }
+// Set once the process has started its orderly exit (the exit request or the exit event).
+static EXITING: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn mark_exiting() {
+    EXITING.store(true, Ordering::SeqCst);
+}
+
+const PING_EXITING: i32 = 2;
+
+fn show_ping_response(reached_main_thread: bool, exiting: bool) -> PipeResponse {
+    let code = if exiting {
+        PING_EXITING
+    } else if reached_main_thread {
+        0
+    } else {
+        1
+    };
+    PipeResponse { code, stdout: String::new(), stderr: String::new() }
 }
 
 // Only a success answer proves the instance is alive and showing itself.
 fn show_ping_proves_life(frame: &[u8]) -> bool {
     serde_json::from_slice::<PipeResponse>(frame).map(|r| r.code == 0).unwrap_or(false)
+}
+
+// The running instance is flushing on its way out: it has to finish, never be terminated.
+fn show_ping_says_exiting(frame: &[u8]) -> bool {
+    serde_json::from_slice::<PipeResponse>(frame).map(|r| r.code == PING_EXITING).unwrap_or(false)
+}
+
+// A second launch waits for an instance that announced its exit instead of ending it; only a
+// silent one is treated as hung.
+fn wait_instead_of_terminate(answer_says_exiting: bool) -> bool {
+    answer_says_exiting
 }
 
 // ---------- Second-launch handshake (a plain GUI start, not a CLI command) ----------
@@ -553,13 +599,17 @@ async fn resolve_second_launch_async() -> LaunchDecision {
         write_frame(&mut client, &bytes).await.ok()?;
         read_frame(&mut client, MAX_FRAME_BYTES).await.ok()
     };
-    let answered = tokio::time::timeout(SECOND_LAUNCH_TIMEOUT, roundtrip)
-        .await
-        .ok()
-        .flatten()
-        .is_some_and(|frame| show_ping_proves_life(&frame));
-    if answered {
+    let frame = tokio::time::timeout(SECOND_LAUNCH_TIMEOUT, roundtrip).await.ok().flatten();
+    if frame.as_deref().is_some_and(show_ping_proves_life) {
         return LaunchDecision::HandedOff;
+    }
+    if wait_instead_of_terminate(frame.as_deref().is_some_and(show_ping_says_exiting)) {
+        // Its exit handlers are still writing; once it is gone this launch is the primary instance.
+        if let Some(pid) = server_pid {
+            let gone = wait_for_process_exit(pid, EXITING_INSTANCE_WAIT_MS);
+            append_crash_log(&format!("second launch: waited for an exiting instance (pid {pid}, gone={gone})"));
+        }
+        return LaunchDecision::Primary;
     }
     // Connected, but the main thread never reached the answer: a wedged instance (the answer goes
     // out before show_main does any work, so a slow or rebuilding window never looks like a hang).
@@ -666,6 +716,23 @@ fn process_identity_check(pid: u32) -> (bool, bool) {
 
         let _ = CloseHandle(process);
         (same_user, same_exe)
+    }
+}
+
+// Longest a second launch waits for an exiting instance to finish its flush.
+const EXITING_INSTANCE_WAIT_MS: u32 = 60_000;
+
+// `true` when `pid` has exited within `wait_ms`. An unopenable process counts as not gone.
+fn wait_for_process_exit(pid: u32, wait_ms: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) else {
+            return false;
+        };
+        let gone = WaitForSingleObject(process, wait_ms) == WAIT_OBJECT_0;
+        let _ = CloseHandle(process);
+        gone
     }
 }
 

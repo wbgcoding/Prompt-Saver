@@ -1334,12 +1334,37 @@ fn a_non_unicode_argument_never_panics_the_launch() {
 
 #[test]
 fn a_show_ping_answer_counts_only_when_the_main_thread_was_reached() {
-    let ok = serde_json::to_vec(&show_ping_response(true)).unwrap();
-    let not_reached = serde_json::to_vec(&show_ping_response(false)).unwrap();
+    let ok = serde_json::to_vec(&show_ping_response(true, false)).unwrap();
+    let not_reached = serde_json::to_vec(&show_ping_response(false, false)).unwrap();
     assert!(show_ping_proves_life(&ok));
     assert!(!show_ping_proves_life(&not_reached), "a failed liveness proof must not end the new launch");
     assert!(!show_ping_proves_life(b"not json"));
     assert!(!show_ping_proves_life(b""));
+}
+
+#[test]
+fn an_exiting_instance_answers_with_its_own_code_and_is_no_proof_of_life() {
+    assert_eq!(show_ping_response(false, true).code, 2);
+    assert_eq!(show_ping_response(true, true).code, 2, "an exit under way wins over a reached main thread");
+    let exiting = serde_json::to_vec(&show_ping_response(false, true)).unwrap();
+    let hung = serde_json::to_vec(&show_ping_response(false, false)).unwrap();
+    let ok = serde_json::to_vec(&show_ping_response(true, false)).unwrap();
+    assert!(!show_ping_proves_life(&exiting), "an exiting instance shows no window");
+    assert!(show_ping_says_exiting(&exiting));
+    assert!(!show_ping_says_exiting(&hung) && !show_ping_says_exiting(&ok));
+    assert!(!show_ping_says_exiting(b"not json") && !show_ping_says_exiting(b""));
+}
+
+#[test]
+fn a_second_launch_waits_for_an_exiting_instance_and_ends_only_a_silent_one() {
+    assert!(wait_instead_of_terminate(true));
+    assert!(!wait_instead_of_terminate(false));
+}
+
+#[test]
+fn waiting_for_a_process_that_cannot_be_opened_reports_not_gone() {
+    // pid 0 is the idle process: it cannot be opened for waiting.
+    assert!(!wait_for_process_exit(0, 10));
 }
 
 // ---- output to a reader that has gone ----
