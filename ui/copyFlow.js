@@ -86,23 +86,32 @@ export async function peekResolveCommit(p, copyFn, opts) {
 // paste option on); a plain click copies and nothing else, exactly like a prompt
 // without variables.
 export let varsPasteRequested = false;
+// The prompt whose fill-in window is the pending one: only a press on that same prompt is
+// the second half of a double click; another prompt starts its own question.
+let varsPendingId = null;
 export async function copyTextWithVars(p, el, paste = false) {
-  // The placeholder window is already up for an earlier press: this one is the
+  // The placeholder window is already up for an earlier press of this prompt: this one is the
   // second half of a double click. It must not start another question, it only
   // upgrades the pending copy to a paste.
-  if (varsWindowPending) { varsPasteRequested = true; return; }
+  if (varsWindowPending && (!varsPendingId || varsPendingId === p.id)) { varsPasteRequested = true; return; }
   varsPasteRequested = false;
+  varsPendingId = p.id;
   let pasteAfter = paste;
-  const ok = await peekResolveCommit(
-    p,
-    (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
-    {
-      afterResolve: () => {
-        pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
-        varsPasteRequested = false;
+  let ok;
+  try {
+    ok = await peekResolveCommit(
+      p,
+      (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
+      {
+        afterResolve: () => {
+          pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
+          varsPasteRequested = false;
+        },
       },
-    },
-  );
+    );
+  } finally {
+    if (varsPendingId === p.id) varsPendingId = null;
+  }
   if (ok) {
     showCopied(el);
     recordCopy(p.id);

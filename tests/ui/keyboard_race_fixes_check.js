@@ -79,6 +79,31 @@ later(async () => {
   check(l.toasts.join() === "compareMissing", "a missing entry still says so");
 });
 
+// copyFlow.js copyTextWithVars: a press on another prompt while a fill-in window is open starts
+// its own question; only the same prompt's second press upgrades the pending copy.
+later(async () => {
+  const src = read("copyFlow.js");
+  const from = src.indexOf("let varsPendingId") >= 0 ? src.indexOf("// The prompt whose fill-in window") : src.indexOf("export async function copyTextWithVars");
+  const code = src.slice(from, src.indexOf("// Copy formatted (context menu")).replace(/export /g, "");
+  const started = [];
+  const gate = deferred();
+  const ctx = {
+    varsWindowPending: null, varsPasteRequested: false,
+    peekResolveCommit: async (p) => { started.push(p.id); ctx.varsWindowPending = () => {}; await gate.promise; ctx.varsWindowPending = null; return false; },
+    invoke: async () => true, errToast() {}, flag: () => true,
+    showCopied() {}, recordCopy() {}, autoPasteNow: async () => {}, maybeCloseOnCopy() {},
+  };
+  const sandbox = run(code + "\n;globalThis.go = copyTextWithVars; globalThis.req = () => varsPasteRequested;", ctx);
+  const a = sandbox.go({ id: "A" }, null, false);
+  await tick();
+  await sandbox.go({ id: "A" }, null, false);
+  check(started.join() === "A" && sandbox.req() === true, `same prompt: double click upgrades, got ${started}`);
+  const b = sandbox.go({ id: "B" }, null, false);
+  await tick();
+  check(started.join() === "A,B", `another prompt starts its own question, got ${started}`);
+  gate.resolve(); await a; await b;
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
