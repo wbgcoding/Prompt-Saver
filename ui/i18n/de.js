@@ -1794,6 +1794,7 @@ export default {
     valRecMaxMb: "Bei Dateigröße beenden",
     tipRecMaxMb: "Beendet die Aufnahme, sobald die Datei diese Größe erreicht, sauber und ohne Verlust des Aufgenommenen. Null schaltet die Grenze aus.",
     recStoppedByLimit: "Aufnahme an der von dir gesetzten Grenze beendet. Alles bis dahin wurde gespeichert.",
+    recSourceLost: "Aufnahmequelle verloren. Die Aufnahme wurde gespeichert.",
     recDiskLow: "Auf diesem Laufwerk sind nur noch {mb} MB frei. Das reicht für etwa {min} Minuten Aufnahme.",
     flagNumFieldWheel: "Mausrad ändert den Wert",
     tipNumFieldWheel: "Steht der Zeiger über einem Zahlenfeld, zählt das Rad hoch und runter. Schalte es aus, wenn du oft an diesen Feldern vorbeiscrollst.",

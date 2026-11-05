@@ -1787,6 +1787,7 @@ export default {
     valRecMaxMb: "Dosya boyutunda durdur",
     tipRecMaxMb: "Dosya bu boyuta ulaştığında kaydedilenleri kaybetmeden kaydı düzgün şekilde sonlandırır. Sıfır değeri sınırı kapatır.",
     recStoppedByLimit: "Kayıt ayarladığınız sınırda sonlandırıldı. O noktaya kadar olan her şey kaydedildi.",
+    recSourceLost: "Kayıt kaynağı kayboldu. Kayıt kaydedildi.",
     recDiskLow: "Bu sürücüde yalnızca {mb} MB kaldı. Bu yaklaşık {min} dakikalık kayda denk gelir.",
     flagNumFieldWheel: "Fare tekerleği değeri değiştirir",
     tipNumFieldWheel: "İşaretçi bir sayı alanının üzerindeyken tekerlek değeri artırır veya azaltır. Bu alanların üzerinden sıkça kaydırma yapıyorsanız kapatın.",

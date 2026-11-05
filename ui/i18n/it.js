@@ -1787,6 +1787,7 @@ export default {
     valRecMaxMb: "Interrompi alla dimensione del file",
     tipRecMaxMb: "Termina la registrazione quando il file raggiunge questa dimensione, in modo pulito e senza perdere quanto registrato. Lo zero disattiva il limite.",
     recStoppedByLimit: "Registrazione terminata al limite impostato. Tutto ciò che è stato registrato fino a quel punto è stato salvato.",
+    recSourceLost: "Sorgente di registrazione persa. La registrazione è stata salvata.",
     recDiskLow: "Rimangono solo {mb} MB su questa unità. Sono circa {min} minuti di registrazione.",
     flagNumFieldWheel: "La rotellina del mouse modifica il valore",
     tipNumFieldWheel: "Con il puntatore su un campo numerico la rotellina aumenta o diminuisce il valore. Disattivalo se scorri spesso sopra questi campi.",

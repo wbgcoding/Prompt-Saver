@@ -1787,6 +1787,7 @@ export default {
     valRecMaxMb: "Zatrzymaj po osiągnięciu rozmiaru pliku",
     tipRecMaxMb: "Kończy nagrywanie, gdy plik osiągnie ten rozmiar, w prawidłowy sposób i bez utraty nagranego materiału. Wpisanie zera wyłącza limit.",
     recStoppedByLimit: "Nagrywanie zakończyło się po osiągnięciu ustawionego limitu. Wszystko do tego momentu zostało zapisane.",
+    recSourceLost: "Utracono źródło nagrywania. Nagranie zostało zapisane.",
     recDiskLow: "Na tym dysku zostało tylko {mb} MB. To w przybliżeniu {min} minut nagrania.",
     flagNumFieldWheel: "Kółko myszy zmienia wartość",
     tipNumFieldWheel: "Gdy wskaźnik znajduje się nad polem liczbowym, kółko zwiększa lub zmniejsza wartość. Wyłącz to, jeśli często przewijasz widok nad tymi polami.",

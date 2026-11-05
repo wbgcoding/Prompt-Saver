@@ -1787,6 +1787,7 @@ export default {
     valRecMaxMb: "Oprește la dimensiunea fișierului",
     tipRecMaxMb: "Oprește înregistrarea corect odată ce fișierul atinge această dimensiune, fără a pierde ce s-a înregistrat. Zero dezactivează limita.",
     recStoppedByLimit: "Înregistrarea s-a încheiat la limita setată. Totul până în acel punct a fost salvat.",
+    recSourceLost: "Sursa înregistrării s-a pierdut. Înregistrarea a fost salvată.",
     recDiskLow: "Au mai rămas doar {mb} MB pe această unitate. Asta înseamnă aproximativ {min} minute de înregistrare.",
     flagNumFieldWheel: "Rotița mouse-ului schimbă valoarea",
     tipNumFieldWheel: "Cu cursorul deasupra unui câmp numeric, rotița crește sau descrește valoarea. Dezactivează această opțiune dacă derulezi des peste aceste câmpuri.",

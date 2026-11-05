@@ -492,6 +492,7 @@ export function bindCapture() {
     // own message: the disk-space watch stopped the recording before the encoder hit the wall.
     if (e.payload?.encode_error === "low-disk-space") toast(t("recDiskStoppedMsg"));
     else if (e.payload?.encode_error === "max-limit-reached") toast(t("recStoppedByLimit"));
+    else if (e.payload?.encode_error === "capture-source-lost") toast(t("recSourceLost"));
     else if (e.payload?.encode_error) toast(t("recEncodeError"));
     // A window recording whose canvas fell back below the "every display" default (too large for
     // the encoder, or a smaller mode picked) says so once; the default case stays silent.

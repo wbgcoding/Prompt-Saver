@@ -1787,6 +1787,7 @@ export default {
     valRecMaxMb: "达到文件大小时停止",
     tipRecMaxMb: "当文件达到此大小时正常结束录制，且不会丢失已录制的内容。设为 0 可关闭此限制。",
     recStoppedByLimit: "录制已达到设置的上限并结束。截至该时间点的内容已全部保存。",
+    recSourceLost: "录制源已丢失。录制内容已保存。",
     recDiskLow: "此驱动器仅剩 {mb} MB 可用空间。大约还可录制 {min} 分钟。",
     flagNumFieldWheel: "鼠标滚轮更改数值",
     tipNumFieldWheel: "光标悬停在数字字段上方时，滚动滚轮可增减数值。如果你经常滚动浏览这些字段，可将其关闭。",

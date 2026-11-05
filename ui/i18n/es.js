@@ -1787,6 +1787,7 @@ export default {
     valRecMaxMb: "Detener por tamaño de archivo",
     tipRecMaxMb: "Finaliza la grabación cuando el archivo alcanza este tamaño, de forma limpia y sin perder lo grabado. El valor cero desactiva el límite.",
     recStoppedByLimit: "La grabación finalizó al alcanzar el límite configurado. Se ha guardado todo hasta ese punto.",
+    recSourceLost: "Se perdió la fuente de grabación. La grabación se ha guardado.",
     recDiskLow: "Solo quedan {mb} MB en esta unidad. Equivale aproximadamente a {min} minutos de grabación.",
     flagNumFieldWheel: "La rueda del ratón cambia el valor",
     tipNumFieldWheel: "Con el cursor sobre un campo numérico, la rueda aumenta o disminuye el valor. Desactívalo si sueles hacer scroll sobre estos campos.",

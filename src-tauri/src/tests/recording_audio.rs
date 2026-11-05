@@ -928,6 +928,34 @@ fn the_first_frame_instant_is_kept_for_the_key_overlay_clock() {
 }
 
 #[test]
+fn a_lost_monitor_source_stops_the_take_with_its_own_code() {
+    let shared = RecFeederShared::new();
+    crate::recording::note_capture_source_lost(&shared, false);
+    assert_eq!(shared.peek_encode_error().as_deref(), Some("capture-source-lost"));
+    assert!(shared.is_stopping());
+}
+
+#[test]
+fn a_closed_window_source_or_a_take_already_stopping_is_left_alone() {
+    let window = RecFeederShared::new();
+    crate::recording::note_capture_source_lost(&window, true);
+    assert!(window.peek_encode_error().is_none() && !window.is_stopping());
+    let stopping = RecFeederShared::new();
+    stopping.request_stop();
+    crate::recording::note_capture_source_lost(&stopping, false);
+    assert!(stopping.peek_encode_error().is_none(), "a normal stop must not turn into an error");
+}
+
+#[test]
+fn the_capture_handler_reports_a_closed_source() {
+    let rec = source!("../recording.rs");
+    let handler = rec.split("impl GraphicsCaptureApiHandler for RecHandler").nth(1).unwrap().split("\n}\n").next().unwrap();
+    assert!(handler.contains("fn on_closed(") && handler.contains("note_capture_source_lost("));
+    let capture_js = source!("../../../ui/capture.js");
+    assert!(capture_js.contains("\"capture-source-lost\""));
+}
+
+#[test]
 fn the_first_video_frame_is_marked_for_a_take_without_audio() {
     let shared = RecFeederShared::new();
     crate::recording::note_first_video_frame(&shared);

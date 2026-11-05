@@ -250,6 +250,23 @@ impl GraphicsCaptureApiHandler for RecHandler {
         }
         Ok(())
     }
+
+    fn on_closed(&mut self) -> Result<(), Self::Error> {
+        // A window target is watched by the control bar, and a live switch closes its old
+        // handler on purpose; only a monitor or region source going away ends here.
+        note_capture_source_lost(&self.shared, self.placement.is_some());
+        Ok(())
+    }
+}
+
+/// A monitor or region capture whose source vanished (display unplugged, mode change): the take
+/// stops through the usual stop path with a code the main window turns into a notice.
+pub(crate) fn note_capture_source_lost(shared: &RecFeederShared, window_target: bool) {
+    if window_target || shared.is_stopping() {
+        return;
+    }
+    shared.set_encode_error("capture-source-lost".to_string());
+    shared.request_stop();
 }
 
 // audio_kbps None disables the encoder's audio track (no active source); Some(kbps) enables
