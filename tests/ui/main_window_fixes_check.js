@@ -1715,6 +1715,33 @@ section(() => {
   });
 });
 
+// 95. The import previews take keyboard focus when they open (confirm, or Cancel while confirm is
+// disabled) and hand it back to the opener when they close.
+section(() => {
+  const src = read("settingsPanel.js");
+  const code = extractBlock(src, "function focusPreview(") + ";globalThis.api = { focusPreview };";
+  const mk = (disabled) => {
+    const log = [];
+    const confirm = { disabled, focus: () => log.push("confirm") };
+    const cancel = { focus: () => log.push("cancel") };
+    const opener = { isConnected: true, focus: () => log.push("opener") };
+    const sb = run(code, { document: { activeElement: opener } });
+    return { log, confirm, cancel, opener, back: sb.api.focusPreview(confirm, cancel) };
+  };
+  let r = mk(false);
+  check(r.log.join() === "confirm", "an import preview focuses its confirm button");
+  r.back();
+  check(r.log.join() === "confirm,opener", "closing an import preview hands focus back");
+  r = mk(true);
+  check(r.log.join() === "cancel", "a preview with nothing to import focuses Cancel");
+  r = mk(false);
+  r.opener.isConnected = false;
+  r.back();
+  check(r.log.join() === "confirm", "focus is not returned to an opener that is gone");
+  check(/focusPreview\(confirmBtn, \$\("import-preview-cancel"\)\)/.test(extractBlock(src, "export async function runImportPreview(")), "the import preview uses focusPreview");
+  check(/focusPreview\(confirmBtn, \$\("import-folder-cancel"\)\)/.test(extractBlock(src, "export async function runImportFolder(")), "the folder import uses focusPreview");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

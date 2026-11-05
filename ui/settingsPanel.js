@@ -70,6 +70,14 @@ export async function runStatsExport(format) {
   }
 }
 
+// Moves keyboard focus into a just-opened preview (its confirm button, or Cancel while confirm is
+// disabled) and returns the function that hands focus back to where it was.
+function focusPreview(confirmBtn, cancelBtn) {
+  const opener = document.activeElement;
+  (confirmBtn.disabled ? cancelBtn : confirmBtn).focus();
+  return () => { if (opener?.isConnected) opener.focus(); };
+}
+
 // Shows what an import would do (new vs. skipped-as-duplicate) before it
 // touches anything. Resolves the picked-file path if the user confirms, or
 // null if they canceled anywhere along the way (no file picked, no items,
@@ -108,9 +116,11 @@ export async function runImportPreview() {
   const confirmBtn = $("import-preview-confirm");
   confirmBtn.disabled = newCount === 0;
   modal.classList.remove("hidden");
+  const restoreFocus = focusPreview(confirmBtn, $("import-preview-cancel"));
   const confirmed = await new Promise((resolve) => {
     const done = (v) => {
       modal.classList.add("hidden");
+      restoreFocus();
       confirmBtn.removeEventListener("click", onOk);
       $("import-preview-cancel").removeEventListener("click", onCancel);
       $("import-preview-close").removeEventListener("click", onCancel);
@@ -218,9 +228,11 @@ export async function runImportFolder() {
   }
   updateSummary();
   modal.classList.remove("hidden");
+  const restoreFocus = focusPreview(confirmBtn, $("import-folder-cancel"));
   const confirmed = await new Promise((resolve) => {
     const done = (v) => {
       modal.classList.add("hidden");
+      restoreFocus();
       confirmBtn.removeEventListener("click", onOk);
       $("import-folder-cancel").removeEventListener("click", onCancel);
       $("import-folder-close").removeEventListener("click", onCancel);
