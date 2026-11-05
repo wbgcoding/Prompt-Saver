@@ -1880,11 +1880,17 @@ pub(crate) fn sync_blank_prompt(id: String) -> Prompt {
 // and folds them into the store. `on_replace` sees a prompt right before a file
 // replaces it (the caller keeps a restore point). Returns (prompts_changed,
 // settings_changed); the caller persists whichever is set.
+// A file or icon path a synced file names stays as written, but one this library did not trust
+// before the round (not held already, not inside one of `roots`) is marked untrusted, so the
+// folder cannot make this machine show or copy an arbitrary local file.
 pub(crate) fn sync_poll_apply(
     store: &mut Store,
     candidates: Vec<(String, String, bool)>,
+    roots: &[PathBuf],
     on_replace: &mut dyn FnMut(&Settings, &Prompt, &Prompt),
 ) -> (bool, bool) {
+    let pre_import = crate::asset_scope::trusted_stored_keys(store);
+    let mut applied: Vec<String> = Vec::new();
     let mut changed = false;
     let mut settings_changed = false;
     let mut placements_touched = false;
@@ -1918,6 +1924,7 @@ pub(crate) fn sync_poll_apply(
             }
             let Some(np) = apply_md_with_tags(&sync_blank_prompt(stem), &content, &canonical_tags(&store.prompts)) else { continue };
             let id = np.id.clone();
+            applied.push(id.clone());
             store.prompts.push(np);
             let (placed, folders_touched_here) = fields
                 .as_ref()
@@ -1952,6 +1959,7 @@ pub(crate) fn sync_poll_apply(
                 let blank = SyncPlacement::default();
                 if prompt_to_md(&store.prompts[idx], &blank) != prompt_to_md(&updated, &blank) {
                     on_replace(&store.settings, &store.prompts[idx], &updated);
+                    applied.push(updated.id.clone());
                     store.prompts[idx] = updated;
                     changed = true;
                 }
@@ -1967,6 +1975,9 @@ pub(crate) fn sync_poll_apply(
                 }
             }
         } // else: deleted while we were reading files; nothing left to update
+    }
+    if !applied.is_empty() && crate::asset_scope::distrust_foreign_paths(store, &applied, &pre_import, roots) {
+        settings_changed = true;
     }
     if placements_touched {
         let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
@@ -2072,6 +2083,11 @@ pub(crate) trait SyncRoundHost {
     fn on_trashed(&self, ids: &[String]);
     /// Every open window still holds what it fetched last.
     fn notify(&self);
+    /// The folders an attachment path named by a synced file may point into and stay trusted.
+    /// Empty by default: then only a path the library already held is trusted.
+    fn attachment_roots(&self, _settings: &Settings) -> Vec<PathBuf> {
+        Vec::new()
+    }
 }
 
 struct AppRoundHost<'a>(&'a AppHandle);
@@ -2127,6 +2143,10 @@ impl SyncRoundHost for AppRoundHost<'_> {
         } else if prompts_changed {
             save_prompts(self.0, store);
         }
+    }
+
+    fn attachment_roots(&self, settings: &Settings) -> Vec<PathBuf> {
+        crate::asset_scope::attachment_source_roots(self.0, settings)
     }
 
     fn notify(&self) {
@@ -2356,7 +2376,8 @@ pub(crate) fn sync_poll_core(db: &Mutex<Store>, dir: &Path, host: &dyn SyncRound
     }
     let stems: Vec<String> = candidates.iter().map(|(stem, _, _)| stem.clone()).collect();
     let trash_before = store.trash.len();
-    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| host.on_replace(settings, old, updated));
+    let roots = host.attachment_roots(&store.settings);
+    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &roots, &mut |settings, old, updated| host.on_replace(settings, old, updated));
     // The library now agrees with these files (or the file was refused): from here on a save
     // that renders the same is not a newer state than the file's.
     for stem in &stems {

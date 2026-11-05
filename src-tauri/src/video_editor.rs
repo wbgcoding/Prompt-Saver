@@ -250,7 +250,13 @@ pub(crate) async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id
         if !store.settings.ui_flags.get("mediaMetaBackfill").copied().unwrap_or(true) {
             return Ok(None);
         }
-        store.prompts.iter().find(|p| p.id == id).and_then(media_backfill_target)
+        // A path an import named and the user has not picked since is never probed.
+        store
+            .prompts
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(media_backfill_target)
+            .filter(|path| !crate::asset_scope::path_untrusted(&store.settings, path))
     };
     let Some(media_path) = media_path else { return Ok(None) };
     // Network paths are cleared where a file from outside enters (import, sync folder); one that is

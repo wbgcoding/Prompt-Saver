@@ -1282,7 +1282,7 @@ fn exec(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path) -> Outcome {
         Cmd::ViewRemove { id, .. } => cmd_view_remove(store, id),
         Cmd::Search { query, tag, json } => cmd_search(store, query, tag.as_deref(), *json),
         Cmd::Export { path, format, ids, confirmed } => cmd_export(store, cwd, path, format, ids.as_deref(), *confirmed),
-        Cmd::Import { path, .. } => cmd_import(store, cwd, path),
+        Cmd::Import { path, .. } => cmd_import(store, dir, cwd, path),
         Cmd::BackupCreate { keep, json } => cmd_backup_create(store, dir, *keep, *json),
         Cmd::BackupList { json } => cmd_backup_list(dir, *json),
         Cmd::BackupRestore { .. } => Outcome::err(1, "backup restore is handled by its own caller\n"), // never reached: special-cased before exec()
@@ -1697,7 +1697,7 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
     }
 }
 
-fn cmd_import(store: &mut Store, cwd: &Path, path: &str) -> Outcome {
+fn cmd_import(store: &mut Store, dir: &Path, cwd: &Path, path: &str) -> Outcome {
     let in_path = match resolve_path_arg(cwd, path) {
         Ok(p) => p,
         Err(e) => return Outcome::err(1, format!("{e}\n")),
@@ -1711,8 +1711,15 @@ fn cmd_import(store: &mut Store, cwd: &Path, path: &str) -> Outcome {
         Ok(d) => d,
         Err(e) => return Outcome::err(4, format!("{e}\n")),
     };
-    let count = append_imported_prompts(store, data.prompts);
-    Outcome::ok(format!("imported {count} prompt(s)\n")).mutating()
+    // No app folders are known here beyond the data folder: an attachment path the file names
+    // anywhere else is marked untrusted, exactly as the app's own import does.
+    let marks_before = store.settings.untrusted_paths.clone();
+    let count = append_imported_prompts(store, data.prompts, &[dir.to_path_buf()]);
+    let out = Outcome::ok(format!("imported {count} prompt(s)\n")).mutating();
+    if store.settings.untrusted_paths != marks_before {
+        return out.mutating_settings();
+    }
+    out
 }
 
 // ---------- Backups ----------

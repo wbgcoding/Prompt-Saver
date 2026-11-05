@@ -1031,6 +1031,8 @@ pub(crate) fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
     incoming.auto_update = local.auto_update;
     incoming.update_consent = local.update_consent;
     incoming.skipped_versions = local.skipped_versions.clone();
+    // Which attachment paths this machine does not trust follows the machine, not the file.
+    incoming.untrusted_paths.clone_from(&local.untrusted_paths);
 }
 
 // Drops every denied row from an incoming settings file and returns how many

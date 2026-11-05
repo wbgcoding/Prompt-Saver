@@ -47,6 +47,9 @@ saving, backups, recordings, the editors and the installer.
   and snapshots sealed with another vault key are refused.
 - **Export targets** must match the chosen format, and a read-only folder is
   refused before an attachment is copied into it.
+- **Imported and synced attachments.** An attachment that an imported or
+  synced file names outside the app's folders is only shown or copied after
+  you pick it again.
 
 ## 3.1.0 (2026-10-31)
 

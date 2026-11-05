@@ -203,7 +203,7 @@ fn json_round_trip_keeps_a_confidential_entry_sealed() {
     assert_eq!(json.matches("secret").count(), 1, "the flag is written for the confidential entry only");
     let data = parse_json_data(&json).unwrap();
     let mut store = bare_import_store();
-    assert_eq!(append_imported_prompts(&mut store, data.prompts), 2);
+    assert_eq!(append_imported_prompts(&mut store, data.prompts, &[]), 2);
     let back = store.prompts.iter().find(|x| x.name == "Vault").unwrap();
     assert!(back.secret, "the entry arrives confidential");
     assert_eq!(back.text, p.text, "its text stays sealed");

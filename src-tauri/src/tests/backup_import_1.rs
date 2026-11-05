@@ -1048,7 +1048,7 @@ fn imported_rows_never_keep_a_network_path() {
         favorite: false,
         secret: false,
     };
-    assert_eq!(append_imported_prompts(&mut store, vec![item]), 1);
+    assert_eq!(append_imported_prompts(&mut store, vec![item], &[]), 1);
     let p = &store.prompts[0];
     assert!(p.file_path.is_empty() && p.icon_path.is_empty() && p.image.is_empty());
     assert_eq!(p.name, "Pack", "the row itself stays");
@@ -1087,7 +1087,7 @@ fn imported_prompt_colours_are_held_to_the_hex_rule() {
     };
     let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
     let items = vec![item("red"), item("#fff"), item(" #A1B2C3 "), item("")];
-    assert_eq!(append_imported_prompts(&mut store, items), 4);
+    assert_eq!(append_imported_prompts(&mut store, items, &[]), 4);
     let colors: Vec<&str> = store.prompts.iter().map(|p| p.color.as_str()).collect();
     assert_eq!(colors, ["", "", "#a1b2c3", ""]);
 }
@@ -1153,7 +1153,7 @@ fn an_imported_name_is_trimmed_to_one_line_like_an_editor_save() {
         favorite: false,
         secret: false,
     };
-    assert_eq!(append_imported_prompts(&mut store, vec![item]), 1);
+    assert_eq!(append_imported_prompts(&mut store, vec![item], &[]), 1);
     assert_eq!(store.prompts[0].name, crate::md_sync::sync_clean_name("  Work  Pack "));
     assert_eq!(store.prompts[0].name, store.prompts[0].name.trim());
 }

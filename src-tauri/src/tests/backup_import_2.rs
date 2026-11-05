@@ -1048,7 +1048,7 @@ fn import_ignores_a_secret_flag_on_text_that_is_not_sealed() {
     let json = r#"[{"name":"Fake","text":"plain words","secret":true}]"#;
     let data = parse_json_data(json).unwrap();
     let mut store = bare_import_store();
-    append_imported_prompts(&mut store, data.prompts);
+    append_imported_prompts(&mut store, data.prompts, &[]);
     assert!(!store.prompts[0].secret, "plain text with the flag set is imported as a plain entry");
 }
 

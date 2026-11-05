@@ -74,6 +74,12 @@ fn is_picked_file(raw: &str) -> bool {
     guard.as_ref().is_some_and(|set| picked_keys(raw).iter().any(|k| set.contains(k)))
 }
 
+// Whether `raw` is a stored path marked untrusted in `marked` and not handed over again this
+// session: such a path is kept as it is but never copied, probed or shown.
+pub(crate) fn held_untrusted(marked: &std::collections::BTreeSet<String>, raw: &str) -> bool {
+    !raw.trim().is_empty() && marked.contains(&stored_key(raw)) && !is_picked_file(raw)
+}
+
 // The key under which a stored prompt's path is remembered for the trust check.
 pub(crate) fn stored_key(raw: &str) -> String {
     file_key(Path::new(raw))
@@ -105,7 +111,7 @@ pub(crate) fn attachment_source_trusted(raw: &str, roots: &[PathBuf], stored: &H
 
 // The folders a renderer-named attachment may come from: everything the app itself writes media
 // to (data, recordings, screenshots, the export folder, its temp folder).
-fn attachment_source_roots(app: &AppHandle, settings: &Settings) -> Vec<PathBuf> {
+pub(crate) fn attachment_source_roots(app: &AppHandle, settings: &Settings) -> Vec<PathBuf> {
     let text = |k: &str| settings.ui_texts.get(k).cloned().unwrap_or_default();
     let mut roots = media_dirs(&data_dir(app), &text("recordingDir"), &std::env::temp_dir());
     roots.push(crate::snip::screenshot_dir(&text("screenshotDir")));
@@ -116,6 +122,26 @@ fn attachment_source_roots(app: &AppHandle, settings: &Settings) -> Vec<PathBuf>
     roots
 }
 
+// The keys of every attachment path the stored prompts and the trash hold and this machine
+// trusts: a path an import or the synced folder named without the user's say-so is left out
+// until the user picks the file again.
+pub(crate) fn trusted_stored_keys(store: &Store) -> HashSet<String> {
+    store
+        .prompts
+        .iter()
+        .chain(store.trash.iter())
+        .flat_map(|p| [p.file_path.as_str(), p.icon_path.as_str()])
+        .filter(|s| !s.trim().is_empty())
+        .map(stored_key)
+        .filter(|k| !store.settings.untrusted_paths.contains(k))
+        .collect()
+}
+
+// Whether a stored path was named by a foreign file and not vouched for since.
+pub(crate) fn path_untrusted(settings: &Settings, raw: &str) -> bool {
+    !raw.trim().is_empty() && settings.untrusted_paths.contains(&stored_key(raw))
+}
+
 // The check the attachment commands run before they copy or probe a source. Takes the store lock
 // only to read the settings and the stored paths, so call it before the slow work.
 pub(crate) fn source_trusted_now(app: &AppHandle, state: &State<'_, Db>, raw: &str) -> bool {
@@ -124,17 +150,81 @@ pub(crate) fn source_trusted_now(app: &AppHandle, state: &State<'_, Db>, raw: &s
     }
     let (roots, stored) = {
         let store = lock(state);
-        let stored: HashSet<String> = store
-            .prompts
-            .iter()
-            .chain(store.trash.iter())
-            .flat_map(|p| [p.file_path.as_str(), p.icon_path.as_str()])
-            .filter(|s| !s.trim().is_empty())
-            .map(stored_key)
-            .collect();
-        (attachment_source_roots(app, &store.settings), stored)
+        (attachment_source_roots(app, &store.settings), trusted_stored_keys(&store))
     };
     attachment_source_trusted(raw, &roots, &stored)
+}
+
+// The same question for a path a prompt file or the synced folder names. `stored` is what the
+// store trusted before that file was read. A path that is not absolute, or that is a foreign
+// network spelling, is never trusted (and the network one is never touched to find out).
+fn imported_path_trusted(raw: &str, roots: &[PathBuf], stored: &HashSet<String>) -> bool {
+    if raw.trim().is_empty() {
+        return true;
+    }
+    if crate::paths::is_foreign_network_path(raw, roots) || !Path::new(raw.trim()).is_absolute() {
+        return false;
+    }
+    attachment_source_trusted(raw, roots, stored)
+}
+
+// Marks the attachment paths of the prompts named in `ids` that did not pass the trust check
+// against `pre_import` (what the store trusted before the foreign file was applied), and clears
+// the mark of one that passes now. The paths stay in the prompts as written. Returns whether the
+// marked set changed, so the caller knows to save the settings.
+pub(crate) fn distrust_foreign_paths(store: &mut Store, ids: &[String], pre_import: &HashSet<String>, roots: &[PathBuf]) -> bool {
+    let ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
+    let before = store.settings.untrusted_paths.clone();
+    let mut marked = std::mem::take(&mut store.settings.untrusted_paths);
+    for p in store.prompts.iter().filter(|p| ids.contains(p.id.as_str())) {
+        for raw in [p.file_path.as_str(), p.icon_path.as_str()] {
+            if raw.trim().is_empty() {
+                continue;
+            }
+            let key = stored_key(raw);
+            if imported_path_trusted(raw, roots, pre_import) {
+                marked.remove(&key);
+            } else {
+                marked.insert(key);
+            }
+        }
+    }
+    store.settings.untrusted_paths = marked;
+    prune_untrusted(store);
+    store.settings.untrusted_paths != before
+}
+
+// Forgets the marks no prompt and no trash entry holds any more. Returns whether any went.
+pub(crate) fn prune_untrusted(store: &mut Store) -> bool {
+    if store.settings.untrusted_paths.is_empty() {
+        return false;
+    }
+    let held: HashSet<String> = store
+        .prompts
+        .iter()
+        .chain(store.trash.iter())
+        .flat_map(|p| [p.file_path.as_str(), p.icon_path.as_str()])
+        .filter(|s| !s.trim().is_empty())
+        .map(stored_key)
+        .collect();
+    let before = store.settings.untrusted_paths.len();
+    store.settings.untrusted_paths.retain(|k| held.contains(k));
+    store.settings.untrusted_paths.len() != before
+}
+
+// The user handed the file over again (a picker, a drop, the clipboard): the paths a saved prompt
+// holds that were picked this session are trusted from now on. Returns whether a mark went.
+pub(crate) fn trust_picked_paths(settings: &mut Settings, paths: &[&str]) -> bool {
+    if settings.untrusted_paths.is_empty() {
+        return false;
+    }
+    let before = settings.untrusted_paths.len();
+    for raw in paths {
+        if !raw.trim().is_empty() && is_picked_file(raw) {
+            settings.untrusted_paths.remove(&stored_key(raw));
+        }
+    }
+    settings.untrusted_paths.len() != before
 }
 
 // The folders the windows read media from: data folder (stills, thumbnails, raw recordings),
@@ -200,13 +290,17 @@ pub(crate) fn allow_app_dirs(app: &AppHandle, settings: &Settings) {
     }
 }
 
-// Every attachment the stored prompts and the trash point at.
+// Every attachment the stored prompts and the trash point at, except the paths an import named
+// that the user has not picked since.
 pub(crate) fn allow_store_files(app: &AppHandle, store: &Store) {
     let data = data_dir(app);
     let custom = store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let own_dirs = vec![data.clone(), crate::media_files::recording_dir(&custom)];
     // Paths already allowed are skipped before the (disk-touching) refusal check.
     let refused = |raw: &str| {
+        if path_untrusted(&store.settings, raw) {
+            return true;
+        }
         let guard = ALLOWED.lock().unwrap_or_else(|e| e.into_inner());
         if guard.as_ref().is_some_and(|s| s.contains(&file_key(Path::new(raw)))) {
             return false;

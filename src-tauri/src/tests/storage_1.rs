@@ -139,7 +139,7 @@ fn import_folder_files_appends_a_prompt_with_tags_note_and_variants() {
         favorite: false,
         secret: false,
     }];
-    let count = append_imported_prompts(&mut store, items);
+    let count = append_imported_prompts(&mut store, items, &[]);
     assert_eq!(count, 1);
     let p = &store.prompts[0];
     assert_eq!(p.tags, vec!["Recipes".to_string()]);

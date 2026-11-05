@@ -1002,10 +1002,22 @@ pub(crate) fn count_network_links(prompts: &[Prompt]) -> usize {
         .sum()
 }
 
-// Shared by import_prompts and import_folder_files: builds a real Prompt for each parsed
-// item and appends it, skipping an exact duplicate of one already present so the original
-// is kept. A malformed tag or note on one item never aborts the whole batch.
-pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
+// Shared by import_prompts, import_folder_files and the command line import: builds a real
+// Prompt for each parsed item and appends it, skipping an exact duplicate of one already present
+// so the original is kept. A malformed tag or note on one item never aborts the whole batch.
+// A file or icon path the file names stays as written, but one this machine does not already
+// trust (not held by the store before, not inside one of `roots`) is marked untrusted in the
+// settings: the caller saves them whenever `untrusted_paths` differs from before the call.
+pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>, roots: &[PathBuf]) -> usize {
+    let pre_import = crate::asset_scope::trusted_stored_keys(store);
+    let first_new = store.prompts.len();
+    let count = append_imported_rows(store, items);
+    let ids: Vec<String> = store.prompts[first_new..].iter().map(|p| p.id.clone()).collect();
+    crate::asset_scope::distrust_foreign_paths(store, &ids, &pre_import, roots);
+    count
+}
+
+fn append_imported_rows(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
@@ -1082,6 +1094,23 @@ pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedProm
     count
 }
 
+// Persists an import that appended prompts after `before_len`: the settings first when the
+// untrusted marks changed, then the prompts. Whatever fails, the appended tail and the marks go
+// back to what they were and false is returned.
+fn save_imported(app: &AppHandle, store: &mut Store, before_len: usize, marks_before: std::collections::BTreeSet<String>) -> bool {
+    let marks_changed = store.settings.untrusted_paths != marks_before;
+    let settings_ok = !marks_changed || save_settings_paired(app, &store.settings);
+    if settings_ok && save_prompts(app, store) {
+        return true;
+    }
+    store.prompts.truncate(before_len);
+    if marks_changed {
+        store.settings.untrusted_paths = marks_before;
+        // The marks already written stay as a harmless superset until the next prune.
+    }
+    false
+}
+
 // Spends the grant preview_import recorded for this file. Decided before the path is opened,
 // so a renderer-made path (a UNC spelling included) never reaches the file system; the error
 // is the one a changed file gets, which the page already words.
@@ -1110,11 +1139,13 @@ pub(crate) async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: S
     // export still carries those blocks (parsed but ignored).
     let mut store = lock(&state);
     let before_len = store.prompts.len(); // everything imported is appended after this
-    let count = append_imported_prompts(&mut store, data.prompts);
+    let marks_before = store.settings.untrusted_paths.clone();
+    let roots = crate::asset_scope::attachment_source_roots(&app, &store.settings);
+    let count = append_imported_prompts(&mut store, data.prompts, &roots);
     // A failed save must not report N prompts imported for a write that never
-    // reached disk: an appended tail is trivial to roll back exactly.
-    if !save_prompts(&app, &store) {
-        store.prompts.truncate(before_len);
+    // reached disk: an appended tail is trivial to roll back exactly. The marks go first, so a
+    // restart can never find an imported path without its mark.
+    if !save_imported(&app, &mut store, before_len, marks_before) {
         return Err("save-failed".into());
     }
     let settings = store.settings.clone();
@@ -1321,9 +1352,10 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     }
     let mut store = lock(&state);
     let before_len = store.prompts.len();
-    let count = append_imported_prompts(&mut store, items);
-    if !save_prompts(&app, &store) {
-        store.prompts.truncate(before_len);
+    let marks_before = store.settings.untrusted_paths.clone();
+    let roots = crate::asset_scope::attachment_source_roots(&app, &store.settings);
+    let count = append_imported_prompts(&mut store, items, &roots);
+    if !save_imported(&app, &mut store, before_len, marks_before) {
         return Err("save-failed".into());
     }
     let settings = store.settings.clone();

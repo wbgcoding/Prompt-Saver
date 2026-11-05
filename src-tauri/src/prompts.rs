@@ -923,6 +923,10 @@ pub(crate) async fn add_prompt(
         // After the pair landed: an early return above drops the staged copies uncommitted, which
         // removes them again.
         staged_copies.commit();
+        // The same file picked again clears the mark an import left on that path.
+        if crate::asset_scope::trust_picked_paths(&mut store.settings, &[prompt.file_path.as_str(), prompt.icon_path.as_str()]) {
+            save_settings(&app, &store.settings);
+        }
         prompt
     };
     rebuild_tray(&app);
@@ -1237,7 +1241,7 @@ pub(crate) async fn update_prompt(
     // against a short snapshot of what the prompt holds. The locked section uses those results
     // only if the prompt still holds exactly that; a concurrent edit falls back to doing the
     // work inline.
-    let (store_files, staged_ocr_on, staged_ocr_max, staged_cur) = {
+    let (store_files, staged_ocr_on, staged_ocr_max, staged_cur, marked_paths) = {
         let store = lock(&state);
         let cur = store.prompts.iter().find(|p| p.id == id).map(|p| (p.image.clone(), p.file_path.clone(), p.icon_path.clone()));
         (
@@ -1245,6 +1249,7 @@ pub(crate) async fn update_prompt(
             store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
             OCR_INDEX_MAX_CHARS,
             cur,
+            store.settings.untrusted_paths.clone(),
         )
     };
     // A path naming another machine or the app's own store files is refused before any copy
@@ -1268,6 +1273,11 @@ pub(crate) async fn update_prompt(
             // A new source must be an app folder or a file the user picked; the value the prompt
             // already holds is never asked again.
             return Err("source-not-allowed".to_string());
+        } else if held == Some(p) && crate::asset_scope::held_untrusted(&marked_paths, p) {
+            // Named by an imported or synced file and not picked since: kept as written, but an
+            // unrelated edit must not copy that file into the data folder (which would make it
+            // trusted) or probe it.
+            keep_as_is[i] = true;
         }
     }
     // Same gate as add_prompt: nothing is copied into a folder this instance may not write to.
@@ -1292,7 +1302,9 @@ pub(crate) async fn update_prompt(
         let fp_now = file_path.clone().unwrap_or_else(|| cur_fp.clone());
         let ip_now = icon_path.clone().unwrap_or_else(|| cur_ip.clone());
         // A kept refused value is never probed either (a share would be contacted).
-        let usable = |p: &String| !p.is_empty() && !attachment_path_refused(&own_dirs, &store_dir, p);
+        let usable = |p: &String| {
+            !p.is_empty() && !attachment_path_refused(&own_dirs, &store_dir, p) && !crate::asset_scope::held_untrusted(&marked_paths, p)
+        };
         let source = if usable(&fp_now) { Some(fp_now) } else if usable(&ip_now) { Some(ip_now) } else { None };
         Some(match source {
             Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(&mp)),
@@ -1374,7 +1386,8 @@ pub(crate) async fn update_prompt(
                     let (d, w, h, sz) = match staged_media {
                         Some(m) if staged_valid => m,
                         _ => {
-                            let media_source = if !p.file_path.is_empty() { Some(p.file_path.as_str()) } else if !p.icon_path.is_empty() { Some(p.icon_path.as_str()) } else { None };
+                            let open = |v: &str| !v.is_empty() && !crate::asset_scope::held_untrusted(&marked_paths, v);
+                            let media_source = if open(&p.file_path) { Some(p.file_path.as_str()) } else if open(&p.icon_path) { Some(p.icon_path.as_str()) } else { None };
                             match media_source {
                                 Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
                                 None => (0, 0, 0, 0),
@@ -1412,6 +1425,10 @@ pub(crate) async fn update_prompt(
                     return Err("save-failed".into());
                 }
                 staged_copies.commit();
+                // A file the user picked again is theirs now: the mark an import left on its path goes.
+                if crate::asset_scope::trust_picked_paths(&mut store.settings, &[clone.file_path.as_str(), clone.icon_path.as_str()]) {
+                    save_settings(&app, &store.settings);
+                }
                 // Snapshot the pre-edit name/text/variants only once the edit is durably saved: inserting
                 // earlier left a version row for an edit that never happened when the save failed, and
                 // could push real history past hist_cap. Entries are content, so editing only entry 2 of a

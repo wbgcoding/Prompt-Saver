@@ -376,6 +376,12 @@ pub(crate) struct Settings {
     // often than the markers live would never let one expire.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub(crate) sync_tomb_seen: HashMap<String, (String, u64)>,
+    // Attachment paths (as `asset_scope::stored_key`) that a prompt file or the synced folder
+    // named and this machine never vouched for. They stay in the prompt as written, but are not
+    // shown, copied or put on the clipboard until the user picks the file again. Kept across
+    // restarts, so a restart never turns a foreign path into a trusted one.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub(crate) untrusted_paths: std::collections::BTreeSet<String>,
 }
 
 pub(crate) fn default_theme() -> String {
@@ -476,6 +482,7 @@ impl Default for Settings {
             sync_file_cells: HashMap::new(),
             sync_trash_marks: HashMap::new(),
             sync_tomb_seen: HashMap::new(),
+            untrusted_paths: std::collections::BTreeSet::new(),
         }
     }
 }

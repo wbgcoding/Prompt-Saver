@@ -746,7 +746,7 @@ pub(super) fn sync_apply_store(prompts: Vec<Prompt>, trash: Vec<Prompt>) -> Stor
 }
 
 pub(super) fn sync_apply(store: &mut Store, stem: &str, content: String, is_new: bool) -> (bool, bool) {
-    sync_poll_apply(store, vec![(stem.to_string(), content, is_new)], &mut |_, _, _| {})
+    sync_poll_apply(store, vec![(stem.to_string(), content, is_new)], &[], &mut |_, _, _| {})
 }
 
 #[test]

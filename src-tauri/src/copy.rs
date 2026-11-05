@@ -207,7 +207,10 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
             Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
             // Asked again at use: the stored path may predate the check on save.
             Some(p) if !p.file_path.is_empty() => {
-                if attachment_path_refused(&own_dirs, &data_dir(&app), &p.file_path) {
+                // A path an import named and the user has not picked since counts as refused.
+                if attachment_path_refused(&own_dirs, &data_dir(&app), &p.file_path)
+                    || crate::asset_scope::path_untrusted(&store.settings, &p.file_path)
+                {
                     CopyPayload::Missing
                 } else {
                     CopyPayload::File(p.file_path.clone())

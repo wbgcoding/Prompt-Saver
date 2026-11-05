@@ -209,3 +209,147 @@ fn restoring_a_saved_editor_state_re_allows_its_files_first() {
     assert!(ask < allow && allow < apply, "the files are allowed after the answer and before the ops are applied");
     assert!(include_str!("../lib.rs").contains("drafts::allow_edit_state_files"), "the command is registered");
 }
+
+fn imported(name: &str, file: &str, icon: &str) -> crate::import_export::ImportedPrompt {
+    crate::import_export::ImportedPrompt {
+        name: name.to_string(),
+        text: format!("body of {name}"),
+        color: String::new(),
+        font: String::new(),
+        font_size: 0,
+        file_path: file.to_string(),
+        pdf_page: 0,
+        icon_path: icon.to_string(),
+        caption: String::new(),
+        caption_size: 0,
+        show_image: false,
+        copy_image: false,
+        image: String::new(),
+        tags: Vec::new(),
+        notes: String::new(),
+        variants: Vec::new(),
+        rotate_mode: String::new(),
+        favorite: false,
+        secret: false,
+    }
+}
+
+fn empty_store() -> Store {
+    Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() }
+}
+
+// A prompt file naming a local file outside the app's folders keeps the path, but the path is
+// marked untrusted: the scope, the copy and the stored set all leave it out. A path in an app
+// folder, or one a stored prompt already held, stays trusted.
+#[test]
+fn an_import_marks_a_foreign_attachment_path_untrusted() {
+    let base = scratch_dir("import-mark");
+    let root = base.join("data");
+    let roots = vec![root.clone()];
+    let own = touch(&root.join("files").join("own.png"));
+    let foreign = touch(&base.join("Documents").join("secret.pdf"));
+    let known = touch(&base.join("Pictures").join("known.png"));
+    let mut store = empty_store();
+    store.prompts.push(prompt_with(&known, ""));
+    let items = vec![
+        imported("a", &foreign, &own),
+        imported("b", &known, ""),
+        imported("c", "relative/x.png", ""),
+        imported("d", "//host/share/x.png", ""),
+    ];
+    assert_eq!(crate::import_export::append_imported_prompts(&mut store, items, &roots), 4);
+    let marked = &store.settings.untrusted_paths;
+    assert!(marked.contains(&crate::asset_scope::stored_key(&foreign)));
+    assert!(!marked.contains(&crate::asset_scope::stored_key(&own)), "an app folder path stays trusted");
+    assert!(!marked.contains(&crate::asset_scope::stored_key(&known)), "a path already stored stays trusted");
+    assert!(marked.contains(&crate::asset_scope::stored_key("relative/x.png")));
+    assert_eq!(store.prompts[1].file_path, foreign, "the path itself is kept");
+    assert!(crate::asset_scope::path_untrusted(&store.settings, &foreign));
+    assert!(!crate::asset_scope::path_untrusted(&store.settings, &own));
+    // The stored set the next trust check uses no longer vouches for the marked path.
+    let trusted = crate::asset_scope::trusted_stored_keys(&store);
+    assert!(!trusted.contains(&crate::asset_scope::stored_key(&foreign)));
+    assert!(trusted.contains(&crate::asset_scope::stored_key(&own)));
+    assert!(trusted.contains(&crate::asset_scope::stored_key(&known)));
+    assert!(!crate::asset_scope::attachment_source_trusted(&foreign, &roots, &trusted));
+    let _ = fs::remove_dir_all(&base);
+}
+
+// The mark survives a settings round trip and goes once the user hands the file over again.
+#[test]
+fn a_re_pick_clears_the_untrusted_mark_and_the_mark_is_saved() {
+    let base = scratch_dir("repick");
+    let foreign = touch(&base.join("Documents").join("manual.pdf"));
+    let mut store = empty_store();
+    crate::import_export::append_imported_prompts(&mut store, vec![imported("a", &foreign, "")], &[base.join("data")]);
+    assert!(crate::asset_scope::path_untrusted(&store.settings, &foreign));
+    let saved = serde_json::to_string(&store.settings).expect("settings serialize");
+    let loaded: Settings = serde_json::from_str(&saved).expect("settings load");
+    assert!(crate::asset_scope::path_untrusted(&loaded, &foreign), "the mark survives a restart");
+    // Saving the prompt without picking the file again changes nothing.
+    assert!(!crate::asset_scope::trust_picked_paths(&mut store.settings, &[&foreign, ""]));
+    assert!(crate::asset_scope::path_untrusted(&store.settings, &foreign));
+    crate::asset_scope::grant_picked_file(&foreign);
+    assert!(crate::asset_scope::trust_picked_paths(&mut store.settings, &[&foreign, ""]));
+    assert!(!crate::asset_scope::path_untrusted(&store.settings, &foreign));
+    assert!(store.settings.untrusted_paths.is_empty());
+    // A default settings value writes no key at all.
+    assert!(!serde_json::to_string(&Settings::default()).expect("serialize").contains("untrusted_paths"));
+    let _ = fs::remove_dir_all(&base);
+}
+
+// A mark nothing holds any more is dropped; one a prompt or a trash entry still holds stays.
+#[test]
+fn untrusted_marks_are_pruned_once_nothing_holds_the_path() {
+    let mut store = empty_store();
+    store.prompts.push(prompt_with("D:/Elsewhere/a.png", ""));
+    let mut trashed = prompt_with("", "D:/Elsewhere/b.png");
+    trashed.trashed_at = 1;
+    store.trash.push(trashed);
+    for raw in ["D:/Elsewhere/a.png", "D:/Elsewhere/b.png", "D:/Elsewhere/gone.png"] {
+        store.settings.untrusted_paths.insert(crate::asset_scope::stored_key(raw));
+    }
+    assert!(crate::asset_scope::prune_untrusted(&mut store));
+    assert_eq!(store.settings.untrusted_paths.len(), 2);
+    assert!(!store.settings.untrusted_paths.contains(&crate::asset_scope::stored_key("D:/Elsewhere/gone.png")));
+    assert!(!crate::asset_scope::prune_untrusted(&mut store), "nothing left to drop");
+    store.prompts.clear();
+    assert!(crate::asset_scope::prune_untrusted(&mut store));
+    assert_eq!(store.settings.untrusted_paths.len(), 1, "the trash entry still holds its path");
+}
+
+// A prompt the synced folder brings in is judged the same way, against what the store trusted
+// before the round.
+#[test]
+fn a_synced_prompt_with_a_foreign_attachment_path_is_marked_untrusted() {
+    let base = scratch_dir("sync-mark");
+    let foreign = touch(&base.join("Documents").join("sheet.pdf"));
+    let mut incoming = sync_test_prompt();
+    incoming.id = "p9".into();
+    incoming.file_path = foreign.clone();
+    let content = prompt_to_md(&incoming, &SyncPlacement::default());
+    let mut store = sync_apply_store(Vec::new(), Vec::new());
+    store.settings.views.push(super::hotkeys_2::test_view("v1"));
+    store.settings.active_view = "v1".to_string();
+    let (changed, settings_changed) = crate::md_sync::sync_poll_apply(
+        &mut store,
+        vec![("p9".to_string(), content, true)],
+        &[base.join("data")],
+        &mut |_, _, _| {},
+    );
+    assert!(changed && settings_changed);
+    assert_eq!(store.prompts[0].file_path, foreign);
+    assert!(crate::asset_scope::path_untrusted(&store.settings, &foreign));
+    let _ = fs::remove_dir_all(&base);
+}
+
+// The marks belong to this machine: a settings restore from a backup keeps the local ones.
+#[test]
+fn a_settings_restore_keeps_the_local_untrusted_marks() {
+    let mut local = Settings::default();
+    local.untrusted_paths.insert("f\u{1}d:/x.png".to_string());
+    let mut incoming = Settings::default();
+    incoming.untrusted_paths.insert("f\u{1}d:/other.png".to_string());
+    crate::vault::keep_machine_settings(&local, &mut incoming);
+    assert_eq!(incoming.untrusted_paths, local.untrusted_paths);
+}
