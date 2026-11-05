@@ -381,6 +381,10 @@ expect("double frame preview puts its outline inside the border", src.includes("
   sb.VE.audio.sys = { mute: false, vol: 20 };
   g = vm.runInContext("buildAudioChain()", sb);
   expect("an unmuted track still hosts the clip with its own volume", g && g.includes("volume=0.20") && !g.includes("volume=1.00"), g);
+  sb.VE.audio.sys = { mute: false, vol: 0 };
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("a recording track at volume zero does not silence the clip", g && g.includes("volume=1.00") && /amovie=/.test(g), g);
+  expect("the zeroed track stays silent", g && g.includes("volume=0.00"), g);
 }
 
 // Closing while an export runs: with the edit state not kept, the confirm must
