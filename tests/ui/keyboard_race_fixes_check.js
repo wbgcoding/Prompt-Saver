@@ -127,6 +127,30 @@ later(async () => {
   check(opened.length === 1, "an undisturbed fetch still opens the editor");
 });
 
+// editor.js onModalSecretToggle: closing and reopening the same prompt while the vault answers
+// leaves the new session alone.
+later(async () => {
+  const code = extractBlock(read("editor.js"), "export async function onModalSecretToggle").replace(/export /g, "");
+  const gate = deferred();
+  const log = { closed: 0, ui: 0 };
+  const sandbox = run("let modalSession = 0; let modalInitial = '';\n" + code + "\n;globalThis.toggle = onModalSecretToggle; globalThis.reopen = () => { modalSession += 2; };", {
+    modalState: { mode: "edit", id: "p1", secret: false },
+    modalSnapshot: () => "", modalInitial: "",
+    toast() {}, t: (k) => k, errToast() {},
+    ensureSecretVaultUnlocked: async () => true,
+    invoke: async () => { await gate.promise; },
+    updateSecretToggleUi: () => { log.ui++; },
+    renderGrid: async () => {},
+    closeModal: () => { log.closed++; },
+    prompts: [], modal: { text: {} },
+  });
+  const p = sandbox.toggle();
+  await tick();
+  sandbox.reopen();
+  gate.resolve(); await p;
+  check(log.closed === 0 && log.ui === 0, `the reopened editor stays, got ${JSON.stringify(log)}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");

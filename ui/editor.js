@@ -491,6 +491,7 @@ export async function onModalSecretToggle() {
     return;
   }
   const id = modalState.id;
+  const session = modalSession;
   const next = !modalState.secret;
   if (!(await ensureSecretVaultUnlocked())) return;
   try {
@@ -501,10 +502,11 @@ export async function onModalSecretToggle() {
   }
   // The editor was closed (or switched to another entry) while the vault answered: the backend
   // change stands, there is just no dialog left to update.
-  if (!modalState || modalState.id !== id) return;
+  if (!modalState || session !== modalSession) return;
   modalState.secret = next;
   updateSecretToggleUi(modalState.mode, next, modalState.copyImage, modalState.filePath);
   await renderGrid();
+  if (session !== modalSession) return; // closed and reopened while the grid refreshed
   if (next) {
     // The field now holds ciphertext at rest: closing avoids the editor
     // resaving the plain text it still shows over that.
