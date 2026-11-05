@@ -98,6 +98,15 @@ if (!startExportBody.includes('if (!stillHere()) $("ve-export-progress-row").cla
   problems.push("startExport does not hide its progress row when the editor moved on");
 }
 
+// The still button is off for the whole export and comes back with it (ffmpeg permitting), so a
+// still taken while an export ran never leaves it disabled afterwards.
+{
+  const beforeInvoke = startExportBody.slice(0, startExportBody.indexOf('invoke("export_video"'));
+  if (!beforeInvoke.includes('$("ve-still").disabled = true;')) problems.push("startExport leaves the still button on during an export");
+  const fin = startExportBody.slice(startExportBody.lastIndexOf("} finally {"));
+  if (!fin.includes('$("ve-still").disabled = !VE.ffmpeg;')) problems.push("the export's finally does not re-enable the still button");
+}
+
 // saveEditStateNow stores only changes made since the last export or load.
 {
   const saved = [];

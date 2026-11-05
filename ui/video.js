@@ -1714,8 +1714,8 @@ $("ve-still").addEventListener("click", async () => {
     noteFfmpeg(err);
     toast(errMessageLogged(err, t, "video"));
   } finally {
-    // An export in progress keeps the button off on its own, so only a free editor re-enables it.
-    // A missing ffmpeg (just noted above) keeps it off as well.
+    // An export in progress keeps the button off (startExport turns it off, its finally back on),
+    // so only a free editor re-enables it. A missing ffmpeg (just noted above) keeps it off as well.
     $("ve-still").disabled = !!VE.exporting || !VE.ffmpeg;
   }
 });

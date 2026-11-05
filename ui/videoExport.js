@@ -192,6 +192,7 @@ export async function startExport(toClipboard) {
   syncExportButton();
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
+  $("ve-still").disabled = true;
   $("ve-export-saveas").classList.add("hidden");
   $("ve-export-status").textContent = t("veExporting");
   showExportErrorDetails("");
@@ -320,6 +321,7 @@ export async function startExport(toClipboard) {
     VE.exporting = false;
     exportRun = null;
     applyExportGate();
+    $("ve-still").disabled = !VE.ffmpeg;
     $("ve-export-eta").textContent = "";
     // The editor moved on to another recording: its progress row is not ours to leave showing.
     if (!stillHere()) $("ve-export-progress-row").classList.add("hidden");
