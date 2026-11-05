@@ -334,10 +334,16 @@ pub(crate) fn mux_timeout(total_bytes: u64) -> Duration {
     Duration::from_secs(600 + 120 * (total_bytes >> 30))
 }
 
+// The staged mux output wears the `.export-<pid>-<stamp>` shape, so the start-up sweep of the
+// export journal (sweep_stale_exports) also removes it when the run died half way.
+pub(crate) fn mux_staged_path(video: &Path, stamp: u128) -> PathBuf {
+    video.with_file_name(format!(".export-{}-{}.mp4", std::process::id(), stamp))
+}
+
 pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbps: u32) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let staged = video.with_file_name(format!(".mux-{}-{}.mp4", std::process::id(), stamp));
+    let staged = mux_staged_path(video, stamp);
     let mut cmd = std::process::Command::new(ffmpeg);
     cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
         .arg(video)
@@ -354,22 +360,36 @@ pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::piped());
     let timeout = mux_timeout(fs::metadata(video).map(|m| m.len()).unwrap_or(0) + fs::metadata(sidecar).map(|m| m.len()).unwrap_or(0));
-    // A spawn error or the timeout leaves the partly written staged file behind; nothing else
-    // journals or sweeps `.mux-` names.
+    // Journaled like an export's staged file: a quit or crash during the mux leaves a
+    // recording-sized hidden file that the next start removes.
+    let journal = crate::ffmpeg::EXPORT_JOURNAL.get();
+    if let Some(journal) = journal {
+        crate::ffmpeg::export_journal_add(journal, &staged);
+    }
+    let forget_staged = || {
+        if let Some(journal) = journal {
+            crate::ffmpeg::export_journal_remove(journal, &staged);
+        }
+    };
+    // A spawn error or the timeout leaves the partly written staged file behind.
     let output = output_in_job(&mut cmd, timeout).map_err(|e| {
         let _ = fs::remove_file(&staged);
+        forget_staged();
         tool_run_error("ffmpeg", &e)
     })?;
     if !output.status.success() || !staged.is_file() {
         let _ = fs::remove_file(&staged);
+        forget_staged();
         let tail: String =
             String::from_utf8_lossy(&output.stderr).chars().rev().take(800).collect::<Vec<_>>().into_iter().rev().collect();
         return Err(format!("mic track mux failed: {}", tail.trim()));
     }
-    fs::rename(&staged, video).map_err(|e| {
+    let renamed = fs::rename(&staged, video).map_err(|e| {
         let _ = fs::remove_file(&staged);
         format!("could not finalize the muxed file: {e}")
-    })?;
+    });
+    forget_staged();
+    renamed?;
     let _ = fs::remove_file(sidecar);
     Ok(())
 }

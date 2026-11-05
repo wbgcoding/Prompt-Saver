@@ -660,3 +660,24 @@ fn an_export_destination_must_end_in_the_requested_format() {
     assert!(!export_dest_ext_matches_format(Path::new(r"C:\x\clip"), "mp4"));
     assert!(!export_dest_ext_matches_format(Path::new(r"C:\x\clip.exe"), "avi"));
 }
+
+// A mux killed half way (quit, crash, power loss) used to leave a recording-sized hidden file in
+// the recordings folder forever. Its staged name now has the journaled export shape.
+#[test]
+fn a_dead_mic_mux_leftover_is_swept_like_a_staged_export() {
+    use crate::ffmpeg::{journal_line, journal_write, sweep_stale_exports};
+    use crate::store::local_host_name;
+    let root = std::env::temp_dir().join(format!("ps-mux-leftover-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let staged = crate::video_editor::mux_staged_path(&root.join("rec-a.mp4"), 12345);
+    assert_eq!(crate::ffmpeg::staged_export_pid(&staged), Some(std::process::id()), "the name carries the pid in the export shape");
+    let dead = root.join(".export-4000000001-12345.mp4");
+    fs::write(&dead, b"half a mux").unwrap();
+    let journal = root.join("export-staging.txt");
+    let host = local_host_name();
+    journal_write(&journal, &[journal_line(&host, 4000000001, &dead)]);
+    sweep_stale_exports(&journal, &host, |_| false);
+    assert!(!dead.exists(), "a dead process's staged mux is removed at start");
+    let _ = fs::remove_dir_all(&root);
+}
