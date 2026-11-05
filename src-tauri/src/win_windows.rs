@@ -166,6 +166,44 @@ pub(crate) fn window_passes_filter(class: &str, ex_style: u32, title_empty: bool
     !matches!(class, "Progman" | "Button")
 }
 
+/// A window the auto-paste must not take as the user's target: the task bar, the Alt+Tab
+/// switcher, the desktop, the Start and search hosts (CoreWindow classes, told apart by their
+/// program) and this program's own windows. Class and program name (file stem) only, so the
+/// rule stays testable.
+pub(crate) fn is_shell_surface(class: &str, process: &str, own: bool) -> bool {
+    if own {
+        return true;
+    }
+    match class {
+        "Shell_TrayWnd" | "Shell_SecondaryTrayWnd" | "XamlExplorerHostIslandWindow" | "MultitaskingViewFrame"
+        | "TaskSwitcherWnd" | "ForegroundStaging" | "Progman" | "WorkerW" | "NotifyIconOverflowWindow"
+        | "TopLevelWindowForOverflowXamlIsland" => true,
+        "Windows.UI.Core.CoreWindow" => matches!(
+            process.to_ascii_lowercase().as_str(),
+            "startmenuexperiencehost" | "searchhost" | "searchapp" | "searchui" | "shellexperiencehost"
+        ),
+        _ => false,
+    }
+}
+
+/// Whether a window that just took the foreground may become the auto-paste target: a visible,
+/// uncloaked window that is not a shell surface.
+pub(crate) fn is_paste_target(hwnd: isize) -> bool {
+    if hwnd == 0 || unsafe { IsWindowVisible(hwnd) } == 0 || is_cloaked(hwnd) {
+        return false;
+    }
+    let class = window_class(hwnd);
+    let pid = window_pid(hwnd);
+    let own = pid == unsafe { GetCurrentProcessId() };
+    // The program is only needed to tell the shell's CoreWindow hosts from other apps.
+    let process = if class == "Windows.UI.Core.CoreWindow" {
+        image_path_of_pid(pid).map(|p| file_stem_of_path(&p)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    !is_shell_surface(&class, &process, own)
+}
+
 /// The overlay offers a window only when it is not minimized and has a title.
 pub(crate) fn offered_to_overlay(w: &WinInfo) -> bool {
     !w.minimized && !w.title.is_empty()

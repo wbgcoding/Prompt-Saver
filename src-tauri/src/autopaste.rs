@@ -32,7 +32,7 @@ const MODIFIER_POLL_MS: u64 = 10;
 const OBJID_WINDOW: i32 = 0;
 
 unsafe extern "system" fn on_foreground(_h: isize, _e: u32, hwnd: isize, id_object: i32, _c: i32, _t: u32, _ms: u32) {
-    if id_object == OBJID_WINDOW && hwnd != 0 {
+    if id_object == OBJID_WINDOW && crate::win_windows::is_paste_target(hwnd) {
         LAST_FG.store(hwnd, Ordering::Relaxed);
     }
 }
