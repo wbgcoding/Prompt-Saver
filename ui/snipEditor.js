@@ -847,9 +847,13 @@ export function initSnipEditor() {
   function snipEditCropDiscard() {
     SE.drag = null;
     SE.cropRect = snipEditFullCropRect();
-    // Same floor adjustment as snipEditPushUniqueOp.
-    SE.floor = Math.max(0, SE.floor - SE.ops.slice(0, SE.floor).filter((o) => o.tool === "crop").length);
-    SE.ops = SE.ops.filter((o) => o.tool !== "crop");
+    // Removed like a dragged-out crop: undoable, and the floor shifts by its own delta.
+    const existing = SE.ops.find((o) => o.tool === "crop");
+    const nudged = SE.lastNudged;
+    if (existing) {
+      snipEditRemoveOp(existing);
+      if (nudged && nudged !== existing) SE.lastNudged = nudged;
+    }
     // A nudge target that was the discarded crop op is detached, so arrow keys cannot bring the
     // discarded box back.
     if (SE.lastNudged && !SE.ops.includes(SE.lastNudged)) {

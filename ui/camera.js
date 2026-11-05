@@ -145,6 +145,8 @@ function stopStream() {
 // changes; never during a take, because swapping the stream under an active MediaRecorder
 // corrupts the file.
 async function refreshPreview() {
+  // No camera request before the permission handler and the saved settings are known.
+  if (!permissionReady || !settingsReady) return;
   if (recorder && recorder.state !== "inactive") return;
   // The finish of a take owns the controls (its last step calls this again), and a window that
   // is about to close needs no stream.
@@ -330,12 +332,14 @@ async function startRecording() {
     const path = recPath;
     const startedAtMs = recStartWall;
     recPath = null;
-    const idleControls = () => {
+    const idleControls = (keepOpen = false) => {
       audioSelect.disabled = false;
       resSelect.disabled = false;
       finishing = false;
-      // A close asked for during the finish happens now that the take is saved.
-      if (closeAfterFinish) {
+      // A close asked for during the finish happens now that the take is saved, unless a message
+      // about the take is waiting: then the window stays until the next close press.
+      if (closeAfterFinish && keepOpen) closeAfterFinish = false;
+      else if (closeAfterFinish) {
         stopStream();
         appWin.close();
       }
@@ -378,7 +382,7 @@ async function startRecording() {
       const text = t("camChunkWriteFailed").replace("{path}", () => path);
       statusText.textContent = text;
       statusText.title = text;
-      idleControls();
+      idleControls(true);
       refreshPreview();
       return;
     }
@@ -400,7 +404,7 @@ async function startRecording() {
       // A failed finish leaves the raw file in place, still playable.
       finishError = err;
     }
-    idleControls();
+    idleControls(!!(finishError || keptNotice));
     refreshPreview();
     if (finishError) await showCameraError(finishError);
     else if (keptNotice) {
@@ -552,6 +556,8 @@ function markPermissionFailed() {
   noDeviceEl.textContent = t("cameraNoDevice");
   noDeviceEl.classList.remove("hidden");
   startBtn.disabled = true;
+  audioSelect.disabled = true;
+  resSelect.disabled = true;
 }
 listen("camera-permission-failed", markPermissionFailed)
   .then(() => invoke("camera_permission_failed"))

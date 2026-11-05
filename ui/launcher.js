@@ -39,13 +39,13 @@ const PREVIEW_LEN = 70;
 function close() {
   if (closed) return;
   closed = true;
-  invoke("launcher_close").catch(() => {});
+  invoke("launcher_close").catch(() => { closed = false; });
 }
 
 function select(id) {
   if (closed) return;
   closed = true;
-  invoke("launcher_select", { id }).catch(() => {});
+  invoke("launcher_select", { id }).catch(() => { closed = false; });
 }
 
 // Case-insensitive substring score: a name hit ranks far above a body hit, an earlier

@@ -7,7 +7,7 @@ import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
 import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize, readCopyPrefs, copyGate, needsMainWindowCopy, pasteFailText } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize, readCopyPrefs, copyGate, needsMainWindowCopy, pasteFailText, rotateBadgeLabel } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab switcher, so
 // it comes from the brand.
@@ -65,7 +65,7 @@ function renderRotateBadge() {
   rotateBadgeEl.classList.toggle("hidden", !show);
   // Pos (not index + 1): in random mode index is the absolute entry drawn next and jumps
   // around; pos is the 1-based draw number within the shuffle cycle.
-  if (show) rotateBadgeEl.textContent = `${rotateInfo.pos}/${rotateInfo.total}`;
+  if (show) rotateBadgeEl.textContent = rotateBadgeLabel(rotateInfo);
 }
 
 function primeRotateBadge() {

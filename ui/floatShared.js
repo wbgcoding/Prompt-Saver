@@ -129,7 +129,12 @@ export async function copyGate(id, copyFn, prefs) {
   if (prefs.cooldownMs && gateCopied[id] && now - gateCopied[id] < prefs.cooldownMs) return "throttled";
   gateCopied[id] = Date.now();
   gateClicked[id] = Date.now(); // arm the double-click paste window
-  const r = await copyFn();
+  let r;
+  try {
+    r = await copyFn();
+  } catch {
+    r = false;
+  }
   if (r === "handoff") {
     gateClicked[id] = 0;
     return "handoff";

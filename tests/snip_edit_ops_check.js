@@ -29,6 +29,7 @@ function sandbox() {
     SE: { ops: [], redo: [], floor: 0, tool: "rect", cropRect: null, drag: null },
     tools: [],
     snipEditPushOp(op) { sb.SE.ops.push(op); },
+    snipEditDeselectShape() {},
     snipEditUpdateUndoRedoButtons() {}, snipEditClearLive() {}, snipEditRedrawBase() {},
     snipEditFit() {}, snipEditDrawCropOverlayLive() {}, snipEditFullCropRect: () => ({ x: 0, y: 0, w: 10, h: 10 }),
     snipEditSetTool(id) { sb.tools.push(id); },
@@ -53,6 +54,7 @@ function sandbox() {
   vm.createContext(sb);
   vm.runInContext(extractBlock("function snipEditPushUniqueOp(tool, op) {"), sb);
   vm.runInContext(extractBlock("function snipEditCropDiscard() {"), sb);
+  vm.runInContext(extractBlock("function snipEditRemoveOp(op) {"), sb);
   vm.runInContext(extractBlock("function snipEditFieldOwnsKeys(tgt) {"), sb);
   vm.runInContext(extractBlock("function snipEditKeydown(e) {"), sb);
   vm.runInContext(extractBlock("function snipEditNudge(op, key, amount, resize) {"), sb);
@@ -83,7 +85,8 @@ function sandbox() {
   sb.SE.floor = 2;
   sb.snipEditCropDiscard();
   check("discard crop above the floor: floor kept", sb.SE.floor, 2);
-  check("discard crop above the floor: op gone", sb.SE.ops.length, 2);
+  check("discard crop above the floor: crop gone", sb.SE.ops.filter((o) => o.tool === "crop").length, 0);
+  check("discard crop is undoable", sb.SE.ops.some((o) => o.tool === "edit" && o.kind === "remove" && o.op.tool === "crop"), true);
 }
 {
   const sb = sandbox();

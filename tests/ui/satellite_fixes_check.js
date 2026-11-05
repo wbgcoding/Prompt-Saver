@@ -520,6 +520,21 @@ section(() => {
 });
 
 later(async () => {
+  const src = read("vars.js");
+  const note = { textContent: "", classList: { remove() {}, add() {} } };
+  const sb = {
+    answered: false, requestGen: 0, tooLongText: "too long", failedText: "failed", noteEl: note, fitWindow() {},
+    invoke: () => Promise.reject(new Error("ipc down")),
+  };
+  vm.createContext(sb);
+  vm.runInContext(extractBlock(src, "function answer(") + "; this.answer = answer;", sb);
+  sb.answer("{}");
+  await new Promise((r) => setTimeout(r, 20));
+  check(sb.answered === false, "a failed answer lets the window answer again");
+  check(note.textContent === "failed", "a failed answer other than too-long values says so in the note");
+});
+
+later(async () => {
   const src = read("recbar.js");
   let handler;
   const calls = [];

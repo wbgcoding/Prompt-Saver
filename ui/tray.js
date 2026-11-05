@@ -25,13 +25,13 @@ let closed = true; // hidden until the first open
 function close() {
   if (closed) return;
   closed = true;
-  invoke("tray_window_close").catch(() => {});
+  invoke("tray_window_close").catch(() => { closed = false; });
 }
 
 function activate(id) {
   if (closed) return;
   closed = true;
-  invoke("tray_window_activate", { id }).catch(() => {});
+  invoke("tray_window_activate", { id }).catch(() => { closed = false; });
 }
 
 // Same four kinds, same fallback tint as the native menu's tray_kind_tint.
