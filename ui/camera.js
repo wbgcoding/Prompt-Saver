@@ -332,12 +332,14 @@ async function startRecording() {
     const path = recPath;
     const startedAtMs = recStartWall;
     recPath = null;
-    const idleControls = () => {
+    const idleControls = (keepOpen = false) => {
       audioSelect.disabled = false;
       resSelect.disabled = false;
       finishing = false;
-      // A close asked for during the finish happens now that the take is saved.
-      if (closeAfterFinish) {
+      // A close asked for during the finish happens now that the take is saved, unless a message
+      // about the take is waiting: then the window stays until the next close press.
+      if (closeAfterFinish && keepOpen) closeAfterFinish = false;
+      else if (closeAfterFinish) {
         stopStream();
         appWin.close();
       }
@@ -380,7 +382,7 @@ async function startRecording() {
       const text = t("camChunkWriteFailed").replace("{path}", () => path);
       statusText.textContent = text;
       statusText.title = text;
-      idleControls();
+      idleControls(true);
       refreshPreview();
       return;
     }
@@ -402,7 +404,7 @@ async function startRecording() {
       // A failed finish leaves the raw file in place, still playable.
       finishError = err;
     }
-    idleControls();
+    idleControls(!!(finishError || keptNotice));
     refreshPreview();
     if (finishError) await showCameraError(finishError);
     else if (keptNotice) {
