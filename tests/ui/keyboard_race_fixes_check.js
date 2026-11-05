@@ -365,6 +365,29 @@ later(async () => {
   check(log.length === 0, "a removed opener is skipped");
 });
 
+// core.js noticeToast: notices raised while hidden share one visibility listener and none is lost.
+later(async () => {
+  const core = read("core.js");
+  const a = core.indexOf("const hiddenNotices");
+  if (a === -1) { check(false, "notice queue missing"); return; }
+  const code = core.slice(a, core.indexOf("// Logs the error and returns")).replace(/export /g, "") + "\n;globalThis.api = { noticeToast };";
+  const shown = [];
+  const listeners = new Set(); let added = 0;
+  const doc = { hidden: true, addEventListener: (t, f) => { added++; listeners.add(f); }, removeEventListener: (t, f) => listeners.delete(f) };
+  const timers = [];
+  const sandbox = run(code, { document: doc, toast: (m) => shown.push(m), TOAST_NOTICE_MS: 1, setTimeout: (f) => timers.push(f) });
+  sandbox.api.noticeToast("one"); sandbox.api.noticeToast("two");
+  check(added === 1, `two hidden notices add one listener, got ${added}`);
+  check(shown.length === 0, "nothing shows while hidden");
+  doc.hidden = false;
+  [...listeners].forEach((f) => f());
+  check(shown.join() === "one" && listeners.size === 0, `the first shows when visible and the listener is gone, got ${shown}`);
+  while (timers.length) timers.shift()();
+  check(shown.join() === "one,two", `the second follows, got ${shown}`);
+  sandbox.api.noticeToast("three");
+  check(shown.join() === "one,two,three", "a notice while visible shows at once");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
