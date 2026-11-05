@@ -135,7 +135,7 @@ section(() => {
   const vid = new FakeVideo();
   const layer = { innerHTML: "<video>" };
   const sb = { HTMLVideoElement: FakeVideo, VE: { liveEls: new Map([["a", vid], ["b", { tag: "img" }]]) } };
-  const fn = extractBlock(src, "export function clearLiveOverlays(").replace("export ", "");
+  const fn = extractBlock(src, "function releaseLiveEl(") + "\n" + extractBlock(src, "export function clearLiveOverlays(").replace("export ", "");
   vm.createContext(sb);
   sb.clearLiveOverlays = vm.runInContext(fn + "\nclearLiveOverlays", sb);
   sb.clearLiveOverlays(layer);

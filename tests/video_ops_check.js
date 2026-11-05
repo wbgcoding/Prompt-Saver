@@ -1197,6 +1197,19 @@ const pending = [];
   expect("undo reaches back only the cap", sb.VE.ops.length === 4 && sb.VE.ops.some((o) => o.tool === "trim"), JSON.stringify(sb.VE.ops.map((o) => o.tool)));
 }
 
+// A live overlay video that is removed from the timeline is released like one cleared with the
+// layer: source dropped, so the decoder and the file handle do not linger until collection.
+{
+  class FakeVideo { constructor() { this.log = []; } pause() { this.log.push("pause"); } removeAttribute(n) { this.log.push("rm:" + n); } load() { this.log.push("load"); } remove() { this.log.push("remove"); } }
+  const sb = makeSandbox({ HTMLVideoElement: FakeVideo });
+  vm.runInContext(extractBlock("releaseLiveEl", "function releaseLiveEl(el) {"), sb);
+  const el = new FakeVideo();
+  vm.runInContext("releaseLiveEl", sb)(el);
+  expect("a released overlay video drops its source", el.log.join() === "pause,rm:src,load", el.log.join());
+  const sweep = extractBlock("renderOverlayLive", "export function renderOverlayLive(").split("Overlays that were removed entirely")[1] || "";
+  expect("a removed overlay is released before it is detached", /releaseLiveEl\(el\);\s*el\.remove\(\);/.test(sweep), sweep.slice(0, 200));
+}
+
 // An explicit height preset may enlarge (with its hint); the "small for chat"
 // and GIF presets only ever shrink; the source size is "no scaling" and removes
 // the entry.

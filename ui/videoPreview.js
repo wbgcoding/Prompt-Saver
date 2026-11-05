@@ -351,12 +351,15 @@ export function renderRects() {
   renderOverlayLive(vb);
 }
 
-// Drops every live-preview node. A detached <video> keeps decoding until its clip ends, so each
-// inserted video is paused and released before the layer is emptied.
+// A detached <video> keeps decoding until its clip ends, and holds the decoder and the file handle
+// until collected (blocking a move or delete of the clip), so it is paused and its source dropped.
+function releaseLiveEl(el) {
+  if (el instanceof HTMLVideoElement) { el.pause(); el.removeAttribute("src"); el.load(); }
+}
+
+// Drops every live-preview node, releasing each inserted video before the layer is emptied.
 export function clearLiveOverlays(layer) {
-  for (const el of VE.liveEls.values()) {
-    if (el instanceof HTMLVideoElement) { el.pause(); el.removeAttribute("src"); el.load(); }
-  }
+  for (const el of VE.liveEls.values()) releaseLiveEl(el);
   VE.liveEls.clear();
   layer.innerHTML = "";
 }
@@ -404,8 +407,7 @@ export function renderOverlayLive(vb) {
   const liveIds = new Set(opsOf("overlay").map((o) => o.id));
   for (const [id, el] of [...VE.liveEls]) {
     if (!liveIds.has(id)) {
-      // A detached <video> keeps playing until it is collected, so stop it first.
-      if (el instanceof HTMLVideoElement) el.pause();
+      releaseLiveEl(el);
       el.remove();
       VE.liveEls.delete(id);
     }
