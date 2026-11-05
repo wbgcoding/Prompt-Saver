@@ -31,6 +31,10 @@ const check = (label, actual, expected) => {
   check("failed copy", await copyGate("b", async () => false, prefs), "failed");
   check("retry after a failure", await copyGate("b", async () => true, prefs), "copied");
 
+  // A copy that throws counts as failed and leaves no stamps behind.
+  check("throwing copy", await copyGate("t", async () => { throw new Error("x"); }, prefs), "failed");
+  check("retry after a throw", await copyGate("t", async () => true, prefs), "copied");
+
   // A hand-off keeps the cooldown but never arms the paste window.
   check("hand-off", await copyGate("c", async () => "handoff", prefs), "handoff");
   check("second click after a hand-off is throttled, not a paste", await copyGate("c", async () => true, prefs), "throttled");
