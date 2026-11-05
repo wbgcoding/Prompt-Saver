@@ -325,6 +325,12 @@ later(async () => {
   check(log.length === 0, "Enter with no highlighted row commits the typed text instead");
 });
 
+// media.css: the volume popup shows while the sound button or the slider has focus, so Tab can reach the slider.
+later(async () => {
+  const css = fs.readFileSync(path.join(uiDir, "styles", "media.css"), "utf8");
+  check(/\.media-sound:focus-within \.media-vol-pop[^{]*\{[^}]*visibility:\s*visible/.test(css), "the volume popup is visible on :focus-within");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");

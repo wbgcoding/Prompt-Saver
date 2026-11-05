@@ -37,6 +37,7 @@
   background: rgba(0, 0, 0, 0.75);
 }
 .media-sound:hover .media-vol-pop,
+.media-sound:focus-within .media-vol-pop,
 .media-sound.dragging .media-vol-pop { visibility: visible; }
 /* No room above (video sitting at the top window edge): open downwards. */
 .media-sound.below .media-vol-pop { top: 100%; bottom: auto; }
