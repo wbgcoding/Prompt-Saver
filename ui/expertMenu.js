@@ -359,9 +359,11 @@ async function afterFlagWrite(key, enabled, accepted, err) {
 }
 
 // What a value write owes beyond the write: the settings dialog's scale select shows the new
-// scale.
-async function afterValueWrite(key) {
+// scale, and the grid's relock refetch is timed from the old secret timeout, so a render asks the
+// backend again. `rerender` is off for a caller that renders the grid itself afterwards.
+async function afterValueWrite(key, rerender = true) {
   if (key === "uiScale") fillScaleSelect("ui-scale", "uiScale");
+  if (key === "secretTimeoutMin" && rerender) await renderGrid(true);
 }
 
 export async function resetOneExpertValue(kind, key, after) {
@@ -1958,7 +1960,7 @@ export async function resetExpertGroup(group, changed, count) {
   await renderGrid(true);
   fitAllTiles();
   for (const [key, enabled, failure] of flagWrites) await afterFlagWrite(key, enabled, failure === undefined, failure);
-  for (const key of [...changed.values, ...changed.selects]) await afterValueWrite(key);
+  for (const key of [...changed.values, ...changed.selects]) await afterValueWrite(key, false);
   toast(t("expertResetGroupDone"));
   renderExpert();
 }

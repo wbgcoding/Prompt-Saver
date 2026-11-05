@@ -1681,6 +1681,24 @@ section(() => {
   });
 });
 
+// 93. Resetting the secret timeout re-renders the grid like a slider change does.
+section(() => {
+  const src = read("expertMenu.js");
+  const code = extractBlock(src, "async function afterValueWrite(") + "\n"
+    + extractBlock(src, "export async function resetOneExpertValue(").replace("export ", "")
+    + ";globalThis.api = { resetOneExpertValue };";
+  later(async () => {
+    let renders = 0;
+    const sb = run(code, {
+      settings: { ui_values: { secretTimeoutMin: 30 } }, EXPERT_BULK_NEVER: [], EXPERT_VALUES: { secretTimeoutMin: { def: 5 } }, EXPERT_SELECTS: {},
+      invoke: async () => {}, errToast() {}, applyValues() {}, refreshTiles: async () => {}, renderExpert() {}, fillScaleSelect() {},
+      renderGrid: async () => { renders++; },
+    });
+    await sb.api.resetOneExpertValue("values", "secretTimeoutMin", () => {});
+    check(renders === 1, "resetting secretTimeoutMin renders the grid again");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
