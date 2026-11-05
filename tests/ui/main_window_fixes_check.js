@@ -1600,6 +1600,13 @@ section(() => {
   });
 });
 
+// 89. The tour help names only the route that exists: the settings dialog has no tour entry.
+section(() => {
+  const src = read("help.js");
+  check(!/reopen it from the settings dialog/.test(src) && !/Später: über den Einstellungsdialog/.test(src), "the tour help does not send people to the settings dialog");
+  check(/Later: reopen it with the expert menu's/.test(src) && /Später: über die Aktion/.test(src), "the tour help names the expert menu action");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
