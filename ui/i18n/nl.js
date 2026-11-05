@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "Onjuist wachtwoord. Probeer het opnieuw.",
     importAllDone: "Back-up “{f}” is geïmporteerd. {n} prompts hersteld.",
     cancel: "Annuleren",
+    later: "Later",
     close: "Sluiten",
     shortcutsTitle: "Sneltoetsen",
     shortcutNextView: "Volgende weergave",

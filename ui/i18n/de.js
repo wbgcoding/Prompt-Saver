@@ -67,6 +67,7 @@ export default {
     backupPwWrong: "Falsches Passwort. Bitte erneut versuchen.",
     importAllDone: "Sicherung „{f}“ wurde importiert. {n} Prompts wiederhergestellt.",
     cancel: "Abbrechen",
+    later: "Später",
     close: "Schließen",
     shortcutsTitle: "Tastenkürzel",
     shortcutNextView: "Nächste Ansicht",

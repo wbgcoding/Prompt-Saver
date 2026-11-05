@@ -1742,6 +1742,32 @@ section(() => {
   check(/focusPreview\(confirmBtn, \$\("import-folder-cancel"\)\)/.test(extractBlock(src, "export async function runImportFolder(")), "the folder import uses focusPreview");
 });
 
+// 96. The language-pack update notices offer the manage dialog as their action and put the snooze
+// under "Later" instead of "Cancel".
+section(() => {
+  const src = read("capture.js");
+  const code = extractBlock(src, "function langUpdateNotice(") + ";globalThis.api = { langUpdateNotice };";
+  const log = [];
+  let shown;
+  const sb = run(code, {
+    t: (k) => k, toast: (...a) => { shown = a; }, hideToast: () => log.push("hide"),
+    invoke: (c) => { log.push("invoke:" + c); return Promise.resolve(); },
+  });
+  const manage = () => log.push("manage");
+  sb.api.langUpdateNotice([{ label: "German" }], "ocrLangsManage", manage, "ocr_lang_snooze", 5000);
+  const [msg, action, tint, chips, ms] = shown;
+  check(action.label === "ocrLangsManage" && action.onClick === manage, "the notice action opens the manage dialog");
+  check(chips.length === 1 && chips[0].label === "later" && ms === 5000, "the snooze sits under Later");
+  action.onClick();
+  check(log.join() === "manage", "the manage action does not snooze");
+  chips[0].onClick();
+  check(log.slice(1).join() === "hide,invoke:ocr_lang_snooze", "Later closes the toast and snoozes");
+  shown = undefined;
+  sb.api.langUpdateNotice([], "ocrLangsManage", manage, "ocr_lang_snooze", 5000);
+  check(shown === undefined, "an empty list shows nothing");
+  check(/langUpdateNotice\(e\.payload, "voiceLangsManage", openVoiceLangsModal, "voice_lang_snooze"/.test(src), "the voice notice opens the voice dialog");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

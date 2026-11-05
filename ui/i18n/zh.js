@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "密码错误，请重试。",
     importAllDone: "备份“{f}”已导入。已还原 {n} 个提示词。",
     cancel: "取消",
+    later: "稍后",
     close: "关闭",
     shortcutsTitle: "键盘快捷键",
     shortcutNextView: "下一个视图",

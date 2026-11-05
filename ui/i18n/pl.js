@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "Nieprawidłowe hasło. Spróbuj ponownie.",
     importAllDone: "Kopia zapasowa „{f}” zaimportowana. {n} promptów przywrócono.",
     cancel: "Anuluj",
+    later: "Później",
     close: "Zamknij",
     shortcutsTitle: "Skróty klawiszowe",
     shortcutNextView: "Następny widok",

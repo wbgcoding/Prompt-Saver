@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "Contraseña incorrecta. Inténtalo de nuevo.",
     importAllDone: "Copia de seguridad «{f}» importada. {n} prompts restaurados.",
     cancel: "Cancelar",
+    later: "Más tarde",
     close: "Cerrar",
     shortcutsTitle: "Atajos de teclado",
     shortcutNextView: "Vista siguiente",

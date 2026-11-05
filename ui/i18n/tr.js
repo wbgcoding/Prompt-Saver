@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "Yanlış şifre. Lütfen tekrar deneyin.",
     importAllDone: "Yedek “{f}” içe aktarıldı. {n} istem geri yüklendi.",
     cancel: "İptal",
+    later: "Sonra",
     close: "Kapat",
     shortcutsTitle: "Klavye kısayolları",
     shortcutNextView: "Sonraki görünüm",

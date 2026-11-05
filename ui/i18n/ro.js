@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "Parolă greșită. Încearcă din nou.",
     importAllDone: "Copia de rezervă „{f}” a fost importată. {n} prompturi restabilite.",
     cancel: "Anulează",
+    later: "Mai târziu",
     close: "Închide",
     shortcutsTitle: "Comenzi rapide de la tastatură",
     shortcutNextView: "Vizualizarea următoare",

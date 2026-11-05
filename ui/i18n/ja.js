@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "パスワードが違います。もう一度お試しください。",
     importAllDone: "バックアップ「{f}」をインポートしました。{n} 件のプロンプトを復元しました。",
     cancel: "キャンセル",
+    later: "後で",
     close: "閉じる",
     shortcutsTitle: "キーボードショートカット",
     shortcutNextView: "次のビュー",

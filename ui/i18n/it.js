@@ -90,6 +90,7 @@ export default {
     backupPwWrong: "Password errata. Riprova.",
     importAllDone: "Backup «{f}» importato. {n} prompt ripristinati.",
     cancel: "Annulla",
+    later: "Più tardi",
     close: "Chiudi",
     shortcutsTitle: "Scorciatoie da tastiera",
     shortcutNextView: "Vista successiva",

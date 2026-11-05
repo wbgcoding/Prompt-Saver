@@ -67,6 +67,7 @@ export default {
     backupPwWrong: "Wrong password. Please try again.",
     importAllDone: "Backup “{f}” was imported. {n} prompts restored.",
     cancel: "Cancel",
+    later: "Later",
     close: "Close",
     shortcutsTitle: "Keyboard shortcuts",
     shortcutNextView: "Next view",
