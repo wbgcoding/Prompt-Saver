@@ -207,6 +207,27 @@ later(async () => {
   check(sandbox.state === "new", `the newest snapshot stays, got ${sandbox.state}`);
 });
 
+// gridFolders.js: a folder member answers Enter/Space (a click with no pointer, detail 0) through
+// the same copy path as the pointer release, and a mouse click is left to the pointer path.
+later(async () => {
+  const src = read("gridFolders.js");
+  check(/btn\.addEventListener\("click", \(ev\) => \{\s*if \(ev\.detail !== 0\) return;\s*copyFolderMember\(/.test(src), "member button has a keyboard click handler guarded by detail 0");
+  const code = src.indexOf("async function copyFolderMember") >= 0 ? extractBlock(src, "async function copyFolderMember") : "async function copyFolderMember() { throw new Error('missing copyFolderMember'); }";
+  const log = [];
+  const sandbox = run(code + "\n;globalThis.copy = copyFolderMember;", {
+    chainMode: false, toggleChainPick: async () => log.push("chain"),
+    dialogTokens: () => [], peekRotatedText: async (p) => p.text, copyOnCooldown: () => false,
+    autoPasteDouble: () => false, autoPasteNow: async () => log.push("paste"),
+    copyResolved: async () => { log.push("copy"); return true; },
+    showCopied: () => log.push("shown"), recordCopy: () => log.push("rec"), maybeCloseOnCopy: () => log.push("close"),
+    copyTextWithVars: async () => log.push("vars"),
+  });
+  await sandbox.copy({ id: "m", text: "hi" }, {});
+  check(log.join() === "copy,shown,rec,close", `member copy path, got ${log}`);
+  await sandbox.copy(undefined, {});
+  check(log.length === 4, "a vanished prompt copies nothing");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
