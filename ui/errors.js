@@ -50,6 +50,7 @@ export const ERROR_MSG_KEYS = {
   "save-failed": "persistFailed",
   "refused: that path belongs to the program files": "errExportProgramFile",
   "corrupt backup": "errCorruptBackup",
+  "backup-not-picked": "errBackupNotPicked",
   "unknown backup format": "errUnknownBackupFormat",
   "this folder holds the app's own data": "errFolderIsAppData",
   "the folder is no longer there": "errFolderGone",

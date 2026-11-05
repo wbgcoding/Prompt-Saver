@@ -133,11 +133,11 @@ fn an_import_over_the_decrypt_lock_replaces_rows_this_process_never_read() {
     conn.execute("INSERT INTO prompts VALUES('foreign', 9, 'sealed')", []).unwrap();
     let incoming = vec![test_prompt("new1")];
     // A plain write spares it (another instance's unseen work) ...
-    db_write_import(&mut conn, &store, &incoming, true, false, false).unwrap();
+    db_write_import(&mut conn, &store, &incoming, &[], true, false, false).unwrap();
     let still: i64 = conn.query_row("SELECT COUNT(*) FROM prompts WHERE id = 'foreign'", [], |r| r.get(0)).unwrap();
     assert_eq!(still, 1);
     // ... a replacing write does not.
-    db_write_import(&mut conn, &store, &incoming, true, false, true).unwrap();
+    db_write_import(&mut conn, &store, &incoming, &[], true, false, true).unwrap();
     let ids: Vec<String> = conn.prepare("SELECT id FROM prompts ORDER BY ord").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
     assert_eq!(ids, vec!["new1".to_string()]);
 }
@@ -148,7 +148,7 @@ fn a_failed_replacing_import_does_not_teach_the_map_about_unread_rows() {
     let store = import_test_store(&mut conn);
     conn.execute("INSERT INTO prompts VALUES('foreign', 9, 'sealed')", []).unwrap();
     conn.execute_batch("CREATE TRIGGER fail_prompts BEFORE INSERT ON prompts BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
-    assert!(db_write_import(&mut conn, &store, &[test_prompt("new1")], true, false, true).is_err());
+    assert!(db_write_import(&mut conn, &store, &[test_prompt("new1")], &[], true, false, true).is_err());
     assert!(!store.written.borrow().contains_key(&row_key("prompts", "foreign")));
 }
 
@@ -304,4 +304,61 @@ fn a_settings_import_path_needs_the_picker_grant() {
     assert!(take_settings_import_grant(&file, false).is_ok(), "the preview keeps it for the apply");
     assert!(take_settings_import_grant(&file, false).is_err(), "spent once");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_backup_import_path_needs_the_picker_grant_and_a_password_retry_keeps_it() {
+    let file = std::env::temp_dir().join(format!("ps-backup-grant-{}.psb", std::process::id()));
+    assert!(!consume_granted_dir(&file, BACKUP_IMPORT_GRANT), "never picked");
+    grant_picked_dir(&file, SETTINGS_IMPORT_GRANT);
+    assert!(!consume_granted_dir(&file, BACKUP_IMPORT_GRANT), "another purpose does not count");
+    grant_picked_dir(&file, BACKUP_IMPORT_GRANT);
+    assert!(consume_granted_dir(&file, BACKUP_IMPORT_GRANT));
+    assert!(!consume_granted_dir(&file, BACKUP_IMPORT_GRANT), "spent once");
+    // The page re-asks only on a password error, so only that error hands the grant back.
+    assert!(keeps_backup_grant("password-required"));
+    assert!(keeps_backup_grant("wrong password or corrupt backup"));
+    assert!(!keeps_backup_grant("corrupt backup"));
+    assert!(!keeps_backup_grant("unknown backup format"));
+    // The same text the page tests: a mapped error key must exist for the refusal itself.
+    assert!(include_str!("../../../ui/errors.js").contains("\"backup-not-picked\":"));
+}
+
+fn trash_ids_on_disk(conn: &Connection) -> Vec<String> {
+    conn.prepare("SELECT id FROM trash ORDER BY ord").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
+}
+
+#[test]
+fn an_import_writes_the_trash_it_changed_in_the_same_transaction() {
+    let mut conn = import_test_db();
+    let mut store = import_test_store(&mut conn);
+    store.trash = vec![test_prompt("new1"), test_prompt("stays")];
+    db_write_trash(&mut conn, &store.trash, &mut store.written.borrow_mut()).unwrap();
+    // The backup brings "new1" back as a live prompt, so it leaves the trash in memory.
+    run_import(&mut store, import_test_backup(), true, false, |st, prompts, settings| {
+        db_write_import(&mut conn, st, &st.prompts, &st.trash, prompts, settings, false).is_ok()
+    })
+    .unwrap();
+    assert_eq!(trash_ids_on_disk(&conn), vec!["stays".to_string()]);
+    let live: Vec<String> = conn.prepare("SELECT id FROM prompts").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+    assert!(live.contains(&"new1".to_string()));
+}
+
+#[test]
+fn a_failed_import_write_leaves_the_trash_rows_and_the_trash_list_as_they_were() {
+    let mut conn = import_test_db();
+    let mut store = import_test_store(&mut conn);
+    store.trash = vec![test_prompt("new1"), test_prompt("stays")];
+    db_write_trash(&mut conn, &store.trash, &mut store.written.borrow_mut()).unwrap();
+    conn.execute_batch("CREATE TRIGGER fail_trash BEFORE DELETE ON trash BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+    let r = run_import(&mut store, import_test_backup(), true, false, |st, prompts, settings| {
+        db_write_import(&mut conn, st, &st.prompts, &st.trash, prompts, settings, false).is_ok()
+    });
+    assert!(r.is_err());
+    let ids: Vec<&str> = store.trash.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(ids, vec!["new1", "stays"]);
+    assert_eq!(trash_ids_on_disk(&conn), vec!["new1".to_string(), "stays".to_string()]);
+    // The prompt rows rolled back with it: the id is not live on disk next to a trash row.
+    let live: i64 = conn.query_row("SELECT COUNT(*) FROM prompts WHERE id = 'new1'", [], |r| r.get(0)).unwrap();
+    assert_eq!(live, 0);
 }

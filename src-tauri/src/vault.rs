@@ -773,18 +773,29 @@ pub(crate) struct ImportSummary {
 
 #[tauri::command]
 pub(crate) async fn pick_backup_file(app: AppHandle) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
         file_dialog(&app)
             .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
             .pick_file()
-            .map(|p| p.display().to_string())
         })
         .flatten()
     })
     .await
     .ok()
-    .flatten()
+    .flatten()?;
+    // The pick is the consent to read this file: import_all spends it, so a path the page
+    // made up (a UNC spelling would make Windows authenticate to a foreign host) is refused.
+    grant_picked_dir(&picked, BACKUP_IMPORT_GRANT);
+    Some(picked.display().to_string())
+}
+
+pub(crate) const BACKUP_IMPORT_GRANT: &str = "backupImportFile";
+
+// A password error leaves the file picked: the page asks again and calls import_all with the
+// same path, so the grant is handed back only for that case.
+pub(crate) fn keeps_backup_grant(err: &str) -> bool {
+    err.to_lowercase().contains("password")
 }
 
 // Settings-only export/import: a plain, unencrypted JSON of just the expert-menu
@@ -1279,8 +1290,10 @@ pub(crate) fn run_import(
 // `replace_prompts` makes the prompts write a wholesale replacement: every row the
 // table holds is treated as known, so rows this process could not read (the ones that
 // locked the store) go too instead of surviving next to the imported set.
+// The trash rows go in the same transaction as the prompt rows: an import takes back trash
+// entries that return as live prompts, and the two tables must never both hold one id.
 pub(crate) fn db_write_import(
-    conn: &mut Connection, store: &Store, prompts: &[Prompt], write_prompts: bool, write_settings: bool, replace_prompts: bool,
+    conn: &mut Connection, store: &Store, prompts: &[Prompt], trash: &[Prompt], write_prompts: bool, write_settings: bool, replace_prompts: bool,
 ) -> rusqlite::Result<()> {
     // Worked on as a copy and adopted only after the write succeeded, so a failed
     // import never leaves the map claiming rows this process never loaded.
@@ -1288,12 +1301,21 @@ pub(crate) fn db_write_import(
     if replace_prompts && write_prompts {
         claim_present_rows(conn, "prompts", &mut written)?;
     }
-    match (write_prompts, write_settings) {
-        (true, true) => db_write_prompts_and_settings(conn, prompts, &store.settings, &mut written),
-        (true, false) => db_write_prompts(conn, prompts, &mut written),
-        (false, true) => db_write_settings(conn, &store.settings),
-        (false, false) => Ok(()),
-    }?;
+    if write_prompts {
+        let tx = conn.transaction()?;
+        claim_prompts_if_pending(&tx, &mut written)?;
+        let fresh_prompts = write_rows(&tx, "prompts", prompts, &written)?;
+        let fresh_trash = write_rows(&tx, "trash", trash, &written)?;
+        if write_settings {
+            db_write_settings(&tx, &store.settings)?;
+        }
+        tx.commit()?;
+        adopt_written_rows(&mut written, "prompts", fresh_prompts);
+        adopt_written_rows(&mut written, "trash", fresh_trash);
+        written.remove(CLAIM_PROMPTS_KEY);
+    } else if write_settings {
+        db_write_settings(conn, &store.settings)?;
+    }
     *store.written.borrow_mut() = written;
     Ok(())
 }
@@ -1307,12 +1329,14 @@ pub(crate) fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, w
     }
     let _writing = write_settings.then(settings_write_lock);
     let dir = data_dir(app);
-    let prompts = strip_data_dir_prefix(&dir, data_dir_is_demo(app, &dir), &store.prompts);
+    let demo = data_dir_is_demo(app, &dir);
+    let prompts = strip_data_dir_prefix(&dir, demo, &store.prompts);
+    let trash = strip_data_dir_prefix(&dir, demo, &store.trash);
     let Some(mut conn) = db_conn(app) else {
         append_crash_log("persist failed: the import could not open the database");
         return false;
     };
-    if db_write_import(&mut conn, store, &prompts, write_prompts, write_settings, replace_prompts).is_err() {
+    if db_write_import(&mut conn, store, &prompts, &trash, write_prompts, write_settings, replace_prompts).is_err() {
         append_crash_log("persist failed: the import could not be written to the database");
         return false;
     }
@@ -1351,6 +1375,9 @@ pub(crate) async fn import_all(
     valid_scope(&scope)?;
     flush_settings_now(&app);
     let path = PathBuf::from(path);
+    if !consume_granted_dir(&path, BACKUP_IMPORT_GRANT) {
+        return Err("backup-not-picked".to_string());
+    }
     let raw = read_file_capped(&path, MAX_IMPORT_BYTES)?;
     // Try the caller-supplied password first, else the one stored for this machine.
     let pw = password.filter(|p| !p.is_empty()).or_else(|| {
@@ -1358,7 +1385,12 @@ pub(crate) async fn import_all(
         stored_backup_password(&store)
     });
     // Encrypted (PSB1) or a legacy plaintext .json backup.
-    let content = match backup_decrypt(&raw, pw.as_deref())? {
+    let decrypted = backup_decrypt(&raw, pw.as_deref()).inspect_err(|e| {
+        if keeps_backup_grant(e) {
+            grant_picked_dir(&path, BACKUP_IMPORT_GRANT);
+        }
+    })?;
+    let content = match decrypted {
         Some(plain) => String::from_utf8(plain).map_err(|_| "corrupt backup".to_string())?,
         None => legacy_backup_text(raw)?,
     };
@@ -1374,15 +1406,9 @@ pub(crate) async fn import_all(
         // An import that overrides the decrypt lock replaces the table: the rows
         // that caused the lock are unknown to this process and would stay behind.
         let replace_prompts = want_data && store.prompts_locked;
-        let trash_before = store.trash.len();
         let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
             save_import(&app, st, prompts, settings, replace_prompts)
         })?;
-        // The import's own save covers the prompt rows; the trash is written here, also when the
-        // import took back entries that came back as live prompts.
-        if store.trash.len() != trash_before {
-            save_trash(&app, &store);
-        }
         if want_settings && ocr_was_on && !ocr_index_flag_on(&store) {
             write_ocr_wipe(&app, &store, "import");
         }

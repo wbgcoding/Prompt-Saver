@@ -47,7 +47,7 @@ pub(super) fn load_store_headless_checked(dir: &Path) -> (Store, StoreHealth) {
     if let Some(conn) = db_conn_at(dir) {
         let mut written = WrittenRows::new();
         let (mut prompts, settings_opt, _needs_mig, prompt_fails, settings_unreadable) = db_load(&conn, &mut written);
-        let (trash, trash_fails) = db_load_trash(&conn, &mut written);
+        let (trash, trash_fails, _) = db_load_trash(&conn, &mut written);
         let decrypt_fails = prompt_fails + trash_fails;
         let mut settings = settings_opt.unwrap_or_default();
         settings.migrate();

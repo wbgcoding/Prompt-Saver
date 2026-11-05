@@ -715,6 +715,7 @@ const RESULTS = {
   data_dir_lock_status: () => ({
     readOnly: window.__DATA_DIR_READONLY__ === true,
     otherHost: window.__DATA_DIR_OTHER_HOST__ || null,
+    unreachableDir: window.__DATA_DIR_UNREACHABLE__ || null,
   }),
   current_data_dir_sync_hint: () => window.__DATA_DIR_SYNC_HINT__ || null,
   path_sync_folder_hint: () => window.__DATA_DIR_SYNC_HINT__ || null,

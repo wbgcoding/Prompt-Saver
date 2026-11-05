@@ -959,6 +959,44 @@ DATA_DIR_READONLY_PROBE = """
 """
 
 
+DATA_DIR_UNREACHABLE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--ddun-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+    const banner = document.getElementById('data-dir-unreachable-banner');
+    for (let i = 0; i < 40 && !visible(banner); i++) await sleep(50);
+    const want = window.__DATA_DIR_UNREACHABLE__;
+    if (!want) {
+      if (visible(banner)) errs.push('unreachable: banner shown although the folder was reached');
+    } else if (!visible(banner)) {
+      errs.push('unreachable: no banner although the data folder could not be reached');
+    } else {
+      const text = document.getElementById('data-dir-unreachable-text').textContent.trim();
+      if (/dataDirUnreachable/.test(text)) errs.push('unreachable: raw i18n key: ' + text);
+      if (!text.includes(want)) errs.push('unreachable: the banner does not name the folder: ' + text);
+      if (banner.classList.contains('banner-stacked')) errs.push('unreachable: the banner is stacked away behind another');
+    }
+  } catch (e) { errs.push('unreachable: probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # 375: pill folders and grid folders are two separate mechanisms, but the
 # "take it apart" menu entry must read and look the same in both. Its own
 # boot, same reasoning as SEAL_PROBE above: the fixture already carries one
@@ -2306,6 +2344,30 @@ def run(browser, tmp):
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- data folder lock ({tag})")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+    # A custom data folder that could not be reached at start: the session runs on the
+    # default folder and a persistent banner names the folder that was skipped.
+    for dead in (True, False):
+        tag = "unreachable" if dead else "reached"
+        side = tmp / "ui" / f"ddun-{tag}.html"
+        extra = (
+            (f'<script>window.__DATA_DIR_UNREACHABLE__ = "Z:\\\\Backup Stick\\\\Prompts";</script>\n' if dead else '')
+            + '<script src="tauri_stub.js"></script>\n<script'
+        )
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", extra, 1)
+            .replace("</body>", DATA_DIR_UNREACHABLE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = run_chrome(browser, tmp / ('profile-ddun-%s' % tag), "1000,780", 45000, side.as_uri(), 180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print(f"-- data folder unreachable ({tag})")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

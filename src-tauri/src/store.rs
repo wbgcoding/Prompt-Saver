@@ -524,6 +524,9 @@ impl Drop for ReloadSaveBlock {
 pub(crate) struct DataDirLockStatus {
     pub(crate) read_only: bool,
     pub(crate) other_host: Option<String>,
+    // The custom data folder the app could not reach at startup, so this session runs on
+    // the default folder.
+    pub(crate) unreachable_dir: Option<String>,
 }
 
 // Polled once at startup to fill the persistent read-only banner before the first render.
@@ -532,6 +535,7 @@ pub(crate) fn data_dir_lock_status() -> DataDirLockStatus {
     DataDirLockStatus {
         read_only: DATA_DIR_READONLY.load(Ordering::Relaxed),
         other_host: DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        unreachable_dir: unreachable_data_dir(),
     }
 }
 
@@ -844,7 +848,7 @@ pub(crate) fn claim_present_rows(conn: &Connection, table: &str, written: &mut W
 // so it never matches a table prefix and adopt_written_rows leaves it alone.
 pub(crate) const CLAIM_PROMPTS_KEY: &str = "\u{2}claim-prompts";
 
-fn claim_prompts_if_pending(conn: &Connection, written: &mut WrittenRows) -> rusqlite::Result<()> {
+pub(crate) fn claim_prompts_if_pending(conn: &Connection, written: &mut WrittenRows) -> rusqlite::Result<()> {
     if written.contains_key(CLAIM_PROMPTS_KEY) {
         claim_present_rows(conn, "prompts", written)?;
     }
@@ -899,33 +903,17 @@ pub(crate) fn db_write_prompts_and_trash(
     Ok(())
 }
 
-// An import that replaces both halves: prompt rows and the settings row land in one
-// transaction, so a failure never leaves one half imported.
-pub(crate) fn db_write_prompts_and_settings(
-    conn: &mut Connection,
-    prompts: &[Prompt],
-    settings: &Settings,
-    written: &mut WrittenRows,
-) -> rusqlite::Result<()> {
-    let tx = conn.transaction()?;
-    claim_prompts_if_pending(&tx, written)?;
-    let fresh = write_rows(&tx, "prompts", prompts, written)?;
-    db_write_settings(&tx, settings)?;
-    tx.commit()?;
-    adopt_written_rows(written, "prompts", fresh);
-    written.remove(CLAIM_PROMPTS_KEY);
-    Ok(())
-}
-
 // written collects what the table was found to hold (see WrittenRows), recorded straight
 // from the rows as read, so the first save only writes what changed.
 //
 // The second return value is a failure count like db_load's: a row that could not be read,
 // decrypted or parsed is present but unaccounted for, and the caller must fold it into the
-// write-lock decision so a trash mutation cannot erase it.
-pub(crate) fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, usize) {
+// write-lock decision so a trash mutation cannot erase it. The third value says a row was
+// stored unsealed, so the startup resave covers the trash table too.
+pub(crate) fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, usize, bool) {
     let mut trash = Vec::new();
     let mut failures = 0usize;
+    let mut plaintext = false;
     match conn.prepare("SELECT data FROM trash ORDER BY ord") {
         Ok(mut stmt) => match stmt.query_map([], |r| r.get::<_, String>(0)) {
             Ok(rows) => {
@@ -940,6 +928,7 @@ pub(crate) fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Ve
                                     let hash = if encrypted {
                                         row_hash(&serde_json::to_string(&p).unwrap_or_default())
                                     } else {
+                                        plaintext = true;
                                         STALE_ROW_HASH
                                     };
                                     written.insert(row_key("trash", &p.id), hash);
@@ -957,7 +946,7 @@ pub(crate) fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Ve
         },
         Err(_) => failures += 1,
     }
-    (trash, failures)
+    (trash, failures, plaintext)
 }
 
 pub(crate) fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result<()> {
@@ -2137,7 +2126,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
         let mut startup = StartupWrites::default();
         let (mut prompts, settings_opt, needs_mig, prompt_fails, settings_unreadable) =
             db_load(&conn, &mut written);
-        let (mut trash, trash_fails) = db_load_trash(&conn, &mut written);
+        let (mut trash, trash_fails, trash_plain) = db_load_trash(&conn, &mut written);
         let decrypt_fails = prompt_fails + trash_fails;
         // A row (prompts, trash or settings) could not be read back or decrypted: preserve the raw
         // DB and lock the affected writes (prompts_locked, SETTINGS_LOCKED).
@@ -2303,9 +2292,13 @@ fn load_store_inner(app: &AppHandle) -> Store {
             store.settings.data_version = DATA_VERSION;
             data_upgraded = true;
         }
-        if needs_mig || migrated_log {
+        if needs_mig || migrated_log || trash_plain {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
-            save_prompts(app, &store);
+            if trash_plain {
+                save_prompts_and_trash(app, &store);
+            } else {
+                save_prompts(app, &store);
+            }
             save_settings(app, &store.settings);
         } else if theme_ai_before || pruned_removed_values || pin_retention || data_upgraded {
             save_settings(app, &store.settings);

@@ -505,3 +505,63 @@ fn a_graph_source_on_a_share_is_judged_on_its_text_before_it_is_opened() {
     let request = fn_body(&graph, "fn validate_export_request_graphs(");
     assert!(request.contains("allowed_texts.extend(media_paths"));
 }
+
+fn redirect_fixture(tag: &str) -> (PathBuf, PathBuf) {
+    let root = std::env::temp_dir().join(format!("ps-test-redirect-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let base = root.join("canonical");
+    fs::create_dir_all(&base).unwrap();
+    (base, root.join("usb-stick"))
+}
+
+#[test]
+fn a_running_custom_folder_that_vanishes_is_never_swapped_for_the_default_one() {
+    let (base, custom) = redirect_fixture("pinned");
+    fs::create_dir_all(&custom).unwrap();
+    fs::write(base.join("datapath"), custom.to_string_lossy().as_bytes()).unwrap();
+    let (dir, skipped) = resolve_datapath_with(base.clone(), false, None);
+    assert_eq!((dir, skipped), (custom.clone(), None));
+    // The drive drops out mid-session: the pointer path is still the answer, so the write
+    // fails against it instead of creating a store beside the pointer.
+    fs::remove_dir_all(&custom).unwrap();
+    let (dir, skipped) = resolve_datapath_with(base.clone(), true, None);
+    assert_eq!((dir, skipped), (custom.clone(), None));
+    assert!(db_conn_at(&custom).is_none());
+    assert!(!base.join("data.db").exists());
+}
+
+#[test]
+fn a_start_with_the_custom_folder_missing_uses_the_default_one_and_names_the_skipped_folder() {
+    let (base, custom) = redirect_fixture("startup");
+    let pointer = base.join("datapath");
+    fs::write(&pointer, custom.to_string_lossy().as_bytes()).unwrap();
+    let (dir, skipped) = resolve_datapath_with(base.clone(), false, None);
+    assert_eq!(dir, base);
+    assert_eq!(skipped.as_deref(), Some(custom.as_path()));
+    // The fallback session leaves the pointer alone, so the next launch tries the folder again.
+    assert_eq!(fs::read_to_string(&pointer).unwrap(), custom.to_string_lossy());
+    // The folder turning up later does not move a session that loaded the default store.
+    fs::create_dir_all(&custom).unwrap();
+    let (dir, skipped) = resolve_datapath_with(base.clone(), false, Some(&custom));
+    assert_eq!((dir, skipped.as_deref()), (base.clone(), Some(custom.as_path())));
+    // A different folder chosen in this session is honoured.
+    let other = custom.with_file_name("other");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(&pointer, other.to_string_lossy().as_bytes()).unwrap();
+    assert_eq!(resolve_datapath_with(base.clone(), false, Some(&custom)), (other, None));
+}
+
+#[test]
+fn an_empty_or_missing_pointer_means_the_default_folder() {
+    let (base, _) = redirect_fixture("empty");
+    assert_eq!(resolve_datapath_with(base.clone(), true, None), (base.clone(), None));
+    fs::write(base.join("datapath"), b"  \n").unwrap();
+    assert_eq!(resolve_datapath_with(base.clone(), true, None), (base, None));
+}
+
+#[test]
+fn the_command_line_does_not_fall_back_to_the_default_store() {
+    let src = source!("../paths.rs");
+    let body = fn_body(&src, "pub(crate) fn data_dir_headless(");
+    assert!(body.contains("resolve_datapath_with(default_data_dir_headless(), true, None)"));
+}
