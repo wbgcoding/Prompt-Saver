@@ -205,7 +205,7 @@ section(() => {
   check(hits.length === 2000, `every match is listed, got ${hits.length}`);
   hits.slice(0, 8).forEach((h) => h.sub);
   check(previews === 8, `only the shown rows build a preview, got ${previews}`);
-  check(hits[3].sub === "body 3", "a drawn row still carries its preview");
+  check(hits[3].sub === "body 3" && hits[3].id === "g3", "a drawn row still carries its preview and identity");
 });
 
 // globalSearch.js gsHelpHits: the article tip is searchable, like the help dialog's own search.

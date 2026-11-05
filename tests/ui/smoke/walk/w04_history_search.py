@@ -666,6 +666,51 @@ SECTION = """\
       document.getElementById('gs-close').click();
       await sleep(100);
     }
+    // The highlighted search-everything row survives a re-render that is not a new query (the
+    // late picture-text answer) and "show more" lands on the first row it reveals.
+    {
+      const corePs = await import('./core.js');
+      const gsPs = await import('./globalSearch.js');
+      const keepPs = corePs.prompts;
+      const basePs = keepPs.find((x) => x.id === 'p1') || keepPs[0];
+      const extraPs = Array.from({ length: 20 }, (_, i) => ({
+        ...basePs, id: 'zq' + i, name: 'Zqkeep ' + String(i).padStart(2, '0'), text: 'zq body ' + i,
+        favorite: false, tags: [], file_path: '', icon_path: '', variants: [], has_image: false,
+        copy_image: false, secret: false, locked: false,
+      }));
+      corePs.assignPrompts([...keepPs, ...extraPs]);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+      await sleep(150);
+      const inpPs = document.getElementById('gs-input');
+      inpPs.value = 'zqkeep';
+      inpPs.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(250);
+      const activePs = () => document.querySelector('#gs-results .gs-row.active');
+      const downPs = () => inpPs.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      for (let i = 0; i < 3; i++) downPs();
+      const beforePs = activePs() && activePs().textContent;
+      gsPs.gsRender(true);
+      const afterPs = activePs() && activePs().textContent;
+      if (!beforePs || beforePs !== afterPs) out.errors.push('late re-render moved the highlighted search row from ' + beforePs + ' to ' + afterPs);
+      gsPs.gsRender();
+      if (activePs() && activePs().textContent === beforePs) out.errors.push('a new query render should start on the first row again');
+      gsPs.gsRender(true);
+      const rowsPs = () => [...document.querySelectorAll('#gs-results .gs-row')];
+      const moreAt = rowsPs().findIndex((r) => r.classList.contains('gs-more-row'));
+      if (moreAt < 1) out.errors.push('no show more row for 20 matches');
+      else {
+        for (let i = 0; i < moreAt; i++) downPs();
+        if (!activePs() || !activePs().classList.contains('gs-more-row')) out.errors.push('could not reach the show more row');
+        inpPs.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(100);
+        const nowPs = rowsPs();
+        if (!activePs() || activePs().classList.contains('gs-more-row')) out.errors.push('show more left no real row highlighted');
+        else if (nowPs.indexOf(activePs()) !== moreAt) out.errors.push('show more should highlight the first revealed row, got index ' + nowPs.indexOf(activePs()) + ' of ' + moreAt);
+      }
+      document.getElementById('gs-close').click();
+      await sleep(100);
+      corePs.assignPrompts(keepPs);
+    }
     // 439: recent-messages window -- reachable from the expert menu, shows an
     // error toast's own text, "copy all" puts it on the clipboard, "clear"
     // empties the list and the empty state says so.
