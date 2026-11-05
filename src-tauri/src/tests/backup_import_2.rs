@@ -1108,6 +1108,28 @@ fn the_import_folder_scan_survives_an_unbounded_limit() {
 }
 
 #[test]
+fn the_folder_confirm_step_only_takes_paths_the_scan_lists() {
+    let dir = std::env::temp_dir().join(format!("ps-listed-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let deep = dir.join("a").join("b");
+    fs::create_dir_all(&deep).unwrap();
+    fs::write(dir.join("one.md"), "x").unwrap();
+    fs::write(dir.join("two.md"), "x").unwrap();
+    fs::write(dir.join("a").join("shallow.txt"), "x").unwrap();
+    fs::write(deep.join("deep.txt"), "x").unwrap();
+    let ask = |max_depth: u32, max_files: usize| {
+        let rels = ["one.md", "two.md", "a/shallow.txt", "a/b/deep.txt", "missing.md", "../x.md", "a/skip.png"];
+        listed_folder_rel_paths(&dir, max_depth, max_files, rels.iter().map(|s| s.to_string()).collect())
+    };
+    // Depth 2 leaves "a/b" out: a made-up deep path is dropped like an unsafe or unlisted one.
+    assert_eq!(ask(2, 500), vec!["one.md", "two.md", "a/shallow.txt"]);
+    assert_eq!(ask(5, 500), vec!["one.md", "two.md", "a/shallow.txt", "a/b/deep.txt"]);
+    // The file limit applies the same way: walk order is a/b/deep, a/shallow, one, two.
+    assert_eq!(ask(5, 2), vec!["a/shallow.txt", "a/b/deep.txt"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn an_oversized_plain_snapshot_is_refused_before_any_copy() {
     let dir = std::env::temp_dir().join(format!("ps-bigplain-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

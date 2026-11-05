@@ -1343,17 +1343,13 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     if !consume_granted_dir(base, "importFolder") {
         return Err("dir-not-picked".to_string());
     }
+    let (max_depth, max_files) = {
+        let store = lock(&state);
+        (import_folder_depth_setting(&store), import_folder_max_setting(&store))
+    };
     let mut items = Vec::new();
-    for rel in rel_paths {
-        if !folder_rel_path_is_safe(&rel) {
-            continue;
-        }
+    for rel in listed_folder_rel_paths(base, max_depth, max_files, rel_paths) {
         let path = base.join(&rel);
-        // Only what the scan itself lists: a renderer-made path to some other kind of
-        // file never becomes a prompt.
-        if !has_import_folder_ext(&path) {
-            continue;
-        }
         let Ok(content) = read_import_folder_file(&path) else { continue };
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         if name.is_empty() {
@@ -1375,6 +1371,15 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     push_theme(&app, &settings);
     rebuild_tray(&app);
     Ok(outcome)
+}
+
+// Of the paths the renderer sends back, only those the scan itself lists with the same
+// depth and file limits; a made-up path to a deeper or later file never gets in.
+pub(crate) fn listed_folder_rel_paths(base: &Path, max_depth: u32, max_files: usize, rel_paths: Vec<String>) -> Vec<String> {
+    let mut walked = Vec::new();
+    walk_import_folder(base, 0, max_depth, max_files, &mut walked);
+    let listed: std::collections::HashSet<String> = walked.iter().map(|p| import_folder_rel_path(base, p)).collect();
+    rel_paths.into_iter().filter(|rel| folder_rel_path_is_safe(rel) && has_import_folder_ext(Path::new(rel)) && listed.contains(&rel.replace('\\', "/"))).collect()
 }
 
 // A path from the frontend is only ever joined onto the chosen folder when it stays
