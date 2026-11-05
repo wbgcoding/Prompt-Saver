@@ -168,14 +168,15 @@ pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool 
     let mut secret = false;
     if let Some(id) = id {
         let auto;
-        (auto, secret) = {
+        let timeout_min;
+        (auto, secret, timeout_min) = {
             let store = lock(state);
             store.prompts.iter().find(|p| p.id == id)
-                .map(|p| (auto_eligible(p, &store.settings), p.secret))
-                .unwrap_or((false, false))
+                .map(|p| (auto_eligible(p, &store.settings), p.secret, secret_timeout_min(&store.settings)))
+                .unwrap_or((false, false, 0))
         };
         if auto {
-            clipwatch::arm(id, text, Vec::new(), secret);
+            clipwatch::arm(id, text, Vec::new(), secret, timeout_min);
             return true;
         }
     }
@@ -406,9 +407,11 @@ pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String,
     rotation_advance(&p, &mut store.settings);
     save_settings_soon(); // pointer only: collected, see SETTINGS_QUIET_MS
     emit_rotation_changed(&app, &p, &store.settings);
+    #[cfg(windows)]
+    let timeout_min = secret_timeout_min(&store.settings);
     drop(store);
     #[cfg(windows)]
-    clipwatch::arm(&id, &text, resolved, p.secret);
+    clipwatch::arm(&id, &text, resolved, p.secret, timeout_min);
     true
 }
 
