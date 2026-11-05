@@ -28,7 +28,6 @@
     "allow-get-settings",
     "allow-log-error",
     "allow-pick-color",
-    "allow-pick-history",
     "allow-pick-tile",
     "allow-recorder-target-picked",
     "allow-set-ui-value",
