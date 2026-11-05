@@ -25,6 +25,7 @@ const okEl = document.getElementById("ok");
 const cancelEl = document.getElementById("cancel");
 const noteEl = document.getElementById("note");
 let tooLongText = "";
+let failedText = "";
 
 let rows = [];
 let answered = false;
@@ -41,9 +42,11 @@ function answer(values) {
   // otherwise this window can never answer again and just sits there forever.
   invoke("var_window_result", { values, gen: requestGen }).catch((e) => {
     answered = false;
-    // The backend refuses an oversized answer; say so instead of sitting silent.
-    if (String(e).includes("bad values") && tooLongText) {
-      noteEl.textContent = tooLongText;
+    // The backend refuses an oversized answer; any other failure is named too, so Enter
+    // never looks dead.
+    const text = String(e).includes("bad values") ? tooLongText : failedText;
+    if (text) {
+      noteEl.textContent = text;
       noteEl.classList.remove("hidden");
       fitWindow();
     }
@@ -108,6 +111,7 @@ function render(data) {
   document.documentElement.lang = data.lang || "en";
   const T = compactTexts(data.lang || "en");
   tooLongText = T.varsTooLong;
+  failedText = T.varsFailed;
   titleEl.textContent = T.varsTitle;
   okEl.textContent = T.varsCopy;
   cancelEl.textContent = T.cancel;
