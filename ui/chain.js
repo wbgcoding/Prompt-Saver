@@ -71,8 +71,9 @@ export function applyChainToTile(tile, p) {
 }
 
 export function refreshChainUi() {
+  const byId = new Map(prompts.map((p) => [p.id, p]));
   for (const tile of gridEl.querySelectorAll(".tile")) {
-    const p = prompts.find((x) => x.id === tile.dataset.id);
+    const p = byId.get(tile.dataset.id);
     if (p) applyChainToTile(tile, p);
   }
   renderChainOverview();

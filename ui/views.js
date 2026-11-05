@@ -271,10 +271,9 @@ export function normalizeLayout(view) {
 // there (renderGrid skips it), so it must not count as overflow either.
 function gridMemberIds(view) {
   if (!flag("archiveTag")) return view.members;
-  return view.members.filter((id) => {
-    const p = prompts.find((x) => x.id === id);
-    return !(p && isArchived(p));
-  });
+  const archived = new Set();
+  for (const p of prompts) if (isArchived(p)) archived.add(p.id);
+  return view.members.filter((id) => !archived.has(id));
 }
 
 // ---- Render ----
