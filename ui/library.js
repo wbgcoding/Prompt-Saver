@@ -201,20 +201,42 @@ function scheduleBackfillRepaint(rerender) {
     if (!libraryEl.classList.contains("hidden")) rerender();
   }, 120));
 }
+// Measured a few at a time, so a library of unmeasured media does not fire one backend call per
+// row at once; each batch repaints once when it is done.
+const BACKFILL_BATCH = 3;
+const backfillQueue = [];
+let backfillBusy = false;
+async function measureOne({ p, rerender }) {
+  try {
+    const updated = await invoke("backfill_media_meta", { id: p.id });
+    if (!updated) return null;
+    const idx = prompts.findIndex((x) => x.id === p.id);
+    if (idx === -1) return null;
+    prompts[idx] = { ...prompts[idx], ...updated };
+    return rerender;
+  } catch {
+    return null; // best-effort -- a failed catch-up just tries again next session
+  }
+}
+async function drainBackfill() {
+  if (backfillBusy) return;
+  backfillBusy = true;
+  try {
+    while (backfillQueue.length) {
+      const done = await Promise.all(backfillQueue.splice(0, BACKFILL_BATCH).map(measureOne));
+      for (const rerender of new Set(done.filter(Boolean))) scheduleBackfillRepaint(rerender);
+    }
+  } finally {
+    backfillBusy = false;
+  }
+}
 export function maybeBackfillMediaMeta(p, rerender) {
   if (!flag("mediaMetaBackfill") || mediaMetaBackfilled.has(p.id)) return;
   if (p.media_duration_ms || p.media_width || p.media_size_bytes) return; // already measured
   if (!p.file_path && !p.icon_path) return; // nothing to measure
   mediaMetaBackfilled.add(p.id);
-  invoke("backfill_media_meta", { id: p.id })
-    .then((updated) => {
-      if (!updated) return;
-      const idx = prompts.findIndex((x) => x.id === p.id);
-      if (idx === -1) return;
-      prompts[idx] = { ...prompts[idx], ...updated };
-      scheduleBackfillRepaint(rerender);
-    })
-    .catch(() => {}); // best-effort -- a failed catch-up just tries again next session
+  backfillQueue.push({ p, rerender });
+  drainBackfill();
 }
 
 // ---- Additive type filters, shared by the library and the copy history ----

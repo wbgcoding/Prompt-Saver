@@ -314,6 +314,35 @@ section(() => {
   check(scans === 0, `the store is not scanned per tile, got ${scans} scans`);
 });
 
+// library.js maybeBackfillMediaMeta: unmeasured media is measured a few at a time, and a batch
+// repaints once instead of once per answer.
+later(async () => {
+  const src = read("library.js");
+  const code = src.slice(src.indexOf("export const mediaMetaBackfilled"), src.indexOf("// ---- Additive type filters")).replace(/export /g, "");
+  let inFlight = 0, peak = 0, calls = 0, timers = 0, repaints = 0;
+  const store = Array.from({ length: 10 }, (_, i) => ({ id: "m" + i, file_path: "C:/v" + i + ".mp4" }));
+  const sandbox = run(code + "\n;globalThis.fill = maybeBackfillMediaMeta;", {
+    flag: () => true,
+    prompts: store,
+    libraryEl: { classList: { contains: () => false } },
+    invoke: async (cmd, args) => {
+      calls++; inFlight++; peak = Math.max(peak, inFlight);
+      await tick(); await tick();
+      inFlight--;
+      return { media_duration_ms: 1000 };
+    },
+    setTimeout: (fn) => { timers++; fn(); return timers; },
+    clearTimeout: () => {},
+  });
+  const rerender = () => { repaints++; };
+  for (const p of store.slice()) sandbox.fill(p, rerender);
+  for (let i = 0; i < 40; i++) await tick();
+  check(calls === 10, `every unmeasured row is measured, got ${calls} calls`);
+  check(peak <= 3, `at most 3 measurements run at once, peak was ${peak}`);
+  check(store.every((p) => p.media_duration_ms === 1000), "every answer lands on its prompt");
+  check(timers <= 4 && repaints === timers, `one repaint per batch, got ${timers} repaints for 10 answers`);
+});
+
 // globalSearch.js gsRefreshImageHits: one lookup per query, stale answers dropped.
 later(async () => {
   const src = read("globalSearch.js");
