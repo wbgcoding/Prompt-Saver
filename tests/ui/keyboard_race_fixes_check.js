@@ -171,6 +171,22 @@ later(async () => {
   check(kids.length === 1, `overlapping loads draw once, got ${kids.length}`);
 });
 
+// editor.js modalSnapshot: the positions a version restore rewrites still hold name, text, entry
+// list and rotate mode.
+later(async () => {
+  const src = read("editor.js");
+  const from = src.indexOf("const SNAP_RESTORED") >= 0 ? src.indexOf("const SNAP_RESTORED") : src.indexOf("export function modalSnapshot");
+  const code = src.slice(from, src.indexOf("// ---- Editor variable helper")).replace(/export /g, "");
+  const fld = (value) => ({ value, classList: { contains: () => false } });
+  const sandbox = run(code + "\n;globalThis.snap = modalSnapshot; globalThis.pos = typeof SNAP_RESTORED === 'undefined' ? null : SNAP_RESTORED;", {
+    modalState: { rotateEntries: ["ENTRIES"], rotateMode: "MODE", tags: [] },
+    modal: { name: fld("NAME"), text: fld("TEXT"), caption: fld(""), captionSize: fld(""), fontSel: fld(""), sizeSel: fld(""), fav: fld(""), notesText: fld("") },
+  });
+  const arr = JSON.parse(sandbox.snap());
+  const pos = sandbox.pos;
+  check(!!pos && arr[pos.name] === "NAME" && arr[pos.text] === "TEXT" && String(arr[pos.entries]) === "ENTRIES" && arr[pos.rotateMode] === "MODE", `restore positions match the snapshot layout, got ${JSON.stringify(pos)}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");

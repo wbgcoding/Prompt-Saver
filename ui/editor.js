@@ -134,7 +134,10 @@ export function updateCaptionPreview() {
   el.style.fontSize = size > 1 ? `${size}px` : "";
 }
 
-// Serialized content of the open modal: compared on dismiss to detect edits.
+// Positions in the modalSnapshot() array that a version restore rewrites.
+const SNAP_RESTORED = { name: 0, text: 1, entries: 16, rotateMode: 17 };
+// Serialized content of the open modal: compared on dismiss to detect edits. Keep SNAP_RESTORED
+// in step when a field is inserted before one of its positions.
 export function modalSnapshot() {
   if (!modalState) return "";
   return JSON.stringify([
@@ -801,7 +804,7 @@ export async function loadHistory(id) {
           // (other edits made in the open editor still are).
           try {
             const now = JSON.parse(modalSnapshot()), base = JSON.parse(modalInitial);
-            for (const i of [0, 1, 16, 17]) base[i] = now[i]; // name, text, entry list, rotate mode
+            for (const i of Object.values(SNAP_RESTORED)) base[i] = now[i];
             modalInitial = JSON.stringify(base);
           } catch { modalInitial = modalSnapshot(); }
           toast(t("historyRestored"));
