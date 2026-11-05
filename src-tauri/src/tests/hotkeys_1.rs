@@ -1457,3 +1457,33 @@ fn a_key_past_the_cutoff_is_a_gap_in_the_stop_time_drain_too() {
     let head = &src[at..at + 120];
     assert!(head.contains("past_cutoff(raw.t_ms, final_cutoff)"), "the drain at stop applies the cutoff");
 }
+
+// A refused new app or voice hotkey is cleared by the rearm pass; the one that worked before
+// has to come back, and only while nobody has typed another value in between.
+#[test]
+fn a_refused_hotkey_gives_the_previous_one_back() {
+    let mut s = Settings { hotkey: String::new(), ..Default::default() };
+    assert!(restore_previous(&mut s, HotkeySlot::App, "Ctrl+Alt+K", "Ctrl+Alt+J"));
+    assert_eq!(s.hotkey, "Ctrl+Alt+J");
+    // The refused value still sits in the slot (the clear did not land): it is replaced too.
+    s.hotkey = "Ctrl+Alt+K".to_string();
+    assert!(restore_previous(&mut s, HotkeySlot::App, "Ctrl+Alt+K", "Ctrl+Alt+J"));
+    assert_eq!(s.hotkey, "Ctrl+Alt+J");
+    // Another value typed meanwhile wins, and an unchanged slot reports no change.
+    s.hotkey = "Ctrl+Alt+L".to_string();
+    assert!(!restore_previous(&mut s, HotkeySlot::App, "Ctrl+Alt+K", "Ctrl+Alt+J"));
+    assert_eq!(s.hotkey, "Ctrl+Alt+L");
+    s.voice_hotkey = String::new();
+    assert!(!restore_previous(&mut s, HotkeySlot::Voice, "Ctrl+Alt+K", ""));
+    assert!(restore_previous(&mut s, HotkeySlot::Voice, "Ctrl+Alt+K", "Ctrl+Alt+V"));
+    assert_eq!(s.voice_hotkey, "Ctrl+Alt+V");
+}
+
+#[test]
+fn apply_hotkey_restores_the_previous_value_and_rearms_when_refused() {
+    let src = include_str!("../shortcuts.rs").replace("\r\n", "\n");
+    let at = src.find("fn apply_hotkey(").expect("apply_hotkey");
+    let body = &src[at..src[at..].find("\n}\n").map(|e| at + e).unwrap()];
+    assert!(body.contains("restore_previous("), "a refusal puts the previous hotkey back");
+    assert!(body.contains("rearm_hotkeys_exact(app);\n    }\n    Err(HK_CONFLICT"), "and re-arms it");
+}

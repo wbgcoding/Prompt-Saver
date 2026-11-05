@@ -801,20 +801,49 @@ fn apply_hotkey(app: &AppHandle, state: &State<'_, Db>, slot: HotkeySlot, accel:
             return Err(HK_CONFLICT.to_string());
         }
     }
-    {
+    let prev = {
         let mut store = lock(state);
+        let prev = slot.get(&store.settings).to_string();
         slot.set(&mut store.settings, &hk);
         save_settings(app, &store.settings);
-    }
+        prev
+    };
     let armed = rearm_hotkeys_exact(app);
-    match slot {
+    let refused = match slot {
         // rearm_hotkeys' return value reports the APP hotkey's fate.
-        HotkeySlot::App if !armed => Err(HK_CONFLICT.to_string()),
+        HotkeySlot::App => !armed,
         // A refused voice hotkey is cleared from the store by rearm_hotkeys itself (unless that
         // write failed), so re-reading it and the registration flag answers "did this one land".
-        HotkeySlot::Voice if !hk.is_empty() && (lock(state).settings.voice_hotkey != hk || !VOICE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed)) => Err(HK_CONFLICT.to_string()),
-        _ => Ok(()),
+        HotkeySlot::Voice => !hk.is_empty() && (lock(state).settings.voice_hotkey != hk || !VOICE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed)),
+        _ => false,
+    };
+    if !refused {
+        return Ok(());
     }
+    // The pass cleared the refused value; the combination that worked before goes back.
+    let restored = {
+        let mut store = lock(state);
+        let restored = restore_previous(&mut store.settings, slot, &hk, &prev);
+        if restored {
+            save_settings(app, &store.settings);
+        }
+        restored
+    };
+    if restored {
+        rearm_hotkeys_exact(app);
+    }
+    Err(HK_CONFLICT.to_string())
+}
+
+// Puts `prev` back into the slot after `refused` was turned down, unless the slot has meanwhile
+// been given another value. Returns whether the slot changed.
+pub(crate) fn restore_previous(settings: &mut Settings, slot: HotkeySlot, refused: &str, prev: &str) -> bool {
+    let cur = slot.get(settings);
+    if cur == prev || !(cur.is_empty() || cur == refused) {
+        return false;
+    }
+    slot.set(settings, prev);
+    true
 }
 
 // Register a new global hotkey (empty = disable); see apply_hotkey.
