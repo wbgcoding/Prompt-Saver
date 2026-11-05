@@ -15,6 +15,11 @@ so a real regression at, say, 10000 is never hidden by 1000 and 5000 passing.
 Set PERF_QUICK=1 to measure only the 1000-entry stage (for a fast loop while
 developing; the full three-stage run is what CI/release should use).
 
+Timing is wall clock: the page runs in real time (no virtual-time budget, under
+which performance.now() stands still during synchronous script and every render
+would read as a few milliseconds). The probe posts its result to a loopback
+listener of the runner, which then stops the browser.
+
 This does not hard-fail on ordinary machine-to-machine speed variance -- only
 on numbers far enough past a generous target to mean an actual regression, not
 noise. Skips cleanly when no Chromium browser is installed, same as smoke_test.
@@ -32,7 +37,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from html import unescape
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -211,7 +217,7 @@ PROBE = """
   await waitFor(() => document.getElementById("expert-flags").children.length > 0, 15000);
   out.timings.expertMenuOpen = performance.now() - t0;
 
-  document.body.insertAdjacentHTML("beforeend", "<pre id=\\"PERF\\">" + JSON.stringify(out) + "</pre>");
+  fetch("http://127.0.0.1:__PERF_PORT__/", { method: "POST", mode: "no-cors", body: JSON.stringify(out) });
 })();
 </script>
 """
@@ -252,10 +258,60 @@ VIDEO_PROBE = """
   out.timings.videoEditorOpen10Min1080p30 = performance.now() - t0;
   out.counts.videoEditorOpen10Min1080p30 = document.querySelectorAll("#ve-filmstrip .ve-thumb").length;
 
-  document.body.insertAdjacentHTML("beforeend", "<pre id=\\"PERF\\">" + JSON.stringify(out) + "</pre>");
+  fetch("http://127.0.0.1:__PERF_PORT__/", { method: "POST", mode: "no-cors", body: JSON.stringify(out) });
 })();
 </script>
 """
+
+
+RESULT_PORT_TOKEN = "__PERF_PORT__"
+
+
+def run_browser(browser, profile, page, size, limit_s):
+    """Load `page` in real time and return the JSON its probe posts back, or None.
+
+    A loopback listener receives the probe's result (the console of a headless
+    browser is not readable from outside); `limit_s` is a real-time cap.
+    """
+    got = []
+    done = threading.Event()
+
+    class Sink(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            got.append(body.decode("utf-8", "replace"))
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            done.set()
+
+        def do_OPTIONS(self):
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "*")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), Sink)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    text = page.read_text(encoding="utf-8").replace(RESULT_PORT_TOKEN, str(srv.server_port))
+    page.write_text(text, encoding="utf-8")
+    proc = subprocess.Popen(
+        [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+         f"--user-data-dir={profile}", "--allow-file-access-from-files",
+         f"--window-size={size}", "--disable-background-timer-throttling",
+         "--disable-renderer-backgrounding", page.as_uri()],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        done.wait(limit_s)
+    finally:
+        proc.kill()
+        proc.wait()
+        srv.shutdown()
+        srv.server_close()
+    return json.loads(got[0]) if got else None
 
 
 def run_stage(browser, tmp_root, n):
@@ -274,19 +330,7 @@ def run_stage(browser, tmp_root, n):
     html = html.replace("</body>", PROBE + "</body>")
     page.write_text(html, encoding="utf-8")
 
-    # Larger fixtures need more virtual time to settle than the 60s baseline.
-    budget_ms = 60000 + n * 20
-    proc = subprocess.run(
-        [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-         f"--user-data-dir={tmp / 'profile'}", "--allow-file-access-from-files",
-         "--window-size=1280,900", f"--virtual-time-budget={budget_ms}",
-         "--dump-dom", page.as_uri()],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=180)
-    m = re.search(r'<pre id="PERF">(\{.*?\})</pre>', proc.stdout, re.S)
-    if not m:
-        return None
-    return json.loads(unescape(m.group(1)))
+    return run_browser(browser, tmp / "profile", page, "1280,900", 120 + n // 100)
 
 
 def main():
@@ -323,19 +367,11 @@ def main():
         video_html = video_html.replace("</body>", VIDEO_PROBE + "</body>")
         video_page.write_text(video_html, encoding="utf-8")
 
-        video_proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={video_tmp / 'profile-video'}", "--allow-file-access-from-files",
-             "--window-size=1100,720", "--virtual-time-budget=30000",
-             "--dump-dom", video_page.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=120)
-        vm = re.search(r'<pre id="PERF">(\{.*?\})</pre>', video_proc.stdout, re.S)
-        if not vm:
+        r_video = run_browser(browser, video_tmp / "profile-video", video_page, "1100,720", 60)
+        if r_video is None:
             rows.append(("-", "videoEditorOpen10Min1080p30", None, VIDEO_TARGET_MS,
                          "the video editor produced no perf result"))
         else:
-            r_video = json.loads(unescape(vm.group(1)))
             all_errors.extend(f"video: {e}" for e in r_video["errors"])
             ms = r_video["timings"].get("videoEditorOpen10Min1080p30")
             rows.append(("-", "videoEditorOpen10Min1080p30", ms, VIDEO_TARGET_MS, None))

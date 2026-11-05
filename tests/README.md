@@ -156,7 +156,9 @@ regression at 10000 must never hide behind 1000 and 5000 passing. All four measu
 10-120 ms at 1000 entries on the 30.08. baseline. Set `PERF_QUICK=1` to run only the
 1000-entry stage while developing. Separately times the video editor opening a 10-minute
 1080p30 recording once (unrelated to prompt count, so not repeated per stage). Needs a
-Chromium-family browser (Chrome or Edge); skips cleanly if neither is found.
+Chromium-family browser (Chrome or Edge); skips cleanly if neither is found. The timings are
+wall clock (the page runs in real time, not under a virtual-time budget), so they grow with N
+and vary a little from run to run.
 
 ## Main-window sources
 The main window is several modules under `ui/`. Tests that scan its source text never open
@@ -185,11 +187,12 @@ printed with its old line number.
   producing frames and the app reveals its window from a nested `requestAnimationFrame`.
   `perf_hot_paths.py` loads `index.html` directly in a normal-sized window instead, since
   its own window is never below that floor.
-- Timers run on Chrome's virtual clock in all three suites, so a probe must never wait on
-  anything needing a real fetch (a dynamic `import()`, for example). Synchronous
-  CPU-bound work (DOM building, layout) still costs real wall-clock time under virtual
-  time, only idle and timer waits get fast-forwarded - which is what makes
-  `perf_hot_paths.py`'s numbers meaningful rather than fabricated.
+- Timers run on Chrome's virtual clock in `smoke_test.py` and `modal_scroll_test.py`, so a
+  probe must never wait on anything needing a real fetch (a dynamic `import()`, for
+  example). Under virtual time `performance.now()` stands still during synchronous script,
+  so those suites say nothing about speed. `perf_hot_paths.py` therefore runs in real time:
+  no virtual-time budget, the probe posts its result to a loopback listener of the runner,
+  and the numbers are wall clock.
 - A `</scr` + `ipt>` in a probe string must be split or it ends the probe's own script
   tag.
 - Every `PROBE` / `*_PROBE` block is a Python triple-quoted (non-raw) string: a
