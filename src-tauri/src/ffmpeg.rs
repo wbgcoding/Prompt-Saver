@@ -1233,6 +1233,24 @@ pub(crate) fn run_ffmpeg_to_staged(
     Ok(staged)
 }
 
+// The name a conversion writes to. A different file already holding `dst` (an earlier rec.webm
+// beside rec.mp4) is never replaced: the result gets `<stem>-1.<ext>`, `-2` and so on. The
+// source's own path stays as it is, since the lossless mp4 pass replaces it in place.
+pub(crate) fn free_convert_target(dst: &Path, src: &Path) -> PathBuf {
+    if dst.as_os_str().eq_ignore_ascii_case(src.as_os_str()) {
+        return src.to_path_buf();
+    }
+    if !dst.exists() {
+        return dst.to_path_buf();
+    }
+    let stem = dst.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = dst.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+    (1u32..)
+        .map(|n| dst.with_file_name(format!("{stem}-{n}.{ext}")))
+        .find(|candidate| !candidate.exists())
+        .unwrap_or_else(|| dst.to_path_buf())
+}
+
 // `is_cancelled` and `on_progress` are plain closures rather than the process-global flag and
 // an `AppHandle`, since this function only polls and reports with them. That keeps it free of
 // Tauri's runtime and REC_CONVERT_CANCEL and testable against a real ffmpeg binary with its
@@ -1249,7 +1267,7 @@ pub(crate) fn convert_recording_blocking(
     // uniquely-named staged file in the same directory first, so a source that is also the
     // destination is never read and written by one process at once, and a failed or cancelled
     // conversion never leaves a half-written file at either name.
-    let dst = src.with_extension(format);
+    let dst = free_convert_target(&src.with_extension(format), src);
     let mut args: Vec<String> = Vec::new();
     match format {
         "mp4" => {

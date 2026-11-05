@@ -20,6 +20,24 @@ fn convert_is_noop_allows_a_genuine_format_change() {
     assert!(!convert_is_noop(false, "gif", false));
 }
 
+#[test]
+fn a_conversion_target_never_replaces_another_file_with_that_name() {
+    let dir = std::env::temp_dir().join(format!("ps-convtest-name-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec.mp4");
+    fs::write(&src, b"src").unwrap();
+    let webm = dir.join("rec.webm");
+    assert_eq!(free_convert_target(&webm, &src), webm, "a free name is used as it is");
+    fs::write(&webm, b"earlier").unwrap();
+    assert_eq!(free_convert_target(&webm, &src), dir.join("rec-1.webm"));
+    fs::write(dir.join("rec-1.webm"), b"x").unwrap();
+    assert_eq!(free_convert_target(&webm, &src), dir.join("rec-2.webm"), "the counter climbs past taken names");
+    assert_eq!(free_convert_target(&src, &src), src, "the lossless in-place pass keeps the source path");
+    let upper = dir.join("REC.MP4");
+    assert_eq!(free_convert_target(&upper, &src), src, "the same file spelled in another case is still the source");
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // ---- Recording conversion: real ffmpeg, no capture hardware needed ----
 //
 // These exercise the actual subprocess, against the local build's own
@@ -66,6 +84,20 @@ fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source
     let bytes = fs::read(&out).unwrap();
     assert_eq!(&bytes[0..4], &[0x1A, 0x45, 0xDF, 0xA3]);
     assert!(!src.is_file(), "source must be removed once the conversion succeeded");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn convert_recording_real_ffmpeg_keeps_an_unrelated_file_with_the_target_name() {
+    let Some(ffmpeg) = test_ffmpeg() else { return };
+    let dir = std::env::temp_dir().join(format!("ps-convtest-keep-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
+    fs::write(dir.join("src.webm"), b"an earlier recording").unwrap();
+    let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {}).expect("conversion should succeed");
+    assert_eq!(PathBuf::from(&out), dir.join("src-1.webm"));
+    assert_eq!(fs::read(dir.join("src.webm")).unwrap(), b"an earlier recording");
+    assert!(PathBuf::from(&out).is_file());
     let _ = fs::remove_dir_all(&dir);
 }
 
