@@ -270,7 +270,7 @@ pub(crate) fn note_capture_source_lost(shared: &RecFeederShared, window_target: 
 }
 
 // audio_kbps None disables the encoder's audio track (no active source); Some(kbps) enables
-// it at the fixed target format (48 kHz stereo 16-bit AAC) that audio_convert_to_target
+// it at the fixed target format (48 kHz stereo 16-bit AAC) that AudioResampler
 // and the feeder's audio tick already produce.
 fn build_encoder(
     width: u32, height: u32, path: &Path, audio_kbps: Option<u32>, video_kbps: u32, video_fps: u32,

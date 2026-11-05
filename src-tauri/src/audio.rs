@@ -4,7 +4,7 @@
 // pushes it onto a shared queue. A device that disappears mid-recording
 // (AUDCLNT_E_DEVICE_INVALIDATED) ends only that thread and marks the queue "lost"; the
 // recording and the other audio source are unaffected.
-use super::{audio_convert_to_target, AudioQueueShared, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE};
+use super::{AudioQueueShared, AudioResampler, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -140,6 +140,7 @@ pub fn spawn_capture(
                 init?;
                 let capture_client: IAudioCaptureClient = client.GetService()?;
                 client.Start()?;
+                let mut resampler = AudioResampler::new(in_channels, in_rate, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE);
                 while !stop.load(Ordering::Relaxed) {
                     let mut packet_len = capture_client.GetNextPacketSize()?;
                     while packet_len != 0 {
@@ -167,9 +168,7 @@ pub fn spawn_capture(
                             } else {
                                 vec![0.0; n] // unsupported native format -- silence rather than garbage
                             };
-                            let pcm = audio_convert_to_target(
-                                &floats, in_channels, in_rate, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
-                            );
+                            let pcm = resampler.convert(&floats);
                             queue.push(&pcm);
                         }
                         capture_client.ReleaseBuffer(num_frames)?;
