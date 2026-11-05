@@ -56,6 +56,11 @@ be running in the app, so check before running it again.
 Add `--json` to any command that supports it for machine-readable output
 instead of the plain tab-separated lines a person would read.
 
+A value that starts with `--` (a search query such as `--json`, a name, a
+text) is taken as a value right after the flag that expects one
+(`--text "--name"`). A bare `--` ends the flags: everything after it is an
+argument, so `search -- --json` searches for the text `--json`.
+
 ## Discovering the command set
 
 `prompt-saver describe` prints the same table below as JSON: the

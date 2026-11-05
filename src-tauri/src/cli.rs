@@ -849,11 +849,17 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> Result<PathBuf, String> {
 struct Args {
     items: Vec<String>,
     pos: usize,
+    // A bare `--` was read: everything after it is a value, never a flag.
+    end_of_flags: bool,
 }
+
+// The flags that take the next item as their value. The scan for any flag steps over these
+// values, so a value that looks like a flag (`--text "--name"`) is never taken as one.
+const VALUE_FLAGS: &[&str] = &["--name", "--text", "--tags", "--notes", "--color", "--tag", "--format", "--ids", "--keep", "--scope"];
 
 impl Args {
     fn new(items: &[String]) -> Self {
-        Args { items: items.to_vec(), pos: 0 }
+        Args { items: items.to_vec(), pos: 0, end_of_flags: false }
     }
     fn peek(&self) -> Option<&str> {
         self.items.get(self.pos).map(String::as_str)
@@ -866,12 +872,35 @@ impl Args {
         v
     }
     fn next_positional(&mut self) -> Option<String> {
+        if !self.end_of_flags && self.peek() == Some("--") {
+            self.pos += 1;
+            self.end_of_flags = true;
+        }
         let v = self.next()?;
-        if v.starts_with("--") {
+        if !self.end_of_flags && v.starts_with("--") {
             self.pos -= 1;
             return None;
         }
         Some(v)
+    }
+    // Index of the first item equal to `name` that is a flag in its own right: past the values of
+    // other value flags and before a bare `--`.
+    fn find_flag(&self, name: &str) -> Option<usize> {
+        if self.end_of_flags {
+            return None;
+        }
+        let mut i = self.pos;
+        while i < self.items.len() {
+            let item = self.items[i].as_str();
+            if item == "--" {
+                return None;
+            }
+            if item == name {
+                return Some(i);
+            }
+            i += if VALUE_FLAGS.contains(&item) { 2 } else { 1 };
+        }
+        None
     }
 }
 
@@ -919,35 +948,23 @@ fn wants_help(a: &Args) -> bool {
 }
 
 fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
-    let mut i = a.pos;
-    while i < a.items.len() {
-        if a.items[i] == name {
-            let val = a.items.get(i + 1).ok_or_else(|| usage_err(format!("{name} needs a value")))?.clone();
-            // Remove the flag and its value so positional parsing never sees them.
-            let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
-            kept.extend_from_slice(&a.items[i + 2..]);
-            a.items = kept;
-            a.pos = 0;
-            return Ok(Some(val));
-        }
-        i += 1;
-    }
-    Ok(None)
+    let Some(i) = a.find_flag(name) else { return Ok(None) };
+    let val = a.items.get(i + 1).ok_or_else(|| usage_err(format!("{name} needs a value")))?.clone();
+    // Remove the flag and its value so positional parsing never sees them.
+    let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
+    kept.extend_from_slice(&a.items[i + 2..]);
+    a.items = kept;
+    a.pos = 0;
+    Ok(Some(val))
 }
 
 fn take_flag(a: &mut Args, name: &str) -> bool {
-    let mut i = a.pos;
-    while i < a.items.len() {
-        if a.items[i] == name {
-            let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
-            kept.extend_from_slice(&a.items[i + 1..]);
-            a.items = kept;
-            a.pos = 0;
-            return true;
-        }
-        i += 1;
-    }
-    false
+    let Some(i) = a.find_flag(name) else { return false };
+    let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
+    kept.extend_from_slice(&a.items[i + 1..]);
+    a.items = kept;
+    a.pos = 0;
+    true
 }
 
 fn split_tags(raw: &str) -> Vec<String> {
@@ -1223,7 +1240,9 @@ fn parse_settings(a: &mut Args) -> Result<Parsed, String> {
 }
 
 fn reject_extra(a: &Args) -> Result<(), String> {
-    if let Some(extra) = a.peek() {
+    // A trailing bare `--` ends the flags and leaves nothing behind it to reject.
+    let lone_marker = !a.end_of_flags && a.items.len() == a.pos + 1 && a.peek() == Some("--");
+    if let Some(extra) = a.peek().filter(|_| !lone_marker) {
         return Err(usage_err(format!("unexpected argument \"{extra}\"")));
     }
     Ok(())

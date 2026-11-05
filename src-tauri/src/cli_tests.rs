@@ -1596,6 +1596,50 @@ fn taking_a_flag_does_not_leak_the_remaining_arguments() {
     assert_eq!(take_flag_value(&mut a, "--tag").unwrap().as_deref(), Some("x"));
     assert_eq!(a.items, vec!["rest".to_string()]);
 }
+// ---- a flag name inside another flag's value, and the `--` end-of-flags marker ----
+
+fn parsed_add(items: &[&str]) -> (String, String, Vec<String>) {
+    match parse(&args(items)).unwrap_or_else(|e| panic!("expected {items:?} to parse: {e}")) {
+        Parsed::Run(Cmd::Add { name, text, tags, .. }) => (name, text, tags),
+        _ => panic!("expected an add command"),
+    }
+}
+
+#[test]
+fn a_flag_name_inside_another_flags_value_is_not_taken_as_a_flag() {
+    let (name, text, _) = parsed_add(&["add", "--text", "--name", "--name", "X"]);
+    assert_eq!((name.as_str(), text.as_str()), ("X", "--name"));
+    let (name, text, tags) = parsed_add(&["add", "--tags", "--text", "--text", "T", "--name", "N"]);
+    assert_eq!((name.as_str(), text.as_str(), tags.as_slice()), ("N", "T", &["--text".to_string()][..]));
+    // A boolean flag spelled as a value stays a value.
+    match parse(&args(&["list", "--tag", "--json"])).unwrap() {
+        Parsed::Run(Cmd::List { tag, json, .. }) => assert_eq!((tag.as_deref(), json), (Some("--json"), false)),
+        _ => panic!("expected list"),
+    }
+}
+
+#[test]
+fn a_bare_double_dash_ends_the_flags() {
+    match parse(&args(&["search", "--json", "--", "--json"])).unwrap() {
+        Parsed::Run(Cmd::Search { query, json, .. }) => assert_eq!((query.as_str(), json), ("--json", true)),
+        _ => panic!("expected search"),
+    }
+    match parse(&args(&["search", "--", "--tag"])).unwrap() {
+        Parsed::Run(Cmd::Search { query, tag, .. }) => assert_eq!((query.as_str(), tag), ("--tag", None)),
+        _ => panic!("expected search"),
+    }
+    match parse(&args(&["settings", "set", "--yes", "k", "--", "--v"])).unwrap() {
+        Parsed::Run(Cmd::SettingsSet { key, value, confirmed }) => assert_eq!((key.as_str(), value.as_str(), confirmed), ("k", "--v", true)),
+        _ => panic!("expected settings set"),
+    }
+    // Without the marker a flag-shaped query is still refused, and a marker with nothing behind it
+    // or with a stray extra argument keeps its meaning.
+    parse_err(&["search", "--json"]);
+    parse_err(&["search", "--"]);
+    parse_err(&["search", "q", "--", "extra"]);
+    assert!(parse(&args(&["search", "q", "--"])).is_ok());
+}
+
 // ---- an old placeholder spelling is upgraded on write ----
 
 #[test]
