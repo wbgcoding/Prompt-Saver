@@ -1,5 +1,5 @@
 // The prompt library: search, filters, batch selection, list and tile rendering.
-import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, DRAG_THRESHOLD, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, makeKeyboardActivatable, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, DRAG_THRESHOLD, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
