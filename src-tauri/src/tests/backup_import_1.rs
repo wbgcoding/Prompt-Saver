@@ -1011,7 +1011,7 @@ pub(super) fn disk_state(conn: &Connection) -> (Vec<String>, String) {
 
 pub(super) fn import_with(conn: &mut Connection, store: &mut Store, want_data: bool, want_settings: bool) -> Result<(usize, usize, bool, bool), String> {
     run_import(store, import_test_backup(), want_data, want_settings, |st, prompts, settings| {
-        db_write_import(conn, st, &st.prompts, prompts, settings, false).is_ok()
+        db_write_import(conn, st, &st.prompts, &st.trash, prompts, settings, false).is_ok()
     })
 }
 

@@ -848,7 +848,7 @@ pub(crate) fn claim_present_rows(conn: &Connection, table: &str, written: &mut W
 // so it never matches a table prefix and adopt_written_rows leaves it alone.
 pub(crate) const CLAIM_PROMPTS_KEY: &str = "\u{2}claim-prompts";
 
-fn claim_prompts_if_pending(conn: &Connection, written: &mut WrittenRows) -> rusqlite::Result<()> {
+pub(crate) fn claim_prompts_if_pending(conn: &Connection, written: &mut WrittenRows) -> rusqlite::Result<()> {
     if written.contains_key(CLAIM_PROMPTS_KEY) {
         claim_present_rows(conn, "prompts", written)?;
     }
@@ -899,24 +899,6 @@ pub(crate) fn db_write_prompts_and_trash(
     tx.commit()?;
     adopt_written_rows(written, "prompts", fresh_prompts);
     adopt_written_rows(written, "trash", fresh_trash);
-    written.remove(CLAIM_PROMPTS_KEY);
-    Ok(())
-}
-
-// An import that replaces both halves: prompt rows and the settings row land in one
-// transaction, so a failure never leaves one half imported.
-pub(crate) fn db_write_prompts_and_settings(
-    conn: &mut Connection,
-    prompts: &[Prompt],
-    settings: &Settings,
-    written: &mut WrittenRows,
-) -> rusqlite::Result<()> {
-    let tx = conn.transaction()?;
-    claim_prompts_if_pending(&tx, written)?;
-    let fresh = write_rows(&tx, "prompts", prompts, written)?;
-    db_write_settings(&tx, settings)?;
-    tx.commit()?;
-    adopt_written_rows(written, "prompts", fresh);
     written.remove(CLAIM_PROMPTS_KEY);
     Ok(())
 }
