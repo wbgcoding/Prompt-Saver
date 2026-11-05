@@ -145,6 +145,8 @@ function stopStream() {
 // changes; never during a take, because swapping the stream under an active MediaRecorder
 // corrupts the file.
 async function refreshPreview() {
+  // No camera request before the permission handler and the saved settings are known.
+  if (!permissionReady || !settingsReady) return;
   if (recorder && recorder.state !== "inactive") return;
   // The finish of a take owns the controls (its last step calls this again), and a window that
   // is about to close needs no stream.
@@ -552,6 +554,8 @@ function markPermissionFailed() {
   noDeviceEl.textContent = t("cameraNoDevice");
   noDeviceEl.classList.remove("hidden");
   startBtn.disabled = true;
+  audioSelect.disabled = true;
+  resSelect.disabled = true;
 }
 listen("camera-permission-failed", markPermissionFailed)
   .then(() => invoke("camera_permission_failed"))

@@ -29,7 +29,7 @@ function fakeEl() {
       toggle: (c, on) => { if (on === undefined ? !cls.has(c) : on) cls.add(c); else cls.delete(c); },
       contains: (c) => cls.has(c),
     },
-    addEventListener() {}, removeEventListener() {}, click() {}, focus() {},
+    addEventListener(t, f) { (el.handlers ||= {})[t] = f; }, removeEventListener() {}, click() {}, focus() {},
     setAttribute(k, v) { own[k] = String(v); },
     getAttribute(k) { return own[k] ?? null; },
     querySelector: () => null, closest: () => null,
@@ -91,7 +91,10 @@ async function main() {
 
   const tick = (ms) => new Promise((r) => setTimeout(r, ms));
   const problems = [];
-  await tick(1900); // permission answered, settings still pending
+  await tick(1000);
+  // A control change while the settings are pending must not open the camera either.
+  if (els["cam-res-select"]?.handlers?.change) els["cam-res-select"].handlers.change();
+  await tick(900); // permission answered, settings still pending
   if (asked.length !== 0) problems.push(`the camera opened before the settings arrived (${asked.length} request)`);
   await tick(1200); // settings in
   if (asked.length === 0) problems.push("no preview was started once the settings arrived");
