@@ -769,7 +769,7 @@ export function makeTileImgObserver(root) {
       _tileImgObs.unobserve(row);
       const placeholder = row.querySelector(".lib-tile-placeholder");
       if (!placeholder) continue;
-      const p = prompts.find((x) => x.id === row.dataset.id);
+      const p = libById.get(row.dataset.id);
       if (p) placeholder.replaceWith(mediaThumb(p, thumbEl(p, libThumbCache)));
     }
   }, { root, rootMargin: "300px" });

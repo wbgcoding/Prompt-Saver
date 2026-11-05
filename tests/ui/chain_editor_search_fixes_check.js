@@ -287,6 +287,33 @@ section(() => {
   check(tokenized - before === once, "a prompt's words are split once per field, not on every scoring");
 });
 
+// library.js makeTileImgObserver: a tile that scrolls into view finds its prompt through the
+// per-render id map, not by scanning the whole store for every row.
+section(() => {
+  const src = read("library.js");
+  const code = extractBlock(src, "export function makeTileImgObserver(").replace("export ", "");
+  let scans = 0;
+  const store = Array.from({ length: 300 }, (_, i) => ({ id: "t" + i }));
+  const orig = store.find.bind(store);
+  store.find = (fn) => { scans++; return orig(fn); };
+  let observerCb = null;
+  const swapped = [];
+  const mkRow = (id) => ({ dataset: { id }, querySelector: () => ({ replaceWith: (n) => swapped.push([id, n]) }) });
+  const sandbox = run(code + "\n;globalThis.make = makeTileImgObserver;", {
+    prompts: store,
+    libById: new Map(store.map((p) => [p.id, p])),
+    IntersectionObserver: function (cb) { observerCb = cb; },
+    _tileImgObs: { unobserve: () => {} },
+    mediaThumb: (p) => "thumb:" + p.id,
+    thumbEl: (p) => p,
+    libThumbCache: {},
+  });
+  sandbox.make(null);
+  observerCb([299, 150, 7].map((i) => ({ isIntersecting: true, target: mkRow("t" + i) })));
+  check(swapped.map((x) => x[1]).join() === "thumb:t299,thumb:t150,thumb:t7", `each entering tile gets its own thumbnail, got ${swapped.map((x) => x[1]).join()}`);
+  check(scans === 0, `the store is not scanned per tile, got ${scans} scans`);
+});
+
 // globalSearch.js gsRefreshImageHits: one lookup per query, stale answers dropped.
 later(async () => {
   const src = read("globalSearch.js");
