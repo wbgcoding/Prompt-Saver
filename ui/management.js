@@ -10,7 +10,7 @@ import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, varPreview } from "./floatShared.js";
 import { saveBackupSetting, saveUiState, statCard } from "./backups.js";
-import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
+import { editPrompt, ensureSecretVaultUnlocked, renderDiffInto, splitDiffSides } from "./editor.js";
 import { ocrErrToast } from "./dictation.js";
 
 // ---- Usage statistics dashboard (opened from the expert menu) ----
@@ -355,7 +355,24 @@ async function keepOneDupRun(remove) {
 // its "keep one side" buttons show instead of "take left/right".
 export let compareState = null;
 export async function openCompareView(ids, dupGroup = null) {
-  const fetched = await Promise.all(ids.map((id) => invoke("get_prompt", { id }).catch(() => null)));
+  const fetched = [];
+  let unlockTried = false;
+  for (const id of ids) {
+    let p = null;
+    for (;;) {
+      try { p = await invoke("get_prompt", { id }); break; } catch (e) {
+        // A confidential entry with no vault key: ask once, then fetch it again.
+        if (String(e) === "secret-locked" && !unlockTried) {
+          unlockTried = true;
+          if (await ensureSecretVaultUnlocked()) continue;
+          return;
+        }
+        errToast(e);
+        return;
+      }
+    }
+    fetched.push(p);
+  }
   if (fetched.some((p) => !p)) { toast(t("compareMissing")); return; }
   compareState = { ids, prompts: fetched, dupGroup };
   renderCompareView();

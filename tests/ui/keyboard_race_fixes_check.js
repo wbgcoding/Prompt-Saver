@@ -53,6 +53,32 @@ later(async () => {
   check(sel.join() === "b", "an unlocked prompt is picked");
 });
 
+// management.js openCompareView: a locked vault asks for the key and fetches again once.
+later(async () => {
+  const code = extractBlock(read("management.js"), "export async function openCompareView").replace(/export /g, "");
+  const run1 = async (fail, unlock) => {
+    const log = { toasts: [], errs: [], unlocks: 0, calls: 0, rendered: 0 };
+    const sandbox = run(code + "\n;globalThis.open = openCompareView;", {
+      compareState: null,
+      invoke: async (cmd, { id }) => { log.calls++; const r = fail(id, log.calls); if (r instanceof Error) throw r.message; return r; },
+      ensureSecretVaultUnlocked: async () => { log.unlocks++; return unlock; },
+      toast: (m) => log.toasts.push(m), t: (k) => k, errToast: (e) => log.errs.push(String(e)),
+      renderCompareView: () => { log.rendered++; },
+      $: () => ({ classList: { remove() {} } }),
+    });
+    await sandbox.open(["a", "b"]);
+    return log;
+  };
+  let l = await run1((id, n) => (n === 1 ? new Error("secret-locked") : { id }), true);
+  check(l.unlocks === 1 && l.rendered === 1 && !l.toasts.length, `locked vault: unlock once, then compare, got ${JSON.stringify(l)}`);
+  l = await run1(() => new Error("secret-locked"), false);
+  check(l.unlocks === 1 && !l.rendered && !l.toasts.length && !l.errs.length, `declined unlock opens nothing silently, got ${JSON.stringify(l)}`);
+  l = await run1(() => new Error("boom"), true);
+  check(l.errs.length === 1 && !l.toasts.length && !l.unlocks, `other errors go through errToast, got ${JSON.stringify(l)}`);
+  l = await run1((id) => (id === "a" ? { id } : null), true);
+  check(l.toasts.join() === "compareMissing", "a missing entry still says so");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
