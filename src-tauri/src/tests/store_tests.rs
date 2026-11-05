@@ -133,8 +133,8 @@ fn a_plaintext_trash_row_is_deleted_by_a_purge_and_sealed_by_a_keep() {
         conn.execute("INSERT INTO trash VALUES(?1, 0, ?2)", params![id, serde_json::to_string(&test_prompt(id)).unwrap()]).unwrap();
     }
     let mut written = WrittenRows::new();
-    let (trash, failures) = db_load_trash(&conn, &mut written);
-    assert_eq!((trash.len(), failures), (2, 0));
+    let (trash, failures, plain) = db_load_trash(&conn, &mut written);
+    assert_eq!((trash.len(), failures, plain), (2, 0, true), "a plaintext trash row asks for the startup resave");
     let kept: Vec<Prompt> = trash.into_iter().filter(|p| p.id == "kept").collect();
     let mut conn = conn;
     db_write_trash(&mut conn, &kept, &mut written).unwrap();
