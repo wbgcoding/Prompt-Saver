@@ -271,10 +271,9 @@ export function normalizeLayout(view) {
 // there (renderGrid skips it), so it must not count as overflow either.
 function gridMemberIds(view) {
   if (!flag("archiveTag")) return view.members;
-  return view.members.filter((id) => {
-    const p = prompts.find((x) => x.id === id);
-    return !(p && isArchived(p));
-  });
+  const archived = new Set();
+  for (const p of prompts) if (isArchived(p)) archived.add(p.id);
+  return view.members.filter((id) => !archived.has(id));
 }
 
 // ---- Render ----
@@ -305,15 +304,26 @@ async function armVaultRelock() {
   }, at - Date.now());
 }
 
+// A fetching render takes a number before its await: an answer that is no longer the newest
+// is dropped (the newer fetch carries the newer state) and that render waits for it instead.
+let renderGridSeq = 0;
+let renderGridNewest = Promise.resolve();
 // skipFetch: caller already updated the local state (drag/hide hot path).
 export async function renderGrid(skipFetch = false) {
   hideTileTip(); // the hovered tile may be replaced by this render
   if (!skipFetch) {
-    try {
+    const gen = ++renderGridSeq;
+    const fetched = (async () => {
       const s = await invoke("get_state");
+      if (gen !== renderGridSeq) return;
       assignPrompts(s.prompts);
       assignSettings(s.settings);
       await updateExamplesBanner(); // re-evaluate on every real fetch, not just at startup
+    })();
+    renderGridNewest = fetched;
+    try {
+      await fetched;
+      if (gen !== renderGridSeq) await renderGridNewest.catch(() => {});
     } catch (e) {
       // IPC hiccup: keep the last good state instead of throwing into the global handler and
       // leaving a half-rendered grid.

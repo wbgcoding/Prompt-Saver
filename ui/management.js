@@ -1,5 +1,5 @@
 // Statistics, duplicate finder, compare view, trash, error log.
-import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, rememberOpener, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
 import { applyFlags, applyValues, jumpToExpertSetting, renderExpert, rowResetBtn } from "./expertMenu.js";
 import { loadPalette, refreshColorUI } from "./theme.js";
@@ -10,7 +10,7 @@ import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, varPreview } from "./floatShared.js";
 import { saveBackupSetting, saveUiState, statCard } from "./backups.js";
-import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
+import { editPrompt, ensureSecretVaultUnlocked, renderDiffInto, splitDiffSides } from "./editor.js";
 import { ocrErrToast } from "./dictation.js";
 
 // ---- Usage statistics dashboard (opened from the expert menu) ----
@@ -228,6 +228,7 @@ export function jumpToPrompt(name) {
 
 // ---- Duplicate finder ----
 export async function openDupes() {
+  rememberOpener($("dupes-modal"));
   $("dupes-modal").classList.remove("hidden");
   await scanDupes();
 }
@@ -355,7 +356,24 @@ async function keepOneDupRun(remove) {
 // its "keep one side" buttons show instead of "take left/right".
 export let compareState = null;
 export async function openCompareView(ids, dupGroup = null) {
-  const fetched = await Promise.all(ids.map((id) => invoke("get_prompt", { id }).catch(() => null)));
+  const fetched = [];
+  let unlockTried = false;
+  for (const id of ids) {
+    let p = null;
+    for (;;) {
+      try { p = await invoke("get_prompt", { id }); break; } catch (e) {
+        // A confidential entry with no vault key: ask once, then fetch it again.
+        if (String(e) === "secret-locked" && !unlockTried) {
+          unlockTried = true;
+          if (await ensureSecretVaultUnlocked()) continue;
+          return;
+        }
+        errToast(e);
+        return;
+      }
+    }
+    fetched.push(p);
+  }
   if (fetched.some((p) => !p)) { toast(t("compareMissing")); return; }
   compareState = { ids, prompts: fetched, dupGroup };
   renderCompareView();
@@ -547,6 +565,7 @@ export async function maybeShowSimilarHint(id) {
 // only place it can come back from or be purged for good.
 export let trashList = [];
 export async function openTrash() {
+  rememberOpener($("trash-modal"));
   $("trash-modal").classList.remove("hidden");
   try { trashList = await invoke("list_trash"); } catch (e) { errToast(e); trashList = []; }
   renderTrashList();

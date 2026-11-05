@@ -356,6 +356,12 @@ export function openTileFolderPop(f, anchor) {
       if (ev.button !== 0) return;
       assignMemberDrag({ id: p.id, startX: ev.clientX, startY: ev.clientY, moved: false, el: btn });
     });
+    // Enter or Space on a focused member: the click has no pointer behind it (detail 0), the
+    // pointer path above copies on release.
+    btn.addEventListener("click", (ev) => {
+      if (ev.detail !== 0) return;
+      copyFolderMember(prompts.find((x) => x.id === p.id), btn);
+    });
     grid.appendChild(btn);
   }
   tileFolderPop.appendChild(grid);
@@ -448,6 +454,26 @@ export function cacheFloatingState(id, pinned) {
   else delete settings.floating[id];
 }
 
+// A plain press on a folder member copies, exactly like the tile it stands for.
+async function copyFolderMember(p, el) {
+  if (!p) return;
+  const id = p.id;
+  if (chainMode) { await toggleChainPick(p); return; } // pick (asks vars), don't copy
+  if (dialogTokens(p, await peekRotatedText(p)).length) {
+    // Cooldown first, like a plain copy: a copy that just happened must not ask again.
+    if (copyOnCooldown(id)) return;
+    await copyTextWithVars(p, el);
+    return;
+  }
+  if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // 2nd fast click pastes
+  if (copyOnCooldown(id)) return;
+  if (await copyResolved(p)) {
+    showCopied(el);
+    recordCopy(id);
+    maybeCloseOnCopy();
+  }
+}
+
 export function wireGridFolders() {
   tileFolderBackdrop.className = "tile-folder-backdrop hidden";
   document.body.appendChild(tileFolderBackdrop);
@@ -490,22 +516,7 @@ export function wireGridFolders() {
     endDragVisuals();
     const p = prompts.find((x) => x.id === d.id);
     if (!d.moved) {
-      // A plain click copies, exactly like the tile it stands for.
-      if (!p) return;
-      if (chainMode) { await toggleChainPick(p); return; } // pick (asks vars), don't copy
-      if (dialogTokens(p, await peekRotatedText(p)).length) {
-        // Cooldown first, like a plain copy: a copy that just happened must not ask again.
-        if (copyOnCooldown(d.id)) return;
-        await copyTextWithVars(p, d.el);
-        return;
-      }
-      if (autoPasteDouble(d.id)) { await autoPasteNow(d.el); return; } // 2nd fast click pastes
-      if (copyOnCooldown(d.id)) return;
-      if (await copyResolved(p)) {
-        showCopied(d.el);
-        recordCopy(d.id);
-        maybeCloseOnCopy();
-      }
+      await copyFolderMember(p, d.el);
       return;
     }
     // Looked up while the layers still let the pointer through, released right after.

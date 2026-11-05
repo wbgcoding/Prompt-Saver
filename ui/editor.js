@@ -134,7 +134,10 @@ export function updateCaptionPreview() {
   el.style.fontSize = size > 1 ? `${size}px` : "";
 }
 
-// Serialized content of the open modal: compared on dismiss to detect edits.
+// Positions in the modalSnapshot() array that a version restore rewrites.
+const SNAP_RESTORED = { name: 0, text: 1, entries: 16, rotateMode: 17 };
+// Serialized content of the open modal: compared on dismiss to detect edits. Keep SNAP_RESTORED
+// in step when a field is inserted before one of its positions.
 export function modalSnapshot() {
   if (!modalState) return "";
   return JSON.stringify([
@@ -491,6 +494,7 @@ export async function onModalSecretToggle() {
     return;
   }
   const id = modalState.id;
+  const session = modalSession;
   const next = !modalState.secret;
   if (!(await ensureSecretVaultUnlocked())) return;
   try {
@@ -501,10 +505,11 @@ export async function onModalSecretToggle() {
   }
   // The editor was closed (or switched to another entry) while the vault answered: the backend
   // change stands, there is just no dialog left to update.
-  if (!modalState || modalState.id !== id) return;
+  if (!modalState || session !== modalSession) return;
   modalState.secret = next;
   updateSecretToggleUi(modalState.mode, next, modalState.copyImage, modalState.filePath);
   await renderGrid();
+  if (session !== modalSession) return; // closed and reopened while the grid refreshed
   if (next) {
     // The field now holds ciphertext at rest: closing avoids the editor
     // resaving the plain text it still shows over that.
@@ -721,15 +726,18 @@ export function renderDiffInto(el, tokens) {
 export const versionEntries = (v) => (v.variants?.length ? [v.text || "", ...v.variants] : [v.text || ""]);
 // The editor's current, unsaved state: the "newer" side of the newest row's diff.
 export const liveEntries = () => (modalState?.rotateEntries?.length ? [...modalState.rotateEntries] : [modal.text.value || ""]);
+let historySeq = 0;
 export async function loadHistory(id) {
   const body = $("modal-history-body");
   if (!body || !id) return;
   body.innerHTML = "";
+  const seq = ++historySeq;
   let list = [];
   try { list = await invoke("list_versions", { promptId: id }); } catch (_) {}
   // A slower response for a since-abandoned prompt must not land in the editor
-  // after it has already moved on to a different one.
-  if (modalState?.id !== id) return;
+  // after it has already moved on to a different one, and of two overlapping loads
+  // for the same prompt only the newest draws its rows.
+  if (modalState?.id !== id || seq !== historySeq) return;
   if (!list.length) {
     const e = document.createElement("div");
     e.className = "hint";
@@ -796,7 +804,7 @@ export async function loadHistory(id) {
           // (other edits made in the open editor still are).
           try {
             const now = JSON.parse(modalSnapshot()), base = JSON.parse(modalInitial);
-            for (const i of [0, 1, 16, 17]) base[i] = now[i]; // name, text, entry list, rotate mode
+            for (const i of Object.values(SNAP_RESTORED)) base[i] = now[i];
             modalInitial = JSON.stringify(base);
           } catch { modalInitial = modalSnapshot(); }
           toast(t("historyRestored"));
@@ -1535,6 +1543,7 @@ export async function editPrompt(id) {
     if (!(await confirmDiscardIfDirty())) return;
     closeModal();
   }
+  const session = modalSession;
   let p;
   try {
     p = await invoke("get_prompt", { id });
@@ -1548,7 +1557,8 @@ export async function editPrompt(id) {
       return;
     }
   }
-  if (p) {
+  // Another editor session opened while the fetch or the unlock dialog was pending: keep it.
+  if (p && session === modalSession) {
     openModal({ ...promptToModal(p), mode: "edit", id });
   }
 }

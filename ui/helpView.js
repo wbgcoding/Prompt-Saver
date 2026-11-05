@@ -1,6 +1,6 @@
 // The help view: search, tabs, collapsed sections and deep links.
 import { HELP_CONTENT } from "./help.js";
-import { $, debounced, LANG, t, txt } from "./core.js";
+import { $, debounced, LANG, rememberOpener, t, txt } from "./core.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
 
 // In-app documentation. EN + DE only (ui/help.js): every other language
@@ -283,6 +283,7 @@ export function renderHelp() {
 }
 
 export function openHelp() {
+  rememberOpener($("help"));
   helpQuery = "";
   $("help-search").value = "";
   helpCollapsed = new Set();

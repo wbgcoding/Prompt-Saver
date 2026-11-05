@@ -5269,7 +5269,8 @@ button.tag-chip:hover { border-color: var(--accent); }
   cursor: pointer;
 }
 .tag-suggest-item > .tag-chip { transition: border-color var(--transition), background var(--transition); }
-.tag-suggest-item:hover > .tag-chip { border-color: var(--accent); background: var(--surface); }
+.tag-suggest-item:hover > .tag-chip,
+.tag-suggest-item.active > .tag-chip { border-color: var(--accent); background: var(--surface); }
 .tag-suggest-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
 .tag-suggest::-webkit-scrollbar { width: 8px; }
 .tag-suggest::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }

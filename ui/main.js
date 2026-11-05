@@ -4,7 +4,7 @@ import EN from "./i18n/en.js";
 import { FOLDER_SVG, fmtBytes, trapTabWithin } from "./floatShared.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { assignVarsWindowPending, varsWindowPending } from "./promptVars.js";
-import { $, applyBrand, appVersion, assignAppVersion, autoGrow, closeColorPop, colorPop, ctxEl, errToast, EXPERT_ACTIONS, flag, ICON_WARN, inputEl, invoke, LANG, libraryEl, listen, modal, noticeToast, prompts, setStatusText, settings, settingsEl, t, toast, val, wireColorPop } from "./core.js";
+import { $, applyBrand, appVersion, assignAppVersion, autoGrow, closeColorPop, colorPop, ctxEl, errToast, EXPERT_ACTIONS, flag, hideRestoringFocus, ICON_WARN, inputEl, invoke, LANG, libraryEl, listen, modal, noticeToast, prompts, setStatusText, settings, settingsEl, t, toast, val, wireColorPop } from "./core.js";
 import { assignTabDragBlockClick, bindViews, closeMiniMenu, closeViewModal, miniMenu, renderGrid, seedExamplesIfNeeded, switchToView, viewModal, viewOrder, wireNumPop, wireViews } from "./views.js";
 import { bindCopyFlow, onPromptHotkey, wireCopyFlow } from "./copyFlow.js";
 import { applyMissingFiles, fitAllTiles, fitCache, pollMissingFiles, wireTiles } from "./tiles.js";
@@ -236,12 +236,12 @@ function bind() {
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (closeStackedDialog()) { /* the dialog closed itself */ }
     else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
-    else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
+    else if (!$("about-modal").classList.contains("hidden")) hideRestoringFocus($("about-modal"));
     else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
-    else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
-    else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
+    else if (!$("dupes-modal").classList.contains("hidden")) hideRestoringFocus($("dupes-modal"));
+    else if (!$("trash-modal").classList.contains("hidden")) hideRestoringFocus($("trash-modal"));
     // A library raised over the backups dialog is the topmost thing: it closes first.
     else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
     else if (!$("stats-modal").classList.contains("hidden")) closeStats();
@@ -249,7 +249,7 @@ function bind() {
     else if (!libraryEl.classList.contains("hidden")) hideLibrary();
     // Help opens over the settings panel: close it before the
     // settings underneath, same pattern as library-front/journal above.
-    else if (!helpEl.classList.contains("hidden")) helpEl.classList.add("hidden");
+    else if (!helpEl.classList.contains("hidden")) hideRestoringFocus(helpEl);
     else if (!settingsEl.classList.contains("hidden")) hideSettings();
   });
 

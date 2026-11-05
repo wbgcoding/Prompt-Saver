@@ -1,14 +1,15 @@
 // Copying a prompt: usage log, formatted copy, variable paste, keyboard focus ring and
 // close-on-copy.
-import { $, errToast, favView, flag, gridEl, invoke, KB_FOCUS_FADE_MS, optFlag, prompts, t, toast, val } from "./core.js";
+import { $, ctxEl, errToast, favView, flag, gridEl, invoke, KB_FOCUS_FADE_MS, optFlag, prompts, t, toast, val } from "./core.js";
 import { playCopySound } from "./floatShared.js";
 import { dialogTokens, peekRotatedText, resolveVars, varsWindowPending } from "./promptVars.js";
 import { renderMarkdown } from "./markdown.js";
-import { activeView, favLayoutMap, layoutOf } from "./views.js";
+import { activeView, favLayoutMap, layoutOf, miniMenu } from "./views.js";
 import { chainLock, chainMode, chainSel, onChainClick, setChainLock, setChainMode, toggleChainPick } from "./chain.js";
 import { autoPasteNow, showCopied } from "./tiles.js";
 import { copyResolved, readyForCopy } from "./library.js";
 import { recordToolUsage } from "./management.js";
+import { folderById, openTileFolderPop } from "./gridFolders.js";
 
 // Record a copy for the history/usage journal (the backend honours the privacy flag).
 // Every successful copy path ends here, so this is the one place that may start the
@@ -86,23 +87,32 @@ export async function peekResolveCommit(p, copyFn, opts) {
 // paste option on); a plain click copies and nothing else, exactly like a prompt
 // without variables.
 export let varsPasteRequested = false;
+// The prompt whose fill-in window is the pending one: only a press on that same prompt is
+// the second half of a double click; another prompt starts its own question.
+let varsPendingId = null;
 export async function copyTextWithVars(p, el, paste = false) {
-  // The placeholder window is already up for an earlier press: this one is the
+  // The placeholder window is already up for an earlier press of this prompt: this one is the
   // second half of a double click. It must not start another question, it only
   // upgrades the pending copy to a paste.
-  if (varsWindowPending) { varsPasteRequested = true; return; }
+  if (varsWindowPending && (!varsPendingId || varsPendingId === p.id)) { varsPasteRequested = true; return; }
   varsPasteRequested = false;
+  varsPendingId = p.id;
   let pasteAfter = paste;
-  const ok = await peekResolveCommit(
-    p,
-    (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
-    {
-      afterResolve: () => {
-        pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
-        varsPasteRequested = false;
+  let ok;
+  try {
+    ok = await peekResolveCommit(
+      p,
+      (text) => invoke("copy_text", { text }).catch((e) => { errToast(e); return false; }),
+      {
+        afterResolve: () => {
+          pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
+          varsPasteRequested = false;
+        },
       },
-    },
-  );
+    );
+  } finally {
+    if (varsPendingId === p.id) varsPendingId = null;
+  }
   if (ok) {
     showCopied(el);
     recordCopy(p.id);
@@ -131,22 +141,29 @@ export async function copyFormattedPrompt(id) {
 // Enter/Space copies the focused tile (feature-gated by keyboardNav).
 export let kbFocus = null;
 export let kbFadeTimer = null;
+// The ring also walks grid-folder cells; their key is "folder:<id>", a prompt's is its id.
+const FOLDER_KEY = "folder:";
+const kbKeyOf = (el) => el.dataset.id || (el.dataset.folderId ? FOLDER_KEY + el.dataset.folderId : "");
+const kbElOf = (key) => gridEl.querySelector(key.startsWith(FOLDER_KEY)
+  ? `.folder-tile[data-folder-id="${CSS.escape(key.slice(FOLDER_KEY.length))}"]`
+  : `.tile[data-id="${CSS.escape(key)}"]`);
 export function focusTile(id) {
   clearTimeout(kbFadeTimer);
   kbFocus = id;
   for (const el of gridEl.querySelectorAll(".tile")) {
-    el.classList.toggle("kb-focus", el.dataset.id === id);
-    if (el.dataset.id === id) el.setAttribute("aria-current", "true"); else el.removeAttribute("aria-current");
+    el.classList.toggle("kb-focus", kbKeyOf(el) === id);
+    if (kbKeyOf(el) === id) el.setAttribute("aria-current", "true"); else el.removeAttribute("aria-current");
   }
   // The ring is visual only; the live region makes a screen reader say which tile it sits on.
+  const target = kbElOf(id);
   const live = document.getElementById("grid-live");
-  if (live) live.textContent = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.getAttribute("aria-label") || "";
+  if (live) live.textContent = target?.getAttribute("aria-label") || target?.dataset.tipName || "";
   for (const el of gridEl.querySelectorAll(".tile.kb-leaving")) el.classList.remove("kb-leaving");
-  gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
+  target?.scrollIntoView({ block: "nearest" });
 }
 // Clears the focus ring. `fade` smoothly transitions it out (used on window blur).
 export function clearKbFocus(fade) {
-  const el = kbFocus ? gridEl.querySelector(`.tile[data-id="${CSS.escape(kbFocus)}"]`) : null;
+  const el = kbFocus ? kbElOf(kbFocus) : null;
   kbFocus = null;
   for (const tile of gridEl.querySelectorAll(".tile.kb-focus")) { tile.classList.remove("kb-focus"); tile.removeAttribute("aria-current"); }
   const live = document.getElementById("grid-live");
@@ -157,10 +174,40 @@ export function clearKbFocus(fade) {
   }
 }
 
+// The cells the arrow keys walk: the layout the grid shows (the favorites view lays out from
+// favLayoutMap(), not the active view) plus the grid-folder cells, read from the drawn cells.
+export function kbNavMap() {
+  const layout = { ...(favView ? favLayoutMap() : layoutOf(activeView())) };
+  if (favView) return layout;
+  for (const el of gridEl.querySelectorAll(".folder-tile")) {
+    const cell = el.closest(".cell");
+    if (cell) layout[FOLDER_KEY + el.dataset.folderId] = [Number(cell.dataset.col), Number(cell.dataset.row)];
+  }
+  return layout;
+}
+// Enter on the ring: a folder cell opens its popover and hands the focus to the first member.
+export function activateKbFocus(key) {
+  if (!key.startsWith(FOLDER_KEY)) return activateTile(key);
+  const f = folderById(key.slice(FOLDER_KEY.length));
+  const el = kbElOf(key);
+  if (!f || !el) return;
+  openTileFolderPop(f, el);
+  document.querySelector(".tile-folder-pop:not(.hidden) .folder-member-tile, .tile-folder-pop:not(.hidden) button")?.focus();
+}
+// Menu key / Shift+F10 on the ring: ask the focused cell for its own menu (the same handler a
+// right-click reaches, so a switched-off tile menu stays off) and move the focus into it.
+export function openKbMenu(key) {
+  const el = kbElOf(key);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  el.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+  }));
+  const menu = [ctxEl, miniMenu].find((m) => !m.classList.contains("hidden"));
+  menu?.querySelector("button:not(.hidden):not(:disabled)")?.focus();
+}
 export function moveKbFocus(dc, dr) {
-  // Use whichever layout the grid is currently showing: the favorites view lays out
-  // from favLayoutMap(), not the active view, so arrow keys must follow that.
-  const layout = favView ? favLayoutMap() : layoutOf(activeView());
+  const layout = kbNavMap();
   const cells = Object.entries(layout);
   if (!cells.length) return;
   if (!kbFocus || !layout[kbFocus]) { focusTile(cells[0][0]); return; }
@@ -267,8 +314,10 @@ export function bindCopyFlow() {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
     if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
+    if (e.target?.closest?.(".tile-folder-pop")) return; // inside an open folder the keys are its own
+    if ((e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) && kbFocus) { e.preventDefault(); openKbMenu(kbFocus); return; }
     if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
-    else if ((e.key === "Enter" || e.key === " ") && kbFocus && !controlOwnsActivateKey(e.target)) { e.preventDefault(); activateTile(kbFocus); }
+    else if ((e.key === "Enter" || e.key === " ") && kbFocus && !controlOwnsActivateKey(e.target)) { e.preventDefault(); activateKbFocus(kbFocus); }
   });
   // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
   // on while Shift is down and off again when released: unless a prompt was picked

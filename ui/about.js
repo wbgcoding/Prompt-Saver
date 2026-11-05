@@ -1,5 +1,5 @@
 // About and update dialog.
-import { $, appVersion, errToast, invoke, listen, setStatusText, settings, t, toast } from "./core.js";
+import { $, appVersion, rememberOpener, errToast, invoke, listen, setStatusText, settings, t, toast } from "./core.js";
 import { fillUpdateIntervalSelect } from "./settingsPanel.js";
 import { attachSelectPicker } from "./selectpop.js";
 
@@ -7,7 +7,7 @@ export function bindAbout() {
   // About dialog: version + project page link.
   const aboutEl = $("about-modal");
   const closeAbout = () => aboutEl.classList.add("hidden");
-  $("about-btn").addEventListener("click", () => aboutEl.classList.remove("hidden"));
+  $("about-btn").addEventListener("click", () => { rememberOpener(aboutEl); aboutEl.classList.remove("hidden"); });
   $("about-close").addEventListener("click", closeAbout);
   $("about-ok").addEventListener("click", closeAbout);
   $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));

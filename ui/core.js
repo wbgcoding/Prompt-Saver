@@ -521,16 +521,39 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   if (toastEl.matches(":hover")) { toastHovered = true; pauseToast(); }
 }
 
+// Dialogs closed with Escape hand focus back to what opened them (the editor does the same
+// with its own opener); the opener is taken while the dialog is still closed.
+const dialogOpeners = new WeakMap();
+export function rememberOpener(el) {
+  if (el.classList.contains("hidden")) dialogOpeners.set(el, document.activeElement);
+}
+export function hideRestoringFocus(el) {
+  el.classList.add("hidden");
+  const opener = dialogOpeners.get(el);
+  dialogOpeners.delete(el);
+  if (opener?.isConnected && opener !== document.body) opener.focus?.();
+}
+
 // An unprompted notice: shown with the long notice lifetime, and only once the window is
 // actually visible (a start into the tray would otherwise let it expire unseen).
-export function noticeToast(msg) {
-  if (!document.hidden) { toast(msg, null, "", null, TOAST_NOTICE_MS); return; }
-  const onVisible = () => {
-    if (document.hidden) return;
-    document.removeEventListener("visibilitychange", onVisible);
+const hiddenNotices = [];
+function showNotices() {
+  if (document.hidden) return;
+  document.removeEventListener("visibilitychange", showNotices);
+  const next = () => {
+    const msg = hiddenNotices.shift();
+    if (msg === undefined) return;
     toast(msg, null, "", null, TOAST_NOTICE_MS);
+    // One toast slot: a second notice waits until the first one has had its time.
+    if (hiddenNotices.length) setTimeout(next, TOAST_NOTICE_MS);
   };
-  document.addEventListener("visibilitychange", onVisible);
+  next();
+}
+export function noticeToast(msg) {
+  if (!document.hidden && !hiddenNotices.length) { toast(msg, null, "", null, TOAST_NOTICE_MS); return; }
+  // Hidden: all notices share ONE visibility listener, so none is lost or listener-leaked.
+  if (!hiddenNotices.length) document.addEventListener("visibilitychange", showNotices);
+  hiddenNotices.push(msg);
 }
 
 // Logs the error and returns the text the user is shown for it. A string with no translation
