@@ -282,6 +282,49 @@ later(async () => {
   check(run1(true) === "ctx@30,35,focus:mini", `a folder cell's mini menu takes focus, got ${run1(true)}`);
 });
 
+// tags.js: ArrowUp/Down walk the suggestion list, Enter picks the highlighted row.
+later(async () => {
+  const src = read("tags.js");
+  const a = src.indexOf("let tagSuggestActive");
+  const b = src.indexOf("export const closeTagPop");
+  if (a === -1 || b === -1) { check(false, "tag suggestion keyboard state missing"); return; }
+  const code = src.slice(a, b).replace(/export /g, "") + "\n" + extractBlock(src, "export function wireTagInput").replace(/export /g, "") + "\n;globalThis.wire = wireTagInput;";
+  const log = [];
+  const mkItem = (id) => {
+    const attrs = {}; const cls = new Set();
+    return { id, attrs, cls, setAttribute: (k, v) => { attrs[k] = v; }, scrollIntoView() {}, click: () => log.push("pick:" + id),
+      classList: { toggle: (c, on) => { on ? cls.add(c) : cls.delete(c); } } };
+  };
+  let items = [];
+  const hidden = new Set(["hidden"]);
+  const tagSuggest = { classList: { contains: (c) => hidden.has(c), add: (c) => hidden.add(c), remove: (c) => hidden.delete(c) }, querySelectorAll: () => items };
+  const attrs = {}; const handlers = {};
+  const input = { value: "", addEventListener: (t, f) => { handlers[t] = f; }, setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } };
+  const sandbox = run(code, {
+    $: (id) => (id === "modal-tag-input" ? input : null), tagSuggest,
+    modalState: { tags: [] }, toast() {}, t: (k) => k,
+    renderTagSuggest: (all) => { items = [mkItem("i0"), mkItem("i1"), mkItem("i2")]; hidden.delete("hidden"); },
+    addTagToModal: () => true, renderTagChips() {},
+  });
+  sandbox.wire();
+  const key = (k) => { const ev = { key: k, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} }; handlers.keydown(ev); return ev; };
+  key("ArrowDown");
+  check(!hidden.has("hidden") && attrs["aria-activedescendant"] === "i0", `ArrowDown on a closed list opens it on the first row, got ${attrs["aria-activedescendant"]}`);
+  key("ArrowDown"); key("ArrowDown");
+  check(attrs["aria-activedescendant"] === "i2", "ArrowDown walks down");
+  key("ArrowDown");
+  check(attrs["aria-activedescendant"] === "i0", "ArrowDown wraps");
+  key("ArrowUp");
+  check(attrs["aria-activedescendant"] === "i2" && items[2].cls.has("active") && !items[0].cls.has("active"), "ArrowUp wraps back and marks one row");
+  const ev = key("Enter");
+  check(log.join() === "pick:i2" && ev.prevented, `Enter picks the highlighted row, got ${log}`);
+  key("Escape");
+  check(!("aria-activedescendant" in attrs), "closing the list clears the active descendant");
+  log.length = 0; input.value = "";
+  key("Enter");
+  check(log.length === 0, "Enter with no highlighted row commits the typed text instead");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");

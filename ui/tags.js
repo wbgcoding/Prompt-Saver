@@ -69,7 +69,28 @@ export const tagSuggest = document.createElement("div");
 export const tagPop = document.createElement("div");
 
 export const placePop = (el, anchor) => placePopover(el, anchor.getBoundingClientRect());
-export const closeTagSuggest = () => tagSuggest.classList.add("hidden");
+let tagSuggestActive = -1;
+const suggestItems = () => [...tagSuggest.querySelectorAll(".tag-suggest-item")];
+// The field keeps real focus while the list is walked, so the highlighted row is
+// announced through aria-activedescendant instead of moving focus.
+function setTagSuggestActive(i) {
+  const items = suggestItems();
+  tagSuggestActive = items.length ? Math.max(-1, Math.min(i, items.length - 1)) : -1;
+  const input = $("modal-tag-input");
+  items.forEach((el, n) => {
+    const on = n === tagSuggestActive;
+    el.classList.toggle("active", on);
+    el.setAttribute("aria-selected", on ? "true" : "false");
+    if (on) el.scrollIntoView?.({ block: "nearest" });
+  });
+  if (!input) return;
+  if (tagSuggestActive >= 0) input.setAttribute("aria-activedescendant", items[tagSuggestActive].id);
+  else input.removeAttribute("aria-activedescendant");
+}
+export const closeTagSuggest = () => {
+  tagSuggest.classList.add("hidden");
+  setTagSuggestActive(-1);
+};
 export const closeTagPop = () => tagPop.classList.add("hidden");
 
 // Palette for one tag. Colors are global (settings), so this writes through at once.
@@ -182,9 +203,15 @@ export function renderTagSuggest(all = false) {
     empty.textContent = t(allTags().length ? "tagAllTaken" : "tagNone");
     tagSuggest.appendChild(empty);
   }
-  for (const name of hits) {
+  tagSuggestActive = -1;
+  input.removeAttribute("aria-activedescendant");
+  hits.forEach((name, n) => {
     const item = document.createElement("button");
     item.type = "button";
+    item.id = `tag-suggest-item-${n}`;
+    item.tabIndex = -1;
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", "false");
     item.className = "tag-suggest-item";
     item.append(tagChipEl(name));
     item.addEventListener("click", () => {
@@ -194,7 +221,8 @@ export function renderTagSuggest(all = false) {
       input.focus();
     });
     tagSuggest.appendChild(item);
-  }
+  });
+  tagSuggest.setAttribute("role", "listbox");
   // A dropdown belongs to its field, so it takes the field's width.
   tagSuggest.style.minWidth = `${Math.round(input.getBoundingClientRect().width)}px`;
   placePop(tagSuggest, input);
@@ -212,7 +240,22 @@ export function wireTagInput() {
     closeTagSuggest();
   };
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commit(); return; }
+    const open = !tagSuggest.classList.contains("hidden");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!open) { renderTagSuggest(true); setTagSuggestActive(e.key === "ArrowDown" ? 0 : suggestItems().length - 1); return; }
+      const n = suggestItems().length;
+      if (!n) return;
+      const next = tagSuggestActive + (e.key === "ArrowDown" ? 1 : -1);
+      setTagSuggestActive((next + n) % n);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (open && tagSuggestActive >= 0) { suggestItems()[tagSuggestActive]?.click(); return; }
+      commit();
+      return;
+    }
     if (e.key === "Escape" && !tagSuggest.classList.contains("hidden")) {
       e.stopPropagation(); // keep Escape from closing the whole editor
       closeTagSuggest();
