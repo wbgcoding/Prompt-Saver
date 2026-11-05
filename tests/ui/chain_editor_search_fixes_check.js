@@ -166,7 +166,8 @@ section(() => {
     for (const [kind, w, val] of fields) if ((val || "").toLowerCase().includes(q) && w * 100 > best) { best = w * 100; field = kind; }
     return best ? { score: best, field } : { score: 0 };
   };
-  const sandbox = run(extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
+  const hitCode = src.includes("function gsPromptHit(") ? extractBlock(src, "function gsPromptHit(") + "\n" : "";
+  const sandbox = run(hitCode + extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
     libQuery: "",
     assignLibQuery: (v) => { sandbox.libQuery = v; },
     gsImageHits: { query: "", ids: new Set() },
@@ -182,6 +183,29 @@ section(() => {
   });
   const labels = sandbox.hits("report").map((h) => h.label).sort().join();
   check(labels === "Beta,Delta report,Gamma", `a file-path-only prompt stays out of the prompt group, got ${labels}`);
+});
+
+// globalSearch.js gsPromptHits: the body preview is built for the rows that are drawn, not for
+// every match.
+section(() => {
+  const src = read("globalSearch.js");
+  let previews = 0;
+  const store = Array.from({ length: 2000 }, (_, i) => ({ id: "g" + i, name: "Note " + i, text: "body " + i, file_path: "" }));
+  const hitCode = src.includes("function gsPromptHit(") ? extractBlock(src, "function gsPromptHit(") + "\n" : "";
+  const sandbox = run(hitCode + extractBlock(src, "export function gsPromptHits(").replace("export ", "") + "\n;globalThis.hits = gsPromptHits;", {
+    libQuery: "",
+    assignLibQuery: (v) => { sandbox.libQuery = v; },
+    gsImageHits: { query: "", ids: new Set() },
+    computeLibSearchScore: () => ({ score: 1, field: "name" }),
+    varPreview: (s) => { previews++; return s; },
+    gsCopyPrompt: () => {},
+    prompts: store,
+  });
+  const hits = sandbox.hits("no");
+  check(hits.length === 2000, `every match is listed, got ${hits.length}`);
+  hits.slice(0, 8).forEach((h) => h.sub);
+  check(previews === 8, `only the shown rows build a preview, got ${previews}`);
+  check(hits[3].sub === "body 3", "a drawn row still carries its preview");
 });
 
 // globalSearch.js gsHelpHits: the article tip is searchable, like the help dialog's own search.

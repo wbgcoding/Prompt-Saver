@@ -60,6 +60,17 @@ export async function gsRefreshImageHits() {
   if (ids.length) gsRender();
 }
 
+// The preview reads the whole body, so `sub` is built only for a row that is really drawn: a
+// short query can match thousands of prompts while the list shows a handful.
+function gsPromptHit(p) {
+  return {
+    label: p.name || "",
+    get sub() { return varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80); },
+    color: p.color,
+    run: () => gsCopyPrompt(p),
+  };
+}
+
 // Reuses the library's scoring (computeLibSearchScore). It reads the module-level
 // libQuery instead of taking a query, so the query is swapped in and restored around one
 // synchronous pass; nothing async runs in between, so a library search mid-flight never
@@ -78,12 +89,7 @@ export function gsPromptHits(q) {
   } finally {
     assignLibQuery(saved);
   }
-  return scored.map(({ p }) => ({
-    label: p.name || "",
-    sub: varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80),
-    color: p.color,
-    run: () => gsCopyPrompt(p),
-  }));
+  return scored.map(({ p }) => gsPromptHit(p));
 }
 
 // The copy history has no text of its own to search: each entry is just an id
@@ -108,12 +114,7 @@ export function gsHistoryHits(q) {
   } finally {
     assignLibQuery(saved);
   }
-  return scored.map(({ p }) => ({
-    label: p.name || "",
-    sub: varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80),
-    color: p.color,
-    run: () => gsCopyPrompt(p),
-  }));
+  return scored.map(({ p }) => gsPromptHit(p));
 }
 
 // A prompt's attached file (p.file_path) is the only per-prompt attachment in the data
