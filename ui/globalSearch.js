@@ -33,9 +33,10 @@ export let gsHistoryLog = []; // recent_copies, refetched each time the overlay 
 // to a result picked here.
 export async function gsCopyPrompt(p) {
   if (copyOnCooldown(p.id)) return;
-  if (!(await copyResolved(p))) return;
+  const copied = {};
+  if (!(await copyResolved(p, copied))) return;
   recordCopy(p.id);
-  toastCopied(p);
+  toastCopied(p, copied.text);
 }
 
 // Recognized picture text for the overlay's own query. Owned here: the library keeps its own

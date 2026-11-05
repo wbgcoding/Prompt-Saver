@@ -60,7 +60,7 @@ function sandbox(status) {
   vm.runInContext("let vaultRelockTimer = 0; let vaultRelockAt = 0; let vaultRelockAsking = false;", sb);
   vm.runInContext(extractBlock("async function armVaultRelock() {"), sb);
   vm.runInContext(extractBlock("async function readyForCopy(p, beforeAsk) {"), sb);
-  vm.runInContext(extractBlock("async function copyResolved(p) {"), sb);
+  vm.runInContext(extractBlock("async function copyResolved("), sb);
   // The placeholder, formatted and hotkey copies share the same re-check through this.
   sb.resolveVars = async (x) => x;
   sb.recordToolUsage = () => {};

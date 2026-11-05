@@ -343,6 +343,23 @@ later(async () => {
   check(timers <= 4 && repaints === timers, `one repaint per batch, got ${timers} repaints for 10 answers`);
 });
 
+// library.js toastCopied: the count is what was copied (a rotation entry, filled variables),
+// the stored text only when the caller passes nothing.
+section(() => {
+  const src = read("library.js");
+  const shown = [];
+  const sandbox = run(extractBlock(src, "export function toastCopied(").replace("export ", "") + "\n;globalThis.say = toastCopied;", {
+    toast: (m) => shown.push(m),
+    t: (k) => (k === "copiedChars" ? "{n} chars" : "copied"),
+    LANG: "en",
+  });
+  const p = { text: "template {?who} with a long body" };
+  sandbox.say(p, "Dear Ana");
+  sandbox.say(p);
+  sandbox.say({ text: "" }, "");
+  check(shown.join("|") === "8 chars|32 chars|copied", `the toast counts the copied text, got ${shown.join("|")}`);
+});
+
 // globalSearch.js gsRefreshImageHits: one lookup per query, stale answers dropped.
 later(async () => {
   const src = read("globalSearch.js");

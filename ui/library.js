@@ -1552,9 +1552,16 @@ export async function readyForCopy(p, beforeAsk) {
   return p;
 }
 
-export async function copyResolved(p) {
+// Resolves a prompt (vault, variables, rotation) and copies it. `out`, when given, receives the
+// text that reached the clipboard, so a caller can count what was really copied.
+export async function copyResolved(p, out = null) {
   p = await readyForCopy(p);
   if (!p) return false;
+  const copyText = async (text, extra) => {
+    const ok = await invoke("copy_text", { text, ...extra }).catch((e) => { errToast(e); return false; });
+    if (ok && out) out.text = text;
+    return ok;
+  };
   // Rotating prompt: peek the entry copy_prompt would use, resolve variables on that text, and
   // commit only once the copy reaches the clipboard, so a cancelled variable dialog never burns
   // an entry.
@@ -1567,6 +1574,7 @@ export async function copyResolved(p) {
       if (!resolved) return false;
       if (await invoke("rotation_arm_session", { id: p.id, resolved }).catch(() => false)) {
         recordToolUsage("rotation_advance");
+        if (out) out.text = resolved[0];
         return true;
       }
     }
@@ -1574,7 +1582,7 @@ export async function copyResolved(p) {
     // without it the Auto switch would do nothing on this path, unlike the floating buttons
     // (which copy through copy_prompt).
     const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
-    return peekResolveCommit(p, (text) => invoke("copy_text", { text, id: armId }).catch((e) => { errToast(e); return false; }), {
+    return peekResolveCommit(p, (text) => copyText(text, { id: armId }), {
       vaultChecked: true,
       resolve: (raw) => (varTokens(p, raw).length ? resolveVars(raw) : raw),
     });
@@ -1582,15 +1590,18 @@ export async function copyResolved(p) {
   if (varTokens(p).length) {
     const text = await resolveVars(p.text);
     if (text === null) return false;
-    return invoke("copy_text", { text }).catch((e) => { errToast(e); return false; });
+    return copyText(text);
   }
-  return invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
+  const ok = await invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
+  if (ok && out) out.text = p.text || "";
+  return ok;
 }
 
 // A blink says "something happened"; the character count says the whole prompt reached the
-// clipboard, the doubt a long one leaves.
-export function toastCopied(p) {
-  const n = (p?.text || "").length;
+// clipboard, the doubt a long one leaves. `text` is what was really copied (a rotation entry,
+// filled variables); left out, the stored text is counted.
+export function toastCopied(p, text) {
+  const n = (text ?? p?.text ?? "").length;
   toast(n > 0 ? t("copiedChars").replace("{n}", n.toLocaleString(LANG)) : t("copied"));
 }
 
@@ -1599,9 +1610,10 @@ export async function libraryCopy(p) {
   // (copyResolved) so variables are asked before copy and auto-paste.
   if (!dialogTokens(p, await peekRotatedText(p)).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
-  if (!(await copyResolved(p))) return;
+  const copied = {};
+  if (!(await copyResolved(p, copied))) return;
   recordCopy(p.id);
-  toastCopied(p);
+  toastCopied(p, copied.text);
   if (flag("closeAfterCopy")) hideLibrary();
 }
 
