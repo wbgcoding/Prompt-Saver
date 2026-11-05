@@ -279,6 +279,36 @@ export function libSearchScore(p) {
   libScoreCache.set(p.id, res);
   return res;
 }
+// Lowercased searchable fields of one prompt, kept while its text stays the same: a keystroke
+// re-scores every prompt, and lowercasing every body (or tokenizing it in fuzzy mode) each time
+// is what made a big store lag. Keyed by the prompt object and re-checked against the source
+// strings, so an edited prompt is never read stale.
+const libFieldCache = new WeakMap();
+function sameList(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+function libFieldsOf(p) {
+  const tOn = tagsOn(), nOn = notesOn();
+  const variants = p.variants || [], tags = p.tags || [];
+  let e = libFieldCache.get(p);
+  if (e && e.name === p.name && e.text === p.text && e.file === p.file_path && e.notes === p.notes
+    && e.tOn === tOn && e.nOn === nOn && sameList(e.variants, variants) && sameList(e.tags, tags)) return e;
+  // entryIndex says which entry a body-field match came from (0 = p.text, 1+ =
+  // variants[entryIndex-1]), so a rotating prompt is findable by any entry and the row can show
+  // the one that matched. The fourth element names the field, so a row can say where its hit
+  // came from.
+  const fields = [[(p.name || "").toLowerCase(), 3, -1, "name"], [(p.text || "").toLowerCase(), 1, 0, "text"], [(p.file_path || "").toLowerCase(), 1, -1, "file"]];
+  variants.forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1, "variant"]));
+  // A tag is a deliberate label, so it ranks between the name and the body.
+  if (tOn && tags.length) fields.push([tags.join(" ").toLowerCase(), 2, -1, "tags"]);
+  // A note is private context, so it matches but ranks below the prompt body.
+  if (nOn && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1, "notes"]);
+  e = { name: p.name, text: p.text, file: p.file_path, notes: p.notes, tOn, nOn, variants: variants.slice(), tags: tags.slice(), fields, words: [], varNames: null };
+  libFieldCache.set(p, e);
+  return e;
+}
 // Whether a prompt satisfies one tag:/var: condition from the search query. tag: matches a
 // tag's identity (tagKey) case-insensitively, not as a substring (the plain search already
 // does that). var: matches a placeholder's name, read as the variable dialog reads it (VAR_RE
@@ -288,58 +318,68 @@ export function searchConditionMet(c, p) {
   if (c.prefix === "tag") {
     hit = (p.tags || []).some((name) => tagKey(name) === tagKey(c.value));
   } else {
-    const names = [p.text, ...(p.variants || [])].flatMap((t) => extractVars(t || ""));
-    hit = names.some((tok) => parseVar(tok).name.toLowerCase() === c.value);
+    const e = libFieldsOf(p);
+    if (!e.varNames) e.varNames = [p.text, ...(p.variants || [])].flatMap((t) => extractVars(t || "")).map((tok) => parseVar(tok).name.toLowerCase());
+    hit = e.varNames.includes(c.value);
   }
   return c.neg ? !hit : hit;
+}
+// The query side of the score, parsed once per query text instead of once per prompt.
+let libQueryMemo = null;
+function libQueryContext() {
+  const raw = libQuery.trim().toLowerCase();
+  const fuzzy = !!flag("fuzzySearch");
+  if (libQueryMemo && libQueryMemo.raw === raw && libQueryMemo.fuzzy === fuzzy) return libQueryMemo;
+  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard conditions pulled
+  // out first: a prompt that fails one is out whatever the rest of the query would score.
+  const ctx = { raw, fuzzy, conditions: [], rest: "", excludes: [], q: "", qWords: [] };
+  if (raw) {
+    const parsed = parseSearchQuery(raw);
+    ctx.conditions = parsed.conditions;
+    ctx.rest = parsed.rest;
+    // A "-word" term excludes any prompt whose searchable text contains it, checked across
+    // every field first.
+    const terms = parsed.rest.split(/\s+/).filter(Boolean);
+    const isExclude = (t) => t.length > 1 && t[0] === "-";
+    ctx.excludes = terms.filter(isExclude).map((t) => t.slice(1));
+    ctx.q = terms.filter((t) => !isExclude(t)).join(" ");
+    // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
+    // clean words (scripts without spaces, e.g. CJK, stay one token: substring wins).
+    if (fuzzy && ctx.q) ctx.qWords = fuzzyTokens(ctx.q);
+  }
+  libQueryMemo = ctx;
+  return ctx;
 }
 // `imageHits` ({ query, ids }) lets another search surface bring its own recognized-text hits
 // instead of the library's; left out, the library's own lookup is used.
 export function computeLibSearchScore(p, imageHits = null) {
-  const rawInput = libQuery.trim().toLowerCase();
+  const ctx = libQueryContext();
+  const rawInput = ctx.raw;
   if (!rawInput) return { score: 1, fuzzy: false, entryIndex: 0 };
-  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard conditions pulled
-  // out first: a prompt that fails one is out whatever the rest of the query would score.
-  const { rest, conditions } = parseSearchQuery(rawInput);
-  if (conditions.length && !conditions.every((c) => searchConditionMet(c, p))) {
+  if (ctx.conditions.length && !ctx.conditions.every((c) => searchConditionMet(c, p))) {
     return { score: 0, fuzzy: false, entryIndex: 0 };
   }
-  const raw = rest;
-  if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 }; // only tag:/var: terms given
-  // entryIndex says which entry a body-field match came from (0 = p.text, 1+ =
-  // variants[entryIndex-1]), so a rotating prompt is findable by any entry and the row can show
-  // the one that matched. The fourth element names the field, so a row can say where its hit
-  // came from.
-  const fields = [[(p.name || "").toLowerCase(), 3, -1, "name"], [(p.text || "").toLowerCase(), 1, 0, "text"], [(p.file_path || "").toLowerCase(), 1, -1, "file"]];
-  (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1, "variant"]));
-  // A tag is a deliberate label, so it ranks between the name and the body.
-  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1, "tags"]);
-  // A note is private context, so it matches but ranks below the prompt body.
-  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1, "notes"]);
-  // A "-word" term excludes any prompt whose searchable text contains it, checked across every
-  // field first.
-  const terms = raw.split(/\s+/).filter(Boolean);
-  const isExclude = (t) => t.length > 1 && t[0] === "-";
-  const excludes = terms.filter(isExclude).map((t) => t.slice(1));
-  if (excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false, entryIndex: 0 };
-  const q = terms.filter((t) => !isExclude(t)).join(" ");
+  if (!ctx.rest) return { score: 1, fuzzy: false, entryIndex: 0 }; // only tag:/var: terms given
+  const entry = libFieldsOf(p);
+  const fields = entry.fields;
+  if (ctx.excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false, entryIndex: 0 };
+  const q = ctx.q;
   if (!q) return { score: 1, fuzzy: false, entryIndex: 0 }; // exclusion-only query matches everything not excluded
   let best = 0, bestEntry = 0, bestKind = "";
-  for (const [val, w, entry, kind] of fields) {
+  for (const [val, w, entryAt, kind] of fields) {
     if (val && val.includes(q)) {
       const s = (val.startsWith(q) ? 120 : 100) * w;
-      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; bestKind = kind; }
+      if (s > best) { best = s; bestEntry = entryAt >= 0 ? entryAt : 0; bestKind = kind; }
     }
   }
   if (best) return { score: best, fuzzy: false, entryIndex: bestEntry, field: bestKind, q };
-  if (!flag("fuzzySearch")) return { score: 0, fuzzy: false, entryIndex: 0 };
-  // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
-  // clean words (scripts without spaces, e.g. CJK, stay one token: substring wins).
-  const qWords = fuzzyTokens(q);
+  if (!ctx.fuzzy) return { score: 0, fuzzy: false, entryIndex: 0 };
+  const qWords = ctx.qWords;
   if (!qWords.length) return { score: 0, fuzzy: false, entryIndex: 0 };
-  for (const [val, w, entry, kind] of fields) {
+  for (let i = 0; i < fields.length; i++) {
+    const [val, w, entryAt, kind] = fields[i];
     if (!val) continue;
-    const words = fuzzyTokens(val);
+    const words = entry.words[i] || (entry.words[i] = fuzzyTokens(val));
     let matched = 0;
     for (const qw of qWords) {
       const max = fuzzyMaxTyposFor(qw);
@@ -347,7 +387,7 @@ export function computeLibSearchScore(p, imageHits = null) {
     }
     if (matched === qWords.length) {
       const s = 40 * w;
-      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; bestKind = kind; }
+      if (s > best) { best = s; bestEntry = entryAt >= 0 ? entryAt : 0; bestKind = kind; }
     }
   }
   if (best) return { score: best, fuzzy: true, entryIndex: bestEntry, field: bestKind, q };

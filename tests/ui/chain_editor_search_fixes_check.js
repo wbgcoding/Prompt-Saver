@@ -222,22 +222,29 @@ section(() => {
 
 // library.js computeLibSearchScore: a caller can hand in its own recognized-text hits, and the
 // library's own set stays untouched.
-section(() => {
+const scoreSandbox = (extra = {}) => {
   const src = read("library.js");
-  const sandbox = run(extractBlock(src, "export function computeLibSearchScore(").replace("export ", "") + "\n;globalThis.score = computeLibSearchScore;", {
+  const code = src.slice(src.includes("const libFieldCache") ? src.indexOf("const libFieldCache") : src.indexOf("// Whether a prompt satisfies"), src.indexOf("// Fills `el` with")).replace(/export /g, "");
+  return run(code + "\n;globalThis.score = computeLibSearchScore;", {
     libQuery: "sunset",
     imageHitQuery: "",
     imageHitIds: new Set(),
     parseSearchQuery: (raw) => ({ rest: raw, conditions: [] }),
-    searchConditionMet: () => true,
     tagsOn: () => false,
     notesOn: () => false,
+    tagKey: (s) => String(s).toLowerCase(),
+    extractVars: () => [],
+    parseVar: (s) => ({ name: s }),
     flag: () => true,
     fuzzyTokens: (s) => s.split(/[^\p{L}\p{N}]+/u).filter(Boolean),
     fuzzyMaxTyposFor: () => 0,
     fuzzyWordHit: (a, b) => a === b,
     optFlag: () => true,
+    ...extra,
   });
+};
+section(() => {
+  const sandbox = scoreSandbox();
   const p = { id: "p1", name: "Beach", text: "waves", file_path: "", variants: [] };
   check(sandbox.score(p).score === 0, "no hit set, no image match");
   const own = { query: "sunset", ids: new Set(["p1"]) };
@@ -245,6 +252,39 @@ section(() => {
   check(r.score > 0 && r.fromImage === true, `a handed-in hit set matches, got ${JSON.stringify(r)}`);
   check(sandbox.score(p, { query: "other", ids: new Set(["p1"]) }).score === 0, "a hit set for another query is ignored");
   check(sandbox.imageHitIds.size === 0 && sandbox.imageHitQuery === "", "the library's own hit state is untouched");
+});
+
+// library.js computeLibSearchScore: the query is parsed once per query text, not once per
+// prompt, and a prompt's lowercased fields follow an edit instead of going stale.
+section(() => {
+  let parses = 0, tokenized = 0;
+  const real = require(path.join(uiDir, "search.js"));
+  const sandbox = scoreSandbox({
+    libQuery: "zebra -cat",
+    parseSearchQuery: (raw) => { parses++; return real.parseSearchQuery(raw); },
+    fuzzyTokens: (s) => { tokenized++; return s.split(/[^\p{L}\p{N}]+/u).filter(Boolean); },
+  });
+  const list = Array.from({ length: 50 }, (_, i) => ({ id: "x" + i, name: "Item " + i, text: i % 2 ? "a ZEBRA here" : "plain", file_path: "", variants: [] }));
+  const hits = () => list.filter((p) => sandbox.score(p).score > 0).length;
+  check(hits() === 25, "the matching half is found");
+  hits();
+  check(parses === 1, `the query is parsed once for ${list.length * 2} scorings, got ${parses}`);
+  sandbox.libQuery = "horse";
+  check(hits() === 0 && parses === 2, `a new query text is parsed again, got ${parses}`);
+  sandbox.libQuery = "zebra";
+  const edited = list[1];
+  check(sandbox.score(edited).score > 0, "before the edit the prompt matches");
+  edited.text = "now a lion";
+  check(sandbox.score(edited).score === 0, "an edited prompt is scored on its new text");
+  edited.variants = ["second zebra entry"];
+  const r = sandbox.score(edited);
+  check(r.score > 0 && r.entryIndex === 1, `an added rotation entry is found, got ${JSON.stringify(r)}`);
+  sandbox.libQuery = "zbra";
+  const before = tokenized;
+  sandbox.score(list[3]); sandbox.score(list[3]);
+  const once = tokenized - before;
+  sandbox.score(list[3]);
+  check(tokenized - before === once, "a prompt's words are split once per field, not on every scoring");
 });
 
 // globalSearch.js gsRefreshImageHits: one lookup per query, stale answers dropped.
