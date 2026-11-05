@@ -151,6 +151,26 @@ later(async () => {
   check(log.closed === 0 && log.ui === 0, `the reopened editor stays, got ${JSON.stringify(log)}`);
 });
 
+// editor.js loadHistory: two overlapping loads for one prompt draw their rows once.
+later(async () => {
+  const src = read("editor.js");
+  const from = src.indexOf("let historySeq") >= 0 ? src.indexOf("let historySeq") : src.indexOf("export async function loadHistory");
+  const code = src.slice(from, src.indexOf("  list.forEach((v, idx)", from)).replace(/export /g, "") + "}";
+  const gates = [deferred(), deferred()];
+  let n = 0;
+  const kids = [];
+  const body = { children: kids, set innerHTML(v) { kids.length = 0; }, appendChild(e) { kids.push(e); } };
+  const sandbox = run(code + "\n;globalThis.load = loadHistory;", {
+    $: () => body, modalState: { id: "p" }, t: (k) => k,
+    invoke: () => gates[n++].promise,
+    document: { createElement: () => ({}) },
+  });
+  const a = sandbox.load("p"); const b = sandbox.load("p");
+  gates[0].resolve([]); gates[1].resolve([]);
+  await a; await b;
+  check(kids.length === 1, `overlapping loads draw once, got ${kids.length}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");

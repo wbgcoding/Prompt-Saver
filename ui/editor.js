@@ -723,15 +723,18 @@ export function renderDiffInto(el, tokens) {
 export const versionEntries = (v) => (v.variants?.length ? [v.text || "", ...v.variants] : [v.text || ""]);
 // The editor's current, unsaved state: the "newer" side of the newest row's diff.
 export const liveEntries = () => (modalState?.rotateEntries?.length ? [...modalState.rotateEntries] : [modal.text.value || ""]);
+let historySeq = 0;
 export async function loadHistory(id) {
   const body = $("modal-history-body");
   if (!body || !id) return;
   body.innerHTML = "";
+  const seq = ++historySeq;
   let list = [];
   try { list = await invoke("list_versions", { promptId: id }); } catch (_) {}
   // A slower response for a since-abandoned prompt must not land in the editor
-  // after it has already moved on to a different one.
-  if (modalState?.id !== id) return;
+  // after it has already moved on to a different one, and of two overlapping loads
+  // for the same prompt only the newest draws its rows.
+  if (modalState?.id !== id || seq !== historySeq) return;
   if (!list.length) {
     const e = document.createElement("div");
     e.className = "hint";
