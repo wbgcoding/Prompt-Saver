@@ -1207,6 +1207,24 @@ const pending = [];
   sb.$ = (id) => (fields[id] = fields[id] || { value: "" });
   sb.persistExportSettings = () => {};
   sb.updateExportNote = () => {};
+// A re-edit passes a spread of the live op, which may carry an older `_prevLocked`. The flag must
+// describe only the predecessor of this edit, or undo raises the floor and blocks a valid step.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  const a = { tool: "crop", rect: { x: 0, y: 0, w: 10, h: 10 } };
+  sb.VE = Object.assign(baseState([a]), { floor: 1, redo: [], undoMax: 50 });
+  const run = (code) => vm.runInContext(code, sb);
+  run("pushReplacing")((o) => o.tool === "crop", { tool: "crop", rect: { x: 1, y: 1, w: 10, h: 10 } });
+  const b = sb.VE.ops[0];
+  expect("the first replacement records its locked predecessor", b._prevLocked === true && sb.VE.floor === 0, String(sb.VE.floor));
+  run("pushReplacing")((o) => o.tool === "crop", { ...b, rect: { x: 2, y: 2, w: 10, h: 10 } });
+  expect("a re-edit of an unlocked op carries no stale lock flag", !sb.VE.ops[0]._prevLocked, String(sb.VE.ops[0]._prevLocked));
+  run("undo()");
+  expect("undoing the re-edit does not raise the floor", sb.VE.floor === 0, String(sb.VE.floor));
+  run("undo()");
+  expect("the earlier replacement can still be undone", sb.VE.ops[0].rect.x === 0 && sb.VE.floor === 1, JSON.stringify(sb.VE.ops[0]) + " floor " + sb.VE.floor);
+}
+
   run(extractBlock("applyPreset", "function applyPreset(format, quality, downscale) {"));
   run("applyPreset('mp4', 'small', '720')");
   expect("the chat preset on a smaller source keeps the source size", scaleOp() === null, JSON.stringify(scaleOp()));

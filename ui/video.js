@@ -427,7 +427,9 @@ export function pushReplacing(match, op, opts) {
   VE.ops = VE.ops.filter((o) => !match(o));
   VE.floor = Math.max(0, VE.floor - lockedGone);
   if (prev && op.tool === "overlay" && op.z === undefined && prev.z !== undefined) op = { ...op, z: prev.z };
-  const next = prev ? { ...op, _prev: prev, ...(prevLocked ? { _prevLocked: true } : {}) } : op;
+  // Callers pass a spread of the live op, so the flag is always set afresh: a stale one from an
+  // earlier edit must not survive when this predecessor is not locked.
+  const next = prev ? { ...op, _prev: prev, _prevLocked: prevLocked || undefined } : op;
   pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
 }
 
