@@ -1304,6 +1304,13 @@ fn snip_overlay_preview_keeps_full_chroma_for_coloured_text() {
 }
 
 #[test]
+fn two_instances_never_share_a_snip_preview_file_name() {
+    assert_ne!(snip::snip_preview_name(100, 0), snip::snip_preview_name(200, 0));
+    let name = snip::snip_preview_name(100, 7);
+    assert!(name.starts_with(&format!("{}-snip-", brand::TEMP_PREFIX)) && name.ends_with(".jpg"), "the sweep and the uninstaller glob match on this shape");
+}
+
+#[test]
 fn the_locked_database_copy_is_removed_and_nothing_else() {
     let root = std::env::temp_dir().join(format!("{}-test-locked-bak", brand::SLUG));
     let _ = std::fs::remove_dir_all(&root);
