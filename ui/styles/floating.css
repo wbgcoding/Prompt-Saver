@@ -689,7 +689,23 @@ body.vars-body {
 /* Choice variables: the list is drawn INSIDE this window. A native <select> popup
    is its own OS window, and the blur it causes is what cancels the prompt. */
 .vars-choice { position: relative; }
-.vars-choice-btn { text-align: left; cursor: pointer; }
+.vars-choice-btn { position: relative; text-align: left; cursor: pointer; padding-right: 30px; }
+/* The same chevron a select shows in the main window; drawn as a mask so it takes the
+   text colour of whatever theme the window wears. */
+.vars-choice-btn::after {
+  content: "";
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  background: currentColor;
+  opacity: 0.7;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  pointer-events: none;
+}
 .vars-choice-list {
   position: absolute;
   left: 0;
