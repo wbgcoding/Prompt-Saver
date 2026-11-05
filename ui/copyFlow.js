@@ -1,10 +1,10 @@
 // Copying a prompt: usage log, formatted copy, variable paste, keyboard focus ring and
 // close-on-copy.
-import { $, errToast, favView, flag, gridEl, invoke, KB_FOCUS_FADE_MS, optFlag, prompts, t, toast, val } from "./core.js";
+import { $, ctxEl, errToast, favView, flag, gridEl, invoke, KB_FOCUS_FADE_MS, optFlag, prompts, t, toast, val } from "./core.js";
 import { playCopySound } from "./floatShared.js";
 import { dialogTokens, peekRotatedText, resolveVars, varsWindowPending } from "./promptVars.js";
 import { renderMarkdown } from "./markdown.js";
-import { activeView, favLayoutMap, layoutOf } from "./views.js";
+import { activeView, favLayoutMap, layoutOf, miniMenu } from "./views.js";
 import { chainLock, chainMode, chainSel, onChainClick, setChainLock, setChainMode, toggleChainPick } from "./chain.js";
 import { autoPasteNow, showCopied } from "./tiles.js";
 import { copyResolved, readyForCopy } from "./library.js";
@@ -194,6 +194,18 @@ export function activateKbFocus(key) {
   openTileFolderPop(f, el);
   document.querySelector(".tile-folder-pop:not(.hidden) .folder-member-tile, .tile-folder-pop:not(.hidden) button")?.focus();
 }
+// Menu key / Shift+F10 on the ring: ask the focused cell for its own menu (the same handler a
+// right-click reaches, so a switched-off tile menu stays off) and move the focus into it.
+export function openKbMenu(key) {
+  const el = kbElOf(key);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  el.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+  }));
+  const menu = [ctxEl, miniMenu].find((m) => !m.classList.contains("hidden"));
+  menu?.querySelector("button:not(.hidden):not(:disabled)")?.focus();
+}
 export function moveKbFocus(dc, dr) {
   const layout = kbNavMap();
   const cells = Object.entries(layout);
@@ -303,6 +315,7 @@ export function bindCopyFlow() {
     if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
     if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
     if (e.target?.closest?.(".tile-folder-pop")) return; // inside an open folder the keys are its own
+    if ((e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) && kbFocus) { e.preventDefault(); openKbMenu(kbFocus); return; }
     if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
     else if ((e.key === "Enter" || e.key === " ") && kbFocus && !controlOwnsActivateKey(e.target)) { e.preventDefault(); activateKbFocus(kbFocus); }
   });

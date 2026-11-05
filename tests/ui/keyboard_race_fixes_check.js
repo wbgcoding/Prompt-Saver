@@ -259,6 +259,29 @@ later(async () => {
   check(opened.join() === "f1,tile:a", "Enter on a prompt still copies it");
 });
 
+// copyFlow.js: Menu key / Shift+F10 on the ring opens the cell's menu and focuses its first item.
+later(async () => {
+  const src = read("copyFlow.js");
+  check(/e\.key === "ContextMenu" \|\| \(e\.key === "F10" && e\.shiftKey\)/.test(src) && src.includes("openKbMenu(kbFocus)"), "the grid key handler maps Menu and Shift+F10 to the tile menu");
+  if (!src.includes("export function openKbMenu")) { check(false, "openKbMenu missing"); return; }
+  const code = extractBlock(src, "export function openKbMenu").replace(/export /g, "");
+  const log = [];
+  const item = (n) => ({ focus: () => log.push("focus:" + n) });
+  const mkMenu = (hidden, first) => ({ classList: { contains: () => hidden }, querySelector: () => first });
+  const run1 = (ctxHidden) => {
+    log.length = 0;
+    const tile = { getBoundingClientRect: () => ({ left: 10, top: 20, width: 40, height: 30 }), dispatchEvent: (ev) => { log.push(`ctx@${ev.clientX},${ev.clientY}`); } };
+    const sandbox = run(code + "\n;globalThis.open = openKbMenu;", {
+      kbElOf: () => tile, ctxEl: mkMenu(ctxHidden, item("ctx")), miniMenu: mkMenu(!ctxHidden, item("mini")),
+      MouseEvent: class { constructor(t, o) { this.type = t; Object.assign(this, o); } },
+    });
+    sandbox.open("a");
+    return log.join();
+  };
+  check(run1(false) === "ctx@30,35,focus:ctx", `a prompt tile menu opens at the tile centre and takes focus, got ${run1(false)}`);
+  check(run1(true) === "ctx@30,35,focus:mini", `a folder cell's mini menu takes focus, got ${run1(true)}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) { console.error("keyboard_race_fixes_check FAILED:\n" + problems.map((p) => "  - " + p).join("\n")); process.exit(1); }
   console.log("keyboard_race_fixes_check: ok");
