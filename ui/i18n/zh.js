@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "数据存储超过 512 MB，无法备份",
     errBackupSchemaMismatch: "此文件看起来不是 {app} 的数据库，未能恢复",
     errCorruptBackup: "此备份文件已损坏，未能还原",
+    errBackupNotPicked: "请重新选择备份文件",
     errUnknownBackupFormat: "此备份文件的格式未知，未能还原",
     errFolderIsAppData: "此文件夹存放应用自身的数据，请选择其他文件夹。",
     errFolderGone: "该文件夹已不存在",

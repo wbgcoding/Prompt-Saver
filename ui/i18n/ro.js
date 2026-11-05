@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "Depozitul de date depășește 512 MB și nu poate fi copiat de rezervă",
     errBackupSchemaMismatch: "Acest fișier nu pare a fi o bază de date {app} și nu a fost restaurat",
     errCorruptBackup: "Acest fișier de backup este deteriorat și nu a fost restaurat",
+    errBackupNotPicked: "Alege din nou fișierul de backup",
     errUnknownBackupFormat: "Acest fișier de backup are un format necunoscut și nu a fost restaurat",
     errFolderIsAppData: "Acest dosar conține datele aplicației. Alege un alt dosar.",
     errFolderGone: "Acel dosar nu mai există",

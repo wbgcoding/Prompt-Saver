@@ -306,6 +306,24 @@ fn a_settings_import_path_needs_the_picker_grant() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn a_backup_import_path_needs_the_picker_grant_and_a_password_retry_keeps_it() {
+    let file = std::env::temp_dir().join(format!("ps-backup-grant-{}.psb", std::process::id()));
+    assert!(!consume_granted_dir(&file, BACKUP_IMPORT_GRANT), "never picked");
+    grant_picked_dir(&file, SETTINGS_IMPORT_GRANT);
+    assert!(!consume_granted_dir(&file, BACKUP_IMPORT_GRANT), "another purpose does not count");
+    grant_picked_dir(&file, BACKUP_IMPORT_GRANT);
+    assert!(consume_granted_dir(&file, BACKUP_IMPORT_GRANT));
+    assert!(!consume_granted_dir(&file, BACKUP_IMPORT_GRANT), "spent once");
+    // The page re-asks only on a password error, so only that error hands the grant back.
+    assert!(keeps_backup_grant("password-required"));
+    assert!(keeps_backup_grant("wrong password or corrupt backup"));
+    assert!(!keeps_backup_grant("corrupt backup"));
+    assert!(!keeps_backup_grant("unknown backup format"));
+    // The same text the page tests: a mapped error key must exist for the refusal itself.
+    assert!(include_str!("../../../ui/errors.js").contains("\"backup-not-picked\":"));
+}
+
 fn trash_ids_on_disk(conn: &Connection) -> Vec<String> {
     conn.prepare("SELECT id FROM trash ORDER BY ord").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
 }

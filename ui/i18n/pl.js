@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "Magazyn danych przekracza 512 MB i nie można wykonać kopii zapasowej",
     errBackupSchemaMismatch: "Ten plik nie wygląda na bazę danych {app} i nie został przywrócony",
     errCorruptBackup: "Ten plik kopii zapasowej jest uszkodzony i nie został przywrócony",
+    errBackupNotPicked: "Wybierz plik kopii zapasowej jeszcze raz",
     errUnknownBackupFormat: "Ten plik kopii zapasowej ma nieznany format i nie został przywrócony",
     errFolderIsAppData: "Ten folder zawiera własne dane aplikacji. Wybierz inny folder.",
     errFolderGone: "Ten folder już nie istnieje",

@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "El almacén de datos supera los 512 MB y no se puede respaldar",
     errBackupSchemaMismatch: "Este archivo no parece una base de datos de {app} y no se restauró",
     errCorruptBackup: "Este archivo de copia de seguridad está dañado y no se restauró",
+    errBackupNotPicked: "Vuelve a elegir el archivo de copia de seguridad",
     errUnknownBackupFormat: "Este archivo de copia de seguridad tiene un formato desconocido y no se restauró",
     errFolderIsAppData: "Esta carpeta contiene los datos propios de la aplicación. Elige otra carpeta.",
     errFolderGone: "Esa carpeta ya no existe",

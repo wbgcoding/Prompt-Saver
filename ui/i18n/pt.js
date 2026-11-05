@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "O armazenamento de dados ultrapassa 512 MB e não pode ser copiado",
     errBackupSchemaMismatch: "Este arquivo não parece um banco de dados do {app} e não foi restaurado",
     errCorruptBackup: "Este arquivo de backup está danificado e não foi restaurado",
+    errBackupNotPicked: "Escolha o arquivo de backup novamente",
     errUnknownBackupFormat: "Este arquivo de backup tem um formato desconhecido e não foi restaurado",
     errFolderIsAppData: "Esta pasta contém os dados do próprio aplicativo. Escolha outra pasta.",
     errFolderGone: "Essa pasta não existe mais",

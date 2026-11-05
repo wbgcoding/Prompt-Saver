@@ -773,18 +773,29 @@ pub(crate) struct ImportSummary {
 
 #[tauri::command]
 pub(crate) async fn pick_backup_file(app: AppHandle) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
         file_dialog(&app)
             .add_filter(format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
             .pick_file()
-            .map(|p| p.display().to_string())
         })
         .flatten()
     })
     .await
     .ok()
-    .flatten()
+    .flatten()?;
+    // The pick is the consent to read this file: import_all spends it, so a path the page
+    // made up (a UNC spelling would make Windows authenticate to a foreign host) is refused.
+    grant_picked_dir(&picked, BACKUP_IMPORT_GRANT);
+    Some(picked.display().to_string())
+}
+
+pub(crate) const BACKUP_IMPORT_GRANT: &str = "backupImportFile";
+
+// A password error leaves the file picked: the page asks again and calls import_all with the
+// same path, so the grant is handed back only for that case.
+pub(crate) fn keeps_backup_grant(err: &str) -> bool {
+    err.to_lowercase().contains("password")
 }
 
 // Settings-only export/import: a plain, unencrypted JSON of just the expert-menu
@@ -1364,6 +1375,9 @@ pub(crate) async fn import_all(
     valid_scope(&scope)?;
     flush_settings_now(&app);
     let path = PathBuf::from(path);
+    if !consume_granted_dir(&path, BACKUP_IMPORT_GRANT) {
+        return Err("backup-not-picked".to_string());
+    }
     let raw = read_file_capped(&path, MAX_IMPORT_BYTES)?;
     // Try the caller-supplied password first, else the one stored for this machine.
     let pw = password.filter(|p| !p.is_empty()).or_else(|| {
@@ -1371,7 +1385,12 @@ pub(crate) async fn import_all(
         stored_backup_password(&store)
     });
     // Encrypted (PSB1) or a legacy plaintext .json backup.
-    let content = match backup_decrypt(&raw, pw.as_deref())? {
+    let decrypted = backup_decrypt(&raw, pw.as_deref()).inspect_err(|e| {
+        if keeps_backup_grant(e) {
+            grant_picked_dir(&path, BACKUP_IMPORT_GRANT);
+        }
+    })?;
+    let content = match decrypted {
         Some(plain) => String::from_utf8(plain).map_err(|_| "corrupt backup".to_string())?,
         None => legacy_backup_text(raw)?,
     };

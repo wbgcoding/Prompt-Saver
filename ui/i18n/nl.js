@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "De gegevensopslag is groter dan 512 MB en kan niet worden geback-upt",
     errBackupSchemaMismatch: "Dit bestand lijkt geen {app}-database te zijn en is niet hersteld",
     errCorruptBackup: "Dit back-upbestand is beschadigd en is niet teruggezet",
+    errBackupNotPicked: "Kies het back-upbestand opnieuw",
     errUnknownBackupFormat: "Dit back-upbestand heeft een onbekend formaat en is niet teruggezet",
     errFolderIsAppData: "Deze map bevat de eigen gegevens van de app. Kies een andere map.",
     errFolderGone: "Die map bestaat niet meer",

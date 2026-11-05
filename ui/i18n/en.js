@@ -1421,6 +1421,7 @@ export default {
     errStoreTooLargeForBackup: "The data store is larger than 512 MB and cannot be backed up",
     errBackupSchemaMismatch: "This file does not look like a {app} database and was not restored",
     errCorruptBackup: "This backup file is damaged and was not restored",
+    errBackupNotPicked: "Please pick the backup file again",
     errUnknownBackupFormat: "This backup file has an unknown format and was not restored",
     errFolderIsAppData: "This folder holds the app's own data. Choose a different folder.",
     errFolderGone: "That folder no longer exists",

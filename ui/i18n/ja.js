@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "データストアが512MBを超えているため、バックアップできません",
     errBackupSchemaMismatch: "このファイルは{app}のデータベースではないようなので、復元されませんでした",
     errCorruptBackup: "このバックアップファイルは壊れているため、復元されませんでした",
+    errBackupNotPicked: "バックアップファイルをもう一度選んでください",
     errUnknownBackupFormat: "このバックアップファイルは形式が不明なため、復元されませんでした",
     errFolderIsAppData: "このフォルダーにはアプリ自身のデータが入っています。別のフォルダーを選んでください。",
     errFolderGone: "そのフォルダーはもう存在しません",

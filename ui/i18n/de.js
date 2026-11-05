@@ -1421,6 +1421,7 @@ export default {
     errStoreTooLargeForBackup: "Der Datenspeicher ist größer als 512 MB und kann nicht gesichert werden",
     errBackupSchemaMismatch: "Diese Datei sieht nicht wie eine {app}-Datenbank aus und wurde nicht wiederhergestellt",
     errCorruptBackup: "Diese Sicherungsdatei ist beschädigt und wurde nicht wiederhergestellt",
+    errBackupNotPicked: "Wähle die Sicherungsdatei bitte erneut aus",
     errUnknownBackupFormat: "Diese Sicherungsdatei hat ein unbekanntes Format und wurde nicht wiederhergestellt",
     errFolderIsAppData: "Dieser Ordner enthält die eigenen Daten der App. Wähle einen anderen Ordner.",
     errFolderGone: "Dieser Ordner existiert nicht mehr",

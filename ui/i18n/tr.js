@@ -1414,6 +1414,7 @@ export default {
     errStoreTooLargeForBackup: "Veri deposu 512 MB'tan büyük olduğu için yedeklenemiyor",
     errBackupSchemaMismatch: "Bu dosya bir {app} veritabanına benzemiyor ve geri yüklenmedi",
     errCorruptBackup: "Bu yedek dosyası bozuk ve geri yüklenmedi",
+    errBackupNotPicked: "Lütfen yedek dosyasını yeniden seçin",
     errUnknownBackupFormat: "Bu yedek dosyasının biçimi bilinmiyor ve geri yüklenmedi",
     errFolderIsAppData: "Bu klasör uygulamanın kendi verilerini içeriyor. Başka bir klasör seçin.",
     errFolderGone: "Bu klasör artık yok",
