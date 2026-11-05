@@ -143,7 +143,10 @@ PROBE = """
     return false;
   };
   const rowCount = () => document.querySelectorAll("#library-list .lib-item").length;
-  const majority = Math.floor(window.__PERF_N * 0.9);
+  // The library draws its rows a page at a time, so "fully rendered" means the first page
+  // (or every row of a smaller store); the header count says how many rows match.
+  const firstPage = Math.min(Math.floor(window.__PERF_N * 0.9), 150);
+  const countText = () => document.getElementById("library-count").textContent;
 
   await waitFor(() => document.querySelectorAll(".tile").length > 0, 20000);
   await sleep(300);
@@ -151,22 +154,23 @@ PROBE = """
   // 1) Library open -- all N unfiltered rows.
   let t0 = performance.now();
   document.getElementById("library-btn").click();
-  await waitFor(() => rowCount() >= majority, 20000);
+  await waitFor(() => rowCount() >= firstPage, 20000);
   out.timings.libraryOpen = performance.now() - t0;
   out.counts.libraryOpen = rowCount();
 
   // 2) Search filter, library already open.
   const q = document.getElementById("library-q");
   const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+  const countAll = countText();
   t0 = performance.now();
   nativeSetter.call(q, "Sample body number 5");
   q.dispatchEvent(new Event("input", { bubbles: true }));
-  await waitFor(() => rowCount() < majority, 15000);
+  await waitFor(() => countText() !== countAll && rowCount() > 0, 15000);
   out.timings.librarySearch = performance.now() - t0;
   out.counts.librarySearch = rowCount();
   nativeSetter.call(q, "");
   q.dispatchEvent(new Event("input", { bubbles: true }));
-  await waitFor(() => rowCount() >= majority, 20000);
+  await waitFor(() => countText() === countAll && rowCount() >= firstPage, 20000);
 
   // 2b) Library tiles view -- same N rows, switching the whole list to a tile
   // grid (and back), lazy-loaded thumbnails included.

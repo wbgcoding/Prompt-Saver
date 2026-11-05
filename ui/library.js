@@ -760,6 +760,10 @@ export function renderLibrary() {
   libScoreCache.clear(); // fresh scores each render (query / prompt content may have changed)
   fillLibrarySort();
   syncLibraryCols();
+  libMoreObs?.disconnect();
+  libMoreObs = null;
+  libItems = [];
+  libShown = 0;
   if (_libObs) _libObs.disconnect();
   _libObs = makeVideoObserver();
   _activeVidObs = _libObs;
@@ -805,187 +809,255 @@ export function renderLibrary() {
   // would show as addable although renderGrid skips ids listed in a folder's members.
   for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
   libDisplayOrder = items.map((p) => p.id); // Range-select uses display order
+  libById = new Map(prompts.map((p) => [p.id, p]));
+  libItems = items;
+  libShown = 0;
+  libCtx = { tilesMode, placed, hasQuery: !!libQuery.trim() };
+  appendLibRows();
+}
+
+// Rows are built a page at a time: a 10000-prompt library would otherwise build 10000 rows on
+// every keystroke. libDisplayOrder keeps the whole order, so select-all and range select reach
+// rows that are not on screen yet; a row built later picks its selected state up from libSelected.
+const LIB_PAGE = 200;
+let libItems = [];   // the filtered, sorted prompts of the current render
+let libShown = 0;    // how many of them have rows
+let libCtx = null;
+let libById = new Map();
+let libMoreObs = null;
+function appendLibRows() {
+  const list = $("library-list");
+  libMoreObs?.disconnect();
+  libMoreObs = null;
+  list.querySelector(":scope > .lib-more")?.remove();
+  const end = Math.min(libItems.length, libShown + LIB_PAGE);
   // Batch through a fragment; appending into the live list forced a reflow per row.
   const frag = document.createDocumentFragment();
-  for (const p of items) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "lib-item";
-    row.dataset.id = p.id; // In-place selection toggle finds the row by id
-    // Dim rows that only matched via the typo-tolerant tier.
-    if (libQuery.trim() && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
-    // Selection state (the checkbox is a CSS ::before shown while the list has .selecting, so
-    // toggling select mode never re-renders).
-    if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
-    row.title = libSelectMode ? "" : t("copy");
-    const rowTimes = tileTimeLines(p.id);
-    if (rowTimes) row.dataset.tipTimes = rowTimes;
-    const rowMedia = mediaTipLine(p);
-    if (rowMedia) row.dataset.tipMedia = rowMedia;
-
-    const body = document.createElement("span");
-    body.className = "lib-body";
-    const name = document.createElement("span");
-    name.className = "lib-name";
-    name.textContent = libLabel(p);
-    // A search hit inside entry 2+ shows that entry (why the row matched) plus a small
-    // "n/total" tag naming it.
-    const hitEntry = libQuery.trim() ? libSearchScore(p).entryIndex : 0;
-    const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
-    // file_path still wins over a variant hit: a file/image prompt never has variants (the
-    // editor gates rotation to text-only prompts).
-    const text = document.createElement("span");
-    text.className = "lib-text";
-    text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
-    // Literal hits are marked in the name and the preview; a typo-tolerant or picture hit has
-    // no substring to mark. A hit that only lives in the private note gets a label instead.
-    const scoreHit = libQuery.trim() ? libSearchScore(p) : null;
-    const markQ = scoreHit && !scoreHit.fuzzy && !scoreHit.fromImage ? scoreHit.q : "";
-    if (markQ) {
-      markHits(name, libLabel(p), markQ);
-      markHits(text, text.textContent, markQ);
-    }
-    const nameRow = document.createElement("span");
-    nameRow.className = "lib-name-row";
-    nameRow.appendChild(name);
-    body.appendChild(nameRow);
-    if (hitVariant != null) {
-      const tag = document.createElement("span");
-      tag.className = "lib-rotate-tag";
-      tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
-      body.appendChild(tag);
-    }
-    // Otherwise this hit would look like a random match, since neither the name nor the body
-    // contains the query.
-    if (libQuery.trim() && libSearchScore(p).fromImage) {
-      const imgTag = document.createElement("span");
-      imgTag.className = "lib-image-hit-tag";
-      imgTag.textContent = t("libFoundInImage");
-      body.appendChild(imgTag);
-    }
-    if (scoreHit && scoreHit.field === "notes" && !scoreHit.fuzzy) {
-      const noteTag = document.createElement("span");
-      noteTag.className = "lib-note-hit-tag";
-      noteTag.textContent = t("libFoundInNote");
-      body.appendChild(noteTag);
-    }
-    body.appendChild(text);
-    // Tags are small flat labels beside the name, not controls: at most three, then "+N".
-    if (tagsOn() && (p.tags || []).length) {
-      const marks = document.createElement("span");
-      marks.className = "lib-tag-marks";
-      const mark = (label, colorOf) => {
-        const m = document.createElement("span");
-        m.className = "tag-mark";
-        m.textContent = label;
-        const c = colorOf ? tagColor(colorOf) : "";
-        if (c) {
-          m.style.setProperty("--chip-color", c);
-          m.classList.add("tag-colored");
-        }
-        marks.appendChild(m);
-      };
-      for (const tn of p.tags.slice(0, 3)) mark(tn, tn);
-      if (p.tags.length > 3) mark(`+${p.tags.length - 3}`, "");
-      nameRow.appendChild(marks);
-    }
-
-    // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot. In tiles mode a
-    // not-yet-visible row gets a placeholder that _tileImgObs swaps for the real thumbnail.
-    if (tilesMode) {
-      const placeholder = document.createElement("span");
-      placeholder.className = "lib-thumb lib-tile-placeholder dot";
-      if (p.color) placeholder.style.background = p.color;
-      row.appendChild(placeholder);
-      _tileImgObs.observe(row);
-    } else {
-      row.appendChild(mediaThumb(p, thumbEl(p, libThumbCache)));
-    }
-    row.appendChild(body);
-    maybeBackfillMediaMeta(p, renderLibrary);
-
-    // Every row gets the same actions menu a grid tile has; the image and video editors are
-    // entries of it.
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openCtx(p.id, e.clientX, e.clientY);
-    });
-
-    row.addEventListener("pointerdown", (e) => {
-      if (libSelectMode) return; // no drag while multi-selecting
-      if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav, .lib-delete")) return;
-      const out = armDragOut(row, e, () => prompts.find((x) => x.id === p.id));
-      assignDrag({ id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out });
-    });
-    // Add-to-view icon (leftmost of the action group): place on the current layout.
-    if (!placed.has(p.id)) {
-      const add = document.createElement("span");
-      add.className = "icon-btn lib-add";
-      add.title = t("addToLayout");
-      putIcon(add, GRID_PLUS);
-      add.addEventListener("pointerdown", (e) => e.stopPropagation());
-      add.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const view = activeView();
-        const occupied = new Map(
-          Object.entries(layoutOf(view)).map(([id, c]) => [cellKey(...c), id])
-        );
-        // A folder's cell is not in the layout, but placing a tile onto it is refused.
-        for (const f of foldersOfView(view.id)) occupied.set(cellKey(...(f.cell || [0, 0])), f.id);
-        const free = firstFree(occupied, view.cols, view.rows);
-        if (!free) { toast(t("gridFull")); return; }
-        await placeTile(p.id, free[0], free[1]);
-        renderLibrary();
-      });
-      makeKeyboardActivatable(add);
-      row.appendChild(add);
-    }
-    // Star (middle): mark/unmark this prompt as a favorite (feature-gated).
-    if (flag("favorites")) {
-      const fav = document.createElement("span");
-      fav.className = "icon-btn lib-fav" + (p.favorite ? " active" : "");
-      fav.textContent = "★";
-      fav.title = t(p.favorite ? "favoriteRemove" : "favoriteAdd");
-      fav.addEventListener("pointerdown", (e) => e.stopPropagation());
-      fav.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await toggleFavoritePrompt(p);
-      });
-      makeKeyboardActivatable(fav);
-      row.appendChild(fav);
-    }
-    const edit = document.createElement("span");
-    edit.className = "icon-btn lib-edit";
-    edit.title = t("edit");
-    putIcon(edit, ICON_EDIT);
-    edit.addEventListener("pointerdown", (e) => e.stopPropagation());
-    edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
-    makeKeyboardActivatable(edit);
-    row.appendChild(edit);
-
-    const del = document.createElement("span");
-    del.className = "icon-btn lib-delete";
-    del.title = t("delete");
-    putIcon(del, ICON_TRASH);
-    del.addEventListener("pointerdown", (e) => e.stopPropagation());
-    del.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (!(await trashPromptWithUndo(p.id, p.name))) return;
-      assignPrompts(prompts.filter((x) => x.id !== p.id));
-      renderLibrary();
-      await renderGrid(); // the tile (or its folder) is gone from the grid as well
-    });
-    makeKeyboardActivatable(del);
-    row.appendChild(del);
-
-    row.addEventListener("click", (e) => {
-      if (libSelectMode) { toggleLibSelect(p.id, e.shiftKey); return; }
-      libraryCopy(p);
-    });
-    frag.appendChild(row);
-  }
+  for (let i = libShown; i < end; i++) frag.appendChild(buildLibRow(libItems[i], libCtx));
+  libShown = end;
   list.appendChild(frag);
+  if (libShown >= libItems.length) return;
+  const more = document.createElement("div");
+  more.className = "lib-more";
+  more.style.gridColumn = "1 / -1";
+  more.style.height = "1px";
+  list.appendChild(more);
+  libMoreObs = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) appendLibRows();
+  }, { root: list, rootMargin: "600px 0px" });
+  libMoreObs.observe(more);
+}
+
+function buildLibRow(p, { tilesMode, placed, hasQuery }) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "lib-item";
+  row.dataset.id = p.id; // In-place selection toggle finds the row by id
+  // Dim rows that only matched via the typo-tolerant tier.
+  if (hasQuery && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
+  // Selection state (the checkbox is a CSS ::before shown while the list has .selecting, so
+  // toggling select mode never re-renders).
+  if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
+  row.title = libSelectMode ? "" : t("copy");
+  const rowTimes = tileTimeLines(p.id);
+  if (rowTimes) row.dataset.tipTimes = rowTimes;
+  const rowMedia = mediaTipLine(p);
+  if (rowMedia) row.dataset.tipMedia = rowMedia;
+
+  const body = document.createElement("span");
+  body.className = "lib-body";
+  const name = document.createElement("span");
+  name.className = "lib-name";
+  name.textContent = libLabel(p);
+  // A search hit inside entry 2+ shows that entry (why the row matched) plus a small
+  // "n/total" tag naming it.
+  const hitEntry = hasQuery ? libSearchScore(p).entryIndex : 0;
+  const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
+  // file_path still wins over a variant hit: a file/image prompt never has variants (the
+  // editor gates rotation to text-only prompts).
+  const text = document.createElement("span");
+  text.className = "lib-text";
+  text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
+  // Literal hits are marked in the name and the preview; a typo-tolerant or picture hit has
+  // no substring to mark. A hit that only lives in the private note gets a label instead.
+  const scoreHit = hasQuery ? libSearchScore(p) : null;
+  const markQ = scoreHit && !scoreHit.fuzzy && !scoreHit.fromImage ? scoreHit.q : "";
+  if (markQ) {
+    markHits(name, libLabel(p), markQ);
+    markHits(text, text.textContent, markQ);
+  }
+  const nameRow = document.createElement("span");
+  nameRow.className = "lib-name-row";
+  nameRow.appendChild(name);
+  body.appendChild(nameRow);
+  if (hitVariant != null) {
+    const tag = document.createElement("span");
+    tag.className = "lib-rotate-tag";
+    tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
+    body.appendChild(tag);
+  }
+  // Otherwise this hit would look like a random match, since neither the name nor the body
+  // contains the query.
+  if (hasQuery && libSearchScore(p).fromImage) {
+    const imgTag = document.createElement("span");
+    imgTag.className = "lib-image-hit-tag";
+    imgTag.textContent = t("libFoundInImage");
+    body.appendChild(imgTag);
+  }
+  if (scoreHit && scoreHit.field === "notes" && !scoreHit.fuzzy) {
+    const noteTag = document.createElement("span");
+    noteTag.className = "lib-note-hit-tag";
+    noteTag.textContent = t("libFoundInNote");
+    body.appendChild(noteTag);
+  }
+  body.appendChild(text);
+  // Tags are small flat labels beside the name, not controls: at most three, then "+N".
+  if (tagsOn() && (p.tags || []).length) {
+    const marks = document.createElement("span");
+    marks.className = "lib-tag-marks";
+    const mark = (label, colorOf) => {
+      const m = document.createElement("span");
+      m.className = "tag-mark";
+      m.textContent = label;
+      const c = colorOf ? tagColor(colorOf) : "";
+      if (c) {
+        m.style.setProperty("--chip-color", c);
+        m.classList.add("tag-colored");
+      }
+      marks.appendChild(m);
+    };
+    for (const tn of p.tags.slice(0, 3)) mark(tn, tn);
+    if (p.tags.length > 3) mark(`+${p.tags.length - 3}`, "");
+    nameRow.appendChild(marks);
+  }
+
+  // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot. In tiles mode a
+  // not-yet-visible row gets a placeholder that _tileImgObs swaps for the real thumbnail.
+  if (tilesMode) {
+    const placeholder = document.createElement("span");
+    placeholder.className = "lib-thumb lib-tile-placeholder dot";
+    if (p.color) placeholder.style.background = p.color;
+    row.appendChild(placeholder);
+    _tileImgObs.observe(row);
+  } else {
+    row.appendChild(mediaThumb(p, thumbEl(p, libThumbCache)));
+  }
+  row.appendChild(body);
+  maybeBackfillMediaMeta(p, renderLibrary);
+
+  // Add-to-view icon (leftmost of the action group): place on the current layout.
+  if (!placed.has(p.id)) {
+    const add = document.createElement("span");
+    add.className = "icon-btn lib-add";
+    add.title = t("addToLayout");
+    putIcon(add, GRID_PLUS);
+    libIconKeyable(add);
+    row.appendChild(add);
+  }
+  // Star (middle): mark/unmark this prompt as a favorite (feature-gated).
+  if (flag("favorites")) {
+    const fav = document.createElement("span");
+    fav.className = "icon-btn lib-fav" + (p.favorite ? " active" : "");
+    fav.textContent = "★";
+    fav.title = t(p.favorite ? "favoriteRemove" : "favoriteAdd");
+    libIconKeyable(fav);
+    row.appendChild(fav);
+  }
+  const edit = document.createElement("span");
+  edit.className = "icon-btn lib-edit";
+  edit.title = t("edit");
+  putIcon(edit, ICON_EDIT);
+  libIconKeyable(edit);
+  row.appendChild(edit);
+
+  const del = document.createElement("span");
+  del.className = "icon-btn lib-delete";
+  del.title = t("delete");
+  putIcon(del, ICON_TRASH);
+  libIconKeyable(del);
+  row.appendChild(del);
+
+  return row;
+}
+
+// The row actions are plain spans inside the row's own button, so they reach the keyboard here
+// and the pointer/click/context-menu behaviour of every row goes through the delegated listeners
+// bindLibraryList puts on the list.
+const LIB_ICON_SEL = ".lib-add, .lib-edit, .lib-fav, .lib-delete";
+function libIconKeyable(el) {
+  el.tabIndex = 0;
+  el.setAttribute("role", "button");
+}
+function libRowOf(e) {
+  const row = e.target.closest?.(".lib-item");
+  return row && $("library-list").contains(row) ? row : null;
+}
+async function libIconAction(icon, id) {
+  const p = libById.get(id);
+  if (!p) return;
+  if (icon.classList.contains("lib-add")) {
+    const view = activeView();
+    const occupied = new Map(
+      Object.entries(layoutOf(view)).map(([pid, c]) => [cellKey(...c), pid])
+    );
+    // A folder's cell is not in the layout, but placing a tile onto it is refused.
+    for (const f of foldersOfView(view.id)) occupied.set(cellKey(...(f.cell || [0, 0])), f.id);
+    const free = firstFree(occupied, view.cols, view.rows);
+    if (!free) { toast(t("gridFull")); return; }
+    await placeTile(p.id, free[0], free[1]);
+    renderLibrary();
+  } else if (icon.classList.contains("lib-fav")) {
+    await toggleFavoritePrompt(p);
+  } else if (icon.classList.contains("lib-edit")) {
+    editPrompt(p.id);
+  } else if (icon.classList.contains("lib-delete")) {
+    if (!(await trashPromptWithUndo(p.id, p.name))) return;
+    assignPrompts(prompts.filter((x) => x.id !== p.id));
+    renderLibrary();
+    await renderGrid(); // the tile (or its folder) is gone from the grid as well
+  }
+}
+function bindLibraryList(list) {
+  // Every row gets the same actions menu a grid tile has; the image and video editors are
+  // entries of it.
+  list.addEventListener("contextmenu", (e) => {
+    const row = libRowOf(e);
+    if (!row) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openCtx(row.dataset.id, e.clientX, e.clientY);
+  });
+  list.addEventListener("pointerdown", (e) => {
+    const row = libRowOf(e);
+    if (!row) return;
+    if (e.target.closest(LIB_ICON_SEL)) { e.stopPropagation(); return; }
+    if (libSelectMode) return; // no drag while multi-selecting
+    if (e.button !== 0) return;
+    const id = row.dataset.id;
+    const out = armDragOut(row, e, () => prompts.find((x) => x.id === id));
+    assignDrag({ id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out });
+  });
+  list.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const icon = e.target.closest?.(LIB_ICON_SEL);
+    if (!icon || !libRowOf(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    icon.click();
+  });
+  list.addEventListener("click", (e) => {
+    const row = libRowOf(e);
+    if (!row) return;
+    const icon = e.target.closest(LIB_ICON_SEL);
+    if (icon) {
+      e.stopPropagation();
+      libIconAction(icon, row.dataset.id);
+      return;
+    }
+    if (libSelectMode) { toggleLibSelect(row.dataset.id, e.shiftKey); return; }
+    const p = libById.get(row.dataset.id);
+    if (p) libraryCopy(p);
+  });
 }
 
 // ---- Batch operations ----
@@ -1211,6 +1283,8 @@ export async function doBatch(action, extra = {}, onIds = null) {
       if (idset.has(row.dataset.id)) row.remove();
     }
     libDisplayOrder = libDisplayOrder.filter((x) => !idset.has(x));
+    libItems = libItems.filter((p) => !idset.has(p.id));
+    libShown = Math.min(libShown, libItems.length);
     // Only the ids that were sent: a row picked while the call was pending stays selected.
     for (const id of ids) libSelected.delete(id);
     if (idset.has(libLastId)) libLastId = null;
@@ -1481,6 +1555,7 @@ export function syncLibraryCols() {
 }
 
 export function bindLibrary() {
+  bindLibraryList($("library-list"));
   $("library-btn").addEventListener("click", async () => {
     const preset = libPresetQuery ?? "";
     libPresetQuery = null;

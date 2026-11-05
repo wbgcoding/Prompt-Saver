@@ -736,6 +736,49 @@ SECTION = """\
       document.getElementById('lib-batch-none').click();
       await click('library-select-btn'); // back out of select mode
     }
+    // Paging: a store larger than one page draws its rows a page at a time, while select-all
+    // and a shift-range still act on the whole filtered order, and rows drawn later come up
+    // already selected.
+    {
+      const corePg = await import('./core.js');
+      const libPg = await import('./library.js');
+      const keepPg = corePg.prompts;
+      const basePg = keepPg.find((x) => x.id === 'p1') || keepPg[0];
+      const manyPg = Array.from({ length: 450 }, (_, i) => ({
+        ...basePg, id: 'pg' + i, name: 'Paged ' + String(i).padStart(3, '0'), text: 'paged body ' + i,
+        favorite: false, tags: [], file_path: '', icon_path: '', variants: [], has_image: false,
+        copy_image: false, secret: false, locked: false, media_duration_ms: 0,
+      }));
+      const rowsPg = () => document.querySelectorAll('#library-list .lib-item').length;
+      corePg.assignPrompts([...keepPg, ...manyPg]);
+      libPg.renderLibrary();
+      await sleep(150);
+      const totalPg = libPg.libDisplayOrder.length;
+      if (totalPg < 450) out.errors.push('paging: the display order holds ' + totalPg + ' ids, expected the whole filtered list');
+      if (rowsPg() >= totalPg || rowsPg() < 100) out.errors.push('paging: ' + rowsPg() + ' rows built at once for ' + totalPg + ' prompts');
+      await click('library-select-btn');
+      document.getElementById('lib-batch-all').click();
+      await sleep(100);
+      if (libPg.libSelected.size !== totalPg) out.errors.push('paging: select all picked ' + libPg.libSelected.size + ' of ' + totalPg);
+      const listPg = document.getElementById('library-list');
+      for (let i = 0; i < 40 && rowsPg() < totalPg; i++) { listPg.scrollTop = listPg.scrollHeight; await sleep(200); }
+      if (rowsPg() !== totalPg) out.errors.push('paging: scrolling to the end drew ' + rowsPg() + ' of ' + totalPg + ' rows');
+      if (document.querySelectorAll('#library-list .lib-item:not(.lib-selected)').length) out.errors.push('paging: a row drawn after select all is not marked selected');
+      document.getElementById('lib-batch-none').click();
+      listPg.scrollTop = 0;
+      libPg.renderLibrary();
+      await sleep(150);
+      const farPg = libPg.libDisplayOrder[Math.min(399, totalPg - 1)];
+      if (document.querySelector('#library-list .lib-item[data-id="' + farPg + '"]')) out.errors.push('paging: the far row is already drawn, the range check proves nothing');
+      libPg.toggleLibSelect(libPg.libDisplayOrder[0], false);
+      libPg.toggleLibSelect(farPg, true);
+      if (libPg.libSelected.size !== Math.min(400, totalPg)) out.errors.push('paging: a range to an undrawn row picked ' + libPg.libSelected.size);
+      document.getElementById('lib-batch-none').click();
+      await click('library-select-btn'); // back out of select mode
+      corePg.assignPrompts(keepPg);
+      libPg.renderLibrary();
+      await sleep(100);
+    }
     await click('library-close');
     await click('library-btn');
     await click('library-tab-history');
