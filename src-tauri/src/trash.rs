@@ -1019,8 +1019,12 @@ pub(crate) fn set_language(app: AppHandle, state: State<Db>, lang: String) {
         save_settings(&app, &store.settings);
         resolved
     };
-    // Live updates without a restart: tray menu + floating pills.
-    apply_tray_menu(&app);
+    announce_language(&app, resolved);
+}
+
+// Live updates without a restart: tray menu + every window and floating pill.
+pub(crate) fn announce_language(app: &AppHandle, resolved: &str) {
+    apply_tray_menu(app);
     let _ = app.emit("language-changed", resolved);
 }
 

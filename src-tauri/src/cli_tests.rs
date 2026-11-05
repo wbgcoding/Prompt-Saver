@@ -1596,6 +1596,27 @@ fn taking_a_flag_does_not_leak_the_remaining_arguments() {
     assert_eq!(take_flag_value(&mut a, "--tag").unwrap().as_deref(), Some("x"));
     assert_eq!(a.items, vec!["rest".to_string()]);
 }
+// ---- a theme or language set from the command line repaints the open windows ----
+
+#[test]
+fn only_theme_and_language_settings_repaint_open_windows() {
+    assert_eq!(setting_repaint("theme"), Some(SettingRepaint::Theme));
+    assert_eq!(setting_repaint("language"), Some(SettingRepaint::Language));
+    for other in ["autostart", "alwaysOnTop", "smartSort", "Theme", ""] {
+        assert_eq!(setting_repaint(other), None, "{other} needs no repaint");
+    }
+}
+
+#[test]
+fn the_cli_theme_and_language_repaint_reuses_the_apps_own_push() {
+    let callers = include_str!("cli_callers.rs");
+    assert!(callers.contains("crate::theme::push_theme("), "theme goes through the app's own theme push");
+    assert!(callers.contains("crate::trash::announce_language("), "language goes through the app's own announce");
+    let trash = include_str!("trash.rs");
+    let set_language = &trash[trash.find("pub(crate) fn set_language").unwrap()..];
+    assert!(set_language.contains("announce_language(&app, resolved)"), "the settings dialog uses the same announce");
+}
+
 // ---- a flag name inside another flag's value, and the `--` end-of-flags marker ----
 
 fn parsed_add(items: &[&str]) -> (String, String, Vec<String>) {
