@@ -1607,6 +1607,21 @@ section(() => {
   check(/Later: reopen it with the expert menu's/.test(src) && /Später: über die Aktion/.test(src), "the tour help names the expert menu action");
 });
 
+// 90. A failed clipboard inbox listing is reported, not shown as an empty inbox.
+section(() => {
+  const src = read("backups.js");
+  const fn = extractBlock(src, "clipInbox: async () => {").replace("clipInbox:", "const clipInbox =");
+  later(async () => {
+    const log = [];
+    const sb = run(fn + ";globalThis.clipInbox = clipInbox;", {
+      invoke: async (cmd) => { log.push(cmd); if (cmd === "clip_inbox_list") throw new Error("boom"); },
+      errToast: (e) => log.push("err:" + e.message), toast: (m) => log.push("toast:" + m), undoToast() {}, restoreClipInbox() {}, t: (k) => k,
+    });
+    await sb.clipInbox();
+    check(log.includes("err:boom") && !log.some((l) => l.startsWith("toast:")) && !log.includes("clip_inbox_clear"), "a failed inbox listing shows the error and clears nothing");
+  });
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

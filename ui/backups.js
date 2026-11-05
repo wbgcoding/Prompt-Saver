@@ -224,7 +224,8 @@ export const RETENTION_CLEANUP = {
   trash: () => retentionCleanupResult(invoke("sweep_trash_now"), "recSweepNothing"),
   copyHistory: () => retentionCleanupResult(invoke("trim_copy_history_now"), "recSweepNothing"),
   clipInbox: async () => {
-    const items = await invoke("clip_inbox_list").catch(() => []);
+    const items = await invoke("clip_inbox_list").catch((e) => { errToast(e); return null; });
+    if (!items) return;
     if (!items.length) { toast(t("recSweepNothing")); return; }
     try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
     undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
