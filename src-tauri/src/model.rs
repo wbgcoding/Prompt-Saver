@@ -651,7 +651,7 @@ pub(crate) fn tray_recording_label(lang: &str) -> &'static str {
         "de" => "Aufnahme läuft…",
         "es" => "Grabando…",
         "it" => "Registrazione…",
-        "pt" => "A gravar…",
+        "pt" => "Gravando…",
         "pl" => "Nagrywanie…",
         "zh" => "录音中…",
         "ja" => "録音中…",
