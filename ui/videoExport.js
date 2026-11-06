@@ -291,6 +291,9 @@ export async function startExport(toClipboard) {
           }
           const base = dest.replace(/^.*[\\/]/, "");
           dest = `${folder.replace(/[\\/]+$/, "")}/${base}`;
+          // The picked folder is the authorized one now. An auto-named export would otherwise keep
+          // building its path from the refused folder and ask again every time.
+          if (!VE.destOverride) VE.originDir = folder;
           continue;
         }
         throw err;

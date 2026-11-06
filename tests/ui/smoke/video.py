@@ -1575,6 +1575,24 @@ VIDEO_PROBE = """
     if (document.getElementById('ve-export-status').textContent.toLowerCase().includes('not recognized')) {
       errs.push('503: a cancelled retry showed the raw backend refusal instead of staying silent');
     }
+    // gfexp: an auto-named export whose folder was refused keeps the picked folder for the
+    // next export of the same recording instead of asking again
+    {
+      const { VE: veGf } = await import('./video.js');
+      const { destPath: destPathGf } = await import('./videoExport.js');
+      destInput.value = '';
+      destInput.dispatchEvent(new Event('change'));
+      await sleep(30);
+      veGf.originDir = 'C:\\\\REFUSEDEST-dir';
+      window.__EXPORT_DEST_REFUSED_ONCE__ = false;
+      window.__PICK_FOLDER__ = 'C:\\\\Retry\\\\Folder';
+      document.getElementById('ve-export-start').click();
+      await sleep(250);
+      const nextDest = destPathGf();
+      if (!nextDest.includes('Retry')) errs.push('gfexp: the next export still targets the refused folder: ' + nextDest);
+      veGf.originDir = '';
+      window.__PICK_FOLDER__ = null;
+    }
     destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
     destInput.dispatchEvent(new Event('change'));
     await sleep(30);
