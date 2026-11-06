@@ -495,6 +495,17 @@ async function cameraOverlayRaceCheck() {
   Object.assign(sb3.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
   await vm.runInContext("addAlignedCameraOverlay", sb3)("C:/cam.mp4", 1);
   expect("a camera overlay starting at the very end is skipped", sb3.VE.ops.length === 0 && sb3.VE.selOv === null, JSON.stringify(sb3.VE.ops));
+  // A path with an apostrophe has no escape the export's movie= filter accepts: refused like every other add.
+  const toasts = [];
+  const sb4 = makeSandbox({
+    invoke: (cmd) => Promise.resolve(cmd === "probe_extra_video_source" ? { duration_ms: 5000, has_audio: false } : null),
+    even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r, newId: () => "cam1",
+    afterOpsChanged: () => {}, OV_MIN_MS: 100, toast: (m) => toasts.push(m), t: (k) => k,
+  });
+  sb4.VE = baseState([]);
+  Object.assign(sb4.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
+  await vm.runInContext("addAlignedCameraOverlay", sb4)("C:/Users/O'Brien/cam.mp4", 1);
+  expect("a camera overlay with an apostrophe in its path is refused with the reason", sb4.VE.ops.length === 0 && toasts.join() === "veOvImageQuote", JSON.stringify([sb4.VE.ops.length, toasts]));
 }
 
 // An export that finishes after another recording was opened in the editor must

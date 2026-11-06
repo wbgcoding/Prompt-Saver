@@ -117,6 +117,9 @@ async function pickExtraVideo() {
 // awaits below is pending must not receive this overlay.
 export async function addAlignedCameraOverlay(path, gen) {
   if (!path) return;
+  // Same refusal as every other video or image add: the export's movie= filter cannot parse an
+  // apostrophe, so say why instead of failing at export time.
+  if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
   if (VE.ops.some((o) => o.tool === "overlay" && o.kind === "video" && o.path === path)) return;
   let probe;
   try {
