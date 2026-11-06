@@ -54,7 +54,9 @@ const LOANWORD_LEAK = /\bprompts?\b/gi;
 // so a self-map for that one string would just as well hide any unrelated,
 // genuine "prompt" leak elsewhere in the same language. Skip the exempt key
 // instead, so the loanword scan still catches everything else.
-const LOANWORD_EXEMPT_KEYS = new Set(["tipFuzzySearch"]);
+// errDemoFolderForeign names the fixed folder "prompt-saver-demo" (DEMO_SUBFOLDER in
+// src-tauri/src/demo.rs), a file name the brand vocabulary must never rewrite.
+const LOANWORD_EXEMPT_KEYS = new Set(["tipFuzzySearch", "errDemoFolderForeign"]);
 
 // Drop the exempt keys once, up front: every scan below, FAMILY or
 // LOANWORD_LEAK alike, must skip them the same way, or a language whose own
