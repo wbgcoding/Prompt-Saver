@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "Windows vraagt eenmalig om beheerdersrechten en toont daarna de beschikbare taalpakketten. Bij deze stap wordt niets geïnstalleerd.",
     ocrNoLanguageMsg: "Er is geen OCR-taal geïnstalleerd.",
     ocrLangUpdateOne: "Taalpakket {lang} kan worden geüpdatet.",
+    pickFilterImages: "Afbeeldingen",
+    pickFilterMedia: "Afbeeldingen en video's",
     ocrLangUpdateMany: "{n} taalpakketten kunnen worden geüpdatet.",
     snipOcrNoLang: "Er is geen OCR-taal geïnstalleerd. Open Talen voor tekstherkenning beheren in het expertmenu en probeer het daarna opnieuw.",
     tipStoreFiles: "Kopieert bijgevoegde bestanden naar de datamap van de app in plaats van alleen het pad op te slaan.",

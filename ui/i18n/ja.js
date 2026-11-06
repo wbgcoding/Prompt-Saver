@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "Windowsが一度だけ管理者権限を求め、その後、利用可能な言語パックを一覧表示します。この手順では何もインストールされません。",
     ocrNoLanguageMsg: "OCR 言語がインストールされていません。",
     ocrLangUpdateOne: "言語パック {lang} を更新できます。",
+    pickFilterImages: "画像",
+    pickFilterMedia: "画像と動画",
     ocrLangUpdateMany: "{n} 個の言語パックを更新できます。",
     snipOcrNoLang: "OCR 言語がインストールされていません。エキスパート メニューで「テキスト認識の言語の管理」を開いて、再試行してください。",
     tipStoreFiles: "添付ファイルをパスだけ保存する代わりに、アプリのデータフォルダにコピーします。",

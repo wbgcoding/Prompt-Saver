@@ -109,7 +109,7 @@ export function bindCapture() {
   // Shared by the composer menu and the library's "Open in editor" on an image/video
   // attachment; existingPath hands over a path the caller already knows.
   async function openExternalFileInEditor(existingPath) {
-    const path = existingPath || (await invoke("pick_media_file_path").catch(() => null));
+    const path = existingPath || (await invoke("pick_media_file_path", { filterLabel: t("pickFilterMedia") }).catch(() => null));
     if (!path) return;
     let res;
     try {
@@ -873,7 +873,7 @@ export function bindCapture() {
   });
   $("ocr-btn").addEventListener("contextmenu", async (e) => {
     e.preventDefault();
-    const path = await withDialog(() => invoke("pick_file_path", { imagesOnly: true }));
+    const path = await withDialog(() => invoke("pick_file_path", { imagesOnly: true, filterLabel: t("pickFilterImages") }));
     if (!path) return;
     try {
       showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));

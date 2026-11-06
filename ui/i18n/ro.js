@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "Windows va cere o singură dată drepturi de administrator și va afișa apoi pachetele de limbă disponibile. Acest pas nu instalează nimic.",
     ocrNoLanguageMsg: "Nu este instalată nicio limbă pentru OCR.",
     ocrLangUpdateOne: "Pachetul de limbă {lang} poate fi actualizat.",
+    pickFilterImages: "Imagini",
+    pickFilterMedia: "Imagini și videoclipuri",
     ocrLangUpdateMany: "{n} pachete de limbă pot fi actualizate.",
     snipOcrNoLang: "Nu este instalată nicio limbă pentru OCR. Deschide Gestionează limbile de recunoaștere a textului din meniul expert, apoi încearcă din nou.",
     tipStoreFiles: "Copiază fișierele atașate în folderul de date al aplicației în loc să salveze doar calea.",

@@ -224,7 +224,7 @@ pub(crate) async fn get_clipboard_file_path(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
-pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_only: Option<bool>) -> Option<String> {
+pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_only: Option<bool>, filter_label: Option<String>) -> Option<String> {
     let label = win.label().to_string();
     let app_for_scope = app.clone();
     // The dialog is modal: it waits on a blocking thread, not on an async worker.
@@ -232,7 +232,7 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_on
         crate::floating::on_dialog_thread(move || {
         let dlg = file_dialog_for(&app, &label);
         // Text recognition accepts only some image types: offer just those.
-        let dlg = if images_only == Some(true) { dlg.add_filter("Images", &OCR_IMAGE_EXTS) } else { dlg };
+        let dlg = if images_only == Some(true) { dlg.add_filter(filter_label.as_deref().unwrap_or("Images"), &OCR_IMAGE_EXTS) } else { dlg };
         dlg.pick_file().map(|p| p.to_string_lossy().to_string())
         })
         .flatten()
@@ -252,14 +252,14 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_on
 // which editor actually opens is decided by open_file_in_editor's own content
 // sniff, not by which extension the user picked here.
 #[tauri::command]
-pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
+pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window, filter_label: Option<String>) -> Option<String> {
     let label = win.label().to_string();
     let app_for_scope = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
         file_dialog_for(&app, &label)
             .add_filter(
-                "Images and videos",
+                filter_label.as_deref().unwrap_or("Images and videos"),
                 &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
             )
             .pick_file()
