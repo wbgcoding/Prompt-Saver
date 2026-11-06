@@ -807,8 +807,9 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
     // Same as a normal stop: the outline window (if this was a region
     // recording) never survives a cancel, even one whose cleanup fails below.
     hide_rec_outline(&app);
+    let trash_root = configured_recording_dir(&app.state::<Db>());
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        recording::cancel(session);
+        recording::cancel(session, &trash_root);
         // A cancelled take never gets a key-overlay sidecar either.
         keylog::discard();
         // A cancel discards the whole take: every part a "finish and continue" chain closed goes
@@ -818,7 +819,7 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
         // Best-effort from here: a missing file (already moved/deleted by the
         // user) is not a reason to fail an otherwise-successful cancel.
         for part in std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner())) {
-            remove_recording_part_files(&part);
+            remove_recording_part_files(&part, &trash_root);
         }
         Ok(())
     })

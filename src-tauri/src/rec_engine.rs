@@ -1007,8 +1007,8 @@ pub(crate) struct RecordingPartInfo {
 // possible. Best-effort: a file already moved or deleted by the user does not fail the
 // cancel.
 #[cfg(windows)]
-pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo) {
-    crate::media_files::discard_or_remove_take(Path::new(&part.path));
+pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo, trash_root: &Path) {
+    crate::media_files::discard_or_remove_take(Path::new(&part.path), trash_root);
     if let Some(w) = &part.mic_wav_path {
         let _ = std::fs::remove_file(w);
     }

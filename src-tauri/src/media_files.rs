@@ -748,10 +748,10 @@ pub(crate) fn with_parts_outside_lock<R>(
 
 // Discard in the result dialog: the earlier parts go to the discard folder like the last
 // file. Returns how many were moved.
-pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, allowed: &[PathBuf]) -> u32 {
+pub(crate) fn discard_recording_parts_in(parts: &mut Vec<RecordingPartInfo>, allowed: &[PathBuf], recording_root: &Path) -> u32 {
     let mut moved = 0u32;
     parts.retain(|part| {
-        let ok = discard_recording_file_in(allowed, Path::new(&part.path)).is_some();
+        let ok = discard_recording_file_in(allowed, recording_root, Path::new(&part.path)).is_some();
         if ok {
             moved += 1;
         }
@@ -766,7 +766,7 @@ pub(crate) fn discard_recording_parts(app: AppHandle, state: State<'_, Db>) -> u
     let allowed = recording_source_dirs(&app, &state);
     wait_for_interim_crops(&REC_INTERIM_CROPS, REC_INTERIM_CROP_WAIT);
     let mut parts = REC_RESULT_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    discard_recording_parts_in(&mut parts, &allowed)
+    discard_recording_parts_in(&mut parts, &allowed, &allowed[1])
 }
 
 // The folder picker for the video editor's "choose folder" export target and the batch-export
@@ -953,9 +953,15 @@ pub(crate) fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
     sidecar == video.with_extension("mic.wav")
 }
 
+// The one discard trash: "verworfen" inside the configured recording folder, whichever folder
+// the discarded take sat in.
+pub(crate) fn discard_trash_dir(recording_root: &Path) -> PathBuf {
+    recording_root.join(crate::stats::DISCARD_SUBDIR)
+}
+
 // Split out so the move logic has a unit test against a plain tempdir, no AppHandle/Db
-// needed. Returns the file's new path in "verworfen" on success.
-pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Option<PathBuf> {
+// needed. Returns the file's new path in the trash of `recording_root` on success.
+pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], recording_root: &Path, path: &std::path::Path) -> Option<PathBuf> {
     // The directory check alone would let this touch any file directly inside recordingDir, often
     // the user's normal Videos folder, shared with files this app never made. Every real
     // recording (raw, saved, converted, or moved by Copy) keeps the "rec-" stem that
@@ -975,10 +981,17 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     if !in_allowed || !path.is_file() {
         return None;
     }
-    let trash = parent.join(crate::stats::DISCARD_SUBDIR);
+    let trash = discard_trash_dir(recording_root);
     fs::create_dir_all(&trash).ok()?;
-    let dest = trash.join(name);
-    move_file(path, &dest).ok()?;
+    // The trash is shared by every folder a take can come from, so a name already in it is
+    // never overwritten.
+    let stem = path.file_stem().and_then(|e| e.to_str()).unwrap_or("rec");
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+    let dest = reserve_unique_dest_path(&trash, stem, ext).ok()?;
+    if move_file(path, &dest).is_err() {
+        let _ = fs::remove_file(&dest);
+        return None;
+    }
     // A move keeps the last-write time, and the holding-area sweep ages a file by it: stamp the
     // moment of the discard so time spent open before it does not count against the keep window.
     if let Ok(f) = fs::OpenOptions::new().write(true).open(&dest) {
@@ -1010,10 +1023,10 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     Some(dest)
 }
 
-// A cancelled take goes to its folder's holding area like a discarded one, so a mistaken
+// A cancelled take goes to the discard trash like a discarded one, so a mistaken
 // Cancel can be undone. A file that cannot be moved there is removed with every sidecar.
-pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
-    let moved = path.parent().and_then(|dir| discard_recording_file_in(&[dir.to_path_buf()], path)).is_some();
+pub(crate) fn discard_or_remove_take(path: &std::path::Path, recording_root: &Path) {
+    let moved = path.parent().and_then(|dir| discard_recording_file_in(&[dir.to_path_buf()], recording_root, path)).is_some();
     if !moved {
         let _ = fs::remove_file(path);
         for ext in ["mic.wav", KEYS_SIDECAR_EXT, CAM_SIDECAR_EXT] {
@@ -1025,14 +1038,14 @@ pub(crate) fn discard_or_remove_take(path: &std::path::Path) {
 // Discard a not-yet-saved recording. Scoped to the app's recordings folder or the current
 // recordingDir (Copy/Save move the working file there before the window closes), never an
 // arbitrary webview-supplied path (defense in depth, as delete_screenshot_file). It moves
-// into a "verworfen" subfolder of whichever it was in rather than deleting, so a wrong click
+// into the recording folder's "verworfen" subfolder rather than deleting, so a wrong click
 // can be undone (see restore_discarded_recording; the sweep in sweep_recordings_now_result
 // eventually clears the subfolder).
 #[tauri::command(async)]
 pub(crate) fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> Option<f64> {
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let allowed = [data_dir(&app).join("recordings"), recording_dir(&custom)];
-    discard_recording_file_in(&allowed, std::path::Path::new(&path))?;
+    discard_recording_file_in(&allowed, &allowed[1], std::path::Path::new(&path))?;
     Some(discard_keep_hours(&state))
 }
 
@@ -1042,67 +1055,44 @@ pub(crate) fn is_bare_filename(name: &str) -> bool {
     !name.is_empty() && std::path::Path::new(name).file_name().is_some_and(|f| f == std::ffi::OsStr::new(name))
 }
 
-// One entry of the "Recently discarded" list. `staging` marks a take discarded from the app's
-// own <data>/recordings folder (a fresh unsaved take) rather than from the recording folder, so
-// the two trash folders may hold the same name and the caller can still address the right one.
+// One entry of the "Recently discarded" list.
 #[derive(Serialize)]
 pub(crate) struct DiscardedRecording {
     pub(crate) name: String,
     pub(crate) size: u64,
-    pub(crate) staging: bool,
 }
 
-// The staging folder's trash is a separate source only when it is not the recording folder
-// itself (a custom recordingDir may point at it).
-fn staging_is_separate(configured: &Path, staging: &Path) -> bool {
-    !path_matches_configured_dir(staging, configured)
-}
-
-fn list_trash_into(trash: &Path, staging: bool, out: &mut Vec<DiscardedRecording>) {
-    let Ok(entries) = fs::read_dir(trash) else { return };
+// The recordings-folder dialog's listing of what sits in the trash waiting out its retention
+// window; same extension filter as video_folder_stats/video_folder_cleanup_preview.
+pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<DiscardedRecording> {
+    let mut out = Vec::new();
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return out;
+    }
+    let Ok(entries) = fs::read_dir(discard_trash_dir(std::path::Path::new(dir))) else { return out };
     for e in entries.flatten() {
         let path = e.path();
         if !is_video_folder_file(&path) { continue; }
         let Ok(meta) = e.metadata() else { continue };
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        out.push(DiscardedRecording { name, size: meta.len(), staging });
-    }
-}
-
-// The recordings-folder dialog's listing of what sits in the trash waiting out its retention
-// window; same extension filter as video_folder_stats/video_folder_cleanup_preview. It lists
-// the recording folder's own trash and the staging folder's one, where an unsaved take lands.
-pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path, staging: &Path) -> Vec<DiscardedRecording> {
-    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    list_trash_into(&std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR), false, &mut out);
-    if staging_is_separate(configured, staging) {
-        list_trash_into(&staging.join(crate::stats::DISCARD_SUBDIR), true, &mut out);
+        out.push(DiscardedRecording { name, size: meta.len() });
     }
     out
 }
 
 #[tauri::command(async)]
-pub(crate) fn list_discarded_recordings(app: AppHandle, state: State<'_, Db>, dir: String) -> Vec<DiscardedRecording> {
-    list_discarded_recordings_impl(&dir, &configured_recording_dir(&state), &data_dir(&app).join("recordings"))
+pub(crate) fn list_discarded_recordings(state: State<'_, Db>, dir: String) -> Vec<DiscardedRecording> {
+    list_discarded_recordings_impl(&dir, &configured_recording_dir(&state))
 }
 
-pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, from_staging: bool, configured: &Path, staging: &Path) -> bool {
+pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured: &Path) -> bool {
     if !is_bare_filename(name) {
         return false;
     }
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return false;
     }
-    if from_staging && staging_is_separate(configured, staging) {
-        // A take from the staging folder joins the recording folder under a name that never
-        // overwrites anything, with its sidecars, like Save does.
-        let src = staging.join(crate::stats::DISCARD_SUBDIR).join(name);
-        return src.is_file() && place_in_dir(&src, std::path::Path::new(dir)).is_ok();
-    }
-    let trash = std::path::Path::new(dir).join(crate::stats::DISCARD_SUBDIR);
+    let trash = discard_trash_dir(std::path::Path::new(dir));
     let src = trash.join(name);
     let dst = std::path::Path::new(dir).join(name);
     // Never overwrites a same-named file that appeared at the old spot since the discard:
@@ -1127,19 +1117,18 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, from_stagi
 }
 
 #[tauri::command(async)]
-pub(crate) fn restore_discarded_recording(app: AppHandle, state: State<'_, Db>, dir: String, name: String, staging: Option<bool>) -> bool {
-    restore_discarded_recording_impl(&dir, &name, staging.unwrap_or(false), &configured_recording_dir(&state), &data_dir(&app).join("recordings"))
+pub(crate) fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) -> bool {
+    restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
 }
 
-pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, from_staging: bool, configured: &Path, staging: &Path) -> bool {
+pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configured: &Path) -> bool {
     if !is_bare_filename(name) {
         return false;
     }
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return false;
     }
-    let base = if from_staging && staging_is_separate(configured, staging) { staging } else { std::path::Path::new(dir) };
-    let path = base.join(crate::stats::DISCARD_SUBDIR).join(name);
+    let path = discard_trash_dir(std::path::Path::new(dir)).join(name);
     if !path.is_file() {
         return false;
     }
@@ -1151,8 +1140,44 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, from_st
 }
 
 #[tauri::command]
-pub(crate) fn delete_discarded_recording_now(app: AppHandle, state: State<'_, Db>, dir: String, name: String, staging: Option<bool>) -> bool {
-    delete_discarded_recording_now_impl(&dir, &name, staging.unwrap_or(false), &configured_recording_dir(&state), &data_dir(&app).join("recordings"))
+pub(crate) fn delete_discarded_recording_now(state: State<'_, Db>, dir: String, name: String) -> bool {
+    delete_discarded_recording_now_impl(&dir, &name, &configured_recording_dir(&state))
+}
+
+// Older builds also kept a trash inside the capture staging folder (<data>/recordings). At
+// startup what is still there joins the one trash of the recording folder, keeping each
+// file's discard time and never replacing a name already in it; the emptied folder goes.
+// Returns how many videos moved.
+pub(crate) fn migrate_staging_discards(staging: &Path, recording_root: &Path) -> u32 {
+    let old = discard_trash_dir(staging);
+    let target = discard_trash_dir(recording_root);
+    if path_matches_configured_dir(&old, &target) || !old.is_dir() {
+        return 0;
+    }
+    let Ok(entries) = fs::read_dir(&old) else { return 0 };
+    let mut moved = 0u32;
+    for e in entries.flatten() {
+        let path = e.path();
+        if !is_video_folder_file(&path) { continue; }
+        if fs::create_dir_all(&target).is_err() { break; }
+        let when = e.metadata().and_then(|m| m.modified()).ok();
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("rec");
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("mp4");
+        let Ok(dest) = reserve_unique_dest_path(&target, stem, ext) else { continue };
+        if move_file(&path, &dest).is_err() {
+            let _ = fs::remove_file(&dest);
+            continue;
+        }
+        if let Some(t) = when {
+            if let Ok(f) = fs::OpenOptions::new().write(true).open(&dest) {
+                let _ = f.set_modified(t);
+            }
+        }
+        move_mic_sidecar_alongside(&path, &dest);
+        moved += 1;
+    }
+    let _ = fs::remove_dir(&old);
+    moved
 }
 
 // Called by the frontend once the first render + text fit is complete.
