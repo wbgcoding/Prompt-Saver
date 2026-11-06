@@ -24,8 +24,16 @@ saving, backups, recordings, the editors and the installer.
 - **Recordings and dictation.** Silent microphone stretches are kept, the
   microphone tail is written before the file closes, the time estimate counts
   the microphone track, the recording bar stays put while minimized, a region
-  on the first monitor records the right screen, and speech keeps dictation
-  from timing out.
+  on the first monitor records the right screen, speech keeps dictation
+  from timing out, and dictation in the Markdown editor keeps writing when you
+  switch to another window.
+- **One trash for discarded recordings.** Discarded recordings and camera
+  clips now all go to one folder inside the recordings folder; an older trash
+  in the data folder is moved there once.
+- **Cleanup keeps backup files.** The unused-files cleanup no longer deletes
+  attachments that a kept backup snapshot still needs.
+- **Faster large libraries.** Opening the library with thousands of prompts
+  is much faster.
 - **Screenshot and video editors.** Enter in crop mode and Tab with a popover
   open work again, scrubbing stops when the mouse is released outside the seek
   bar, the still-frame button stays off without ffmpeg, a zero opacity halo
@@ -60,10 +68,12 @@ saving, backups, recordings, the editors and the installer.
 
 - **Confidential prompts** are checked against the vault on every copy path,
   and snapshots sealed with another vault key are refused.
+- **Video export options** that would write files outside the chosen target
+  are refused.
 - **Export targets** must match the chosen format, and a read-only folder is
   refused before an attachment is copied into it.
-- **Imported and synced attachments.** An attachment that an imported or
-  synced file names outside the app's folders is only shown or copied after
+- **Imported, restored and synced attachments.** An attachment that an
+  imported, restored or synced file names outside the app's folders is only shown or copied after
   you pick it again.
 
 ## 3.1.0 (2026-10-31)
