@@ -275,7 +275,7 @@ pub(crate) fn lock_content_key(e: &DataDirLockInfo) -> String {
 // our id.
 pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserver, now: Instant, settle: Duration) -> LockOutcome {
     use std::io::Write;
-    let unknown = || LockOutcome::ReadOnly("unknown".to_string());
+    let unknown = || LockOutcome::ReadOnly(String::new()); // no host known: the UI shows its own placeholder
     let info = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: now_secs(), id: me.id.to_string(), beat: 0 };
     let Ok(json) = serde_json::to_string(&info) else { return unknown() };
     if let Ok(mut f) = fs::OpenOptions::new().write(true).create_new(true).open(path) {

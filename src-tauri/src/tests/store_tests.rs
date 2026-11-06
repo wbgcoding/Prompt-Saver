@@ -517,3 +517,17 @@ fn a_refused_lock_swap_keeps_the_old_lock_instead_of_writing_in_place() {
     assert_eq!(read_data_dir_lock(&path).map(|l| l.seen), Some(200));
     let _ = fs::remove_dir_all(&dir);
 }
+
+// A lock file that cannot be read names no host: the UI shows its own placeholder instead of an
+// English word in every language.
+#[test]
+fn an_unreadable_lock_file_names_no_host() {
+    let dir = lock_test_dir("unreadable");
+    let path = data_dir_lock_path(&dir);
+    fs::create_dir_all(&path).unwrap(); // exists, cannot be created or read as a file
+    let t0 = Instant::now();
+    let mut obs = LockObserver::new(t0);
+    let me = LockMe { host: "B", pid: 1, id: "idb" };
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, Duration::ZERO), LockOutcome::ReadOnly(h) if h.is_empty()));
+    let _ = fs::remove_dir_all(&dir);
+}
