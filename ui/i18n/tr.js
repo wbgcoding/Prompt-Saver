@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "Seçilen alan boş",
     errImageDecode: "Görsel okunamadı",
     errImageTooLarge: "Bu dosya çok büyük ({n} MB, sınır {m} MB)",
+    errFileTooLargeLimit: "Bu dosya çok büyük (sınır {n} MB)",
     errWindowGone: "Bu pencere artık mevcut değil",
     errScreenLayout: "Ekran düzeni okunamadı",
     errNoRecording: "Devam eden bir kayıt yok",

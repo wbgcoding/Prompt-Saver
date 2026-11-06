@@ -74,6 +74,8 @@ PATTERNS = [re.compile(p, re.S) for p in (
     r"ok_or\(\s*" + LIT + r"\s*\)",
     r"map_err\(\s*\|[^|]*\|\s*" + LIT + CONV,
     r"map_err\(\s*\|[^|]*\|\s*format!\(\s*" + LIT,
+    # size_error() builds the "too large" refusal every import path returns.
+    r"fn size_error\([^)]*\)\s*->\s*String\s*\{\s*format!\(\s*" + LIT,
 )]
 
 

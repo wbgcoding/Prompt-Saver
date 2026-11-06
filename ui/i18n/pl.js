@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "Zaznaczony obszar jest pusty",
     errImageDecode: "Nie udało się odczytać obrazu",
     errImageTooLarge: "Ten plik jest za duży ({n} MB, limit to {m} MB)",
+    errFileTooLargeLimit: "Ten plik jest za duży (limit to {n} MB)",
     errWindowGone: "To okno nie jest już dostępne",
     errScreenLayout: "Nie udało się odczytać układu ekranów",
     errNoRecording: "Żadne nagrywanie nie trwa",

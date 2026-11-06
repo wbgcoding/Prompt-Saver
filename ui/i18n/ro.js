@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "Zona selectată este goală",
     errImageDecode: "Imaginea nu a putut fi citită",
     errImageTooLarge: "Acel fișier este prea mare ({n} MB, limita este {m} MB)",
+    errFileTooLargeLimit: "Acel fișier este prea mare (limita este {n} MB)",
     errWindowGone: "Acea fereastră nu mai este disponibilă",
     errScreenLayout: "Aranjarea ecranelor nu a putut fi citită",
     errNoRecording: "Nicio înregistrare nu rulează",

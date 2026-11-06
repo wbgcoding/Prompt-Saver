@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "所选区域为空",
     errImageDecode: "无法读取该图片",
     errImageTooLarge: "该文件过大（{n} MB，上限为 {m} MB）",
+    errFileTooLargeLimit: "该文件过大（上限为 {n} MB）",
     errWindowGone: "该窗口已不可用",
     errScreenLayout: "无法读取屏幕布局",
     errNoRecording: "没有正在进行的录制",

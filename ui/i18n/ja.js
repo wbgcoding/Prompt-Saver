@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "選択した範囲が空です",
     errImageDecode: "画像を読み込めませんでした",
     errImageTooLarge: "そのファイルは大きすぎます（{n} MB、上限は {m} MB）",
+    errFileTooLargeLimit: "そのファイルは大きすぎます（上限は {n} MB）",
     errWindowGone: "そのウィンドウは使用できなくなりました",
     errScreenLayout: "画面の配置を読み取れませんでした",
     errNoRecording: "実行中の録画はありません",
