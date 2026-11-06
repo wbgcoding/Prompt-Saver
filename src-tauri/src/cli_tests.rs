@@ -1244,6 +1244,11 @@ fn a_read_waits_on_the_store_only_for_what_it_reads() {
     assert!(unreadable_store_message(&get_setting, true, true).is_none());
     assert!(unreadable_store_message(&get_setting, false, false).is_some());
     assert!(unreadable_store_message(&list, false, true).is_none());
+    // The view list is read from the settings row.
+    let views = Cmd::ViewList { json: false };
+    assert!(unreadable_store_message(&views, false, false).is_some());
+    assert!(unreadable_store_message(&views, true, true).is_some());
+    assert!(unreadable_store_message(&views, false, true).is_none());
 }
 
 #[test]

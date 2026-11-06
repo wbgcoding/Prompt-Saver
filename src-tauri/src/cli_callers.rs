@@ -65,9 +65,11 @@ pub(super) fn load_store_headless_checked(dir: &Path) -> (Store, StoreHealth) {
 // that did not open (not the settings row); `settings_ok` is false when the settings row is unreadable.
 pub(super) fn unreadable_store_message(cmd: &Cmd, prompts_locked: bool, settings_ok: bool) -> Option<&'static str> {
     let unreadable = match cmd {
-        Cmd::List { .. } | Cmd::Get { .. } | Cmd::Copy { .. } | Cmd::TagList { .. } | Cmd::ViewList { .. } | Cmd::Search { .. } | Cmd::Export { .. } => {
+        Cmd::List { .. } | Cmd::Get { .. } | Cmd::Copy { .. } | Cmd::TagList { .. } | Cmd::Search { .. } | Cmd::Export { .. } => {
             prompts_locked
         }
+        // The views live in the settings row, so they need it too.
+        Cmd::ViewList { .. } => prompts_locked || !settings_ok,
         Cmd::SettingsGet { .. } => !settings_ok,
         _ => false,
     };
