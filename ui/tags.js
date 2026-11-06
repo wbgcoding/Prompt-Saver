@@ -246,7 +246,9 @@ export function wireTagInput() {
       if (!open) { renderTagSuggest(true); setTagSuggestActive(e.key === "ArrowDown" ? 0 : suggestItems().length - 1); return; }
       const n = suggestItems().length;
       if (!n) return;
-      const next = tagSuggestActive + (e.key === "ArrowDown" ? 1 : -1);
+      const down = e.key === "ArrowDown";
+      // Nothing highlighted yet (a re-render resets it): enter the list at the end the key points to.
+      const next = tagSuggestActive < 0 ? (down ? 0 : n - 1) : tagSuggestActive + (down ? 1 : -1);
       setTagSuggestActive((next + n) % n);
       return;
     }

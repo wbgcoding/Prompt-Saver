@@ -1350,8 +1350,10 @@ export async function doBatch(action, extra = {}, onIds = null) {
       if (idset.has(row.dataset.id)) row.remove();
     }
     libDisplayOrder = libDisplayOrder.filter((x) => !idset.has(x));
+    // The rows still rendered are the survivors among the first libShown items; the paging
+    // counter has to follow, or the prompts that move up never get a row.
+    libShown = libItems.slice(0, libShown).filter((p) => !idset.has(p.id)).length;
     libItems = libItems.filter((p) => !idset.has(p.id));
-    libShown = Math.min(libShown, libItems.length);
     // Only the ids that were sent: a row picked while the call was pending stays selected.
     for (const id of ids) libSelected.delete(id);
     if (idset.has(libLastId)) libLastId = null;

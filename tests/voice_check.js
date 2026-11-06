@@ -52,6 +52,8 @@ const zh = (text) => applyVoiceCommands(text, { punct: true, autoCaps: true, lan
 check("zh command matches without spaces", zh("你好句号世界"), "你好.世界");
 check("zh literal escape word", zh("说字面量句号完"), "说句号完");
 check("zh trailing literal word is not swallowed", zh("说完字面量"), "说完字面量");
+// The escaped phrase is kept whole: its tail must not be read as another command.
+check("zh literal escape keeps a longer phrase whole", zh("说字面量百分号完"), "说百分号完");
 
 // "point" used to be a synonym for "period", but it is also completely
 // ordinary English ("the point is ...") and got silently swallowed into a

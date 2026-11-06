@@ -29,14 +29,16 @@ export function accelFromEvent(e) {
 export const MOD_LABELS = {
   CommandOrControl: () => t("keyCtrl"), Control: () => t("keyCtrl"),
   Shift: () => t("keyShift"),
-  Alt: () => "Alt", Option: () => "Alt",
+  Alt: () => t("keyAlt"), Option: () => t("keyAlt"),
   Super: () => "Win", Meta: () => "Win", Command: () => "Win", Cmd: () => "Win",
 };
 // Key names the backend parser spells out that read better as the character on the key.
 const KEY_LABELS = { Equal: "=", NumpadAdd: "Num +" };
+// Named keys the UI languages spell out (the same strings the shortcut overview uses).
+const KEY_NAME_IDS = { Space: "keySpace", Up: "keyUp", Down: "keyDown", Left: "keyLeft", Right: "keyRight", Home: "keyHome", End: "keyEnd" };
 export function prettyAccel(accel) {
   if (!accel) return "";
-  return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : KEY_LABELS[p] || p)).join(" + ");
+  return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : KEY_NAME_IDS[p] ? t(KEY_NAME_IDS[p]) : KEY_LABELS[p] || p)).join(" + ");
 }
 
 // ---- Per-prompt hotkey (editor row) ----
@@ -169,8 +171,11 @@ export function bindHotkeyField(input, { id = null, slot = null, errEl = null, s
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
     e.preventDefault();
+    // A modifier pressed to start a combo is not a combo yet: wait for the real key.
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
     if (busy) return;
-    const clearing = e.key === "Backspace" || e.key === "Delete";
+    // With a modifier held, Backspace/Delete is a key to bind, not the clear gesture.
+    const clearing = (e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey;
     let accel = "";
     if (!clearing) {
       accel = accelFromEvent(e);
