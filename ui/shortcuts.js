@@ -184,7 +184,7 @@ const KEYS_TEXT = { snipEditText: "snipEditTextAgainKeys" };
 // together, since a user there has no reason to tell those two apart.
 export function rowsForScope(scope, t, lang) {
   const scopes = Array.isArray(scope) ? scope : [scope];
-  const seen = new Set();
+  const seen = new Map();
   const rows = [];
   for (const entry of SHORTCUTS) {
     if (!entry.scopes.some((s) => scopes.includes(s))) continue;
@@ -193,10 +193,16 @@ export function rowsForScope(scope, t, lang) {
       const primary = SHORTCUTS.find((s) => s.action === entry.action.slice(0, -3));
       if (primary && primary.descKey === entry.descKey) continue;
     }
-    if (seen.has(entry.descKey)) continue;
-    seen.add(entry.descKey);
     const keys = KEYS_TEXT[entry.action] ? t(KEYS_TEXT[entry.action]) : formatKeys(entry, lang, t);
-    rows.push({ desc: stripTrailingHint(t(entry.descKey)), keys });
+    // Another action with the same description (close and keep, close and drop) adds its keys to the row.
+    const row = seen.get(entry.descKey);
+    if (row) {
+      if (!row.keys.split(" / ").includes(keys)) row.keys += ` / ${keys}`;
+      continue;
+    }
+    const added = { desc: stripTrailingHint(t(entry.descKey)), keys };
+    seen.set(entry.descKey, added);
+    rows.push(added);
   }
   return rows;
 }
