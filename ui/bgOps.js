@@ -98,9 +98,18 @@ export function renderBgOpsPop(ops) {
 export const bgOpsToasted = new Set();
 export let bgOpsFirstRun = true;
 
+// list_bg_ops runs on the thread pool, so two calls (a last progress tick and the done
+// event) can answer out of order: each call takes a number and an answer older than the
+// newest one already applied is dropped, or a stale "running" list would land last.
+let bgOpsCallSeq = 0;
+let bgOpsAppliedSeq = 0;
+
 export async function refreshBgOps() {
+  const seq = ++bgOpsCallSeq;
   let ops = [];
   try { ops = (await invoke("list_bg_ops")) || []; } catch { return; }
+  if (seq < bgOpsAppliedSeq) return;
+  bgOpsAppliedSeq = seq;
   const running = ops.filter((o) => o.state === "running" || o.state === "indeterminate");
   $("bg-ops-btn").classList.toggle("hidden", running.length === 0);
   $("bg-ops-badge").classList.toggle("hidden", running.length === 0);
