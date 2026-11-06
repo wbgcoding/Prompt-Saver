@@ -166,3 +166,14 @@ fn system_tools_are_started_from_the_system_folder() {
     let src = source!("../webview2.rs");
     assert!(!src.contains("Command::new(\"cmd\")"), "the fallback page opens through the system cmd.exe");
 }
+
+#[cfg(windows)]
+#[test]
+fn powershell_and_explorer_resolve_to_their_system_paths() {
+    let ps = webview2::powershell_exe();
+    assert!(ps.is_absolute() && ps.is_file(), "got {ps:?}");
+    assert!(ps.to_string_lossy().to_lowercase().ends_with(r"system32\windowspowershell\v1.0\powershell.exe"));
+    let ex = webview2::windows_dir_exe("explorer.exe");
+    assert!(ex.is_absolute() && ex.is_file(), "got {ex:?}");
+    assert!(ex.parent().unwrap().to_string_lossy().to_lowercase().ends_with("windows"));
+}

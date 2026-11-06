@@ -47,8 +47,29 @@ pub(crate) fn system_exe(name: &str) -> std::path::PathBuf {
     extern "system" {
         fn GetSystemDirectoryW(buf: *mut u16, size: u32) -> u32;
     }
+    exe_in_dir(name, |buf| unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) })
+}
+
+// Same for the tools that live in the Windows folder itself (explorer.exe).
+#[cfg(windows)]
+pub(crate) fn windows_dir_exe(name: &str) -> std::path::PathBuf {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetWindowsDirectoryW(buf: *mut u16, size: u32) -> u32;
+    }
+    exe_in_dir(name, |buf| unsafe { GetWindowsDirectoryW(buf.as_mut_ptr(), buf.len() as u32) })
+}
+
+// Windows PowerShell 5.1 at its fixed place below the system folder.
+#[cfg(windows)]
+pub(crate) fn powershell_exe() -> std::path::PathBuf {
+    system_exe(r"WindowsPowerShell\v1.0\powershell.exe")
+}
+
+#[cfg(windows)]
+fn exe_in_dir(name: &str, dir_of: impl FnOnce(&mut [u16; 260]) -> u32) -> std::path::PathBuf {
     let mut buf = [0u16; 260];
-    let n = unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+    let n = dir_of(&mut buf) as usize;
     if n == 0 || n >= buf.len() {
         return std::path::PathBuf::from(name);
     }
