@@ -171,8 +171,11 @@ export function bindHotkeyField(input, { id = null, slot = null, errEl = null, s
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
     e.preventDefault();
+    // A modifier pressed to start a combo is not a combo yet: wait for the real key.
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
     if (busy) return;
-    const clearing = e.key === "Backspace" || e.key === "Delete";
+    // With a modifier held, Backspace/Delete is a key to bind, not the clear gesture.
+    const clearing = (e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey;
     let accel = "";
     if (!clearing) {
       accel = accelFromEvent(e);

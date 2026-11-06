@@ -188,6 +188,43 @@ later(async () => {
   check(pretty("Option+F5") === "<keyAlt> + F5" && pretty("Super+X") === "Win + X", "Option reads as Alt, Super as Win");
 });
 
+// hotkeys.js bindHotkeyField: a lone modifier is no combo yet, and Delete/Backspace with a modifier is a binding, not a clear.
+later(async () => {
+  const src = read("hotkeys.js");
+  const code = extractBlock(src, "export function accelFromEvent").replace(/export /g, "") + "\n" + extractBlock(src, "export function bindHotkeyField").replace(/export /g, "")
+    + "\n;globalThis.bind = bindHotkeyField;";
+  const handlers = {};
+  const input = { value: "", addEventListener: (t, f) => { handlers[t] = f; } };
+  const log = { errs: [], commits: [] };
+  const sandbox = run(code, {
+    hotkeyCapture() {}, reassertHotkeyCapture() {}, hotkeyOwner: () => null, hotkeyTakenMsg: () => "taken", hotkeyMessage: String,
+    prettyAccel: (a) => a, t: (k) => k, toast: (m) => log.errs.push(m),
+  });
+  const errEl = { textContent: "", classList: { toggle() {} } };
+  sandbox.bind(input, { errEl, current: () => "", onCommit: async (a) => { log.commits.push(a); return a; } });
+  const press = async (key, mods = {}) => {
+    await handlers.keydown({ key, code: key, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods, preventDefault() {}, stopPropagation() {} });
+    await tick();
+  };
+  await press("Control", { ctrlKey: true });
+  check(errEl.textContent === "" && log.commits.length === 0, `a lone modifier shows no error and commits nothing, got "${errEl.textContent}"`);
+  await press("Shift", { shiftKey: true });
+  await press("Alt", { altKey: true });
+  await press("Meta", { metaKey: true });
+  check(errEl.textContent === "" && log.commits.length === 0, "no modifier alone shows an error");
+  await press("Delete", { ctrlKey: true, shiftKey: true });
+  check(log.commits.join() === "CommandOrControl+Shift+Delete", `Ctrl+Shift+Delete binds, got ${log.commits}`);
+  log.commits.length = 0;
+  await press("Backspace", { ctrlKey: true });
+  check(log.commits.join() === "CommandOrControl+Backspace", `Ctrl+Backspace binds, got ${log.commits}`);
+  log.commits.length = 0;
+  await press("Backspace");
+  check(log.commits.length === 1 && log.commits[0] === "", "a bare Backspace still clears");
+  log.commits.length = 0;
+  await press("Delete");
+  check(log.commits.length === 1 && log.commits[0] === "", "a bare Delete still clears");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);
