@@ -91,7 +91,30 @@ fn terminating_a_process_waits_until_it_is_really_gone() {
         .spawn()
         .expect("a child process to end");
     let pid = child.id();
-    assert!(terminate_process(pid), "the child must be reported as ended");
+    let handle = unsafe {
+        windows::Win32::System::Threading::OpenProcess(
+            windows::Win32::System::Threading::PROCESS_TERMINATE | windows::Win32::System::Threading::PROCESS_SYNCHRONIZE,
+            false,
+            pid,
+        )
+    }
+    .expect("a handle to the child");
+    let ended = end_process(handle);
+    unsafe {
+        let _ = windows::Win32::Foundation::CloseHandle(handle);
+    }
+    assert!(ended, "the child must be reported as ended");
+    // A foreign executable is left alone, judged on the handle that would have ended it.
+    let mut other = std::process::Command::new("cmd.exe")
+        .args(["/c", "ping -n 20 127.0.0.1 >nul"])
+        .spawn()
+        .expect("a second child process");
+    let verdict = take_over_hung_instance(other.id());
+    let still_running = other.try_wait().expect("wait").is_none();
+    let _ = other.kill();
+    let _ = other.wait();
+    assert_eq!(verdict, None);
+    assert!(still_running, "a process of another executable must survive");
     // Reported gone means gone: the handle is signalled, so a wait here
     // returns at once instead of blocking for the ping's remaining minute.
     assert!(child.try_wait().expect("wait").is_some(), "the process must already be reaped");
