@@ -233,6 +233,34 @@ fn bg_ops_running_count_ignores_done_and_error_entries() {
     ops.remove(&b);
 }
 
+// A fixed-id job that failed before its first tick must not inherit the previous run's target.
+#[test]
+fn an_error_after_a_finished_run_starts_a_fresh_entry() {
+    let _guard = BG_OPS_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let op = format!("test-rerun-{}", std::process::id());
+    record_bg_op(&op, "backup", "running", Some(10), Some("C:\\old\\a.zip".to_string()), 10.0);
+    record_bg_op(&op, "backup", "done", None, None, 10.0);
+    record_bg_op(&op, "backup", "error", None, None, 10.0);
+    let list = list_bg_ops_impl(10.0);
+    let row = list.iter().find(|o| o.id == op).expect("the failed run must be listed");
+    assert_eq!(row.state, "error");
+    assert_eq!(row.target, None, "the old run's target must not carry over");
+    bg_ops().lock().unwrap_or_else(|e| e.into_inner()).remove(&op);
+}
+
+// A progress tick reads two settings but never waits for the store: a backup holding it gives
+// the defaults.
+#[test]
+fn bg_tick_settings_fall_back_to_defaults_while_the_store_is_busy() {
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    store.settings.ui_values.insert("bgDoneKeepMin".to_string(), 3.0);
+    store.settings.ui_flags.insert("taskbarProgress".to_string(), false);
+    let db: Db = Mutex::new(store);
+    assert_eq!(bg_tick_settings_if_free(&db), (3.0, false));
+    let _held = db.lock().unwrap();
+    assert_eq!(bg_tick_settings_if_free(&db), (10.0, true));
+}
+
 // ---- ffmpeg: zip-signature + pinned-hash verification, no network needed ----
 
 pub(super) fn ffmpeg_test_zip() -> Vec<u8> {

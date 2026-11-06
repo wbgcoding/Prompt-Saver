@@ -128,6 +128,11 @@ pub(crate) fn bg_tick_settings(settings: &Settings) -> (f64, bool) {
     (bg_keep_min_of(settings), settings.ui_flags.get("taskbarProgress").copied().unwrap_or(true))
 }
 
+// The same pair for a progress tick, never waiting on the store: a busy store gives the defaults.
+pub(crate) fn bg_tick_settings_if_free(db: &Db) -> (f64, bool) {
+    try_lock_ignoring_poison(db).map(|s| bg_tick_settings(&s.settings)).unwrap_or((10.0, true))
+}
+
 // The entry a progress or start report writes to. The ids are fixed ("backup", "import"),
 // so a second run finds the first one's finished entry and replaces it with a fresh one;
 // otherwise the new run would keep the old start time (which the UI keys its once-per-run
@@ -153,7 +158,7 @@ pub(crate) fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>
             }
         }
         "error" => {
-            let entry = ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind));
+            let entry = entry_for_run(&mut ops, id, kind);
             entry.phase = OpPhase::Error;
             entry.finished_at_ms = Some(now_ms());
             if target.is_some() {
@@ -343,7 +348,7 @@ pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: Stri
 pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
     let (keep_min, enabled) = app
         .try_state::<Db>()
-        .map(|s| bg_tick_settings(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+        .map(|s| bg_tick_settings_if_free(&s))
         .unwrap_or((10.0, true));
     let (agg_state, agg_value) = record_bg_op(id, kind, state, value, target, keep_min);
     // One broadcast point for every state change (running tick, done, error): the header

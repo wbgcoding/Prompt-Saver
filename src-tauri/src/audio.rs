@@ -114,7 +114,7 @@ pub fn spawn_capture(
     thread::Builder::new()
         .name(format!("rec-audio-{label}"))
         .spawn(move || unsafe {
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let com_ref = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
             let result = (|| -> windows::core::Result<()> {
                 let device = open_endpoint(flow, &device_id)?;
                 let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
@@ -186,6 +186,9 @@ pub fn spawn_capture(
                 // Any failure ends this source's capture, not only an unplugged device (a missing device or
                 // a refused start), and must reach the bar instead of leaving a silent track.
                 queue.mark_lost();
+            }
+            if com_ref {
+                CoUninitialize();
             }
         })
 }

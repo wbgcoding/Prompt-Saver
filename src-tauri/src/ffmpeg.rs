@@ -208,7 +208,7 @@ pub(crate) async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
     let app_done = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || download_ffmpeg_blocking(&app))
         .await
-        .map_err(|e| e.to_string())?;
+        .unwrap_or_else(|e| Err(e.to_string()));
     push_bg_op(&app_done, "ffmpeg-download", "ffmpeg-download", if result.is_ok() { "done" } else { "error" }, None, None);
     result
 }
@@ -605,7 +605,7 @@ pub(crate) async fn convert_recording(
         })
     })
     .await
-    .map_err(|e| e.to_string())?;
+    .unwrap_or_else(|e| Err(e.to_string()));
     push_bg_op(&app_done, "convert", "convert", if result.is_ok() { "done" } else { "error" }, None, None);
     result
 }
