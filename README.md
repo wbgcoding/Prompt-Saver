@@ -189,6 +189,9 @@ This is the canonical build path: it regenerates the app icons, builds both the
 portable exe and the NSIS installer, writes a `.sha256` sidecar next to the
 installer (checked by the in-app updater), and copies everything into `dist/`.
 
+A second run with nothing changed reports "Build is up to date" and exits; `build.bat --force`
+(or `FORCE=1`) rebuilds anyway.
+
 or manually:
 
 ```sh

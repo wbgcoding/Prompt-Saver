@@ -34,6 +34,20 @@ if exist "%~dp0dist\%APP_NAME%.new.exe" (
     move /y "%~dp0dist\%APP_NAME%.new.exe" "%~dp0dist\%APP_NAME%.exe" >nul 2>nul
 )
 
+rem === build freshness: check ===
+set "BS=%~dp0tools\build-stamp.ps1"
+set "BSKEY=exe"
+set "BSEXTRA="
+set "BSFRESH="
+set "BSFORCE="
+if "%FORCE%"=="1" set "BSFORCE=1"
+for %%A in (%*) do if /i "%%~A"=="--force" set "BSFORCE=1"
+if defined BSFORCE goto :bs_start
+if not exist "%BS%" goto :bs_start
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy RemoteSigned -File "%BS%" -Check -Project "%~dp0." -Key "%BSKEY%" -Extra "%BSEXTRA%"`) do set "BSFRESH=%%A"
+if defined BSFRESH goto :bs_uptodate
+:bs_start
+
 rem A dev instance launched straight from this repo's own target\release locks
 rem that exact exe file. Cargo can usually relink a running exe, but the NSIS
 rem bundler copying that same file a moment later sometimes cannot (os error 32),
@@ -195,6 +209,17 @@ rem automatically, together with src-tauri\ffmpeg-LICENSE (the LICENSE file from
 rem zip root, saved under that name); the portable exe here in dist\ never gets a copy and instead
 rem offers to download ffmpeg itself on first need (see ffmpeg_search_path in ffmpeg.rs).
 
+rem === build freshness: save (skipped while the new exe is still waiting for its swap) ===
+if exist "%DIST%\%APP_NAME%.new.exe" goto :bs_nosave
+set "BSART=dist\%APP_NAME%.exe"
+set "BSSETUP="
+if defined DIST_SETUP for %%I in ("!DIST_SETUP!") do set "BSSETUP=dist\%%~nxI"
+if defined BSSETUP set "BSART=!BSART!,!BSSETUP!"
+if defined BSSETUP if exist "!DIST_SETUP!.sha256" set "BSART=!BSART!,!BSSETUP!.sha256"
+if defined BSSETUP if exist "!DIST_SETUP!.sig" set "BSART=!BSART!,!BSSETUP!.sig"
+if exist "%BS%" powershell -NoProfile -ExecutionPolicy RemoteSigned -File "%BS%" -Save -Project "%~dp0." -Key "%BSKEY%" -Extra "%BSEXTRA%" -Artifact "!BSART!" >nul 2>&1
+:bs_nosave
+
 echo.
 echo ============================================
 echo  DONE
@@ -221,3 +246,8 @@ echo Build FAILED. Check the messages above.
 if not defined INTERACTIVE exit /b 1
 pause
 exit /b 1
+
+:bs_uptodate
+for %%F in ("%BSFRESH%") do echo Build is up to date (last build %%~tF), nothing to do: %%~fF
+if defined INTERACTIVE "%SystemRoot%\System32\timeout.exe" /t 10
+exit /b 0
