@@ -797,7 +797,7 @@ pub(crate) async fn list_backups(app: AppHandle) -> Result<Vec<BackupInfo>, Stri
 pub(crate) fn open_backups_folder(app: AppHandle) -> Result<(), String> {
     let dir = backups_dir(&app);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::process::Command::new("explorer")
+    std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe"))
         .arg(&dir)
         .spawn()
         .map(|_| ())

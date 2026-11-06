@@ -362,3 +362,18 @@ fn a_failed_import_write_leaves_the_trash_rows_and_the_trash_list_as_they_were()
     let live: i64 = conn.query_row("SELECT COUNT(*) FROM prompts WHERE id = 'new1'", [], |r| r.get(0)).unwrap();
     assert_eq!(live, 0);
 }
+
+#[test]
+fn a_backup_password_sealed_for_another_user_does_not_count_as_set() {
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    assert_eq!(stored_backup_password(&store), None);
+    // A DPAPI row from another PC or Windows user: present, but not readable here.
+    store.settings.ui_texts.insert(BACKUP_PW_KEY.into(), format!("{ENC_PREFIX}AAAAAAAAAAAAAAAA"));
+    assert_eq!(stored_backup_password(&store), None);
+    store.settings.ui_texts.insert(BACKUP_PW_KEY.into(), enc_str("hunter2"));
+    assert_eq!(stored_backup_password(&store).as_deref(), Some("hunter2"));
+    let src = include_str!("../vault.rs");
+    let cmd = &src[src.find("fn has_backup_password").unwrap()..];
+    let cmd = &cmd[..cmd.find("\n}").unwrap()];
+    assert!(cmd.contains("stored_backup_password(&store).is_some()"), "the command must use the readable check");
+}

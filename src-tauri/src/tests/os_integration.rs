@@ -154,3 +154,61 @@ fn a_forwarded_cli_command_runs_on_a_blocking_worker_and_backup_create_releases_
     assert!(bk.contains("flush_settings") && bk.contains("backup_released"));
     assert!(!bk.contains("do_backup_at"));
 }
+
+// A bare "cmd" is looked up in the exe's own folder before System32, so a portable copy run from
+// a folder with a planted cmd.exe would run that file. System tools are started by full path.
+#[cfg(windows)]
+#[test]
+fn system_tools_are_started_from_the_system_folder() {
+    let cmd = webview2::system_exe("cmd.exe");
+    assert!(cmd.is_absolute() && cmd.is_file(), "got {cmd:?}");
+    assert!(cmd.parent().unwrap().to_string_lossy().to_lowercase().ends_with("system32"));
+    let src = source!("../webview2.rs");
+    assert!(!src.contains("Command::new(\"cmd\")"), "the fallback page opens through the system cmd.exe");
+}
+
+#[cfg(windows)]
+#[test]
+fn powershell_and_explorer_resolve_to_their_system_paths() {
+    let ps = webview2::powershell_exe();
+    assert!(ps.is_absolute() && ps.is_file(), "got {ps:?}");
+    assert!(ps.to_string_lossy().to_lowercase().ends_with(r"system32\windowspowershell\v1.0\powershell.exe"));
+    let ex = webview2::windows_dir_exe("explorer.exe");
+    assert!(ex.is_absolute() && ex.is_file(), "got {ex:?}");
+    assert!(ex.parent().unwrap().to_string_lossy().to_lowercase().ends_with("windows"));
+}
+
+// Gate: no production source starts a program by a bare literal name (cmd, explorer,
+// powershell.exe ...), which Windows resolves in the exe's own folder first. Tools come from the
+// system path helpers; ffmpeg/ffprobe and the app's own exe are passed as variables.
+#[test]
+fn no_source_starts_a_windows_tool_by_a_bare_name() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n != "tests") {
+                    walk(&p, out);
+                }
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+    assert!(files.len() > 50);
+    let mut bad = Vec::new();
+    for f in files {
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+        if name.ends_with("_tests.rs") {
+            continue; // test fixtures spawn throwaway child processes
+        }
+        let text = std::fs::read_to_string(&f).unwrap();
+        let compact: String = text.split_whitespace().collect();
+        if compact.contains("Command::new(\"") {
+            bad.push(name);
+        }
+    }
+    assert!(bad.is_empty(), "bare program name in: {bad:?}");
+}

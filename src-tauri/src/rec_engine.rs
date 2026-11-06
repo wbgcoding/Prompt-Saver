@@ -346,11 +346,15 @@ pub(crate) fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min:
     by_time || by_size
 }
 
-// The bounds of the display containing (x, y), the "display the window is on" fallback tier;
-// uses the same Win32 lookup as resolve_region_monitor.
+// The bounds of the display a window (rect as left, top, right, bottom) is mostly on, the
+// "display the window is on" fallback tier; uses the same Win32 lookup as resolve_region_monitor.
+// The whole rect is looked up, not its corner: a maximized window overhangs its display by the
+// frame width, so its corner can lie on the neighbouring display.
 #[cfg(windows)]
-pub(crate) fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
-    let (hmon, ..) = resolve_region_monitor(x, y, 1, 1).ok()?;
+pub(crate) fn monitor_rect_for_window(rect: (i32, i32, i32, i32)) -> Option<(i32, i32, u32, u32)> {
+    let (l, t, r, b) = rect;
+    let (w, h) = (r.saturating_sub(l).max(1), b.saturating_sub(t).max(1));
+    let (hmon, ..) = resolve_region_monitor(l, t, w as u32, h as u32).ok()?;
     let (left, top, right, bottom) = monitor_bounds(hmon as isize)?;
     Some((left, top, (right - left).max(1) as u32, (bottom - top).max(1) as u32))
 }

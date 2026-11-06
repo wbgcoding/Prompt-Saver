@@ -29,13 +29,51 @@ pub(crate) fn ensure_webview2() -> bool {
             }
         } else {
             use std::os::windows::process::CommandExt;
-            let _ = std::process::Command::new("cmd")
+            let _ = std::process::Command::new(system_exe("cmd.exe"))
                 .args(["/C", "start", "", "https://go.microsoft.com/fwlink/p/?LinkId=2124703"])
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn();
         }
     }
     false
+}
+
+// Full path of a Windows tool in the system folder. A bare name is searched in the exe's own
+// folder first, so a portable copy started from a folder holding a planted file of that name
+// would run it. Falls back to the bare name only if the system folder cannot be read.
+#[cfg(windows)]
+pub(crate) fn system_exe(name: &str) -> std::path::PathBuf {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetSystemDirectoryW(buf: *mut u16, size: u32) -> u32;
+    }
+    exe_in_dir(name, |buf| unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) })
+}
+
+// Same for the tools that live in the Windows folder itself (explorer.exe).
+#[cfg(windows)]
+pub(crate) fn windows_dir_exe(name: &str) -> std::path::PathBuf {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetWindowsDirectoryW(buf: *mut u16, size: u32) -> u32;
+    }
+    exe_in_dir(name, |buf| unsafe { GetWindowsDirectoryW(buf.as_mut_ptr(), buf.len() as u32) })
+}
+
+// Windows PowerShell 5.1 at its fixed place below the system folder.
+#[cfg(windows)]
+pub(crate) fn powershell_exe() -> std::path::PathBuf {
+    system_exe(r"WindowsPowerShell\v1.0\powershell.exe")
+}
+
+#[cfg(windows)]
+fn exe_in_dir(name: &str, dir_of: impl FnOnce(&mut [u16; 260]) -> u32) -> std::path::PathBuf {
+    let mut buf = [0u16; 260];
+    let n = dir_of(&mut buf) as usize;
+    if n == 0 || n >= buf.len() {
+        return std::path::PathBuf::from(name);
+    }
+    std::path::PathBuf::from(String::from_utf16_lossy(&buf[..n])).join(name)
 }
 
 // Authenticode-verify a staged file via WinVerifyTrust (WINTRUST_ACTION_GENERIC_VERIFY_V2, no

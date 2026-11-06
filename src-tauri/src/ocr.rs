@@ -380,7 +380,7 @@ fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
 // directory is our own always-writable one, not the inherited one: DISM's "could not set
 // the current directory" failure had nothing to do with the query itself.
 fn run_powershell_command(script: &str) -> Result<String, String> {
-    let mut cmd = std::process::Command::new("powershell.exe");
+    let mut cmd = std::process::Command::new(super::webview2::powershell_exe());
     cmd.args(["-NoProfile", "-NonInteractive", "-Command", script])
         .current_dir(dism_temp_dir())
         .creation_flags(super::CREATE_NO_WINDOW);

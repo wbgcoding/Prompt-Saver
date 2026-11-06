@@ -695,13 +695,10 @@ pub(crate) async fn set_backup_password(app: AppHandle, state: State<'_, Db>, pa
 
 #[tauri::command]
 pub(crate) async fn has_backup_password(state: State<'_, Db>) -> Result<bool, String> {
+    // Readable here, not merely present: a row sealed under another PC or Windows user stays in
+    // the settings, and an export then seals with the shared key, so the warning must show.
     let store = lock(&state);
-    Ok(store
-        .settings
-        .ui_texts
-        .get(BACKUP_PW_KEY)
-        .map(|v| !v.is_empty())
-        .unwrap_or(false))
+    Ok(stored_backup_password(&store).is_some())
 }
 
 // The clear backup password for this machine (sealed → dec_str), if one is set.
@@ -1275,6 +1272,7 @@ pub(crate) fn run_import(
         store.prompts_locked = original_prompts_locked;
         SETTINGS_LOCKED.store(original_settings_locked, Ordering::Relaxed);
         mirror_minimize_to_tray(&store.settings);
+        load_pick_history(&store.settings); // the import replaced the colour-history mirror too
         // Put back a set the disk was never told about, so nothing may be
         // skipped as "already written" on the next save either.
         store.forget_written_rows();

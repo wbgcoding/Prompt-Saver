@@ -3,7 +3,7 @@ use super::{
     scale_to_fit_frame_top_down, rec_filename, free_rec_path, now_ms,
     AudioQueueShared, RecWavWriter,
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
-    canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
+    canvas_within_ceiling, external_window_rect, monitor_rect_for_window, place_frame_in_canvas, visible_canvas_rect,
     scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
     estimate_recording_seconds_remaining, recording_audio_kbps, active_tick_secs, DISK_CHECK_SECS, UsedAreaTracker,
 };
@@ -620,7 +620,8 @@ struct CanvasCandidate {
 fn window_canvas_candidates(
     hwnd: isize, native_w: u32, native_h: u32, mode: &str, ceiling: (u32, u32),
 ) -> Vec<CanvasCandidate> {
-    let native_origin = external_window_rect(hwnd).map(|(l, t, _, _)| (l, t)).unwrap_or((0, 0));
+    let window_rect = external_window_rect(hwnd);
+    let native_origin = window_rect.map(|(l, t, _, _)| (l, t)).unwrap_or((0, 0));
     let mut out = Vec::new();
     if mode != "window" {
         if mode != "monitor" {
@@ -630,7 +631,7 @@ fn window_canvas_candidates(
                 }
             }
         }
-        if let Some((mx, my, mw, mh)) = monitor_rect_at(native_origin.0, native_origin.1) {
+        if let Some((mx, my, mw, mh)) = monitor_rect_for_window(window_rect.unwrap_or((0, 0, 1, 1))) {
             out.push(CanvasCandidate { size: (mw, mh), origin: (mx, my), placement: true, note: "monitor" });
         }
     }

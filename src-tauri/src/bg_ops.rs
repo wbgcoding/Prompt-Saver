@@ -412,7 +412,7 @@ pub(crate) fn open_explorer_at(path: &str) -> Result<(), String> {
     if !dir.is_dir() {
         return Err("folder not found".to_string());
     }
-    std::process::Command::new("explorer")
+    std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe"))
         .arg(&dir)
         .spawn()
         .map(|_| ())

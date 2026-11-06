@@ -1209,3 +1209,16 @@ fn a_read_only_data_folder_unpacks_snapshots_into_the_local_temp_folder() {
     assert_eq!(unpack_dir(home, false), home);
     assert_eq!(unpack_dir(home, true), std::env::temp_dir());
 }
+
+// The colour history is a process-wide mirror that the import reloads from the backup's settings;
+// a refused import has to put the previous settings' history back with them.
+#[test]
+fn a_refused_import_reloads_the_pick_history_from_the_restored_settings() {
+    let src = include_str!("../vault.rs").replace("\r\n", "\n");
+    let run = &src[src.find("pub(crate) fn run_import(").unwrap()..];
+    let rollback = &run[run.find("if !persist(store").unwrap()..];
+    let rollback = &rollback[..rollback.find("return Err(\"save-failed\"").unwrap()];
+    let restore = rollback.find("store.settings = original_settings;").unwrap();
+    let reload = rollback.find("load_pick_history(&store.settings)").expect("the rollback must reload the pick history");
+    assert!(reload > restore, "the reload reads the restored settings");
+}

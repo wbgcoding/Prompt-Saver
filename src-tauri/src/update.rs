@@ -719,7 +719,7 @@ pub(crate) async fn install_update(app: AppHandle, url: String) -> Result<(), St
     // replaces the portable exe by hand.
     if is_portable() {
         let page = release_page_for(&url).ok_or_else(|| "invalid update source".to_string())?;
-        std::process::Command::new("explorer").arg(page).spawn().map_err(|e| e.to_string())?;
+        std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe")).arg(page).spawn().map_err(|e| e.to_string())?;
         return Err("portable-update-manual".to_string());
     }
     if let Some(why) = update_blocker_now(&app) {
@@ -913,7 +913,7 @@ pub(crate) fn install_update_blocking(
         return Err(why.to_string());
     }
 
-    let mut cmd = std::process::Command::new("cmd");
+    let mut cmd = std::process::Command::new(crate::webview2::system_exe("cmd.exe"));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

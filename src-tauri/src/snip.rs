@@ -1949,6 +1949,11 @@ pub(crate) fn move_store_dir(
     if path_matches_configured_dir(new, current) {
         return Ok(false);
     }
+    // delete_data_dir removes backups/ of the old folder whole, so a store inside it would be
+    // wiped with it (adopted or copied alike).
+    if path_is_inside_dir(new, &current.join("backups")) {
+        return Err("the new folder lies inside backups/, which the cleanup deletes".to_string());
+    }
     // From the end of the flush to the pointer write no database write may reach the folder
     // being left (see DATA_MOVE_IN_PROGRESS). The gate clears itself on every way out; the
     // success path releases it right after the pointer write, before the rebase needs to save.
@@ -1982,9 +1987,8 @@ pub(crate) fn move_store_dir(
         // location while the old backups/ folder is offered for deletion. Best-effort; the store
         // copy above is the critical part.
         let old_backups = current.join("backups");
-        // The new folder may itself sit inside old_backups; copying a directory into its own
-        // descendant would recurse forever.
-        if old_backups.is_dir() && !path_is_inside_dir(new, &old_backups) {
+        // A target inside old_backups is refused above, so the copy cannot recurse into itself.
+        if old_backups.is_dir() {
             if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
                 append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
             }
