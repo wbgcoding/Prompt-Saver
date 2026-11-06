@@ -87,9 +87,13 @@ function applyVoiceCommandsCjk(text, commands, literalWord) {
   let forceLiteral = false;
   for (let i = 0; i < text.length; ) {
     if (forceLiteral) {
-      out += text[i];
+      // Keep the escaped command phrase whole; one character would leave its tail to be
+      // read as another command ("百分号" must not become "百" plus the semicolon "分号").
+      let len = Math.min(maxLen, text.length - i);
+      while (len > 1 && !commands.has(text.slice(i, i + len))) len--;
+      out += text.slice(i, i + len);
       forceLiteral = false;
-      i++;
+      i += len;
       continue;
     }
     let matched = false;
