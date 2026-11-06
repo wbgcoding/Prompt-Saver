@@ -350,6 +350,80 @@ pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<
         let _ = fs::remove_dir_all(dir.join(name));
     }
 }
+// What the retained snapshots hold of the attachment folder. Snapshots keep data.db only, so the
+// orphan sweep must not delete a file a snapshot still names: a restore would bring back prompts
+// with dead attachments. `unreadable_after` is the newest unreadable snapshot's time (unpacking
+// failed, or a row did not open, e.g. sealed for another account); its references are unknown,
+// so the sweep keeps every file older than it.
+#[derive(Default)]
+pub(crate) struct SnapshotRefs {
+    pub(crate) files: std::collections::HashSet<String>,
+    pub(crate) unreadable_after: Option<std::time::SystemTime>,
+}
+
+type SnapshotCache = std::collections::HashMap<PathBuf, (u64, std::time::SystemTime, std::collections::HashSet<String>)>;
+// A packed snapshot never changes, so its references are read once per (size, time) and not on
+// every sweep.
+static SNAPSHOT_REFS_CACHE: Mutex<Option<SnapshotCache>> = Mutex::new(None);
+
+fn snapshot_db_refs(db: &std::path::Path, data: &std::path::Path) -> Option<std::collections::HashSet<String>> {
+    let conn = Connection::open(db).ok()?;
+    let mut out = std::collections::HashSet::new();
+    for (table, required) in [("prompts", true), ("trash", false)] {
+        let Ok(mut stmt) = conn.prepare(&format!("SELECT data FROM {table}")) else {
+            if required {
+                return None;
+            }
+            continue;
+        };
+        let mut rows: Vec<Prompt> = Vec::new();
+        for cell in stmt.query_map([], |r| r.get::<_, String>(0)).ok()? {
+            rows.push(serde_json::from_str::<Prompt>(&dec_str_strict(&cell.ok()?)?).ok()?);
+        }
+        resolve_relative_file_paths(data, &mut rows);
+        out.extend(rows.iter().flat_map(|p| [&p.file_path, &p.icon_path]).filter(|s| !s.is_empty()).map(|s| pending_key(s)));
+    }
+    Some(out)
+}
+
+pub(crate) fn snapshot_file_refs(backups: &std::path::Path, data: &std::path::Path) -> SnapshotRefs {
+    let mut out = SnapshotRefs::default();
+    let mut seen: Vec<PathBuf> = Vec::new();
+    for entry in fs::read_dir(backups).into_iter().flatten().flatten() {
+        let folder = entry.path();
+        let Some(db) = folder.is_dir().then(|| backup_db_file(&folder)).flatten() else { continue };
+        let Ok(meta) = fs::metadata(&db) else { continue };
+        let stamp = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+        seen.push(db.clone());
+        let cached = {
+            let guard = SNAPSHOT_REFS_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+            guard.as_ref().and_then(|c| c.get(&db)).filter(|(len, t, _)| *len == meta.len() && *t == stamp).map(|(_, _, refs)| refs.clone())
+        };
+        let refs = cached.or_else(|| {
+            let gz = db.extension().is_some_and(|e| e == "gz");
+            if !gz {
+                return snapshot_db_refs(&db, data);
+            }
+            let tmp = unpack_dir(&folder, data_dir_write_blocked_quiet()).join(format!("refs.tmp-{}", gen_id()));
+            let read = gunzip_to(&db, &tmp).ok().and_then(|_| snapshot_db_refs(&tmp, data));
+            let _ = fs::remove_file(&tmp);
+            read
+        });
+        match refs {
+            Some(refs) => {
+                out.files.extend(refs.iter().cloned());
+                let mut guard = SNAPSHOT_REFS_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+                guard.get_or_insert_with(Default::default).insert(db, (meta.len(), stamp, refs));
+            }
+            None => out.unreadable_after = out.unreadable_after.max(Some(stamp)),
+        }
+    }
+    if let Some(c) = SNAPSHOT_REFS_CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        c.retain(|k, _| seen.contains(k));
+    }
+    out
+}
+
 // A snapshot is stored gzipped: a vacuumed store is mostly JSON text, so this shrinks it to a
 // fraction, and ten are kept by default. An uncompressed `data.db` is still accepted so older
 // backups keep working.
@@ -412,7 +486,7 @@ pub(crate) fn auto_backup_tick(app: &AppHandle) {
 
 // Names a snapshot folder may be left with by an interrupted run: the unpacked copies made to
 // count rows, list names or purge the clip inbox hold a whole library and must not stay.
-const BACKUP_STRAY_FILES: [&str; 5] = ["data.db.tmp", "data.db.gz.part", "count.tmp", "names.tmp", "purge.tmp"];
+const BACKUP_STRAY_FILES: [&str; 6] = ["data.db.tmp", "data.db.gz.part", "count.tmp", "names.tmp", "purge.tmp", "refs.tmp"];
 
 // The unpacked copies carry a per-call suffix (`count.tmp-<id>`), the older ones none.
 pub(crate) fn is_backup_stray(name: &str) -> bool {

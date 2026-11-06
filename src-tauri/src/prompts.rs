@@ -359,18 +359,38 @@ pub(crate) fn store_attached_file_in(files_dir: &std::path::Path, path: &str, st
 // cannot freeze other windows. Callers build the set with orphan_cleanup_enabled +
 // orphan_referenced_set inside their locked block, then call this once the lock is dropped.
 pub(crate) fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
-    sweep_orphan_files_in(&data_dir(app).join("files"), referenced, || {
-        app.try_state::<Db>().map(|state| {
-            let store = lock(&state);
-            orphan_referenced_set(&store)
-        })
-    });
+    sweep_files(app, referenced, true);
 }
 
+// The data wipe: every attachment goes, retained snapshots or not.
+pub(crate) fn sweep_all_files(app: &AppHandle) {
+    sweep_files(app, &std::collections::HashSet::new(), false);
+}
+
+fn sweep_files(app: &AppHandle, referenced: &std::collections::HashSet<String>, keep_for_snapshots: bool) {
+    let data = data_dir(app);
+    sweep_orphan_files_in(
+        &data.join("files"),
+        referenced,
+        || {
+            app.try_state::<Db>().map(|state| {
+                let store = lock(&state);
+                orphan_referenced_set(&store)
+            })
+        },
+        || if keep_for_snapshots { snapshot_file_refs(&backups_dir(app), &data) } else { SnapshotRefs::default() },
+    );
+}
+
+// Backup snapshots hold data.db only, so a file a retained snapshot references is not an orphan
+// (a restore would bring back dead attachments); it is swept once that snapshot is gone. If a
+// snapshot cannot be read, files older than it stay. Snapshots are read after the candidates are
+// known and before the short store lock of the live check, never under it.
 pub(crate) fn sweep_orphan_files_in(
     files_dir: &std::path::Path,
     referenced: &std::collections::HashSet<String>,
     live_now: impl FnOnce() -> Option<std::collections::HashSet<String>>,
+    snapshots: impl FnOnce() -> SnapshotRefs,
 ) {
     let entries = match fs::read_dir(files_dir) {
         Ok(e) => e,
@@ -389,6 +409,7 @@ pub(crate) fn sweep_orphan_files_in(
     if candidates.is_empty() {
         return;
     }
+    let snap = snapshots();
     // referenced is a snapshot from before the lock was released, and add/update copy a new
     // attachment into this folder before its prompt is in the store (StagedCopies registers
     // those as pending). Re-check every candidate against the store's current state and the
@@ -396,9 +417,19 @@ pub(crate) fn sweep_orphan_files_in(
     // under the lock.
     let Some(live) = live_now() else { return };
     for path in candidates {
-        if !live.contains(&norm(&path.to_string_lossy())) && !pending_attachments_contain(&path.to_string_lossy()) {
-            let _ = fs::remove_file(&path);
+        let key = norm(&path.to_string_lossy());
+        if live.contains(&key) || snap.files.contains(&key) || pending_attachments_contain(&path.to_string_lossy()) {
+            continue;
         }
+        if let Some(cut) = snap.unreadable_after {
+            // The earlier of created/modified: a copy keeps its source's modified time.
+            let meta = fs::metadata(&path).ok();
+            let born = meta.as_ref().and_then(|m| [m.created().ok(), m.modified().ok()].into_iter().flatten().min());
+            if born.is_none_or(|t| t < cut) {
+                continue;
+            }
+        }
+        let _ = fs::remove_file(&path);
     }
 }
 

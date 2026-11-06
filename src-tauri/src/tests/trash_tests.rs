@@ -145,3 +145,84 @@ fn adopting_checks_and_swaps_under_one_store_lock() {
     assert!(adopt.find("store_has_no_real_prompts").unwrap() < adopt.find("copy_live_store_files").unwrap());
     assert!(adopt.find("copy_live_store_files").unwrap() < adopt.find("*store = fresh").unwrap());
 }
+
+// ---- Orphan sweep and retained backup snapshots ----
+
+fn snap_dirs(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let base = std::env::temp_dir().join(format!("ps-snaprefs-{}-{}-{}", tag, std::process::id(), gen_id()));
+    let files = base.join("files");
+    let backups = base.join("backups");
+    std::fs::create_dir_all(&files).unwrap();
+    std::fs::create_dir_all(&backups).unwrap();
+    (base, files, backups)
+}
+
+fn snap_file(files: &Path, name: &str) -> PathBuf {
+    let p = files.join(name);
+    std::fs::write(&p, b"x").unwrap();
+    p
+}
+
+// A snapshot folder whose prompts table holds one prompt per attachment, in one plain unsealed row each.
+fn write_snapshot(backups: &Path, stamp: &str, attachments: &[&Path]) -> PathBuf {
+    let folder = backups.join(stamp);
+    std::fs::create_dir_all(&folder).unwrap();
+    let raw = folder.join("raw.db");
+    let conn = Connection::open(&raw).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+         CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);",
+    )
+    .unwrap();
+    for (i, a) in attachments.iter().enumerate() {
+        let p = Prompt { id: format!("p{i}"), file_path: a.to_string_lossy().to_string(), ..Default::default() };
+        conn.execute("INSERT INTO prompts VALUES (?1, ?2, ?3)", rusqlite::params![p.id, i as i64, serde_json::to_string(&p).unwrap()]).unwrap();
+    }
+    drop(conn);
+    gzip_to(&raw, &folder.join(BACKUP_DB_GZ)).unwrap();
+    std::fs::remove_file(&raw).unwrap();
+    folder
+}
+
+fn sweep_with_snapshots(files: &Path, backups: &Path, data: &Path) {
+    let empty = std::collections::HashSet::new();
+    sweep_orphan_files_in(files, &empty, || Some(std::collections::HashSet::new()), || snapshot_file_refs(backups, data));
+}
+
+#[test]
+fn a_file_only_a_retained_snapshot_references_survives_the_sweep_until_the_snapshot_is_gone() {
+    let (base, files, backups) = snap_dirs("keep");
+    let kept = snap_file(&files, "kept.txt");
+    let loose = snap_file(&files, "loose.txt");
+    let folder = write_snapshot(&backups, "2026-01-01_00-00-00", &[&kept]);
+    sweep_with_snapshots(&files, &backups, &base);
+    assert!(kept.is_file(), "a snapshot still needs this attachment");
+    assert!(!loose.exists(), "nothing references this one");
+    std::fs::remove_dir_all(&folder).unwrap();
+    sweep_with_snapshots(&files, &backups, &base);
+    assert!(!kept.exists(), "once the snapshot is gone its references stop protecting the file");
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn an_unreadable_snapshot_keeps_the_files_older_than_it() {
+    let (base, files, backups) = snap_dirs("unreadable");
+    let old = snap_file(&files, "old.txt");
+    let folder = backups.join("2026-01-01_00-00-00");
+    std::fs::create_dir_all(&folder).unwrap();
+    let db = folder.join(BACKUP_DB_GZ);
+    std::fs::write(&db, b"not a gzip stream").unwrap();
+    let set_age = |ahead_secs: i64| {
+        let now = std::time::SystemTime::now();
+        let t = if ahead_secs >= 0 { now + Duration::from_secs(ahead_secs as u64) } else { now - Duration::from_secs((-ahead_secs) as u64) };
+        std::fs::File::options().write(true).open(&db).unwrap().set_modified(t).unwrap();
+    };
+    set_age(3600);
+    sweep_with_snapshots(&files, &backups, &base);
+    assert!(old.is_file(), "a file that existed when the unreadable snapshot was made must stay");
+    // A file made after that snapshot cannot be in it.
+    set_age(-3600);
+    sweep_with_snapshots(&files, &backups, &base);
+    assert!(!old.exists(), "a file newer than every unreadable snapshot is swept as before");
+    let _ = std::fs::remove_dir_all(&base);
+}
