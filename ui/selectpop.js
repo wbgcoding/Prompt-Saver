@@ -79,6 +79,7 @@ export function openValuePop(a, items, current, pick) {
       selected = row;
     }
     row.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // a right or middle click is no pick
       e.preventDefault();
       const done = onPick;
       closeValuePop();
@@ -137,6 +138,7 @@ export function attachSelectPicker(sel) {
   };
 
   sel.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     // The default action would have focused the select; do it by hand so the
     // keyboard keeps working on the open list.
