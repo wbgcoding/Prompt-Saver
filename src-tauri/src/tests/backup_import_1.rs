@@ -204,20 +204,42 @@ fn restore_selective_settings_scope_leaves_data_untouched() {
     }
     {
         let conn = full_schema_db(&staged, "staged");
-        conn.execute_batch(
-            "INSERT INTO prompts VALUES('backed-up', 0, '{}');
-                 INSERT INTO meta VALUES('settings', 'BACKUP-SETTINGS');",
-        )
-        .unwrap();
+        conn.execute_batch("INSERT INTO prompts VALUES('backed-up', 0, '{}');").unwrap();
+        let mut theirs = Settings::default();
+        theirs.ui_texts.insert("marker".into(), "BACKUP".into());
+        db_write_settings(&conn, &theirs).unwrap();
     }
     restore_selective(&target, &staged, "settings").unwrap();
     let conn = Connection::open(&target).unwrap();
     let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
     assert_eq!(prompt_id, "live", "settings scope must never touch prompts");
-    let settings: String = conn.query_row("SELECT value FROM meta WHERE key='settings'", [], |r| r.get(0)).unwrap();
-    assert_eq!(settings, "BACKUP-SETTINGS", "settings scope must apply the backup's settings");
+    let restored = read_settings_row(&conn, "main").expect("settings row");
+    assert_eq!(restored.ui_texts.get("marker").map(String::as_str), Some("BACKUP"), "settings scope must apply the backup's settings");
     let migrated: String = conn.query_row("SELECT value FROM meta WHERE key='copy_log_migrated'", [], |r| r.get(0)).unwrap();
     assert_eq!(migrated, "1", "settings scope must never touch the migration marker");
+    let _ = std::fs::remove_file(&target);
+    let _ = std::fs::remove_file(&staged);
+}
+
+#[test]
+fn restore_selective_settings_scope_refuses_an_unreadable_snapshot_row() {
+    let dir = std::env::temp_dir();
+    let target = dir.join(format!("{}-test-restore-badrow-target.db", brand::SLUG));
+    let staged = dir.join(format!("{}-test-restore-badrow-staged.db", brand::SLUG));
+    {
+        let conn = full_schema_db(&target, "target");
+        let mut live = Settings::default();
+        live.ui_texts.insert("marker".into(), "LIVE".into());
+        db_write_settings(&conn, &live).unwrap();
+    }
+    {
+        let conn = full_schema_db(&staged, "staged");
+        conn.execute_batch("INSERT INTO meta VALUES('settings', 'NOT-A-SETTINGS-ROW');").unwrap();
+    }
+    let err = restore_selective(&target, &staged, "settings").unwrap_err();
+    assert_eq!(err, "backup-schema-mismatch");
+    let after = read_settings_row(&Connection::open(&target).unwrap(), "main").expect("live row survives");
+    assert_eq!(after.ui_texts.get("marker").map(String::as_str), Some("LIVE"));
     let _ = std::fs::remove_file(&target);
     let _ = std::fs::remove_file(&staged);
 }
