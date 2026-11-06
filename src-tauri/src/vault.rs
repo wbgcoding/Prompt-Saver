@@ -1272,6 +1272,7 @@ pub(crate) fn run_import(
         store.prompts_locked = original_prompts_locked;
         SETTINGS_LOCKED.store(original_settings_locked, Ordering::Relaxed);
         mirror_minimize_to_tray(&store.settings);
+        load_pick_history(&store.settings); // the import replaced the colour-history mirror too
         // Put back a set the disk was never told about, so nothing may be
         // skipped as "already written" on the next save either.
         store.forget_written_rows();
