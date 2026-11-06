@@ -73,6 +73,11 @@ SECTION = """\
       await sleep(50);
       window.__FIRE__('voice-stopped', { id: 1, token: 3, reason: 'manual' });
       await sleep(50);
+      // vb18 needs the Markdown preview on: the stub's settings are what the next state fetch reads.
+      SETTINGS.ui_flags.mdPreview = true;
+      window.__FIRE__('store-synced', {});
+      await sleep(300);
+      let mdWasOn = false;
       const tile = document.querySelector('#grid .tile');
       let modalVoiceBtn = null, modalText = null;
       if (tile) {
@@ -91,6 +96,7 @@ SECTION = """\
         // user would make, before dictating into it.
         const mdPreviewEl = document.getElementById('modal-md-preview');
         if (modalText.classList.contains('hidden') && mdPreviewEl && !mdPreviewEl.classList.contains('hidden')) {
+          mdWasOn = true;
           mdPreviewEl.click();
           await sleep(100);
         }
@@ -109,10 +115,25 @@ SECTION = """\
         }
         window.__FIRE__('voice-text', { id: 2, token: 4, text: 'real' });
         await sleep(50);
+        // vb18: leaving the window (the textarea blurs) while dictating into it keeps the
+        // raw field: the Markdown preview would hide the very field the next result goes to.
+        if (!mdWasOn) out.errors.push('vb18: NOT_MEASURED, the editor did not open in the Markdown preview');
+        // A click into another app sends no pointer event here; end any press an earlier step left open.
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+        modalText.dispatchEvent(new FocusEvent('blur'));
+        await sleep(80);
+        if (modalText.classList.contains('hidden')) {
+          out.errors.push('vb18: a blur during dictation swapped the editor back to the Markdown preview');
+        }
+        window.__FIRE__('voice-text', { id: 2, token: 4, text: 'after' });
+        await sleep(50);
+        if (!modalText.value.includes('after')) {
+          out.errors.push('vb18: dictation stopped writing after the window lost focus');
+        }
         modalVoiceBtn.click();
         window.__FIRE__('voice-stopped', { id: 2, token: 4, reason: 'manual' });
         await sleep(50);
-        if (!modalText.value.trim().endsWith('real')) {
+        if (!modalText.value.trim().endsWith('after')) {
           out.errors.push('Second session text did not land in its own target (' + JSON.stringify(modalText.value) + ')');
         }
         if (modalVoiceBtn.classList.contains('is-listening') || modalVoiceBtn.classList.contains('is-arming')) {

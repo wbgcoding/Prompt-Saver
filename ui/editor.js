@@ -1733,15 +1733,18 @@ export function bindEditor() {
   // click then lands somewhere else, or nowhere. Wait for the pointer to come up.
   let swapAfterClick = false;
   let pointerIsDown = false;
+  // A dictation into the field keeps it on screen: the preview hides the textarea, and a hidden
+  // target takes no more recognized text, so leaving the window would end the dictation.
+  const dictatingHere = () => voiceState !== "idle" && voiceTargetEl === modal.text;
   window.addEventListener("pointerdown", () => { pointerIsDown = true; }, true);
   window.addEventListener("pointerup", () => {
     pointerIsDown = false;
     if (!swapAfterClick) return;
     swapAfterClick = false;
-    if (mdEditing && document.activeElement !== modal.text) mdSwap(false);
+    if (mdEditing && document.activeElement !== modal.text && !dictatingHere()) mdSwap(false);
   }, true);
   modal.text.addEventListener("blur", () => {
-    if (!mdEditing) return;
+    if (!mdEditing || dictatingHere()) return;
     if (pointerIsDown) { swapAfterClick = true; return; }
     mdSwap(false);
   });
