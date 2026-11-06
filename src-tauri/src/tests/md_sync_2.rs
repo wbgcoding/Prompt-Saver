@@ -1415,3 +1415,21 @@ fn the_exit_flush_waits_for_a_running_write_and_still_flushes_a_queued_one() {
     assert!(!sync_exit_flush_owed(&stuck, Duration::from_millis(150)));
     assert!(started.elapsed() < Duration::from_secs(2));
 }
+
+// The refusal is a code with a payload, not a bare file list: the dialog formats the names
+// itself, because an unmapped English sentence would be replaced by "Something went wrong".
+#[test]
+fn the_foreign_file_refusal_is_a_code_carrying_the_names_and_the_remainder() {
+    let dir = sync_tmp_dir("del-foreign-code");
+    for i in 0..7 {
+        fs::write(dir.join(format!("note{i}.txt")), "not yours").unwrap();
+    }
+    let data = sync_tmp_dir("del-foreign-code-data");
+    let err = sync_delete_dir(&dir, &data).expect_err("strangers stop the delete");
+    let payload = err.strip_prefix("sync-foreign-files:").unwrap_or_else(|| panic!("not a code: {err}"));
+    let (list, more) = payload.rsplit_once('|').unwrap();
+    assert_eq!(list.split(", ").count(), 5, "{list}");
+    assert_eq!(more, "2");
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&data);
+}

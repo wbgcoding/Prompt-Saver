@@ -20,6 +20,7 @@ ALLOW = {
         "ocr-no-language", "ocr-index-busy", "voice-no-language", "voice-busy", "voice-online-required",
         "recording-too-young-to-continue", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
+        "sync-foreign-files:{list}|{more}",
         "view-full:{deficit}", "view-full", "invalid-exe",
     ],
     "an export graph only this app's own UI builds; a refusal shows the generic export failure": [

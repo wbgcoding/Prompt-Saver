@@ -2511,11 +2511,9 @@ pub(crate) fn sync_delete_dir(dir: &Path, data: &Path) -> Result<usize, String> 
         let shown: Vec<String> = scan.foreign.iter().take(5).cloned().collect();
         let more = scan.foreign.len().saturating_sub(shown.len());
         let list = shown.join(", ");
-        return Err(if more > 0 {
-            format!("{list} and {more} more")
-        } else {
-            list
-        });
+        // A code with a payload (file names, how many more): the settings dialog formats it,
+        // since a bare sentence here would show up as the generic error text.
+        return Err(format!("sync-foreign-files:{list}|{more}"));
     }
     let mut removed = 0usize;
     for path in &scan.ours {
