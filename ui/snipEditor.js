@@ -1834,7 +1834,7 @@ export function initSnipEditor() {
     const plainKey = !(e.ctrlKey || e.metaKey || e.altKey);
     if (plainKey && e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
     // A slider keeps its own arrow keys.
-    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged && e.target?.type !== "range") {
       e.preventDefault();
       const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : 1;
       snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);
