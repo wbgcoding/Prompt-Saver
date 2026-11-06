@@ -172,6 +172,22 @@ later(async () => {
   }
 });
 
+// hotkeys.js prettyAccel: named keys and Alt follow the UI language.
+later(async () => {
+  const src = read("hotkeys.js");
+  const a = src.indexOf("export const MOD_LABELS");
+  const b = src.indexOf("// ---- Per-prompt hotkey");
+  const code = src.slice(a, b).replace(/export /g, "") + "\n;globalThis.pretty = prettyAccel;";
+  const sandbox = run(code, { t: (k) => `<${k}>` });
+  const pretty = sandbox.pretty;
+  check(pretty("CommandOrControl+Shift+Space") === "<keyCtrl> + <keyShift> + <keySpace>", `Space is translated, got ${pretty("CommandOrControl+Shift+Space")}`);
+  check(pretty("Alt+Up") === "<keyAlt> + <keyUp>", `Alt and Up are translated, got ${pretty("Alt+Up")}`);
+  check(pretty("Alt+Down") === "<keyAlt> + <keyDown>" && pretty("Alt+Left") === "<keyAlt> + <keyLeft>" && pretty("Alt+Right") === "<keyAlt> + <keyRight>", "all four arrows are translated");
+  check(pretty("Alt+Home") === "<keyAlt> + <keyHome>" && pretty("Alt+End") === "<keyAlt> + <keyEnd>", "Home and End are translated");
+  check(pretty("CommandOrControl+P") === "<keyCtrl> + P" && pretty("Alt+Equal") === "<keyAlt> + =", "letters and the plus key stay as they are");
+  check(pretty("Option+F5") === "<keyAlt> + F5" && pretty("Super+X") === "Win + X", "Option reads as Alt, Super as Win");
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);

@@ -29,14 +29,16 @@ export function accelFromEvent(e) {
 export const MOD_LABELS = {
   CommandOrControl: () => t("keyCtrl"), Control: () => t("keyCtrl"),
   Shift: () => t("keyShift"),
-  Alt: () => "Alt", Option: () => "Alt",
+  Alt: () => t("keyAlt"), Option: () => t("keyAlt"),
   Super: () => "Win", Meta: () => "Win", Command: () => "Win", Cmd: () => "Win",
 };
 // Key names the backend parser spells out that read better as the character on the key.
 const KEY_LABELS = { Equal: "=", NumpadAdd: "Num +" };
+// Named keys the UI languages spell out (the same strings the shortcut overview uses).
+const KEY_NAME_IDS = { Space: "keySpace", Up: "keyUp", Down: "keyDown", Left: "keyLeft", Right: "keyRight", Home: "keyHome", End: "keyEnd" };
 export function prettyAccel(accel) {
   if (!accel) return "";
-  return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : KEY_LABELS[p] || p)).join(" + ");
+  return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : KEY_NAME_IDS[p] ? t(KEY_NAME_IDS[p]) : KEY_LABELS[p] || p)).join(" + ");
 }
 
 // ---- Per-prompt hotkey (editor row) ----
