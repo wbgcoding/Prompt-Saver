@@ -137,16 +137,21 @@ export function pollElevatedCaps(kind) {
       if (st.elevChain !== chain) return;
       st.elevRunning = false; renderLangsRetry(kind, errText(e)); return;
     }
-    if (st.elevChain !== chain) return;
-    if (res == null) {
-      if (--st.elevLeft <= 0) { st.elevRunning = false; renderLangsRetry(kind, t("ocrLangsNeedElevation")); return; }
-      st.elevTimer = setTimeout(tick, 2000);
+    if (res != null) {
+      // The backend deleted its result file when it handed the list over, so a chain that went
+      // stale meanwhile (dialog closed, another chain started) still keeps it, retires every
+      // other chain and repaints; dropping it would leave the next poll waiting for nothing.
+      st.elevChain++;
+      if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
+      st.elevRunning = false;
+      st.cache = res;
+      st.checked = Math.floor(Date.now() / 1000);
+      renderLangsBody(kind);
       return;
     }
-    st.elevRunning = false;
-    st.cache = res;
-    st.checked = Math.floor(Date.now() / 1000);
-    renderLangsBody(kind);
+    if (st.elevChain !== chain) return;
+    if (--st.elevLeft <= 0) { st.elevRunning = false; renderLangsRetry(kind, t("ocrLangsNeedElevation")); return; }
+    st.elevTimer = setTimeout(tick, 2000);
   };
   st.elevTimer = setTimeout(tick, 2000);
 }

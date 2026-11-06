@@ -179,6 +179,10 @@ export const FLAG_LABELS = {
   // The thin frame around a region recording; its window is excluded from capture, so it is
   // never part of the video.
   recOutline: "flagRecOutline",
+  // Off = the data folder is written to unconditionally, whatever it holds. On (shipped) = a lock
+  // file next to the database refuses writes while another machine's lock on the same (typically
+  // synced) folder is fresh; see acquire_data_dir_lock/DATA_DIR_READONLY in store.rs.
+  dataDirLock: "flagDataDirLock",
 };
 export const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -234,10 +238,6 @@ export const OPT_FLAG_LABELS = {
   // windows can run side by side. Read once at launch, before settings normally
   // load: toggling it needs a restart to take effect (flagRow() toasts that).
   allowMultipleInstances: "flagAllowMultipleInstances",
-  // Off = the data folder is written to unconditionally, whatever it holds. On (shipped) = a lock
-  // file next to the database refuses writes while another machine's lock on the same (typically
-  // synced) folder is fresh; see acquire_data_dir_lock/DATA_DIR_READONLY in store.rs.
-  dataDirLock: "flagDataDirLock",
   // Swaps the whole window over to a bundled sample library, for showing the app or taking a
   // screenshot without exposing real data. The real store is never touched (see
   // enable_demo_mode/disable_demo_mode in demo.rs). Never toggled through the normal set_ui_flag
