@@ -986,15 +986,20 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
 
 // The target and the prompts it may be compared with. A confidential prompt is
 // neither compared nor offered as a match: its stored text can be ciphertext and
-// its name must not surface as a hint. None when the target is missing or secret.
+// its name must not surface as a hint, and a pair the user marked "not duplicates" is not
+// offered either. None when the target is missing or secret.
 // Only id, name and text are copied (all the comparison reads), so the lock is not held
 // while a whole library's image data URLs are cloned.
-pub(crate) fn similar_inputs(prompts: &[Prompt], id: &str) -> Option<(Prompt, Vec<Prompt>)> {
+pub(crate) fn similar_inputs(prompts: &[Prompt], id: &str, ignored: &[Vec<String>]) -> Option<(Prompt, Vec<Prompt>)> {
     fn slim(p: &Prompt) -> Option<Prompt> {
         serde_json::from_value(serde_json::json!({ "id": p.id, "name": p.name, "text": p.text })).ok()
     }
     let target = slim(prompts.iter().find(|p| p.id == id).filter(|p| !p.secret)?)?;
-    let others = prompts.iter().filter(|p| p.id != id && !p.secret).filter_map(slim).collect();
+    let others = prompts
+        .iter()
+        .filter(|p| p.id != id && !p.secret && !dup_pair_is_ignored(ignored, id, &p.id))
+        .filter_map(slim)
+        .collect();
     Some((target, others))
 }
 
@@ -1005,7 +1010,10 @@ pub(crate) fn similar_inputs(prompts: &[Prompt], id: &str) -> Option<(Prompt, Ve
 pub(crate) async fn similar_to_saved(state: State<'_, Db>, id: String, threshold: f64) -> Result<Option<SimilarHit>, String> {
     // Snapshot and drop the lock before the scan, as find_duplicates does: the bounded but real
     // comparison must not block every other command.
-    let Some((target, others)) = similar_inputs(&lock(&state).prompts, &id) else {
+    let Some((target, others)) = ({
+        let store = lock(&state);
+        similar_inputs(&store.prompts, &id, &store.settings.dup_ignored)
+    }) else {
         return Ok(None);
     };
     let others_ref: Vec<&Prompt> = others.iter().collect();
