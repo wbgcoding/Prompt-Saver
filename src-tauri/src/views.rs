@@ -963,6 +963,11 @@ pub(crate) fn place_taken_out_member(
         layout.insert(occupant, free);
     }
     layout.insert(id.to_string(), cell);
+    // A folder can hold a prompt the view never listed; without this the next grid resize
+    // (which keeps only members) would drop the seated tile.
+    if !view.members.iter().any(|m| m == id) {
+        view.members.push(id.to_string());
+    }
     Ok(())
 }
 

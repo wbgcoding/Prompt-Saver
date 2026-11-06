@@ -1352,3 +1352,15 @@ fn a_view_colour_is_a_hex_value_or_nothing() {
     assert_eq!(clean_view_color("red"), "");
     assert_eq!(clean_view_color("#12345"), "");
 }
+
+#[test]
+fn a_prompt_taken_out_of_a_folder_joins_the_views_member_list() {
+    let mut view = test_view("v");
+    view.cols = 2;
+    view.rows = 1;
+    assert!(!view.members.contains(&"new".to_string()));
+    place_taken_out_member(&mut view, &[], "new", [0, 0]).unwrap();
+    assert!(view.members.contains(&"new".to_string()), "a layout entry without a member would be dropped on the next resize");
+    place_taken_out_member(&mut view, &[], "new", [1, 0]).unwrap();
+    assert_eq!(view.members.iter().filter(|m| *m == "new").count(), 1);
+}
