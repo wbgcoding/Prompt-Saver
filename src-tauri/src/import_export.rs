@@ -1395,7 +1395,8 @@ pub(crate) fn folder_file_item(name: String, tags: Vec<String>, content: &str) -
     // The rotation split runs FIRST, on the whole file: the note is only
     // ever pulled off entry 0 (the plain text), never off a later variant,
     // so a short line right after the separator is never mistaken for it.
-    let (raw_text, variants) = split_variants(content);
+    let content = content.replace("\r\n", "\n");
+    let (raw_text, variants) = split_variants(&content);
     let (text, note) = split_folder_note(&raw_text);
     ImportedPrompt {
         name,

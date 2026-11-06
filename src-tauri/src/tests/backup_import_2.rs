@@ -1040,6 +1040,13 @@ fn folder_import_upgrades_the_retired_placeholder_spelling() {
 }
 
 #[test]
+fn folder_import_splits_rotation_entries_of_a_crlf_file() {
+    let item = folder_file_item("Note".to_string(), vec![], "Title\r\none\r\n<!-- next -->\r\ntwo\r\n");
+    assert_eq!(item.text, "one");
+    assert_eq!(item.variants, vec!["two\n".to_string()]);
+}
+
+#[test]
 fn an_import_with_edited_rotation_entries_is_not_an_exact_duplicate() {
     let note = |variant: &str| folder_file_item("Note".to_string(), vec![], &format!("Title\nbody{VARIANT_SEP}{variant}"));
     let mut store = bare_import_store();
