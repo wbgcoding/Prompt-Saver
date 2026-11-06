@@ -642,14 +642,14 @@ fn sweep_keeps_a_staged_copy_while_the_add_is_in_flight() {
     assert_ne!(copy, orig.to_string_lossy());
     assert!(Path::new(&copy).is_file());
     let empty = std::collections::HashSet::new();
-    sweep_orphan_files_in(&files, &empty, || Some(std::collections::HashSet::new()));
+    sweep_orphan_files_in(&files, &empty, || Some(std::collections::HashSet::new()), SnapshotRefs::default);
     assert!(Path::new(&copy).is_file(), "an in-flight staged copy was swept");
     // the insert completes: the store references it, the pending entry goes away
     staged.commit();
     drop(staged);
     let mut live = std::collections::HashSet::new();
     live.insert(copy.replace('/', "\\").to_lowercase());
-    sweep_orphan_files_in(&files, &empty, || Some(live));
+    sweep_orphan_files_in(&files, &empty, || Some(live), SnapshotRefs::default);
     assert!(Path::new(&copy).is_file(), "a referenced copy was swept after the insert");
     let _ = fs::remove_dir_all(&base);
 }
