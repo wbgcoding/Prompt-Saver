@@ -1729,8 +1729,10 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
                 // save to come along.
                 let booting = sync_state().booting.load(Ordering::SeqCst);
                 if sync_write_again(failed, booting, &mut retries, &mut boot_waited) {
-                    tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
+                    // Queued before the wait, not after: an app that closes during it still owes
+                    // this write (see sync_flush_on_exit).
                     q.0.lock().unwrap_or_else(|e| e.into_inner()).pending = true;
+                    tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
                 }
             }
         }
@@ -1758,12 +1760,35 @@ pub(crate) fn sync_write_again(failed: usize, booting: bool, retries: &mut u32, 
     false
 }
 
-// The app is closing with a folder write still queued (a delete made a moment ago, say): it runs
-// once more here, on its own thread and for a few seconds at most, so the folder does not keep
-// what the library no longer has. Whatever it cannot finish is picked up by the next start.
+// Whether the closing app owes the folder one more write. A queued write (including one
+// waiting for its retry) does. A write that is running right now (the queue is active but
+// nothing is queued) is waited for, up to `wait`, because the process must not exit in the
+// middle of it; if another save queued a write meanwhile, that one is owed too.
+pub(crate) fn sync_exit_flush_owed(state: &Mutex<SyncWriteState>, wait: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            if s.pending {
+                return true;
+            }
+            if !s.active || std::time::Instant::now() >= deadline {
+                return false;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+// The app is closing with a folder write still queued or running (a delete made a moment ago,
+// say): a running one is waited for, a queued one runs once more here, on its own thread, all
+// within a few seconds at most, so the folder does not keep what the library no longer has.
+// Whatever it cannot finish is picked up by the next start.
 pub(crate) fn sync_flush_on_exit(app: &AppHandle) {
+    const EXIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
+    let started = std::time::Instant::now();
     let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
-    if !q.0.lock().unwrap_or_else(|e| e.into_inner()).pending {
+    if !sync_exit_flush_owed(&q.0, EXIT_BUDGET) {
         return;
     }
     let Some(state) = app.try_state::<Db>() else { return };
@@ -1780,7 +1805,7 @@ pub(crate) fn sync_flush_on_exit(app: &AppHandle) {
         sync_write_all_impl(&app2, &prompts, &settings);
         let _ = tx.send(());
     });
-    let _ = rx.recv_timeout(std::time::Duration::from_secs(3));
+    let _ = rx.recv_timeout(EXIT_BUDGET.saturating_sub(started.elapsed()).max(std::time::Duration::from_millis(500)));
 }
 
 // A prompt that left the library (deleted, trashed, or given an id this feature refuses)

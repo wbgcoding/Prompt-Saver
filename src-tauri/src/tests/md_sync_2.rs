@@ -1372,3 +1372,46 @@ fn a_lock_whose_reused_pid_cannot_be_inspected_goes_stale_by_age() {
     assert!(sync_lock_is_stale(&lock_path), "an old one is not kept forever by a process nobody can inspect");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// The exit flush: a write that is running when the app closes is waited for (the process must
+// not exit mid-write), and a write queued again meanwhile or waiting for its retry still runs.
+#[test]
+fn the_exit_flush_waits_for_a_running_write_and_still_flushes_a_queued_one() {
+    use std::sync::Arc;
+    let wait = Duration::from_secs(2);
+    let idle = Mutex::new(SyncWriteState::default());
+    assert!(!sync_exit_flush_owed(&idle, wait), "nothing queued, nothing running");
+
+    let queued = Mutex::new(SyncWriteState { pending: true, active: true });
+    assert!(sync_exit_flush_owed(&queued, wait), "a queued write (or one waiting to retry) is flushed at once");
+
+    // A write is running and finishes on its own: the exit waits for it instead of returning.
+    let running = Arc::new(Mutex::new(SyncWriteState { pending: false, active: true }));
+    let worker = running.clone();
+    let done = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(150));
+        worker.lock().unwrap().active = false;
+    });
+    let started = Instant::now();
+    assert!(!sync_exit_flush_owed(&running, wait));
+    assert!(started.elapsed() >= Duration::from_millis(100), "returned while the write was still running");
+    done.join().unwrap();
+
+    // The running write finishes and a save queued another one meanwhile.
+    let running = Arc::new(Mutex::new(SyncWriteState { pending: false, active: true }));
+    let worker = running.clone();
+    let done = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        let mut s = worker.lock().unwrap();
+        s.pending = true;
+        s.active = false;
+    });
+    assert!(sync_exit_flush_owed(&running, wait));
+    done.join().unwrap();
+
+    // A write that never ends cannot hold the exit longer than the bound.
+    let stuck = Mutex::new(SyncWriteState { pending: false, active: true });
+    let started = Instant::now();
+    assert!(!sync_exit_flush_owed(&stuck, Duration::from_millis(150)));
+    assert!(started.elapsed() < Duration::from_secs(2));
+}
