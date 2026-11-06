@@ -1778,6 +1778,9 @@ export function initSnipEditor() {
     if (!snipCtxPop.classList.contains("hidden")) {
       if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
       if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
+      // The menu owns every other key too: undo behind it would leave its Duplicate pointing at
+      // a shape that is gone.
+      return;
     }
     // The size and colour popovers sit on document.body too, so the Tab trap stays inside the
     // one that is open instead of pulling focus out of its fields.
