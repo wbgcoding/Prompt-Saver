@@ -475,6 +475,29 @@ RECENT_PROBE = """
     }
 """
 
+# 1246: every expert path row carries the jump-to-setting hook, and picking a recording quality
+# step moves the visible bitrate slider and readout with the value it just stored.
+EXPERT_SYNC_PROBE = """
+    // 1246:
+    {
+      const em = await import('./expertMenu.js');
+      const ec = await import('./expertConfig.js');
+      for (const k of Object.keys(em.EXPERT_PATHS)) {
+        if (em.pathRow(k).dataset.settingRow !== k) errs.push('1246: the path row ' + k + ' has no data-setting-row');
+      }
+      const row = em.valueRow('recBitrateKbps');
+      document.body.appendChild(row);
+      const slider = row.querySelector('input[type=range]');
+      const out = row.querySelector('.value-out, output, .value-head span:last-child');
+      for (const [q, want] of [['small', ec.REC_QUALITY_BITRATE.small], ['high', ec.REC_QUALITY_BITRATE.high]]) {
+        await em.EXPERT_DROPDOWNS.recQuality.set(q);
+        if (Number(slider.value) !== want) errs.push('1246: after quality ' + q + ' the bitrate slider reads ' + slider.value + ', wanted ' + want);
+        if (out && !out.textContent.includes(String(want))) errs.push('1246: after quality ' + q + ' the bitrate readout reads ' + out.textContent);
+      }
+      row.remove();
+    }
+"""
+
 def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
     side.write_text(
@@ -500,7 +523,8 @@ def run(browser, tmp):
             ("folder-second", FOLDER_SECOND_PROBE, ""),
             ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
             ("backup-now", BACKUP_NOW_PROBE, ""),
-            ("recent-searches", RECENT_PROBE, RECENT_SEED)):
+            ("recent-searches", RECENT_PROBE, RECENT_SEED),
+            ("expert-sync", EXPERT_SYNC_PROBE, "")):
         errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:

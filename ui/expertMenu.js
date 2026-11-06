@@ -169,6 +169,9 @@ export const EXPERT_DROPDOWNS = {
         settings.ui_values = { ...(settings.ui_values || {}), recBitrateKbps: REC_QUALITY_BITRATE[v] };
         try {
           await invoke("set_ui_value", { key: "recBitrateKbps", value: REC_QUALITY_BITRATE[v] });
+          // The bitrate slider sits in the same group: bring it (and its reset icon) along in place.
+          document.querySelector('[data-setting-row="recBitrateKbps"]')?.resyncValue?.();
+          syncRowReset("values", "recBitrateKbps");
         } catch (e) {
           const back = { ...(settings.ui_values || {}) };
           if (before === undefined) delete back.recBitrateKbps; else back.recBitrateKbps = before;
@@ -628,20 +631,29 @@ export function valueRow(key) {
     ? () => cfg.stops[Number(slider.value)]
     : () => (isUnlimitedStop() ? 0 : Number(slider.value));
   const show = cfg.stops ? (v) => String(v) : (v) => (isUnlimitedStop() ? t("valUnlimited") : fmt(v));
+  // Puts the slider and its readout on the stored value; also what resyncValue reruns when
+  // another control writes this value (recQuality re-suggests recBitrateKbps).
+  const showStored = () => {
+    if (cfg.stops) {
+      const idx = cfg.stops.findIndex((s) => s >= val(key));
+      slider.value = idx < 0 ? cfg.stops.length - 1 : idx;
+    } else {
+      const stored = val(key);
+      slider.value = cfg.topUnlimited && stored === 0 ? unlimitedStop : stored;
+    }
+    out.textContent = show(cur());
+  };
   if (cfg.stops) {
     slider.min = 0;
     slider.max = cfg.stops.length - 1;
     slider.step = 1;
-    const idx = cfg.stops.findIndex((s) => s >= val(key));
-    slider.value = idx < 0 ? cfg.stops.length - 1 : idx;
   } else {
     slider.min = cfg.min;
     slider.max = unlimitedStop ?? cfg.max;
     slider.step = cfg.step;
-    const stored = val(key);
-    slider.value = cfg.topUnlimited && stored === 0 ? unlimitedStop : stored;
   }
-  out.textContent = show(cur());
+  showStored();
+  row.resyncValue = showStored;
   slider.addEventListener("input", () => { out.textContent = show(cur()); previewValue(key, cur()); });
   slider.addEventListener("change", () => commitValue(key, cur()));
   // .value-head is `justify-content: space-between` over exactly two children;
@@ -1245,6 +1257,7 @@ export function pathRow(key) {
   const cfg = EXPERT_PATHS[key];
   const row = document.createElement("div");
   row.className = "field value-field path-field";
+  row.dataset.settingRow = key; // the jump-to-setting hook global search scrolls to and flashes
   const head = document.createElement("div");
   head.className = "value-head";
   const span = document.createElement("span");
