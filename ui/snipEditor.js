@@ -1832,6 +1832,8 @@ export function initSnipEditor() {
     if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); snipEditZoomBy(snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
+    // A keyboard-focused checkbox or radio keeps Space: it toggles instead of panning.
+    if (e.key === " " && e.target?.matches?.("input[type=checkbox],input[type=radio]")) return;
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
     // Ctrl+V and friends are not tool or toggle keys.
     const plainKey = !(e.ctrlKey || e.metaKey || e.altKey);
