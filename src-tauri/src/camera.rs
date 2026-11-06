@@ -303,7 +303,7 @@ pub fn camera_mark_finishing(cam: State<'_, CameraState>, path: String, cam_star
 
 // The cancel path: bytes on disk are discarded with the slot, like keylog::discard,
 // leaving neither a half-written video nor a sidecar.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_discard_recording(cam: State<'_, CameraState>, path: String) -> Result<(), String> {
     let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
     discard_session(&session);

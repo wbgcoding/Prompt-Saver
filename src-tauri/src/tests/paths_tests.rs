@@ -464,6 +464,13 @@ fn the_recording_commands_check_the_path_text_before_they_open_it() {
 }
 
 #[test]
+fn the_camera_discard_removes_its_files_off_the_main_thread() {
+    let camera = source!("../camera.rs");
+    let at = camera.find("pub fn camera_discard_recording(").unwrap();
+    assert!(camera[..at].trim_end().ends_with("#[tauri::command(async)]"), "files may sit on a network share");
+}
+
+#[test]
 fn the_editor_commands_check_the_path_text_before_they_open_it() {
     let video = source!("../video_editor.rs");
     for sig in [
