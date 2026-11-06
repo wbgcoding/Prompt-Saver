@@ -282,8 +282,9 @@ async function startRecording() {
   recScreenElapsedValue = null;
   try {
     recorder = new MediaRecorder(stream, { mimeType });
-  } catch {
+  } catch (err) {
     await rollbackFailedStart();
+    await showCameraError(err);
     return;
   }
   recorder.ondataavailable = (e) => {
@@ -414,8 +415,9 @@ async function startRecording() {
   };
   try {
     recorder.start(1000);
-  } catch {
+  } catch (err) {
     await rollbackFailedStart();
+    await showCameraError(err);
     return;
   }
   paused = false;
