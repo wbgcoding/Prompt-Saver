@@ -792,7 +792,8 @@ export function bindCapture() {
     if (e.payload?.save_failed) lost.push(t("snipSaveFailed"));
     if (lost.length) toast(lost.join(". "));
     pendingSnipPath = e.payload?.path || "";
-    pendingSnipName = e.payload?.name || "";
+    // The backend names the shot in English; the leading word becomes the UI language's own.
+    pendingSnipName = (e.payload?.name || "").replace(/^Screenshot/, () => t("snipTitle"));
     pendingSnipStem = e.payload?.stem || "";
     pendingSnipOriginDir = "";
     snipEditOpen(shot, {
