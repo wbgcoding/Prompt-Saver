@@ -313,7 +313,7 @@ pub(crate) fn open_repo(page: Option<String>) -> Result<(), String> {
         Some("privacy") => format!("{}/blob/main/PRIVACY.md", repo_url()),
         _ => repo_url(),
     };
-    let mut cmd = std::process::Command::new("cmd");
+    let mut cmd = std::process::Command::new(crate::webview2::system_exe("cmd.exe"));
     cmd.args(["/C", "start", "", &url]);
     #[cfg(windows)]
     {

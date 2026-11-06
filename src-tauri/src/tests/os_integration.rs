@@ -177,3 +177,38 @@ fn powershell_and_explorer_resolve_to_their_system_paths() {
     assert!(ex.is_absolute() && ex.is_file(), "got {ex:?}");
     assert!(ex.parent().unwrap().to_string_lossy().to_lowercase().ends_with("windows"));
 }
+
+// Gate: no production source starts a program by a bare literal name (cmd, explorer,
+// powershell.exe ...), which Windows resolves in the exe's own folder first. Tools come from the
+// system path helpers; ffmpeg/ffprobe and the app's own exe are passed as variables.
+#[test]
+fn no_source_starts_a_windows_tool_by_a_bare_name() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n != "tests") {
+                    walk(&p, out);
+                }
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+    assert!(files.len() > 50);
+    let mut bad = Vec::new();
+    for f in files {
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+        if name.ends_with("_tests.rs") {
+            continue; // test fixtures spawn throwaway child processes
+        }
+        let text = std::fs::read_to_string(&f).unwrap();
+        let compact: String = text.split_whitespace().collect();
+        if compact.contains("Command::new(\"") {
+            bad.push(name);
+        }
+    }
+    assert!(bad.is_empty(), "bare program name in: {bad:?}");
+}
