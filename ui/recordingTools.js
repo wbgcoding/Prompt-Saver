@@ -62,8 +62,7 @@ async function openVideoCleanupRun(dir) {
     }
     updateExportBtn();
   };
-  // The trash section: a discarded recording in this folder's "verworfen" subfolder or in the
-  // app's staging folder's one (f.staging, where an unsaved take lands), restorable
+  // The trash section: a discarded recording in this folder's "verworfen" subfolder, restorable
   // or deletable one at a time. Independent of the age-based bulk cleanup above, so it refreshes
   // on its own after either action instead of closing the dialog.
   const discardedSection = $("video-cleanup-discarded-section");
@@ -86,7 +85,7 @@ async function openVideoCleanupRun(dir) {
       restoreBtn.className = "ghost-btn";
       restoreBtn.textContent = t("videoDiscardedRestore");
       restoreBtn.addEventListener("click", async () => {
-        const ok = await invoke("restore_discarded_recording", { dir, name: f.name, staging: !!f.staging }).catch(() => false);
+        const ok = await invoke("restore_discarded_recording", { dir, name: f.name }).catch(() => false);
         if (ok) { toast(t("videoDiscardedRestored")); refreshDiscarded(); refreshVideoFolderInfo(dir); }
         else toast(t("videoDiscardedRestoreFailed"));
       });
@@ -97,7 +96,7 @@ async function openVideoCleanupRun(dir) {
       deleteBtn.addEventListener("click", async () => {
         const sure = await confirmDialog({ title: t("videoDiscardedDeleteNow"), message: t("videoDiscardedDeleteAsk"), confirmLabel: t("videoDiscardedDeleteNow") });
         if (!sure) return;
-        const ok = await invoke("delete_discarded_recording_now", { dir, name: f.name, staging: !!f.staging }).catch(() => false);
+        const ok = await invoke("delete_discarded_recording_now", { dir, name: f.name }).catch(() => false);
         if (ok) { refreshDiscarded(); refreshVideoFolderInfo(dir); }
         else toast(t("videoDiscardedDeleteFailed"));
       });
