@@ -1145,7 +1145,10 @@ pub(crate) async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, 
 // AppHandle-dependent side of the contract). Returns (prompt count, dropped
 // hotkeys, whether the backup's own backup-password was dropped in favour of
 // this machine's).
-pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_settings: bool) -> (usize, usize, bool) {
+pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_settings: bool, roots: &[PathBuf]) -> (usize, usize, bool) {
+    // What this machine trusted before the file was applied: the restored attachment paths are
+    // judged against it, since a backup (also one sealed with the public fixed key) can name any path.
+    let pre_import = crate::asset_scope::trusted_stored_keys(store);
     if want_data {
         store.prompts = backup.prompts;
         // A backup written by hand could miss ids; keep every prompt addressable.
@@ -1221,6 +1224,8 @@ pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, w
     // changed: a settings-only import must not touch the current grid.
     if want_data {
         store.normalize_folders();
+        let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        crate::asset_scope::distrust_foreign_paths(store, &ids, &pre_import, roots);
     }
     (store.prompts.len(), dropped, backup_pw_dropped)
 }
@@ -1235,6 +1240,7 @@ pub(crate) fn run_import(
     backup: Backup,
     want_data: bool,
     want_settings: bool,
+    roots: &[PathBuf],
     persist: impl FnOnce(&Store, bool, bool) -> bool,
 ) -> Result<(usize, usize, bool, bool), String> {
     let original_prompts = store.prompts.clone();
@@ -1243,7 +1249,7 @@ pub(crate) fn run_import(
     let original_trash = store.trash.clone();
     let original_settings_locked = SETTINGS_LOCKED.load(Ordering::Relaxed);
     let ocr_was_on = ocr_index_flag_on(store);
-    let (count, dropped, backup_pw_dropped) = apply_import(store, backup, want_data, want_settings);
+    let (count, dropped, backup_pw_dropped) = apply_import(store, backup, want_data, want_settings, roots);
     // Imported settings may switch the picture-text index off while the prompts
     // (and the trash) still carry its text.
     let ocr_cleared = want_settings && clear_ocr_text_if_switched_off(ocr_was_on, store);
@@ -1259,7 +1265,9 @@ pub(crate) fn run_import(
     // A data-only import still carries the backup's vault salt and verifier into the
     // settings (the imported confidential prompts are sealed with them): leaving them
     // out of the write would restart with the old keys against the new prompts.
-    let write_settings = want_settings || vault_keys_differ(&original_settings, &store.settings);
+    let write_settings = want_settings
+        || vault_keys_differ(&original_settings, &store.settings)
+        || store.settings.untrusted_paths != original_settings.untrusted_paths;
     if !persist(store, write_prompts, write_settings) {
         store.prompts = original_prompts;
         store.trash = original_trash;
@@ -1406,7 +1414,9 @@ pub(crate) async fn import_all(
         // An import that overrides the decrypt lock replaces the table: the rows
         // that caused the lock are unknown to this process and would stay behind.
         let replace_prompts = want_data && store.prompts_locked;
-        let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
+        // The folders of this machine's own settings, never the ones the file brings.
+        let roots = crate::asset_scope::attachment_source_roots(&app, &store.settings);
+        let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, &roots, |st, prompts, settings| {
             save_import(&app, st, prompts, settings, replace_prompts)
         })?;
         if want_settings && ocr_was_on && !ocr_index_flag_on(&store) {

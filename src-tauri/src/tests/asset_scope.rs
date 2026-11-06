@@ -353,3 +353,58 @@ fn a_settings_restore_keeps_the_local_untrusted_marks() {
     crate::vault::keep_machine_settings(&local, &mut incoming);
     assert_eq!(incoming.untrusted_paths, local.untrusted_paths);
 }
+
+fn backup_with(prompts: Vec<Prompt>) -> Backup {
+    Backup { prompts, settings: Settings::default() }
+}
+
+// A full restore judges the attachment paths it brings in the way a prompt-file import does: a
+// path outside the app folders that the store did not hold before is marked untrusted, an
+// in-app path and one the store already held stay usable.
+#[test]
+fn a_full_restore_marks_foreign_attachment_paths_untrusted() {
+    let base = scratch_dir("restore-mark");
+    let root = base.join("data");
+    let roots = vec![root.clone()];
+    let own = touch(&root.join("files").join("own.png"));
+    let foreign = touch(&base.join("Documents").join("secret.pdf"));
+    let known = touch(&base.join("Pictures").join("known.png"));
+    let mut store = empty_store();
+    store.prompts.push(prompt_with(&known, ""));
+    let mut a = prompt_with(&foreign, &own);
+    a.id = "a".into();
+    let mut b = prompt_with(&known, "//host/share/x.png");
+    b.id = "b".into();
+    let mut c = prompt_with("relative/x.png", "");
+    c.id = "c".into();
+    let backup = backup_with(vec![a, b, c]);
+    crate::vault::apply_import(&mut store, backup, true, false, &roots);
+    let marked = &store.settings.untrusted_paths;
+    assert!(marked.contains(&crate::asset_scope::stored_key(&foreign)));
+    assert!(marked.contains(&crate::asset_scope::stored_key("relative/x.png")));
+    assert!(!marked.contains(&crate::asset_scope::stored_key(&own)), "an app folder path stays trusted");
+    assert!(!marked.contains(&crate::asset_scope::stored_key(&known)), "a path the store held stays trusted");
+    assert_eq!(store.prompts[0].file_path, foreign, "the path is kept as written");
+    let trusted = crate::asset_scope::trusted_stored_keys(&store);
+    assert!(!trusted.contains(&crate::asset_scope::stored_key(&foreign)));
+    assert!(trusted.contains(&crate::asset_scope::stored_key(&own)));
+    let _ = fs::remove_dir_all(&base);
+}
+
+// A settings only restore marks nothing and keeps the local marks; the marks survive the
+// settings replacement of a full restore.
+#[test]
+fn a_restore_keeps_local_marks_and_a_settings_only_restore_marks_nothing() {
+    let base = scratch_dir("restore-scope");
+    let foreign = touch(&base.join("Documents").join("secret.pdf"));
+    let mut store = empty_store();
+    store.settings.untrusted_paths.insert("f\u{1}d:/older.png".to_string());
+    store.prompts.push(prompt_with("d:/older.png", ""));
+    crate::vault::apply_import(&mut store, backup_with(vec![prompt_with(&foreign, "")]), false, true, &[]);
+    assert!(!crate::asset_scope::path_untrusted(&store.settings, &foreign));
+    assert!(store.settings.untrusted_paths.contains("f\u{1}d:/older.png"), "the local mark survives");
+    let mut full = empty_store();
+    crate::vault::apply_import(&mut full, backup_with(vec![prompt_with(&foreign, "")]), true, true, &[]);
+    assert!(crate::asset_scope::path_untrusted(&full.settings, &foreign), "marks survive the settings replacement");
+    let _ = fs::remove_dir_all(&base);
+}

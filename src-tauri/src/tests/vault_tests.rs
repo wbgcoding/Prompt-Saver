@@ -103,7 +103,7 @@ fn a_data_only_import_writes_the_vault_keys_it_carried_in() {
     for (foreign, expect_settings_written) in [(true, true), (false, false)] {
         let mut store = vault_store(settings.clone(), p.clone());
         let mut seen = None;
-        run_import(&mut store, foreign_backup(foreign), true, false, |_, prompts, settings| {
+        run_import(&mut store, foreign_backup(foreign), true, false, &[], |_, prompts, settings| {
             seen = Some((prompts, settings));
             true
         })
@@ -335,7 +335,7 @@ fn an_import_writes_the_trash_it_changed_in_the_same_transaction() {
     store.trash = vec![test_prompt("new1"), test_prompt("stays")];
     db_write_trash(&mut conn, &store.trash, &mut store.written.borrow_mut()).unwrap();
     // The backup brings "new1" back as a live prompt, so it leaves the trash in memory.
-    run_import(&mut store, import_test_backup(), true, false, |st, prompts, settings| {
+    run_import(&mut store, import_test_backup(), true, false, &[], |st, prompts, settings| {
         db_write_import(&mut conn, st, &st.prompts, &st.trash, prompts, settings, false).is_ok()
     })
     .unwrap();
@@ -351,7 +351,7 @@ fn a_failed_import_write_leaves_the_trash_rows_and_the_trash_list_as_they_were()
     store.trash = vec![test_prompt("new1"), test_prompt("stays")];
     db_write_trash(&mut conn, &store.trash, &mut store.written.borrow_mut()).unwrap();
     conn.execute_batch("CREATE TRIGGER fail_trash BEFORE DELETE ON trash BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
-    let r = run_import(&mut store, import_test_backup(), true, false, |st, prompts, settings| {
+    let r = run_import(&mut store, import_test_backup(), true, false, &[], |st, prompts, settings| {
         db_write_import(&mut conn, st, &st.prompts, &st.trash, prompts, settings, false).is_ok()
     });
     assert!(r.is_err());
