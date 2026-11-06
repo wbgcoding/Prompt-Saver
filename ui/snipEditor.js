@@ -1126,7 +1126,13 @@ export function initSnipEditor() {
   function snipEditTextPointerDown(pt) {
     snipEditFinishTextIfOpen();
     const hit = snipEditHitTestText(pt);
-    if (hit) { SE.drag = { kind: "text-move", op: hit, dx: pt.x - hit.point.x, dy: pt.y - hit.point.y }; return; }
+    if (hit) {
+      // The pointer press cleared the nudge target; a grabbed text box is the target again.
+      SE.lastNudged = hit;
+      snipEditUpdateNudgeHint();
+      SE.drag = { kind: "text-move", op: hit, dx: pt.x - hit.point.x, dy: pt.y - hit.point.y };
+      return;
+    }
     snipEditOpenTextInput(pt);
   }
 
@@ -1824,6 +1830,7 @@ export function initSnipEditor() {
     // Ctrl+V and friends are not tool or toggle keys.
     const plainKey = !(e.ctrlKey || e.metaKey || e.altKey);
     if (plainKey && e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
+    // A slider keeps its own arrow keys.
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
       const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : 1;
