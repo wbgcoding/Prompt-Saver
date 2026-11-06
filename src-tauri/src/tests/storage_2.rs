@@ -1017,6 +1017,20 @@ fn sweep_edit_state_removes_a_row_whose_target_is_gone() {
 }
 
 #[test]
+fn sweep_edit_state_keeps_a_row_it_cannot_unseal_until_it_expires_by_age() {
+    let conn = edit_state_test_conn();
+    let now = (now_ms() / 1000) as i64;
+    let sealed = format!("{ENC_PREFIX}AAAAAAAAAAAAAAAAAAAAAAAA");
+    assert!(dec_str_strict(&sealed).is_none(), "the fixture must not unseal");
+    for (id, updated) in [("fresh", now), ("old", now - 90 * 86400)] {
+        conn.execute("INSERT INTO edit_state VALUES(?1, 'video', ?2, 1, 1, '{}', ?3)", params![id, sealed, updated]).unwrap();
+    }
+    assert_eq!(sweep_edit_state_conn(&conn, |_| false, 30.0), 1, "only the aged-out row goes");
+    let left: String = conn.query_row("SELECT id FROM edit_state", [], |r| r.get(0)).unwrap();
+    assert_eq!(left, "fresh");
+}
+
+#[test]
 fn sweep_edit_state_keeps_a_fresh_row_whose_target_still_exists() {
     let conn = edit_state_test_conn();
     let now = (now_ms() / 1000) as i64;
