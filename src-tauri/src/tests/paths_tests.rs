@@ -565,3 +565,20 @@ fn the_command_line_does_not_fall_back_to_the_default_store() {
     let body = fn_body(&src, "pub(crate) fn data_dir_headless(");
     assert!(body.contains("resolve_datapath_with(default_data_dir_headless(), true, None)"));
 }
+
+#[test]
+fn the_missing_files_scan_never_stats_a_foreign_network_path() {
+    let entries = vec![
+        ("net".to_string(), r"\\evil-host\share\a.pdf".to_string(), String::new()),
+        ("neticon".to_string(), String::new(), "//evil-host/share/i.png".to_string()),
+        ("local".to_string(), r"C:\gone\b.pdf".to_string(), String::new()),
+        ("none".to_string(), String::new(), String::new()),
+    ];
+    let probed = std::cell::RefCell::new(Vec::<String>::new());
+    let ids = missing_ids(entries, &[], |p| {
+        probed.borrow_mut().push(p.to_string());
+        false
+    });
+    assert_eq!(ids, vec!["local".to_string()]);
+    assert_eq!(probed.into_inner(), vec![r"C:\gone\b.pdf".to_string()], "a network spelling is never probed");
+}
