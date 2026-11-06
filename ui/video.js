@@ -2211,6 +2211,8 @@ document.addEventListener("keydown", (e) => {
   if (!colorPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeColorPop(); return; }
     if (e.key === "Tab") { trapTabWithin(colorPop, e); return; }
+    // The picker is about one colour; arrows and Delete must not edit the overlay behind it.
+    if (!keepsOwnKeys(document.activeElement) && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return; }
   }
   if (!ovCtxPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
