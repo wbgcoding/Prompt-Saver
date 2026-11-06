@@ -1574,6 +1574,9 @@ export function initSnipEditor() {
         if (SE.selOp && SE.selOp.tool === SE.tool) {
           const handle = snipEditHitShapeHandle(pt, SE.selOp);
           if (handle) {
+            // The shape still shows its handles, so it stays what the arrows and Escape act on.
+            SE.lastNudged = SE.selOp;
+            snipEditUpdateNudgeHint();
             SE.drag = SE.selOp.points
               ? { kind: "shape-endpoint", op: SE.selOp, handle, orig: SE.selOp.points.map((p) => ({ ...p })) }
               : { kind: "shape-resize", op: SE.selOp, handle, orig: { ...SE.selOp.rect } };
