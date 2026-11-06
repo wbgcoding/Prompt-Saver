@@ -68,7 +68,8 @@ function keysGridRects(rows, rect) {
     const rowW = row.length * cellW;
     const xOff = rect.x + (rect.w - rowW) / 2;
     row.forEach((vk, ci) => {
-      out.push({ vk, x: Math.round(xOff + ci * cellW), y: Math.round(rect.y + ri * cellH), w: Math.round(cellW) - 2, h: Math.round(cellH) - 2 });
+      // drawbox reads a width or height of 0 as the whole frame, so a cell never rounds below 1
+      out.push({ vk, x: Math.round(xOff + ci * cellW), y: Math.round(rect.y + ri * cellH), w: Math.max(1, Math.round(cellW) - 2), h: Math.max(1, Math.round(cellH) - 2) });
     });
   });
   return out;
