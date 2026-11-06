@@ -631,11 +631,9 @@ pub(crate) fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
     (count, bytes)
 }
 
-// A discarded recording sits in its folder's "verworfen" subfolder and is stale-eligible
-// past recDiscardKeepH with no referenced check (a discarded recording is attached to
-// nothing). recDiscardKeepH <= 0 disables this leg. Covers both places a working recording
-// can live (data_dir's recordings folder and the current recordingDir), since
-// discard_recording_file accepts either.
+// A discarded recording sits in the recording folder's "verworfen" subfolder (the one discard
+// trash) and is stale-eligible past recDiscardKeepH with no referenced check (a discarded
+// recording is attached to nothing). recDiscardKeepH <= 0 disables this leg.
 pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
     if data_dir_write_blocked_quiet() {
         return (0, 0);
@@ -649,16 +647,7 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
         return (0, 0);
     }
     let age = Duration::from_secs((keep_h * 3600.0) as u64);
-    let default_dir = data_dir(app).join("recordings");
-    let custom_dir = recording_dir(&custom);
-    let mut count = 0u32;
-    let mut bytes = 0u64;
-    for dir in [default_dir.clone(), custom_dir].into_iter().collect::<std::collections::HashSet<_>>() {
-        let (c, b) = discarded_stale_in(&dir.join(DISCARD_SUBDIR), age);
-        count += c;
-        bytes += b;
-    }
-    (count, bytes)
+    discarded_stale_in(&discard_trash_dir(&recording_dir(&custom)), age)
 }
 
 // The discarded-recordings row's on-demand trigger. sweep_recordings_now answers for the

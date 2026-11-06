@@ -598,8 +598,9 @@ pub(crate) async fn convert_recording(
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
     push_bg_op(&app, "convert", "convert", "indeterminate", None, Some(src_path.clone()));
     let app_done = app.clone();
+    let trash_root = configured_recording_dir(&state);
     let result = tauri::async_runtime::spawn_blocking(move || {
-        convert_recording_blocking(&ffmpeg, &src, &format, lossless, || REC_CONVERT_CANCEL.load(Ordering::SeqCst), |ms| {
+        convert_recording_blocking(&ffmpeg, &src, &format, lossless, &trash_root, || REC_CONVERT_CANCEL.load(Ordering::SeqCst), |ms| {
             let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms, job: None });
         })
     })
@@ -1256,7 +1257,7 @@ pub(crate) fn free_convert_target(dst: &Path, src: &Path) -> PathBuf {
 // Tauri's runtime and REC_CONVERT_CANCEL and testable against a real ffmpeg binary with its
 // own local cancel flag.
 pub(crate) fn convert_recording_blocking(
-    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
+    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, trash_root: &Path, is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
     let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(format));
     if convert_is_noop(same_extension, format, lossless) {
@@ -1317,7 +1318,7 @@ pub(crate) fn convert_recording_blocking(
             // result lacks: it goes to the discard folder (where it can be restored until the
             // keep window ends) and stays put if it cannot be moved there.
             if let Some(dir) = src.parent() {
-                let _ = crate::media_files::discard_recording_file_in(&[dir.to_path_buf()], src);
+                let _ = crate::media_files::discard_recording_file_in(&[dir.to_path_buf()], trash_root, src);
             }
         } else {
             let _ = fs::remove_file(src);

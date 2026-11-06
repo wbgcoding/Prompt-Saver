@@ -1296,7 +1296,7 @@ fn the_feeder_stops_feeding_after_the_first_encoder_error() {
 fn stopping_and_cancelling_a_recording_return_plain_values() {
     let rec = source!("../recording.rs");
     assert!(rec.contains("pub fn stop(session: RecSession) -> StopResult {"));
-    assert!(rec.contains("pub fn cancel(session: RecSession) {"));
+    assert!(rec.contains("pub fn cancel(session: RecSession, trash_root: &Path) {"));
     assert!(rec.contains("fn finish_and_stop(mut session: RecSession) -> (u64, Option<String>) {"));
     let cmds = source!("../rec_cmds.rs");
     assert!(!cmds.contains("recording::cancel(session)?"));

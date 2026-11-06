@@ -118,7 +118,7 @@ fn discard_recording_parts_in_moves_parts_to_the_holding_folder() {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let mut parts = vec![part_info(&dir, "rec-2026-01-01-00-00-00_part2.mp4"), part_info(&dir, "rec-2026-01-01-00-00-00_part3.mp4")];
-    let moved = discard_recording_parts_in(&mut parts, std::slice::from_ref(&dir));
+    let moved = discard_recording_parts_in(&mut parts, std::slice::from_ref(&dir), &dir);
     assert_eq!(moved, 2);
     assert!(parts.is_empty());
     assert!(dir.join("verworfen").join("rec-2026-01-01-00-00-00_part3.mp4").is_file());
@@ -137,7 +137,7 @@ fn a_removed_take_takes_every_sidecar_with_it() {
     for ext in ["mic.wav", KEYS_SIDECAR_EXT, CAM_SIDECAR_EXT] {
         fs::write(sidecar_path(&video, ext), b"s").unwrap();
     }
-    discard_or_remove_take(&video);
+    discard_or_remove_take(&video, &dir);
     assert!(!video.exists());
     for ext in ["mic.wav", KEYS_SIDECAR_EXT, CAM_SIDECAR_EXT] {
         assert!(!sidecar_path(&video, ext).exists(), "{ext} was left behind");

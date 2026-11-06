@@ -74,7 +74,7 @@ fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source
     let dir = std::env::temp_dir().join(format!("ps-convtest-webm-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
-    let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {}).expect("conversion should succeed");
+    let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, &dir, || false, |_| {}).expect("conversion should succeed");
     let out = PathBuf::from(out);
     assert!(out.is_file(), "converted file missing");
     assert_eq!(out.extension().unwrap(), "webm");
@@ -94,7 +94,7 @@ fn convert_recording_real_ffmpeg_keeps_an_unrelated_file_with_the_target_name() 
     fs::create_dir_all(&dir).unwrap();
     let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
     fs::write(dir.join("src.webm"), b"an earlier recording").unwrap();
-    let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {}).expect("conversion should succeed");
+    let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, &dir, || false, |_| {}).expect("conversion should succeed");
     assert_eq!(PathBuf::from(&out), dir.join("src-1.webm"));
     assert_eq!(fs::read(dir.join("src.webm")).unwrap(), b"an earlier recording");
     assert!(PathBuf::from(&out).is_file());
@@ -107,7 +107,7 @@ fn convert_recording_real_ffmpeg_gif_has_gif_magic_and_keeps_the_source_in_the_d
     let dir = std::env::temp_dir().join(format!("ps-convtest-gif-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     let src = make_test_mp4(&ffmpeg, &dir, "rec-src.mp4", 1, "64x64");
-    let out = convert_recording_blocking(&ffmpeg, &src, "gif", false, || false, |_| {}).expect("conversion should succeed");
+    let out = convert_recording_blocking(&ffmpeg, &src, "gif", false, &dir, || false, |_| {}).expect("conversion should succeed");
     let bytes = fs::read(&out).unwrap();
     assert_eq!(&bytes[0..3], b"GIF");
     // A GIF is capped and shortened, so the full-length source must survive the conversion.
@@ -126,7 +126,7 @@ fn convert_recording_real_ffmpeg_gif_keeps_a_source_that_cannot_be_moved_aside()
     fs::create_dir_all(&dir).unwrap();
     // No "rec-" stem: the discard move refuses it, and the footage must then stay where it is.
     let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
-    convert_recording_blocking(&ffmpeg, &src, "gif", false, || false, |_| {}).expect("conversion should succeed");
+    convert_recording_blocking(&ffmpeg, &src, "gif", false, &dir, || false, |_| {}).expect("conversion should succeed");
     assert!(src.is_file(), "a source that cannot be moved aside is never deleted");
     let _ = fs::remove_dir_all(&dir);
 }
@@ -138,7 +138,7 @@ fn convert_recording_real_ffmpeg_lossless_replaces_the_source_in_place() {
     fs::create_dir_all(&dir).unwrap();
     let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
     let before = fs::read(&src).unwrap();
-    let out = convert_recording_blocking(&ffmpeg, &src, "mp4", true, || false, |_| {}).expect("conversion should succeed");
+    let out = convert_recording_blocking(&ffmpeg, &src, "mp4", true, &dir, || false, |_| {}).expect("conversion should succeed");
     assert_eq!(PathBuf::from(&out), src, "lossless mp4 must replace the source path, not a new one");
     assert!(src.is_file());
     let after = fs::read(&src).unwrap();
@@ -162,7 +162,7 @@ fn convert_recording_real_ffmpeg_cancel_leaves_the_source_untouched() {
         std::thread::sleep(Duration::from_millis(150));
         cancel_writer.store(true, Ordering::SeqCst);
     });
-    let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, || cancel.load(Ordering::SeqCst), |_| {});
+    let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, &dir, || cancel.load(Ordering::SeqCst), |_| {});
     assert_eq!(result, Err("cancelled".to_string()));
     assert!(src.is_file(), "a cancelled conversion must never remove the source");
     assert!(!dir.join("src.webm").exists(), "a cancelled conversion must leave no destination file");
@@ -183,7 +183,7 @@ fn convert_recording_real_ffmpeg_failure_leaves_the_source_untouched() {
     // right below exists as its own separate case.
     let src = dir.join("src.mp4");
     fs::write(&src, b"this is not a video file").unwrap();
-    let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {});
+    let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, &dir, || false, |_| {});
     let Err(err) = result else { panic!("garbage input must fail") };
     let payload: serde_json::Value = serde_json::from_str(&err).expect("error must be the classified JSON shape");
     assert_eq!(payload["key"], "ffErrTruncated");
@@ -206,7 +206,7 @@ fn convert_recording_real_ffmpeg_truncated_file_shows_the_friendly_incomplete_ke
     let bytes = fs::read(&whole).unwrap();
     let src = dir.join("src.mp4");
     fs::write(&src, &bytes[..bytes.len() / 3]).unwrap();
-    let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {});
+    let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, &dir, || false, |_| {});
     let Err(err) = result else { panic!("a truncated file must fail to convert") };
     let payload: serde_json::Value = serde_json::from_str(&err).expect("error must be the classified JSON shape");
     assert_eq!(payload["key"], "ffErrTruncated");

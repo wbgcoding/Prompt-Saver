@@ -373,6 +373,21 @@ pub fn run() {
                 }
             }
 
+            // The discard trash inside the capture staging folder (an older layout) joins the recording
+            // folder's one. Off the setup thread: the recording folder may be a slow share.
+            {
+                let staging = data_dir(&handle).join("recordings");
+                let root = recording_dir(&store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default());
+                std::thread::spawn(move || {
+                    if !data_dir_write_blocked_quiet() {
+                        let n = migrate_staging_discards(&staging, &root);
+                        if n > 0 {
+                            append_crash_log(&format!("moved {n} discarded recording(s) into the recording folder trash"));
+                        }
+                    }
+                });
+            }
+
             // One startup pass; the periodic job below keeps it up afterwards.
             sweep_clip_export_temp(clip_export_ttl());
 
