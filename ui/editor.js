@@ -531,7 +531,7 @@ export function updateLenCounter() {
   // Still a text prompt while the Markdown preview stands in for the textarea; never
   // while rotation replaced the textarea with the variants list instead.
   const on = flag("lengthCounter") && !rotationUiOn() &&
-    !(modal.text.classList.contains("hidden") && modal.mdPreview.classList.contains("hidden"));
+    !(modal.text.classList.contains("hidden") && modal.mdWrap.classList.contains("hidden"));
   el.classList.toggle("hidden", !on);
   if (!on) return;
   const s = modal.text.value;
@@ -569,9 +569,10 @@ export function renderMdPreview(force) {
   scheduleFitText();
 }
 export function scheduleMdPreview() {
-  // Nothing to draw into while the pane is hidden: but mark it stale, so the next
-  // time it is shown it is rebuilt from the current text instead of a stale render.
-  if (modal.mdPreview.classList.contains("hidden")) { mdLastText = null; return; }
+  // Nothing to draw into while the pane is hidden (its wrapper is what gets hidden, e.g.
+  // while the textarea has the focus): but mark it stale, so the next time it is shown it is
+  // rebuilt from the current text instead of a stale render.
+  if (modal.mdWrap.classList.contains("hidden")) { mdLastText = null; return; }
   clearTimeout(mdTimer);
   // A plain timer, deliberately not requestAnimationFrame: a window that paints no
   // frames (occluded, minimised to the tray, restored from it) never runs a rAF
