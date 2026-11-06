@@ -649,7 +649,10 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
     (e) => {
       if (!(typeof wheelEnabled === "function" ? wheelEnabled() : wheelEnabled)) return; // a function reads the switch live
       e.preventDefault();
-      stepBy(e.deltaY < 0 ? 1 : -1, e.shiftKey);
+      // Shift+wheel (the big step) and touchpad side swipes arrive as deltaX with deltaY 0.
+      const d = e.deltaY || e.deltaX;
+      if (!d) return;
+      stepBy(d < 0 ? 1 : -1, e.shiftKey);
     },
     { passive: false }
   );
@@ -667,6 +670,8 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
       if (e.button !== 0) return; // only the primary button steps; right and middle clicks do nothing
       // Captured, so the release reaches this button even after it turned disabled at the limit.
       try { btn.setPointerCapture(e.pointerId); } catch { /* no active pointer: the leave events still stop it */ }
+      // A second pointer on the same button must not orphan the first one's pending hold timer.
+      stop();
       stepBy(dir, e.shiftKey);
       holdTimeout = setTimeout(() => {
         holdInterval = setInterval(() => {
