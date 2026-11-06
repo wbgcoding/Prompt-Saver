@@ -2223,6 +2223,8 @@ document.addEventListener("keydown", (e) => {
   if (!addVideoPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }
     if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
+    // The menu is about the insert; arrows and Delete must not edit the overlay or playhead behind it.
+    if (!keepsOwnKeys(document.activeElement) && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return; }
   }
   if (e.code === "F1") { e.preventDefault(); openShortcutsModal(); return; }
   const typing = keepsOwnKeys(document.activeElement);
