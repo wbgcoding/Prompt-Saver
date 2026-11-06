@@ -154,3 +154,15 @@ fn a_forwarded_cli_command_runs_on_a_blocking_worker_and_backup_create_releases_
     assert!(bk.contains("flush_settings") && bk.contains("backup_released"));
     assert!(!bk.contains("do_backup_at"));
 }
+
+// A bare "cmd" is looked up in the exe's own folder before System32, so a portable copy run from
+// a folder with a planted cmd.exe would run that file. System tools are started by full path.
+#[cfg(windows)]
+#[test]
+fn system_tools_are_started_from_the_system_folder() {
+    let cmd = webview2::system_exe("cmd.exe");
+    assert!(cmd.is_absolute() && cmd.is_file(), "got {cmd:?}");
+    assert!(cmd.parent().unwrap().to_string_lossy().to_lowercase().ends_with("system32"));
+    let src = source!("../webview2.rs");
+    assert!(!src.contains("Command::new(\"cmd\")"), "the fallback page opens through the system cmd.exe");
+}
