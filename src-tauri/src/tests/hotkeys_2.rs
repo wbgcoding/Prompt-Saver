@@ -167,7 +167,7 @@ fn stats_csv_export_escapes_semicolons_and_quotes_in_names() {
 fn stats_txt_and_json_export_carry_the_same_entries_and_daily_counts() {
     let entries = vec![StatsExportEntry { name: "Mail".into(), copies: 5, last_used: 42 }];
     let daily = vec![DayCount { ts: 1700000000, count: 4 }];
-    let txt = stats_to_txt(&entries, &daily, &[], StatsTxtLabels::default());
+    let txt = stats_to_txt(&entries, &daily, &[], StatsTxtLabels::default(), 0);
     assert!(txt.contains("Mail: 5 copies, last used 1970-01-01"));
     assert!(txt.contains("2023-11-14: 4"));
     let de = StatsTxtLabels {
@@ -178,7 +178,7 @@ fn stats_txt_and_json_export_carry_the_same_entries_and_daily_counts() {
         ..Default::default()
     };
     let never = vec![StatsExportEntry { name: "Neu".into(), copies: 0, last_used: 0 }];
-    let txt = stats_to_txt(&never, &daily, &[], de);
+    let txt = stats_to_txt(&never, &daily, &[], de, 0);
     assert!(txt.contains("Kopien pro Tag\n=============="), "{txt}");
     assert!(txt.contains("Neu: 0 Kopien, zuletzt nie"), "{txt}");
     assert!(!txt.contains("1700000000"));
@@ -1439,4 +1439,16 @@ fn removing_from_a_view_strips_every_grid_size_and_adds_no_empty_layout() {
     assert!(!view.layouts[&grid_key(3, 1)].contains_key("a"));
     assert_eq!(view.layouts[&grid_key(3, 1)].get("b"), Some(&[1, 0]));
     assert!(!view.layouts.contains_key(&grid_key(2, 1)), "no empty layout for the current size");
+}
+
+// A copy at 00:30 local time (CET) is 23:30 UTC the day before: the "last used" date uses the
+// same local day the daily rows are bucketed into.
+#[test]
+fn the_txt_export_dates_the_last_use_in_local_time() {
+    let utc_2330 = 1_700_000_000 - 1_700_000_000 % 86_400 + 23 * 3600 + 1800;
+    let entries = vec![StatsExportEntry { name: "Mail".into(), copies: 1, last_used: utc_2330 }];
+    let utc = stats_to_txt(&entries, &[], &[], StatsTxtLabels::default(), 0);
+    let cet = stats_to_txt(&entries, &[], &[], StatsTxtLabels::default(), 3600);
+    assert!(utc.contains("2023-11-14"), "{utc}");
+    assert!(cet.contains("2023-11-15"), "{cet}");
 }

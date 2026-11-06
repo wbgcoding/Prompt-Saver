@@ -264,14 +264,14 @@ pub(crate) fn stats_date(secs: u64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-pub(crate) fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry], labels: StatsTxtLabels) -> String {
+pub(crate) fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry], labels: StatsTxtLabels, utc_offset: i64) -> String {
     use std::fmt::Write;
     let l = labels.or_english();
     let heading = |out: &mut String, title: &str| {
         let _ = writeln!(out, "{title}\n{}", "=".repeat(title.chars().count().max(3)));
     };
     let line = |template: &str, n: u32, last: u64| {
-        let date = if last == 0 { l.never.clone() } else { stats_date(last) };
+        let date = if last == 0 { l.never.clone() } else { stats_date((last as i64 + utc_offset).max(0) as u64) };
         template.replace("{n}", &n.to_string()).replace("{date}", &date)
     };
     let mut out = String::new();
@@ -328,7 +328,7 @@ pub(crate) async fn export_stats(app: AppHandle, state: State<'_, Db>, format: S
     let count = entries.len();
     let content = match format.as_str() {
         "csv" => stats_to_csv(&entries, &daily, &tools),
-        "txt" => stats_to_txt(&entries, &daily, &tools, labels.unwrap_or_default()),
+        "txt" => stats_to_txt(&entries, &daily, &tools, labels.unwrap_or_default(), local_utc_offset_secs()),
         "json" => stats_to_json(&entries, &daily, &tools),
         _ => return Err("unsupported-export-format".to_string()),
     };
