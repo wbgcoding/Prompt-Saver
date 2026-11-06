@@ -23,6 +23,9 @@
 # The fingerprint covers the project sources, not build output:
 #   git repo: HEAD commit plus path and content hash of every changed or new, non-ignored file.
 #   otherwise: path, size and modification time of all files outside the usual output folders.
+#   both: content of local, usually ignored build inputs (signing keys and their settings,
+#   local.properties, .env files, export presets) plus any -Include <path or wildcard>.
+#   Pass -Include with the same values to -Check and -Save.
 # Stamps live in %LOCALAPPDATA%\BuildStamps, one json file per project.
 
 [CmdletBinding()]
@@ -35,7 +38,8 @@ param(
     [string]$Key,
     [string]$Extra = '',
     [string[]]$Artifact,
-    [string]$Since
+    [string]$Since,
+    [string[]]$Include
 )
 
 $ErrorActionPreference = 'Stop'
@@ -157,9 +161,34 @@ function WalkFingerprintText([string]$root) {
     'walk' + "`n" + ($lines -join "`n")
 }
 
+function ConfigFingerprintText([string]$root) {
+    # Local files that change the output but are usually git-ignored: signing keys and their
+    # settings, SDK paths, env files. Their presence and content count, so adding or swapping
+    # a signing key forces a rebuild. -Include adds project specific paths or wildcards.
+    $specs = @('key.properties', 'local.properties', '.env', '.env.*', '*.jks', '*.keystore',
+               '.signing\*', 'android\key.properties', 'android\local.properties',
+               'android\app\*.jks', 'android\app\*.keystore', 'app\*.jks', 'app\*.keystore',
+               'export_presets.cfg', 'signing.properties') + @($Include | Where-Object { $_ })
+    $lines = New-Object 'Collections.Generic.List[string]'
+    $sha1 = [Security.Cryptography.SHA1]::Create()
+    try {
+        foreach ($s in $specs) {
+            $dir = Join-Path $root (Split-Path $s -Parent)
+            $leaf = Split-Path $s -Leaf
+            if (-not [IO.Directory]::Exists($dir)) { continue }
+            foreach ($f in [IO.Directory]::EnumerateFiles($dir, $leaf)) {
+                $lines.Add($f.Substring($root.Length) + '|' + (ToHex ($sha1.ComputeHash([IO.File]::ReadAllBytes($f)))))
+            }
+        }
+    } finally { $sha1.Dispose() }
+    $lines.Sort([StringComparer]::Ordinal)
+    'config' + "`n" + (($lines | Select-Object -Unique) -join "`n")
+}
+
 function GetFingerprint([string]$root) {
     $gitRoot = GitRoot $root
     $body = if ($gitRoot) { GitFingerprintText $gitRoot } else { WalkFingerprintText $root }
+    $body = $body + "`n" + (ConfigFingerprintText $root)
     HashText ('v1' + "`n" + 'key=' + $Key + "`n" + 'extra=' + $Extra + "`n" + $body) 'SHA256'
 }
 
