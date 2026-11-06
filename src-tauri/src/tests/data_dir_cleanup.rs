@@ -145,6 +145,28 @@ fn a_target_inside_the_media_folders_is_refused() {
 }
 
 #[test]
+fn a_target_inside_the_old_backups_folder_is_refused() {
+    let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = media_test_dir("inbackups");
+    let (current, pointer) = (root.join("old"), root.join("pointer"));
+    touch(&current.join("data.db"));
+    touch(&current.join("backups/b1.bak"));
+    fs::create_dir_all(&pointer).unwrap();
+    // The cleanup of the old folder removes backups/ whole, so a store living there would go with it.
+    for new in [current.join("Backups").join("new"), current.join("backups")] {
+        *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        assert!(move_store_dir(&current, &new, &pointer, &mut || Ok(()), &mut || {}, &mut || Ok(())).is_err());
+        assert!(!new.join("data.db").exists() && !pointer.join("datapath").exists());
+        assert!(LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).is_none());
+    }
+    // An adopted store in there is refused as well.
+    let adopt = current.join("backups").join("lib");
+    touch(&adopt.join("data.db"));
+    assert!(move_store_dir(&current, &adopt, &pointer, &mut || Ok(()), &mut || {}, &mut || Ok(())).is_err());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn a_failed_rebase_keeps_the_old_folder_out_of_the_cleanup() {
     let _serial = DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = media_test_dir("keep");
@@ -282,7 +304,7 @@ fn the_data_folder_move_runs_off_the_runtime_and_one_at_a_time() {
 #[test]
 fn the_backups_self_copy_guard_ignores_case() {
     let src = source!("../snip.rs");
-    assert!(src.contains("old_backups.is_dir() && !path_is_inside_dir(new, &old_backups)"));
+    assert!(src.contains("path_is_inside_dir(new, &current.join(\"backups\"))"));
     assert!(!src.contains("!new.starts_with(&old_backups)"));
     let old = Path::new(r"C:\Data\backups");
     assert!(path_is_inside_dir(Path::new(r"c:\data\BACKUPS\sub"), old));
