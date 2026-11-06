@@ -264,8 +264,9 @@ async function openPopover(kind) {
   if (req !== openReq) return; // a newer openPopover() call already won
   const token = ++seq;
   const el = kind === "menu" ? menuEl : popEl;
-  if (kind === "grid") renderGrid();
   el.classList.remove("hidden");
+  // Drawn after the popover is displayed: the name fitting measures text, which a hidden box cannot do.
+  if (kind === "grid") renderGrid();
   pendingEl = el;
   opening = true;
   blurredWhileOpening = false;

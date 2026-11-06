@@ -225,6 +225,29 @@ later(async () => {
   check(log.commits.length === 1 && log.commits[0] === "", "a bare Delete still clears");
 });
 
+// folder.js openPopover: the grid is drawn once the popover is visible, so the name fitting can measure it.
+later(async () => {
+  const src = read("folder.js");
+  const code = ["async function layout(kind, el, token) {", "async function openPopover(kind) {", "async function closePopover(instant) {"]
+    .map((m) => extractBlock(src, m)).join("\n") + "\n;globalThis.openPopover = openPopover;";
+  const mkEl = () => { const cls = new Set(["hidden"]); return { style: {}, classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) } }; };
+  const popEl = mkEl(), menuEl = mkEl();
+  let hiddenAtRender = null;
+  const sandbox = run(code, {
+    open: null, seq: 0, openReq: 0, opening: false, blurredWhileOpening: false, pendingEl: null,
+    animMs: 0, folderId: "f1", POP_GAP: 4, state: { scale: 1 },
+    menuEl, popEl, memberMenu: mkEl(), iconEl: mkEl(),
+    document: { body: { classList: { add() {}, remove() {} }, dataset: {} } },
+    requestAnimationFrame: (f) => f(),
+    px: (v) => v + "px", popoverSize: () => ({ w: 10, h: 10 }),
+    renderGrid() { hiddenAtRender = popEl.classList.contains("hidden"); },
+    sleep: () => Promise.resolve(), openEl: () => popEl,
+    invoke: async () => ({ side: "r", icon_x: 0, icon_y: 0, pop_x: 0, pop_y: 0 }),
+  });
+  await sandbox.openPopover("grid");
+  check(hiddenAtRender === false, `the grid is rendered while the popover is visible, hidden was ${hiddenAtRender}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);
