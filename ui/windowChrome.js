@@ -438,6 +438,7 @@ export function wireLightbox() {
     // media in already-scaled screen pixels, not the pre-scale ones lbToLocal reads.
     const before = lbToLocal(e.clientX, e.clientY);
     lbScale = Math.min(8, Math.max(1, lbScale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    if (lbScale < 1.001) lbScale = 1; // float drift after many notches must not leave 1.0000000000000002
     if (lbScale === 1) {
       lbX = 0; lbY = 0;
     } else {

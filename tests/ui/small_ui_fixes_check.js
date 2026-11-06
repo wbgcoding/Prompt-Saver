@@ -150,6 +150,28 @@ later(async () => {
   check(sandbox.libShown === 2, `libShown counts the rows still rendered, got ${sandbox.libShown}`);
 });
 
+// windowChrome.js lightbox: the same number of wheel notches in and out lands exactly on 1, not 1.0000000000000002.
+later(async () => {
+  const src = read("windowChrome.js");
+  const code = "let lbScale = 1, lbX = 0, lbY = 0, lbDrag = null;\n"
+    + ["export function lbMedia", "export function lbApply", "export function lbToLocal", "export function wireLightbox"]
+      .map((m) => extractBlock(src, m).replace(/export /g, "")).join("\n")
+    + "\n;globalThis.wire = wireLightbox; globalThis.state = () => ({ lbScale, lbX, lbY });";
+  const handlers = {};
+  const media = { style: {}, classList: { contains: () => false }, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  const stage = { classList: { toggle() {}, add() {}, remove() {} }, addEventListener: (t, f) => { handlers[t] = f; } };
+  const els = { "lightbox-img": media, "lightbox-stage": stage, "lightbox-close": { addEventListener() {} } };
+  const sandbox = run(code, { $: (id) => els[id], closeLightbox() {} });
+  sandbox.wire();
+  for (let n = 1; n <= 24; n++) {
+    const wheel = (dy) => handlers.wheel({ deltaY: dy, clientX: 40, clientY: 30, preventDefault() {} });
+    for (let i = 0; i < n; i++) wheel(-1);
+    for (let i = 0; i < n; i++) wheel(1);
+    const st = sandbox.state();
+    check(st.lbScale === 1 && st.lbX === 0 && st.lbY === 0, `${n} notches in and out are back at 1 with no pan, got ${st.lbScale} ${st.lbX} ${st.lbY}`);
+  }
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);
