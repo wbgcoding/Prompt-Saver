@@ -1338,3 +1338,13 @@ fn a_silent_packet_without_a_data_pointer_still_counts_toward_the_timeline() {
     assert!(!packet_has_audio(false, 480, false), "a non-silent packet needs its data");
     assert!(!packet_has_audio(true, 0, true), "an empty packet adds nothing");
 }
+
+// A maximized window overhangs its display by the frame width: the display lookup must follow the
+// window's bulk, not its top-left corner, which can lie on the neighbouring display.
+#[cfg(windows)]
+#[test]
+fn a_window_overhanging_the_primary_display_resolves_to_the_primary_display() {
+    let (x, y, w, h) = monitor_rect_for_window((-8, -8, 640, 480)).expect("a display");
+    let (x, y, w, h) = (i64::from(x), i64::from(y), i64::from(w), i64::from(h));
+    assert!(x <= 0 && y <= 0 && x + w > 0 && y + h > 0, "the display holding the origin, got {x},{y} {w}x{h}");
+}

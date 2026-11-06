@@ -372,8 +372,8 @@ pub(crate) async fn switch_recording_target(
     let _switch_guard = SwitchInFlightGuard;
     let new_hwnd = target_id as isize;
     // The window's own rect only names its corner; target_fits_canvas needs the display it sits
-    // on, as monitor_rect_at gives window_canvas_candidates for the "current display" tier.
-    let new_monitor = external_window_rect(new_hwnd).and_then(|(l, t, _, _)| monitor_rect_at(l, t));
+    // on, as monitor_rect_for_window gives window_canvas_candidates for the "current display" tier.
+    let new_monitor = external_window_rect(new_hwnd).and_then(monitor_rect_for_window);
     // spawn_blocking cannot borrow the request-scoped State, so it is re-fetched from the cloned
     // 'static AppHandle, as stop_recording_now does.
     let app2 = app.clone();
