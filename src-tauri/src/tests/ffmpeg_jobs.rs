@@ -451,6 +451,10 @@ fn an_export_graph_may_only_read_the_source_and_the_media_the_request_names() {
     assert!(check("[0:v]drawtext=a.ttf:hi[vout]").is_ok());
     assert!(check(r"[0:v]subtitles='C\:/x/y.srt'[vout]").is_err());
     assert!(check("[0:v]sendcmd=f=cmds.txt[vout]").is_err());
+    assert!(check("[0:v][1:v]paletteuse=dither=bayer[vout]").is_ok());
+    assert!(check(r"[0:v][1:v]paletteuse=debug_kdtree=C\:/Users/x/victim.txt[vout]").is_err());
+    assert!(check(r"[0:v][1:v]paletteuse=dither=bayer:Debug_KdTree =C\:/x[vout]").is_err());
+    assert!(check(r"[0:v][1:v]paletteuse=bayer:3:rectangle:1:128:C\:/x[vout]").is_err());
     assert!(check("[0:v]zmq[vout]").is_err());
     assert!(check(r"[0:v]null[vout];[0:a]ametadata=mode=print:file=C\:/x[aout]").is_err());
     // A movie source that is not the source or a named media file, or has extra options.
