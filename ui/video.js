@@ -836,7 +836,7 @@ export function setZoom(next, anchorMs) {
   // Zoom is anchored: whatever was under the playhead stays under it, instead of
   // the view sliding away from the frame the user is working on.
   view.scrollLeft = clamp(msToPx(anchor) - before, 0, Math.max(0, trackWidth() - view.clientWidth));
-  $("ve-zoom-val").textContent = `${Math.round((VE.zoom / Math.max(1, fitZoom())) * 100)}%`;
+  $("ve-zoom-val").textContent = `${Math.round((VE.zoom / fitZoom()) * 100)}%`;
   scheduleStrip();
   scheduleWaves();
 }

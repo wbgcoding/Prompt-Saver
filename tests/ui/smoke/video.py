@@ -59,6 +59,19 @@ VIDEO_DE_PROBE = """
       if (document.getElementById('ve-zoom-val').textContent !== '100%') {
         errs.push('934: Fit did not return the zoom to 100% (' + document.getElementById('ve-zoom-val').textContent + ')');
       }
+      // gfzoom: a clip so long that Fit lands below one pixel per second still reads 100% at Fit
+      {
+        const { VE: veZ } = await import('./video.js');
+        const keptDur = veZ.dur;
+        veZ.dur = 20 * 60 * 1000;
+        fit.click();
+        await sleep(60);
+        const longFit = document.getElementById('ve-zoom-val').textContent;
+        veZ.dur = keptDur;
+        fit.click();
+        await sleep(60);
+        if (longFit !== '100%') errs.push('gfzoom: Fit on a 20 minute clip reads ' + longFit + ', expected 100%');
+      }
     }
     // 936: the clip start and end fields are compact and sit on one line.
     {
