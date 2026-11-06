@@ -131,7 +131,7 @@ pub(crate) fn note_own_copy(text: &str) {
 // List / dismiss / clear the clipboard inbox.
 #[tauri::command]
 pub(crate) async fn clip_inbox_list(app: AppHandle) -> Result<Vec<ClipItem>, String> {
-    Ok(db_conn(&app).map(|c| db_list_clips(&c)).unwrap_or_default())
+    db_conn(&app).map(|c| db_list_clips(&c)).ok_or_else(|| "history-failed".to_string())
 }
 // How many entries the inbox holds, without unsealing any of them: the tab badge
 // asks on every clipboard change while the watcher is on.
