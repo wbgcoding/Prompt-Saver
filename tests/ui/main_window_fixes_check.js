@@ -1168,7 +1168,7 @@ section(() => {
   const src = read("dictation.js");
   const poll = extractBlock(src, "export function pollElevatedCaps(");
   check(poll.includes("const chain = st.elevChain = (st.elevChain || 0) + 1;"), "each poll start takes a new chain id");
-  check(poll.indexOf("if (st.elevChain !== chain) return;\n    if (res == null)") > 0 || /if \(st\.elevChain !== chain\) return;\s+if \(res == null\)/.test(poll), "a stale chain stops after the await, before re-arming");
+  check(/if \(st\.elevChain !== chain\) return;\s+if \(--st\.elevLeft/.test(poll), "a stale chain stops after the await, before re-arming (a delivered list is kept first)");
   check(extractBlock(src, "export function closeLangsModal(").includes("st.elevChain = (st.elevChain || 0) + 1"), "closing the dialog retires the chain");
 });
 
