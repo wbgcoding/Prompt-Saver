@@ -132,6 +132,24 @@ later(async () => {
   check(redo && !/ \/ /.test(redo.keys), `an Alt binding stays folded into its primary row, got ${redo && redo.keys}`);
 });
 
+// library.js doBatch("delete"): the paging counter follows the rows left, so the prompts that move up get their row.
+later(async () => {
+  const code = extractBlock(read("library.js"), "export async function doBatch").replace(/export /g, "") + "\n;globalThis.doBatch = doBatch;";
+  const mk = (id) => ({ id, dataset: { id }, remove() { rows.splice(rows.indexOf(this), 1); } });
+  const rows = ["a", "b", "c"].map(mk); // rendered rows; d, e have none yet
+  const sandbox = run(code, {
+    libItems: ["a", "b", "c", "d", "e"].map((id) => ({ id })),
+    libShown: 3, libDisplayOrder: ["a", "b", "c"], libSelected: new Set(), libLastId: null,
+    gridDirty: false, prompts: [], mirrorBatch: async () => true,
+    $: () => ({ querySelectorAll: () => [...rows] }),
+    renderLibrary() {}, updateLibraryCount() {}, updateBatchBar() {}, renderViews() {},
+    libMatches: () => true,
+  });
+  await sandbox.doBatch("delete", {}, ["a"]);
+  check(sandbox.libItems.length === 4, "the deleted prompt left the list");
+  check(sandbox.libShown === 2, `libShown counts the rows still rendered, got ${sandbox.libShown}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);
