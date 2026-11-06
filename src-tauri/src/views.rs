@@ -912,10 +912,17 @@ pub(crate) fn apply_tile_folder_save(
 // dropped by normalize, so that member is seated on a cell first, as when a prompt is taken
 // out of a folder.
 pub(crate) fn finish_tile_folder_edit(settings: &mut Settings, prompt_ids: &[String]) {
-    let inside: Vec<String> = settings.tile_folders.iter().flat_map(|f| f.members.iter().cloned()).collect();
+    // Only in the folder's own view: the grid hides a folder member there and nowhere else, so
+    // the same prompt keeps its tile in another view that shows it.
     for view in settings.views.iter_mut() {
+        let inside: Vec<&String> = settings
+            .tile_folders
+            .iter()
+            .filter(|f| f.view_id == view.id)
+            .flat_map(|f| f.members.iter())
+            .collect();
         for layout in view.layouts.values_mut() {
-            layout.retain(|pid, _| !inside.contains(pid));
+            layout.retain(|pid, _| !inside.contains(&pid));
         }
     }
     settle_lone_folder_members(&mut settings.views, &settings.tile_folders);

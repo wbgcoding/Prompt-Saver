@@ -1038,3 +1038,26 @@ fn a_render_reads_the_last_input_before_the_clock() {
     let clock = body.find("let now = tick();").unwrap();
     assert!(input < clock, "an input between the reads must not make last_input newer than now");
 }
+
+// With a prompt shown as a tile in two views, putting it into a folder of one view must not
+// take its cell away in the other view: renderGrid hides folder members only in the folder's view.
+#[test]
+fn a_folder_edit_keeps_the_members_cells_in_views_other_than_the_folders() {
+    let mut a = test_view("a");
+    let mut b = test_view("b");
+    let (ka, kb) = (grid_key(a.cols, a.rows), grid_key(b.cols, b.rows));
+    for (v, k) in [(&mut a, &ka), (&mut b, &kb)] {
+        v.layouts.entry(k.clone()).or_default().insert("p1".into(), [2, 0]);
+        v.layouts.entry(k.clone()).or_default().insert("p2".into(), [3, 0]);
+    }
+    let mut settings = Settings {
+        views: vec![a, b],
+        tile_folders: vec![test_tile_folder("f", "a", [0, 0], &["p1", "p2"])],
+        ..Settings::default()
+    };
+    let ids: Vec<String> = ["p1", "p2"].iter().map(|s| s.to_string()).collect();
+    finish_tile_folder_edit(&mut settings, &ids);
+    assert!(settings.views[0].layouts[&ka].is_empty(), "no tile cell left in the folder's own view");
+    assert_eq!(settings.views[1].layouts[&kb].get("p1"), Some(&[2, 0]), "the other view keeps its tile");
+    assert_eq!(settings.views[1].layouts[&kb].get("p2"), Some(&[3, 0]));
+}
