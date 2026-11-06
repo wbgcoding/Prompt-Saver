@@ -931,7 +931,7 @@ pub(crate) struct HiddenFloats(pub(crate) Mutex<std::collections::HashSet<String
 static PLACED_BY_APP: Mutex<Vec<(String, (i32, i32))>> = Mutex::new(Vec::new());
 
 // Remembers (or, with None, forgets) the spot the app just moved a window to.
-fn note_app_placement(label: &str, spot: Option<(i32, i32)>) {
+pub(crate) fn note_app_placement(label: &str, spot: Option<(i32, i32)>) {
     let mut v = PLACED_BY_APP.lock().unwrap_or_else(|e| e.into_inner());
     v.retain(|(l, _)| l != label);
     if let Some(s) = spot {
@@ -979,9 +979,19 @@ pub(crate) fn mark_parked(app: &AppHandle, id: &str, parked: bool) {
 // once on boot to decide whether to show the marker.
 #[tauri::command]
 pub(crate) fn is_float_parked(app: AppHandle, id: String) -> bool {
+    float_parked(&app, &id)
+}
+
+pub(crate) fn float_parked(app: &AppHandle, id: &str) -> bool {
     app.try_state::<ParkedFloats>()
-        .map(|s| s.0.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&id))
+        .map(|s| s.0.lock().unwrap_or_else(|e| e.into_inner()).contains_key(id))
         .unwrap_or(false)
+}
+
+// The spot to remember before the app moves a window itself: only a parked one needs it, so
+// the Moved event of that move is not taken for a drag that would end the parking.
+pub(crate) fn app_move_spot(parked: bool, x: f64, y: f64) -> Option<(i32, i32)> {
+    parked.then(|| (x.round() as i32, y.round() as i32))
 }
 
 pub(crate) fn folder_expansion(app: &AppHandle, id: &str) -> Option<Rect> {
@@ -1553,6 +1563,7 @@ pub(crate) async fn set_float_bounds(
     width: f64,
     height: f64,
     clamp: Option<bool>,
+    app_move: Option<bool>,
 ) -> Result<(), String> {
     if [x, y, width, height].iter().all(|v| v.is_finite()) {
         if let Some(win) = app.get_webview_window(&flabel(&id)) {
@@ -1574,6 +1585,11 @@ pub(crate) async fn set_float_bounds(
             } else {
                 (x, y)
             };
+            // The pill menu moves the window origin itself: for a parked pill that is not a drag.
+            if app_move.unwrap_or(false) {
+                let s = win.scale_factor().unwrap_or(1.0);
+                note_app_placement(&flabel(&id), app_move_spot(float_parked(&app, &id), x * s, y * s));
+            }
             #[cfg(windows)]
             if set_float_bounds_native(&win, x, y, w, h) {
                 return Ok(());

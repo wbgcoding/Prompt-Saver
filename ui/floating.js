@@ -625,7 +625,7 @@ function placeMenu(box, mw, mh) {
   menuState.offX = offX;
   menuState.offY = offY;
   confineResizeToPill(offX, offY, box.w, box.h);
-  invoke("set_float_bounds", { id: promptId, x, y, width: w, height: h, clamp: true }).catch(() => {});
+  invoke("set_float_bounds", { id: promptId, x, y, width: w, height: h, clamp: true, appMove: true }).catch(() => {});
 }
 
 async function openMenu() {
@@ -679,7 +679,7 @@ async function closeMenu() {
     x = p.x / d + (st ? st.offX : 0);
     y = p.y / d + (st ? st.offY : 0);
   } catch {}
-  await invoke("set_float_bounds", { id: promptId, x, y, width: box.w, height: box.h }).catch(() => {});
+  await invoke("set_float_bounds", { id: promptId, x, y, width: box.w, height: box.h, appMove: true }).catch(() => {});
   document.body.classList.remove("menu-open", "menu-below", "menu-above", "menu-right", "menu-left");
   resetResizeOverlay();
   pill.style.width = "";

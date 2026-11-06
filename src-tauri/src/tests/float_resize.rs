@@ -152,6 +152,6 @@ fn a_free_size_pill_may_be_resized_down_to_the_free_minimum_height() {
     assert_eq!(float_min_height(false), 48.0);
     let src = include_str!("../floating.rs").replace("\r\n", "\n");
     let at = src.find("pub(crate) async fn set_float_bounds(").unwrap();
-    let body = &src[at..at + 900];
+    let body = &src[at..at + 1500];
     assert!(body.contains("float_min_height(free)"), "the edge resize uses the same minimum as set_float_size");
 }

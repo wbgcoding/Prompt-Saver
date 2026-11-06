@@ -292,6 +292,8 @@ pub(crate) async fn expand_float_folder(
         &id,
         Some(Rect { x: layout.icon.0, y: layout.icon.1, w: icon.w, h: icon.h }),
     );
+    // A parked folder opens at its park spot: growing the window is not a drag.
+    note_app_placement(&folder_label(&id), app_move_spot(float_parked(&app, &id), layout.win.x, layout.win.y));
     set_bounds_phys(&win, layout.win);
     Ok(FolderGeom {
         side: layout.side.as_str().to_string(),
@@ -317,11 +319,17 @@ pub(crate) async fn collapse_float_folder(app: AppHandle, state: State<'_, Db>, 
     };
     let icon = folder_icon_rect(&app, &id, current);
     set_folder_expansion(&app, &id, None);
+    let parked = float_parked(&app, &id);
+    note_app_placement(&folder_label(&id), app_move_spot(parked, icon.x, icon.y));
     set_bounds_phys(&win, icon);
     // The window may have been dragged while it was open, so store where the icon
     // ended up rather than where the folder was opened. The screen id comes first: monitor
     // queries wait for the main thread, which may be waiting on the store lock.
     let (ix, iy) = (icon.x.round() as i32, icon.y.round() as i32);
+    // A parked folder still parked was never dragged: its saved home stays.
+    if !collapse_stores_home(parked) {
+        return Ok(());
+    }
     let screen = screen_id_at(&app, ix, iy);
     let mut store = lock(&state);
     if let Some(folder) = store.settings.float_folders.iter_mut().find(|f| f.id == id) {
@@ -329,6 +337,12 @@ pub(crate) async fn collapse_float_folder(app: AppHandle, state: State<'_, Db>, 
     }
     save_settings(&app, &store.settings);
     Ok(())
+}
+
+// Whether closing a folder writes where its icon sits as the folder's home. A parked folder's
+// icon sits on the park spot, and only a drag (which ends parking) changes the home.
+pub(crate) fn collapse_stores_home(parked: bool) -> bool {
+    !parked
 }
 
 // Per-folder size, mirroring the per-pill float_scale.

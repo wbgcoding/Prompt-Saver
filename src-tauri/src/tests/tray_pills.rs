@@ -1158,6 +1158,24 @@ fn the_app_placing_a_parked_pill_is_not_a_user_drag() {
     assert!(moved_is_user_drag(&mut placed, "float-a", (40, 60)), "after a drag the old spot counts again");
     assert!(moved_is_user_drag(&mut placed, "float-b", (40, 60)), "a window the app never parked");
 }
+
+#[test]
+fn the_app_moving_a_parked_window_is_remembered_so_it_is_not_a_drag() {
+    // The pill menu and an opening folder move the window origin; the Moved event of that move
+    // used to unpark the window and overwrite its saved home with the park spot.
+    assert_eq!(app_move_spot(false, 40.4, 60.6), None, "a window that is not parked keeps recording");
+    let spot = app_move_spot(true, 40.4, 60.6);
+    assert_eq!(spot, Some((40, 61)));
+    let mut placed = vec![("float-a".to_string(), spot.unwrap())];
+    assert!(!moved_is_user_drag(&mut placed, "float-a", (40, 61)));
+    assert!(moved_is_user_drag(&mut placed, "float-a", (90, 61)), "the next real drag still counts");
+}
+
+#[test]
+fn closing_a_parked_folder_keeps_its_saved_home() {
+    assert!(!collapse_stores_home(true));
+    assert!(collapse_stores_home(false));
+}
 #[test]
 fn a_maximized_window_keeps_its_normal_bounds() {
     // Moved/Resized used to store the full work-area bounds, so quitting while maximized
