@@ -93,6 +93,33 @@ later(async () => {
   check(pop.children.length === 1 && pop.children[0].textContent === "X", "a primary press opens the list");
 });
 
+// tags.js: ArrowUp on an open list with nothing highlighted (typing re-renders it) lands on the last row.
+later(async () => {
+  const src = read("tags.js");
+  const a = src.indexOf("let tagSuggestActive");
+  const b = src.indexOf("export const closeTagPop");
+  if (a === -1 || b === -1) { check(false, "tag suggestion keyboard state missing"); return; }
+  const code = src.slice(a, b).replace(/export /g, "") + "\n" + extractBlock(src, "export function wireTagInput").replace(/export /g, "")
+    + "\n;globalThis.wire = wireTagInput; globalThis.unhighlight = () => { tagSuggestActive = -1; };";
+  const mkItem = (id) => ({ id, setAttribute() {}, scrollIntoView() {}, click() {}, classList: { toggle() {} } });
+  const items = [mkItem("i0"), mkItem("i1"), mkItem("i2")];
+  const tagSuggest = { classList: { contains: () => false, add() {}, remove() {} }, querySelectorAll: () => items };
+  const attrs = {}; const handlers = {};
+  const input = { value: "", addEventListener: (t, f) => { handlers[t] = f; }, setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } };
+  const sandbox = run(code, {
+    $: (id) => (id === "modal-tag-input" ? input : null), tagSuggest,
+    modalState: { tags: [] }, toast() {}, t: (k) => k, renderTagSuggest() {}, addTagToModal: () => true, renderTagChips() {},
+  });
+  sandbox.wire();
+  const key = (k) => handlers.keydown({ key: k, preventDefault() {}, stopPropagation() {} });
+  sandbox.unhighlight();
+  key("ArrowUp");
+  check(attrs["aria-activedescendant"] === "i2", `ArrowUp with nothing highlighted picks the last row, got ${attrs["aria-activedescendant"]}`);
+  sandbox.unhighlight();
+  key("ArrowDown");
+  check(attrs["aria-activedescendant"] === "i0", `ArrowDown with nothing highlighted picks the first row, got ${attrs["aria-activedescendant"]}`);
+});
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);
