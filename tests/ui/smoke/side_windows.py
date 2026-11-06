@@ -1531,7 +1531,9 @@ CAMERA_REC_PROBE = """
       if (count("camera_discard_recording") !== 1) errs.push(mode + ": discard count " + count("camera_discard_recording"));
       const d = __CAM.calls.find(c => c[0] === "camera_discard_recording");
       if (d && d[1].path !== "C:/r/rec-cam-1.webm") errs.push(mode + ": discarded the wrong path");
-      if (statusText.textContent.trim()) errs.push(mode + ": status text left over: " + statusText.textContent);
+      if (!statusText.textContent.trim()) errs.push(mode + ": the failed start shows no reason");
+      statusText.textContent = "";
+      statusText.title = "";
       idleUi(mode);
       __CAM[mode] = false;
     }
