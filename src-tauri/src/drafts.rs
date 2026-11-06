@@ -348,8 +348,9 @@ pub(crate) fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> 
     drop(stmt);
     let mut removed = 0usize;
     for (id, target, updated_at) in rows {
-        let target = dec_str(&target);
-        let gone = !exists(&target);
+        // A target this account cannot unseal (the folder was used under another Windows account) says
+        // nothing about the file: only age may expire that row.
+        let gone = dec_str_strict(&target).is_some_and(|t| !exists(&t));
         let expired = keep_days > 0.0 && updated_at < cutoff;
         if (gone || expired) && conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
             removed += 1;

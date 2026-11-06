@@ -245,6 +245,8 @@ export default {
     ocrCapsElevateInfo: "Windows fragt einmal nach Administratorrechten und listet danach die verfügbaren Sprachpakete auf. Dabei wird nichts installiert.",
     ocrNoLanguageMsg: "Es ist keine OCR-Sprache installiert.",
     ocrLangUpdateOne: "Sprachpaket {lang} kann aktualisiert werden.",
+    pickFilterImages: "Bilder",
+    pickFilterMedia: "Bilder und Videos",
     ocrLangUpdateMany: "{n} Sprachpakete können aktualisiert werden.",
     snipOcrNoLang: "Es ist keine OCR-Sprache installiert. Öffne „Sprachen der Texterkennung verwalten“ im Expertenmenü und versuche es erneut.",
     tipStoreFiles: "Kopiert angehängte Dateien in den Datenordner der App, statt nur den Pfad zu speichern.",

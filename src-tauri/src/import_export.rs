@@ -866,8 +866,8 @@ pub(crate) fn parse_csv_data(content: &str) -> ImportData {
 
 // The signature a prompt is de-duplicated by, on preview and real import alike; the two
 // must agree or the preview's "new"/"duplicate" label could lie.
-pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
-    format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
+pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool, variants: &[String]) -> String {
+    format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}\u{1}{}", variants.join(VARIANT_SEP))
 }
 
 // An editor's UTF-8 byte-order mark is not part of the text: left in, it sticks to the first
@@ -944,13 +944,13 @@ pub(crate) async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Resu
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
-        .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
+        .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image, &p.variants))
         .collect();
     let items = data
         .prompts
         .into_iter()
         .map(|item| {
-            let dup = !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image));
+            let dup = !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image, &item.variants));
             ImportPreviewItem { name: item.name, duplicate: dup }
         })
         .collect();
@@ -1032,14 +1032,14 @@ fn append_imported_rows(store: &mut Store, items: Vec<ImportedPrompt>) -> Import
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
-        .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
+        .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image, &p.variants))
         .collect();
     let mut count = 0usize;
     let mut removed = 0usize;
     // Grows while importing so tags introduced by the file itself also settle on one casing.
     let mut known = canonical_tags(&store.prompts);
     for item in items {
-        if !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image)) {
+        if !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image, &item.variants)) {
             continue; // duplicate of an existing (or earlier imported) prompt
         }
         let tags = lenient_import_tags(item.tags, &known);
@@ -1395,7 +1395,8 @@ pub(crate) fn folder_file_item(name: String, tags: Vec<String>, content: &str) -
     // The rotation split runs FIRST, on the whole file: the note is only
     // ever pulled off entry 0 (the plain text), never off a later variant,
     // so a short line right after the separator is never mistaken for it.
-    let (raw_text, variants) = split_variants(content);
+    let content = content.replace("\r\n", "\n");
+    let (raw_text, variants) = split_variants(&content);
     let (text, note) = split_folder_note(&raw_text);
     ImportedPrompt {
         name,

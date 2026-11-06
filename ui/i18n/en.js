@@ -245,6 +245,8 @@ export default {
     ocrCapsElevateInfo: "Windows will ask for administrator rights once, then list the available language packs. Nothing is installed by this step.",
     ocrNoLanguageMsg: "No OCR language is installed.",
     ocrLangUpdateOne: "Language pack {lang} can be updated.",
+    pickFilterImages: "Images",
+    pickFilterMedia: "Images and videos",
     ocrLangUpdateMany: "{n} language packs can be updated.",
     snipOcrNoLang: "No OCR language is installed. Open “Manage text recognition languages” in the expert menu, then try again.",
     tipStoreFiles: "Copies attached files into the app's data folder instead of only saving the path.",

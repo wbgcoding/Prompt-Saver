@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "Windows 会请求一次管理员权限，然后列出可用的语言包。此步骤不会安装任何内容。",
     ocrNoLanguageMsg: "未安装 OCR 语言。",
     ocrLangUpdateOne: "可以更新语言包 {lang}。",
+    pickFilterImages: "图片",
+    pickFilterMedia: "图片和视频",
     ocrLangUpdateMany: "有 {n} 个语言包可以更新。",
     snipOcrNoLang: "未安装 OCR 语言。在专家菜单中打开“管理文本识别语言”，然后重试。",
     tipStoreFiles: "将附加文件复制到应用的数据文件夹中，而不是只保存路径。",

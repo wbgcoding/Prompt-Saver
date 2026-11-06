@@ -1006,6 +1006,13 @@ pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Pa
             // The prompts stay, so the vault keys they are sealed with stay too, and so do this machine's
             // network, credential and registration values.
             let local = read_settings_row(&tx, "main");
+            // A snapshot row that cannot be read would replace a readable local one and drop the vault
+            // keys the kept prompts are sealed with: refuse, the transaction rolls back.
+            let backup_has_row: bool =
+                tx.query_row("SELECT EXISTS(SELECT 1 FROM backup.meta WHERE key = 'settings')", [], |r| r.get(0))?;
+            if backup_has_row && read_settings_row(&tx, "backup").is_none() {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
             tx.execute(
                 "INSERT INTO meta(key, value) SELECT key, value FROM backup.meta WHERE key = 'settings'
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1036,7 +1043,10 @@ pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Pa
         // must reach the main file, because the caller never touches the WAL of a selective restore.
         let _ = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()));
     }
-    result.map_err(|e| e.to_string())
+    result.map_err(|e| match e {
+        rusqlite::Error::InvalidQuery => "backup-schema-mismatch".to_string(),
+        e => e.to_string(),
+    })
 }
 
 // Pure core of backup_contents: everything a snapshot holds, read from an open connection on

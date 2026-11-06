@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "Windows pedirá permisos de administrador una vez y luego mostrará los paquetes de idioma disponibles. Este paso no instala nada.",
     ocrNoLanguageMsg: "No hay ningún idioma OCR instalado.",
     ocrLangUpdateOne: "El paquete de idioma {lang} se puede actualizar.",
+    pickFilterImages: "Imágenes",
+    pickFilterMedia: "Imágenes y vídeos",
     ocrLangUpdateMany: "Se pueden actualizar {n} paquetes de idioma.",
     snipOcrNoLang: "No hay ningún idioma OCR instalado. Abre «Administrar idiomas de reconocimiento de texto» en el menú experto y vuelve a intentarlo.",
     tipStoreFiles: "Copia los archivos adjuntos a la carpeta de datos de la app en vez de guardar solo la ruta.",

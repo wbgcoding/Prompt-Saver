@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "System Windows poprosi raz o uprawnienia administratora, a następnie wyświetli dostępne pakiety językowe. Ten krok niczego nie instaluje.",
     ocrNoLanguageMsg: "Żaden język OCR nie jest zainstalowany.",
     ocrLangUpdateOne: "Pakiet językowy {lang} może zostać zaktualizowany.",
+    pickFilterImages: "Obrazy",
+    pickFilterMedia: "Obrazy i filmy",
     ocrLangUpdateMany: "Dostępne są aktualizacje dla {n} pakietów językowych.",
     snipOcrNoLang: "Żaden język OCR nie jest zainstalowany. Otwórz Zarządzaj językami rozpoznawania tekstu w menu eksperckim, a następnie spróbuj ponownie.",
     tipStoreFiles: "Kopiuje załączone pliki do folderu danych aplikacji zamiast zapisywać tylko ścieżkę.",

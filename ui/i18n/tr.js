@@ -268,6 +268,8 @@ export default {
     ocrCapsElevateInfo: "Windows bir kez yönetici izni ister ve ardından kullanılabilir dil paketlerini listeler. Bu adımda hiçbir şey yüklenmez.",
     ocrNoLanguageMsg: "Hiçbir OCR dili yüklü değil.",
     ocrLangUpdateOne: "{lang} dil paketi güncellenebilir.",
+    pickFilterImages: "Resimler",
+    pickFilterMedia: "Resimler ve videolar",
     ocrLangUpdateMany: "{n} dil paketi güncellenebilir.",
     snipOcrNoLang: "Hiçbir OCR dili yüklü değil. Uzman menüsünde Metin tanıma dillerini yönet'i açın, ardından tekrar deneyin.",
     tipStoreFiles: "Ekli dosyaları yalnızca yolunu kaydetmek yerine uygulamanın veri klasörüne kopyalar.",

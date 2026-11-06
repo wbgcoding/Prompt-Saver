@@ -234,6 +234,16 @@ pub(crate) fn validate_export_graph(graph: &str, allowed: &[PathBuf], allowed_te
             if base == "drawtext" && pairs.iter().enumerate().any(|(n, (k, _))| k.is_none() && n >= 2) {
                 return refuse("text file");
             }
+            // paletteuse can dump its search tree to any path (`debug_kdtree`, the sixth option); the
+            // editor only sets `dither`.
+            if base == "paletteuse"
+                && pairs.iter().enumerate().any(|(n, (k, _))| match k {
+                    Some(k) => k.trim().eq_ignore_ascii_case("debug_kdtree"),
+                    None => n >= 5,
+                })
+            {
+                return refuse("file-writing option");
+            }
         }
     }
     Ok(())

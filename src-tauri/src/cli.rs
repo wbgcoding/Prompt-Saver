@@ -203,7 +203,7 @@ fn current_user_sid_string() -> Option<String> {
         if !got {
             return None;
         }
-        let sid = (*buf.as_ptr().cast::<TOKEN_USER>()).User.Sid;
+        let sid = std::ptr::read_unaligned(buf.as_ptr().cast::<TOKEN_USER>()).User.Sid;
         let len = GetLengthSid(sid) as usize;
         sid_to_string(std::slice::from_raw_parts(sid.0.cast::<u8>(), len))
     }
@@ -616,22 +616,21 @@ async fn resolve_second_launch_async() -> LaunchDecision {
     // Connected, but the main thread never reached the answer: a wedged instance (the answer goes
     // out before show_main does any work, so a slow or rebuilding window never looks like a hang).
     let Some(pid) = server_pid else { return LaunchDecision::Primary };
-    let (same_user, same_exe) = process_identity_check(pid);
-    if should_take_over_hung_instance(false, same_user, same_exe) {
+    match take_over_hung_instance(pid) {
         // Terminate and wait: TerminateProcess only asks. Racing ahead while the old process still
         // holds the single-instance mutex, the data-dir lock and the pipe would leave this launch
         // without a window.
-        let ended = terminate_process(pid);
-        append_crash_log(&format!(
-            "second launch: took over a hung running instance (pid {pid}, ended={ended})"
-        ));
-        if ended {
-            LaunchDecision::TookOver
-        } else {
-            LaunchDecision::Primary // could not confirm it is gone -- let the plugin decide
+        Some(ended) => {
+            append_crash_log(&format!(
+                "second launch: took over a hung running instance (pid {pid}, ended={ended})"
+            ));
+            if ended {
+                LaunchDecision::TookOver
+            } else {
+                LaunchDecision::Primary // could not confirm it is gone -- let the plugin decide
+            }
         }
-    } else {
-        LaunchDecision::Primary
+        None => LaunchDecision::Primary,
     }
 }
 
@@ -667,10 +666,23 @@ fn named_pipe_server_pid(client: &tokio::net::windows::named_pipe::NamedPipeClie
 // failure; an unknown answer is never treated as a match.
 fn process_identity_check(pid: u32) -> (bool, bool) {
     use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return (false, false);
+        };
+        let answer = process_identity_of(process);
+        let _ = CloseHandle(process);
+        answer
+    }
+}
+
+// The same answer for a process the caller already holds open (it needs PROCESS_QUERY_LIMITED_INFORMATION).
+fn process_identity_of(process: windows::Win32::Foundation::HANDLE) -> (bool, bool) {
+    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Security::{EqualSid, GetTokenInformation, TokenUser, PSID, TOKEN_QUERY};
     use windows::Win32::System::Threading::{
-        GetCurrentProcess, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-        PROCESS_QUERY_LIMITED_INFORMATION,
+        GetCurrentProcess, OpenProcessToken, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
     };
     // The Sid field of a queried TOKEN_USER points into its info buffer, so the buffer must
     // outlive every use of the pointer; it is returned together rather than as a bare PSID a
@@ -683,15 +695,11 @@ fn process_identity_check(pid: u32) -> (bool, bool) {
         }
         let mut buf = vec![0u8; needed as usize];
         unsafe { GetTokenInformation(token, TokenUser, Some(buf.as_mut_ptr().cast()), needed, &mut needed).ok()? };
-        let sid = unsafe { (*buf.as_ptr().cast::<windows::Win32::Security::TOKEN_USER>()).User.Sid };
+        let sid = unsafe { std::ptr::read_unaligned(buf.as_ptr().cast::<windows::Win32::Security::TOKEN_USER>()).User.Sid };
         Some((buf, sid))
     }
 
     unsafe {
-        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
-            return (false, false);
-        };
-
         let mut name_buf = [0u16; 1024];
         let mut name_len = name_buf.len() as u32;
         let same_exe = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(name_buf.as_mut_ptr()), &mut name_len).is_ok()
@@ -716,7 +724,6 @@ fn process_identity_check(pid: u32) -> (bool, bool) {
         })()
         .unwrap_or(false);
 
-        let _ = CloseHandle(process);
         (same_user, same_exe)
     }
 }
@@ -738,23 +745,33 @@ fn wait_for_process_exit(pid: u32, wait_ms: u32) -> bool {
     }
 }
 
-// Ends `pid` and waits until it is really gone. `true` only when the process has exited: the
-// caller may not touch the mutex, data-dir lock or pipe the old instance owns until then.
-fn terminate_process(pid: u32) -> bool {
-    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+// Ends the hung instance `pid` when it is this user's own build, judged and ended on ONE open
+// handle so the pid cannot be reused between the check and the kill. None = left alone, Some(true)
+// only when the process has exited: the caller may not touch the mutex, data-dir lock or pipe the
+// old instance owns until then.
+fn take_over_hung_instance(pid: u32) -> Option<bool> {
+    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
-        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     };
-    const EXIT_WAIT_MS: u32 = 3000;
     unsafe {
-        let Ok(process) = OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, false, pid) else {
-            return false;
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, false, pid) else {
+            return None;
         };
-        let asked = TerminateProcess(process, 1).is_ok();
-        let gone = asked && WaitForSingleObject(process, EXIT_WAIT_MS) == WAIT_OBJECT_0;
+        let (same_user, same_exe) = process_identity_of(process);
+        let ended = should_take_over_hung_instance(false, same_user, same_exe).then(|| end_process(process));
         let _ = CloseHandle(process);
-        gone
+        ended
     }
+}
+
+// Ends the process behind `process` (PROCESS_TERMINATE | PROCESS_SYNCHRONIZE) and waits until it
+// is really gone.
+fn end_process(process: windows::Win32::Foundation::HANDLE) -> bool {
+    use windows::Win32::Foundation::WAIT_OBJECT_0;
+    use windows::Win32::System::Threading::{TerminateProcess, WaitForSingleObject};
+    const EXIT_WAIT_MS: u32 = 3000;
+    unsafe { TerminateProcess(process, 1).is_ok() && WaitForSingleObject(process, EXIT_WAIT_MS) == WAIT_OBJECT_0 }
 }
 
 // ---------- Command grammar ----------

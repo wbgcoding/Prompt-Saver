@@ -224,7 +224,7 @@ pub(crate) async fn get_clipboard_file_path(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
-pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_only: Option<bool>) -> Option<String> {
+pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_only: Option<bool>, filter_label: Option<String>) -> Option<String> {
     let label = win.label().to_string();
     let app_for_scope = app.clone();
     // The dialog is modal: it waits on a blocking thread, not on an async worker.
@@ -232,7 +232,7 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_on
         crate::floating::on_dialog_thread(move || {
         let dlg = file_dialog_for(&app, &label);
         // Text recognition accepts only some image types: offer just those.
-        let dlg = if images_only == Some(true) { dlg.add_filter("Images", &OCR_IMAGE_EXTS) } else { dlg };
+        let dlg = if images_only == Some(true) { dlg.add_filter(filter_label.as_deref().unwrap_or("Images"), &OCR_IMAGE_EXTS) } else { dlg };
         dlg.pick_file().map(|p| p.to_string_lossy().to_string())
         })
         .flatten()
@@ -252,14 +252,14 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_on
 // which editor actually opens is decided by open_file_in_editor's own content
 // sniff, not by which extension the user picked here.
 #[tauri::command]
-pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
+pub(crate) async fn pick_media_file_path(app: AppHandle, win: tauri::Window, filter_label: Option<String>) -> Option<String> {
     let label = win.label().to_string();
     let app_for_scope = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
         file_dialog_for(&app, &label)
             .add_filter(
-                "Images and videos",
+                filter_label.as_deref().unwrap_or("Images and videos"),
                 &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
             )
             .pick_file()
@@ -535,9 +535,10 @@ pub(crate) async fn attachment_text_preview(
 // refresh is start_missing_files_poll below. Async with spawn_blocking: Path::exists() on a
 // slow or unreachable network path blocks, and must not tie up an IPC dispatch worker.
 #[tauri::command]
-pub(crate) async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, String> {
+pub(crate) async fn missing_files(app: AppHandle, state: State<'_, Db>) -> Result<Vec<String>, String> {
     // Snapshot ids + paths under the lock, then stat OUTSIDE it: a slow or dead
     // drive must never block other DB operations behind this polled command.
+    let own_dirs = own_storage_dirs(&app, &state);
     let entries: Vec<(String, String, String)> = {
         let g = lock(&state);
         g.prompts
@@ -545,16 +546,25 @@ pub(crate) async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, S
             .map(|p| (p.id.clone(), p.file_path.clone(), p.icon_path.clone()))
             .collect()
     };
-    tauri::async_runtime::spawn_blocking(move || {
-        let gone = |path: &str| !path.is_empty() && !std::path::Path::new(path).exists();
-        entries
-            .into_iter()
-            .filter(|(_, fp, ip)| gone(fp) || gone(ip))
-            .map(|(id, _, _)| id)
-            .collect()
-    })
-    .await
-    .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || missing_ids(entries, &own_dirs, |p| std::path::Path::new(p).exists()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// The ids whose file or icon is gone. A foreign network spelling (a synced prompt can carry one)
+// is judged on its text and never asked of the file system, so polling never contacts that host;
+// it counts as present.
+pub(crate) fn missing_ids(
+    entries: Vec<(String, String, String)>,
+    own_dirs: &[PathBuf],
+    exists: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let gone = |path: &str| !path.is_empty() && !is_foreign_network_path(path, own_dirs) && !exists(path);
+    entries
+        .into_iter()
+        .filter(|(_, fp, ip)| gone(fp) || gone(ip))
+        .map(|(id, _, _)| id)
+        .collect()
 }
 
 // One backend timer runs the missing-files check and pushes the result to every window, so
@@ -562,10 +572,15 @@ pub(crate) async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, S
 pub(crate) const MISSING_FILES_POLL_SECS: u64 = 5;
 pub(crate) fn start_missing_files_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
+        // Emit only a changed set: a window that opens later asks missing_files itself.
+        let mut last: Option<Vec<String>> = None;
         loop {
             if let Some(state) = app.try_state::<Db>() {
-                let ids = missing_files(state).await.unwrap_or_default();
-                let _ = app.emit("missing-files", ids);
+                let ids = missing_files(app.clone(), state).await.unwrap_or_default();
+                if last.as_ref() != Some(&ids) {
+                    let _ = app.emit("missing-files", ids.clone());
+                    last = Some(ids);
+                }
             }
             tokio::time::sleep(std::time::Duration::from_secs(MISSING_FILES_POLL_SECS)).await;
         }
