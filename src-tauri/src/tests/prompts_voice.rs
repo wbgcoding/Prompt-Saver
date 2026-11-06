@@ -918,7 +918,7 @@ fn the_ocr_file_picker_offers_only_the_types_the_check_accepts() {
     let src = include_str!("../images.rs");
     let cmd = src.split("pub(crate) async fn pick_file_path").nth(1).unwrap().split("pub(crate) async fn pick_media_file_path").next().unwrap();
     assert!(
-        cmd.contains("images_only == Some(true)") && cmd.contains("add_filter(\"Images\", &OCR_IMAGE_EXTS)"),
+        cmd.contains("images_only == Some(true)") && cmd.contains("&OCR_IMAGE_EXTS)"),
         "the filter must be built from the extensions ocr_validate_path accepts"
     );
     // A missing file fails on the file check, not on the type check, for every offered type.

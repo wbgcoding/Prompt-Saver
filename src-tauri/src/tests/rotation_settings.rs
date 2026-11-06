@@ -79,7 +79,7 @@ fn rotation_bag_with_repeats_is_discarded_instead_of_underflowing_the_position()
     p.rotate_mode = "random".into();
     let mut settings = Settings::default();
     settings.rotate_bag.insert(p.id.clone(), vec![0, 1, 0]); // longer than the prompt: a hand-edited bag
-    let (idx, pos, _) = rotation_position(&p, &settings);
+    let (idx, pos) = rotation_position(&p, &settings);
     assert_eq!((idx, pos), (0, 1));
     rotation_advance(&p, &mut settings);
     let bag = settings.rotate_bag.get(&p.id).unwrap();
