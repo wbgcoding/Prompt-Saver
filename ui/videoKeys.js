@@ -105,7 +105,10 @@ function keysEnable(op, spans) {
   const clipped = spans
     .map(([s, e]) => [Math.max(s, op.startMs), Math.min(e, op.endMs)])
     .filter(([s, e]) => e > s)
-    .map(([s, e]) => [outMs(s) / 1000, outMs(e, true) / 1000]);
+    .map(([s, e]) => [outMs(s) / 1000, outMs(e, true) / 1000])
+    // a press completely inside a cut collapses to one output time; between(t,a,a) would still
+    // match the frame that lands on the cut boundary
+    .filter(([a, b]) => b > a);
   if (!clipped.length) return null;
   return `enable='${clipped.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join("+")}'`;
 }
