@@ -93,7 +93,7 @@ fn a_failed_settings_only_import_puts_back_a_hotkey_it_had_dropped() {
     let mut backup = import_test_backup();
     backup.settings.hotkey = "CommandOrControl+Alt+K".into(); // collides with old1
     let before = serde_json::to_string(&store.prompts).unwrap();
-    let r = run_import(&mut store, backup, false, true, |_, prompts, _| {
+    let r = run_import(&mut store, backup, false, true, &[], |_, prompts, _| {
         assert!(prompts, "a dropped accelerator changes prompt rows, so they are written too");
         false
     });
@@ -178,7 +178,7 @@ fn a_settings_only_import_keeps_the_local_vault_whatever_the_file_carries() {
     for with_salt in [true, false] {
         let (settings, p, _) = vault_fixture();
         let mut store = vault_store(settings, p.clone());
-        apply_import(&mut store, foreign_backup(with_salt), false, true);
+        apply_import(&mut store, foreign_backup(with_salt), false, true, &[]);
         assert_eq!(store.settings.ui_texts.get("marker").map(String::as_str), Some("THEIRS"), "the settings did come in");
         assert!(still_opens(&store.settings, &p), "file with salt: {with_salt}");
     }
@@ -203,7 +203,7 @@ fn a_full_import_with_data_takes_the_backups_own_vault_keys() {
     let mut store = vault_store(settings, p);
     let mut backup = foreign_backup(true);
     backup.prompts = vec![test_prompt("theirs")];
-    apply_import(&mut store, backup, true, true);
+    apply_import(&mut store, backup, true, true, &[]);
     assert_eq!(store.settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("Zm9yZWlnbi1zYWx0"));
     assert_eq!(store.settings.ui_texts.get(SECRET_VERIFY_KEY).map(String::as_str), Some("Zm9yZWlnbi12ZXJpZnk="));
 }
@@ -245,15 +245,15 @@ fn a_settings_only_restore_keeps_the_local_vault() {
 fn a_data_import_takes_the_backups_vault_keys_or_keeps_local_ones_when_it_has_none() {
     let (settings, p, _) = vault_fixture();
     let mut store = vault_store(settings.clone(), p.clone());
-    apply_import(&mut store, foreign_backup(true), true, false);
+    apply_import(&mut store, foreign_backup(true), true, false, &[]);
     assert_eq!(store.settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("Zm9yZWlnbi1zYWx0"), "keys follow the prompts");
     assert_eq!(store.settings.ui_texts.get("marker"), None, "data scope still leaves the other settings alone");
 
     let mut store = vault_store(settings.clone(), p.clone());
-    apply_import(&mut store, foreign_backup(false), true, false);
+    apply_import(&mut store, foreign_backup(false), true, false, &[]);
     assert!(still_opens(&store.settings, &p), "a backup without keys keeps the local ones");
     let mut store = vault_store(settings, p.clone());
-    apply_import(&mut store, foreign_backup(false), true, true);
+    apply_import(&mut store, foreign_backup(false), true, true, &[]);
     assert!(still_opens(&store.settings, &p), "full import of a backup without keys keeps the local ones");
     assert_eq!(store.settings.ui_texts.get("marker").map(String::as_str), Some("THEIRS"));
 }
@@ -276,14 +276,14 @@ fn an_import_warns_when_trashed_confidential_prompts_lose_their_key() {
         let mut t = test_prompt("trashed");
         t.secret = trash_secret;
         store.trash.push(t);
-        let r = run_import(&mut store, foreign_backup(true), true, true, |_, _, _| true).unwrap();
+        let r = run_import(&mut store, foreign_backup(true), true, true, &[], |_, _, _| true).unwrap();
         assert_eq!(r.3, expect, "trash holds a confidential prompt: {trash_secret}");
     }
     let mut store = vault_store(settings, p);
     let mut t = test_prompt("trashed");
     t.secret = true;
     store.trash.push(t);
-    let r = run_import(&mut store, foreign_backup(false), true, true, |_, _, _| true).unwrap();
+    let r = run_import(&mut store, foreign_backup(false), true, true, &[], |_, _, _| true).unwrap();
     assert!(!r.3, "keys unchanged, nothing to warn about");
 }
 
@@ -295,7 +295,7 @@ fn an_import_that_swaps_the_vault_keys_ends_the_unlocked_session() {
         *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(SecretSession { key: [7u8; 32], unlocked_at: std::time::Instant::now() });
         let mut store = vault_store(settings.clone(), p.clone());
-        run_import(&mut store, foreign_backup(foreign), true, true, |_, _, _| true).unwrap();
+        run_import(&mut store, foreign_backup(foreign), true, true, &[], |_, _, _| true).unwrap();
         assert_eq!(secret_session_key(0).is_none(), expect_locked, "foreign keys: {foreign}");
     }
     *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -404,7 +404,7 @@ fn a_snapshot_restore_keeps_this_machines_network_and_credential_values() {
 #[test]
 fn a_full_import_keeps_the_update_choices_and_the_clipboard_watcher_of_this_machine() {
     let mut store = Store { prompts: vec![], trash: Vec::new(), settings: local_machine_settings(), prompts_locked: false, written: Default::default() };
-    apply_import(&mut store, Backup { prompts: vec![], settings: old_snapshot_settings() }, false, true);
+    apply_import(&mut store, Backup { prompts: vec![], settings: old_snapshot_settings() }, false, true, &[]);
     assert_machine_values_are_local(&store.settings);
 }
 
@@ -482,7 +482,7 @@ fn import_all_data_scope_deletes_the_prompts_it_replaces_from_disk() {
     };
     // A one-prompt backup, with an id neither original prompt had.
     let backup = Backup { prompts: vec![test_prompt("imported-only")], settings: Settings::default() };
-    apply_import(&mut store, backup, true, false);
+    apply_import(&mut store, backup, true, false, &[]);
     assert_eq!(store.prompts.len(), 1, "the in-memory list is always replaced outright");
 
     // The save import_all performs right after apply_import, using the SAME

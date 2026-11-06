@@ -392,7 +392,7 @@ fn import_all_data_scope_leaves_settings_untouched() {
     backup_settings.ui_texts.insert("marker".into(), "BACKUP".into());
     let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
 
-    let (count, dropped, pw_dropped) = apply_import(&mut store, backup, true, false);
+    let (count, dropped, pw_dropped) = apply_import(&mut store, backup, true, false, &[]);
 
     assert_eq!(store.prompts.len(), 1, "data scope must replace the prompts list");
     assert_eq!(store.prompts[0].id, "backed-up");
@@ -419,13 +419,13 @@ fn an_import_that_brings_back_a_trashed_prompt_drops_its_trash_entry() {
         written: Default::default(),
     };
     let backup = Backup { prompts: vec![test_prompt("back")], settings: Settings::default() };
-    apply_import(&mut store, backup, true, false);
+    apply_import(&mut store, backup, true, false, &[]);
     let trash_ids: Vec<&str> = store.trash.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(trash_ids, vec!["stays"], "only the entry that came back as a live prompt leaves the trash");
 
     // A settings-only import leaves prompts and trash as they are.
     let backup = Backup { prompts: vec![test_prompt("stays")], settings: Settings::default() };
-    apply_import(&mut store, backup, false, true);
+    apply_import(&mut store, backup, false, true, &[]);
     assert_eq!(store.trash.len(), 1);
 }
 
@@ -482,7 +482,7 @@ fn import_all_settings_scope_leaves_data_untouched() {
     backup_settings.ui_texts.insert(BACKUP_PW_KEY.into(), "foreign-pw".into());
     let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
 
-    let (count, dropped, pw_dropped) = apply_import(&mut store, backup, false, true);
+    let (count, dropped, pw_dropped) = apply_import(&mut store, backup, false, true, &[]);
 
     assert_eq!(store.prompts.len(), 1, "settings scope must never touch prompts");
     assert_eq!(store.prompts[0].id, "live");
@@ -527,7 +527,7 @@ fn import_all_settings_scope_keeps_this_machines_own_folder_settings() {
     backup_settings.ui_texts.insert("marker".into(), "BACKUP".into());
     let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
 
-    apply_import(&mut store, backup, false, true);
+    apply_import(&mut store, backup, false, true, &[]);
 
     assert_eq!(
         store.settings.ui_texts.get("marker").map(String::as_str),
@@ -595,7 +595,7 @@ fn a_full_import_that_switches_ocr_index_off_erases_prompt_and_trash_text() {
     let mut incoming = import_test_backup();
     incoming.prompts[0].image_text = "kept by data".into();
     let mut wrote_prompts = false;
-    run_import(&mut store, incoming, false, true, |_, prompts, _| {
+    run_import(&mut store, incoming, false, true, &[], |_, prompts, _| {
         wrote_prompts = prompts;
         true
     })
@@ -606,7 +606,7 @@ fn a_full_import_that_switches_ocr_index_off_erases_prompt_and_trash_text() {
     // A data-only import leaves the switch alone and the text with it.
     store.settings.ui_flags.insert("ocrIndex".into(), true);
     store.trash[0].image_text = "trashed".into();
-    run_import(&mut store, import_test_backup(), true, false, |_, _, _| true).unwrap();
+    run_import(&mut store, import_test_backup(), true, false, &[], |_, _, _| true).unwrap();
     assert_eq!(store.trash[0].image_text, "trashed");
 }
 
@@ -691,7 +691,7 @@ fn a_full_import_never_brings_in_a_foreign_receiver_secret() {
         foreign.ui_texts.insert(k.to_string(), "theirs".into());
     }
     let backup = Backup { prompts: vec![], settings: foreign };
-    apply_import(&mut store, backup, false, true);
+    apply_import(&mut store, backup, false, true, &[]);
     for k in OLD_REMOTE_SECRETS {
         assert!(!store.settings.ui_texts.contains_key(k), "{k} must not arrive from a file");
     }
@@ -764,12 +764,12 @@ fn a_settings_file_cannot_set_consent_or_lock_switches() {
 #[test]
 fn a_full_import_cannot_set_consent_or_lock_switches() {
     let mut store = Store { prompts: vec![], trash: Vec::new(), settings: local_consent_settings(), prompts_locked: false, written: Default::default() };
-    apply_import(&mut store, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true);
+    apply_import(&mut store, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true, &[]);
     assert_consent_kept(&store.settings, "full import");
     assert_eq!(store.settings.ui_flags.get("copyFlash"), Some(&false));
     // A machine that never had the rows does not receive them either.
     let mut bare = Store { prompts: vec![], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
-    apply_import(&mut bare, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true);
+    apply_import(&mut bare, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true, &[]);
     for k in CONSENT_KEYS {
         assert!(!bare.settings.ui_flags.contains_key(k), "{k} must not arrive");
     }
@@ -888,7 +888,7 @@ fn a_full_import_cannot_plant_network_or_machine_settings() {
     store.settings.ui_flags.insert("remoteApi".into(), false);
     store.settings.ui_texts.insert("remotePasswordHash".into(), "mine".into());
     let backup = Backup { prompts: vec![], settings: hostile_settings() };
-    apply_import(&mut store, backup, false, true);
+    apply_import(&mut store, backup, false, true, &[]);
     let s = &store.settings;
     for k in ["remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
         assert!(!s.ui_flags.contains_key(k), "{k} must not be imported");
@@ -1010,7 +1010,7 @@ pub(super) fn disk_state(conn: &Connection) -> (Vec<String>, String) {
 }
 
 pub(super) fn import_with(conn: &mut Connection, store: &mut Store, want_data: bool, want_settings: bool) -> Result<(usize, usize, bool, bool), String> {
-    run_import(store, import_test_backup(), want_data, want_settings, |st, prompts, settings| {
+    run_import(store, import_test_backup(), want_data, want_settings, &[], |st, prompts, settings| {
         db_write_import(conn, st, &st.prompts, &st.trash, prompts, settings, false).is_ok()
     })
 }
@@ -1059,7 +1059,7 @@ fn imported_rows_never_keep_a_network_path() {
     hostile.file_path = unc;
     hostile.icon_path = "C:/ok/local.mp4".to_string();
     let backup = Backup { prompts: vec![hostile], settings: Settings::default() };
-    apply_import(&mut store, backup, true, false);
+    apply_import(&mut store, backup, true, false, &[]);
     assert!(store.prompts[0].file_path.is_empty(), "a full backup is cleared too");
     assert_eq!(store.prompts[0].icon_path, "C:/ok/local.mp4");
 }

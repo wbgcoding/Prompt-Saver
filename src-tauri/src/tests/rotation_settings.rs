@@ -876,9 +876,9 @@ fn an_import_refreshes_the_close_handlers_tray_setting() {
         let mut incoming = import_test_backup();
         incoming.settings.minimize_to_tray = after;
         // A failed write rolls everything back, the mirror included.
-        run_import(&mut store, import_test_backup_with(after), false, true, |_, _, _| false).unwrap_err();
+        run_import(&mut store, import_test_backup_with(after), false, true, &[], |_, _, _| false).unwrap_err();
         assert_eq!(close_minimizes(false), before, "a rolled back import leaves the mirror alone");
-        run_import(&mut store, incoming, false, true, |_, _, _| true).unwrap();
+        run_import(&mut store, incoming, false, true, &[], |_, _, _| true).unwrap();
         assert_eq!(close_minimizes(false), after, "the imported setting must reach the close handler");
         assert_eq!(store.settings.minimize_to_tray, after);
     }
