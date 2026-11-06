@@ -1526,9 +1526,17 @@ export async function duplicatePrompt(id) {
   // A duplicate carries everything except what identifies the prompt and its hotkey (one
   // accelerator, one prompt): it opens the create dialog prefilled, so the user can review or
   // cancel before anything is saved. The copy starts unstarred, unbound and not confidential.
+  // An image or file entry takes its copy text from the new name (no text field), so it opens
+  // in the matching create mode; the heading is the one a fresh entry of that kind gets.
+  const mode = p.file_path ? "file-create" : p.copy_image ? "image-create" : "create";
+  const kind = p.file_path ? mediaKind(p.file_path) : "";
+  const title = p.file_path
+    ? t(kind === "video" ? "videoModalTitle" : kind || PDF_EXT.test(p.file_path) ? "imageModalTitle" : "fileModalTitle")
+    : p.copy_image ? t("imageModalTitle") : t("nameModalTitle");
   openModal({
     ...promptToModal(p),
-    mode: "create",
+    mode,
+    title,
     name: `${p.name} (${t("duplicateSuffix")})`,
     favorite: false,
     secret: false,
