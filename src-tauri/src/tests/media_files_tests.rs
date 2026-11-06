@@ -402,7 +402,7 @@ fn move_file_copies_only_after_a_cross_device_rename_error() {
 #[test]
 fn the_discard_sweep_and_restore_commands_run_off_the_main_thread() {
     let media = source!("../media_files.rs");
-    for name in ["discard_recording_file", "restore_discarded_recording"] {
+    for name in ["discard_recording_file", "restore_discarded_recording", "delete_discarded_recording_now"] {
         let at = media.find(&format!("pub(crate) fn {name}(")).unwrap();
         assert!(media[..at].trim_end().ends_with("#[tauri::command(async)]"), "{name} must be an async command");
     }

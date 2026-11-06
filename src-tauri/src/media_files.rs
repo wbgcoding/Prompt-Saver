@@ -1139,7 +1139,7 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
     fs::remove_file(&path).is_ok()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn delete_discarded_recording_now(state: State<'_, Db>, dir: String, name: String) -> bool {
     delete_discarded_recording_now_impl(&dir, &name, &configured_recording_dir(&state))
 }
