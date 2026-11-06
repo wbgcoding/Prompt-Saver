@@ -761,7 +761,9 @@ SECTION = """\
       await sleep(100);
       if (libPg.libSelected.size !== totalPg) out.errors.push('paging: select all picked ' + libPg.libSelected.size + ' of ' + totalPg);
       const listPg = document.getElementById('library-list');
-      for (let i = 0; i < 240 && rowsPg() < totalPg; i++) { listPg.scrollTop = listPg.scrollHeight; await sleep(250); } // a frame can take seconds in the headless run
+      // Headless Chrome may stop producing frames for a while, and both the sentinel observer and the
+      // scroll event wait for a frame; dispatching the scroll event drives the scroll backup directly.
+      for (let i = 0; i < 240 && rowsPg() < totalPg; i++) { listPg.scrollTop = listPg.scrollHeight; listPg.dispatchEvent(new Event('scroll')); await sleep(250); }
       if (rowsPg() !== totalPg) out.errors.push('paging: scrolling to the end drew ' + rowsPg() + ' of ' + totalPg + ' rows');
       if (document.querySelectorAll('#library-list .lib-item:not(.lib-selected)').length) out.errors.push('paging: a row drawn after select all is not marked selected');
       document.getElementById('lib-batch-none').click();
