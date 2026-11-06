@@ -32,6 +32,15 @@ saving, backups, recordings, the editors and the installer.
   in the data folder is moved there once.
 - **Cleanup keeps backup files.** The unused-files cleanup no longer deletes
   attachments that a kept backup snapshot still needs.
+- **Editors, part two.** In the screenshot editor a dragged text box keeps the
+  arrow keys, Escape first deselects a shape, sliders and check boxes keep
+  their keys and an open shape menu blocks undo behind it. In the video editor
+  key presses inside a cut stay out of the export, Fit works on very long
+  clips and arrow keys stay with an open colour picker or menu.
+- **Data folder and passwords.** Moving the data folder into the old backups
+  folder is refused, the backup password counts as set only when it can still
+  be read, and a recorded window on a second monitor is found by its whole
+  area.
 - **Faster large libraries.** Opening the library with thousands of prompts
   is much faster.
 - **Screenshot and video editors.** Enter in crop mode and Tab with a popover
@@ -70,6 +79,8 @@ saving, backups, recordings, the editors and the installer.
   and snapshots sealed with another vault key are refused.
 - **Video export options** that would write files outside the chosen target
   are refused.
+- **Windows tools** such as Explorer and PowerShell are started by their full
+  system path, never by a bare name.
 - **Export targets** must match the chosen format, and a read-only folder is
   refused before an attachment is copied into it.
 - **Imported, restored and synced attachments.** An attachment that an
