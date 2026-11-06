@@ -208,7 +208,9 @@ fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
                 return true;
             }
             // The id may have gone to a newer process since the holder died.
-            pid_started_ns(pid).is_some_and(|started| started > since_ns.saturating_add(2_000_000_000))
+            // A process this user cannot inspect (a service that reused the id) has no readable
+            // start time; the age alone then frees the lock, as for a lock from another computer.
+            pid_started_ns(pid).map_or(age >= SYNC_LOCK_FOREIGN_STALE_SECS, |started| started > since_ns.saturating_add(2_000_000_000))
         }
         // Whether a process on another computer lives cannot be asked; only time tells.
         SyncLockHolder::Elsewhere => age >= SYNC_LOCK_FOREIGN_STALE_SECS,

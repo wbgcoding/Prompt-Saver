@@ -1352,3 +1352,23 @@ fn a_lock_file_whose_host_name_is_all_digits_still_names_its_process() {
     assert_eq!(sync_lock_holder("1234\n4242\n"), SyncLockHolder::Unreadable);
     assert_eq!(sync_lock_holder(""), SyncLockHolder::Unreadable);
 }
+
+// A dead writer's process id reused by a process this user cannot open (a system service):
+// the id counts as alive and its start time cannot be read, so only the age can free the lock.
+#[test]
+fn a_lock_whose_reused_pid_cannot_be_inspected_goes_stale_by_age() {
+    const SYSTEM_PID: u32 = 4;
+    if !pid_is_alive(SYSTEM_PID) || pid_started_ns(SYSTEM_PID).is_some() {
+        return; // an elevated run can open the System process; the premise does not hold
+    }
+    let dir = sync_tmp_dir("lock-uninspectable");
+    let md = dir.join("p1.md");
+    fs::write(&md, "x").unwrap();
+    let lock_path = sync_lock_path(&md);
+    fs::write(&lock_path, format!("{}\n{}\n{}", local_host_name(), SYSTEM_PID, 1)).unwrap();
+    backdate(&lock_path, Duration::from_secs(SYNC_LOCK_FOREIGN_STALE_SECS - 10));
+    assert!(!sync_lock_is_stale(&lock_path), "a young lock is still respected");
+    backdate(&lock_path, Duration::from_secs(SYNC_LOCK_FOREIGN_STALE_SECS + 10));
+    assert!(sync_lock_is_stale(&lock_path), "an old one is not kept forever by a process nobody can inspect");
+    let _ = fs::remove_dir_all(&dir);
+}
