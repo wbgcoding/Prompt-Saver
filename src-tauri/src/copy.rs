@@ -85,6 +85,12 @@ pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, S
     (idx, pos, rotation_entry_text(p, idx))
 }
 
+// A stored shuffle bag counts only when it fits the prompt as it is now: no more entries than
+// the prompt has (a hand-edited bag with repeats would underflow the position), none out of range.
+fn bag_is_valid(bag: &[u32], total: usize) -> bool {
+    !bag.is_empty() && bag.len() <= total && bag.iter().all(|&i| (i as usize) < total)
+}
+
 // The entry index and 1-based position rotation_next() would serve right now, without
 // building the text.
 pub(crate) fn rotation_position(p: &Prompt, settings: &Settings) -> (usize, usize) {
@@ -93,7 +99,7 @@ pub(crate) fn rotation_position(p: &Prompt, settings: &Settings) -> (usize, usiz
         (0, 1)
     } else if p.rotate_mode == "random" {
         match settings.rotate_bag.get(&p.id) {
-            Some(bag) if !bag.is_empty() && bag.iter().all(|&i| (i as usize) < total) => {
+            Some(bag) if bag_is_valid(bag, total) => {
                 (bag[0] as usize, total - bag.len() + 1)
             }
             _ => (0, 1),
@@ -129,7 +135,7 @@ pub(crate) fn rotation_advance(p: &Prompt, settings: &mut Settings) {
     let total = rotation_total(p);
     if p.rotate_mode == "random" {
         let bag_valid = settings.rotate_bag.get(&p.id)
-            .map(|b| !b.is_empty() && b.iter().all(|&i| (i as usize) < total))
+            .map(|b| bag_is_valid(b, total))
             .unwrap_or(false);
         let (shown, mut rest) = if bag_valid {
             let mut bag = settings.rotate_bag.remove(&p.id).unwrap();

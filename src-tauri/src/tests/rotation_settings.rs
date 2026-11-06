@@ -73,6 +73,20 @@ fn rotation_stale_pointer_and_bag_never_go_out_of_range_after_entries_shrink() {
 }
 
 #[test]
+fn rotation_bag_with_repeats_is_discarded_instead_of_underflowing_the_position() {
+    let mut p = sample_prompts().remove(0);
+    p.variants = vec!["b".into()]; // total = 2
+    p.rotate_mode = "random".into();
+    let mut settings = Settings::default();
+    settings.rotate_bag.insert(p.id.clone(), vec![0, 1, 0]); // longer than the prompt: a hand-edited bag
+    let (idx, pos, _) = rotation_position(&p, &settings);
+    assert_eq!((idx, pos), (0, 1));
+    rotation_advance(&p, &mut settings);
+    let bag = settings.rotate_bag.get(&p.id).unwrap();
+    assert_eq!(bag.len(), 2, "the repeats must not carry into the new cycle");
+}
+
+#[test]
 fn rotation_disabled_globally_always_serves_entry_one_and_freezes_the_pointer() {
     let mut p = sample_prompts().remove(0);
     p.variants = vec!["b".into(), "c".into()];
