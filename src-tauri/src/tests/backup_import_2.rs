@@ -1039,6 +1039,18 @@ fn folder_import_upgrades_the_retired_placeholder_spelling() {
     assert_eq!(item.variants, vec!["Dear {?name}".to_string()]);
 }
 
+#[test]
+fn an_import_with_edited_rotation_entries_is_not_an_exact_duplicate() {
+    let note = |variant: &str| folder_file_item("Note".to_string(), vec![], &format!("Title\nbody{VARIANT_SEP}{variant}"));
+    let mut store = bare_import_store();
+    let first = crate::import_export::append_imported_counted(&mut store, vec![note("one")], &[]);
+    assert_eq!(first.count, 1);
+    let edited = crate::import_export::append_imported_counted(&mut store, vec![note("two")], &[]);
+    assert_eq!(edited.count, 1, "changed entries are a new prompt");
+    let same = crate::import_export::append_imported_counted(&mut store, vec![note("two")], &[]);
+    assert_eq!(same.count, 0, "identical entries are still a duplicate");
+}
+
 pub(super) fn bare_import_store() -> Store {
     Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() }
 }
