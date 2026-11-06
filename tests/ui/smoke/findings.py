@@ -2610,5 +2610,64 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
       if (hint.top < area.bottom - 0.5) errs.push('x53: the hint overlaps the image area (hint top ' + hint.top + ', area bottom ' + area.bottom + ')');
     }
 """)
+    failed += ar_probe('gfsnip', 'screenshot editor: nudge target after a text move or handle grab, keys owned by a slider, the shape menu and a checkbox', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('gfsnip: the editor did not open'); }
+    else {
+      const hintOn = () => !document.querySelector('#snip-edit-nudge-hint > *').classList.contains('hidden');
+      const press = (el, key, extra) => el.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra || {})));
+      const editorOpen = () => !document.getElementById('snip-edit').classList.contains('hidden');
+      // text: drag it, the arrows and F2 keep working on it
+      await baTool('text');
+      await baClick(30, 90);
+      const ti = document.getElementById('snip-edit-text-input');
+      ti.value = 'AAA';
+      ti.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(60);
+      await baTool('text');
+      await baDrag(32, 94, 62, 94);
+      if (!hintOn()) errs.push('gfsnip-text: no nudge hint after dragging a text box');
+      press(document.body, 'F2'); await sleep(60);
+      if (document.getElementById('snip-edit-text-input').classList.contains('hidden')) errs.push('gfsnip-text: F2 did not reopen the dragged text');
+      baKey('Escape'); await sleep(60);
+      // a resized shape stays the nudge target and Escape only deselects it
+      await baTool('rect'); await baDrag(20, 20, 100, 50);
+      await baTool('pen'); await baTool('rect');
+      await baClick(60, 20); // select the finished rectangle, its handles show
+      await baDrag(100, 50, 120, 60);
+      if (!hintOn()) errs.push('gfsnip-handle: no nudge hint after resizing by a handle');
+      baKey('Escape'); await sleep(60);
+      if (!editorOpen()) errs.push('gfsnip-handle: Escape after a handle resize closed the editor');
+      if (hintOn()) errs.push('gfsnip-handle: Escape after a handle resize did not deselect');
+      // the spotlight dim slider keeps its arrow keys
+      await baTool('spotlight'); await baDrag(40, 70, 90, 110);
+      const dim = document.querySelector('#snip-edit-context input[type=range]');
+      if (!dim) errs.push('gfsnip-range: fixture: no dim slider');
+      else {
+        dim.focus();
+        if (!press(dim, 'ArrowLeft')) errs.push('gfsnip-range: ArrowLeft on the dim slider was prevented');
+      }
+      // the shape menu owns every key
+      await baTool('rect'); await baDrag(20, 75, 60, 90);
+      const pop = await baCtx(40, 82);
+      if (!pop) errs.push('gfsnip-menu: fixture: no menu');
+      else {
+        const inked = async () => { const img = await baExport(); return !near(img.px(40, 75), BGC, 30) || !near(img.px(40, 76), BGC, 30); };
+        const had = await inked();
+        baKey('z', { ctrlKey: true }); await sleep(60);
+        if (!had) errs.push('gfsnip-menu: fixture: the rectangle is not drawn');
+        else if (!(await inked()) || !baCtxPop()) errs.push('gfsnip-menu: Ctrl+Z acted while the shape menu was open');
+        baKey('Escape'); await sleep(60);
+      }
+      // a keyboard-focused checkbox keeps Space
+      document.getElementById('snip-edit-scale').click(); await sleep(150);
+      const cb = document.querySelector('.snip-scale-pop input[type=checkbox]');
+      if (!cb) errs.push('gfsnip-space: fixture: no checkbox in the scale popover');
+      else {
+        cb.focus();
+        if (!press(cb, ' ')) errs.push('gfsnip-space: Space on a checkbox was prevented');
+        if (document.getElementById('snip-edit-canvas-wrap').classList.contains('panning')) errs.push('gfsnip-space: Space on a checkbox started panning');
+      }
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

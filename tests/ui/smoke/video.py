@@ -59,6 +59,19 @@ VIDEO_DE_PROBE = """
       if (document.getElementById('ve-zoom-val').textContent !== '100%') {
         errs.push('934: Fit did not return the zoom to 100% (' + document.getElementById('ve-zoom-val').textContent + ')');
       }
+      // gfzoom: a clip so long that Fit lands below one pixel per second still reads 100% at Fit
+      {
+        const { VE: veZ } = await import('./video.js');
+        const keptDur = veZ.dur;
+        veZ.dur = 20 * 60 * 1000;
+        fit.click();
+        await sleep(60);
+        const longFit = document.getElementById('ve-zoom-val').textContent;
+        veZ.dur = keptDur;
+        fit.click();
+        await sleep(60);
+        if (longFit !== '100%') errs.push('gfzoom: Fit on a 20 minute clip reads ' + longFit + ', expected 100%');
+      }
     }
     // 936: the clip start and end fields are compact and sit on one line.
     {
@@ -1574,6 +1587,24 @@ VIDEO_PROBE = """
     }
     if (document.getElementById('ve-export-status').textContent.toLowerCase().includes('not recognized')) {
       errs.push('503: a cancelled retry showed the raw backend refusal instead of staying silent');
+    }
+    // gfexp: an auto-named export whose folder was refused keeps the picked folder for the
+    // next export of the same recording instead of asking again
+    {
+      const { VE: veGf } = await import('./video.js');
+      const { destPath: destPathGf } = await import('./videoExport.js');
+      destInput.value = '';
+      destInput.dispatchEvent(new Event('change'));
+      await sleep(30);
+      veGf.originDir = 'C:\\\\REFUSEDEST-dir';
+      window.__EXPORT_DEST_REFUSED_ONCE__ = false;
+      window.__PICK_FOLDER__ = 'C:\\\\Retry\\\\Folder';
+      document.getElementById('ve-export-start').click();
+      await sleep(250);
+      const nextDest = destPathGf();
+      if (!nextDest.includes('Retry')) errs.push('gfexp: the next export still targets the refused folder: ' + nextDest);
+      veGf.originDir = '';
+      window.__PICK_FOLDER__ = null;
     }
     destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
     destInput.dispatchEvent(new Event('change'));

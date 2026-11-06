@@ -495,6 +495,17 @@ async function cameraOverlayRaceCheck() {
   Object.assign(sb3.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
   await vm.runInContext("addAlignedCameraOverlay", sb3)("C:/cam.mp4", 1);
   expect("a camera overlay starting at the very end is skipped", sb3.VE.ops.length === 0 && sb3.VE.selOv === null, JSON.stringify(sb3.VE.ops));
+  // A path with an apostrophe has no escape the export's movie= filter accepts: refused like every other add.
+  const toasts = [];
+  const sb4 = makeSandbox({
+    invoke: (cmd) => Promise.resolve(cmd === "probe_extra_video_source" ? { duration_ms: 5000, has_audio: false } : null),
+    even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r, newId: () => "cam1",
+    afterOpsChanged: () => {}, OV_MIN_MS: 100, toast: (m) => toasts.push(m), t: (k) => k,
+  });
+  sb4.VE = baseState([]);
+  Object.assign(sb4.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
+  await vm.runInContext("addAlignedCameraOverlay", sb4)("C:/Users/O'Brien/cam.mp4", 1);
+  expect("a camera overlay with an apostrophe in its path is refused with the reason", sb4.VE.ops.length === 0 && toasts.join() === "veOvImageQuote", JSON.stringify([sb4.VE.ops.length, toasts]));
 }
 
 // An export that finishes after another recording was opened in the editor must
@@ -700,6 +711,18 @@ async function exportIdleCheck() {
   expect("a right Ctrl event lights the generic Ctrl key", JSON.stringify(run("keyPressSpans(0x11, 400)")) === "[[3000,3500]]", JSON.stringify(run("keyPressSpans(0x11, 400)")));
   expect("a modifier event does not light a letter key", JSON.stringify(run("keyPressSpans(0x41, 400)")) === "[[4000,4500]]");
   sb.VE.keySidecar = keptSidecar;
+  // A key box narrower than its grid never rounds to zero: ffmpeg's drawbox reads a width of 0 as
+  // the whole frame width.
+  const tiny = run("keysGridRects([new Array(14).fill(0x41), new Array(14).fill(0x42)], { x: 0, y: 0, w: 30, h: 3 })");
+  expect("no key cell has a zero or negative size", tiny.length === 28 && tiny.every((c) => c.w >= 1 && c.h >= 1), JSON.stringify(tiny[0]));
+  // A press that lies completely inside a cut has no output time and must not flash on the
+  // frame at the cut boundary.
+  const keptOutMs = sb.outMs;
+  sb.outMs = (ms) => (ms >= 1000 && ms <= 2000 ? 1000 : ms);
+  sb.__enableOp = { startMs: 0, endMs: 5000 };
+  expect("a press fully inside a cut adds no enable window", run("keysEnable(__enableOp, [[1200, 1600]])") === null, String(run("keysEnable(__enableOp, [[1200, 1600]])")));
+  expect("a press outside the cut keeps its window", /between\(t,3\.000,3\.500\)/.test(run("keysEnable(__enableOp, [[3000, 3500]])")));
+  sb.outMs = keptOutMs;
   // An empty custom pick draws nothing, and the preview says so.
   sb.__empty = { ...sb.__op, preset: "custom", keys: [] };
   expect("an empty custom pick adds no filter", run("buildKeysFilters(__empty)").length === 0);

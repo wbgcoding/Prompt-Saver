@@ -836,7 +836,7 @@ export function setZoom(next, anchorMs) {
   // Zoom is anchored: whatever was under the playhead stays under it, instead of
   // the view sliding away from the frame the user is working on.
   view.scrollLeft = clamp(msToPx(anchor) - before, 0, Math.max(0, trackWidth() - view.clientWidth));
-  $("ve-zoom-val").textContent = `${Math.round((VE.zoom / Math.max(1, fitZoom())) * 100)}%`;
+  $("ve-zoom-val").textContent = `${Math.round((VE.zoom / fitZoom()) * 100)}%`;
   scheduleStrip();
   scheduleWaves();
 }
@@ -2211,6 +2211,8 @@ document.addEventListener("keydown", (e) => {
   if (!colorPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeColorPop(); return; }
     if (e.key === "Tab") { trapTabWithin(colorPop, e); return; }
+    // The picker is about one colour; arrows and Delete must not edit the overlay behind it.
+    if (!keepsOwnKeys(document.activeElement) && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return; }
   }
   if (!ovCtxPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
@@ -2221,6 +2223,8 @@ document.addEventListener("keydown", (e) => {
   if (!addVideoPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }
     if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
+    // The menu is about the insert; arrows and Delete must not edit the overlay or playhead behind it.
+    if (!keepsOwnKeys(document.activeElement) && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete", "Backspace"].includes(e.key)) { e.preventDefault(); return; }
   }
   if (e.code === "F1") { e.preventDefault(); openShortcutsModal(); return; }
   const typing = keepsOwnKeys(document.activeElement);

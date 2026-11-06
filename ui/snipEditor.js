@@ -1126,7 +1126,13 @@ export function initSnipEditor() {
   function snipEditTextPointerDown(pt) {
     snipEditFinishTextIfOpen();
     const hit = snipEditHitTestText(pt);
-    if (hit) { SE.drag = { kind: "text-move", op: hit, dx: pt.x - hit.point.x, dy: pt.y - hit.point.y }; return; }
+    if (hit) {
+      // The pointer press cleared the nudge target; a grabbed text box is the target again.
+      SE.lastNudged = hit;
+      snipEditUpdateNudgeHint();
+      SE.drag = { kind: "text-move", op: hit, dx: pt.x - hit.point.x, dy: pt.y - hit.point.y };
+      return;
+    }
     snipEditOpenTextInput(pt);
   }
 
@@ -1568,6 +1574,9 @@ export function initSnipEditor() {
         if (SE.selOp && SE.selOp.tool === SE.tool) {
           const handle = snipEditHitShapeHandle(pt, SE.selOp);
           if (handle) {
+            // The shape still shows its handles, so it stays what the arrows and Escape act on.
+            SE.lastNudged = SE.selOp;
+            snipEditUpdateNudgeHint();
             SE.drag = SE.selOp.points
               ? { kind: "shape-endpoint", op: SE.selOp, handle, orig: SE.selOp.points.map((p) => ({ ...p })) }
               : { kind: "shape-resize", op: SE.selOp, handle, orig: { ...SE.selOp.rect } };
@@ -1769,6 +1778,9 @@ export function initSnipEditor() {
     if (!snipCtxPop.classList.contains("hidden")) {
       if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
       if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
+      // The menu owns every other key too: undo behind it would leave its Duplicate pointing at
+      // a shape that is gone.
+      return;
     }
     // The size and colour popovers sit on document.body too, so the Tab trap stays inside the
     // one that is open instead of pulling focus out of its fields.
@@ -1820,11 +1832,14 @@ export function initSnipEditor() {
     if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); snipEditZoomBy(snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
+    // A keyboard-focused checkbox or radio keeps Space: it toggles instead of panning.
+    if (e.key === " " && e.target?.matches?.("input[type=checkbox],input[type=radio]")) return;
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
     // Ctrl+V and friends are not tool or toggle keys.
     const plainKey = !(e.ctrlKey || e.metaKey || e.altKey);
     if (plainKey && e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
-    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
+    // A slider keeps its own arrow keys.
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged && e.target?.type !== "range") {
       e.preventDefault();
       const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : 1;
       snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);

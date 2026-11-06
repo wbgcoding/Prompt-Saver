@@ -274,6 +274,36 @@ def run(browser, tmp):
     if (count() !== 2) errs.push('4027: undo after Delete gave ' + count() + ' overlays');
     """)
 
+    # gfpops: Delete and the arrows belong to an open colour picker or "Add a video" menu, never to the
+    # overlay or the playhead behind it.
+    failed += vprobe('gfpops', 'Delete and arrows stay out of the overlay behind an open picker or menu', r"""
+    // gfpops: keys behind open pop-ups.
+    const { addOverlay } = await import('./videoOverlays.js');
+    const count = () => VE.ops.filter((o) => o.tool === 'overlay').length;
+    await addOverlay('frame'); await sleep(150);
+    if (count() !== 1) { errs.push('gfpops: setup gave ' + count() + ' overlays'); return; }
+    mod.selectOverlay(VE.ops.find((o) => o.tool === 'overlay').id); await sleep(100);
+    const press = (key) => { const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }); document.body.dispatchEvent(ev); return ev.defaultPrevented; };
+    const cp = document.querySelector('.color-pop');
+    const avp = document.getElementById('ve-add-video-pop');
+    for (const [label, pop] of [['colour picker', cp], ['add-video menu', avp]]) {
+      if (!pop) { errs.push('gfpops: fixture: no ' + label); continue; }
+      pop.classList.remove('hidden');
+      if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+      for (const key of ['Delete', 'ArrowRight']) {
+        const t0 = VE.playhead;
+        const rect0 = JSON.stringify(VE.ops.find((o) => o.tool === 'overlay')?.rect);
+        const prevented = press(key);
+        await sleep(100);
+        if (!prevented) errs.push('gfpops: ' + key + ' was not held back while the ' + label + ' is open');
+        if (count() !== 1) errs.push('gfpops: ' + key + ' removed the overlay behind the ' + label);
+        if (VE.playhead !== t0) errs.push('gfpops: ' + key + ' moved the playhead behind the ' + label);
+        if (count() === 1 && JSON.stringify(VE.ops.find((o) => o.tool === 'overlay').rect) !== rect0) errs.push('gfpops: ' + key + ' nudged the overlay behind the ' + label);
+      }
+      pop.classList.add('hidden');
+    }
+    """)
+
     # 4028: a drag that leaves the timeline while zoomed scrolls it on its own.
     failed += vprobe('autoscroll', 'dragging past the timeline edge scrolls it', r"""
     // 4028: drag autoscroll.

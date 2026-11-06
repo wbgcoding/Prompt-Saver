@@ -68,7 +68,8 @@ function keysGridRects(rows, rect) {
     const rowW = row.length * cellW;
     const xOff = rect.x + (rect.w - rowW) / 2;
     row.forEach((vk, ci) => {
-      out.push({ vk, x: Math.round(xOff + ci * cellW), y: Math.round(rect.y + ri * cellH), w: Math.round(cellW) - 2, h: Math.round(cellH) - 2 });
+      // drawbox reads a width or height of 0 as the whole frame, so a cell never rounds below 1
+      out.push({ vk, x: Math.round(xOff + ci * cellW), y: Math.round(rect.y + ri * cellH), w: Math.max(1, Math.round(cellW) - 2), h: Math.max(1, Math.round(cellH) - 2) });
     });
   });
   return out;
@@ -104,7 +105,10 @@ function keysEnable(op, spans) {
   const clipped = spans
     .map(([s, e]) => [Math.max(s, op.startMs), Math.min(e, op.endMs)])
     .filter(([s, e]) => e > s)
-    .map(([s, e]) => [outMs(s) / 1000, outMs(e, true) / 1000]);
+    .map(([s, e]) => [outMs(s) / 1000, outMs(e, true) / 1000])
+    // a press completely inside a cut collapses to one output time; between(t,a,a) would still
+    // match the frame that lands on the cut boundary
+    .filter(([a, b]) => b > a);
   if (!clipped.length) return null;
   return `enable='${clipped.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join("+")}'`;
 }
