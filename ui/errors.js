@@ -123,6 +123,7 @@ export const ERROR_MSG_KEYS = {
   "could not decode image": "errImageDecode",
   "image is too large ({} MB); the limit is {} MB": "errImageTooLarge",
   "file is too large ({} MB); the limit is {} MB": "errImageTooLarge",
+  "file is too large; the limit is {} MB": "errFileTooLargeLimit",
   "window is no longer valid": "errWindowGone",
   "window has no visible size": "errWindowGone",
   "could not read monitor bounds": "errScreenLayout",

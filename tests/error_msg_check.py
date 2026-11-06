@@ -20,6 +20,7 @@ ALLOW = {
         "ocr-no-language", "ocr-index-busy", "voice-no-language", "voice-busy", "voice-online-required",
         "recording-too-young-to-continue", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
+        "sync-foreign-files:{list}|{more}",
         "view-full:{deficit}", "view-full", "invalid-exe",
     ],
     "an export graph only this app's own UI builds; a refusal shows the generic export failure": [
@@ -75,6 +76,8 @@ PATTERNS = [re.compile(p, re.S) for p in (
     r"ok_or\(\s*" + LIT + r"\s*\)",
     r"map_err\(\s*\|[^|]*\|\s*" + LIT + CONV,
     r"map_err\(\s*\|[^|]*\|\s*format!\(\s*" + LIT,
+    # size_error() builds the "too large" refusal every import path returns.
+    r"fn size_error\([^)]*\)\s*->\s*String\s*\{\s*format!\(\s*" + LIT,
 )]
 
 

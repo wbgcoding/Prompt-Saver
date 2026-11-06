@@ -1352,3 +1352,84 @@ fn a_lock_file_whose_host_name_is_all_digits_still_names_its_process() {
     assert_eq!(sync_lock_holder("1234\n4242\n"), SyncLockHolder::Unreadable);
     assert_eq!(sync_lock_holder(""), SyncLockHolder::Unreadable);
 }
+
+// A dead writer's process id reused by a process this user cannot open (a system service):
+// the id counts as alive and its start time cannot be read, so only the age can free the lock.
+#[test]
+fn a_lock_whose_reused_pid_cannot_be_inspected_goes_stale_by_age() {
+    const SYSTEM_PID: u32 = 4;
+    if !pid_is_alive(SYSTEM_PID) || pid_started_ns(SYSTEM_PID).is_some() {
+        return; // an elevated run can open the System process; the premise does not hold
+    }
+    let dir = sync_tmp_dir("lock-uninspectable");
+    let md = dir.join("p1.md");
+    fs::write(&md, "x").unwrap();
+    let lock_path = sync_lock_path(&md);
+    fs::write(&lock_path, format!("{}\n{}\n{}", local_host_name(), SYSTEM_PID, 1)).unwrap();
+    backdate(&lock_path, Duration::from_secs(SYNC_LOCK_FOREIGN_STALE_SECS - 10));
+    assert!(!sync_lock_is_stale(&lock_path), "a young lock is still respected");
+    backdate(&lock_path, Duration::from_secs(SYNC_LOCK_FOREIGN_STALE_SECS + 10));
+    assert!(sync_lock_is_stale(&lock_path), "an old one is not kept forever by a process nobody can inspect");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// The exit flush: a write that is running when the app closes is waited for (the process must
+// not exit mid-write), and a write queued again meanwhile or waiting for its retry still runs.
+#[test]
+fn the_exit_flush_waits_for_a_running_write_and_still_flushes_a_queued_one() {
+    use std::sync::Arc;
+    let wait = Duration::from_secs(2);
+    let idle = Mutex::new(SyncWriteState::default());
+    assert!(!sync_exit_flush_owed(&idle, wait), "nothing queued, nothing running");
+
+    let queued = Mutex::new(SyncWriteState { pending: true, active: true });
+    assert!(sync_exit_flush_owed(&queued, wait), "a queued write (or one waiting to retry) is flushed at once");
+
+    // A write is running and finishes on its own: the exit waits for it instead of returning.
+    let running = Arc::new(Mutex::new(SyncWriteState { pending: false, active: true }));
+    let worker = running.clone();
+    let done = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(150));
+        worker.lock().unwrap().active = false;
+    });
+    let started = Instant::now();
+    assert!(!sync_exit_flush_owed(&running, wait));
+    assert!(started.elapsed() >= Duration::from_millis(100), "returned while the write was still running");
+    done.join().unwrap();
+
+    // The running write finishes and a save queued another one meanwhile.
+    let running = Arc::new(Mutex::new(SyncWriteState { pending: false, active: true }));
+    let worker = running.clone();
+    let done = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        let mut s = worker.lock().unwrap();
+        s.pending = true;
+        s.active = false;
+    });
+    assert!(sync_exit_flush_owed(&running, wait));
+    done.join().unwrap();
+
+    // A write that never ends cannot hold the exit longer than the bound.
+    let stuck = Mutex::new(SyncWriteState { pending: false, active: true });
+    let started = Instant::now();
+    assert!(!sync_exit_flush_owed(&stuck, Duration::from_millis(150)));
+    assert!(started.elapsed() < Duration::from_secs(2));
+}
+
+// The refusal is a code with a payload, not a bare file list: the dialog formats the names
+// itself, because an unmapped English sentence would be replaced by "Something went wrong".
+#[test]
+fn the_foreign_file_refusal_is_a_code_carrying_the_names_and_the_remainder() {
+    let dir = sync_tmp_dir("del-foreign-code");
+    for i in 0..7 {
+        fs::write(dir.join(format!("note{i}.txt")), "not yours").unwrap();
+    }
+    let data = sync_tmp_dir("del-foreign-code-data");
+    let err = sync_delete_dir(&dir, &data).expect_err("strangers stop the delete");
+    let payload = err.strip_prefix("sync-foreign-files:").unwrap_or_else(|| panic!("not a code: {err}"));
+    let (list, more) = payload.rsplit_once('|').unwrap();
+    assert_eq!(list.split(", ").count(), 5, "{list}");
+    assert_eq!(more, "2");
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&data);
+}

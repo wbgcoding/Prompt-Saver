@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "A área selecionada está vazia",
     errImageDecode: "Não foi possível ler a imagem",
     errImageTooLarge: "Esse arquivo é grande demais ({n} MB, o limite é {m} MB)",
+    errFileTooLargeLimit: "Esse arquivo é grande demais (o limite é {n} MB)",
     errWindowGone: "Essa janela não está mais disponível",
     errScreenLayout: "Não foi possível ler a disposição das telas",
     errNoRecording: "Nenhuma gravação em andamento",

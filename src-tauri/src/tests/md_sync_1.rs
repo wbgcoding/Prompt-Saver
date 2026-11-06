@@ -102,7 +102,7 @@ fn apply_md_placement_creates_a_view_by_name_and_places_the_cell() {
         ("grid".to_string(), "5x4".to_string()),
         ("cell".to_string(), "1,2".to_string()),
     ]);
-    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false, false));
     assert_eq!(settings.views.len(), 1);
     let view = &settings.views[0];
     assert_eq!(view.name, "Work");
@@ -121,7 +121,7 @@ fn apply_md_placement_reuses_an_existing_view_with_the_same_name() {
         ("grid".to_string(), grid_key(default_cols(), default_rows())),
         ("cell".to_string(), "0,0".to_string()),
     ]);
-    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false, false));
     assert_eq!(settings.views.len(), existing_count, "must not create a second view for a name that already exists");
 }
 
@@ -138,7 +138,7 @@ fn apply_md_placement_falls_back_to_a_free_cell_on_collision() {
         ("grid".to_string(), "2x1".to_string()),
         ("cell".to_string(), "0,0".to_string()),
     ]);
-    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false, false));
     let key = grid_key(2, 1);
     assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[1, 0]));
 }
@@ -173,7 +173,7 @@ fn apply_md_placement_creates_a_tile_folder_and_drops_the_members_own_layout_ent
         ("tile_folder".to_string(), "Team".to_string()),
         ("tile_folder_color".to_string(), "#00ff00".to_string()),
     ]);
-    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, true));
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, true, false));
     assert_eq!(settings.tile_folders.len(), 1);
     assert_eq!(settings.tile_folders[0].name, "Team");
     assert!(settings.tile_folders[0].members.iter().any(|m| m == "p1"));
@@ -188,7 +188,7 @@ fn apply_md_placement_creates_a_tile_folder_and_drops_the_members_own_layout_ent
 fn apply_md_placement_never_turns_a_grid_only_prompt_into_a_floating_pill() {
     let mut settings = Settings::default();
     let fields = HashMap::from([("float_folder".to_string(), "Pills".to_string())]);
-    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false));
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false, false));
     assert!(settings.float_folders.is_empty(), "joining a pill folder from sync must never conjure a new pill window");
 }
 
@@ -197,7 +197,7 @@ fn apply_md_placement_joins_an_existing_floating_pill_to_a_pill_folder() {
     let mut settings = Settings::default();
     settings.floating.insert("p1".to_string(), Pos { x: 10, y: 10, ..Default::default() });
     let fields = HashMap::from([("float_folder".to_string(), "Pills".to_string())]);
-    let (grid_placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+    let (grid_placed, folders_touched, _) = apply_md_placement(&mut settings, "p1", &fields);
     assert!(!grid_placed, "no grid fields were supplied, so the caller should still fall back for the grid");
     assert!(folders_touched);
     assert_eq!(settings.float_folders.len(), 1);
@@ -208,7 +208,7 @@ fn apply_md_placement_joins_an_existing_floating_pill_to_a_pill_folder() {
 fn apply_md_placement_returns_nothing_placed_when_every_field_is_absent() {
     let mut settings = Settings::default();
     let fields = HashMap::new();
-    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false));
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false, false));
     assert!(settings.views.is_empty());
 }
 
@@ -225,7 +225,7 @@ fn prompt_to_md_and_apply_md_placement_round_trip_a_tile_folder() {
     let md = prompt_to_md(&p, &placement);
     let (fields, _) = parse_frontmatter(&md).unwrap();
     let mut target = Settings::default();
-    assert_eq!(apply_md_placement(&mut target, "p1", &fields), (true, true));
+    assert_eq!(apply_md_placement(&mut target, "p1", &fields), (true, true, false));
     assert_eq!(target.tile_folders[0].name, "Team");
     assert_eq!(target.tile_folders[0].color, "#7c5cff");
     assert_eq!(target.views[0].name, "V1");
@@ -271,7 +271,7 @@ fn apply_md_placement_leaves_a_tile_folder_on_an_explicit_empty_field() {
         ("cell".to_string(), "3,3".to_string()),
         ("tile_folder".to_string(), String::new()),
     ]);
-    let (placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+    let (placed, folders_touched, _) = apply_md_placement(&mut settings, "p1", &fields);
     assert!(placed);
     assert!(folders_touched);
     assert!(!settings.tile_folders[0].members.iter().any(|m| m == "p1"));
@@ -291,7 +291,7 @@ fn apply_md_placement_leaves_a_float_folder_on_an_explicit_empty_field() {
         members: vec!["p1".to_string(), "p2".to_string()],
     });
     let fields = HashMap::from([("float_folder".to_string(), String::new())]);
-    let (_, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+    let (_, folders_touched, _) = apply_md_placement(&mut settings, "p1", &fields);
     assert!(folders_touched);
     assert!(!settings.float_folders[0].members.iter().any(|m| m == "p1"));
 }
@@ -305,7 +305,7 @@ fn apply_md_placement_never_treats_a_missing_field_as_a_leave() {
     let mut settings = Settings::default();
     settings.tile_folders.push(test_tile_folder("f1", "v1", [0, 0], &["p1", "p2"]));
     let fields = HashMap::new(); // no tile_folder / float_folder key at all
-    let (_, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+    let (_, folders_touched, _) = apply_md_placement(&mut settings, "p1", &fields);
     assert!(!folders_touched);
     assert!(settings.tile_folders[0].members.iter().any(|m| m == "p1"));
 }
@@ -325,7 +325,7 @@ fn apply_md_placement_falls_back_to_the_grid_when_the_folder_name_is_rejected() 
         ("cell".to_string(), "0,0".to_string()),
         ("tile_folder".to_string(), too_long),
     ]);
-    let (placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+    let (placed, folders_touched, _) = apply_md_placement(&mut settings, "p1", &fields);
     assert!(placed, "grid fields were valid - must not report nothing placed");
     assert!(!folders_touched);
     assert!(settings.tile_folders.is_empty());
@@ -1304,4 +1304,33 @@ fn notes_keep_the_spaces_they_start_and_end_with_through_a_file() {
         let back = apply_md_to_prompt(&sync_blank_prompt("p1".to_string()), &md).expect("our own file reads back");
         assert_eq!(back.notes, notes, "the note changed on its way through the file:{nl}{md}", nl = "\n");
     }
+}
+
+// A new file that names a known view under a new name but carries no usable cell renames the
+// view and places nothing, so the prompt still needs a seat in the active view.
+#[test]
+fn a_new_file_that_only_renames_a_known_view_is_still_seated_in_the_active_view() {
+    let mut settings = Settings::default();
+    settings.views.push(test_view("v1"));
+    settings.active_view = "v1".into();
+    let fields = HashMap::from([
+        ("view".to_string(), "Renamed".to_string()),
+        ("view_id".to_string(), "v1".to_string()),
+        ("cell".to_string(), "x".to_string()),
+    ]);
+    assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false, true));
+    assert_eq!(settings.views[0].name, "Renamed");
+
+    let p = sync_test_prompt();
+    let placement = SyncPlacement { view: "Renamed".into(), view_id: "v1".into(), cell: "x".into(), ..SyncPlacement::default() };
+    let content = prompt_to_md(&p, &placement);
+    let mut store = sync_apply_store(Vec::new(), Vec::new());
+    store.settings.views.push(test_view("v1"));
+    store.settings.active_view = "v1".into();
+    let (changed, settings_changed) = sync_apply(&mut store, "p1", content, true);
+    assert!(changed && settings_changed);
+    assert!(
+        store.settings.views[0].layouts.values().any(|l| l.contains_key("p1")),
+        "the new prompt landed in no view"
+    );
 }

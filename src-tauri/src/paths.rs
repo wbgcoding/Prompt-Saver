@@ -276,7 +276,9 @@ pub(crate) fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> 
             Err(_) => SealedRead::Unreadable,
         },
         Ok(_) => SealedRead::Missing, // empty file: nothing meaningful was ever written
-        Err(_) => SealedRead::Missing,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => SealedRead::Missing,
+        // A file is there but cannot be read (invalid UTF-8, locked): not "nothing to import".
+        Err(_) => SealedRead::Unreadable,
     }
 }
 

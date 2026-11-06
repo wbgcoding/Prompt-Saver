@@ -1484,6 +1484,7 @@ export default {
     errRegionEmpty: "Het geselecteerde gebied is leeg",
     errImageDecode: "De afbeelding kon niet worden gelezen",
     errImageTooLarge: "Dat bestand is te groot ({n} MB, de limiet is {m} MB)",
+    errFileTooLargeLimit: "Dat bestand is te groot (de limiet is {n} MB)",
     errWindowGone: "Dat venster is niet meer beschikbaar",
     errScreenLayout: "De schermindeling kon niet worden gelezen",
     errNoRecording: "Er loopt geen opname",

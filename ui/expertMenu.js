@@ -1172,6 +1172,14 @@ export function refreshVideoFolderInfo(dir) {
 // otherwise, so the question comes first and its answer rides along as an explicit
 // instruction: the backend never deletes a folder by itself, and only removes files this app
 // wrote (a stranger's file in there stops the whole delete and is reported).
+// What stands in the way of deleting the old sync folder: the backend names the foreign files
+// as "sync-foreign-files:<names>|<how many more>"; any other refusal is a mapped error code.
+function syncKeptWhat(e) {
+  const m = /^sync-foreign-files:([\s\S]*)\|(\d+)$/.exec(String(e));
+  if (!m) return errText(e);
+  return Number(m[2]) > 0 ? `${m[1]} (+${m[2]})` : m[1];
+}
+
 export async function applySyncDir(dir) {
   const next = dir || "";
   if ((settings.ui_texts?.syncDir || "") === next) return;
@@ -1215,7 +1223,7 @@ export async function applySyncDir(dir) {
     // in the old folder and why nothing there was touched.
     await infoDialog(
       t("syncOldDirTitle"),
-      t("syncOldDirKept").replace("{path}", () => info?.path || "").replace("{what}", () => errText(e)),
+      t("syncOldDirKept").replace("{path}", () => info?.path || "").replace("{what}", () => syncKeptWhat(e)),
     );
   }
   refreshSyncStatus(true);

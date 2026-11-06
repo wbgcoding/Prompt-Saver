@@ -517,3 +517,35 @@ fn a_refused_lock_swap_keeps_the_old_lock_instead_of_writing_in_place() {
     assert_eq!(read_data_dir_lock(&path).map(|l| l.seen), Some(200));
     let _ = fs::remove_dir_all(&dir);
 }
+
+// A lock file that cannot be read names no host: the UI shows its own placeholder instead of an
+// English word in every language.
+#[test]
+fn an_unreadable_lock_file_names_no_host() {
+    let dir = lock_test_dir("unreadable");
+    let path = data_dir_lock_path(&dir);
+    fs::create_dir_all(&path).unwrap(); // exists, cannot be created or read as a file
+    let t0 = Instant::now();
+    let mut obs = LockObserver::new(t0);
+    let me = LockMe { host: "B", pid: 1, id: "idb" };
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, Duration::ZERO), LockOutcome::ReadOnly(h) if h.is_empty()));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A repeated id in a legacy prompts.json or a fallback file must be made unique BEFORE the
+// copy handed to the startup write is taken, or that write fails on the primary key every
+// launch and the second prompt gets another fresh id each start.
+#[test]
+fn legacy_and_fallback_prompts_are_deduped_before_they_are_cloned_for_the_startup_write() {
+    let mut list = vec![test_prompt("same"), test_prompt("same"), test_prompt("other")];
+    dedupe_prompt_ids(&mut list);
+    let ids: std::collections::HashSet<_> = list.iter().map(|p| p.id.clone()).collect();
+    assert_eq!(ids.len(), 3);
+    assert_eq!(list[0].id, "same");
+    let src = include_str!("../store.rs").replace("\r\n", "\n");
+    let load = &src[src.find("let mut j_prompts = match j_prompts_r").unwrap()..];
+    let (legacy, rest) = load.split_once("startup.legacy_import = Some").unwrap();
+    assert!(legacy.contains("dedupe_prompt_ids(&mut j_prompts)"), "legacy list deduped before the clone");
+    let (fb_before, _) = rest.split_once("startup.prompts_fallback = Some").unwrap();
+    assert!(fb_before.contains("dedupe_prompt_ids(&mut prompts)"), "fallback list deduped before the clone");
+}

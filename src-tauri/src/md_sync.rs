@@ -495,10 +495,11 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
 // The incoming half of the six placement fields. Unlike apply_md_to_prompt these land on
 // Settings: a view or folder is found by name (ids mean nothing across machines) and
 // created if unseen. Every part is best-effort, so one malformed field never aborts the
-// file. Returns (grid_placed, folders_touched): grid_placed tells the caller to skip the
+// file. Returns (grid_placed, folders_touched, view_renamed): grid_placed tells the caller to skip the
 // "active view, first free cell" fallback (it is set unless the grid fields were absent or
 // unusable); folders_touched says a tile or float folder was created, joined or left and
-// needs a normalize pass. They are independent, since a float_folder join or leave carries
+// needs a normalize pass; view_renamed says only a known view took a new name, which dirties the
+// settings without placing the prompt. They are independent, since a float_folder join or leave carries
 // no grid fields.
 //
 // A field that is present but empty ("tile_folder: ") is a deliberate "not in a folder any
@@ -506,7 +507,7 @@ pub(crate) fn apply_md_with_tags(base: &Prompt, content: &str, known: &HashMap<S
 // feature". It must actively leave the folder this machine still has the prompt in, or the
 // stale membership would be re-asserted by this machine's next write and re-joined by the
 // other on the next poll.
-pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
+pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool, bool) {
     settings.sync_file_cells.remove(prompt_id);
     let mut folders_touched = false;
     if let Some(raw) = fields.get("float_folder") {
@@ -547,7 +548,7 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
                         f.color.clear();
                     }
                 }
-                return (true, folders_touched);
+                return (true, folders_touched, renamed);
             }
             // An unusable folder name (too long, control characters only) falls
             // through to plain grid placement below instead of leaving a
@@ -559,13 +560,13 @@ pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, field
             // No tile to seat, but the file may still carry the view's new name.
             renamed |= sync_rename_known_view(settings, file_view_id, view_name);
         }
-        return (renamed, folders_touched);
+        return (false, folders_touched, renamed);
     }
     let (view_id, _) = sync_resolve_view(settings, file_view_id, view_name, cols, rows);
     let wanted = cell.unwrap();
     sync_place_in_view(settings, prompt_id, &view_id, wanted);
     sync_note_file_cell(settings, prompt_id, &view_id, fields, wanted);
-    (true, folders_touched)
+    (true, folders_touched, renamed)
 }
 
 // Keeps the file's grid and cell when this machine could not use them as written.
@@ -1728,8 +1729,10 @@ pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
                 // save to come along.
                 let booting = sync_state().booting.load(Ordering::SeqCst);
                 if sync_write_again(failed, booting, &mut retries, &mut boot_waited) {
-                    tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
+                    // Queued before the wait, not after: an app that closes during it still owes
+                    // this write (see sync_flush_on_exit).
                     q.0.lock().unwrap_or_else(|e| e.into_inner()).pending = true;
+                    tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
                 }
             }
         }
@@ -1757,12 +1760,35 @@ pub(crate) fn sync_write_again(failed: usize, booting: bool, retries: &mut u32, 
     false
 }
 
-// The app is closing with a folder write still queued (a delete made a moment ago, say): it runs
-// once more here, on its own thread and for a few seconds at most, so the folder does not keep
-// what the library no longer has. Whatever it cannot finish is picked up by the next start.
+// Whether the closing app owes the folder one more write. A queued write (including one
+// waiting for its retry) does. A write that is running right now (the queue is active but
+// nothing is queued) is waited for, up to `wait`, because the process must not exit in the
+// middle of it; if another save queued a write meanwhile, that one is owed too.
+pub(crate) fn sync_exit_flush_owed(state: &Mutex<SyncWriteState>, wait: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            if s.pending {
+                return true;
+            }
+            if !s.active || std::time::Instant::now() >= deadline {
+                return false;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+// The app is closing with a folder write still queued or running (a delete made a moment ago,
+// say): a running one is waited for, a queued one runs once more here, on its own thread, all
+// within a few seconds at most, so the folder does not keep what the library no longer has.
+// Whatever it cannot finish is picked up by the next start.
 pub(crate) fn sync_flush_on_exit(app: &AppHandle) {
+    const EXIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
+    let started = std::time::Instant::now();
     let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
-    if !q.0.lock().unwrap_or_else(|e| e.into_inner()).pending {
+    if !sync_exit_flush_owed(&q.0, EXIT_BUDGET) {
         return;
     }
     let Some(state) = app.try_state::<Db>() else { return };
@@ -1779,7 +1805,7 @@ pub(crate) fn sync_flush_on_exit(app: &AppHandle) {
         sync_write_all_impl(&app2, &prompts, &settings);
         let _ = tx.send(());
     });
-    let _ = rx.recv_timeout(std::time::Duration::from_secs(3));
+    let _ = rx.recv_timeout(EXIT_BUDGET.saturating_sub(started.elapsed()).max(std::time::Duration::from_millis(500)));
 }
 
 // A prompt that left the library (deleted, trashed, or given an id this feature refuses)
@@ -1926,10 +1952,10 @@ pub(crate) fn sync_poll_apply(
             let id = np.id.clone();
             applied.push(id.clone());
             store.prompts.push(np);
-            let (placed, folders_touched_here) = fields
+            let (placed, folders_touched_here, _) = fields
                 .as_ref()
                 .map(|f| apply_md_placement(&mut store.settings, &id, f))
-                .unwrap_or((false, false));
+                .unwrap_or((false, false, false));
             if folders_touched_here {
                 placements_touched = true;
             }
@@ -1965,8 +1991,8 @@ pub(crate) fn sync_poll_apply(
                 }
             }
             if let Some(f) = fields.as_ref() {
-                let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
-                if placed {
+                let (placed, folders_touched_here, view_renamed) = apply_md_placement(&mut store.settings, &stem, f);
+                if placed || view_renamed {
                     settings_changed = true;
                 }
                 if folders_touched_here {
@@ -2485,11 +2511,9 @@ pub(crate) fn sync_delete_dir(dir: &Path, data: &Path) -> Result<usize, String> 
         let shown: Vec<String> = scan.foreign.iter().take(5).cloned().collect();
         let more = scan.foreign.len().saturating_sub(shown.len());
         let list = shown.join(", ");
-        return Err(if more > 0 {
-            format!("{list} and {more} more")
-        } else {
-            list
-        });
+        // A code with a payload (file names, how many more): the settings dialog formats it,
+        // since a bare sentence here would show up as the generic error text.
+        return Err(format!("sync-foreign-files:{list}|{more}"));
     }
     let mut removed = 0usize;
     for path in &scan.ours {

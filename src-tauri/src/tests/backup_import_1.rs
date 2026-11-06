@@ -314,11 +314,11 @@ fn similar_inputs_leaves_confidential_prompts_out_on_both_sides() {
     s.secret = true;
     s.text = "Please write a short friendly email".into();
     let all = vec![a, b, s];
-    let (target, others) = similar_inputs(&all, "a").expect("a plain target");
+    let (target, others) = similar_inputs(&all, "a", &[]).expect("a plain target");
     assert_eq!(target.id, "a");
     assert_eq!(others.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["b"]);
-    assert!(similar_inputs(&all, "s").is_none(), "a confidential target gets no hint");
-    assert!(similar_inputs(&all, "missing").is_none());
+    assert!(similar_inputs(&all, "s", &[]).is_none(), "a confidential target gets no hint");
+    assert!(similar_inputs(&all, "missing", &[]).is_none());
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn similar_inputs_copies_only_what_the_comparison_reads() {
     b.image = "data:image/png;base64,BBBB".into();
     b.notes = "a long note".into();
     let all = vec![a, b];
-    let (target, others) = similar_inputs(&all, "a").expect("a plain target");
+    let (target, others) = similar_inputs(&all, "a", &[]).expect("a plain target");
     assert_eq!((target.id.as_str(), target.text.as_str()), ("a", "Please write a short friendly email"));
     assert_eq!((others[0].id.as_str(), others[0].name.as_str()), ("b", "Mail"));
     assert_eq!(others[0].text, "Please write a short friendly email today");
@@ -1193,4 +1193,18 @@ fn a_long_repetitive_text_still_matches_its_short_twin() {
     let others = vec![&b];
     let hit = find_similar_prompt(&a, &others, 90.0);
     assert_eq!(hit.map(|h| h.id), Some("b".to_string()));
+}
+
+#[test]
+fn similar_inputs_skips_prompts_the_user_marked_as_not_duplicates() {
+    let mut a = test_prompt("a");
+    a.text = "Please write a short friendly email".into();
+    let mut b = test_prompt("b");
+    b.text = "Please write a short friendly email today".into();
+    let mut c = test_prompt("c");
+    c.text = "Please write a short friendly email again".into();
+    let all = vec![a, b, c];
+    let ignored = vec![vec!["a".to_string(), "b".to_string()]];
+    let (_, others) = similar_inputs(&all, "a", &ignored).expect("a plain target");
+    assert_eq!(others.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["c"]);
 }

@@ -589,3 +589,15 @@ fn the_missing_files_scan_never_stats_a_foreign_network_path() {
     assert_eq!(ids, vec!["local".to_string()]);
     assert_eq!(probed.into_inner(), vec![r"C:\gone\b.pdf".to_string()], "a network spelling is never probed");
 }
+
+// A file that is there but cannot be read as text (invalid UTF-8) is "unreadable", never
+// "missing": a missing prompts.json is treated as empty and then removed after the import.
+#[test]
+fn a_sealed_file_with_invalid_utf8_reads_as_unreadable_not_missing() {
+    let dir = legacy_test_dir("badutf8");
+    let file = dir.join("prompts.json");
+    fs::write(&file, [0x5b, 0xff, 0xfe, 0x5d]).unwrap();
+    assert!(matches!(read_sealed_json::<Vec<Prompt>>(&file), SealedRead::Unreadable));
+    assert!(matches!(read_sealed_json::<Vec<Prompt>>(&dir.join("nope.json")), SealedRead::Missing));
+    let _ = fs::remove_dir_all(&dir);
+}
