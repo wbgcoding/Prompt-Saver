@@ -1805,11 +1805,11 @@ pub(crate) fn upgrade_prompt_placeholders(p: &mut Prompt) {
     }
 }
 
-pub(crate) fn migrate_prompts(prompts: &mut [Prompt]) {
-    // id is the prompts table's primary key, so a duplicate fails the whole rewrite, and
-    // save_prompts then quietly writes the JSON fallback that the database path ignores: the
-    // import looks fine and the old prompts return after a restart. Only an import or a
-    // hand-edited backup can duplicate an id; the second prompt gets a fresh one.
+// id is the prompts table's primary key, so a duplicate fails the whole rewrite, and
+// save_prompts then quietly writes the JSON fallback that the database path ignores: the
+// import looks fine and the old prompts return after a restart. Only an import or a
+// hand-edited backup can duplicate an id; the second prompt gets a fresh one.
+pub(crate) fn dedupe_prompt_ids(prompts: &mut [Prompt]) {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for p in prompts.iter_mut() {
         if p.id.is_empty() || !seen.insert(p.id.clone()) {
@@ -1817,6 +1817,10 @@ pub(crate) fn migrate_prompts(prompts: &mut [Prompt]) {
             seen.insert(p.id.clone());
         }
     }
+}
+
+pub(crate) fn migrate_prompts(prompts: &mut [Prompt]) {
+    dedupe_prompt_ids(prompts);
     for p in prompts {
         if !p.image.is_empty() && !p.copy_image && (p.text.is_empty() || p.text == p.name) {
             p.copy_image = true;
@@ -2156,10 +2160,12 @@ fn load_store_inner(app: &AppHandle) -> Store {
                      import skipped this launch, files kept",
                 );
             } else {
-                let j_prompts = match j_prompts_r {
+                let mut j_prompts = match j_prompts_r {
                     SealedRead::Loaded(v) => v,
                     _ => Vec::new(),
                 };
+                // Unique ids before the copy for the startup write is taken (see dedupe_prompt_ids).
+                dedupe_prompt_ids(&mut j_prompts);
                 let j_settings = match j_settings_r {
                     SealedRead::Loaded(v) => {
                         settings_defaulted = false;
@@ -2187,6 +2193,7 @@ fn load_store_inner(app: &AppHandle) -> Store {
                     match read_sealed_json::<Vec<Prompt>>(&pj) {
                         SealedRead::Loaded(fallback) => {
                             prompts = fallback;
+                            dedupe_prompt_ids(&mut prompts);
                             startup.prompts_fallback = Some(prompts.clone());
                         }
                         // Unreadable, or a read error on a file that has content (a sync client
