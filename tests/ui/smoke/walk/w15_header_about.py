@@ -112,15 +112,16 @@ SECTION = """\
         check727('the page language');
         const swSpan727 = sw727.closest('label').querySelector('span');
         const ivLabelEl727 = document.querySelector('.update-interval-label');
-        const prev727 = [aboutBtn.textContent, ub.textContent, swSpan727.textContent];
+        const ubLabel727 = ub.querySelector('.btn-label') || ub;
+        const prev727 = [aboutBtn.textContent, ubLabel727.textContent, swSpan727.textContent];
         const prevIvLabel727 = ivLabelEl727 ? ivLabelEl727.textContent : '';
         if (ivLabelEl727) ivLabelEl727.textContent = 'Häufigkeit';
         aboutBtn.textContent = 'Über';
-        ub.textContent = 'Updates suchen';
+        ubLabel727.textContent = 'Updates suchen';
         swSpan727.textContent = 'Automatische Updates';
         uv.textContent = 'Update v2.10.0';
         check727('German');
-        [aboutBtn.textContent, ub.textContent, swSpan727.textContent] = prev727;
+        [aboutBtn.textContent, ubLabel727.textContent, swSpan727.textContent] = prev727;
         if (ivLabelEl727) ivLabelEl727.textContent = prevIvLabel727;
         if (window.innerWidth >= 680 && !(rect(aboutBtn).left > rect(uv).left && rect(ub).left > rect(aboutBtn).left && rect(ui727).top > rect(ub).top && rect(ex727).top > rect(ui727).top)) {
           out.errors.push('727: the System rows are not in the order version row, switch row, Expert menu');
@@ -661,14 +662,15 @@ SECTION = """\
           if (!fits(aboutBtn)) out.errors.push('about-btn overflows with "' + word + '" at ' + window.innerWidth + 'px');
         }
         aboutBtn.textContent = prevAbout;
-        const prevUpdate = updateBtn.textContent;
+        const updateLabel = updateBtn.querySelector('.btn-label') || updateBtn;
+        const prevUpdate = updateLabel.textContent;
         for (const word of ['Check for updates', 'Update suchen', 'Buscar actualizaciones', 'Cerca aggiornamenti',
           'Verificar atualizações', 'Sprawdź aktualizacje', '检查更新', 'アップデートを確認', 'Controleren op updates',
           'Güncellemeleri denetle', 'Caută actualizări']) {
-          updateBtn.textContent = word;
+          updateLabel.textContent = word;
           if (!fits(updateBtn)) out.errors.push('update-btn overflows with "' + word + '" at ' + window.innerWidth + 'px');
         }
-        updateBtn.textContent = prevUpdate;
+        updateLabel.textContent = prevUpdate;
         const prevVersion = updateVersion.textContent;
         for (const word of ['Version 2.7.0', 'Version 2.7.0', 'Versión 2.7.0', 'Versione 2.7.0', 'Versão 2.7.0',
           'Wersja 2.7.0', '版本 2.7.0', 'バージョン 2.7.0', 'Versie 2.7.0', 'Sürüm 2.7.0', 'Versiunea 2.7.0']) {
@@ -683,6 +685,7 @@ SECTION = """\
     // The changelog popup renders the release Markdown instead of dumping it, and
     // grows with the text rather than clipping it.
     await click('update-btn');
+    await sleep(750);
     await click('update-version');
     const notes = document.getElementById('update-modal-notes');
     if (document.getElementById('update-modal').classList.contains('hidden')) {

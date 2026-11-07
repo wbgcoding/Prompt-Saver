@@ -1,5 +1,5 @@
 // About and update dialog.
-import { $, appVersion, rememberOpener, errToast, invoke, listen, setStatusText, settings, t, toast } from "./core.js";
+import { $, LANG, appVersion, rememberOpener, errToast, invoke, listen, setStatusText, settings, t, toast } from "./core.js";
 import { fillUpdateIntervalSelect } from "./settingsPanel.js";
 import { attachSelectPicker } from "./selectpop.js";
 
@@ -25,6 +25,7 @@ export function bindAbout() {
 
   // Updates: manual check in the settings + daily background notification.
   let updateInfo = null;
+  let checking = false;
   const updateBtn = $("update-btn");
   const updateVersion = $("update-version");
   // The status line (left of the button) is the version by default, and switches to
@@ -157,24 +158,35 @@ export function bindAbout() {
     notesFromAbout = false;
   };
 
+  // A check shows a spinner for at least 600 ms and then one result line under the version, so even a fast or repeated check is visibly answered.
   updateBtn.addEventListener("click", async () => {
-    updateBtn.disabled = true;
-    try {
-      const info = await invoke("check_update");
-      if (info.available) offerUpdate(info);          // status → "Update to X available"
-      else {
-        // The short form keeps this on one line at the width the long sentence wrapped
-        // at; the full sentence is the tooltip. dataset.i18nTitle (not just .title) keeps
-        // it correct across a language switch.
-        setStatusText(updateVersion, "upToDate", "v", appVersion);
-        updateVersion.dataset.i18nTitle = "upToDateTip";
-        updateVersion.title = t("upToDateTip");
-        updateVersion.classList.remove("update-avail");
-      }
-    } catch (err) {
-      errToast(err);
+    if (checking) return;
+    checking = true;
+    updateBtn.classList.add("is-busy");
+    updateBtn.setAttribute("aria-busy", "true");
+    const started = Date.now();
+    let info = null, failed = false;
+    try { info = await invoke("check_update"); } catch { failed = true; }
+    const left = 600 - (Date.now() - started);
+    if (left > 0) await new Promise((r) => setTimeout(r, left));
+    updateBtn.classList.remove("is-busy");
+    updateBtn.removeAttribute("aria-busy");
+    checking = false;
+    const res = $("update-result");
+    res.classList.remove("hidden");
+    res.classList.toggle("update-result-error", failed);
+    if (failed) setStatusText(res, "errUpdateCheckFailed", "time", "");
+    else if (info.available) {
+      offerUpdate(info);                              // status → "Update to X available"
+      setStatusText(res, "updateResultAvailable", "v", info.version);
+    } else {
+      setStatusText(res, "updateResultLatest", "time", new Date().toLocaleTimeString(LANG, { hour: "2-digit", minute: "2-digit" }));
+      // Back to the plain installed version, in case an earlier check offered an update.
+      setStatusText(updateVersion, "versionInstalled", "v", appVersion);
+      updateVersion.dataset.i18nTitle = "openReleases";
+      updateVersion.title = t("openReleases");
+      updateVersion.classList.remove("update-avail");
     }
-    updateBtn.disabled = false;
   });
   // No launch check here: the backend schedules the automatic check itself (a couple
   // of seconds after start, then at the chosen interval) and announces what it finds

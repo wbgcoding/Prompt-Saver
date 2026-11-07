@@ -2093,6 +2093,53 @@ UPDATE_INTERVAL_PROBE = """
         if (checks() !== checksBefore) errs.push('646: changing the update setting made a check_update call');
       }
     }
+
+    // 646-result: a manual check shows a spinner for at least 600 ms and then one result line under the version row.
+    {
+      const btn = document.getElementById('update-btn');
+      const res = document.getElementById('update-result');
+      const ver = document.getElementById('update-version');
+      const toastBox = document.getElementById('toast');
+      if (!btn || !res) errs.push('646-result: the check button or the result line is missing');
+      else {
+        const realCheck = window.__STUB_RESULTS__.check_update;
+        const realDelay = window.__STUB_DELAY_MS__;
+        const busy = () => btn.classList.contains('is-busy') && btn.getAttribute('aria-busy') === 'true';
+        const verBefore = ver.textContent;
+        window.__STUB_RESULTS__.check_update = () => ({ available: false });
+        window.__STUB_DELAY_MS__ = { check_update: 50 };
+        if (!res.classList.contains('hidden')) errs.push('646-result: the result line is visible before any check');
+        btn.click();
+        await sleep(20);
+        if (!busy()) errs.push('646-result: the button shows no busy state right after the click');
+        const callsA = (window.__SMOKE_CALLS__ || []).filter((c) => c === 'check_update').length;
+        btn.click();
+        await sleep(280);
+        if ((window.__SMOKE_CALLS__ || []).filter((c) => c === 'check_update').length !== callsA) errs.push('646-result: a click while busy started a second check');
+        if (!busy()) errs.push('646-result: the busy state ended before 300 ms');
+        await sleep(420);
+        if (busy()) errs.push('646-result: the busy state is still on at 700 ms');
+        if (res.classList.contains('hidden') || !/[0-9]/.test(res.textContent) || /updateResult/.test(res.textContent)) {
+          errs.push('646-result: no readable result line with the time: ' + res.textContent);
+        }
+        if (ver.textContent !== verBefore) errs.push('646-result: the version label changed from ' + verBefore + ' to ' + ver.textContent);
+        // A failing check shows the error in the result line, not in a toast.
+        window.__STUB_RESULTS__.check_update = () => { throw 'update check failed'; };
+        toastBox.textContent = '';
+        btn.click();
+        await sleep(750);
+        if (!res.classList.contains('update-result-error') || res.classList.contains('hidden')) errs.push('646-result: a failed check shows no error line');
+        if (!res.textContent.trim() || /errUpdate/.test(res.textContent)) errs.push('646-result: the error line is empty or a raw key: ' + res.textContent);
+        if (toastBox.textContent.trim()) errs.push('646-result: a failed check also raised a toast: ' + toastBox.textContent);
+        // A good check afterwards clears the error look.
+        window.__STUB_RESULTS__.check_update = () => ({ available: false });
+        btn.click();
+        await sleep(750);
+        if (res.classList.contains('update-result-error')) errs.push('646-result: the error look stays after a good check');
+        window.__STUB_RESULTS__.check_update = realCheck;
+        window.__STUB_DELAY_MS__ = realDelay;
+      }
+    }
   } catch (e) { errs.push('646 probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');

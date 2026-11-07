@@ -4138,6 +4138,8 @@ body.drag-over::after {
 }
 .update-version:hover { text-decoration: underline; }
 .update-version.update-avail { color: var(--accent-text); }
+.update-result { margin: 0; font-size: 12px; color: var(--muted); }
+.update-result.update-result-error { color: var(--danger); }
 
 /* ---- Prompt library ---- */
 /* One wide column by default (read more of each prompt); the header toggle sets the
