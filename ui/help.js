@@ -281,19 +281,6 @@ export const HELP_CONTENT = {
       settings: [],
     },
     {
-      section: "features",
-      title: "Markdown folder sync",
-      whatItIs:
-        "Folder sync mirrors every text tile as its own readable Markdown file in a chosen folder.",
-      howTo: [
-        "Turn it on and pick a folder in the expert menu.",
-        "Edit a tile normally, or edit its Markdown file directly; both directions stay in sync.",
-      ],
-      whatHappens:
-        "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name; a view renamed on another machine is renamed here too. Deleting a file in the folder does not delete the tile (it is written again on the next round). Deleting the tile in the app takes its file with it, and on every other computer using the same folder the tile moves to the trash. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept as a version of the tile. The other way round, the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
-      settings: ["Folder sync, sync folder: Expert menu → Features → Floating buttons & folders"],
-    },
-    {
       section: "capture",
       title: "Screenshot tool",
       whatItIs: "The screenshot tool captures part or all of the screen into a new tile.",
@@ -353,6 +340,7 @@ export const HELP_CONTENT = {
         "Two optional global hotkeys and the tray menu can also stop or pause it while a recording runs.",
         "A window recording over all screens or the current screen also gets a button that switches its target without starting over.",
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
+        "Right-click the record button and choose \"Manage recordings…\" to export or delete older recordings.",
       ],
       whatHappens:
         "MP4 (H.264) is always what gets written while recording. Three quality steps (Small, High, Lossless) trade file size for detail. A format setting can turn the result into WebM, GIF or AVI afterward: WebM and AVI are converted from the MP4, and GIF is capped at 30 seconds and has no sound. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record, each into its own track. The microphone track is captured but stays silent until you mix it in yourself in the video editor. Unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself, not its buttons, moves it anywhere, including onto another monitor. It then stops following the recorded window for the rest of that recording; the next recording follows again. The bar is never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalizing is never touched. The recording folder's row in the expert menu shows how many videos it holds and how much space they use. Its \"Clean up…\" button lists files older than 7, 30 or 90 days and the space they would free, and nothing is deleted without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text. It shows every key, including typed text. It skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch limits capture to combinations with Ctrl, Alt or Win, plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys. Use it for a recording with confidential input. The same cleanup dialog has a checkbox per file: \"Export selected\" converts every checked recording in one go, to a chosen format, quality and folder, and reports how many finished. A new install deletes unused recordings after 90 days (expert menu, 0 = keep forever).",
@@ -671,6 +659,19 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "CSV and TXT round-trip text alone; JSON also carries the full rotation texts of a tile with rotation, tags, notes, hotkey, and color, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
       settings: ["Import and export: Expert menu → System & data → Data & maintenance", "Folder import depth and file limit: Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "system",
+      title: "Markdown folder sync",
+      whatItIs:
+        "Folder sync mirrors every text tile as its own readable Markdown file in a chosen folder.",
+      howTo: [
+        "Turn it on and pick a folder in the expert menu.",
+        "Edit a tile normally, or edit its Markdown file directly; both directions stay in sync.",
+      ],
+      whatHappens:
+        "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name; a view renamed on another machine is renamed here too. Deleting a file in the folder does not delete the tile (it is written again on the next round). Deleting the tile in the app takes its file with it, and on every other computer using the same folder the tile moves to the trash. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept as a version of the tile. The other way round, the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
+      settings: ["Markdown folder (beta), sync folder: Expert menu → System & data → Data & maintenance"],
     },
     {
       section: "system",
@@ -1017,19 +1018,6 @@ export const HELP_CONTENT = {
       settings: [],
     },
     {
-      section: "features",
-      title: "Markdown-Ordner-Sync",
-      whatItIs:
-        "Der Ordner-Sync spiegelt jede Text-Kachel als eigene lesbare Markdown-Datei in einem gewählten Ordner.",
-      howTo: [
-        "Im Expertenmenü einschalten und einen Ordner wählen.",
-        "Eine Kachel normal bearbeiten, oder ihre Markdown-Datei direkt bearbeiten; beide Richtungen bleiben synchron.",
-      ],
-      whatHappens:
-        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst. Der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich; eine auf einem anderen Rechner umbenannte Ansicht wird hier mit umbenannt. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben). Wer die Kachel in der App löscht, löscht auch ihre Datei, und auf jedem anderen Rechner mit demselben Ordner wandert die Kachel in den Papierkorb. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt als Version der Kachel erhalten. Umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
-      settings: ["Ordner-Sync, Synchronisierungsordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
-    },
-    {
       section: "capture",
       title: "Screenshot-Tool",
       whatItIs: "Das Screenshot-Tool erfasst einen Teil oder den gesamten Bildschirm direkt in eine neue Kachel.",
@@ -1090,6 +1078,7 @@ export const HELP_CONTENT = {
         "Zwei optionale globale Hotkeys und das Tray-Menü können die Aufnahme ebenfalls stoppen oder pausieren, solange sie läuft.",
         "Eine Fensteraufnahme über alle Bildschirme oder den aktuellen Bildschirm bekommt einen Button, der das Ziel wechselt, ohne neu zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
+        "Rechtsklick auf den Aufnahme-Button und „Aufnahmen verwalten…“ wählen, um ältere Aufnahmen zu exportieren oder zu löschen.",
       ],
       whatHappens:
         "Aufgenommen wird immer MP4 (H.264). Drei Qualitätsstufen (Klein, Hoch, Verlustfrei) tauschen Dateigröße gegen Bildschärfe. Ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln: WebM und AVI entstehen aus dem MP4, GIF ist auf 30 Sekunden begrenzt und hat keinen Ton. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg, einen separaten Download, der direkt angeboten wird, wenn er fehlt. Eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide aufgenommen, je als eigene Spur. Die Mikrofonspur wird aufgezeichnet, aber erst hörbar, wenn man sie selbst im Video-Editor dazumischt. Zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Buttons in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner. Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden. Schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst, nicht ihre Buttons, bleibt sie frei beweglich stehen, auch auf einem anderen Monitor, und folgt für den Rest dieser Aufnahme nicht mehr dem Fenster. Die nächste Aufnahme folgt wieder, und die Leiste ist nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde, etwa nach einem Absturz oder erzwungenen Beenden, wird nach einer Schonfrist automatisch entfernt. Eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos. Ihr „Aufräumen…“-Button listet Dateien älter als 7, 30 oder 90 Tage samt frei werdender Größe zur Bestätigung auf, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt. Sie zeigt jede Taste, auch getippten Text. Ein Passwortfeld lässt sie aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten. Das passt für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: „Auswahl exportieren“ wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
@@ -1411,6 +1400,19 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die vollen Rotationstexte einer Kachel mit Rotation, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Sicherungsformat. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
       settings: ["Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Tiefe und Dateigrenze des Ordner-Imports: Expertenmenü → System & Daten → Daten & Wartung"],
+    },
+    {
+      section: "system",
+      title: "Markdown-Ordner-Sync",
+      whatItIs:
+        "Der Ordner-Sync spiegelt jede Text-Kachel als eigene lesbare Markdown-Datei in einem gewählten Ordner.",
+      howTo: [
+        "Im Expertenmenü einschalten und einen Ordner wählen.",
+        "Eine Kachel normal bearbeiten, oder ihre Markdown-Datei direkt bearbeiten; beide Richtungen bleiben synchron.",
+      ],
+      whatHappens:
+        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst. Der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich; eine auf einem anderen Rechner umbenannte Ansicht wird hier mit umbenannt. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben). Wer die Kachel in der App löscht, löscht auch ihre Datei, und auf jedem anderen Rechner mit demselben Ordner wandert die Kachel in den Papierkorb. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt als Version der Kachel erhalten. Umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
+      settings: ["Markdown-Ordner (Beta), Sync-Ordner: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
       section: "system",

@@ -489,9 +489,8 @@ export const EXPERT_TABS = [
     { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, "autoPaste", { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySizeLevel"] },
     // Copying several different prompts as one text.
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
-    // Floating buttons and the two kinds of folder they can form, plus the
-    // Markdown mirror of prompt folders (text-only prompts as .md files).
-    { title: "expGroupFolders", flags: ["floating", "folders", "promptSync"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"], paths: ["syncDir"],
+    // Floating buttons and the two kinds of folder they can form.
+    { title: "expGroupFolders", flags: ["floating", "folders"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN"] },
@@ -545,7 +544,7 @@ export const EXPERT_TABS = [
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "taskbarProgress", "firstRunTour"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }, { id: "tour-open", label: "tourOpenAction" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "usageStats", "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "usageStats", "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog", "promptSync"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"], paths: ["syncDir"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // Switches and caps for finding a fault, not for everyday use: folded until opened.
     { title: "expGroupDiagnostics", flags: ["allowMultipleInstances", "dataDirLock", "demoMode", "mediaMetaBackfill", { key: "recSweepBroken", gate: "screenRecord" }], values: ["errorLogKeepKb", "bgDoneKeepMin"],

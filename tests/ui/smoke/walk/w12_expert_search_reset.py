@@ -615,7 +615,7 @@ SECTION = """\
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
       };
-      const syncRow = rowByLabel3('as Markdown files', '.switch-field');
+      const syncRow = rowByLabel3('Markdown folder', '.switch-field');
       const syncSw = syncRow && syncRow.querySelector('input.switch');
       if (!syncSw) {
         out.errors.push('the prompt-sync toggle is missing from the expert menu');
@@ -649,7 +649,7 @@ SECTION = """\
         }
         // Restore the default so later blocks (and a real re-run of this suite)
         // see the same starting state.
-        const backSw = rowByLabel3('as Markdown files', '.switch-field')?.querySelector('input.switch');
+        const backSw = rowByLabel3('Markdown folder', '.switch-field')?.querySelector('input.switch');
         if (backSw) { backSw.checked = false; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
         await sleep(120);
       }

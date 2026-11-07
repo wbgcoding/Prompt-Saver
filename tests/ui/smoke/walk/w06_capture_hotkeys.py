@@ -80,6 +80,29 @@ SECTION = """\
       if (!openEditPop || openEditPop.classList.contains('hidden')) {
         out.errors.push('417: right-clicking the record button did not open the open-in-editor menu');
       }
+      // 60: the record button's menu also leads to the recordings manager.
+      {
+        const core60 = await import('./core.js');
+        const manage60 = document.getElementById('manage-recordings-item');
+        if (!manage60 || manage60.classList.contains('hidden')) {
+          out.errors.push('60: the record button menu has no visible Manage recordings entry');
+        } else {
+          if (manage60.textContent.trim() !== core60.t('manageRecordingsItem')) out.errors.push('60: the Manage recordings entry is mislabelled: ' + manage60.textContent);
+          manage60.click();
+          await sleep(300);
+          const cleanup60 = document.getElementById('video-cleanup-modal');
+          if (openEditPop && !openEditPop.classList.contains('hidden')) out.errors.push('60: choosing Manage recordings left the menu open');
+          if (!cleanup60 || cleanup60.classList.contains('hidden')) {
+            out.errors.push('60: Manage recordings did not open the recordings dialog');
+          } else {
+            const title60 = document.getElementById('video-cleanup-modal-title');
+            if (!title60 || title60.textContent.trim() !== core60.t('videoCleanupTitle')) out.errors.push('60: the recordings dialog title is wrong');
+            document.getElementById('video-cleanup-cancel').click();
+            await sleep(150);
+            if (!cleanup60.classList.contains('hidden')) out.errors.push('60: the recordings dialog did not close on Cancel');
+          }
+        }
+      }
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
       if (openEditPop && !openEditPop.classList.contains('hidden')) {
@@ -92,6 +115,8 @@ SECTION = """\
       openEditPop = document.querySelector('.open-editor-pop');
       if (!openEditPop || openEditPop.classList.contains('hidden')) {
         out.errors.push('417: right-clicking the screenshot button did not open the open-in-editor menu');
+      } else if (!document.getElementById('manage-recordings-item')?.classList.contains('hidden')) {
+        out.errors.push('60: the screenshot button menu shows the Manage recordings entry');
       } else if (!(openEditPop.querySelector('button').textContent || '').trim()) {
         out.errors.push('417: the open-in-editor menu entry has no label');
       } else {

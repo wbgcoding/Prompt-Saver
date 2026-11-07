@@ -6,6 +6,7 @@ import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
+import { openVideoCleanup } from "./recordingTools.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { ocrErrToast, openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
 
@@ -64,16 +65,18 @@ export function bindCapture() {
     invoke("open_recorder").catch((err) => errToast(err));
   });
 
-  // A right-click on either composer button opens a one-item menu to edit an existing file.
-  // Which editor opens is decided by the file's content (open_file_in_editor), not by the
-  // button.
+  // A right-click on either composer button opens a small menu: edit an existing file, and on
+  // the record button also the camera and the recordings manager. Which editor opens is
+  // decided by the file's content (open_file_in_editor), not by the button.
   const openEditorPop = document.createElement("div");
   openEditorPop.className = "ctx open-editor-pop hidden";
   openEditorPop.setAttribute("role", "menu");
   openEditorPop.innerHTML =
     '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
     // A camera-only entry on the same popover, shown only when cameraRecord is on.
-    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>';
+    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>' +
+    // Record button only: the old-recordings dialog of the expert menu's recording folder.
+    '<button type="button" role="menuitem" id="manage-recordings-item" class="hidden"></button>';
   document.body.appendChild(openEditorPop);
   function closeOpenEditorPop() {
     openEditorPop.classList.add("hidden");
@@ -81,12 +84,15 @@ export function bindCapture() {
   // path is set only when the menu is opened for a known attachment (the library's
   // right-click); left empty it lets the user pick a file.
   let openEditorPopPath = "";
-  function openOpenEditorPopAt(anchorEl, path, showCamera) {
+  function openOpenEditorPopAt(anchorEl, path, showCamera, showManage) {
     openEditorPopPath = path || "";
     openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
     const camItem = openEditorPop.querySelector("#camera-menu-item");
     camItem.classList.toggle("hidden", !showCamera);
     if (showCamera) camItem.textContent = t("cameraMenuItem");
+    const manageItem = openEditorPop.querySelector("#manage-recordings-item");
+    manageItem.classList.toggle("hidden", !showManage);
+    if (showManage) manageItem.textContent = t("manageRecordingsItem");
     placePopover(openEditorPop, anchorEl.getBoundingClientRect());
   }
   openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
@@ -98,13 +104,17 @@ export function bindCapture() {
     closeOpenEditorPop();
     invoke("open_camera_window").catch((e) => errToast(e));
   });
+  openEditorPop.querySelector("#manage-recordings-item").addEventListener("click", () => {
+    closeOpenEditorPop();
+    openVideoCleanup(EXPERT_PATHS.recordingDir.get());
+  });
   $("snip-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
     openOpenEditorPopAt($("snip-btn"));
   });
   $("record-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"));
+    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"), true);
   });
   // Shared by the composer menu and the library's "Open in editor" on an image/video
   // attachment; existingPath hands over a path the caller already knows.

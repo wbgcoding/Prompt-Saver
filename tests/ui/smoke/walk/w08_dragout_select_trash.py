@@ -50,7 +50,7 @@ SECTION = """\
       };
       // The switch warns about plain text first; accept it, that is not this test.
       await openExpert();
-      const syncSwitch = await expertRow('Sync prompts as Markdown');
+      const syncSwitch = await expertRow('Markdown folder');
       if (!syncSwitch) {
         out.errors.push('the Markdown-sync switch is missing from the expert menu');
       } else {
@@ -171,7 +171,7 @@ SECTION = """\
           }
         }
         // Back to the shipped default for everything after this.
-        const off = await expertRow('Sync prompts as Markdown');
+        const off = await expertRow('Markdown folder');
         const offSw = off && off.querySelector('input.switch');
         if (offSw && offSw.checked) { offSw.click(); await sleep(200); }
         window.__PICK_FOLDER__ = null;
