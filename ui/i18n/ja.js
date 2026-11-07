@@ -269,6 +269,8 @@ export default {
     ocrNoLanguageMsg: "OCR 言語がインストールされていません。",
     ocrLangUpdateOne: "言語パック {lang} を更新できます。",
     pickFilterImages: "画像",
+    pickFilterVideos: "動画",
+    pickFilterAll: "すべてのファイル",
     pickFilterMedia: "画像と動画",
     ocrLangUpdateMany: "{n} 個の言語パックを更新できます。",
     snipOcrNoLang: "OCR 言語がインストールされていません。エキスパート メニューで「テキスト認識の言語の管理」を開いて、再試行してください。",

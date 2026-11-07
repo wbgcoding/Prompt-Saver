@@ -269,6 +269,8 @@ export default {
     ocrNoLanguageMsg: "Er is geen OCR-taal geïnstalleerd.",
     ocrLangUpdateOne: "Taalpakket {lang} kan worden geüpdatet.",
     pickFilterImages: "Afbeeldingen",
+    pickFilterVideos: "Video's",
+    pickFilterAll: "Alle bestanden",
     pickFilterMedia: "Afbeeldingen en video's",
     ocrLangUpdateMany: "{n} taalpakketten kunnen worden geüpdatet.",
     snipOcrNoLang: "Er is geen OCR-taal geïnstalleerd. Open Talen voor tekstherkenning beheren in het expertmenu en probeer het daarna opnieuw.",

@@ -246,6 +246,8 @@ export default {
     ocrNoLanguageMsg: "Es ist keine OCR-Sprache installiert.",
     ocrLangUpdateOne: "Sprachpaket {lang} kann aktualisiert werden.",
     pickFilterImages: "Bilder",
+    pickFilterVideos: "Videos",
+    pickFilterAll: "Alle Dateien",
     pickFilterMedia: "Bilder und Videos",
     ocrLangUpdateMany: "{n} Sprachpakete können aktualisiert werden.",
     snipOcrNoLang: "Es ist keine OCR-Sprache installiert. Öffne „Sprachen der Texterkennung verwalten“ im Expertenmenü und versuche es erneut.",

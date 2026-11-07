@@ -246,6 +246,8 @@ export default {
     ocrNoLanguageMsg: "No OCR language is installed.",
     ocrLangUpdateOne: "Language pack {lang} can be updated.",
     pickFilterImages: "Images",
+    pickFilterVideos: "Videos",
+    pickFilterAll: "All files",
     pickFilterMedia: "Images and videos",
     ocrLangUpdateMany: "{n} language packs can be updated.",
     snipOcrNoLang: "No OCR language is installed. Open “Manage text recognition languages” in the expert menu, then try again.",

@@ -17,7 +17,7 @@ const EXPORT_GRAPH_FILTERS: [&str; 33] = [
 // Extensions a media file named by the request may have. Text-like extensions are
 // left out on purpose: ffmpeg decodes several of them (.txt, .nfo, .asc ...) into
 // pictures, which would turn a text file into video.
-const EXPORT_MEDIA_EXTS: [&str; 46] = [
+pub(crate) const EXPORT_MEDIA_EXTS: [&str; 46] = [
     "png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "apng", "avif", "mp4", "webm", "avi", "mov", "mkv", "m4v", "wmv", "flv",
     "mpg", "mpeg", "ts", "m2ts", "3gp", "ogv", "mp3", "wav", "m4a", "aac", "ogg", "oga", "opus", "flac", "wma", "mka", "aif", "aiff",
     "mp2", "ac3", "ico", "jfif", "mts", "mxf", "vob", "m2v", "heic", "jxl",

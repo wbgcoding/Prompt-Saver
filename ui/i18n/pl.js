@@ -269,6 +269,8 @@ export default {
     ocrNoLanguageMsg: "Żaden język OCR nie jest zainstalowany.",
     ocrLangUpdateOne: "Pakiet językowy {lang} może zostać zaktualizowany.",
     pickFilterImages: "Obrazy",
+    pickFilterVideos: "Filmy",
+    pickFilterAll: "Wszystkie pliki",
     pickFilterMedia: "Obrazy i filmy",
     ocrLangUpdateMany: "Dostępne są aktualizacje dla {n} pakietów językowych.",
     snipOcrNoLang: "Żaden język OCR nie jest zainstalowany. Otwórz Zarządzaj językami rozpoznawania tekstu w menu eksperckim, a następnie spróbuj ponownie.",

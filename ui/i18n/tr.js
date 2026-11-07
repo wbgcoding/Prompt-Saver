@@ -269,6 +269,8 @@ export default {
     ocrNoLanguageMsg: "Hiçbir OCR dili yüklü değil.",
     ocrLangUpdateOne: "{lang} dil paketi güncellenebilir.",
     pickFilterImages: "Resimler",
+    pickFilterVideos: "Videolar",
+    pickFilterAll: "Tüm dosyalar",
     pickFilterMedia: "Resimler ve videolar",
     ocrLangUpdateMany: "{n} dil paketi güncellenebilir.",
     snipOcrNoLang: "Hiçbir OCR dili yüklü değil. Uzman menüsünde Metin tanıma dillerini yönet'i açın, ardından tekrar deneyin.",

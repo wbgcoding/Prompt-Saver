@@ -269,6 +269,8 @@ export default {
     ocrNoLanguageMsg: "Nu este instalată nicio limbă pentru OCR.",
     ocrLangUpdateOne: "Pachetul de limbă {lang} poate fi actualizat.",
     pickFilterImages: "Imagini",
+    pickFilterVideos: "Videoclipuri",
+    pickFilterAll: "Toate fișierele",
     pickFilterMedia: "Imagini și videoclipuri",
     ocrLangUpdateMany: "{n} pachete de limbă pot fi actualizate.",
     snipOcrNoLang: "Nu este instalată nicio limbă pentru OCR. Deschide Gestionează limbile de recunoaștere a textului din meniul expert, apoi încearcă din nou.",

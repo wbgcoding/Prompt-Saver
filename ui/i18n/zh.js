@@ -269,6 +269,8 @@ export default {
     ocrNoLanguageMsg: "未安装 OCR 语言。",
     ocrLangUpdateOne: "可以更新语言包 {lang}。",
     pickFilterImages: "图片",
+    pickFilterVideos: "视频",
+    pickFilterAll: "所有文件",
     pickFilterMedia: "图片和视频",
     ocrLangUpdateMany: "有 {n} 个语言包可以更新。",
     snipOcrNoLang: "未安装 OCR 语言。在专家菜单中打开“管理文本识别语言”，然后重试。",
