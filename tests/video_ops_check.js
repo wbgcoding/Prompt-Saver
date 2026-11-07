@@ -870,7 +870,7 @@ async function exportIdleCheck() {
   expect("the Stop export button is hidden again once the export ended", byId["ve-export-cancel"].cls.has("hidden"));
   const videoHtml = fs.readFileSync(path.join(__dirname, "..", "ui", "video.html"), "utf8");
   expect("the html starts the Stop export button hidden and labelled Stop export", /<button id="ve-export-cancel"[^>]*class="[^"]*\bhidden\b[^"]*"[^>]*data-i18n="veStopExport"/.test(videoHtml));
-  expect("the title bar has no Export button", !videoHtml.includes("ve-export-" + "open"));
+  expect("the title bar has no Export button", !videoHtml.includes('id="ve-export-' + 'open"'));
 }
 
 // Keyboard and screen reader: trim handles are millisecond sliders, mute buttons say what a click
@@ -1069,13 +1069,13 @@ const pending = [];
     let handler = null;
     const field = { value: " D:/out/clip.gif ", title: "", addEventListener: (_, fn) => { handler = fn; } };
     const sb = {
-      $: () => field, VE: { destOverride: null }, exportFormat: () => "mp4", formatExt: (f) => f, updateExportNote: () => {},
+      $: () => field, VE: { destOverride: null }, winPath: (p) => String(p).replace(/\//g, "\\"), exportFormat: () => "mp4", formatExt: (f) => f, updateExportNote: () => {},
       withExtension: (p, ext) => `${String(p).replace(/\.[^\\/.]+$/, "")}.${ext}`, destPath: () => sb.VE.destOverride || "auto.mp4",
     };
     vm.createContext(sb);
     vm.runInContext(extractBlock("dest", '$("ve-export-dest").addEventListener("change", () => {') + ");", sb);
     handler();
-    expect("a typed clip.gif becomes clip.mp4 for the mp4 format", sb.VE.destOverride === "D:/out/clip.mp4" && field.value === "D:/out/clip.mp4", sb.VE.destOverride);
+    expect("a typed clip.gif becomes clip.mp4 for the mp4 format", sb.VE.destOverride === "D:\\out\\clip.mp4" && field.value === "D:\\out\\clip.mp4", sb.VE.destOverride);
     field.value = "  ";
     handler();
     expect("an emptied field goes back to the automatic name", sb.VE.destOverride === null);

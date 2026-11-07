@@ -21,7 +21,7 @@ ALLOW = {
         "recording-too-young-to-continue", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
         "sync-foreign-files:{list}|{more}",
-        "view-full:{deficit}", "view-full", "invalid-exe",
+        "view-full:{deficit}", "view-full", "invalid-exe", "export-not-found",
     ],
     "an export graph only this app's own UI builds; a refusal shows the generic export failure": [
         "export graph not allowed: {why}", "export graph not allowed: media file type",
@@ -49,6 +49,7 @@ ALLOW = {
         "the new folder lies inside backups/, which the cleanup deletes",
         "the stored prompts are unreadable and cannot be rewritten",
         "the updated paths could not be saved",
+        "could not open the file (ShellExecuteW code {code})", "editor-busy",
     ],
     "background save of editor state, the caller ignores the failure": [
         "db unavailable",
