@@ -31,6 +31,7 @@ const FAMILY = {
   nl: /\bprompts?\b/gi,
   pl: /\bprompt\w*\b/gi,
   ro: /\bprompt\w*\b/gi,
+  fr: /\bprompts?\b/gi,
   tr: /\bistem(?:ler)?(?:i|e|le|iyle|leri)?\b/gi,
   zh: /提示词/g,
   ja: /プロンプト/g,
