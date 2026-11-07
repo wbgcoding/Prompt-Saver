@@ -1743,6 +1743,9 @@ export function initSnipEditor() {
   window.addEventListener("blur", () => {
     if (SE.spaceDown) { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
     snipOriginalToggle.reset();
+    // Leaving the window is the moment someone pastes elsewhere: a copy still waiting for its quiet
+    // period is made now, so the paste matches what the editor shows.
+    if (snipLiveCopyTimer) setTimeout(() => { if (snipLiveCopyTimer) { snipEditCancelLiveCopy(); snipEditLiveCopy(); } }, 0);
   });
   snipEditWrap.addEventListener("wheel", (e) => {
     if (!SE.active) return;

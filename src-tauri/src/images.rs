@@ -115,8 +115,58 @@ pub(crate) fn copy_image_to_clipboard(data_url: &str) -> bool {
     copy_image_to_clipboard_as(data_url, false).is_ok()
 }
 
-// `transient`: an in-between state (the screenshot editor's live copy) that stays out of the
-// Windows clipboard history and cloud clipboard, so editing does not fill them with every step.
+// The clipboard formats an editor copy writes, in the order they are written. A transient copy
+// (the screenshot editor's live copy) also carries the two Windows flags that keep an entry out of
+// the clipboard history and the cloud clipboard, so editing does not fill them with every step.
+pub(crate) fn editor_clipboard_formats(transient: bool) -> &'static [&'static str] {
+    if transient {
+        &["PNG", "CF_DIBV5", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"]
+    } else {
+        &["PNG", "CF_DIBV5"]
+    }
+}
+
+// A BITMAPV5HEADER (124 bytes) followed by the pixels as a bottom-up 32-bit BGRA bitmap, the
+// CF_DIBV5 layout every Windows paste target reads.
+pub(crate) fn dibv5_bytes(w: u32, h: u32, rgba: &[u8]) -> Vec<u8> {
+    let image_size = w as usize * h as usize * 4;
+    let mut out = Vec::with_capacity(124 + image_size);
+    let mut put = |v: u32| out.extend_from_slice(&v.to_le_bytes());
+    put(124); // bV5Size
+    put(w); // bV5Width
+    put(h); // bV5Height, positive = bottom-up
+    out.extend_from_slice(&1u16.to_le_bytes()); // bV5Planes
+    out.extend_from_slice(&32u16.to_le_bytes()); // bV5BitCount
+    let mut put = |v: u32| out.extend_from_slice(&v.to_le_bytes());
+    put(3); // bV5Compression = BI_BITFIELDS
+    put(image_size as u32); // bV5SizeImage
+    put(0); // bV5XPelsPerMeter
+    put(0); // bV5YPelsPerMeter
+    put(0); // bV5ClrUsed
+    put(0); // bV5ClrImportant
+    put(0x00FF_0000); // bV5RedMask
+    put(0x0000_FF00); // bV5GreenMask
+    put(0x0000_00FF); // bV5BlueMask
+    put(0xFF00_0000); // bV5AlphaMask
+    put(0x7352_4742); // bV5CSType = LCS_sRGB
+    for _ in 0..9 {
+        put(0); // bV5Endpoints (36 bytes)
+    }
+    put(0); // bV5GammaRed
+    put(0); // bV5GammaGreen
+    put(0); // bV5GammaBlue
+    put(4); // bV5Intent = LCS_GM_IMAGES
+    put(0); // bV5ProfileData
+    put(0); // bV5ProfileSize
+    put(0); // bV5Reserved
+    for row in rgba.chunks_exact(w as usize * 4).rev() {
+        for px in row.as_chunks::<4>().0 {
+            out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        }
+    }
+    out
+}
+
 // The error is one of the strings the UI maps to a message.
 pub(crate) fn copy_image_to_clipboard_as(data_url: &str, transient: bool) -> Result<(), &'static str> {
     let bytes = data_url_bytes(data_url);
@@ -124,23 +174,42 @@ pub(crate) fn copy_image_to_clipboard_as(data_url: &str, transient: bool) -> Res
         return Err("could not decode image");
     };
     let (w, h) = img.dimensions();
-    let img_data = arboard::ImageData {
-        width: w as usize,
-        height: h as usize,
-        bytes: img.into_raw().into(),
-    };
-    arboard::Clipboard::new()
-        .and_then(|mut c| {
-            #[cfg(windows)]
-            if transient {
-                use arboard::SetExtWindows;
-                return c.set().exclude_from_history().exclude_from_cloud().image(img_data);
+    #[cfg(windows)]
+    {
+        // The editor's PNG goes onto the clipboard as it is; only a non-PNG source is encoded.
+        let png = if bytes.starts_with(b"\x89PNG") {
+            bytes
+        } else {
+            let mut buf = std::io::Cursor::new(Vec::<u8>::new());
+            img.write_to(&mut buf, image::ImageFormat::Png).map_err(|_| "could not decode image")?;
+            buf.into_inner()
+        };
+        let dib = dibv5_bytes(w, h, img.as_raw());
+        let Ok(_clip) = clipboard_win::Clipboard::new_attempts(10) else {
+            return Err("clipboard write failed");
+        };
+        // The exclusion formats must be set in the same clipboard bracket as the image, or
+        // Windows keeps the entry in its history.
+        let png_fmt = clipboard_win::raw::register_format("PNG").map(|f| f.get()).ok_or("clipboard write failed")?;
+        const CF_DIBV5: u32 = 17;
+        let zero = 0u32.to_ne_bytes();
+        let mut ok = clipboard_win::raw::empty().is_ok()
+            && clipboard_win::raw::set_without_clear(png_fmt, &png).is_ok()
+            && clipboard_win::raw::set_without_clear(CF_DIBV5, &dib).is_ok();
+        if ok && transient {
+            for name in &editor_clipboard_formats(true)[2..] {
+                let f = clipboard_win::raw::register_format(name).map(|f| f.get());
+                ok = ok && f.is_some_and(|f| clipboard_win::raw::set_without_clear(f, &zero).is_ok());
             }
-            #[cfg(not(windows))]
-            let _ = transient;
-            c.set_image(img_data)
-        })
-        .map_err(|_| "clipboard write failed")
+        }
+        if ok { Ok(()) } else { Err("clipboard write failed") }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (bytes, transient);
+        let img_data = arboard::ImageData { width: w as usize, height: h as usize, bytes: img.into_raw().into() };
+        arboard::Clipboard::new().and_then(|mut c| c.set_image(img_data)).map_err(|_| "clipboard write failed")
+    }
 }
 
 pub(crate) fn scale_and_encode(img: image::DynamicImage) -> String {

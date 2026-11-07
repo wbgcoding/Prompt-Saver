@@ -1267,6 +1267,15 @@ def run(browser, tmp):
       await baRedo();
       await sleep(800);
       if (copies().length !== 2) errs.push('livecopy1: redo did not copy once more, total ' + copies().length);
+      // Leaving the window with a copy pending makes it at once, long before the quiet period ends
+      window.__SMOKE_ARGS__.length = 0;
+      await baDrag(120, 90, 150, 110);
+      await sleep(100);
+      window.dispatchEvent(new Event('blur'));
+      await sleep(150);
+      if (copies().length !== 1 || copies()[0].transient !== true) errs.push('livecopy1: a blur 100 ms after an edit made ' + copies().length + ' copies, expected 1 transient one before the quiet period');
+      await sleep(700);
+      if (copies().length !== 1) errs.push('livecopy1: the blurred copy was followed by another, total ' + copies().length);
       // Close with a copy pending: only the final copy of Close runs
       window.__SMOKE_ARGS__.length = 0;
       await baDrag(20, 20, 40, 40);
