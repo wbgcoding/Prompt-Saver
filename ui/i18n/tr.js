@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "Yedekler",
     settingsAreaToolbar: "Araç çubuğu",
     historyRestoreAsNew: "Yeni girdi olarak kaydet",
+    historyRowTip: "Sağ tık: yeni girdi olarak kaydet",
     historyRestoreAsNewSuffix: "({date} sürümü)",
     historyRestoredAsNew: "Yeni kayıt oluşturuldu",
     compareBtn: "Karşılaştır",

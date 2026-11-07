@@ -19,6 +19,8 @@ saving, backups, recordings, the editors and the installer.
 - **Composer buttons reordered.** The order is now Screenshot, Recording, Text
   recognition, Pipette, File, Voice input; dictation is now called Voice input
   everywhere.
+- **Save as new entry.** In the version list, right-click a version to keep it
+  as a new entry; the extra button next to Restore is gone.
 
 ### Fixed
 

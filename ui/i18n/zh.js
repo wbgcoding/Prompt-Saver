@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "备份",
     settingsAreaToolbar: "工具栏",
     historyRestoreAsNew: "另存为新条目",
+    historyRowTip: "右键：另存为新条目",
     historyRestoreAsNewSuffix: "(来自 {date} 的版本)",
     historyRestoredAsNew: "已创建新条目",
     compareBtn: "比较",

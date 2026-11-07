@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "バックアップ",
     settingsAreaToolbar: "ツールバー",
     historyRestoreAsNew: "新しいエントリとして保存",
+    historyRowTip: "右クリック：新しいエントリとして保存",
     historyRestoreAsNewSuffix: "（{date} のバージョン）",
     historyRestoredAsNew: "新しいエントリが作成されました",
     compareBtn: "比較",

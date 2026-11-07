@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "Backup",
     settingsAreaToolbar: "Barra degli strumenti",
     historyRestoreAsNew: "Salva come nuova voce",
+    historyRowTip: "Clic destro: salva come nuova voce",
     historyRestoreAsNewSuffix: "(versione del {date})",
     historyRestoredAsNew: "Nuova voce creata",
     compareBtn: "Confronta",

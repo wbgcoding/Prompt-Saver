@@ -85,9 +85,13 @@ SECTION = """\
       if (rows408.length !== 2) {
         out.errors.push('408: the history panel shows ' + rows408.length + ' versions instead of 2');
       } else {
-        const restoreNewBtn = rows408[0].querySelector('.hist-restore-new');
+        if (rows408[0].querySelector('.hist-restore-new')) out.errors.push('408: the version row still shows a save-as-new button');
+        const rr408 = rows408[0].getBoundingClientRect();
+        rows408[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rr408.left + 20, clientY: rr408.top + 10 }));
+        await sleep(200);
+        const restoreNewBtn = [...document.querySelectorAll('.ctx.tab-menu:not(.hidden) button')].find(b => (b.textContent || '').trim() === 'Save as new entry');
         if (!restoreNewBtn) {
-          out.errors.push('408: the newest version row has no "save as new entry" button');
+          out.errors.push('408: the right-click menu on the newest version row has no "save as new entry" item');
         } else {
           restoreNewBtn.click();
           await sleep(400);

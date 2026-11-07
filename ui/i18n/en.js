@@ -1849,6 +1849,7 @@ export default {
     editStateRestoreContinue: "Continue editing",
     editStateRestoreDiscard: "Start fresh",
     historyRestoreAsNew: "Save as new entry",
+    historyRowTip: "Right-click: save as new entry",
     historyRestoreAsNewSuffix: "(version from {date})",
     historyRestoredAsNew: "New entry created",
     compareBtn: "Compare",

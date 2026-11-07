@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "Back-ups",
     settingsAreaToolbar: "Werkbalk",
     historyRestoreAsNew: "Opslaan als nieuw item",
+    historyRowTip: "Rechtsklik: opslaan als nieuw item",
     historyRestoreAsNewSuffix: "(versie van {date})",
     historyRestoredAsNew: "Nieuw item aangemaakt",
     compareBtn: "Vergelijken",

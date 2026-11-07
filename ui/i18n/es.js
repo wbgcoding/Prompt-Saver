@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "Copias de seguridad",
     settingsAreaToolbar: "Barra de herramientas",
     historyRestoreAsNew: "Guardar como nueva entrada",
+    historyRowTip: "Clic derecho: guardar como nueva entrada",
     historyRestoreAsNewSuffix: "(versión del {date})",
     historyRestoredAsNew: "Nueva entrada creada",
     compareBtn: "Comparar",

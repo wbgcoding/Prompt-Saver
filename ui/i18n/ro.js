@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "Copii de rezervă",
     settingsAreaToolbar: "Bară de instrumente",
     historyRestoreAsNew: "Salvează ca intrare nouă",
+    historyRowTip: "Clic dreapta: salvează ca intrare nouă",
     historyRestoreAsNewSuffix: "(versiunea din {date})",
     historyRestoredAsNew: "Intrare nouă creată",
     compareBtn: "Compară",

@@ -1849,6 +1849,7 @@ export default {
     editStateRestoreContinue: "Weiterbearbeiten",
     editStateRestoreDiscard: "Neu beginnen",
     historyRestoreAsNew: "Als neuen Eintrag anlegen",
+    historyRowTip: "Rechtsklick: als neuen Eintrag anlegen",
     historyRestoreAsNewSuffix: "(Fassung vom {date})",
     historyRestoredAsNew: "Neuer Eintrag angelegt",
     compareBtn: "Vergleichen",

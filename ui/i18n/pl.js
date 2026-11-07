@@ -1849,6 +1849,7 @@ export default {
     settingsAreaBackup: "Kopie zapasowe",
     settingsAreaToolbar: "Pasek narzędzi",
     historyRestoreAsNew: "Zapisz jako nowy wpis",
+    historyRowTip: "Prawy przycisk: zapisz jako nowy wpis",
     historyRestoreAsNewSuffix: "(wersja z {date})",
     historyRestoredAsNew: "Utworzono nowy wpis",
     compareBtn: "Porównaj",

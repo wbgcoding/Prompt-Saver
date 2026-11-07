@@ -7,7 +7,7 @@ import { normSize } from "./settingsPanel.js";
 import { closeTagPop, closeTagSuggest, renderTagChips } from "./tags.js";
 import { bindHotkeyField, HOTKEY_ERRORS, hotkeyMessage, promptHotkeysOn, renderPromptHotkey, setPromptHotkey, showHotkeyError } from "./hotkeys.js";
 import { confirmDialog } from "./dialog.js";
-import { renderGrid } from "./views.js";
+import { openMiniMenu, renderGrid } from "./views.js";
 import { hasMarkdownSyntax, renderMarkdown } from "./markdown.js";
 import { focusTile } from "./copyFlow.js";
 import { IMAGE_EXT, mediaKind } from "./media.js";
@@ -819,11 +819,7 @@ export async function loadHistory(id) {
     // Keeps the current entry untouched and adds the snapshot as a separate one
     // instead, for comparing them side by side rather than losing whichever
     // version restore_version would have overwritten.
-    const restoreNew = document.createElement("button");
-    restoreNew.type = "button";
-    restoreNew.className = "ghost-btn hist-restore-new";
-    restoreNew.textContent = t("historyRestoreAsNew");
-    restoreNew.addEventListener("click", async () => {
+    const saveAsNew = async () => {
       try {
         const suffix = t("historyRestoreAsNewSuffix").replace("{date}", () => new Date(v.ts * 1000).toLocaleString(LANG));
         const created = await invoke("restore_version_as_new", { versionId: v.id, suffix });
@@ -839,8 +835,13 @@ export async function loadHistory(id) {
       } catch (err) {
         errToast(err);
       }
+    };
+    row.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openMiniMenu([{ label: t("historyRestoreAsNew"), run: saveAsNew }], e.clientX, e.clientY);
     });
-    head.append(expand, restore, restoreNew);
+    row.title = t("historyRowTip");
+    head.append(expand, restore);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
     // Building this (word-diffing every entry) is expensive at long prompts /
