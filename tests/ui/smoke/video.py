@@ -2470,7 +2470,7 @@ def run_expert(browser, tmp):
       document.getElementById('ve-export-start').click();
       await until(() => exportCalls().length > n, 100);
       const req2 = exportCalls().pop()[1].req;
-      if (!/[\\/]clip[.]mp4$/.test(String(req2.dest_path))) errs.push('745: the export path was ' + req2.dest_path);
+      if (!/[\\\\/]clip[.]mp4$/.test(String(req2.dest_path))) errs.push('745: the export path was ' + req2.dest_path);
       await until(() => !document.getElementById('ve-export-start').disabled, 100);
     }
 
