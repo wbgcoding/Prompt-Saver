@@ -242,3 +242,5 @@ What the app sends where (only the update check, downloads you approve and voice
 ## License
 
 © 2026 BGCoding. You may modify Prompt Saver and share it, original or modified, free of charge for non-commercial use; commercial use needs written permission. Full terms: [LICENSE](LICENSE).
+
+<p align="right">© 2026 BGCoding · Made with Claude</p>
