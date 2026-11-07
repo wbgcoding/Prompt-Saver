@@ -2789,7 +2789,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .modal-name-row { display: flex; align-items: stretch; gap: 8px; }
 .modal-name-row .clear-wrap, .modal-name-row > #modal-name { flex: 1 1 auto; min-width: 0; }
 .modal { --modal-lead-w: 42px; }
-.modal-name-row .modal-fav-star,
 .modal-name-row .modal-name-icon {
   flex: 0 0 auto;
   display: flex;
@@ -2803,7 +2802,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* A dashed well reads as a picture slot. */
 .modal-name-row .modal-name-icon { border: 1.5px dashed var(--border); border-radius: 8px; color: var(--muted); background: transparent; }
 .modal-name-row .modal-name-icon:hover { border-color: var(--accent); color: var(--accent); }
-.modal-name-row .modal-fav-star { font-size: 22px; }
 .modal-fav-star {
   flex: 0 0 auto;
   border: none;
@@ -2819,6 +2817,8 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* Gold pulled toward the theme's ink, so the star stays readable on a light dialog. */
 .modal-fav-star:hover { color: color-mix(in srgb, #f5b301 55%, var(--fg)); transform: scale(1.1); }
 .modal-fav-star.active { color: color-mix(in srgb, #f5b301 55%, var(--fg)); }
+/* Favourite star: in the title bar, just left of the close button. */
+.modal-titlebar .modal-fav-star { margin-left: auto; margin-right: 6px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0; font-size: 21px; }
 .modal-name-row .modal-secret-toggle {
   flex: 0 0 auto;
   display: flex;

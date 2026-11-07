@@ -207,11 +207,11 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
 <link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags">
 <div id="modal" class="overlay tall{' history-open' if history_open else ''}" role="dialog" aria-modal="true"><div class="modal">
   <div class="modal-titlebar"><h2 class="modal-title">{L('editModalTitle')}</h2>
+    <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button>
     <button class="icon-btn modal-x" type="button">X</button></div>
   <div class="modal-name-row"><span class="clear-wrap">
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
-    <button type="button" class="clear-btn show">x</button></span>
-    <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
+    <button type="button" class="clear-btn show">x</button></span></div>
   <div id="modal-img-wrap" class="modal-img-wrap">
     <div class="modal-media-stage">
       <img id="modal-img" class="modal-preview-img" alt="" src="{preview_src}">

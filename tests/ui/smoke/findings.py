@@ -1891,6 +1891,28 @@ def run(browser, tmp):
 """
     for size_lh in ('880x600', '680x460'):
         failed += ar_probe('blh01-' + size_lh, 'library head: Clear copy history shares the first line at ' + size_lh, 'index', size_lh, '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', lib_head_body)
+    # The favourite star sits in the editor title bar, just left of the close button.
+    failed += ar_probe('bed08', 'editor: the favourite star sits in the title bar next to the close button', 'index', '680x460', '', r"""
+    await bootReady();
+    const t0 = document.querySelector('#grid .tile[data-id]'); const r0 = t0.getBoundingClientRect();
+    t0.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r0.left + 30, clientY: r0.top + 30 }));
+    await sleep(300);
+    document.querySelector('#ctx [data-act="edit"]').click();
+    await sleep(500);
+    const fav = document.getElementById('modal-fav'), x = document.getElementById('modal-close-x');
+    if (!fav || !fav.parentElement.classList.contains('modal-titlebar')) errs.push('bed08: the star is not inside .modal-titlebar');
+    if (fav && fav.nextElementSibling !== x) errs.push('bed08: the star is not right before the close button');
+    if (fav && x) {
+      const a = fav.getBoundingClientRect(), b = x.getBoundingClientRect();
+      const gap = b.left - a.right;
+      if (gap < 8 || gap > 24) errs.push('bed08: gap between star and close button is ' + gap);
+      if (Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) > 2) errs.push('bed08: star and close button are not vertically centred');
+    }
+    const nm = document.getElementById('modal-name'), row = document.querySelector('.modal-name-row'), lock = document.getElementById('modal-secret');
+    const lockHidden = !lock || lock.classList.contains('hidden') || lock.offsetParent === null;
+    const wrap = nm.closest('.clear-wrap') || nm;
+    if (lockHidden && Math.abs(wrap.getBoundingClientRect().right - row.getBoundingClientRect().right) > 2) errs.push('bed08: the name field does not reach the right edge of its row');
+    """)
     # The two bar-restore buttons draw a centred, mirrored icon.
     failed += ar_probe('brs01', 'bar restore buttons: both icons are centred and the same height', 'index', '880x600', '', r"""
     await bootReady();
