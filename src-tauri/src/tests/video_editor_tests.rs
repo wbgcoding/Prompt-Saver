@@ -718,3 +718,35 @@ fn a_filmstrip_slot_without_a_frame_reuses_the_previous_thumbnail() {
     assert!(!first.exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn export_output_to_open_takes_only_a_remembered_export() {
+    let dir = std::env::temp_dir().join(format!("ps-open-export-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("clip out.mp4");
+    fs::write(&file, b"video").unwrap();
+    let path = file.to_string_lossy().to_string();
+    assert!(export_output_to_open(&[], &path).is_err(), "a file no export wrote is refused");
+    remember_export_output(&file);
+    assert_eq!(export_output_to_open(&[], &path).unwrap(), file, "a remembered export passes");
+    assert!(export_output_to_open(&[], &format!("{path}\"")).is_err(), "a quote could break the Explorer argument");
+    assert!(export_output_to_open(&[], r"\host\share\x.mp4").is_err(), "a network spelling is refused");
+    fs::remove_file(&file).unwrap();
+    assert!(export_output_to_open(&[], &path).is_err(), "a remembered file that is gone is refused");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn both_post_export_commands_pass_the_gate_before_they_launch_anything() {
+    let src = source!("../video_editor.rs");
+    for (name, launcher) in [("fn reveal_export_output", "Command::new"), ("fn open_export_output", "ShellExecuteW(")] {
+        let body = src.split(name).nth(1).unwrap_or_else(|| panic!("{name} is missing"));
+        let body = body.split("\n}\n").next().unwrap();
+        let gate = body.find("export_output_to_open(").unwrap_or_else(|| panic!("{name} skips the gate"));
+        let launch = body.find(launcher).unwrap_or_else(|| panic!("{name} never launches"));
+        assert!(gate < launch, "{name} must check the path before {launcher}");
+    }
+    let caps = source!("../../capabilities/video-editor.json");
+    assert!(caps.contains("\"allow-reveal-export-output\"") && caps.contains("\"allow-open-export-output\""));
+}

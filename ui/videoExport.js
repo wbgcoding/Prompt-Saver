@@ -197,6 +197,7 @@ export async function startExport(toClipboard) {
   $("ve-export-clip").disabled = true;
   $("ve-still").disabled = true;
   $("ve-export-saveas").classList.add("hidden");
+  $("ve-export-done-row").classList.add("hidden");
   $("ve-export-status").textContent = t("veExporting");
   showExportErrorDetails("");
   exportEta.reset();
@@ -273,6 +274,7 @@ export async function startExport(toClipboard) {
             VE.lastExport = outPath;
             $("ve-export-status").textContent = t("veExportDone").replace("{path}", () => outPath);
             $("ve-export-saveas").classList.remove("hidden");
+            $("ve-export-done-row").classList.remove("hidden");
           }
           toast(t("veExportDone").replace("{path}", () => outPath));
           if ($("ve-export-tile").checked) await addExportTile(outPath);

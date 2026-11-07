@@ -1560,6 +1560,22 @@ VIDEO_PROBE = """
     if (document.getElementById('ve-export-saveas').classList.contains('hidden')) {
       errs.push('503: the retried export did not complete successfully');
     }
+    // After a file export the two actions on the result show up under the status line and act on
+    // the file just written.
+    {
+      const doneRow = document.getElementById('ve-export-done-row');
+      const exportedPath = (await import('./video.js')).VE.lastExport;
+      if (doneRow.classList.contains('hidden')) errs.push('open-file: the folder/file buttons are hidden after a file export');
+      if (doneRow.previousElementSibling.id !== 've-export-status') errs.push('open-file: the buttons do not sit directly under the status line');
+      window.__SMOKE_ARGS__ = [];
+      document.getElementById('ve-export-open-folder').click();
+      document.getElementById('ve-export-open-file').click();
+      await sleep(40);
+      const reveals = window.__SMOKE_ARGS__.filter((c) => c[0] === 'reveal_export_output');
+      const opens = window.__SMOKE_ARGS__.filter((c) => c[0] === 'open_export_output');
+      if (reveals.length !== 1 || reveals[0][1].path !== exportedPath) errs.push('open-file: Open folder did not reveal the exported file once: ' + JSON.stringify(reveals));
+      if (opens.length !== 1 || opens[0][1].path !== exportedPath) errs.push('open-file: Open file did not open the exported file once: ' + JSON.stringify(opens));
+    }
     {
       const keptDest = String((await import('./video.js')).VE.destOverride || '');
       if (!keptDest.includes('Retry')) errs.push('F-dest: the typed destination kept its refused folder after the retry: ' + keptDest);
@@ -1842,6 +1858,7 @@ VIDEO_PROBE = """
     await sleep(150);
     if (!clipVE.dirty) errs.push('F-clip: a clipboard export cleared the unsaved-edits mark');
     if (window.__EDIT_STATE_DISCARDED__) errs.push('F-clip: a clipboard export dropped the remembered edit state');
+    if (!document.getElementById('ve-export-done-row').classList.contains('hidden')) errs.push('open-file: a clipboard export shows the folder/file buttons');
     if (!window.__CLIP_EXPORT_COPIED__) {
       errs.push('"Copy to clipboard" never reached copy_file_to_clipboard');
     } else if (!window.__CLIP_EXPORT_COPIED__.includes('clipexport')) {

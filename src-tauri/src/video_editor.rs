@@ -909,6 +909,44 @@ pub(crate) fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Res
     Ok(())
 }
 
+// The one gate both post-export buttons pass: a file this session exported (or moved after
+// exporting), not a foreign network spelling, and no quote that could break the Explorer
+// argument (Windows file names cannot hold one).
+pub(crate) fn export_output_to_open(own_dirs: &[PathBuf], path: &str) -> Result<PathBuf, String> {
+    let file = PathBuf::from(path);
+    if path.contains('"') || is_foreign_network_path(path, own_dirs) || !file.is_file() || !is_known_export_output(&file) {
+        return Err("export-not-found".to_string());
+    }
+    Ok(file)
+}
+
+#[tauri::command(async)]
+pub(crate) fn reveal_export_output(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let file = export_output_to_open(&own_storage_dirs(&app, &state), &path)?;
+    // Shows the exported file selected in its folder. raw_arg keeps Explorer's own quoting, which the
+    // normal argument escaping breaks for a path with spaces.
+    std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe"))
+        .raw_arg(format!("/select,\"{}\"", file.display()))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub(crate) fn open_export_output(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let file = export_output_to_open(&own_storage_dirs(&app, &state), &path)?;
+    let code = unsafe { ShellExecuteW(None, &HSTRING::from("open"), &HSTRING::from(file.as_os_str()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+    let code = code.0 as isize;
+    if code <= 32 {
+        return Err(format!("could not open the file (ShellExecuteW code {code})"));
+    }
+    Ok(())
+}
+
 // What export_video remembers once ffmpeg finishes: the path export_video_blocking returned,
 // not the requested dest_path, since reserve_unique_dest_path may have renamed the file to a
 // sibling when that name was taken.
@@ -1972,7 +2010,7 @@ pub(crate) async fn open_video_editor(
     .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())?;
     let origin_dir = origin_dir.unwrap_or_default();
-    let mut request = (src_path, origin_dir, overlay_path);
+    let request = (src_path, origin_dir, overlay_path);
     // Two rounds at most: the second one only happens when the first found its window gone and
     // another call built a new one in the meantime.
     for _attempt in 0..2 {

@@ -2083,6 +2083,15 @@ $("ve-export-saveas").addEventListener("click", async () => {
   }
 });
 
+// The two actions on the finished export act on the file written last (or moved there by "Save as").
+// The backend refuses any path this session's exports did not write; a file gone since is told plainly.
+function exportedFileAction(call) {
+  if (!VE.lastExport) return;
+  call(VE.lastExport).catch((err) => toast(String(err).includes("export-not-found") ? t("veOpenExportGone") : errMessageLogged(err, t, "video")));
+}
+$("ve-export-open-folder").addEventListener("click", () => exportedFileAction((path) => invoke("reveal_export_output", { path })));
+$("ve-export-open-file").addEventListener("click", () => exportedFileAction((path) => invoke("open_export_output", { path })));
+
 function persistExportSettings() {
   invoke("set_ui_text", { key: "videoExportFormat", value: exportFormat() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportQuality", value: exportQuality() }).catch(() => {});
@@ -2398,6 +2407,7 @@ export function resetForNewSource() {
   $("ve-export-status").textContent = "";
   $("ve-export-progress-row").classList.add("hidden");
   $("ve-export-saveas").classList.add("hidden");
+  $("ve-export-done-row").classList.add("hidden");
 }
 
 videoEl.addEventListener("loadedmetadata", () => {

@@ -637,6 +637,8 @@ const RESULTS = {
     window.__TILE_ADDED__ = a && a.path;
     return "tile-1";
   },
+  reveal_export_output: () => null,
+  open_export_output: () => null,
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
   // A number back (the retention hours), not a bare true/false, since
   // discard now moves the file into "verworfen" instead of deleting it.
