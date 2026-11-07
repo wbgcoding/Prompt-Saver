@@ -176,7 +176,7 @@ app hotkey always wins a conflict, and among tiles the first one in the list
 keeps a combination two tiles happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
-"All shortcuts" in Settings opens the shortcuts dialog with every hotkey,
+"Hotkeys" in Settings opens the shortcuts dialog with every hotkey,
 global and per-tile, in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
 
@@ -1115,9 +1115,9 @@ eingesetzt, bevor er getippt oder übernommen wird.
 </p>
 
 **Tastenkürzel**: ein globales Tastenkürzel öffnet den Schnellstarter (Standard
-Strg+Alt+P, einstellbar unter Einstellungen → Alle Tastenkürzel), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
+Strg+Alt+P, einstellbar unter Einstellungen → Tastenkürzel), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Tastenkürzel, sonst die erste Kachel in der Liste.
-„Alle Tastenkürzel“ in den Einstellungen öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
+„Tastenkürzel“ in den Einstellungen öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
 mit eigenem Tastenkürzel zeigt ein kleines Tastatursymbol.
 

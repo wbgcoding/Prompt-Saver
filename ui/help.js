@@ -168,17 +168,17 @@ export const HELP_CONTENT = {
       whatItIs:
         "Two independent hotkey types exist: one global combination that opens the quick launcher, and one combination per tile.",
       howTo: [
-        "Set the global hotkey in Settings → All shortcuts, row \"Quick launcher\" (default: Ctrl+Alt+P).",
+        "Set the global hotkey in Settings → Hotkeys, row \"Quick launcher\" (default: Ctrl+Alt+P).",
         "Give a tile its own hotkey from its editor.",
         "Choose whether it should paste as well as copy.",
-        "\"All shortcuts\" in Settings opens one list: global and per-tile hotkeys on top, searchable, then the keys of every window.",
+        "\"Hotkeys\" in Settings opens one list: global and per-tile hotkeys on top, searchable, then the keys of every window.",
         "Each row rebinds or clears on the spot.",
         "If a combination is already used, the field explains why instead of accepting it silently.",
       ],
       whatHappens:
         "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among tiles, the first one in the list keeps a combination two tiles happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped. A tile with its own hotkey shows a small keyboard symbol on it.",
       settings: [
-        "Global hotkey, all shortcuts: Settings → All shortcuts",
+        "Global hotkey, all shortcuts: Settings → Hotkeys",
         "Per-tile hotkeys, paste-after-copy: Expert menu → Features → Copying",
         "Hotkey badge: Expert menu → Tiles → Tiles",
       ],
@@ -903,10 +903,10 @@ export const HELP_CONTENT = {
       whatItIs:
         "Zwei unabhängige Arten von Tastenkürzeln: eine globale Kombination, die den schnellen Launcher öffnet, und eine Kombination pro Kachel.",
       howTo: [
-        "Das globale Tastenkürzel in Einstellungen → Alle Tastenkürzel, Zeile „Schnellstarter“, festlegen (Standard: Strg+Alt+P).",
+        "Das globale Tastenkürzel in Einstellungen → Tastenkürzel, Zeile „Schnellstarter“, festlegen (Standard: Strg+Alt+P).",
         "Einer Kachel im Editor ein eigenes Tastenkürzel geben.",
         "Wählen, ob er nach dem Kopieren auch einfügen soll.",
-        "„Alle Tastenkürzel“ in den Einstellungen öffnet eine Liste.",
+        "„Tastenkürzel“ in den Einstellungen öffnet eine Liste.",
         "Oben stehen globale Tastenkürzel und die der Kacheln, durchsuchbar, darunter die Tasten jedes Fensters.",
         "Jede Zeile wird dort direkt umbelegt oder gelöscht.",
         "Ist eine Kombination bereits vergeben, erklärt das Feld den Grund, statt sie stillschweigend zu akzeptieren.",
@@ -914,7 +914,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "Eine Kombination muss Strg oder Alt enthalten; Shift allein oder eine bloße Taste wird abgelehnt, damit normales Tippen nie verschluckt wird. Das App-Tastenkürzel gewinnt bei einem Konflikt immer; bei Kacheln behält die erste in der Liste eine geteilte Kombination. Der Import einer Sicherung mit kollidierendem Tastenkürzel verwirft das verlierende, statt den Import abzubrechen, und die Zusammenfassung nennt die Anzahl der verworfenen. Eine Kachel mit eigenem Tastenkürzel zeigt ein kleines Tastatursymbol.",
       settings: [
-        "Globales Tastenkürzel, alle Tastenkürzel: Einstellungen → Alle Tastenkürzel",
+        "Globales Tastenkürzel, alle Tastenkürzel: Einstellungen → Tastenkürzel",
         "Eigene Tastenkürzel pro Kachel, Einfügen nach Kopieren: Expertenmenü → Funktionen → Kopieren",
         "Tastenkürzel-Abzeichen: Expertenmenü → Kacheln → Kacheln",
       ],

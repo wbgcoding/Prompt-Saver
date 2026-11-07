@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Haz clic y pulsa una combinación…",
     hotkeySet: "Atajo establecido",
     hotkeyFail: "Ese atajo no está disponible",
-    hotkeysAllBtn: "Todos los atajos",
+    hotkeysAllBtn: "Atajos",
     hotkeysAllTitle: "Atajos globales",
     hotkeysSearchPh: "Buscar prompts o atajos…",
     hotkeysGlobalRow: "Lanzador rápido",

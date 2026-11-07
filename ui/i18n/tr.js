@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Tıklayın ve tuş kombinasyonuna basın…",
     hotkeySet: "Kısayol ayarlandı",
     hotkeyFail: "Bu kısayol kullanılamıyor",
-    hotkeysAllBtn: "Tüm kısayollar",
+    hotkeysAllBtn: "Kısayollar",
     hotkeysAllTitle: "Genel kısayollar",
     hotkeysSearchPh: "İstem veya kısayol ara…",
     hotkeysGlobalRow: "Hızlı başlatıcı",

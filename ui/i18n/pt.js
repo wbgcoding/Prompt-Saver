@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Clique e pressione uma combinação…",
     hotkeySet: "Atalho definido",
     hotkeyFail: "Esse atalho não está disponível",
-    hotkeysAllBtn: "Todos os atalhos",
+    hotkeysAllBtn: "Atalhos",
     hotkeysAllTitle: "Atalhos globais",
     hotkeysSearchPh: "Pesquisar prompts ou atalhos…",
     hotkeysGlobalRow: "Iniciador rápido",

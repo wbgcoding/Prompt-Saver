@@ -1073,7 +1073,7 @@ export default {
     hotkeyPh: "Click, then press a key combo…",
     hotkeySet: "Hotkey set",
     hotkeyFail: "That key combination is unavailable",
-    hotkeysAllBtn: "All shortcuts",
+    hotkeysAllBtn: "Hotkeys",
     hotkeysAllTitle: "Global hotkeys",
     hotkeysSearchPh: "Search prompts or hotkeys…",
     hotkeysGlobalRow: "Quick launcher",

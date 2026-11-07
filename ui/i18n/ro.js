@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Faceți clic și apăsați o combinație…",
     hotkeySet: "Scurtătură setată",
     hotkeyFail: "Acea scurtătură nu este disponibilă",
-    hotkeysAllBtn: "Toate scurtăturile",
+    hotkeysAllBtn: "Scurtături",
     hotkeysAllTitle: "Scurtături globale",
     hotkeysSearchPh: "Caută prompturi sau scurtături…",
     hotkeysGlobalRow: "Lansator rapid",

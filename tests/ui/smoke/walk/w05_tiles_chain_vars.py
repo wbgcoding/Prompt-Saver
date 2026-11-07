@@ -919,6 +919,15 @@ SECTION = """\
       if (!listBtn) {
         out.errors.push('the "All shortcuts" button is missing in Settings');
       } else {
+        if (window.innerWidth >= 680) {
+          // The button fills the free cell under the interface size list, level with the lists beside it.
+          const rb = listBtn.getBoundingClientRect();
+          const scaleSel = document.getElementById('ui-scale').getBoundingClientRect();
+          const sizeSel = document.getElementById('tile-size').getBoundingClientRect();
+          if (!listBtn.closest('#settings-main .three-col')) out.errors.push('the shortcuts button is not in the Appearance grid');
+          if (Math.abs(rb.left - scaleSel.left) > 1.5) out.errors.push('the shortcuts button is not under the interface size list');
+          if (Math.abs(rb.bottom - sizeSel.bottom) > 1.5) out.errors.push('the shortcuts button is not level with the tile text size list');
+        }
         listBtn.click();
         await sleep(150);
         const popup = document.getElementById('shortcuts-modal');

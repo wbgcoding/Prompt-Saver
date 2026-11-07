@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "クリックしてキーを押す…",
     hotkeySet: "ホットキーを設定しました",
     hotkeyFail: "そのキーの組み合わせは使用できません",
-    hotkeysAllBtn: "すべてのホットキー",
+    hotkeysAllBtn: "ホットキー",
     hotkeysAllTitle: "グローバルホットキー",
     hotkeysSearchPh: "プロンプトやホットキーを検索…",
     hotkeysGlobalRow: "クイックランチャー",

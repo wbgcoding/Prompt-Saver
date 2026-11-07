@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Clicca e premi una combinazione…",
     hotkeySet: "Scorciatoia impostata",
     hotkeyFail: "Quella scorciatoia non è disponibile",
-    hotkeysAllBtn: "Tutte le scorciatoie",
+    hotkeysAllBtn: "Scorciatoie",
     hotkeysAllTitle: "Scorciatoie globali",
     hotkeysSearchPh: "Cerca prompt o scorciatoie…",
     hotkeysGlobalRow: "Avvio rapido",

@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Klik en druk op een toetscombinatie…",
     hotkeySet: "Sneltoets ingesteld",
     hotkeyFail: "Die sneltoets is niet beschikbaar",
-    hotkeysAllBtn: "Alle sneltoetsen",
+    hotkeysAllBtn: "Sneltoetsen",
     hotkeysAllTitle: "Globale sneltoetsen",
     hotkeysSearchPh: "Zoek prompts of sneltoetsen…",
     hotkeysGlobalRow: "Snelstarter",

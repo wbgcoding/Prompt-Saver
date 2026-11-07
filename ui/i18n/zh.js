@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "点击后按下组合键…",
     hotkeySet: "快捷键已设置",
     hotkeyFail: "该快捷键不可用",
-    hotkeysAllBtn: "所有快捷键",
+    hotkeysAllBtn: "快捷键",
     hotkeysAllTitle: "全局快捷键",
     hotkeysSearchPh: "搜索提示词或快捷键…",
     hotkeysGlobalRow: "快速启动器",

@@ -1073,7 +1073,7 @@ export default {
     hotkeyPh: "Klicken, dann Tastenkürzel drücken…",
     hotkeySet: "Tastenkürzel gesetzt",
     hotkeyFail: "Dieses Tastenkürzel ist nicht verfügbar",
-    hotkeysAllBtn: "Alle Tastenkürzel",
+    hotkeysAllBtn: "Tastenkürzel",
     hotkeysAllTitle: "Globale Tastenkürzel",
     hotkeysSearchPh: "Prompts oder Tastenkürzel durchsuchen…",
     hotkeysGlobalRow: "Schnellstarter",

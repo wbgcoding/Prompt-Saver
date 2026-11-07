@@ -1025,7 +1025,7 @@
             <!-- Options filled by JS: scale presets -->
             <select id="ui-scale" class="modal-input"></select>
           </label>
-          <!-- Row 1: theme, language, interface size. Row 2: tile font and tile text size. -->
+          <!-- Row 1: theme, language, interface size. Row 2: tile font, tile text size and the shortcuts dialog. -->
           <label class="field">
             <span data-i18n="tileFont">Tile font</span>
             <!-- Options filled by JS from the shared font catalog -->
@@ -1036,6 +1036,7 @@
             <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->
             <select id="tile-size" class="modal-input"></select>
           </label>
+          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">Hotkeys</button>
         </div>
         <div class="switch-grid">
           <label class="field switch-field" data-i18n-title="tipTooltips">
@@ -1064,9 +1065,6 @@
             <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
             <input id="opt-autopaste" type="checkbox" class="switch" />
           </label>
-          <!-- Every global hotkey is edited in the All shortcuts dialog; this is its door. It shares
-               the Auto-paste row, so the autostart pair below keeps its optional second cell. -->
-          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
           <label class="field switch-field">
             <span data-i18n="autostart">Start automatically at login</span>
             <input id="opt-autostart" type="checkbox" class="switch" />

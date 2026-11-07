@@ -1109,7 +1109,7 @@ export default {
     hotkeyPh: "Kliknij i naciśnij kombinację…",
     hotkeySet: "Skrót ustawiony",
     hotkeyFail: "Ten skrót jest niedostępny",
-    hotkeysAllBtn: "Wszystkie skróty",
+    hotkeysAllBtn: "Skróty",
     hotkeysAllTitle: "Skróty globalne",
     hotkeysSearchPh: "Szukaj promptów lub skrótów…",
     hotkeysGlobalRow: "Szybki program uruchamiający",
