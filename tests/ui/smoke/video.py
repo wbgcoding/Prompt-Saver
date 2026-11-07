@@ -1934,7 +1934,8 @@ EDIT_STATE_PROBE = """
 
 # 873: closing the editor and choosing Discard must not write the discarded ops as the
 # recording's remembered edit state (and must drop one an earlier autosave left behind);
-# answering Keep editing instead leaves the remembered state exactly as it is.
+# answering Keep editing instead leaves the remembered state exactly as it is, and Save (the
+# default button) stores the draft for the next open.
 CLOSE_STATE_PROBE = """
 <script>
 (async () => {
@@ -1954,7 +1955,7 @@ CLOSE_STATE_PROBE = """
     await until(() => document.getElementById('ve-stage-msg').classList.contains('hidden') &&
       document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0, 300);
     await sleep(300);
-    if (mode === 'discard') {
+    if (mode === 'discard' || mode === 'save') {
       const fade = document.getElementById('ve-fade-on');
       fade.checked = true;
       fade.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1966,13 +1967,20 @@ CLOSE_STATE_PROBE = """
     document.getElementById('ve-close').click();
     await until(shown, 40);
     if (!shown()) errs.push(which + 'closing with unsaved edits did not ask');
-    else document.getElementById(mode === 'discard' ? 'confirm-ok' : 'confirm-cancel').click();
+    else {
+      const labels = Array.from(document.querySelectorAll('#confirm-ok, #confirm-alt, #confirm-cancel')).filter(b => !b.classList.contains('hidden')).map(b => b.id);
+      if (labels.slice().sort().join() !== 'confirm-alt,confirm-cancel,confirm-ok') errs.push(which + 'the question does not offer three buttons: ' + labels.join());
+      document.getElementById(mode === 'discard' ? 'confirm-alt' : mode === 'save' ? 'confirm-ok' : 'confirm-cancel').click();
+    }
     await sleep(500);
     const saved = window.__EDIT_STATE_SAVED__;
     const dropped = window.__EDIT_STATE_DISCARDED__;
     if (mode === 'discard') {
       if (saved) errs.push(which + 'the discarded edits were saved as the remembered edit state: ' + String(saved.ops).slice(0, 80));
       if (!dropped || dropped.kind !== 'video' || !dropped.target) errs.push(which + 'the remembered edit state was not cleared');
+    } else if (mode === 'save') {
+      if (!saved || !saved.ops || !saved.ops.length) errs.push(which + 'Save did not store the edit state');
+      if (dropped) errs.push(which + 'Save cleared the remembered edit state');
     } else {
       if (saved) errs.push(which + 'Keep editing saved the edit state on the way');
       if (dropped) errs.push(which + 'Keep editing cleared the remembered edit state');
@@ -2212,7 +2220,7 @@ def run(browser, tmp):
             print("   ok")
 
     # 873: closing with Discard, and answering Keep editing with restored operations.
-    for mode in ("discard", "kept"):
+    for mode in ("discard", "save", "kept"):
         side = tmp / "ui" / f"video-close-{mode}.html"
         fixture = f'window.__EDIT_STATE_FIXTURE__ = {edit_state_fixture};' if mode == "kept" else ""
         side.write_text(
