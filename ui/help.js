@@ -1290,7 +1290,7 @@ export const HELP_CONTENT = {
     {
       section: "system",
       title: "System",
-      whatItIs: "System-Einstellungen betreffen app-weites Verhalten, das nicht eine einzelne Kachel betrifft.",
+      whatItIs: "System-Einstellungen betreffen App-weites Verhalten, das nicht eine einzelne Kachel betrifft.",
       howTo: ["Die System-Gruppe des Expertenmenüs für Update-Checks, Tastaturnavigation, mehrere Instanzen und den Daten-Ordner öffnen."],
       whatHappens:
         "Update-Checks installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt. Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner. Eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
