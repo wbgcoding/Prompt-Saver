@@ -18,7 +18,7 @@ import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { stripFormatExt } from "./exportName.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
-import { destPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
+import { destPath, winPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
 import { markedRange, centeredRect, addAlignedCameraOverlay, addOverlay, ovCtxPop, closeOvCtxPop, addVideoPop, closeAddVideoPop, startAddVideo, renderOverlayList, renderClipList, renderOverlayEditor, OV_X_SVG } from "./videoOverlays.js";
 import { videoBox, clampPan, applyPreviewTransform, setPreviewZoom, resetPreviewZoom, snapRect, nudgeSelectedOverlay, renderRects, renderOverlayLive, clearLiveOverlays } from "./videoPreview.js";
@@ -2029,7 +2029,7 @@ $("ve-export-name").addEventListener("change", () => {
 $("ve-export-dest").addEventListener("change", () => {
   const value = $("ve-export-dest").value.trim();
   // A typed name with another extension would write one container under another's name.
-  VE.destOverride = value ? withExtension(value, formatExt(exportFormat())) : null;
+  VE.destOverride = value ? winPath(withExtension(value, formatExt(exportFormat()))) : null;
   $("ve-export-dest").value = destPath();
   updateExportNote();
 });

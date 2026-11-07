@@ -1455,12 +1455,22 @@ VIDEO_PROBE = """
     if (!destInput.value) {
       errs.push('the export destination field starts empty');
     }
+    if (destInput.value.includes('/')) errs.push('the export destination mixes in a forward slash: ' + destInput.value);
     destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
     destInput.dispatchEvent(new Event('change'));
     await sleep(30);
     if (destInput.value !== 'C:\\\\Custom\\\\my-clip.mp4') {
       errs.push('typing a destination path directly did not stick as an override');
     }
+    destInput.value = 'C:/Custom/slash-clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+    if (destInput.value !== 'C:\\\\Custom\\\\slash-clip.mp4') {
+      errs.push('a typed forward-slash destination was not written with backslashes: ' + destInput.value);
+    }
+    destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
     const pickedFile = destInput.value;
     document.getElementById('ve-export-choose-folder').click();
     await sleep(80);

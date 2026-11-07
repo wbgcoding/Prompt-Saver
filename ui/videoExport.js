@@ -8,6 +8,9 @@ import { $, clamp, ETA_MIN_PCT, ETA_MIN_SECS, EXPORT_KBPS, fmtTime, formatExt, i
 
 // ---------------------------------------------------------------- export
 
+// Windows spelling for every path the editor shows or sends: one separator, the backslash.
+export function winPath(p) { return String(p).replace(/\//g, "\\"); }
+
 // The source file's own stem, with no folder and no extension: the base
 // every auto-named export starts from.
 function sourceStem() {
@@ -30,17 +33,17 @@ export function exportNameStem() {
 // remembered "Export to…" folder keeps the (auto or custom) filename but
 // moves it there; otherwise the original folder next to the source file.
 export function destPath() {
-  if (VE.destOverride) return VE.destOverride;
+  if (VE.destOverride) return winPath(VE.destOverride);
   const format = exportFormat();
   const name = `${exportNameStem()}.${formatExt(format)}`;
   // A file opened for editing from outside the app suggests its own folder over the standing
   // videoExportDir preference, which is about ordinary recording exports, not this one-off copy.
   const dir = VE.originDir || VE.destDir;
-  if (dir) return `${dir.replace(/[\\/]+$/, "")}/${name}`;
+  if (dir) return winPath(`${dir.replace(/[\\/]+$/, "")}\\${name}`);
   const cut = VE.src.replace(/[/\\]+$/, "");
   const slash = Math.max(cut.lastIndexOf("\\"), cut.lastIndexOf("/"));
   const srcDir = slash >= 0 ? cut.slice(0, slash) : "";
-  return srcDir ? `${srcDir}/${name}` : name;
+  return srcDir ? winPath(`${srcDir}\\${name}`) : name;
 }
 
 // One explanatory note per format that needs one, kept as a lookup instead of
@@ -290,7 +293,7 @@ export async function startExport(toClipboard) {
             return;
           }
           const base = dest.replace(/^.*[\\/]/, "");
-          dest = `${folder.replace(/[\\/]+$/, "")}/${base}`;
+          dest = winPath(`${folder.replace(/[\\/]+$/, "")}\\${base}`);
           // The picked folder is the authorized one now. An auto-named export would otherwise keep
           // building its path from the refused folder and ask again every time.
           if (!VE.destOverride) VE.originDir = folder;
