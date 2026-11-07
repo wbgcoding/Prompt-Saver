@@ -31,11 +31,12 @@ export const HELP_CONTENT = {
       title: "Settings",
       whatItIs: "The settings window holds the everyday choices; everything optional lives in the expert menu, opened from the same window.",
       howTo: [
-        "Click the gear button in the header to open it.",
-        "Pick the language, the theme, and the text size and font of the tiles.",
-        "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background when closed.",
+        "Click the gear button in the top bar to open it.",
+        "Appearance: theme, language, interface size, tile font and size, tooltips and the favorites view.",
+        "Behavior: always on top, keep running in the background when closed, all hotkeys, start with Windows and start in the background.",
+        "Data: import, export, the backup manager and the usage statistics.",
+        "System: the About window, the update check and automatic updates.",
         "A portable copy always quits when closed instead of going to the background.",
-        "Open the list of all shortcuts.",
       ],
       whatHappens:
         "Every change applies at once, with no save button. \"Automatic\" as the language follows Windows and falls back to English. Reset puts every setting back to its default and keeps the tiles; Delete removes all data and asks first.",
@@ -81,7 +82,6 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "The attached file, screenshot, or color becomes the tile's content; a later copy delivers that file, image, or color, never text. A plain text, Markdown, JSON or CSV attachment shows its first lines right in the editor, below the file row, always as plain text.",
       settings: ["File attach, keep a copy of an attached file and delete that copy with its tile, text preview for attachments, paste, drag and drop: Expert menu → Features → Attachments and input", "Screenshot tool: Expert menu → Capture → Screenshot", "Color picker: Expert menu → Capture → Color picker"],
-      tip: "Pick a color format (hex, RGB, or HSL) from the toast that appears right after a pick.",
     },
     {
       section: "basics",
@@ -92,7 +92,7 @@ export const HELP_CONTENT = {
         "Adjust Markdown preview, syntax highlighting, versions, or private notes in the expert menu.",
       ],
       whatHappens:
-        "Versions keep every saved change so an earlier version can be restored. Markdown preview renders next to, or instead of, the text box without altering what is actually stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers the draft back once. A confidential tile never gets a draft. Saving a new tile that closely matches an existing one shows a quiet hint instead of blocking the save. For a text with Markdown in it, \"Copy formatted\" in the editor and the tile menu puts the rendered version on the clipboard as well, so Word or a mail program shows the formatting. Right-click a version in the list to keep it as a new tile and leave the current one untouched.",
+        "Versions keep every saved change: Restore brings an earlier one back, and the button next to it keeps that version as a new tile instead. Markdown preview shows next to or instead of the text box and never changes what is stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers it back once. A confidential tile never gets a draft. \"Copy formatted\" also puts the rendered Markdown on the clipboard, so Word or a mail app shows the formatting. Saving a new tile that closely matches an existing one shows a hint but still saves.",
       settings: ["Markdown preview, syntax highlighting, versions, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -105,7 +105,7 @@ export const HELP_CONTENT = {
         "Turn on \"Only changed\" to see just what has been adjusted from the defaults.",
       ],
       whatHappens:
-        "A feature that ships switched off carries a small dot badge on its label, with a tooltip explaining what it does. Reset works at three levels: one value's own undo icon, a whole group's reset icon in its header, or every setting at once from the general reset action. The search also finds settings outside the expert menu, such as the settings window or the backup manager, marked with where they live; a click opens that place.",
+        "A feature that ships switched off carries a small dot badge on its label, with a tooltip explaining what it does. Reset works at three levels: one value's own undo icon, a whole group's reset icon in its heading, or every setting at once from the general reset action. The search also finds settings outside the expert menu, such as the settings window or the backup manager, marked with where they live; a click opens that place.",
       settings: [],
     },
     {
@@ -141,8 +141,15 @@ export const HELP_CONTENT = {
         "Ctrl-drag a tile onto another window to drop its text directly, with no clipboard round-trip.",
       ],
       whatHappens:
-        "A short confirmation bubble or flash confirms the copy; the text size of that bubble has three levels (small, medium, large) in the expert menu. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; Start chain here: right-click a text tile to start a chain with that tile first. A chain stays when you switch to another program. One tap on the chain button in the top bar starts a chain, the next tap ends it. Pasting with Ctrl+V in the app window ends it too. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotation). With the chain option to stay on after copying enabled in the expert menu, chain mode stays on after copying, for building several chains in a row. The strip can also mark a step red when it needs a placeholder that no earlier step fills; the chain still runs.",
-      settings: ["Chaining, and starting a chain from the tile menu: Expert menu → Features → Chain", "What goes between two chained steps: Expert menu → Features → Chain", "Keep chain mode on after copying: Expert menu → Features → Chain", "Auto-paste on double-click: Expert menu → Features → Copying", "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
+        "A short bubble or flash confirms the copy. Chaining combines several tiles clicked in a row into one clipboard entry instead of each overwriting the last. The chain button in the top bar starts a chain and ends it on the next tap; \"Start chain here\" in a text tile's right-click menu starts one with that tile first. A chain survives switching to another app; Ctrl+V in the app window ends it. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. A red step needs a placeholder that no earlier step fills; the chain still runs. Chaining is not rotation: rotation changes what one tile holds from copy to copy (see Rotation).",
+      settings: [
+        "Chaining, and starting a chain from the tile menu: Expert menu → Features → Chain",
+        "What goes between two chained steps: Expert menu → Features → Chain",
+        "Keep chain mode on after copying: Expert menu → Features → Chain",
+        "Auto-paste on double-click: Expert menu → Features → Copying",
+        "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying, size of the copy bubble: Expert menu → Features → Copying",
+        "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying",
+      ],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -178,7 +185,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among tiles, the first one in the list keeps a combination two tiles happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped. A tile with its own hotkey shows a small keyboard symbol on it.",
       settings: [
-        "Global hotkey, all shortcuts: Settings → Hotkeys",
+        "Global hotkey, all hotkeys: Settings → Hotkeys",
         "Per-tile hotkeys, paste-after-copy: Expert menu → Features → Copying",
         "Hotkey badge: Expert menu → Tiles → Tiles",
       ],
@@ -195,7 +202,7 @@ export const HELP_CONTENT = {
         "Copy the tile as normal: it always serves the next rotation text, never asks which one.",
       ],
       whatHappens:
-        "A small badge counts up on a grid tile, a floating button, and a desktop folder member, like \"2/5\"; a grid folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
+        "A small badge like \"2/5\" counts up on a grid tile, a floating button and a desktop folder member; a grid folder member shows only its file-type icon. In order mode it shows the position; in shuffle mode it counts draws in the current round and restarts at 1 once every text was used. The count survives restarts and full backups; a CSV or TXT import starts the new tile at its first text. Turning rotation off keeps all texts but uses only the first until it is back on. With \"Rotate on paste\", a tile also moves to its next text on every real paste, not only on copy.",
       settings: ["Rotation, default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself is in the editor under Advanced options."],
     },
     {
@@ -259,12 +266,12 @@ export const HELP_CONTENT = {
       id: "voiceDictation",
       whatItIs: "The microphone button {icon:mic} turns speech into text through Microsoft's online speech recognition.",
       howTo: [
-        "Click the microphone icon next to the composer, or in a tile's editor.",
+        "Click the microphone icon next to the input bar, or in a tile's editor.",
         "Speak; the text appears as it is recognized.",
         "Click the icon again, press ESC, or save/close to stop.",
       ],
       whatHappens:
-        "Voice input always uses Microsoft's online speech recognition, so your audio goes to Microsoft while you speak. It starts only after you agree in the app's consent dialog, which also turns on online speech recognition in the Windows settings. Switching off \"Allow online recognition\" withdraws that consent; voice input then asks again. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all. The text goes to the clipboard, is pasted, or lands straight in the composer; the tray icon's tooltip shows \"Recording…\" while it runs.",
+        "Voice input uses Microsoft's online speech recognition, so your audio goes to Microsoft while you speak. It starts only after you agree in the consent dialog, which also turns on online speech recognition in Windows. Switching off \"Allow online recognition\" withdraws that consent. Spoken words like \"comma\" or \"new line\" become punctuation; say \"literal\" before a word to type it instead. A missing language pack opens the language pack dialog. An optional global hotkey starts and stops voice input without opening the window. The text goes to the clipboard, is pasted, or lands in the input bar; while it runs, the tray icon's tooltip shows \"Recording…\".",
       settings: ["Voice input, punctuation commands, auto-capitalize, silence auto-stop, insert position, global hotkey: Expert menu → Features → Voice input"],
     },
     {
@@ -335,7 +342,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Click the record button {icon:record}.",
         "Pick a window, drag a region, or click empty desktop for the whole screen, in the same overlay as the screenshot tool.",
-        "An optional countdown toast counts down before capture actually starts.",
+        "An optional countdown runs before the recording starts.",
         "A small control bar shows elapsed time and file size, two audio mute buttons, and Pause/Resume, Stop and Discard.",
         "Two optional global hotkeys and the tray menu can also stop or pause it while a recording runs.",
         "A window recording over all screens or the current screen also gets a button that switches its target without starting over.",
@@ -343,7 +350,7 @@ export const HELP_CONTENT = {
         "Right-click the record button and choose \"Manage recordings…\" to export or delete older recordings.",
       ],
       whatHappens:
-        "MP4 (H.264) is always what gets written while recording. Three quality steps (Small, High, Lossless) trade file size for detail. A format setting can turn the result into WebM, GIF or AVI afterward: WebM and AVI are converted from the MP4, and GIF is capped at 30 seconds and has no sound. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record, each into its own track. The microphone track is captured but stays silent until you mix it in yourself in the video editor. Unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself, not its buttons, moves it anywhere, including onto another monitor. It then stops following the recorded window for the rest of that recording; the next recording follows again. The bar is never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalizing is never touched. The recording folder's row in the expert menu shows how many videos it holds and how much space they use. Its \"Clean up…\" button lists files older than 7, 30 or 90 days and the space they would free, and nothing is deleted without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text. It shows every key, including typed text. It skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch limits capture to combinations with Ctrl, Alt or Win, plus Enter, Tab, ESC, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys. Use it for a recording with confidential input. The same cleanup dialog has a checkbox per file: \"Export selected\" converts every checked recording in one go, to a chosen format, quality and folder, and reports how many finished. A new install deletes unused recordings after 90 days (expert menu, 0 = keep forever).",
+        "The recording is always written as MP4 (H.264); the quality steps Small, High and Lossless trade file size for detail. A format setting can convert it afterward to WebM, AVI or GIF; GIF is capped at 30 seconds and has no sound. Every format other than MP4, and Lossless, needs ffmpeg, which the installer brings along; where it is missing, the app offers the download. A failed or cancelled conversion keeps the original recording. System audio and microphone record into separate tracks; the microphone track stays silent until you add it in the video editor. The two audio buttons in the bar mute a source at once and unmute it again; an unplugged microphone only ends its own track. Save and Copy use the recording folder; Edit opens the clip in the video editor, and closing the dialog without saving or copying still discards it. Drag the bar to move it anywhere; it then stops following the window for that recording and is never part of the video. If the recorded window closes, the recording stops and keeps what it has. A recording left behind by a crash or a forced shutdown is removed after a grace period. The recording folder row in the expert menu shows how many videos it holds and their size. \"Clean up…\" lists files older than 7, 30 or 90 days and deletes only after you confirm; \"Export selected\" converts the checked files in one go. By default, unused recordings are deleted after 90 days (0 keeps them forever). The optional keys overlay records key names and times, typed letters included, and skips a password field only when Windows reports it. For a recording with confidential input, turn on \"Shortcuts only\".",
       settings: ["Screen recording, countdown, bitrate, quality, format, recording folder and cleanup: Expert menu → Capture → Screen recording", "Cursor, audio sources and device, stop/pause hotkeys, tray entries, keys overlay, frame around a recorded region and its color: Expert menu → Capture → While recording", "Auto-remove broken recordings, clean up now: Expert menu → System & data → Troubleshooting"],
     },
     {
@@ -381,11 +388,11 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer. It runs fully offline and nothing leaves the machine.",
       howTo: [
-        "From the composer: click the OCR button {icon:ocr} to recognize text in a screenshot, or right-click it to pick an existing image file.",
+        "From the input bar: click the OCR button {icon:ocr} to recognize text in a screenshot, or right-click it to pick an existing image file.",
         "Review the result, then copy it or insert it directly.",
       ],
       whatHappens:
-        "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice input uses; see \"Language packs\" below.",
+        "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice input uses; see \"Language packs\".",
       settings: ["Text recognition, auto-copy the result, join lines, recognition language: Expert menu → Capture → Text recognition"],
     },
     {
@@ -394,14 +401,14 @@ export const HELP_CONTENT = {
       id: "colorPicker",
       whatItIs: "The color picker is a pipette that reads any on-screen pixel as hex, RGB, or HSL.",
       howTo: [
-        "Click the pipette icon in the composer bar.",
+        "Click the pipette icon in the input bar.",
         "Move the loupe to the pixel wanted; scroll or use plus/minus to zoom.",
         "Click to copy the color; right-click the pipette icon to reopen the last few picks.",
       ],
       whatHappens:
         "Nothing is ever saved to a tile automatically; a pick only reaches the clipboard. The pick history holds the last few colors and survives a restart, capped by its own setting.",
       settings: ["Color picker, zoom, format, pick-history length: Expert menu → Capture → Color picker"],
-      tip: "Pick a color format (hex, RGB, or HSL) from the toast that appears right after a pick.",
+      tip: "Pick a color format (hex, RGB, or HSL) from the message that appears right after a pick.",
     },
     {
       section: "tiles",
@@ -444,20 +451,21 @@ export const HELP_CONTENT = {
       section: "tiles",
       title: "Tooltips",
       whatItIs: "Hovering a tile shows its full text, length, and any private note.",
-      howTo: [
-        "Hover a tile and wait for the delay to elapse.",
-        "Adjust delay or width in the expert menu if needed.",
-      ],
+      howTo: ["Hover a tile and wait for the delay to elapse.", "Adjust the delay in the expert menu if needed."],
       whatHappens: "The tooltip auto-hides after its timeout even if the mouse stays put.",
       settings: ["Delay before showing: Expert menu → Tiles → Tooltips"],
     },
     {
       section: "appearance",
       title: "Appearance & themes",
-      whatItIs: "Eight built-in themes cover system, light, dark, and five accent styles.",
+      whatItIs: "Seven built-in themes cover System, Light, Dark and four accent styles: Programmer, Neon Violet, Ocean and Cyberpunk.",
       howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colors and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately; the built-in it was based on stays untouched.",
-      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Visual", "Accent-colored header, frosted dialogs, hidden scrollbars: Expert menu → Appearance → Visual"],
+      settings: [
+        "Theme choice: Settings",
+        "Theme editor: Expert menu → Appearance → Visual",
+        "Frosted dialogs, hidden scrollbars: Expert menu → Appearance → Visual",
+      ],
       tip: "Switching custom themes off also removes the “Custom theme…” entry from the theme list.",
     },
     {
@@ -494,8 +502,15 @@ export const HELP_CONTENT = {
         "The Tiles button next to Sort switches to large preview tiles.",
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
-      whatHappens: "Search is typo-tolerant and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, type filter, recent searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
+      whatHappens:
+        "Search is typo-tolerant and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select. An optional setting reads text out of attached pictures so the search finds it too; a hit found only there carries a \"found in image\" badge. That text is never shown, exported or synchronized, and its length is capped. Removing or replacing the picture clears it, and switching the setting off removes it from every tile, the trash included.",
+      settings: [
+        "Fuzzy search, type filter, recent searches: Expert menu → Library & copy history → Search",
+        "Focus the search field on opening: Expert menu → Library & copy history → Search",
+        "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search",
+        "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display",
+        "Index text inside attached pictures for search: Expert menu → Library & copy history → Search",
+      ],
     },
     {
       section: "library",
@@ -551,17 +566,23 @@ export const HELP_CONTENT = {
     {
       section: "system",
       title: "System",
-      whatItIs: "System settings cover app-level behavior that is not about any single tile.",
-      howTo: ["Open the expert menu's System group for updates, navigation, instances, and the data folder."],
+      whatItIs: "System settings cover app-wide behavior that is not about any single tile.",
+      howTo: ["Open the expert menu's System group for keyboard navigation, the data folder, taskbar progress and the video tools download."],
       whatHappens:
-        "Update checks never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database. A second computer that finds a fresh lock from another one opens everything read-only and says so in a banner. A lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
-      settings: ["Keyboard navigation, data folder, taskbar progress, video tools download: Expert menu → System & data → System", "Allow multiple instances, data folder lock: Expert menu → System & data → Troubleshooting"],
+        "The update check in Settings → System never installs anything without asking first. Changing the data folder moves the existing database there. Allowing multiple instances takes a restart. Long jobs can fill the taskbar icon as a progress bar and show the time left.",
+      settings: [
+        "Keyboard navigation, data folder, taskbar progress, video tools download: Expert menu → System & data → System",
+        "Allow multiple instances: Expert menu → System & data → Troubleshooting",
+      ],
     },
     {
       section: "system",
       title: "Toolbar",
-      whatItIs: "The toolbar setting controls which buttons the header and composer bar show.",
-      howTo: ["Right-click the header to show or hide its buttons; features themselves are switched in the expert menu.", "Hide the top bar or the input bar: right-click the gear or the top bar."],
+      whatItIs: "The toolbar settings control which buttons the top bar and the input bar show.",
+      howTo: [
+        "Right-click the top bar to show or hide its buttons; features themselves are switched in the expert menu.",
+        "Hide the top bar or the input bar: right-click the gear or the top bar.",
+      ],
       whatHappens: "Hiding a button only hides it; the feature behind it, if any, keeps working through its own hotkey or menu entry.",
       settings: ["Library button and double-click on the bar buttons: Expert menu → System & data → Toolbar; logo, title and bar buttons: right-click the top bar.", "Quick grid-size control and showing it on hover only, multiple views: Expert menu → Features → Views and quick grid"],
     },
@@ -573,8 +594,11 @@ export const HELP_CONTENT = {
         "Turn on media blur in the expert menu, as needed.",
       ],
       whatHappens:
-        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential prompts\" below.",
-      settings: ["Exclude from screen capture, blur media: Expert menu → System & data → Privacy", "Index text inside attached pictures for search: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
+        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. A single tile can also be marked confidential; see \"Confidential tiles\".",
+      settings: [
+        "Exclude from screen capture, blur media: Expert menu → System & data → Privacy",
+        "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy",
+      ],
     },
     {
       section: "system",
@@ -606,122 +630,6 @@ export const HELP_CONTENT = {
     },
     {
       section: "system",
-      title: "Where your data lives",
-      whatItIs:
-        "Everything lives in one local SQLite database plus its small companion file.",
-      howTo: [
-        "Installed: the data folder is under AppData, shown and changeable in the expert menu.",
-        "Portable: the data folder sits next to the exe, so it all fits on a USB stick.",
-      ],
-      whatHappens: "Moving from portable to installed, or back, is detected automatically and offered as a one-time migration: existing data is never silently left behind.",
-      settings: ["Data folder: Expert menu → System & data → System"],
-    },
-    {
-      section: "system",
-      title: "Backup manager",
-      whatItIs: "The backup manager creates encrypted, compressed snapshots of the entire library and settings.",
-      howTo: [
-        "Open the Backup manager from Settings.",
-        "Turn on automatic backups and pick an interval, or create one manually.",
-        "Save a backup to a file of your choice or import one from a file with the two buttons beside Create backup.",
-        "Restore from the snapshot list, choosing data only, settings only, or both.",
-      ],
-      whatHappens:
-        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a storage breakdown of what is taking up disk space. Each snapshot can open its contents: counts, the newest change inside it, the version that made it, and every tile it holds, searchable and sortable, with a button to restore one tile on its own. One row per kind of kept data shows how much it holds and how long it is kept, jumps to its setting and can clean it up on the spot. The kinds are trash, copy history, copies from other apps, recordings, temporary exports and edit states.",
-      settings: [
-        "Interval, retention tiers, password, restore scope: Backup manager (its own window, opened from Settings)",
-      ],
-    },
-    {
-      section: "system",
-      title: "Usage statistics",
-      whatItIs: "A small window with the number of prompts, the copies of the last 7 days, the most used and the never used prompts.",
-      howTo: [
-        "Switch on \"Show statistics\" in the expert menu under \"Data & maintenance\".",
-        "Open Settings and click \"Usage statistics\".",
-        "Pick how many prompts the most used list shows: 5, 10 or 20.",
-        "Click a never used prompt to find it in the library.",
-      ],
-      whatHappens:
-        "Everything stays on this computer. The export button saves the full numbers, including daily counts and tool use, as CSV, TXT or JSON.",
-      settings: [],
-    },
-    {
-      section: "system",
-      title: "Import & export",
-      whatItIs: "Plain CSV, TXT or JSON export covers text alone; a full backup file covers everything.",
-      howTo: [
-        "Export or import from the expert menu's data group.",
-        "Pick a format from the dropdown next to the Export button (JSON keeps the most); a CSV or JSON import shows a name and duplicate status per item first.",
-        "A full backup restores directly, from its own window.",
-        "Confirm to actually import, or cancel and nothing changes.",
-        "Import → \"From folder…\" in Settings turns a folder of .md or .txt files into tiles, one per file, after a preview with a checkbox per file.",
-      ],
-      whatHappens: "CSV and TXT round-trip text alone; JSON also carries the full rotation texts of a tile with rotation, tags, notes, hotkey, and color, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
-      settings: ["Import and export: Expert menu → System & data → Data & maintenance", "Folder import depth and file limit: Expert menu → System & data → Data & maintenance"],
-    },
-    {
-      section: "system",
-      title: "Markdown folder sync",
-      whatItIs:
-        "Folder sync mirrors every text tile as its own readable Markdown file in a chosen folder.",
-      howTo: [
-        "Turn it on and pick a folder in the expert menu.",
-        "Edit a tile normally, or edit its Markdown file directly; both directions stay in sync.",
-      ],
-      whatHappens:
-        "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name; a view renamed on another machine is renamed here too. Deleting a file in the folder does not delete the tile (it is written again on the next round). Deleting the tile in the app takes its file with it, and on every other computer using the same folder the tile moves to the trash. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept as a version of the tile. The other way round, the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
-      settings: ["Markdown folder (beta), sync folder: Expert menu → System & data → Data & maintenance"],
-    },
-    {
-      section: "system",
-      title: "Data maintenance",
-      whatItIs: "Data maintenance gathers housekeeping tools reached from the expert menu's data group.",
-      howTo: ["Open the expert menu → System & data → Data & maintenance.", "Open the trash, or import or export, from there.", "The duplicate finder has its own \"Find duplicates\" button in the library."],
-      whatHappens:
-        "A deleted tile sits in the trash, with its own retention setting, before it is gone for good. The duplicate finder only flags near-identical tiles by text similarity; it never deletes anything on its own. \"Recent messages\" keeps a short list of error messages that flashed by in a toast, with time and place; copy or clear the list from its window. Settings alone can be saved to a file and loaded again from the same group.",
-      settings: ["Duplicate finder, trash retention, import and export: Expert menu → System & data → Data & maintenance", "Take a backup before a reset or a delete-everything: Expert menu → System & data → Data & maintenance", "Recent messages and how much it keeps, settings export and import, undo button: Expert menu → System & data → Data & maintenance"],
-    },
-    {
-      section: "system",
-      title: "Trash & restoring tiles",
-      whatItIs: "A deleted tile moves to the trash first, not straight to permanent deletion.",
-      howTo: [
-        "Delete a tile as normal: it goes to the trash, and Undo brings it back.",
-        "Open the trash from the expert menu's data group.",
-        "Restore a tile from there, or let retention clear it automatically.",
-      ],
-      whatHappens:
-        "Retention is set in days; zero means keep forever. Restoring places the tile in the active view's first free cell, not necessarily its original view or cell. It does not bring back a floating button, folder membership or hotkey it had before deletion; those need setting up again.",
-      settings: ["Trash retention: Expert menu → System & data → Data & maintenance"],
-    },
-    {
-      section: "system",
-      title: "Undo button",
-      whatItIs: "Some actions outside the trash offer a one-step undo right on their confirmation message.",
-      howTo: [
-        "Delete a view, clear the copy history, delete a tag, or run a batch delete or tag change.",
-        "Click Undo on the message that appears.",
-      ],
-      whatHappens:
-        "Only the latest action can be undone; a newer one replaces it, and the button goes away with the message. With the undo time set to Off, deleting a view or merging tags asks first instead.",
-      settings: ["Undo button, how long the message stays: Expert menu → System & data → Data & maintenance"],
-    },
-    {
-      section: "system",
-      title: "Duplicate finder",
-      whatItIs: "The duplicate finder flags tiles that are textually very similar without deleting anything.",
-      howTo: [
-        "Click \"Find duplicates\" in the library.",
-        "Review each flagged pair side by side.",
-        "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
-      ],
-      whatHappens:
-        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A tile with rotation is only compared on its first text. The only way in is the \"Find duplicates\" button in the library; the expert menu only holds its on/off switch and the threshold.",
-      settings: ["Duplicate finder, similarity threshold: Expert menu → System & data → Data & maintenance"],
-    },
-    {
-      section: "system",
       title: "Command line",
       whatItIs: "The program file also works as a command line tool, for scripts and quick jobs without opening the window.",
       howTo: [
@@ -746,6 +654,133 @@ export const HELP_CONTENT = {
         "The sample library is built fresh each time and covers most features: tiles with and without a picture, a tile with rotation, a placeholder, tags, a favorite, two views, a folder, an attachment and a video. Your own data is never opened or changed while it runs. Anything changed during the demo is discarded when it ends.",
       settings: ["Demo mode: Expert menu → System & data → Troubleshooting"],
     },
+    {
+      section: "data",
+      title: "Where your data lives",
+      whatItIs:
+        "Everything lives in one local SQLite database plus its small companion file.",
+      howTo: [
+        "Installed: the data folder is under AppData, shown and changeable in the expert menu.",
+        "Portable: the data folder sits next to the exe, so it all fits on a USB stick.",
+      ],
+      whatHappens:
+        "Moving from portable to installed, or back, is detected automatically and offered as a one-time migration: existing data is never silently left behind. Pointing the data folder at a cloud-synced folder shows a one-time warning, and a small lock file then tracks which computer uses the database. Another computer that finds a fresh lock opens everything read-only and says so in a banner; a lock nobody refreshed for a while is taken over.",
+      settings: ["Data folder: Expert menu → System & data → System", "Data folder lock: Expert menu → System & data → Troubleshooting"],
+    },
+    {
+      section: "data",
+      title: "Backup manager",
+      whatItIs: "The backup manager creates encrypted, compressed snapshots of the entire library and settings.",
+      howTo: [
+        "Open the Backup manager from Settings.",
+        "Turn on automatic backups and pick an interval, or create one manually.",
+        "Save a backup to a file of your choice or import one from a file with the two buttons beside Create backup.",
+        "Restore from the snapshot list, choosing data only, settings only, or both.",
+      ],
+      whatHappens:
+        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a storage breakdown of what is taking up disk space. Each snapshot can open its contents: counts, the newest change inside it, the version that made it, and every tile it holds, searchable and sortable, with a button to restore one tile on its own. One row per kind of kept data shows how much it holds and how long it is kept, jumps to its setting and can clean it up on the spot. The kinds are trash, copy history, copies from other apps, recordings, temporary exports and edit states.",
+      settings: [
+        "Interval, retention tiers, password, restore scope: Backup manager (its own window, opened from Settings)",
+      ],
+    },
+    {
+      section: "data",
+      title: "Import & export",
+      whatItIs: "Plain CSV, TXT or JSON export covers text alone; a full backup file covers everything.",
+      howTo: [
+        "Use Import or Export in Settings → Data.",
+        "Pick a format from the dropdown next to the Export button (JSON keeps the most); a CSV or JSON import shows a name and duplicate status per item first.",
+        "A full backup is restored from its own window.",
+        "Confirm to actually import, or cancel and nothing changes.",
+        "Import → \"From folder…\" in Settings turns a folder of .md or .txt files into tiles, one per file, after a preview with a checkbox per file.",
+      ],
+      whatHappens: "CSV and TXT round-trip text alone; JSON also carries the full rotation texts of a tile with rotation, tags, notes, hotkey, and color, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
+      settings: [
+        "Switch import and export on or off: Expert menu → System & data → Data & maintenance",
+        "Folder import depth and file limit: Expert menu → System & data → Data & maintenance",
+      ],
+    },
+    {
+      section: "data",
+      title: "Markdown folder sync",
+      whatItIs:
+        "Folder sync mirrors every text tile as its own readable Markdown file in a chosen folder.",
+      howTo: [
+        "Turn it on and pick a folder in the expert menu.",
+        "Edit a tile normally, or edit its Markdown file directly; both directions stay in sync.",
+      ],
+      whatHappens:
+        "The Markdown files are plain text: anyone with access to the folder can read them, so keep sensitive tiles out of a shared or cloud folder. A confidential tile is never written there, and a file never changes one. A tile with an attached file, image or PDF syncs as a reference to its path, so another computer needs the same path; a pasted screenshot stays in the database only. Views and folders named in a file are created here if missing, and a view renamed on another computer is renamed here too. The file name is the tile's fixed id: renaming a file by hand makes a second tile. Deleting a file does not delete its tile, which is written again on the next round. Deleting a tile removes its file and moves the tile to the trash on every other computer using the folder. If both sides changed, one wins and the losing text is kept as a version of the tile or as a conflict copy beside the file. Files this app did not write are never changed or deleted, and a file over 8 MB is skipped. Picking another folder asks whether to delete the old one; only files this app wrote are removed, and nothing at all if anything unknown is in it. An unreachable folder pauses the sync after a few failed rounds.",
+      settings: ["Markdown folder (beta), sync folder: Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "data",
+      title: "Trash & restoring tiles",
+      whatItIs: "A deleted tile moves to the trash first, not straight to permanent deletion.",
+      howTo: [
+        "Delete a tile as normal: it goes to the trash, and Undo brings it back.",
+        "Open the trash from the expert menu's data group.",
+        "Restore a tile from there, or let retention clear it automatically.",
+      ],
+      whatHappens:
+        "Retention is set in days; zero means keep forever. Restoring places the tile in the active view's first free cell, not necessarily its original view or cell. It does not bring back a floating button, folder membership or hotkey it had before deletion; those need setting up again.",
+      settings: ["Trash retention: Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "data",
+      title: "Undo button",
+      whatItIs: "Some actions outside the trash offer a one-step undo right on their confirmation message.",
+      howTo: [
+        "Delete a view, clear the copy history, delete a tag, or run a batch delete or tag change.",
+        "Click Undo on the message that appears.",
+      ],
+      whatHappens:
+        "Only the latest action can be undone; a newer one replaces it, and the button goes away with the message. With the undo time set to Off, deleting a view or merging tags asks first instead.",
+      settings: ["Undo button, how long the message stays: Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "data",
+      title: "Duplicate finder",
+      whatItIs: "The duplicate finder flags tiles that are textually very similar without deleting anything.",
+      howTo: [
+        "Click \"Find duplicates\" in the library.",
+        "Review each flagged pair side by side.",
+        "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
+      ],
+      whatHappens:
+        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A tile with rotation is only compared on its first text. The only way in is the \"Find duplicates\" button in the library; the expert menu only holds its on/off switch and the threshold.",
+      settings: ["Duplicate finder, similarity threshold: Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "data",
+      title: "Usage statistics",
+      whatItIs: "A small window with the number of prompts, the copies of the last 7 days, the most used and the never used prompts.",
+      howTo: [
+        "Switch on \"Show statistics\" in the expert menu under \"Data & maintenance\".",
+        "Open Settings and click \"Usage statistics\".",
+        "Pick how many prompts the most used list shows: 5, 10 or 20.",
+        "Click a never used prompt to find it in the library.",
+      ],
+      whatHappens:
+        "Everything stays on this computer. The export button saves the full numbers, including daily counts and tool use, as CSV, TXT or JSON.",
+      settings: [],
+    },
+    {
+      section: "data",
+      title: "Data maintenance",
+      whatItIs: "Data maintenance gathers housekeeping tools in the expert menu.",
+      howTo: [
+        "Open Expert menu → System & data → Data & maintenance.",
+        "From there, open the trash, export or import the settings alone, or open \"Recent messages\".",
+      ],
+      whatHappens:
+        "\"Recent messages\" keeps a short list of error messages that flashed by, with time and place; copy or clear the list from its window. The settings alone can be saved to a file and loaded again. Before a reset or a delete-everything, the app can take a backup first.",
+      settings: [
+        "Trash retention, recent messages, settings export and import, undo button: Expert menu → System & data → Data & maintenance",
+        "Take a backup before a reset or a delete-everything: Expert menu → System & data → Data & maintenance",
+        "How much the recent messages keep: Expert menu → System & data → Troubleshooting",
+      ],
+    },
   ],
   de: [
     {
@@ -766,11 +801,12 @@ export const HELP_CONTENT = {
       title: "Einstellungen",
       whatItIs: "Das Einstellungsfenster enthält die alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das sich im selben Fenster öffnet.",
       howTo: [
-        "Auf das Zahnrad in der Kopfzeile klicken, um es zu öffnen.",
-        "Sprache, Design sowie Textgröße und Schriftart der Kacheln wählen.",
-        "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt.",
-        "Eine portable Kopie beendet sich beim Schließen immer, statt in den Hintergrund zu gehen.",
-        "Die Liste aller Tastenkürzel öffnen.",
+        "Auf das Zahnrad in der oberen Leiste klicken, um es zu öffnen.",
+        "Aussehen: Design, Sprache, Größe der Oberfläche, Schriftart und Größe der Kacheln, Kurzinfos und die Favoriten-Ansicht.",
+        "Verhalten: immer im Vordergrund, beim Schließen im Hintergrund weiterlaufen, alle Tastenkürzel, mit Windows starten und im Hintergrund starten.",
+        "Daten: Import, Export, die Sicherungen und die Nutzungsstatistik.",
+        "System: das Info-Fenster, die Update-Suche und automatische Updates.",
+        "Eine portable Kopie beendet sich beim Schließen immer, statt im Hintergrund weiterzulaufen.",
       ],
       whatHappens:
         "Jede Änderung gilt sofort, ohne Speichern-Button. „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück. Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln; Löschen entfernt alle Daten und fragt vorher nach.",
@@ -817,7 +853,6 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "Die angehängte Datei, der Screenshot oder die Farbe wird zum Inhalt der Kachel; ein späteres Kopieren liefert diese Datei, dieses Bild oder diese Farbe, nie Text. Ein Anhang aus reinem Text, Markdown, JSON oder CSV zeigt seine ersten Zeilen direkt im Editor unter der Dateizeile, immer als reiner Text.",
       settings: ["Dateianhang, Kopie einer angehängten Datei behalten und mit der Kachel löschen, Textvorschau für Anhänge, Einfügen, Ziehen und Ablegen: Expertenmenü → Funktionen → Anhänge und Eingabe", "Screenshot-Tool: Expertenmenü → Aufnehmen → Screenshot", "Farbpipette: Expertenmenü → Aufnehmen → Farbpipette"],
-      tip: "Farbformat (Hex, RGB oder HSL) im Hinweis wählen, der direkt nach der Auswahl erscheint.",
     },
     {
       section: "basics",
@@ -828,7 +863,7 @@ export const HELP_CONTENT = {
         "Markdown-Vorschau, Syntax-Hervorhebung, Versionen oder private Notizen im Expertenmenü anpassen.",
       ],
       whatHappens:
-        "Die Versionen speichern jede Änderung, sodass eine frühere wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt „Formatiert kopieren“ im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. Ein Rechtsklick auf eine Version in der Liste behält sie als neue Kachel und lässt die aktuelle unverändert.",
+        "Die Versionen speichern jede Änderung: Wiederherstellen holt eine frühere zurück, und der Button daneben behält diese Fassung stattdessen als neue Kachel. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds und ändert nie den gespeicherten Inhalt. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gespeichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start ihn einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. „Formatiert kopieren“ legt zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder eine Mail-App die Formatierung zeigt. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen Hinweis, gespeichert wird trotzdem.",
       settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
@@ -841,7 +876,7 @@ export const HELP_CONTENT = {
         "„Nur geänderte“ einschalten, um nur das zu sehen, was an den Standardwerten angepasst wurde.",
       ],
       whatHappens:
-        "Eine standardmäßig deaktivierte Funktion trägt ein kleines Punkt-Badge an ihrer Beschriftung, mit einer erklärenden Kurzinfo. Zurücksetzen funktioniert auf drei Ebenen: das eigene Rückgängig-Symbol eines Werts, das Zurücksetzen-Symbol einer ganzen Gruppe in ihrer Kopfzeile, oder alles auf einmal über die allgemeine Zurücksetzen-Aktion. Die Suche findet auch Einstellungen außerhalb des Expertenmenüs, etwa im Einstellungsfenster oder im Fenster der Sicherungen, mit einem Hinweis, wo sie liegen; ein Klick öffnet diese Stelle.",
+        "Eine standardmäßig deaktivierte Funktion trägt ein kleines Punkt-Badge an ihrer Beschriftung, mit einer erklärenden Kurzinfo. Zurücksetzen funktioniert auf drei Ebenen: das eigene Rückgängig-Symbol eines Werts, das Zurücksetzen-Symbol einer ganzen Gruppe in ihrer Überschrift, oder alles auf einmal über die allgemeine Zurücksetzen-Aktion. Die Suche findet auch Einstellungen außerhalb des Expertenmenüs, etwa im Einstellungsfenster oder im Fenster der Sicherungen, mit einem Hinweis, wo sie liegen; ein Klick öffnet diese Stelle.",
       settings: [],
     },
     {
@@ -873,12 +908,19 @@ export const HELP_CONTENT = {
       whatItIs: "Kopieren ist der Ablauf zwischen dem Klick auf eine Kachel und dem Eintreffen ihres Texts in der Zwischenablage.",
       howTo: [
         "Einmaliger Klick auf eine Kachel kopiert sie.",
-        "Schneller zweiter Klick oder Enter fügt den Text zusätzlich ein, falls Auto-Paste aktiv ist.",
+        "Schneller zweiter Klick oder Enter fügt den Text zusätzlich ein, falls Auto-Einfügen aktiv ist.",
         "Strg-Ziehen einer Kachel auf ein anderes Fenster legt ihren Text direkt dort ab.",
       ],
       whatHappens:
-        "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang; die Textgröße dieser Blase hat im Expertenmenü drei Stufen (klein, mittel, groß). Verketten fasst mehrere nacheinander angeklickte Kacheln zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben. „Kette hier starten“ im Rechtsklickmenü einer Textkachel beginnt direkt eine Kette mit dieser Kachel. Eine Kette bleibt beim Wechsel in ein anderes Programm bestehen. Ein Tipp auf den Ketten-Button oben startet eine Kette, der nächste beendet sie. Auch Strg+V im App-Fenster beendet sie. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Rotation). Ist im Expertenmenü „Kette: bleibt nach dem Kopieren aktiv“ eingeschaltet, bleibt der Kettenmodus nach dem Kopieren an, um mehrere Ketten nacheinander zu bauen. Der Streifen kann außerdem einen Schritt rot markieren, wenn er einen Platzhalter braucht, den kein früherer Schritt füllt; die Kette läuft trotzdem.",
-      settings: ["Verketten und der Kettenstart im Kachelmenü: Expertenmenü → Funktionen → Kette", "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette", "Kettenmodus nach dem Kopieren eingeschaltet lassen: Expertenmenü → Funktionen → Kette", "Auto-Einfügen bei Doppelklick: Expertenmenü → Funktionen → Kopieren", "Eigene Tastenkürzel pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden: Expertenmenü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren"],
+        "Eine kurze Blase oder ein Aufblinken bestätigt das Kopieren. Verketten fasst mehrere nacheinander angeklickte Kacheln zu einem Eintrag in der Zwischenablage zusammen, statt dass jede die vorige überschreibt. Der Ketten-Button in der oberen Leiste startet eine Kette, der nächste Tipp beendet sie; „Kette hier starten“ im Rechtsklickmenü einer Textkachel beginnt eine mit dieser Kachel. Eine Kette bleibt beim Wechsel in eine andere App bestehen; Strg+V im App-Fenster beendet sie. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Ein roter Schritt braucht einen Platzhalter, den kein früherer Schritt füllt; die Kette läuft trotzdem. Verketten ist nicht Rotation: Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Rotation).",
+      settings: [
+        "Verketten und der Kettenstart im Kachelmenü: Expertenmenü → Funktionen → Kette",
+        "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette",
+        "Kettenmodus nach dem Kopieren eingeschaltet lassen: Expertenmenü → Funktionen → Kette",
+        "Auto-Einfügen bei Doppelklick: Expertenmenü → Funktionen → Kopieren",
+        "Eigene Tastenkürzel pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden, Größe der Kopierblase: Expertenmenü → Funktionen → Kopieren",
+        "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren",
+      ],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -932,7 +974,7 @@ export const HELP_CONTENT = {
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Desktop-Ordners hoch, wie „2/5“; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Symbol, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position. Im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam. Der Zählerstand übersteht Neustarts und vollständige Sicherungen. Ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger; übernommen werden nur die Textliste und ihr Reihenfolge- oder Misch-Modus, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
+        "Ein kleines Badge wie „2/5“ zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Desktop-Ordners hoch; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Symbol. Im Reihenfolge-Modus zeigt es die Position, im Misch-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Text einmal drankam. Der Zählerstand übersteht Neustarts und vollständige Sicherungen; ein CSV- oder TXT-Import startet die neue Kachel beim ersten Text. Wird die Rotation ausgeschaltet, bleiben alle Texte erhalten, genutzt wird nur der erste, bis sie wieder an ist. Mit „Beim Einfügen rotieren“ wechselt eine Kachel auch bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
       settings: ["Rotation, Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“."],
     },
     {
@@ -1001,7 +1043,7 @@ export const HELP_CONTENT = {
         "Erneut klicken, ESC drücken, oder speichern/schließen, um zu stoppen.",
       ],
       whatHappens:
-        "Die Spracheingabe nutzt immer die Online-Spracherkennung von Microsoft, deine Sprachaufnahme geht also während der Spracheingabe an Microsoft. Es startet erst, wenn du im Zustimmungsdialog der App einwilligst; dabei wird auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet. Das Ausschalten von „Online-Erkennung erlauben“ zieht diese Zustimmung zurück; die Spracheingabe fragt dann erneut. Gesprochene Satzzeichen-Wörter („Komma“, „neue Zeile“, …) werden zu echten Satzzeichen; „wörtlich“ vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen „Aufnahme läuft…“ in der Kurzinfo.",
+        "Die Spracheingabe nutzt die Online-Spracherkennung von Microsoft, deine Sprachaufnahme geht also an Microsoft, während du sprichst. Sie startet erst, wenn du im Zustimmungsdialog einwilligst; dabei wird auch die Online-Spracherkennung in Windows eingeschaltet. Das Ausschalten von „Online-Erkennung erlauben“ zieht diese Zustimmung zurück. Gesprochene Wörter wie „Komma“ oder „neue Zeile“ werden zu Satzzeichen; „wörtlich“ vor einem Wort tippt es stattdessen. Ein fehlendes Sprachpaket öffnet den Sprachpaket-Dialog. Ein optionales globales Tastenkürzel startet und stoppt die Spracheingabe, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht in die Eingabeleiste; währenddessen zeigt die Kurzinfo des Infobereich-Symbols „Aufnahme läuft…“.",
       settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globales Tastenkürzel: Expertenmenü → Funktionen → Spracheingabe"],
     },
     {
@@ -1075,14 +1117,18 @@ export const HELP_CONTENT = {
         "Ein Fenster anklicken, einen Bereich ziehen oder für den ganzen Bildschirm auf den freien Desktop klicken, in derselben Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
         "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße, zwei Ton-Stummschalt-Buttons sowie Pause/Fortsetzen, Stopp und Verwerfen.",
-        "Zwei optionale globale Hotkeys und das Tray-Menü können die Aufnahme ebenfalls stoppen oder pausieren, solange sie läuft.",
+        "Zwei optionale globale Tastenkürzel und das Infobereich-Menü können die Aufnahme ebenfalls stoppen oder pausieren, solange sie läuft.",
         "Eine Fensteraufnahme über alle Bildschirme oder den aktuellen Bildschirm bekommt einen Button, der das Ziel wechselt, ohne neu zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
         "Rechtsklick auf den Aufnahme-Button und „Aufnahmen verwalten…“ wählen, um ältere Aufnahmen zu exportieren oder zu löschen.",
       ],
       whatHappens:
-        "Aufgenommen wird immer MP4 (H.264). Drei Qualitätsstufen (Klein, Hoch, Verlustfrei) tauschen Dateigröße gegen Bildschärfe. Ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln: WebM und AVI entstehen aus dem MP4, GIF ist auf 30 Sekunden begrenzt und hat keinen Ton. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg, einen separaten Download, der direkt angeboten wird, wenn er fehlt. Eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide aufgenommen, je als eigene Spur. Die Mikrofonspur wird aufgezeichnet, aber erst hörbar, wenn man sie selbst im Video-Editor dazumischt. Zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Buttons in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner. Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden. Schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst, nicht ihre Buttons, bleibt sie frei beweglich stehen, auch auf einem anderen Monitor, und folgt für den Rest dieser Aufnahme nicht mehr dem Fenster. Die nächste Aufnahme folgt wieder, und die Leiste ist nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde, etwa nach einem Absturz oder erzwungenen Beenden, wird nach einer Schonfrist automatisch entfernt. Eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos. Ihr „Aufräumen…“-Button listet Dateien älter als 7, 30 oder 90 Tage samt frei werdender Größe zur Bestätigung auf, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt. Sie zeigt jede Taste, auch getippten Text. Ein Passwortfeld lässt sie aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, ESC, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten. Das passt für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: „Auswahl exportieren“ wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
-      settings: ["Bildschirmaufnahme, Countdown, Bitrate, Qualität, Format, Aufnahme-Ordner: Expertenmenü → Aufnehmen → Bildschirmaufnahme", "Mauszeiger, Tonquellen und -gerät, Stopp-/Pause-Tastenkürzel, Tray-Einträge, Tastenanzeige, Rahmen um einen aufgenommenen Bereich und seine Farbe: Expertenmenü → Aufnehmen → Während der Aufnahme", "Defekte Aufnahmen automatisch entfernen, jetzt aufräumen: Expertenmenü → System & Daten → Fehlersuche"],
+        "Aufgenommen wird immer MP4 (H.264); die Qualitätsstufen Klein, Hoch und Verlustfrei tauschen Dateigröße gegen Bildschärfe. Ein Format-Feld kann das Ergebnis danach in WebM, AVI oder GIF umwandeln; GIF ist auf 30 Sekunden begrenzt und hat keinen Ton. Jedes Format außer MP4 sowie Verlustfrei braucht ffmpeg, das der Installer mitbringt; fehlt es, bietet die App den Download an. Eine fehlgeschlagene oder abgebrochene Umwandlung behält die Originalaufnahme. Systemton und Mikrofon landen in getrennten Spuren; die Mikrofonspur bleibt stumm, bis du sie im Video-Editor dazunimmst. Die beiden Ton-Buttons der Leiste schalten eine Quelle sofort stumm und wieder zu; ein abgezogenes Mikrofon beendet nur seine eigene Spur. Speichern und Kopieren nutzen den Aufnahmeordner; Bearbeiten öffnet den Clip im Video-Editor, und wer den Dialog danach ohne Speichern oder Kopieren schließt, verwirft ihn trotzdem. Die Leiste lässt sich überallhin ziehen, folgt dann für diese Aufnahme nicht mehr dem Fenster und ist nie Teil des Videos. Schließt sich das aufgenommene Fenster, stoppt die Aufnahme und behält, was sie hat. Eine nach einem Absturz oder erzwungenen Beenden liegengebliebene Aufnahme wird nach einer Schonfrist entfernt. Die Zeile des Aufnahmeordners im Expertenmenü zeigt Anzahl und Größe der Videos. „Aufräumen…“ listet Dateien älter als 7, 30 oder 90 Tage und löscht erst nach deiner Bestätigung; „Auswahl exportieren“ wandelt die angehakten Dateien in einem Rutsch um. Standardmäßig werden nicht verwendete Aufnahmen nach 90 Tagen gelöscht (0 behält sie für immer). Die optionale Tastenanzeige zeichnet Tastennamen und Zeiten auf, auch getippte Buchstaben, und lässt ein Passwortfeld nur aus, wenn Windows es meldet. Für Aufnahmen mit vertraulichen Eingaben „Nur Tastenkürzel“ einschalten.",
+      settings: [
+        "Bildschirmaufnahme, Countdown, Bitrate, Qualität, Format, Aufnahmeordner: Expertenmenü → Aufnehmen → Bildschirmaufnahme",
+        "Mauszeiger, Tonquellen und -gerät, Stopp-/Pause-Tastenkürzel, Einträge im Infobereich-Menü, Tastenanzeige, Rahmen um einen aufgenommenen Bereich und seine Farbe: Expertenmenü → Aufnehmen → Während der Aufnahme",
+        "Defekte Aufnahmen automatisch entfernen, jetzt aufräumen: Expertenmenü → System & Daten → Fehlersuche",
+      ],
     },
     {
       section: "capture",
@@ -1123,7 +1169,7 @@ export const HELP_CONTENT = {
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
       whatHappens:
-        "Die Erkennung läuft vollständig auf dem Gerät über die eigene Erkennungs-Engine von Windows. Der Ergebnisdialog kann den Text automatisch kopieren und getrennte Zeilen wieder zu Absätzen verbinden; beides lässt sich separat ein- und ausschalten. Fehlt ein Sprachpaket, öffnet sich derselbe Dialog wie bei der Spracheingabe; siehe „Sprachpakete“ unten.",
+        "Die Erkennung läuft vollständig auf dem Gerät über die eigene Erkennungs-Engine von Windows. Der Ergebnisdialog kann den Text automatisch kopieren und getrennte Zeilen wieder zu Absätzen verbinden; beides lässt sich separat ein- und ausschalten. Fehlt ein Sprachpaket, öffnet sich derselbe Dialog wie bei der Spracheingabe; siehe „Sprachpakete“.",
       settings: ["Texterkennung, Ergebnis automatisch kopieren, Zeilen verbinden, Erkennungssprache: Expertenmenü → Aufnehmen → Texterkennung"],
     },
     {
@@ -1182,20 +1228,21 @@ export const HELP_CONTENT = {
       section: "tiles",
       title: "Kurzinfos",
       whatItIs: "Das Überfahren einer Kachel mit der Maus zeigt ihren vollständigen Text, ihre Länge und eine eventuelle private Notiz.",
-      howTo: [
-        "Über eine Kachel fahren und die Verzögerung abwarten.",
-        "Verzögerung oder Breite im Expertenmenü anpassen, falls der Standard nicht passt.",
-      ],
+      howTo: ["Über eine Kachel fahren und die Verzögerung abwarten.", "Die Verzögerung im Expertenmenü anpassen, falls der Standard nicht passt."],
       whatHappens: "Die Kurzinfo blendet sich nach ihrem Timeout automatisch aus, selbst wenn die Maus stehen bleibt.",
       settings: ["Verzögerung vor Anzeige: Expertenmenü → Kacheln → Kurzinfos"],
     },
     {
       section: "appearance",
       title: "Aussehen & Designs",
-      whatItIs: "Acht integrierte Designs decken System, Hell, Dunkel und fünf Akzent-Varianten ab.",
+      whatItIs: "Sieben integrierte Designs decken System, Hell, Dunkel und vier Akzent-Varianten ab: Programmierer, Neon-Violett, Ozean und Cyberpunk.",
       howTo: ["Ein Design in den Einstellungen wählen.", "Den Design-Editor, sobald aktiviert, öffnen, um Farben eines Designs anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Design wird separat gespeichert; das integrierte, auf dem es basierte, bleibt unangetastet.",
-      settings: ["Design-Wahl: Einstellungen", "Design-Editor: Expertenmenü → Aussehen → Visuell", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte Scrollbalken: Expertenmenü → Aussehen → Visuell"],
+      settings: [
+        "Design-Wahl: Einstellungen",
+        "Design-Editor: Expertenmenü → Aussehen → Visuell",
+        "Milchige Dialoge, versteckte Scrollbalken: Expertenmenü → Aussehen → Visuell",
+      ],
       tip: "Ausgeschaltete benutzerdefinierte Designs entfernen auch den Eintrag „Eigenes Design…“ aus der Design-Auswahl.",
     },
     {
@@ -1232,8 +1279,15 @@ export const HELP_CONTENT = {
         "Der Knopf „Kacheln“ neben dem Sortieren wechselt zu großen Vorschaukacheln.",
         "Zwei Zeilen auswählen und in der Auswahlleiste „Vergleichen“ klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
-      whatHappens: "Die Suche ist fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
-      settings: ["Unscharfe Suche, Typfilter, letzte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
+      whatHappens:
+        "Die Suche ist fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste. Eine optionale Einstellung liest Text aus angehängten Bildern, damit die Suche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“. Dieser Text wird nie angezeigt, exportiert oder synchronisiert, und seine Länge ist begrenzt. Wird das Bild entfernt oder ersetzt, ist er sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb.",
+      settings: [
+        "Unscharfe Suche, Typfilter, letzte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche",
+        "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche",
+        "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche",
+        "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige",
+        "Text in angehängten Bildern für die Suche erfassen: Expertenmenü → Bibliothek & Kopierverlauf → Suche",
+      ],
     },
     {
       section: "library",
@@ -1284,25 +1338,34 @@ export const HELP_CONTENT = {
         "Bibliothek → Kopierverlauf öffnen, den Herkunftsfilter auf „Anderswo“ stellen und nützliche Einträge als Kacheln speichern.",
       ],
       whatHappens:
-        "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit „Vermutete Passwörter überspringen“ landet eine Kopie, die wie ein Passwort aussieht, nie im Eingang. Als Passwort gilt eine Zeile ohne Leerzeichen mit gemischten Buchstaben, Ziffern und Zeichen; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
+        "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit „Vermutete Passwörter überspringen“ landet eine Kopie, die wie ein Passwort aussieht, nie unter den Kopien aus anderen Apps. Als Passwort gilt eine Zeile ohne Leerzeichen mit gemischten Buchstaben, Ziffern und Zeichen; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren der Kopien aus anderen Apps bietet die Meldung einen Rückgängig-Button.",
       settings: ["Vermutete Passwörter überspringen, Mindestlänge, Obergrenze: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf"],
     },
     {
       section: "system",
       title: "System",
-      whatItIs: "System-Einstellungen betreffen App-weites Verhalten, das nicht eine einzelne Kachel betrifft.",
-      howTo: ["Die System-Gruppe des Expertenmenüs für Update-Checks, Tastaturnavigation, mehrere Instanzen und den Daten-Ordner öffnen."],
+      whatItIs: "System-Einstellungen betreffen das Verhalten der ganzen App, nicht einer einzelnen Kachel.",
+      howTo: ["Die System-Gruppe des Expertenmenüs für Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol und den Download der Video-Werkzeuge öffnen."],
       whatHappens:
-        "Update-Checks installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt. Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner. Eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
-      settings: ["Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System", "Mehrere Instanzen erlauben, Sperre des Daten-Ordners: Expertenmenü → System & Daten → Fehlersuche"],
+        "Die Update-Suche unter Einstellungen → System installiert nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners verschiebt die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen braucht einen Neustart. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
+      settings: [
+        "Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System",
+        "Mehrere Instanzen erlauben: Expertenmenü → System & Daten → Fehlersuche",
+      ],
     },
     {
       section: "system",
       title: "Werkzeugleiste",
-      whatItIs: "Die Werkzeugleiste bestimmt, welche Buttons der Kopfbereich und die Composer-Leiste zeigen.",
-      howTo: ["Rechtsklick auf den Kopfbereich blendet seine Buttons ein oder aus; die Funktionen selbst schaltet das Expertenmenü.", "Obere Leiste oder Eingabeleiste ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile."],
-      whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus; die dahinterliegende Funktion funktioniert weiterhin über ihr eigenes Tastenkürzel oder Menüeintrag.",
-      settings: ["Bibliotheksknopf und Doppelklick auf die Leisten-Buttons: Expertenmenü → System & Daten → Werkzeugleiste; Logo, Titel und Leisten-Buttons: Rechtsklick auf die Kopfzeile.", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
+      whatItIs: "Die Werkzeugleiste bestimmt, welche Buttons die obere Leiste und die Eingabeleiste zeigen.",
+      howTo: [
+        "Rechtsklick auf die obere Leiste blendet ihre Buttons ein oder aus; die Funktionen selbst schaltet das Expertenmenü.",
+        "Obere Leiste oder Eingabeleiste ausblenden: Rechtsklick auf das Zahnrad oder die obere Leiste.",
+      ],
+      whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus; die Funktion dahinter läuft weiter über ihr eigenes Tastenkürzel oder ihren Menüeintrag.",
+      settings: [
+        "Bibliotheksknopf und Doppelklick auf die Leisten-Buttons: Expertenmenü → System & Daten → Werkzeugleiste; Logo, Titel und Leisten-Buttons: Rechtsklick auf die obere Leiste.",
+        "Schnelle Rastergrößen-Steuerung und sie erst beim Überfahren zeigen, mehrere Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster",
+      ],
     },
     {
       section: "system",
@@ -1312,8 +1375,11 @@ export const HELP_CONTENT = {
         "Bei Bedarf Unschärfe für Medien im Expertenmenü aktivieren.",
       ],
       whatHappens:
-        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet. Ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Prompts“ weiter unten.",
-      settings: ["Von Bildschirmaufnahmen ausschließen, Medien unscharf machen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
+        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahme-Apps unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Kacheln“.",
+      settings: [
+        "Von Bildschirmaufnahmen ausschließen, Medien unscharf machen: Expertenmenü → System & Daten → Datenschutz",
+        "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz",
+      ],
     },
     {
       section: "system",
@@ -1341,125 +1407,8 @@ export const HELP_CONTENT = {
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:
-        "Beim ersten Start fragt das Programm, ob es nach Updates suchen darf; bis zur Antwort geht es nie online. Die Update-Prüfung und, falls diese Laufzeit fehlt, ein Download des Microsoft-WebView2-Installers beim ersten Start sind der einzige Netzwerkverkehr, den die App von sich aus startet. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Alles andere wartet auf dich. ffmpeg, für Videoexport und -umwandlung, bringt eine installierte Version mit und greift dafür nie auf das Netzwerk zu. Eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es braucht, nie automatisch und nie im Hintergrund. Die Spracheingabe schickt Ton an die Online-Spracherkennung von Microsoft, erst nach deiner Zustimmung. Ein Sprachpaket für Texterkennung oder Spracheingabe kommt über Windows Update, nur wenn du die Installation startest. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Updates suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
+        "Beim ersten Start fragt die App, ob es nach Updates suchen darf; bis zur Antwort geht es nie online. Die Update-Prüfung und, falls diese Laufzeit fehlt, ein Download des Microsoft-WebView2-Installers beim ersten Start sind der einzige Netzwerkverkehr, den die App von sich aus startet. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Alles andere wartet auf dich. ffmpeg, für Videoexport und -umwandlung, bringt eine installierte Version mit und greift dafür nie auf das Netzwerk zu. Eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es braucht, nie automatisch und nie im Hintergrund. Die Spracheingabe schickt Ton an die Online-Spracherkennung von Microsoft, erst nach deiner Zustimmung. Ein Sprachpaket für Texterkennung oder Spracheingabe kommt über Windows Update, nur wenn du die Installation startest. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Updates suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
       settings: ["Automatische Updates und wie oft sie prüfen: Einstellungen"],
-    },
-    {
-      section: "system",
-      title: "Wo die Daten liegen",
-      whatItIs:
-        "Alles liegt in einer einzigen lokalen SQLite-Datenbank plus ihrer kleinen Begleitdatei.",
-      howTo: [
-        "Installiert: der Daten-Ordner liegt unter AppData, im Expertenmenü einsehbar und änderbar.",
-        "Portabel: der Daten-Ordner liegt direkt neben der exe, sodass alles auf einen USB-Stick passt.",
-      ],
-      whatHappens: "Ein Wechsel von portabel zu installiert, oder zurück, wird automatisch erkannt und als einmalige Migration angeboten: bestehende Daten werden nie stillschweigend zurückgelassen.",
-      settings: ["Daten-Ordner: Expertenmenü → System & Daten → System"],
-    },
-    {
-      section: "system",
-      title: "Sicherungen",
-      whatItIs: "Das Fenster „Sicherungen“ erstellt verschlüsselte, komprimierte Snapshots der gesamten Bibliothek und Einstellungen.",
-      howTo: [
-        "„Sicherungen“ in den Einstellungen öffnen.",
-        "Automatische Sicherungen aktivieren und ein Intervall wählen, oder manuell eine erstellen.",
-        "Mit den zwei Buttons neben „Sicherung erstellen“ eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei importieren.",
-        "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
-      ],
-      whatHappens:
-        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Eine Sicherung ist entweder vollständig oder gar nicht vorhanden; eine fehlgeschlagene hinterlässt nichts. Dasselbe Fenster enthält außerdem einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel. Die Liste ist durchsuchbar und sortierbar, und ein Button stellt eine einzelne Kachel wieder her. Je eine Zeile pro Art aufbewahrter Daten zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen. Die Arten sind Papierkorb, Kopierverlauf, Kopien aus anderen Apps, Aufnahmen, temporäre Exporte und Bearbeitungsstände.",
-      settings: [
-        "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Sicherungen (eigenes Fenster, geöffnet aus Einstellungen)",
-      ],
-    },
-    {
-      section: "system",
-      title: "Nutzungsstatistik",
-      whatItIs: "Ein kleines Fenster mit der Zahl der Prompts, den Kopien der letzten 7 Tage, den meistgenutzten und den nie genutzten Prompts.",
-      howTo: [
-        "Im Expertenmenü unter „Daten & Wartung“ „Statistik anzeigen“ einschalten.",
-        "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",
-        "Wählen, wie viele Prompts die Liste der meistgenutzten zeigt: 5, 10 oder 20.",
-        "Einen nie genutzten Prompt anklicken, um ihn in der Bibliothek zu finden.",
-      ],
-      whatHappens:
-        "Alles bleibt auf diesem Rechner. Der Export-Button speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV, TXT oder JSON.",
-      settings: [],
-    },
-    {
-      section: "system",
-      title: "Import & Export",
-      whatItIs: "Einfacher CSV-, TXT- oder JSON-Export deckt nur den Text ab; eine vollständige Sicherungsdatei deckt alles ab.",
-      howTo: [
-        "Aus der Daten-Gruppe des Expertenmenüs exportieren oder importieren.",
-        "Ein Format aus der Auswahl neben dem Export-Button wählen (JSON behält am meisten); ein CSV- oder JSON-Import zeigt zuerst Name und Duplikat-Status je Eintrag.",
-        "Eine vollständige Sicherung stellt direkt wieder her, aus seinem eigenen Fenster.",
-        "Zum tatsächlichen Import bestätigen, oder abbrechen, wodurch sich nichts ändert.",
-        "„Importieren“ → „Aus Ordner…“ in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei.",
-        "Vorher zeigt eine Vorschau jede Datei mit einem Häkchen.",
-      ],
-      whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die vollen Rotationstexte einer Kachel mit Rotation, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Sicherungsformat. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
-      settings: ["Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Tiefe und Dateigrenze des Ordner-Imports: Expertenmenü → System & Daten → Daten & Wartung"],
-    },
-    {
-      section: "system",
-      title: "Markdown-Ordner-Sync",
-      whatItIs:
-        "Der Ordner-Sync spiegelt jede Text-Kachel als eigene lesbare Markdown-Datei in einem gewählten Ordner.",
-      howTo: [
-        "Im Expertenmenü einschalten und einen Ordner wählen.",
-        "Eine Kachel normal bearbeiten, oder ihre Markdown-Datei direkt bearbeiten; beide Richtungen bleiben synchron.",
-      ],
-      whatHappens:
-        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst. Der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich; eine auf einem anderen Rechner umbenannte Ansicht wird hier mit umbenannt. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben). Wer die Kachel in der App löscht, löscht auch ihre Datei, und auf jedem anderen Rechner mit demselben Ordner wandert die Kachel in den Papierkorb. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt als Version der Kachel erhalten. Umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
-      settings: ["Markdown-Ordner (Beta), Sync-Ordner: Expertenmenü → System & Daten → Daten & Wartung"],
-    },
-    {
-      section: "system",
-      title: "Datenwartung",
-      whatItIs: "Die Datenwartung bündelt Wartungswerkzeuge aus der Daten-Gruppe des Expertenmenüs.",
-      howTo: ["Im Expertenmenü unter System & Daten die Gruppe Daten & Wartung öffnen.", "Von dort den Papierkorb öffnen, importieren oder exportieren.", "Der Duplikat-Finder hat seinen eigenen Button „Duplikate finden“ in der Bibliothek."],
-      whatHappens:
-        "Eine gelöschte Kachel liegt zunächst im Papierkorb mit eigener Aufbewahrungsdauer, bevor sie endgültig verschwindet. Der Duplikat-Finder markiert nur textlich fast identische Kacheln; er löscht von sich aus nichts. „Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei speichern und wieder laden.",
-      settings: ["Duplikat-Finder, Papierkorb-Aufbewahrung, Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Vor einem Zurücksetzen oder Alles-Löschen eine Sicherung anlegen: Expertenmenü → System & Daten → Daten & Wartung", "Letzte Meldungen und wie viel davon bleibt, Einstellungen exportieren und importieren, Rückgängig-Button: Expertenmenü → System & Daten → Daten & Wartung"],
-    },
-    {
-      section: "system",
-      title: "Papierkorb & Kacheln wiederherstellen",
-      whatItIs: "Eine gelöschte Kachel wandert zuerst in den Papierkorb, nicht direkt in die endgültige Löschung.",
-      howTo: [
-        "Eine Kachel wie gewohnt löschen: sie landet im Papierkorb, Rückgängig holt sie zurück.",
-        "Den Papierkorb aus der Daten-Gruppe des Expertenmenüs öffnen.",
-        "Eine Kachel dort wiederherstellen oder sie durch die Aufbewahrungsdauer automatisch löschen lassen.",
-      ],
-      whatHappens:
-        "Die Aufbewahrungsdauer wird in Tagen festgelegt; null bedeutet für immer behalten. Das Wiederherstellen setzt die Kachel in die erste freie Zelle der aktiven Ansicht, nicht zwingend in die ursprüngliche Ansicht oder Zelle. Schwebender Button, Ordner-Mitgliedschaft und Hotkey von vorher kommen nicht zurück; die müssen neu eingerichtet werden.",
-      settings: ["Papierkorb-Aufbewahrung: Expertenmenü → System & Daten → Daten & Wartung"],
-    },
-    {
-      section: "system",
-      title: "Rückgängig-Button",
-      whatItIs: "Einige Aktionen außerhalb des Papierkorbs bieten direkt in ihrer Bestätigungsmeldung ein einstufiges Rückgängig.",
-      howTo: [
-        "Eine Ansicht löschen, den Kopierverlauf leeren, einen Tag löschen oder mehrere Einträge auf einmal löschen oder taggen.",
-        "In der erscheinenden Meldung auf Rückgängig klicken.",
-      ],
-      whatHappens:
-        "Nur die letzte Aktion lässt sich zurücknehmen; eine neuere ersetzt sie, und der Button verschwindet mit der Meldung. Steht die Rückgängig-Zeit auf Aus, fragen das Löschen einer Ansicht und das Zusammenführen von Tags vorher nach.",
-      settings: ["Rückgängig-Button, wie lange die Meldung bleibt: Expertenmenü → System & Daten → Daten & Wartung"],
-    },
-    {
-      section: "system",
-      title: "Duplikat-Finder",
-      whatItIs: "Der Duplikat-Finder markiert textlich sehr ähnliche Kacheln, ohne selbst etwas zu löschen.",
-      howTo: [
-        "In der Bibliothek auf „Duplikate finden“ klicken.",
-        "Jedes markierte Paar Seite an Seite prüfen.",
-        "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
-      ],
-      whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen. Der einzige Zugang ist der Button „Duplikate finden“ in der Bibliothek; das Expertenmenü enthält nur den Schalter und die Schwelle.",
-      settings: ["Duplikat-Finder, Ähnlichkeitsschwelle: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
       section: "system",
@@ -1477,16 +1426,145 @@ export const HELP_CONTENT = {
     },
     {
       section: "system",
-      title: "Vorführung",
-      whatItIs: "Die Vorführung schaltet das ganze Fenster auf eine Beispiel-Bibliothek um, damit eine Vorführung oder ein Screenshot nie etwas Echtes zeigt.",
+      title: "Vorführmodus",
+      whatItIs:
+        "Der Vorführmodus schaltet das ganze Fenster auf eine Beispiel-Bibliothek um, damit eine Vorführung oder ein Screenshot nie etwas Echtes zeigt.",
       howTo: [
-        "Die Vorführung im Expertenmenü einschalten; die App startet neu in die Beispiel-Bibliothek.",
+        "Den Vorführmodus im Expertenmenü einschalten; die App startet neu in die Beispiel-Bibliothek.",
         "Alles zeigen oder ausprobieren; eine Markierung bleibt die ganze Zeit sichtbar.",
         "Zum Zurückkehren ausschalten; die App fragt zuerst nach und startet neu in die eigenen Daten.",
       ],
       whatHappens:
-        "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab. Sie enthält Kacheln mit und ohne Bild, eine Kachel mit Rotation, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was während der Vorführung geändert wurde, wird beim Beenden verworfen.",
-      settings: ["Vorführung: Expertenmenü → System & Daten → Fehlersuche"],
+        "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab. Sie enthält Kacheln mit und ohne Bild, eine Kachel mit Rotation, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was im Vorführmodus geändert wurde, wird beim Beenden verworfen.",
+      settings: ["Vorführmodus: Expertenmenü → System & Daten → Fehlersuche"],
+    },
+    {
+      section: "data",
+      title: "Wo die Daten liegen",
+      whatItIs:
+        "Alles liegt in einer einzigen lokalen SQLite-Datenbank plus ihrer kleinen Begleitdatei.",
+      howTo: [
+        "Installiert: der Daten-Ordner liegt unter AppData, im Expertenmenü einsehbar und änderbar.",
+        "Portabel: der Daten-Ordner liegt direkt neben der exe, sodass alles auf einen USB-Stick passt.",
+      ],
+      whatHappens:
+        "Ein Wechsel von portabel zu installiert, oder zurück, wird automatisch erkannt und als einmalige Migration angeboten: bestehende Daten werden nie stillschweigend zurückgelassen. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung, und eine kleine Sperrdatei hält dann fest, welcher PC die Datenbank nutzt. Ein anderer PC, der eine frische Sperre findet, öffnet alles nur lesend und zeigt das in einem Banner; eine Sperre, die länger niemand erneuert hat, wird übernommen.",
+      settings: ["Daten-Ordner: Expertenmenü → System & Daten → System", "Sperre des Daten-Ordners: Expertenmenü → System & Daten → Fehlersuche"],
+    },
+    {
+      section: "data",
+      title: "Sicherungen",
+      whatItIs: "Das Fenster „Sicherungen“ erstellt verschlüsselte, komprimierte Snapshots der gesamten Bibliothek und Einstellungen.",
+      howTo: [
+        "„Sicherungen“ in den Einstellungen öffnen.",
+        "Automatische Sicherungen aktivieren und ein Intervall wählen, oder manuell eine erstellen.",
+        "Mit den zwei Buttons neben „Sicherung erstellen“ eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei importieren.",
+        "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
+      ],
+      whatHappens:
+        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Eine Sicherung ist entweder vollständig oder gar nicht vorhanden; eine fehlgeschlagene hinterlässt nichts. Dasselbe Fenster enthält außerdem einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel. Die Liste ist durchsuchbar und sortierbar, und ein Button stellt eine einzelne Kachel wieder her. Je eine Zeile pro Art aufbewahrter Daten zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen. Die Arten sind Papierkorb, Kopierverlauf, Kopien aus anderen Apps, Aufnahmen, temporäre Exporte und Bearbeitungsstände.",
+      settings: [
+        "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Sicherungen (eigenes Fenster, geöffnet aus Einstellungen)",
+      ],
+    },
+    {
+      section: "data",
+      title: "Import & Export",
+      whatItIs: "Einfacher CSV-, TXT- oder JSON-Export deckt nur den Text ab; eine vollständige Sicherungsdatei deckt alles ab.",
+      howTo: [
+        "In den Einstellungen unter Daten auf Importieren oder Exportieren klicken.",
+        "Ein Format aus der Auswahl neben dem Export-Button wählen (JSON behält am meisten); ein CSV- oder JSON-Import zeigt zuerst Name und Duplikat-Status je Eintrag.",
+        "Eine vollständige Sicherung wird in ihrem eigenen Fenster wiederhergestellt.",
+        "Zum tatsächlichen Import bestätigen, oder abbrechen, wodurch sich nichts ändert.",
+        "„Importieren“ → „Aus Ordner…“ in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei.",
+        "Vorher zeigt eine Vorschau jede Datei mit einem Häkchen.",
+      ],
+      whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die vollen Rotationstexte einer Kachel mit Rotation, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Sicherungsformat. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
+      settings: [
+        "Import und Export ein- oder ausschalten: Expertenmenü → System & Daten → Daten & Wartung",
+        "Tiefe und Dateigrenze des Ordner-Imports: Expertenmenü → System & Daten → Daten & Wartung",
+      ],
+    },
+    {
+      section: "data",
+      title: "Markdown-Ordner-Sync",
+      whatItIs:
+        "Der Ordner-Sync spiegelt jede Text-Kachel als eigene lesbare Markdown-Datei in einem gewählten Ordner.",
+      howTo: [
+        "Im Expertenmenü einschalten und einen Ordner wählen.",
+        "Eine Kachel normal bearbeiten, oder ihre Markdown-Datei direkt bearbeiten; beide Richtungen bleiben synchron.",
+      ],
+      whatHappens:
+        "Die Markdown-Dateien sind Klartext: wer Zugriff auf den Ordner hat, kann sie lesen, also gehören sensible Kacheln nicht in einen geteilten oder Cloud-Ordner. Eine vertrauliche Kachel wird nie dorthin geschrieben, und eine Datei ändert nie eine. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis auf ihren Pfad synchronisiert, ein anderer PC braucht also denselben Pfad; ein eingefügter Screenshot bleibt nur in der Datenbank. In einer Datei genannte Ansichten und Ordner werden hier angelegt, falls sie fehlen, und eine auf einem anderen PC umbenannte Ansicht wird hier mit umbenannt. Der Dateiname ist die feste Kennung der Kachel: eine von Hand umbenannte Datei ergibt eine zweite Kachel. Eine gelöschte Datei löscht ihre Kachel nicht, sie wird im nächsten Durchlauf neu geschrieben. Eine gelöschte Kachel nimmt ihre Datei mit und landet auf jedem anderen PC mit demselben Ordner im Papierkorb. Wurden beide Seiten geändert, gewinnt eine, und der unterlegene Text bleibt als Version der Kachel oder als Konfliktkopie neben der Datei erhalten. Dateien, die diese App nicht geschrieben hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird übersprungen. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; entfernt wird nur, was diese App geschrieben hat, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert den Sync nach einigen Fehlversuchen.",
+      settings: ["Markdown-Ordner (Beta), Sync-Ordner: Expertenmenü → System & Daten → Daten & Wartung"],
+    },
+    {
+      section: "data",
+      title: "Papierkorb & Kacheln wiederherstellen",
+      whatItIs: "Eine gelöschte Kachel wandert zuerst in den Papierkorb, nicht direkt in die endgültige Löschung.",
+      howTo: [
+        "Eine Kachel wie gewohnt löschen: sie landet im Papierkorb, Rückgängig holt sie zurück.",
+        "Den Papierkorb aus der Daten-Gruppe des Expertenmenüs öffnen.",
+        "Eine Kachel dort wiederherstellen oder sie durch die Aufbewahrungsdauer automatisch löschen lassen.",
+      ],
+      whatHappens:
+        "Die Aufbewahrungsdauer wird in Tagen festgelegt; null bedeutet für immer behalten. Das Wiederherstellen setzt die Kachel in die erste freie Zelle der aktiven Ansicht, nicht zwingend in die ursprüngliche Ansicht oder Zelle. Schwebender Button, Ordner-Mitgliedschaft und Hotkey von vorher kommen nicht zurück; die müssen neu eingerichtet werden.",
+      settings: ["Papierkorb-Aufbewahrung: Expertenmenü → System & Daten → Daten & Wartung"],
+    },
+    {
+      section: "data",
+      title: "Rückgängig-Button",
+      whatItIs: "Einige Aktionen außerhalb des Papierkorbs bieten direkt in ihrer Bestätigungsmeldung ein einstufiges Rückgängig.",
+      howTo: [
+        "Eine Ansicht löschen, den Kopierverlauf leeren, einen Tag löschen oder mehrere Einträge auf einmal löschen oder taggen.",
+        "In der erscheinenden Meldung auf Rückgängig klicken.",
+      ],
+      whatHappens:
+        "Nur die letzte Aktion lässt sich zurücknehmen; eine neuere ersetzt sie, und der Button verschwindet mit der Meldung. Steht die Rückgängig-Zeit auf Aus, fragen das Löschen einer Ansicht und das Zusammenführen von Tags vorher nach.",
+      settings: ["Rückgängig-Button, wie lange die Meldung bleibt: Expertenmenü → System & Daten → Daten & Wartung"],
+    },
+    {
+      section: "data",
+      title: "Duplikat-Finder",
+      whatItIs: "Der Duplikat-Finder markiert textlich sehr ähnliche Kacheln, ohne selbst etwas zu löschen.",
+      howTo: [
+        "In der Bibliothek auf „Duplikate finden“ klicken.",
+        "Jedes markierte Paar Seite an Seite prüfen.",
+        "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
+      ],
+      whatHappens:
+        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen. Der einzige Zugang ist der Button „Duplikate finden“ in der Bibliothek; das Expertenmenü enthält nur den Schalter und die Schwelle.",
+      settings: ["Duplikat-Finder, Ähnlichkeitsschwelle: Expertenmenü → System & Daten → Daten & Wartung"],
+    },
+    {
+      section: "data",
+      title: "Nutzungsstatistik",
+      whatItIs: "Ein kleines Fenster mit der Zahl der Prompts, den Kopien der letzten 7 Tage, den meistgenutzten und den nie genutzten Prompts.",
+      howTo: [
+        "Im Expertenmenü unter „Daten & Wartung“ „Statistik anzeigen“ einschalten.",
+        "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",
+        "Wählen, wie viele Prompts die Liste der meistgenutzten zeigt: 5, 10 oder 20.",
+        "Einen nie genutzten Prompt anklicken, um ihn in der Bibliothek zu finden.",
+      ],
+      whatHappens:
+        "Alles bleibt auf diesem PC. Der Export-Button speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV, TXT oder JSON.",
+      settings: [],
+    },
+    {
+      section: "data",
+      title: "Datenwartung",
+      whatItIs: "Die Datenwartung bündelt Wartungswerkzeuge im Expertenmenü.",
+      howTo: [
+        "Im Expertenmenü unter System & Daten die Gruppe Daten & Wartung öffnen.",
+        "Von dort den Papierkorb öffnen, nur die Einstellungen exportieren oder importieren, oder „Letzte Meldungen“ öffnen.",
+      ],
+      whatHappens:
+        "„Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren oder leeren. Die Einstellungen allein lassen sich in eine Datei speichern und wieder laden. Vor einem Zurücksetzen oder Alles-Löschen kann die App zuerst eine Sicherung anlegen.",
+      settings: [
+        "Papierkorb-Aufbewahrung, letzte Meldungen, Einstellungen exportieren und importieren, Rückgängig-Button: Expertenmenü → System & Daten → Daten & Wartung",
+        "Vor einem Zurücksetzen oder Alles-Löschen eine Sicherung anlegen: Expertenmenü → System & Daten → Daten & Wartung",
+        "Wie viel die letzten Meldungen behalten: Expertenmenü → System & Daten → Fehlersuche",
+      ],
     },
   ],
 };

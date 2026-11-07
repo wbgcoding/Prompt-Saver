@@ -19,8 +19,8 @@ export function helpCategories() {
 // non-basic areas reuse the expert-menu tab names, so a setting and its help sit
 // under the same word in all 11 languages even though the article content itself
 // stays EN/DE-only.
-export const HELP_SECTIONS = ["basics", "features", "capture", "tiles", "appearance", "library", "system"];
-const HELP_SECTION_LABELS = { basics: "helpSecBasics", features: "expTabFeatures", capture: "expTabCapture", tiles: "expTabTiles", appearance: "expTabAppearance", library: "expTabLibrary", system: "expTabSystem" };
+export const HELP_SECTIONS = ["basics", "features", "capture", "tiles", "appearance", "library", "system", "data"];
+const HELP_SECTION_LABELS = { basics: "helpSecBasics", features: "expTabFeatures", capture: "expTabCapture", tiles: "expTabTiles", appearance: "expTabAppearance", library: "expTabLibrary", system: "expGroupSystem", data: "settingsSecData" };
 export function helpSectionLabel(id) {
   return t(HELP_SECTION_LABELS[id] || "helpSecBasics");
 }

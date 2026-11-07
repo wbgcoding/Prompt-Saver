@@ -15,12 +15,12 @@ a button above the grid removes them with one click once they're no longer neede
 
 ### Settings
 
-The gear button in the header opens the settings window with the everyday
+The gear button in the top bar opens the settings window with the everyday
 choices; everything optional lives in the expert menu, opened from the same
 window. It holds the language, the theme, the text size and font of the tiles,
 whether the window stays on top, starts with Windows, starts in the background
 and goes to the background instead of quitting when closed (a portable copy
-always quits), and a button that opens the list of all shortcuts. Every change applies at once, with no save button. "Automatic" as the
+always quits), and a button that opens the list of all hotkeys. Every change applies at once, with no save button. "Automatic" as the
 language follows Windows and falls back to English. Reset puts every setting
 back to its default and keeps the tiles; Delete removes all data and asks first.
 
@@ -176,7 +176,7 @@ app hotkey always wins a conflict, and among tiles the first one in the list
 keeps a combination two tiles happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
-"Hotkeys" in Settings opens the shortcuts dialog with every hotkey,
+"Hotkeys" in Settings opens the list of all hotkeys with every hotkey,
 global and per-tile, in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
 
@@ -214,7 +214,7 @@ while a session is running. Placeholders still work; the popup asks once per
 session and the same values are reused for every rotation text. Five expert-menu
 settings (all under the same toggle) tune the session timeout and the timing
 window that tells a real paste apart from other clipboard activity; pasting too
-fast too often pauses the session with a toast instead of looping.
+fast too often pauses the session with a message instead of looping.
 
 ### Floating buttons
 
@@ -262,7 +262,7 @@ several views.
 
 ### Voice input
 
-A microphone button on the composer and in the edit dialog turns
+A microphone button next to the input bar and in the edit dialog turns
 speech into text through Microsoft's online speech recognition, so your audio
 goes to Microsoft while you speak. It starts only after you agree in the
 app's consent dialog, which also turns on online speech recognition in the
@@ -292,7 +292,7 @@ Like OCR, it needs a Windows language pack: see "Language packs" below, same
 dialog either way. A global hotkey (in the expert menu) can
 start or stop a session from anywhere without bringing the window forward;
 the finished text goes to the clipboard, is pasted into whatever app was
-active, or lands in the composer, whichever the setting picks.
+active, or lands in the input bar, whichever the setting picks.
 
 ### Language packs
 
@@ -375,7 +375,7 @@ holds that log line with a copy button for anyone who wants it.
 
 Clicking the record button opens the same frozen-desktop overlay a screenshot
 uses: click a window, drag a region, or click empty desktop for the whole
-screen. An optional countdown toast then counts down before capture actually
+screen. An optional countdown then runs before capture actually
 starts (3 seconds, adjustable in the expert menu, 0 turns it off).
 A small floating control bar then follows the recording: a red dot, elapsed
 time, live file size, two audio buttons, Pause/Resume, Stop and a discard
@@ -567,12 +567,12 @@ None of it touches the export.
 
 ### Text recognition (OCR)
 
-A button on the composer pulls the
+A button on the input bar pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
-own text recognizer; nothing is uploaded or sent anywhere. A click on the composer
+own text recognizer; nothing is uploaded or sent anywhere. A click on the input bar
 button recognizes text in a screenshot you take right now, a right-click picks an
 image file instead.
-It needs a Windows language pack: see "Language packs" below for how that
+It needs a Windows language pack: see "Language packs" for how that
 install works. Recognized text can auto-copy to the clipboard and auto-join
 wrapped lines into full sentences, both adjustable.
 
@@ -612,13 +612,13 @@ star in the library. A favorite tile shows a small star in its top-right corner.
 ### Tooltips
 
 Hovering a tile shows its full text, length, and (if present) its private note.
-The delay and the width are adjustable.
+The delay is adjustable.
 
 ## Appearance
 
 ### Appearance & themes
 
-Six built-in themes: system/light, dark, Programmer, Neon Violet, Ocean, and
+Seven built-in themes: System, Light, Dark, Programmer, Neon Violet, Ocean and
 Cyberpunk. The theme editor adjusts any theme's colors and
 saves the result as a custom theme.
 
@@ -686,7 +686,7 @@ the source filter in Library → Copy history shows only those, and a useful one
 can be saved as a tile. A minimum-length filter and a cap keep the list from
 growing unbounded.
 
-## System & data
+## System
 
 ### System
 
@@ -701,7 +701,7 @@ is on; switching Auto update off turns the automatic check off.
 
 ### Toolbar
 
-Which buttons the header and composer bar show: quick grid-size control,
+Which buttons the top bar and the input bar show: quick grid-size control,
 the library button, and multiple views. Hide the top bar or the input bar: right-click the
 gear or the top bar.
 
@@ -785,6 +785,50 @@ changed since the version you last saw; its list ships with the app, so
 opening it needs no network. Its "View on GitHub" button opens the releases page in your browser.
 Reopen the current version's list any time from the About dialog.
 
+### Command line
+
+`prompt-saver.exe <command> ...` runs the app as a command line tool instead
+of opening its window: list, get, copy, add, edit, delete, restore prompts,
+manage tags and views, search, export, import, and create, list or restore
+backups, plus reading or writing one setting directly. If the app is already
+running, the command is handed to that copy and its answer is printed here.
+Otherwise the command runs on its own, straight against the database, and
+exits without ever opening a window. Either way only one process ever touches
+the database at a time.
+
+Every command takes `--help`. `--json` switches a command's output to
+machine readable JSON instead of plain text. Any command that changes
+something needs `--yes`, or it only prints what it would have done and
+changes nothing. The exceptions are `copy`, which only reads a prompt's text
+onto the clipboard, `backup create`, which only ever adds a new snapshot, and
+`export`, which only needs `--yes` to overwrite a file that already exists.
+Exit codes: 0 success, 1 bad invocation, 2 not
+found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
+value that failed validation). Full command list: `prompt-saver.exe --help`.
+
+For a script or another program, `prompt-saver describe` prints the full
+command list as JSON, and [docs/automation.md](automation.md) has the complete
+reference: every command's arguments and JSON response shape, the error codes
+and worked examples, so nothing needs to be worked out by trial and error.
+
+### Demo mode
+
+An expert-menu switch (System tab, Troubleshooting group) swaps the whole window to a bundled sample
+library covering most features at once: prompts with and without an image, a
+prompt with rotation, a couple of plain prompts to start a chain with, a
+placeholder, tags, a favorite, two views, a folder, an attachment and (when
+available) a video. Turning it on rebuilds the sample library fresh every
+time and restarts the app into it; the real library is never opened, written
+or even read while any of this happens. A permanent marker stays visible in
+the window for as long as demo mode is on, so nobody mistakes the sample data
+for their own. Turning it back off asks for confirmation, since anything
+changed during the session is discarded, then restarts back into the real
+library exactly as it was. The same sample library is also the source for
+this help window's own picture and for `docs/screenshot.png`: see the
+README's "Building from source" section for the exact steps.
+
+## Data
+
 ### Where your data lives
 
 Everything lives in one local SQLite database (plus its small WAL file).
@@ -832,16 +876,6 @@ size and kind, searchable by name and sortable by any column, with a button
 to restore that single prompt right from the list instead of the whole
 snapshot.
 
-### Usage statistics
-
-A small window opened from Settings → Usage statistics, with four things: the
-number of prompts, the copies of the last 7 days, the most used prompts by
-name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
-which you can click to find them in the library. The "Show statistics" switch
-in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
-history. Everything stays on this computer. The export button saves the full
-numbers, including daily counts and tool use, as CSV, TXT or JSON.
-
 ### Import & export
 
 Plain CSV, TXT or JSON export for the text alone, or a full backup file with
@@ -878,7 +912,7 @@ here too.
 **The `.md` files are plain text**: unlike the database, anyone with access to
 that folder can read the content, so a synced or shared folder should be avoided
 for anything sensitive. A tile with an attached file, image, or PDF syncs as a
-reference: the header carries the path and the PDF page, never the file itself. A
+reference: the file names the path and the PDF page, never the file itself. A
 screenshot pasted straight into a tile has no path and stays in the database only.
 
 The folder is `<data folder>\prompt-saver-sync` unless you pick another one; an
@@ -908,16 +942,6 @@ to arrive. What happens in either direction is fixed and never silent:
   (after five failed rounds). The line under the folder in the expert
   menu says when the folder was last read, how many files were in it, and why it
   is paused.
-
-### Data maintenance
-
-Trash (with its own retention setting), CSV/TXT export, and full backup
-export/import, all reached from the expert menu's data group. The duplicate
-finder is opened from the "Find duplicates" button in the library.
-
-"Recent messages" keeps a short list of error messages that flashed by in a
-toast, with time and place; copy or clear the list from its window. Settings
-alone can be saved to a file and loaded again from the same group.
 
 ### Trash & restoring tiles
 
@@ -949,47 +973,22 @@ another to compare the two. It never holds up the save and never asks
 anything, so ignoring it costs nothing. Both share one threshold in the expert
 menu.
 
-### Command line
+### Usage statistics
 
-`prompt-saver.exe <command> ...` runs the app as a command line tool instead
-of opening its window: list, get, copy, add, edit, delete, restore prompts,
-manage tags and views, search, export, import, and create, list or restore
-backups, plus reading or writing one setting directly. If the app is already
-running, the command is handed to that copy and its answer is printed here.
-Otherwise the command runs on its own, straight against the database, and
-exits without ever opening a window. Either way only one process ever touches
-the database at a time.
+A small window opened from Settings → Usage statistics, with four things: the
+number of prompts, the copies of the last 7 days, the most used prompts by
+name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
+which you can click to find them in the library. The "Show statistics" switch
+in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
+history. Everything stays on this computer. The export button saves the full
+numbers, including daily counts and tool use, as CSV, TXT or JSON.
 
-Every command takes `--help`. `--json` switches a command's output to
-machine readable JSON instead of plain text. Any command that changes
-something needs `--yes`, or it only prints what it would have done and
-changes nothing. The exceptions are `copy`, which only reads a prompt's text
-onto the clipboard, `backup create`, which only ever adds a new snapshot, and
-`export`, which only needs `--yes` to overwrite a file that already exists.
-Exit codes: 0 success, 1 bad invocation, 2 not
-found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
-value that failed validation). Full command list: `prompt-saver.exe --help`.
+### Data maintenance
 
-For a script or another program, `prompt-saver describe` prints the full
-command list as JSON, and [docs/automation.md](automation.md) has the complete
-reference: every command's arguments and JSON response shape, the error codes
-and worked examples, so nothing needs to be worked out by trial and error.
+Trash, settings export and import, and the recent messages, all in Expert menu → System & data → Data & maintenance. Import and export of tiles sit in Settings → Data. The duplicate finder is opened from the "Find duplicates" button in the library.
 
-### Demo mode
-
-An expert-menu switch (System tab, Troubleshooting group) swaps the whole window to a bundled sample
-library covering most features at once: prompts with and without an image, a
-prompt with rotation, a couple of plain prompts to start a chain with, a
-placeholder, tags, a favorite, two views, a folder, an attachment and (when
-available) a video. Turning it on rebuilds the sample library fresh every
-time and restarts the app into it; the real library is never opened, written
-or even read while any of this happens. A permanent marker stays visible in
-the window for as long as demo mode is on, so nobody mistakes the sample data
-for their own. Turning it back off asks for confirmation, since anything
-changed during the session is discarded, then restarts back into the real
-library exactly as it was. The same sample library is also the source for
-this help window's own picture and for `docs/screenshot.png`: see the
-README's "Building from source" section for the exact steps.
+"Recent messages" keeps a short list of error messages that flashed by, with time and place; copy or clear the list from its window. Settings
+alone can be saved to a file and loaded again.
 
 ---
 
@@ -1007,7 +1006,7 @@ legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
 
-**Einstellungen**: Das Zahnrad in der Kopfzeile öffnet das Einstellungsfenster
+**Einstellungen**: Das Zahnrad in der oberen Leiste öffnet das Einstellungsfenster
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das
 sich im selben Fenster öffnet. Dort stehen Sprache, Design, Textgröße und Schriftart
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
@@ -1379,7 +1378,7 @@ offline über die eigene Texterkennung von Windows. Ein Klick auf den Button
 in der Leiste liest einen Screenshot, ein Rechtsklick eine Bilddatei. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
 werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
-„Sprachpakete“ unten).
+„Sprachpakete“).
 
 **Farbpipette & Auswahlverlauf**: Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart.
@@ -1400,7 +1399,7 @@ sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
 **Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht. „Zu Favoriten hinzufügen“ im Rechtsklickmenü einer Kachel oder den Stern in der Bibliothek nutzen; eine Favoriten-Kachel zeigt oben rechts einen kleinen Stern.
 
-**Kurzinfos**: Verzögerung, Breite.
+**Kurzinfos**: Verzögerung einstellbar.
 
 ### Aussehen
 
@@ -1447,7 +1446,7 @@ Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopi
 **Kopien aus anderen Apps**: aus; eingeschaltet nimmt der Kopierverlauf auch Text
 auf, der in anderen Apps kopiert wurde, filterbar nach Herkunft.
 
-### System & Daten
+### System
 
 **System**: Updates, Tastatur-Navigation, Datenordner; mehrere Instanzen stehen in der Gruppe Fehlersuche.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
@@ -1456,8 +1455,8 @@ beides abschaltbar.
 Neben „Automatische Updates“ im Einstellungsfenster steht die Intervall-Auswahl, solange der
 Schalter an ist; „Automatische Updates“ auszuschalten schaltet die automatische Prüfung ab.
 
-**Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen. Obere Leiste
-ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile.
+**Werkzeugleiste**: welche Buttons die obere Leiste und die Eingabeleiste zeigen. Obere Leiste
+ausblenden: Rechtsklick auf Zahnrad oder die obere Leiste.
 
 **Datenschutz**: Bildschirmaufnahme-Ausschluss ("Screenshots von Prompt
 Saver erlauben" gilt für jedes Aufnahmeprogramm, auch das eigene, nur die
@@ -1538,150 +1537,6 @@ der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
 Programm, sie braucht kein Netz. Der Button „Auf GitHub ansehen“ öffnet die
 Releases-Seite im Browser. Über den Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
-**Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
-WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
-änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
-erkannt und als einmalige Migration angeboten.
-
-Ein Ordner, der zwischen zwei Computern synchronisiert wird (OneDrive,
-Dropbox, Google Drive, iCloud Drive, Nextcloud), braucht Vorsicht: Schreiben
-zwei Rechner gleichzeitig in dieselbe Datenbankdatei, kann sie beschädigt
-werden. Wird der Datenordner auf einen solchen gesetzt, erscheint einmalig
-eine Warnung dazu. Eine kleine Sperrdatei neben der Datenbank hält dann fest,
-welcher Computer sie gerade verwendet, alle 30 Sekunden aufgefrischt; findet
-ein zweiter Computer eine frische Sperre eines anderen Rechners, öffnet er
-alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
-still verloren geht, während eine länger nicht aufgefrischte Sperre (der
-andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
-übernommen wird. Der zugehörige Schalter liegt im
-Expertenmenü, Reiter System, Gruppe Fehlersuche. Das ist ein Sicherheitsnetz, kein
-Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
-Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
-
-**Sicherungen.** Verschlüsselte Sicherungen, Aufbewahrung nach Tag, Woche, Monat und Jahr,
-gezieltes Wiederherstellen. Mit den zwei Buttons neben „Sicherung erstellen“ lässt
-sich eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei
-importieren. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
-wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
-temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Button,
-um einen aufgeführten Ordner zu öffnen. Ein Aufbewahrungsbereich listet eine Zeile je Art
-von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
-Kopien aus anderen Apps, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
-und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
-bleibt, einem Button zum sofortigen Aufräumen und einem Button, der direkt zur
-zugehörigen Einstellung im Expertenmenü springt. Die Zahlen werden im
-Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
-wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
-jeder Sicherung in der Liste lässt sich auf Wunsch auch der volle Inhalt
-anzeigen: Anzahl der Einträge, Ansichten und Tags, die jüngste Änderung
-darin, die Programmfassung, die sie erstellt hat, und ob ihre Zeilen normal
-versiegelt sind oder auf Klartext zurückgefallen sind. Darunter jeder
-enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
-nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
-diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
-ganzen Sicherung.
-
-**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster mit vier Dingen: der Zahl der
-Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
-(eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und den nie genutzten
-Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
-Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
-sammelt der Kopierverlauf. Alles bleibt auf diesem Rechner. Der Export-Button
-speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
-TXT oder JSON.
-
-**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
-für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
-Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
-Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
-Feld zu quetschen. JSON ist das Standardformat des Export-Buttons und behält jedes Detail eines Prompts; CSV und TXT bleiben in der Auswahl verfügbar. Bilder reisen in keinem der drei mit, dafür gibt es die
-volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
-JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
-Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
-sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
-anderes zu importieren als angezeigt.
-
-**Importieren** → **Aus Ordner…** in den Einstellungen macht aus einem Ordner voller `.md`/`.txt`-
-Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
-Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
-Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,
-die den Rotationstrenner schon enthält, wird ein Prompt mit Rotationstexten. Die
-Vorschau listet jede Datei mit ihren Tags, ihrer Größe und einem Häkchen und
-graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
-mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
-Dateien Schluss ist, sind beides Einstellungen im Expertenmenü.
-
-**Markdown-Ordner-Sync**: spiegelt jede Text-Kachel als lesbare
-`.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
-Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
-PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
-keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
-genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
-wird automatisch angelegt, per Namensabgleich; eine auf einem anderen Rechner
-umbenannte Ansicht wird hier mit umbenannt. **Die Dateien sind Klartext**:
-anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
-Sensibles.
-
-Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
-ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
-erst gelesen, wenn sie sich nicht mehr ändert, eine Änderung von außen kann also
-einen Durchlauf länger brauchen. Was in welche Richtung passiert, steht fest und
-geschieht nie stillschweigend:
-
-- **Eine im Ordner gelöschte Datei löscht die Kachel nicht.** Sie wird im
-  nächsten Durchlauf neu geschrieben. Wer die Kachel in der App löscht, löscht
-  auch die Datei; auf jedem anderen Rechner mit demselben Ordner wandert die
-  Kachel in den Papierkorb.
-- **Umbenennen erzeugt eine zweite Kachel.** Der Dateiname ist die feste Kennung
-  der Kachel; die umbenannte Datei kommt als neue Kachel an, das Original wird
-  unter seinem eigenen Namen neu geschrieben. Also in der App umbenennen.
-- **Kachel und Datei gleichzeitig geändert?** In diesem Durchlauf gewinnt die
-  Datei, und die ersetzte Fassung landet in der Versionsgeschichte der Kachel.
-  Umgekehrt gewinnt die App die Datei, und der Dateiinhalt bleibt daneben als
-  `<Kennung>.conflict-<Zahl>.md` liegen.
-- **Dateien, die diese App nicht geschrieben hat, werden nie angefasst**, in
-  keiner Richtung, und eine Datei über 8 MB wird ganz übersprungen, nie
-  abgeschnitten. Das Fehlerprotokoll sagt warum.
-- **Ein Ordnerwechsel fragt nach**, was mit dem alten Ordner geschehen soll:
-  löschen oder behalten. Gelöscht werden nur die `.md`-Dateien, die diese App
-  selbst geschrieben hat, nie ein Unterordner, und der Ordner selbst nur, wenn er
-  danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
-  eine Meldung nennt, was im Weg liegt.
-- **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
-  paar Sekunden zu scheitern (nach fünf Fehlversuchen). Die Zeile
-  unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
-  der Dateien und den Grund der Pause.
-
-**Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
-Button „Duplikate finden“ in der Bibliothek.
-„Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als
-Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
-oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei
-speichern und wieder laden.
-
-**Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
-Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Löschen geht mit einem Klick,
-eine Meldung mit Rückgängig holt die Kachel zurück. Wiederherstellen legt in die
-erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
-ohne schwebenden Button, Ordner-Mitgliedschaft oder Tastenkürzel von vorher.
-
-**Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
-eigenen Rückgängig-Button direkt auf der Meldung: einen Prompt oder mehrere löschen,
-eine Ansicht löschen, den Kopierverlauf leeren, Tags löschen oder zusammenführen
-und eine Sammeländerung von Tags. Es wartet
-immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
-und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
-das abschalten, dann bleibt die Meldung eine reine Bestätigung.
-
-**Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
-Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
-aus. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen.
-Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
-Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
-seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
-das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
-Beide teilen sich eine Schwelle im Expertenmenü.
-
 **Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
 Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
 kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
@@ -1709,7 +1564,7 @@ ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
 seiner JSON-Antwort, die Fehlercodes und durchgerechnete Beispiele, nichts
 davon muss durch Ausprobieren herausgefunden werden.
 
-**Vorführung**: Ein Schalter im Expertenmenü (Tab System, Gruppe Fehlersuche) schaltet das
+**Vorführmodus**: Ein Schalter im Expertenmenü (Tab System, Gruppe Fehlersuche) schaltet das
 ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
 viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
 Prompt mit Rotation, zwei einfache Prompts für den Anfang einer Kette, ein
@@ -1717,10 +1572,156 @@ Platzhalter, Tags, ein Favorit, zwei Ansichten, ein Ordner, ein Anhang und
 (wenn vorhanden) ein Video. Das Einschalten baut den Beispielbestand jedes
 Mal frisch auf und startet die App darin neu; der echte Bestand wird dabei
 nie geöffnet, geschrieben oder auch nur gelesen. Eine dauerhafte Marke bleibt
-im Fenster sichtbar, solange die Vorführung läuft, damit niemand den
+im Fenster sichtbar, solange der Vorführmodus läuft, damit niemand den
 Beispielbestand für den eigenen hält. Das Zurückschalten fragt zuerst nach,
-weil alles, was während der Vorführung geändert wurde, dabei verloren geht,
+weil alles, was im Vorführmodus geändert wurde, dabei verloren geht,
 und startet dann genau in den echten Bestand zurück. Derselbe
 Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
 für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
 from source" der README.
+
+### Daten
+
+**Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
+WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
+änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
+erkannt und als einmalige Migration angeboten.
+
+Ein Ordner, der zwischen zwei PCs synchronisiert wird (OneDrive,
+Dropbox, Google Drive, iCloud Drive, Nextcloud), braucht Vorsicht: Schreiben
+zwei PCs gleichzeitig in dieselbe Datenbankdatei, kann sie beschädigt
+werden. Wird der Datenordner auf einen solchen gesetzt, erscheint einmalig
+eine Warnung dazu. Eine kleine Sperrdatei neben der Datenbank hält dann fest,
+welcher PC sie gerade verwendet, alle 30 Sekunden aufgefrischt; findet
+ein zweiter PC eine frische Sperre eines anderen PCs, öffnet er
+alles nur lesend und zeigt das dauerhaft in einem Banner, damit nichts
+still verloren geht, während eine länger nicht aufgefrischte Sperre (der
+andere PC ist vermutlich abgestürzt oder geschlossen) automatisch
+übernommen wird. Der zugehörige Schalter liegt im
+Expertenmenü, Reiter System, Gruppe Fehlersuche. Das ist ein Sicherheitsnetz, kein
+Weg, die Bibliothek über PCs hinweg zu teilen: dafür ist die
+Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
+
+**Sicherungen.** Verschlüsselte Sicherungen, Aufbewahrung nach Tag, Woche, Monat und Jahr,
+gezieltes Wiederherstellen. Mit den zwei Buttons neben „Sicherung erstellen“ lässt
+sich eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei
+importieren. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
+wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
+temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Button,
+um einen aufgeführten Ordner zu öffnen. Ein Aufbewahrungsbereich listet eine Zeile je Art
+von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
+Kopien aus anderen Apps, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
+und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
+bleibt, einem Button zum sofortigen Aufräumen und einem Button, der direkt zur
+zugehörigen Einstellung im Expertenmenü springt. Die Zahlen werden im
+Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
+wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
+jeder Sicherung in der Liste lässt sich auf Wunsch auch der volle Inhalt
+anzeigen: Anzahl der Einträge, Ansichten und Tags, die jüngste Änderung
+darin, die Programmfassung, die sie erstellt hat, und ob ihre Zeilen normal
+versiegelt sind oder auf Klartext zurückgefallen sind. Darunter jeder
+enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
+nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
+diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
+ganzen Sicherung.
+
+**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
+für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
+Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
+Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
+Feld zu quetschen. JSON ist das Standardformat des Export-Buttons und behält jedes Detail eines Prompts; CSV und TXT bleiben in der Auswahl verfügbar. Bilder reisen in keinem der drei mit, dafür gibt es die
+volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
+JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
+Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
+sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
+anderes zu importieren als angezeigt.
+
+**Importieren** → **Aus Ordner…** in den Einstellungen macht aus einem Ordner voller `.md`/`.txt`-
+Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
+Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
+Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,
+die den Rotationstrenner schon enthält, wird ein Prompt mit Rotationstexten. Die
+Vorschau listet jede Datei mit ihren Tags, ihrer Größe und einem Häkchen und
+graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
+mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
+Dateien Schluss ist, sind beides Einstellungen im Expertenmenü.
+
+**Markdown-Ordner-Sync**: spiegelt jede Text-Kachel als lesbare
+`.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
+Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
+PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
+keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
+genannte Ansicht oder ein Ordner, den es auf diesem PC noch nicht gibt,
+wird automatisch angelegt, per Namensabgleich; eine auf einem anderen PC
+umbenannte Ansicht wird hier mit umbenannt. **Die Dateien sind Klartext**:
+anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
+Sensibles.
+
+Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
+ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
+erst gelesen, wenn sie sich nicht mehr ändert, eine Änderung von außen kann also
+einen Durchlauf länger brauchen. Was in welche Richtung passiert, steht fest und
+geschieht nie stillschweigend:
+
+- **Eine im Ordner gelöschte Datei löscht die Kachel nicht.** Sie wird im
+  nächsten Durchlauf neu geschrieben. Wer die Kachel in der App löscht, löscht
+  auch die Datei; auf jedem anderen PC mit demselben Ordner wandert die
+  Kachel in den Papierkorb.
+- **Umbenennen erzeugt eine zweite Kachel.** Der Dateiname ist die feste Kennung
+  der Kachel; die umbenannte Datei kommt als neue Kachel an, das Original wird
+  unter seinem eigenen Namen neu geschrieben. Also in der App umbenennen.
+- **Kachel und Datei gleichzeitig geändert?** In diesem Durchlauf gewinnt die
+  Datei, und die ersetzte Fassung landet in der Versionsgeschichte der Kachel.
+  Umgekehrt gewinnt die App die Datei, und der Dateiinhalt bleibt daneben als
+  `<Kennung>.conflict-<Zahl>.md` liegen.
+- **Dateien, die diese App nicht geschrieben hat, werden nie angefasst**, in
+  keiner Richtung, und eine Datei über 8 MB wird ganz übersprungen, nie
+  abgeschnitten. Das Fehlerprotokoll sagt warum.
+- **Ein Ordnerwechsel fragt nach**, was mit dem alten Ordner geschehen soll:
+  löschen oder behalten. Gelöscht werden nur die `.md`-Dateien, die diese App
+  selbst geschrieben hat, nie ein Unterordner, und der Ordner selbst nur, wenn er
+  danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
+  eine Meldung nennt, was im Weg liegt.
+- **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
+  paar Sekunden zu scheitern (nach fünf Fehlversuchen). Die Zeile
+  unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
+  der Dateien und den Grund der Pause.
+
+**Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
+Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Löschen geht mit einem Klick,
+eine Meldung mit Rückgängig holt die Kachel zurück. Wiederherstellen legt in die
+erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
+ohne schwebenden Button, Ordner-Mitgliedschaft oder Tastenkürzel von vorher.
+
+**Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
+eigenen Rückgängig-Button direkt auf der Meldung: einen Prompt oder mehrere löschen,
+eine Ansicht löschen, den Kopierverlauf leeren, Tags löschen oder zusammenführen
+und eine Sammeländerung von Tags. Es wartet
+immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
+und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
+das abschalten, dann bleibt die Meldung eine reine Bestätigung.
+
+**Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
+Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
+aus. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen.
+Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
+Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
+seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
+das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
+Beide teilen sich eine Schwelle im Expertenmenü.
+
+**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster mit vier Dingen: der Zahl der
+Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
+(eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und den nie genutzten
+Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
+Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
+sammelt der Kopierverlauf. Alles bleibt auf diesem PC. Der Export-Button
+speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
+TXT oder JSON.
+
+**Datenwartung**: Papierkorb, Einstellungen exportieren und importieren, letzte Meldungen. Import und Export der Kacheln liegen in den Einstellungen unter Daten. Den Duplikatfinder öffnet der
+Button „Duplikate finden“ in der Bibliothek.
+„Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz
+erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
+oder leeren. Die Einstellungen allein lassen sich in eine Datei
+speichern und wieder laden.

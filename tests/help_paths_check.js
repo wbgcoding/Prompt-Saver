@@ -140,7 +140,10 @@ const NOT_LABELS = {
   } else {
     const SECTIONS = [...sectionsM[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
     const SEC_KEY = Object.fromEntries([...labelsM[1].matchAll(/(\w+): "(\w+)"/g)].map((m) => [m[1], m[2]]));
-    const secLabel = (lang, id) => (SEC_KEY[id] && SEC_KEY[id].startsWith("helpSec") ? I18N[lang][SEC_KEY[id]] : label(lang, SEC_KEY[id]));
+    const secLabel = (lang, id) => (SEC_KEY[id] && !SEC_KEY[id].startsWith("exp") ? I18N[lang][SEC_KEY[id]] : label(lang, SEC_KEY[id]));
+    // Areas that split one expert-menu tab name that tab in their paths.
+    const AREA_TAB = { system: "expTabSystem", data: "expTabSystem" };
+    const tabLabel = (lang, id) => (AREA_TAB[id] ? label(lang, AREA_TAB[id]) : secLabel(lang, id));
     for (const id of SECTIONS) {
       if (!SEC_KEY[id]) problems.push(`area "${id}" has no label key in HELP_SECTION_LABELS`);
     }
@@ -174,8 +177,8 @@ const NOT_LABELS = {
         if (art.section === "basics" || !SECTIONS.includes(art.section)) return;
         const strings = [art.whatItIs, art.whatHappens, art.tip, ...(art.howTo || []), ...(art.settings || [])].filter(Boolean);
         const named = strings.flatMap((x) => [...x.matchAll(re)].map((m) => m[1].trim()));
-        if (named.length && !named.includes(secLabel(lang, art.section)))
-          problems.push(`${lang}[${i}] "${art.title}": sits under "${secLabel(lang, art.section)}" but its expert-menu paths name only ${[...new Set(named)].map((n) => `"${n}"`).join(", ")}`);
+        if (named.length && !named.includes(tabLabel(lang, art.section)))
+          problems.push(`${lang}[${i}] "${art.title}": sits under "${tabLabel(lang, art.section)}" but its expert-menu paths name only ${[...new Set(named)].map((n) => `"${n}"`).join(", ")}`);
       });
     }
     // docs/help.md mirrors the areas: EN "##" headings, then the DE "###" area headings.
