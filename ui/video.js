@@ -1610,7 +1610,9 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
       applyExportGate();
       $("ve-still").disabled = false;
       toast(t("ffmpegDownloadDone"));
-      await loadRecording(VE.src);
+      // Unexported edits stay: a reload would wipe them, and the strip and waveforms are all that
+      // were waiting for ffmpeg.
+      if (VE.ops.length && VE.dirty) { loadStrip(); scheduleWaves(); } else await loadRecording(VE.src);
     },
     onError: (err) => toast(errMessageLogged(err, t, "video")),
   });
@@ -2117,6 +2119,24 @@ async function closeWindow(opts) {
   }
 }
 
+// The question for edits no export covered yet: "save" (keep the draft for the next open),
+// "discard", "export" (draft not kept: go to the Export tab first) or "stay". Enter takes the
+// safe button, Esc and a click outside cancel; the destructive choice is the extra button.
+async function askUnsavedEdits() {
+  if (VE.editStateKeepOn) {
+    const r = await confirmDialog({
+      title: t("veCloseTitle"), message: t("veCloseUnsavedKeep"),
+      confirmLabel: t("save"), altLabel: t("veDontSave"), cancelLabel: t("cancel"), danger: false,
+    });
+    return r === true ? "save" : r === "alt" ? "discard" : "stay";
+  }
+  const r = await confirmDialog({
+    title: t("veCloseTitle"), message: t("veCloseUnsavedNoKeep"),
+    confirmLabel: t("veGoExport"), altLabel: t("veDontSave"), cancelLabel: t("cancel"), danger: false,
+  });
+  return r === true ? "export" : r === "alt" ? "discard" : "stay";
+}
+
 async function closeWindowAsked(quit) {
   let discarded = false;
   const keepOpen = () => { invoke("video_editor_close_ack", { state: "cancel" }).catch(() => {}); };
@@ -2139,9 +2159,11 @@ async function closeWindowAsked(quit) {
     if (choice === "alt") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
     await bringForward();
-    const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
-    if (!ok) { keepOpen(); return; }
-    discarded = true;
+    const choice = await askUnsavedEdits();
+    if (choice === "stay") { keepOpen(); return; }
+    if (choice === "export") { keepOpen(); showPanel("ve-panel-export"); return; }
+    // "save" falls through: the draft is stored below.
+    if (choice === "discard") discarded = true;
   }
   if (discarded) {
     // The user threw these edits away: stop the autosave and forget what an earlier tick
@@ -2416,11 +2438,17 @@ listen("video-editor-load", async (e) => {
   if (VE.ops.length && VE.dirty) {
     ack("asking");
     const askedSrc = VE.src;
-    const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
-    if (!ok) { ack("refused"); return; }
+    const choice = await askUnsavedEdits();
+    if (choice === "stay" || choice === "export") {
+      if (choice === "export") showPanel("ve-panel-export");
+      ack("refused");
+      return;
+    }
     // A second request queued behind the first confirm: once the first was accepted the old
-    // edits are gone and another source is loaded, so there is nothing left to discard.
-    if (VE.src === askedSrc && VE.ops.length && VE.dirty) {
+    // edits are gone and another source is loaded, so there is nothing left to discard or save.
+    if (choice === "save") {
+      if (VE.src === askedSrc && VE.ops.length && VE.dirty) await saveEditStateNow();
+    } else if (VE.src === askedSrc && VE.ops.length && VE.dirty) {
       // Thrown away on purpose: stop the autosave for the old source and forget what an
       // earlier tick stored, or reopening that recording would offer the work back.
       stopEditStateAutosave();

@@ -97,6 +97,7 @@ function makeSandbox(extra) {
       extractBlock("bringForward", "async function bringForward() {"),
       extractLine("closeAsking", "let closeAsking = false;"),
       extractBlock("closeWindow", "async function closeWindow(opts) {"),
+      extractBlock("askUnsavedEdits", "async function askUnsavedEdits() {"),
       extractBlock("closeWindowAsked", "async function closeWindowAsked(quit) {"),
       extractBlock("addAlignedCameraOverlay", "async function addAlignedCameraOverlay(path, gen) {"),
     ].join("\n"),
@@ -413,32 +414,61 @@ function winStub() {
 // only when edits exist that no export covered, and lets the backend's close through only after
 // the answer: "allow" before the window closes, "cancel" when the person keeps it open.
 async function closeAskChecks() {
+  const ops = [{ tool: "cut", startMs: 0, endMs: 1000 }];
+  // `answer` is what the dialog returns: true = the confirm button (Save, or Export without a kept
+  // draft), "alt" = Don't save, false = Cancel / Esc / click outside.
   const cases = [
     { name: "no edits closes at once", ops: [], dirty: false, answer: true, asks: false, closes: true },
-    { name: "edits already exported (not dirty) close at once", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: false, answer: true, asks: false, closes: true },
-    { name: "unexported edits ask, Discard closes", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: true, answer: true, asks: true, closes: true },
-    { name: "unexported edits ask, Cancel keeps the window", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: true, answer: false, asks: true, closes: false },
-    { name: "app quit with unexported edits asks", ops: [{ tool: "cut", startMs: 0, endMs: 1000 }], dirty: true, answer: true, asks: true, closes: true, opts: { quit: true } },
+    { name: "edits already exported (not dirty) close at once", ops, dirty: false, answer: true, asks: false, closes: true },
+    { name: "unexported edits ask, Save keeps the draft and closes", ops, dirty: true, answer: true, asks: true, closes: true, saves: 1, discards: 0 },
+    { name: "unexported edits ask, Don't save discards the draft and closes", ops, dirty: true, answer: "alt", asks: true, closes: true, saves: 0, discards: 1 },
+    { name: "unexported edits ask, Cancel keeps the window", ops, dirty: true, answer: false, asks: true, closes: false, saves: 0, discards: 0 },
+    { name: "app quit with unexported edits asks", ops, dirty: true, answer: true, asks: true, closes: true, opts: { quit: true }, saves: 1, discards: 0 },
     { name: "app quit without edits closes silently", ops: [], dirty: false, answer: true, asks: false, closes: true, opts: { quit: true } },
     { name: "app quit during a clean export closes without the export question", ops: [], dirty: false, answer: true, asks: false, closes: true, opts: { quit: true }, exporting: true },
+    { name: "no kept draft: Export opens the Export tab and stays", ops, dirty: true, keep: false, answer: true, asks: true, closes: false, saves: 0, discards: 0, panel: "ve-panel-export" },
+    { name: "no kept draft: Don't save closes", ops, dirty: true, keep: false, answer: "alt", asks: true, closes: true, saves: 0, discards: 1 },
+    { name: "no kept draft: Cancel stays", ops, dirty: true, keep: false, answer: false, asks: true, closes: false, saves: 0, discards: 0 },
   ];
   for (const c of cases) {
     const stub = winStub();
     const acks = [];
+    const dialogs = [];
+    const panels = [];
     let asked = 0;
+    let saves = 0;
+    let discards = 0;
     const sb = makeSandbox({
-      t: (k) => k, confirmDialog: async () => { asked += 1; return c.answer; },
-      invoke: (cmd, args) => { if (cmd === "video_editor_close_ack") acks.push(args.state); return Promise.resolve(); },
-      saveEditStateNow: async () => {}, stopEditStateAutosave: () => {}, appWin: stub.win,
+      t: (k) => k, confirmDialog: async (o) => { asked += 1; dialogs.push(o); return c.answer; },
+      invoke: (cmd, args) => {
+        if (cmd === "video_editor_close_ack") acks.push(args.state);
+        if (cmd === "discard_edit_state") discards += 1;
+        return Promise.resolve();
+      },
+      saveEditStateNow: async () => { saves += 1; }, stopEditStateAutosave: () => {}, appWin: stub.win, showPanel: (id) => panels.push(id),
     });
     sb.VE = baseState(c.ops);
-    Object.assign(sb.VE, { exporting: !!c.exporting, dirty: c.dirty, editStateKeepOn: true, src: "C:/a.mp4" });
+    Object.assign(sb.VE, { exporting: !!c.exporting, dirty: c.dirty, editStateKeepOn: c.keep !== false, src: "C:/a.mp4" });
     await vm.runInContext("(o) => closeWindow(o)", sb)(c.opts);
     const closed = stub.log.includes("close");
-    const detail = `asked=${asked} acks=${acks} win=${stub.log}`;
+    const detail = `asked=${asked} acks=${acks} win=${stub.log} saves=${saves} discards=${discards} panels=${panels}`;
     expect(`close: ${c.name}`, (asked === 1) === c.asks && closed === c.closes && (c.closes ? acks.join() === "allow" : acks.join() === "cancel"), detail);
     if (c.closes) expect(`close: ${c.name} allows before closing`, acks[0] === "allow" && stub.log.lastIndexOf("close") === stub.log.length - 1, detail);
+    if (c.discards !== undefined) expect(`close: ${c.name} (discard count)`, discards === c.discards, detail);
+    if (c.saves !== undefined) expect(`close: ${c.name} (draft saves)`, saves === c.saves, detail);
+    if (c.panel) expect(`close: ${c.name} shows ${c.panel}`, panels.join() === c.panel, detail);
+    if (c.asks) {
+      const d = dialogs[0];
+      expect(`close: ${c.name} confirm is Save/Export, never danger-styled`, d.confirmLabel === (c.keep === false ? "veGoExport" : "save") && d.altLabel === "veDontSave" && d.cancelLabel === "cancel" && d.danger !== true, JSON.stringify(d));
+      expect(`close: ${c.name} words the draft state`, d.message === (c.keep === false ? "veCloseUnsavedNoKeep" : "veCloseUnsavedKeep"), d.message);
+    }
   }
+  // The source switch asks the same question, and the ffmpeg download never reloads over unexported edits.
+  const loadHandler = src.slice(src.indexOf('listen("video-editor-load"'), src.indexOf('listen("ve-close-requested"'));
+  expect("source switch: asks through askUnsavedEdits", loadHandler.includes("await askUnsavedEdits()") && !loadHandler.includes("confirmDialog"), "");
+  expect("source switch: Save stores the draft first", /choice === "save"[\s\S]{0,160}saveEditStateNow\(\)/.test(loadHandler), "");
+  const onDone = src.slice(src.indexOf("onDone: async () => {"), src.indexOf("onError: (err) => toast(errMessageLogged(err, t, \"video\"))"));
+  expect("ffmpeg download: keeps unexported edits", /if \(VE\.ops\.length && VE\.dirty\) \{ loadStrip\(\); scheduleWaves\(\); \} else await loadRecording\(VE\.src\);/.test(onDone), onDone);
   // A second request while the question is open is ignored (Alt+F4 pressed twice).
   const stub = winStub();
   let asked = 0;
