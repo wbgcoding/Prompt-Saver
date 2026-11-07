@@ -203,7 +203,7 @@ fn closing_the_editor_releases_every_waiting_open_request_as_gone() {
     assert!(crate::video_editor::VE_PENDING_REQUEST.lock().unwrap().is_none(), "a stale offer must not outlive its window");
     let src = source!("../video_editor.rs");
     let hook = src.find("tauri::WindowEvent::Destroyed =>").expect("the editor window must watch its own destruction");
-    assert!(src[hook..hook + 500].contains("release_pending_editor_requests"));
+    assert!(src[hook..hook + 900].contains("release_pending_editor_requests"));
 }
 
 // The open-while-closing race: a request that met a window on its way out must build a fresh
@@ -227,19 +227,23 @@ fn a_request_that_met_a_closing_window_falls_through_to_building_one() {
     assert_eq!(wait_for_editor_decision(&rx, short, short), D::Gone);
     // Structural: the open command reaches the build path on that outcome and waits for the label to free up.
     let src = source!("../video_editor.rs");
-    assert!(src.contains("RetargetOutcome::BuildNew => carried = Some(request)"));
-    assert!(src.contains("carried.unwrap_or((src_path, origin_dir, overlay_path))"));
+    assert!(src.contains("RetargetOutcome::BuildNew => {}"));
+    assert!(src.contains("return build_video_editor(&app, &pending, request, guard).await"));
+    assert!(src.contains("Err(\"editor-busy\".to_string())"));
 }
 
 #[test]
 fn a_close_the_page_cannot_answer_goes_through_and_any_other_is_held_for_it() {
     use crate::video_editor::{editor_close_action, EditorCloseAction as A};
     // Page not listening yet (still booting): nobody could answer, so the close goes through.
-    assert_eq!(editor_close_action(false, false), A::Allow);
+    assert_eq!(editor_close_action(false, false, None), A::Allow);
     // Alt+F4 / taskbar close on a page that listens: held back and handed to the page.
-    assert_eq!(editor_close_action(true, false), A::AskPage);
+    assert_eq!(editor_close_action(true, false, None), A::AskPage);
+    // A question the page has not even confirmed seeing: held for 3 s, then the close goes through.
+    assert_eq!(editor_close_action(true, false, Some(2999)), A::AskPage);
+    assert_eq!(editor_close_action(true, false, Some(3000)), A::Allow);
     // The page asked and the person agreed: the one-shot permission lets it through.
-    assert_eq!(editor_close_action(true, true), A::Allow);
+    assert_eq!(editor_close_action(true, true, None), A::Allow);
     // Structural: the handler holds the close back and only flags and emits (a close handler must never
     // create or destroy a window), and a quit asks the editor before the job question.
     let src = source!("../video_editor.rs");
@@ -250,6 +254,21 @@ fn a_close_the_page_cannot_answer_goes_through_and_any_other_is_held_for_it() {
     let quit = source!("../bg_ops.rs");
     let at = quit.find("pub(crate) fn request_app_quit").unwrap();
     assert!(quit[at..at + 400].contains("ask_editor_before_quit"));
+}
+
+// Structural fix, no red unit test: two racing Tauri window builds cannot be provoked headless; the
+// source contrast pins the order (lock, then the window lookup, then the build) and the late reveal.
+#[test]
+fn the_editor_opens_one_window_per_burst_and_shows_it_after_the_page_loaded() {
+    let src = source!("../video_editor.rs");
+    let lock = src.find("VE_OPEN_LOCK.lock().await").expect("the open command takes the open lock");
+    let lookup = src.find("app.get_webview_window(VIDEO_WIN_LABEL) else").expect("then looks for the window");
+    let build = src.find("WebviewWindowBuilder::new(app, VIDEO_WIN_LABEL").expect("and builds");
+    assert!(lock < lookup && lookup < build, "lock, lookup, build in this order");
+    let builder = &src[build..build + 900];
+    assert!(builder.contains(".on_page_load("), "the window is shown when its page has loaded");
+    assert!(builder.find(".visible(false)").unwrap() < builder.find(".build()").unwrap());
+    assert!(src.contains("VE_WIN_GEN.load(Ordering::SeqCst) == my_gen"));
 }
 
 // Structural fix, no red unit test: a panic inside the export task cannot be provoked here.
@@ -272,7 +291,7 @@ fn a_superseded_filmstrip_loop_stops_before_its_first_thumbnail() {
     assert!(src.contains("FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
         }"));
     let r = crate::video_editor::generate_filmstrip_blocking(
-        std::path::Path::new("nope-ffmpeg"), std::path::Path::new("nope-ffprobe"), std::path::Path::new("nope.mp4"), 3, || true,
+        std::path::Path::new("nope-ffmpeg"), std::path::Path::new("nope-ffprobe"), std::path::Path::new("nope.mp4"), 3, None, || true,
     );
     assert!(r.is_err(), "the probe of a missing file fails first");
 }
@@ -645,7 +664,7 @@ fn the_mic_mux_timeout_grows_with_the_bytes_it_copies() {
 fn the_editor_close_flags_are_all_cleared_when_its_window_is_destroyed() {
     let src = source!("../video_editor.rs");
     let at = src.find("tauri::WindowEvent::Destroyed => {").unwrap();
-    let body = &src[at..at + 500];
+    let body = &src[at..at + 900];
     for flag in ["VE_CLOSE_READY", "VE_CLOSING_OK", "VE_QUIT_AFTER_CLOSE"] {
         assert!(body.contains(&format!("{flag}.store(false")), "{flag} must be reset on Destroyed");
     }
@@ -698,4 +717,36 @@ fn a_filmstrip_slot_without_a_frame_reuses_the_previous_thumbnail() {
     assert!(!crate::video_editor::reuse_previous_thumb(None, &first), "the first slot has nothing to reuse");
     assert!(!first.exists());
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn export_output_to_open_takes_only_a_remembered_export() {
+    let dir = std::env::temp_dir().join(format!("ps-open-export-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("clip out.mp4");
+    fs::write(&file, b"video").unwrap();
+    let path = file.to_string_lossy().to_string();
+    assert!(export_output_to_open(&[], &path).is_err(), "a file no export wrote is refused");
+    remember_export_output(&file);
+    assert_eq!(export_output_to_open(&[], &path).unwrap(), file, "a remembered export passes");
+    assert!(export_output_to_open(&[], &format!("{path}\"")).is_err(), "a quote could break the Explorer argument");
+    assert!(export_output_to_open(&[], r"\host\share\x.mp4").is_err(), "a network spelling is refused");
+    fs::remove_file(&file).unwrap();
+    assert!(export_output_to_open(&[], &path).is_err(), "a remembered file that is gone is refused");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn both_post_export_commands_pass_the_gate_before_they_launch_anything() {
+    let src = source!("../video_editor.rs");
+    for (name, launcher) in [("fn reveal_export_output", "Command::new"), ("fn open_export_output", "ShellExecuteW(")] {
+        let body = src.split(name).nth(1).unwrap_or_else(|| panic!("{name} is missing"));
+        let body = body.split("\n}\n").next().unwrap();
+        let gate = body.find("export_output_to_open(").unwrap_or_else(|| panic!("{name} skips the gate"));
+        let launch = body.find(launcher).unwrap_or_else(|| panic!("{name} never launches"));
+        assert!(gate < launch, "{name} must check the path before {launcher}");
+    }
+    let caps = source!("../../capabilities/video-editor.json");
+    assert!(caps.contains("\"allow-reveal-export-output\"") && caps.contains("\"allow-open-export-output\""));
 }

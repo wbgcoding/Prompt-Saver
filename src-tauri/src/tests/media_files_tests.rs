@@ -476,3 +476,21 @@ fn the_quit_save_copies_the_parts_without_holding_the_shared_list() {
     assert!(body.contains("with_parts_outside_lock(&REC_RESULT_PARTS"));
     assert!(!body.contains("REC_RESULT_PARTS.lock()"));
 }
+
+#[test]
+fn the_overlay_picker_lists_only_types_the_export_accepts() {
+    for ext in OVERLAY_IMAGE_EXTS.iter().chain(OVERLAY_VIDEO_EXTS.iter()) {
+        assert!(EXPORT_MEDIA_EXTS.contains(ext), "{ext} is offered by the picker but refused by the export");
+    }
+    let body = source!("../images.rs");
+    let cmd = body.split("pub(crate) async fn pick_file_path").nth(1).unwrap().split("pub(crate) async fn pick_media_file_path").next().unwrap();
+    assert!(cmd.contains("OVERLAY_IMAGE_EXTS") && cmd.contains("OVERLAY_VIDEO_EXTS") && cmd.contains("set_directory"), "the picker takes a kind, its types and a start folder");
+}
+
+#[test]
+fn the_video_editor_pickers_name_their_kind_and_share_one_in_flight_guard() {
+    let js = source!("../../../ui/videoOverlays.js");
+    assert!(!js.contains("invoke(\"pick_file_path\")"), "every picker passes its kind");
+    assert_eq!(js.matches("pickPath(").count(), 5, "one definition and four call sites");
+    assert!(js.contains("let picking = false;") && js.contains("kind: \"image\"") && js.contains("kind: \"video\""));
+}

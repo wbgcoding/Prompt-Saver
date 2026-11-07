@@ -1,5 +1,5 @@
 // Tile context menu, views popup, move-to-folder popup, grid tag popup and the toolbar menu.
-import { $, assignSettings, ctxEl, errToast, favView, flag, gridTags, invoke, libraryEl, optFlag, prompts, settings, t, TB_CHECK, toast } from "./core.js";
+import { $, assignSettings, ctxEl, errToast, favView, flag, gridTags, invoke, libraryEl, openVideoEditor, optFlag, prompts, settings, t, TB_CHECK, toast } from "./core.js";
 import { chainMode, isTextPrompt, startChainWith } from "./chain.js";
 import { hasMarkdownSyntax } from "./markdown.js";
 import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, toggleFavoritePrompt, toggleGridSelect, trashPromptWithUndo } from "./library.js";
@@ -435,7 +435,7 @@ export function bindGridMenus({ openExternalFileInEditor }) {
     } else if (act === "editVideo") {
       const p = prompts.find((x) => x.id === id);
       if (p?.file_path) {
-        await invoke("open_video_editor", { srcPath: p.file_path })
+        await openVideoEditor({ srcPath: p.file_path })
           .then(() => recordToolUsage("video_editor"))
           .catch((e) => errToast(e));
       }

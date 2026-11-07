@@ -412,10 +412,10 @@ pub(crate) fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
 // has been superseded (another source was loaded, or the editor closed) and stops decoding.
 pub(crate) static FILMSTRIP_GEN: AtomicU64 = AtomicU64::new(0);
 
-// No duration parameter: the editor already ran probe_recording before reaching the
-// timeline, so ffprobe is known to be present.
+// The editor already ran probe_recording before reaching the timeline, so ffprobe is known to
+// be present; it passes the duration it knows so the strip does not probe again.
 #[tauri::command]
-pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32) -> Result<Vec<String>, String> {
+pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32, duration_ms: Option<u64>) -> Result<Vec<String>, String> {
     // A network spelling is refused on its text, before is_file() would contact the host.
     if is_foreign_network_path(&path, &own_storage_dirs(&app, &app.state::<Db>())) {
         return Err("source-not-allowed".to_string());
@@ -429,7 +429,7 @@ pub(crate) async fn generate_filmstrip(app: AppHandle, path: String, count: u32)
     let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     tauri::async_runtime::spawn_blocking(move || {
-        generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count, || FILMSTRIP_GEN.load(Ordering::SeqCst) != my_gen)
+        generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count, duration_ms, || FILMSTRIP_GEN.load(Ordering::SeqCst) != my_gen)
     })
         .await
         .map_err(|e| e.to_string())?
@@ -445,13 +445,19 @@ pub(crate) fn reuse_previous_thumb(prev: Option<&Path>, slot: &Path) -> bool {
 // `-vf select` pass: a recording's variable frame rate (WGC capture never
 // guarantees CFR) makes frame-index-based selection unreliable, while a
 // wall-clock `-ss` seek before `-i` is exact regardless of frame timing.
-// `is_stale` is polled before every thumbnail; once it answers true the loop returns an empty
-// list (the page ignores a result for a source it no longer shows).
+// The missing thumbnails run in chunks of FILMSTRIP_PARALLEL processes. `is_stale` is polled
+// before every chunk; once it answers true the call returns an empty list (the page ignores a
+// result for a source it no longer shows). `duration_ms` is probed only when unknown.
+const FILMSTRIP_PARALLEL: usize = 4;
+
 pub(crate) fn generate_filmstrip_blocking(
-    ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32, is_stale: impl Fn() -> bool,
+    ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32, duration_ms: Option<u64>, is_stale: impl Fn() -> bool,
 ) -> Result<Vec<String>, String> {
     use std::os::windows::process::CommandExt;
-    let duration_ms = probe_recording_blocking(ffprobe, src)?.duration_ms;
+    let duration_ms = match duration_ms {
+        Some(ms) if ms > 0 => ms,
+        _ => probe_recording_blocking(ffprobe, src)?.duration_ms,
+    };
     let Some(cache_dir) = filmstrip_cache_dir(src, count) else {
         return Err("could not read the recording".to_string());
     };
@@ -467,10 +473,7 @@ pub(crate) fn generate_filmstrip_blocking(
     if !all_cached {
         fs::create_dir_all(&cache_dir).map_err(|e| format!("thumbnail cache: {e}"))?;
         let dur_s = (duration_ms as f64 / 1000.0).max(0.1);
-        for (i, p) in out.iter().enumerate() {
-            if is_stale() {
-                return Ok(Vec::new());
-            }
+        let grab = |i: usize, p: &Path| -> Result<(), String> {
             let t = dur_s * (i as f64 + 0.5) / count as f64;
             let mut cmd = std::process::Command::new(ffmpeg);
             cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
@@ -484,11 +487,36 @@ pub(crate) fn generate_filmstrip_blocking(
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
             let status = status_in_job(&mut cmd, Duration::from_secs(20)).map_err(|e| tool_run_error("ffmpeg", &e))?;
-            if !status.success() {
-                return Err("thumbnail extraction failed".to_string());
+            if status.success() {
+                Ok(())
+            } else {
+                Err("thumbnail extraction failed".to_string())
             }
-            // A clean exit without a picture: the seek landed past the last decodable frame.
-            if !p.is_file() && !reuse_previous_thumb(i.checked_sub(1).map(|j| out[j].as_path()), p) {
+        };
+        let missing: Vec<usize> = (0..out.len()).filter(|&i| !out[i].is_file()).collect();
+        for chunk in missing.chunks(FILMSTRIP_PARALLEL) {
+            if is_stale() {
+                return Ok(Vec::new());
+            }
+            let results: Vec<Result<(), String>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = chunk.iter().map(|&i| {
+                    let grab = &grab;
+                    let p = out[i].as_path();
+                    scope.spawn(move || grab(i, p))
+                }).collect();
+                handles.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("thumbnail extraction failed".to_string()))).collect()
+            });
+            for r in results {
+                r?;
+            }
+        }
+        if is_stale() {
+            return Ok(Vec::new());
+        }
+        // A clean exit without a picture: the seek landed past the last decodable frame, so the
+        // slot borrows its predecessor's picture (in order, so a run of empty slots chains).
+        for &i in &missing {
+            if !out[i].is_file() && !reuse_previous_thumb(i.checked_sub(1).map(|j| out[j].as_path()), &out[i]) {
                 return Err("thumbnail extraction failed".to_string());
             }
         }
@@ -877,6 +905,44 @@ pub(crate) fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Res
     if let Some(old) = old {
         EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).retain(|p| p != &old);
         remember_export_output(dst);
+    }
+    Ok(())
+}
+
+// The one gate both post-export buttons pass: a file this session exported (or moved after
+// exporting), not a foreign network spelling, and no quote that could break the Explorer
+// argument (Windows file names cannot hold one).
+pub(crate) fn export_output_to_open(own_dirs: &[PathBuf], path: &str) -> Result<PathBuf, String> {
+    let file = PathBuf::from(path);
+    if path.contains('"') || is_foreign_network_path(path, own_dirs) || !file.is_file() || !is_known_export_output(&file) {
+        return Err("export-not-found".to_string());
+    }
+    Ok(file)
+}
+
+#[tauri::command(async)]
+pub(crate) fn reveal_export_output(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let file = export_output_to_open(&own_storage_dirs(&app, &state), &path)?;
+    // Shows the exported file selected in its folder. raw_arg keeps Explorer's own quoting, which the
+    // normal argument escaping breaks for a path with spaces.
+    std::process::Command::new(crate::webview2::windows_dir_exe("explorer.exe"))
+        .raw_arg(format!("/select,\"{}\"", file.display()))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub(crate) fn open_export_output(app: AppHandle, state: State<'_, Db>, path: String) -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let file = export_output_to_open(&own_storage_dirs(&app, &state), &path)?;
+    let code = unsafe { ShellExecuteW(None, &HSTRING::from("open"), &HSTRING::from(file.as_os_str()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+    let code = code.0 as isize;
+    if code <= 32 {
+        return Err(format!("could not open the file (ShellExecuteW code {code})"));
     }
     Ok(())
 }
@@ -1772,6 +1838,13 @@ pub(crate) fn release_pending_editor_requests() {
 static VE_CLOSE_READY: AtomicBool = AtomicBool::new(false);
 static VE_CLOSING_OK: AtomicBool = AtomicBool::new(false);
 static VE_QUIT_AFTER_CLOSE: AtomicBool = AtomicBool::new(false);
+// Milliseconds since the UNIX epoch when the close question went to the page (0 = none
+// outstanding). A page that has not confirmed seeing it after 3 s is hung: the close goes through.
+static VE_ASK_SENT_MS: AtomicU64 = AtomicU64::new(0);
+// Counts built editor windows; only the newest one may reset the shared close state.
+static VE_WIN_GEN: AtomicU64 = AtomicU64::new(0);
+// Serializes "is there an editor window" with "the new window is registered".
+static VE_OPEN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum EditorCloseAction {
@@ -1779,8 +1852,12 @@ pub(crate) enum EditorCloseAction {
     AskPage,
 }
 
-pub(crate) fn editor_close_action(page_ready: bool, allowed: bool) -> EditorCloseAction {
-    if allowed || !page_ready {
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(1)
+}
+
+pub(crate) fn editor_close_action(page_ready: bool, allowed: bool, unanswered_ms: Option<u64>) -> EditorCloseAction {
+    if allowed || !page_ready || unanswered_ms.is_some_and(|ms| ms >= 3000) {
         EditorCloseAction::Allow
     } else {
         EditorCloseAction::AskPage
@@ -1796,18 +1873,22 @@ pub(crate) fn ask_editor_before_quit(app: &AppHandle) -> bool {
         return false;
     }
     VE_QUIT_AFTER_CLOSE.store(true, Ordering::SeqCst);
+    VE_ASK_SENT_MS.store(now_ms(), Ordering::SeqCst);
     let _ = app.emit_to(VIDEO_WIN_LABEL, "ve-close-requested", true);
     true
 }
 
-// The page's side of the close handshake: "ready" (it listens), "allow" (it asked and the
+// The page's side of the close handshake: "ready" (it listens), "seen" (the question arrived), "allow" (it asked and the
 // person agreed, or nothing needed asking: the next close goes through), "cancel" (the person
 // kept the editor open, so a pending quit is dropped).
 #[tauri::command]
 pub(crate) fn video_editor_close_ack(app: AppHandle, state: String) {
     match state.as_str() {
         "ready" => VE_CLOSE_READY.store(true, Ordering::SeqCst),
+        // The page saw the question (it may now show a dialog for as long as the person needs).
+        "seen" => VE_ASK_SENT_MS.store(0, Ordering::SeqCst),
         "allow" => {
+            VE_ASK_SENT_MS.store(0, Ordering::SeqCst);
             VE_CLOSING_OK.store(true, Ordering::SeqCst);
             if VE_QUIT_AFTER_CLOSE.swap(false, Ordering::SeqCst) {
                 // The quit goes on from a plain thread once the window is really gone, never
@@ -1823,7 +1904,10 @@ pub(crate) fn video_editor_close_ack(app: AppHandle, state: String) {
                 });
             }
         }
-        "cancel" => VE_QUIT_AFTER_CLOSE.store(false, Ordering::SeqCst),
+        "cancel" => {
+            VE_ASK_SENT_MS.store(0, Ordering::SeqCst);
+            VE_QUIT_AFTER_CLOSE.store(false, Ordering::SeqCst);
+        }
         _ => {}
     }
 }
@@ -1926,20 +2010,36 @@ pub(crate) async fn open_video_editor(
     .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())?;
     let origin_dir = origin_dir.unwrap_or_default();
-    let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path.clone()) };
-    let mut carried: Option<(String, String, String)> = None;
-    if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
+    let request = (src_path, origin_dir, overlay_path);
+    // Two rounds at most: the second one only happens when the first found its window gone and
+    // another call built a new one in the meantime.
+    for _attempt in 0..2 {
+        // One call at a time between "is there a window" and "the window is registered": Tauri
+        // registers a new window only after the native one exists, so two calls in flight would
+        // both see none and build two.
+        let guard = VE_OPEN_LOCK.lock().await;
+        let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) else {
+            return build_video_editor(&app, &pending, request, guard).await;
+        };
+        if pending.lock().0 == request.0 {
+            // The same file again: bring the open editor forward, no reload and no question.
+            let _ = win.show();
+            let _ = win.set_focus();
+            return Ok(true);
+        }
+        // The retarget may wait up to an hour for the person's answer: never under the lock.
+        drop(guard);
+        let overlay_opt = if request.2.is_empty() { None } else { Some(request.2.clone()) };
         // The open editor may still refuse (unsaved edits kept), so the source is only offered here
         // and becomes pending once taken.
         let id = VE_LOAD_REQUEST_SEQ.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         VE_LOAD_ACKS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(id, tx);
-        let request = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
         *VE_PENDING_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(request.clone());
         let _ = app.emit_to(
             VIDEO_WIN_LABEL,
             "video-editor-load",
-            &VideoEditorSource { path: src_path.clone(), origin_dir: origin_dir.clone(), overlay_path: overlay_opt, request_id: Some(id) },
+            &VideoEditorSource { path: request.0.clone(), origin_dir: request.1.clone(), overlay_path: overlay_opt, request_id: Some(id) },
         );
         let _ = win.show();
         let _ = win.set_focus();
@@ -1957,6 +2057,7 @@ pub(crate) async fn open_video_editor(
         if still_mine {
             *slot = None;
         }
+        drop(slot);
         let outcome = retarget_outcome(&decision, app.get_webview_window(VIDEO_WIN_LABEL).is_some());
         match outcome {
             RetargetOutcome::Done(false) => return Ok(false),
@@ -1973,10 +2074,20 @@ pub(crate) async fn open_video_editor(
                 return Ok(true);
             }
             // The window closed under the request: open a fresh one for this file.
-            RetargetOutcome::BuildNew => carried = Some(request),
+            RetargetOutcome::BuildNew => {}
         }
     }
-    let (src_path, origin_dir, overlay_path) = carried.unwrap_or((src_path, origin_dir, overlay_path));
+    Err("editor-busy".to_string())
+}
+
+// Builds the editor window for `request` while the caller holds the open lock; the lock drops
+// when the window is registered and placed.
+async fn build_video_editor(
+    app: &AppHandle,
+    pending: &State<'_, VideoEditorPending>,
+    request: (String, String, String),
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+) -> Result<bool, String> {
     // The closed window's label may be released a moment after its destroy event; building too
     // early would be refused as a duplicate label.
     for _ in 0..40 {
@@ -1985,14 +2096,14 @@ pub(crate) async fn open_video_editor(
         }
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
-    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
+    *pending.lock() = request;
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
     let excluded = {
         let state: State<Db> = app.state();
         let store = lock(&state);
         capture_excluded(&store.settings)
     };
-    let win = WebviewWindowBuilder::new(&app, VIDEO_WIN_LABEL, WebviewUrl::App("video.html".into()))
+    let win = WebviewWindowBuilder::new(app, VIDEO_WIN_LABEL, WebviewUrl::App("video.html".into()))
         .title(brand::DISPLAY_NAME)
         .inner_size(VIDEO_WIN_W as f64, VIDEO_WIN_H as f64)
         .min_inner_size(VIDEO_WIN_MIN_W as f64, VIDEO_WIN_MIN_H as f64)
@@ -2000,24 +2111,40 @@ pub(crate) async fn open_video_editor(
         .transparent(true)
         .resizable(true)
         .visible(false)
+        // Shown once the page has loaded: a window shown at creation sits on screen as an empty
+        // transparent frame while WebView2 loads the scripts and styles.
+        .on_page_load(|win, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        })
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    let my_gen = VE_WIN_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let close_app = app.clone();
     win.on_window_event(move |event| match event {
         tauri::WindowEvent::CloseRequested { api, .. } => {
             let allowed = VE_CLOSING_OK.swap(false, Ordering::SeqCst);
-            if editor_close_action(VE_CLOSE_READY.load(Ordering::SeqCst), allowed) == EditorCloseAction::AskPage {
+            let asked_at = VE_ASK_SENT_MS.load(Ordering::SeqCst);
+            let unanswered_ms = (asked_at != 0).then(|| now_ms().saturating_sub(asked_at));
+            if editor_close_action(VE_CLOSE_READY.load(Ordering::SeqCst), allowed, unanswered_ms) == EditorCloseAction::AskPage {
                 api.prevent_close();
+                VE_ASK_SENT_MS.store(now_ms(), Ordering::SeqCst);
                 let _ = close_app.emit_to(VIDEO_WIN_LABEL, "ve-close-requested", false);
             }
         }
         tauri::WindowEvent::Destroyed => {
-            VE_CLOSE_READY.store(false, Ordering::SeqCst);
-            VE_CLOSING_OK.store(false, Ordering::SeqCst);
-            // A quit that was waiting on the editor must not outlive it and close the next one.
-            VE_QUIT_AFTER_CLOSE.store(false, Ordering::SeqCst);
-            release_pending_editor_requests();
+            // A window that lost the label race to a newer one must not reset the live one's state.
+            if VE_WIN_GEN.load(Ordering::SeqCst) == my_gen {
+                VE_CLOSE_READY.store(false, Ordering::SeqCst);
+                VE_CLOSING_OK.store(false, Ordering::SeqCst);
+                VE_ASK_SENT_MS.store(0, Ordering::SeqCst);
+                // A quit that was waiting on the editor must not outlive it and close the next one.
+                VE_QUIT_AFTER_CLOSE.store(false, Ordering::SeqCst);
+                release_pending_editor_requests();
+            }
             FILMSTRIP_GEN.fetch_add(1, Ordering::SeqCst);
         }
         _ => {}
@@ -2025,7 +2152,14 @@ pub(crate) async fn open_video_editor(
     set_capture_exclusion(&win, excluded);
     let geom = centered_on_primary(&win, VIDEO_WIN_W, VIDEO_WIN_H);
     let _ = win.set_position(PhysicalPosition::new(geom.x, geom.y));
-    let _ = win.show();
-    let _ = win.set_focus();
+    // A failed page load must never leave an invisible window.
+    let fallback = win.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+        if matches!(fallback.is_visible(), Ok(false)) {
+            let _ = fallback.show();
+            let _ = fallback.set_focus();
+        }
+    });
     Ok(true)
 }

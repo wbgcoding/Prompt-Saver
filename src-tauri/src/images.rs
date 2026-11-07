@@ -223,16 +223,75 @@ pub(crate) async fn get_clipboard_file_path(app: AppHandle) -> Option<String> {
     }
 }
 
+// Types the video editor offers for an overlay picture and for an extra clip. Every entry is a type
+// the export accepts, so the dialog never lists a file the export would refuse.
+pub(crate) const OVERLAY_IMAGE_EXTS: [&str; 11] = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "apng", "avif", "jfif"];
+pub(crate) const OVERLAY_VIDEO_EXTS: [&str; 16] =
+    ["mp4", "webm", "avi", "mov", "mkv", "m4v", "wmv", "flv", "mpg", "mpeg", "ts", "m2ts", "3gp", "ogv", "mts", "vob"];
+
+// The folder of the last file picked per kind (image, video), for this session only.
+static LAST_PICK_DIR: std::sync::Mutex<[Option<PathBuf>; 2]> = std::sync::Mutex::new([None, None]);
+
+fn pick_kind_slot(kind: &str) -> Option<usize> {
+    match kind {
+        "image" => Some(0),
+        "video" => Some(1),
+        _ => None,
+    }
+}
+
+// Where the dialog opens for a kind: the folder of the last pick of that kind if it is still
+// there, else the user's Pictures or Videos folder if that exists.
+fn pick_start_dir(kind: &str) -> Option<PathBuf> {
+    let slot = pick_kind_slot(kind)?;
+    let last = LAST_PICK_DIR.lock().ok().and_then(|g| g[slot].clone());
+    if let Some(dir) = last.filter(|d| d.is_dir()) {
+        return Some(dir);
+    }
+    let profile = std::env::var_os("USERPROFILE")?;
+    let dir = PathBuf::from(profile).join(if slot == 0 { "Pictures" } else { "Videos" });
+    dir.is_dir().then_some(dir)
+}
+
+fn remember_pick_dir(kind: &str, picked: &str) {
+    let (Some(slot), Some(dir)) = (pick_kind_slot(kind), Path::new(picked).parent()) else {
+        return;
+    };
+    if let Ok(mut g) = LAST_PICK_DIR.lock() {
+        g[slot] = Some(dir.to_path_buf());
+    }
+}
+
 #[tauri::command]
-pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_only: Option<bool>, filter_label: Option<String>) -> Option<String> {
+pub(crate) async fn pick_file_path(
+    app: AppHandle,
+    win: tauri::Window,
+    images_only: Option<bool>,
+    filter_label: Option<String>,
+    kind: Option<String>,
+    all_label: Option<String>,
+) -> Option<String> {
     let label = win.label().to_string();
     let app_for_scope = app.clone();
+    let kind_for_memory = kind.clone();
     // The dialog is modal: it waits on a blocking thread, not on an async worker.
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::floating::on_dialog_thread(move || {
         let dlg = file_dialog_for(&app, &label);
         // Text recognition accepts only some image types: offer just those.
         let dlg = if images_only == Some(true) { dlg.add_filter(filter_label.as_deref().unwrap_or("Images"), &OCR_IMAGE_EXTS) } else { dlg };
+        // The video editor names a kind: that type list first, everything else one filter away,
+        // and a start folder so the dialog does not open on a folder full of recordings.
+        let dlg = match kind.as_deref() {
+            Some("image") => dlg.add_filter(filter_label.as_deref().unwrap_or("Images"), &OVERLAY_IMAGE_EXTS),
+            Some("video") => dlg.add_filter(filter_label.as_deref().unwrap_or("Videos"), &OVERLAY_VIDEO_EXTS),
+            _ => dlg,
+        };
+        let dlg = match kind.as_deref().and_then(pick_start_dir) {
+            Some(dir) => dlg.set_directory(dir),
+            None => dlg,
+        };
+        let dlg = if kind.as_deref().and_then(pick_kind_slot).is_some() { dlg.add_filter(all_label.as_deref().unwrap_or("All files"), &["*"]) } else { dlg };
         dlg.pick_file().map(|p| p.to_string_lossy().to_string())
         })
         .flatten()
@@ -242,6 +301,9 @@ pub(crate) async fn pick_file_path(app: AppHandle, win: tauri::Window, images_on
     .flatten();
     let _ = win.set_focus();
     if let Some(p) = &result {
+        if let Some(k) = &kind_for_memory {
+            remember_pick_dir(k, p);
+        }
         crate::asset_scope::grant_picked_file(p);
         crate::asset_scope::allow_file(&app_for_scope, p);
     }

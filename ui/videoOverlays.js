@@ -39,6 +39,21 @@ export function centeredRect(fraction) {
 // takes the overlay back out instead of leaving an invisible one behind.
 let freshTextOv = null;
 
+// Only one file dialog at a time: a second click while the first is still starting would open a
+// second dialog.
+let picking = false;
+async function pickPath(args) {
+  if (picking) return null;
+  picking = true;
+  try {
+    return await invoke("pick_file_path", args).catch(() => null);
+  } finally {
+    picking = false;
+  }
+}
+const IMAGE_PICK = () => ({ kind: "image", filterLabel: t("pickFilterImages"), allLabel: t("pickFilterAll") });
+const VIDEO_PICK = () => ({ kind: "video", filterLabel: t("pickFilterVideos"), allLabel: t("pickFilterAll") });
+
 export async function addOverlay(kind) {
   // Same race as startAddVideo: a button live from first paint that builds text with t() at
   // click time needs the lazy i18n import landed first.
@@ -50,7 +65,7 @@ export async function addOverlay(kind) {
     // The dialog can stay open while another recording loads; its answer then belongs to a
     // file that is no longer in the editor.
     const gen = VE.loadGen;
-    const path = await invoke("pick_file_path").catch(() => null);
+    const path = await pickPath(IMAGE_PICK());
     if (!path || VE.loadGen !== gen) return;
     // An apostrophe in the path has no escape ffmpeg's filter parser accepts, so
     // it is refused here with a reason instead of failing at export time.
@@ -88,7 +103,7 @@ async function pickExtraVideo() {
     return null;
   }
   const gen = VE.loadGen;
-  const path = await invoke("pick_file_path").catch(() => null);
+  const path = await pickPath(VIDEO_PICK());
   if (!path || VE.loadGen !== gen) return null;
   if (path.includes("'")) { toast(t("veOvImageQuote")); return null; }
   try {
@@ -649,7 +664,7 @@ export function renderOverlayEditor() {
     change.textContent = t("pathChange");
     change.addEventListener("click", async () => {
       const gen = VE.loadGen;
-      const path = await invoke("pick_file_path").catch(() => null);
+      const path = await pickPath(IMAGE_PICK());
       if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
       commitOverlay(op, { path });
@@ -676,7 +691,7 @@ export function renderOverlayEditor() {
     change.textContent = t("pathChange");
     change.addEventListener("click", async () => {
       const gen = VE.loadGen;
-      const path = await invoke("pick_file_path").catch(() => null);
+      const path = await pickPath(VIDEO_PICK());
       if (!path || !overlayStillInEditor(op, gen)) return;
       if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
       try {

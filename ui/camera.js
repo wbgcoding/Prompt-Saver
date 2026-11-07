@@ -12,6 +12,13 @@ import { LANGS, fullTexts } from "./i18n.js";
 import { attachSelectPicker } from "./selectpop.js";
 
 const { invoke } = window.__TAURI__.core;
+
+// One editor open at a time: a second call while the first is still starting joins it.
+let veOpening = null;
+function openVideoEditor(args) {
+  if (!veOpening) veOpening = invoke("open_video_editor", args).finally(() => { veOpening = null; });
+  return veOpening;
+}
 const { listen } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 const appWin = getCurrentWebviewWindow();
@@ -396,8 +403,8 @@ async function startRecording() {
       // opens on its own. The overlay alignment lives in its sidecar (written above), not
       // in open_video_editor's arguments.
       const opened = finished && finished.companion_path
-        ? await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path })
-        : await invoke("open_video_editor", { srcPath: path });
+        ? await openVideoEditor({ srcPath: finished.companion_path, overlayPath: path })
+        : await openVideoEditor({ srcPath: path });
       // An editor that is open with unsaved work refuses the new source: the take is saved but
       // nothing shows it, so the status strip says where it is.
       if (opened === false) keptNotice = t("camTakeKept").replace("{path}", () => path);

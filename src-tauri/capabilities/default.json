@@ -318,6 +318,8 @@
     "allow-video-editor-load-ack",
     "allow-video-editor-close-ack",
     "allow-video-editor-add-tile",
+    "allow-reveal-export-output",
+    "allow-open-export-output",
     "allow-video-editor-source",
     "allow-probe-recording",
     "allow-probe-extra-video-source",

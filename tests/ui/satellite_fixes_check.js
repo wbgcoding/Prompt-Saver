@@ -59,6 +59,7 @@ later(async () => {
     stopEditStateAutosave: () => {},
     invoke: async (cmd, args) => { if (cmd === "discard_edit_state") discards.push(args.target); },
     confirmDialog: () => new Promise((resolve) => gates.push(resolve)),
+    askUnsavedEdits: async () => ((await sb.confirmDialog()) ? "discard" : "stay"),
     loadRecording: (p) => { sb.VE.src = p; sb.VE.ops = []; sb.VE.dirty = false; },
   };
   run(extractBlock(src, 'listen("video-editor-load", async (e)') + ");", sb);
@@ -83,7 +84,7 @@ section(() => {
   check(sb.overlayStillInEditor({ id: "o1" }, 3) === true, "an overlay still in the same recording may be committed");
   check(sb.overlayStillInEditor({ id: "o1" }, 2) === false, "another recording was loaded: no commit");
   check(sb.overlayStillInEditor({ id: "o2" }, 3) === false, "the overlay was removed: no commit");
-  const guards = src.match(/const gen = VE\.loadGen;\n\s+const path = await invoke\("pick_file_path"\)\.catch\(\(\) => null\);\n\s+if \(!path \|\| !overlayStillInEditor\(op, gen\)\) return;/g) || [];
+  const guards = src.match(/const gen = VE\.loadGen;\n\s+const path = await pickPath\(\w+_PICK\(\)\);\n\s+if \(!path \|\| !overlayStillInEditor\(op, gen\)\) return;/g) || [];
   check(guards.length === 2, "both Change file handlers re-check the overlay after the picker");
   check(/probe_extra_video_source[^\n]*\n\s+if \(!overlayStillInEditor\(op, gen\)\) return;/.test(src), "the video handler re-checks after the probe");
 });

@@ -1,5 +1,5 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errText, errToast, flag, hideToast, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errText, errToast, flag, hideToast, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, openVideoEditor, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -125,7 +125,7 @@ export function bindCapture() {
       openImageFileInEditor(res);
     } else if (res.kind === "video") {
       toast(t("openedCopyNote"));
-      await invoke("open_video_editor", { srcPath: res.copied_path, originDir: res.origin_dir })
+      await openVideoEditor({ srcPath: res.copied_path, originDir: res.origin_dir })
         .then(() => recordToolUsage("video_editor"))
         .catch((e) => errToast(e));
     }
@@ -562,7 +562,7 @@ export function bindCapture() {
   $("rec-modal-edit").addEventListener("click", async () => {
     if (!pendingRecPath || recSaveBusy || recSaveAsBusy || recCopyBusy) return;
     try {
-      const taken = await invoke("open_video_editor", { srcPath: pendingRecPath });
+      const taken = await openVideoEditor({ srcPath: pendingRecPath });
       // The open editor kept its unsaved work: this take stays here to decide on.
       if (taken === false) return;
       recordToolUsage("video_editor");
