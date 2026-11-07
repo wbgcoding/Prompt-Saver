@@ -416,6 +416,7 @@ export const HELP_CONTENT = {
       whatItIs: "These settings control how a tile reacts to the mouse and what it looks like.",
       howTo: [
         "Right-click a tile for its menu: edit, pin, hide, delete, and more.",
+        "Right-click a tile twice quickly to open its editor straight away.",
         "Right-click a tile (or Ctrl+click) to select it; while selecting, every tile shows its checkbox.",
         "Drag a tile to any grid cell; drop it on an occupied cell to swap.",
         "Turn on hover lift, shadows, badges and similar looks in the expert menu.",
@@ -1193,6 +1194,7 @@ export const HELP_CONTENT = {
       whatItIs: "Diese Einstellungen regeln, wie eine Kachel auf die Maus reagiert und wie sie aussieht.",
       howTo: [
         "Rechtsklick auf eine Kachel für ihr Menü: Bearbeiten, Anheften, Verbergen, Löschen und mehr.",
+        "Zwei schnelle Rechtsklicks auf eine Kachel öffnen direkt ihren Editor.",
         "Rechtsklick auf eine Kachel (oder Strg+Klick) wählt sie aus; solange du auswählst, zeigt jede Kachel ihr Kästchen.",
         "Eine Kachel auf eine beliebige Rasterzelle ziehen; auf einer besetzten Zelle loslassen, um zu tauschen.",
         "Hover-Lift, Schatten, Badges und ähnliche Optiken im Expertenmenü einschalten.",

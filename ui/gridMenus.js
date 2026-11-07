@@ -19,6 +19,23 @@ import { setBars } from "./windowChrome.js";
 export let ctxId = null;
 
 // ---- Context menu ----
+// A second right-click on the same tile within this window skips the menu and opens the
+// editor. The menu opens under the cursor, so that second click usually lands on the menu
+// itself; both paths go through openTileCtx.
+export const CTX_DOUBLE_MS = 400;
+let lastCtxId = null;
+let lastCtxAt = 0;
+export function openTileCtx(id, x, y, now = performance.now()) {
+  if (id && id === lastCtxId && now - lastCtxAt <= CTX_DOUBLE_MS) {
+    lastCtxId = null;
+    closeCtx();
+    editPrompt(id);
+    return;
+  }
+  lastCtxId = id;
+  lastCtxAt = now;
+  openCtx(id, x, y);
+}
 export function openCtx(id, x, y) {
   ctxId = id;
   const cp = prompts.find((x) => x.id === id);
@@ -333,6 +350,11 @@ export function openToolbarMenu(x, y) {
 export function closeToolbarMenu() { toolbarMenu.classList.add("hidden"); }
 
 export function bindGridMenus({ openExternalFileInEditor }) {
+  ctxEl.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (ctxId) openTileCtx(ctxId, e.clientX, e.clientY);
+  });
   ctxEl.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
     const act = btn?.dataset.act;

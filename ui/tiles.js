@@ -14,7 +14,7 @@ import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
 import { recordToolUsage } from "./management.js";
 import { openModal } from "./editor.js";
 import { armFolderDrop, disarmFolder, dropIntoFolder, endMemberDragLayers, folderById, openTileFolderPop, saveFolder } from "./gridFolders.js";
-import { openCtx } from "./gridMenus.js";
+import { openTileCtx } from "./gridMenus.js";
 
 // Auto-fit cache per (text, cell size); cleared on font changes.
 export const fitCache = new Map();
@@ -510,7 +510,7 @@ export function buildTile(p) {
     tile.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      openCtx(p.id, e.clientX, e.clientY);
+      openTileCtx(p.id, e.clientX, e.clientY);
     });
   }
 
