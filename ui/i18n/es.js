@@ -707,6 +707,7 @@ export default {
     veCloseUnsaved: "Los cambios aún no se han exportado. ¿Cerrar de todos modos?",
     veCloseExporting: "Hay una exportación en curso.",
     veDiscard: "Descartar",
+    veOpening: "Abriendo el editor de vídeo…",
     recAttach: "Adjuntar como botón",
     recConvertFailedKeepRaw: "La conversión falló, se conserva la grabación original.",
     recEncodeError: "Grabación detenida antes de tiempo: un error de escritura la interrumpió, pero se conserva lo grabado hasta ahora.",

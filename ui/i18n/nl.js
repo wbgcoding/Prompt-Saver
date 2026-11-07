@@ -707,6 +707,7 @@ export default {
     veCloseUnsaved: "De wijzigingen zijn nog niet geëxporteerd. Toch sluiten?",
     veCloseExporting: "Er wordt nog geëxporteerd.",
     veDiscard: "Verwerpen",
+    veOpening: "Video-editor wordt geopend…",
     recAttach: "Toevoegen als knop",
     recConvertFailedKeepRaw: "Conversie mislukt, oorspronkelijke opname blijft behouden.",
     recEncodeError: "Opname vroegtijdig gestopt: een schrijffout onderbrak de opname, maar wat tot nu toe is vastgelegd blijft behouden.",

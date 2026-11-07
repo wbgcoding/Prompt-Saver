@@ -707,6 +707,7 @@ export default {
     veCloseUnsaved: "Değişiklikler henüz dışa aktarılmadı. Yine de kapatılsın mı?",
     veCloseExporting: "Dışa aktarma hâlâ sürüyor.",
     veDiscard: "At",
+    veOpening: "Video düzenleyici açılıyor…",
     recAttach: "Buton olarak ekle",
     recConvertFailedKeepRaw: "Dönüştürme başarısız oldu, orijinal kayıt korunuyor.",
     recEncodeError: "Kayıt erken durduruldu: bir yazma hatası kaydı kesti, ancak o ana kadar yakalanan kısım korunuyor.",

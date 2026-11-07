@@ -707,6 +707,7 @@ export default {
     veCloseUnsaved: "Modificările nu au fost încă exportate. Închizi oricum?",
     veCloseExporting: "Un export este încă în curs.",
     veDiscard: "Renunță",
+    veOpening: "Se deschide editorul video…",
     recAttach: "Adaugă ca buton",
     recConvertFailedKeepRaw: "Conversia a eșuat, înregistrarea originală este păstrată.",
     recEncodeError: "Înregistrarea s-a oprit mai devreme: o eroare de scriere a întrerupt-o, dar ce a fost înregistrat până acum este păstrat.",

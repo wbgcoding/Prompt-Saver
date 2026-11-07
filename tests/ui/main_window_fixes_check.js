@@ -1809,6 +1809,27 @@ section(() => {
   check(!/statCard\([^\n]*backupContent[^\n]*true\)/.test(src), "the content preview cards stay value first");
 });
 
+// The video editor opens through one in-flight promise: a burst of clicks asks the backend once.
+later(async () => {
+  const core = read("core.js");
+  const src = "let veOpening = null;\n" + extractBlock(core, "export function openVideoEditor(").replace("export ", "") + ";globalThis.api = { openVideoEditor };";
+  let calls = 0;
+  const toasts = [];
+  const invoke = () => { calls++; return new Promise((resolve) => setTimeout(() => resolve(true), 5)); };
+  const sb = run(src, { invoke, toast: (m) => toasts.push(m), t: (k) => k, setTimeout, clearTimeout });
+  const a = sb.api.openVideoEditor({ srcPath: "a.mp4" });
+  const b = sb.api.openVideoEditor({ srcPath: "a.mp4" });
+  check(a === b, "a second open while the first is pending returns the same promise");
+  await a;
+  check(calls === 1, "invoke runs once for a burst of opens, ran " + calls);
+  await sb.api.openVideoEditor({ srcPath: "a.mp4" });
+  check(calls === 2, "a later open asks the backend again, ran " + calls);
+  check(toasts.length === 0, "a fast start shows no note");
+  for (const f of ["gridMenus.js", "capture.js"]) {
+    check(!read(f).includes('invoke("open_video_editor"'), f + " opens the editor through openVideoEditor");
+  }
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

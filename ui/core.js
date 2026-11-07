@@ -452,6 +452,18 @@ export const OCR_LANG_NOTICE_MS = 8000;
 export const VOICE_LANG_NOTICE_MS = 8000;
 // Arrow-key nudge step in the screenshot editor while Shift is held.
 export const NUM_FIELD_BIG_STEP = 10;
+// One editor open at a time: a second click while the first is still starting joins it instead of
+// asking the backend again. A slow start (first window, big file) gets one short note.
+let veOpening = null;
+export function openVideoEditor(args) {
+  if (veOpening) return veOpening;
+  const slow = setTimeout(() => toast(t("veOpening")), 400);
+  veOpening = invoke("open_video_editor", args).finally(() => {
+    clearTimeout(slow);
+    veOpening = null;
+  });
+  return veOpening;
+}
 export function toast(msg, action = null, tint = "", chips = null, duration = null) {
   clearTimeout(toastHideTimer);
   toastEl.textContent = "";

@@ -1013,7 +1013,7 @@ export async function loadStrip() {
   // return stops a slow filmstrip for the old video from painting over the new one's.
   const myGen = VE.loadGen;
   try {
-    const paths = await invoke("generate_filmstrip", { path: VE.src, count: want });
+    const paths = await invoke("generate_filmstrip", { path: VE.src, count: want, durationMs: Math.round(VE.dur) });
     if (VE.loadGen !== myGen) return;
     if (Array.isArray(paths) && paths.length) {
       VE.strip = paths;
@@ -2433,7 +2433,12 @@ listen("video-editor-load", async (e) => {
 // A close the page did not start (Alt+F4, the taskbar entry, the app quitting) arrives here and
 // takes the same path as the close button. The backend only holds closes back once told that this
 // listener exists.
-listen("ve-close-requested", (e) => { closeWindow({ quit: e.payload === true }); })
+listen("ve-close-requested", (e) => {
+  // Tell the backend the page is alive before anything else: only a page that stays silent is
+  // force-closed. A question dialog may then stay open as long as the person needs.
+  invoke("video_editor_close_ack", { state: "seen" }).catch(() => {});
+  closeWindow({ quit: e.payload === true });
+})
   .then(() => invoke("video_editor_close_ack", { state: "ready" }))
   .catch(() => {});
 listen(EXPORT_PROGRESS_EVENT, (e) => {
@@ -2513,31 +2518,32 @@ export function applySettings(settings) {
 // ---------------------------------------------------------------- boot
 
 (async () => {
+  // The four startup calls are independent: they run together instead of one after the other.
+  // The recording is pulled, not pushed (a push would race the webview's first frame, as for the
+  // placeholder window). The "video-editor-load" event covers a second recording opened into a
+  // window that is already up. No source command yet, or none set: wait for the event instead of
+  // showing an error for what is a normal startup order.
+  const [themeName, themeVars, loadedSettings, source] = await Promise.all([
+    invoke("current_theme").catch(() => null),
+    invoke("theme_vars").catch(() => null),
+    invoke("get_settings").catch(() => null),
+    invoke("video_editor_source").catch(() => null),
+  ]);
   try {
-    applyTheme(await invoke("current_theme"), await invoke("theme_vars"));
+    if (themeName != null && themeVars != null) applyTheme(themeName, themeVars);
   } catch (_) {}
   try {
-    settings = await invoke("get_settings");
-    applySettings(settings);
+    if (loadedSettings != null) {
+      settings = loadedSettings;
+      applySettings(settings);
+    }
   } catch (_) {}
   textsReady = loadTexts(settings).catch(() => {});
   renderSpeedSteps();
   renderScalePresets();
-  // The recording is pulled, not pushed (a push would race the webview's first frame, as for the
-  // placeholder window). The "video-editor-load" event covers a second recording opened into a
-  // window that is already up.
-  let path = "";
-  let originDir = "";
-  let overlayPath = "";
-  try {
-    const source = await invoke("video_editor_source");
-    path = source?.path || "";
-    originDir = source?.origin_dir || "";
-    overlayPath = source?.overlay_path || "";
-  } catch (_) {
-    // No source command yet, or none set: wait for the event instead of showing
-    // an error for what is a normal startup order.
-  }
+  const path = source?.path || "";
+  const originDir = source?.origin_dir || "";
+  const overlayPath = source?.overlay_path || "";
   if (path) await loadRecording(path, originDir, overlayPath);
   else {
     // Wait for the texts (t() answers the raw key before they land) and point the label's

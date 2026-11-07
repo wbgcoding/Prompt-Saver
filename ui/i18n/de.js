@@ -684,6 +684,7 @@ export default {
     veCloseUnsaved: "Die Änderungen wurden noch nicht exportiert. Trotzdem schließen?",
     veCloseExporting: "Ein Export läuft noch.",
     veDiscard: "Verwerfen",
+    veOpening: "Video-Editor wird geöffnet…",
     recAttach: "Als Button hinzufügen",
     recConvertFailedKeepRaw: "Konvertierung fehlgeschlagen, Originalaufnahme bleibt erhalten.",
     recEncodeError: "Aufnahme vorzeitig gestoppt, weil ein Schreibfehler sie unterbrochen hat. Das bisher Aufgenommene bleibt erhalten.",

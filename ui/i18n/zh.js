@@ -707,6 +707,7 @@ export default {
     veCloseUnsaved: "更改尚未导出。仍要关闭吗？",
     veCloseExporting: "导出仍在进行中。",
     veDiscard: "放弃",
+    veOpening: "正在打开视频编辑器…",
     recAttach: "添加为按钮",
     recConvertFailedKeepRaw: "转换失败，已保留原始录制文件。",
     recEncodeError: "录制提前停止：写入错误中断了录制，但到目前为止捕获的内容已保留。",

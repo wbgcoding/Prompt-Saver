@@ -707,6 +707,7 @@ export default {
     veCloseUnsaved: "変更はまだ書き出されていません。このまま閉じますか？",
     veCloseExporting: "書き出しが実行中です。",
     veDiscard: "破棄",
+    veOpening: "動画エディターを開いています…",
     recAttach: "ボタンとして追加",
     recConvertFailedKeepRaw: "変換に失敗しました。元の録画を保持します。",
     recEncodeError: "書き込みエラーにより録画が途中で停止しました。それまでに録画された内容は保持されます。",
