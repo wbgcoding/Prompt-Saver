@@ -98,7 +98,7 @@ export const modal = {
 export const DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT;
 export const INPUT_MAX = 160; // keep in sync with .input max-height
 // Grid-dimension and view-count limits are expert values (val("gridMax") / val("maxViews")).
-// The backend keeps a hard ceiling of 100 for both.
+// The backend keeps a hard ceiling of 200 for both.
 export const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip shows
 export let BUBBLE_MS = 950; // "Copied!" bubble lifetime (expert-tunable)
 export function assignBUBBLE_MS(v) { BUBBLE_MS = v; }

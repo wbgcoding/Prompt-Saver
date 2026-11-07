@@ -15,7 +15,7 @@ pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("iconScale", 50.0, 300.0, false),
     ("nameMaxLen", 20.0, 1000.0, false),
     ("maxViews", 1.0, 200.0, false),
-    ("gridMax", 1.0, 200.0, false),
+    ("gridMax", 1.0, 50.0, false),
     ("historyMax", 0.0, 1000000.0, false),
     ("copyCooldownMs", 0.0, 10000.0, false),
     ("copySoundVolume", 0.0, 100.0, false),

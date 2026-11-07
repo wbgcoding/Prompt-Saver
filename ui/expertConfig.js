@@ -338,7 +338,7 @@ export const EXPERT_VALUES = {
   nameMaxLen: { label: "valNameMaxLen", min: 20, max: 1000, step: 10, def: 80, unit: "" },
   // Limit overrides (defaults match the classic 20; backend ceiling is 200).
   maxViews: { label: "valMaxViews", min: 1, max: 200, step: 1, def: 20, unit: "", gate: "multiView" },
-  gridMax: { label: "valGridMax", min: 1, max: 200, step: 1, def: 20, unit: "" },
+  gridMax: { label: "valGridMax", min: 1, max: 50, step: 1, def: 20, unit: "" },
   // Copy-history length (0 = keep none).
   historyMax: { label: "valHistoryMax", def: 100, unit: "", stops: HISTORY_STOPS, gate: "copyHistory" },
   // Max copy-history rows the journal renders at once (UI cap, not storage).
