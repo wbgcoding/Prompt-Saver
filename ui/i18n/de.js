@@ -1733,6 +1733,7 @@ export default {
     tipMultiView: "Mehrere benannte Ansichten mit jeweils eigenem Raster und Layout, umschaltbar über die Tabs neben dem Titel.",
     tipLibraryCols: "Höchstens so viele Spalten zeigt die Liste der Bibliothek. Ein schmales Fenster zeigt weniger.",
     tipUiScale: "Skaliert das ganze Fenster. Es wächst nur so weit, wie der Bildschirm es zeigen kann.",
+    tipIconScale: "Größe der Schaltflächen und des Eingabefelds. Sie wächst nur so weit, wie das Fenster Platz hat.",
     tipCopySizeLevel: "Schriftgröße der „Kopiert!“-Bestätigung auf Kacheln und schwebenden Buttons. „Groß“ füllt Kachel oder Button aus.",
     tipShowLibrary: "Blendet den Button für die Bibliothek in der Kopfzeile ein oder aus.",
     expGroupVars: "Platzhalter",

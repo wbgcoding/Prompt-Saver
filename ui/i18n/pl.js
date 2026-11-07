@@ -1726,6 +1726,7 @@ export default {
     tipMultiView: "Kilka nazwanych widoków, każdy z własną siatką i układem, przełączanych kartami obok tytułu.",
     tipLibraryCols: "Największa liczba kolumn listy biblioteki. W wąskim oknie jest ich mniej.",
     tipUiScale: "Skaluje całe okno. Rośnie tylko tyle, ile może pokazać ekran.",
+    tipIconScale: "Rozmiar przycisków i pola wprowadzania. Rośnie tylko tyle, ile miejsca ma okno.",
     tipCopySizeLevel: "Rozmiar tekstu potwierdzenia „Skopiowano!” na kafelkach i przyciskach pływających. Duży wypełnia kafelek lub przycisk.",
     tipShowLibrary: "Pokazuje lub ukrywa przycisk biblioteki na górnym pasku.",
     expGroupVars: "Symbole zastępcze",

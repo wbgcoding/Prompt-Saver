@@ -1733,6 +1733,7 @@ export default {
     tipMultiView: "Several named views, each with its own grid and layout, switched by tabs next to the title.",
     tipLibraryCols: "The most columns the library list uses. A narrow window shows fewer.",
     tipUiScale: "Scales the whole window. It grows only as far as the screen can show.",
+    tipIconScale: "Size of the buttons and the entry field. It grows only as far as the window has room.",
     tipCopySizeLevel: "Text size of the \"Copied!\" confirmation on tiles and floating buttons. Large fills the tile or button.",
     tipShowLibrary: "Shows or hides the library button in the top bar.",
     expGroupVars: "Placeholders",

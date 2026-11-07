@@ -1726,6 +1726,7 @@ export default {
     tipMultiView: "Varias vistas con nombre, cada una con su propia cuadrícula y disposición, con pestañas junto al título.",
     tipLibraryCols: "El máximo de columnas que usa la lista de la biblioteca. Una ventana estrecha muestra menos.",
     tipUiScale: "Escala toda la ventana. Solo crece hasta donde la pantalla puede mostrarlo.",
+    tipIconScale: "Tamaño de los botones y del campo de entrada. Solo crece hasta donde la ventana tiene espacio.",
     tipCopySizeLevel: "Tamaño del texto de la confirmación “¡Copiado!” en mosaicos y botones flotantes. Grande llena el mosaico o el botón.",
     tipShowLibrary: "Muestra u oculta el botón de la biblioteca en la barra superior.",
     expGroupVars: "Marcadores",

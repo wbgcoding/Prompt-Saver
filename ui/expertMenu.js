@@ -253,6 +253,13 @@ export function applyFlags() {
   syncBannerStack(); // demo mode is a flag-driven notice
 }
 
+// Icons grow only as far as the window has room: 150 % at the smallest window, more as it
+// grows; 100 % always stays allowed.
+export function applyIconZoom() {
+  const room = Math.max(1, 1.5 * Math.min(window.innerWidth / 680, window.innerHeight / 460));
+  document.documentElement.style.setProperty("--icon-zoom", String(Math.min(val("iconScale") / 100, room)));
+}
+
 // Apply every numeric tweak to its live target (CSS vars + JS constants).
 export let _lastUiZoom = null; // last native-zoom factor pushed to the backend (throttle)
 export let _lastTileStyle = null; // last tile style applied (refit only when it changes)
@@ -278,7 +285,7 @@ export function applyValues() {
     _lastUiZoom = uiZoomFactor;
     invoke("set_ui_zoom", { factor: uiZoomFactor }).catch(() => {});
   }
-  root.setProperty("--icon-zoom", val("iconScale") / 100);
+  applyIconZoom();
   // Sizes exposed to CSS (favorites star, chain badge, tile geometry, header, snip).
   root.setProperty("--tile-radius", `${val("tileRadius")}px`);
   root.setProperty("--tile-border-w", `${val("tileBorderWidth")}px`);

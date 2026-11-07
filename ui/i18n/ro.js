@@ -1726,6 +1726,7 @@ export default {
     tipMultiView: "Mai multe vizualizări cu nume, fiecare cu grila și aranjamentul ei, comutate din filele de lângă titlu.",
     tipLibraryCols: "Numărul maxim de coloane folosite de lista bibliotecii. O fereastră îngustă afișează mai puține.",
     tipUiScale: "Scalează întreaga fereastră. Crește doar atât cât poate afișa ecranul.",
+    tipIconScale: "Dimensiunea butoanelor și a câmpului de introducere. Crește doar atât cât are loc fereastra.",
     tipCopySizeLevel: "Mărimea textului confirmării „Copiat!” pe dale și pe butoane plutitoare. Mare umple dala sau butonul.",
     tipShowLibrary: "Afișează sau ascunde butonul bibliotecii din bara de sus.",
     expGroupVars: "Substituenți",

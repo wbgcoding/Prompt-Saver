@@ -17,7 +17,7 @@ import { applyTheme, applyTileStyle, bindTheme, closeThemeEditor, wireTheme } fr
 import { applySettingsCore, applySettingsUi, bindSettingsPanel, closeImportMenu, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
 import { bindHotkeys } from "./hotkeys.js";
 import { bindAbout } from "./about.js";
-import { applyFlags, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, warnDataDirSyncFolder } from "./expertMenu.js";
+import { applyFlags, applyIconZoom, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, warnDataDirSyncFolder } from "./expertMenu.js";
 import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
 import { bindDictation, closeLangsModal, wireDictation } from "./dictation.js";
@@ -53,6 +53,7 @@ wireColorPop();
 wireViews();
 
 wireTiles();
+window.addEventListener("resize", applyIconZoom);
 
 wireGridFolders();
 

@@ -620,7 +620,7 @@ export const EXPERT_TIPS = [
   // Appearance
   "hideScrollbars", "gridLines", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
-  "toastPos", "tileStyle", "uiScale",
+  "toastPos", "tileStyle", "uiScale", "iconScale",
   // Library / privacy
   "mediaMeta", "mediaMetaBackfill", "ocrIndex",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",

@@ -1726,6 +1726,7 @@ export default {
     tipMultiView: "Meerdere benoemde weergaven, elk met een eigen raster en indeling, te wisselen via de tabs naast de titel.",
     tipLibraryCols: "Het maximale aantal kolommen van de lijst van de bibliotheek. Een smal venster toont er minder.",
     tipUiScale: "Schaalt het hele venster. Het groeit alleen zo ver als het scherm kan tonen.",
+    tipIconScale: "Grootte van de knoppen en het invoerveld. Het groeit alleen zo ver als het venster ruimte heeft.",
     tipCopySizeLevel: "Tekstgrootte van de bevestiging “Gekopieerd!” op tegels en zwevende knoppen. Groot vult de tegel of knop.",
     tipShowLibrary: "Toont of verbergt de knop voor de bibliotheek in de bovenbalk.",
     expGroupVars: "Plaatsaanduidingen",

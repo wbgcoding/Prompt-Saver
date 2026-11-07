@@ -2684,5 +2684,13 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
       if (cssCols !== '4') errs.push('xcols: --lib-cols is ' + cssCols + ', the setting no longer reaches CSS');
     }
 """)
+    failed += ar_probe('xicon', 'icon size: a small window caps the icon zoom so the grid keeps its room', 'index', '680x460', '<script>window.__SEED_SETTINGS__ = { ui_values: { iconScale: 300 } };</script>\n', r"""
+    // xicon: icons grow only as far as the window has room
+    await bootReady();
+    const iz = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--icon-zoom'));
+    if (!(iz <= 1.5)) errs.push('xicon: --icon-zoom is ' + iz + ' in the smallest window, expected at most 1.5');
+    const gh = document.getElementById('grid').getBoundingClientRect().height;
+    if (gh < 150) errs.push('xicon: the grid is only ' + Math.round(gh) + ' px high at icon size 300');
+""")
     # ---- main window findings: generated block end ----
     return failed
