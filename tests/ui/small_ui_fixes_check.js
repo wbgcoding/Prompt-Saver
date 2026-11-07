@@ -126,7 +126,7 @@ later(async () => {
   const shortcuts = await import(pathToFileURL(path.join(uiDir, "shortcuts.js")).href);
   const rows = shortcuts.rowsForScope("snipEditor", (k) => k, "en");
   const close = rows.find((r) => r.desc === "snipEditCloseTip");
-  check(close && /Enter/.test(close.keys) && /Esc/.test(close.keys), `the editor close row lists Enter and Esc, got ${close && close.keys}`);
+  check(close && /Enter/.test(close.keys) && /ESC/.test(close.keys), `the editor close row lists Enter and ESC, got ${close && close.keys}`);
   check(rows.filter((r) => r.desc === "snipEditCloseTip").length === 1, "the close row appears once");
   const redo = rows.find((r) => r.desc === "snipEditRedoTip");
   check(redo && !/ \/ /.test(redo.keys), `an Alt binding stays folded into its primary row, got ${redo && redo.keys}`);

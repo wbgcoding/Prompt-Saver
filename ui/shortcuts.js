@@ -105,7 +105,7 @@ export function letterCode(e) {
 // the four arrow keys.
 const CODE_LABELS = {
   Equal: "+", Minus: "-", Comma: ",", Period: ".", Space: "Space",
-  Enter: "Enter", Escape: "Esc", Tab: "Tab",
+  Enter: "Enter", Escape: "ESC", Tab: "Tab",
   ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down",
   Home: "Home", End: "End",
   Arrows: "↑↓←→",

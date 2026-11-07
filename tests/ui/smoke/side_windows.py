@@ -906,7 +906,7 @@ LAUNCHER_PROBE = """
       const keys = document.getElementById('keys');
       const kbds = keys ? [...keys.querySelectorAll('kbd')].map((k) => k.textContent) : [];
       const arrows = String.fromCharCode(0x2191, 0x2193);
-      if (kbds.join('|') !== 'Enter|' + arrows + '|Esc') errs.push('944-dg: the footer keys read ' + JSON.stringify(kbds));
+      if (kbds.join('|') !== 'Enter|' + arrows + '|ESC') errs.push('944-dg: the footer keys read ' + JSON.stringify(kbds));
       if (keys) {
         const kr = keys.getBoundingClientRect();
         const cr = document.getElementById('card').getBoundingClientRect();

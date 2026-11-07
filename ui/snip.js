@@ -73,20 +73,20 @@ let pickHistory = [];
 // below refines it for the user's actually-selected language.
 const SEED = {
   en: {
-    hint: "Drag a region · click a window · Esc to cancel",
+    hint: "Drag a region · click a window · ESC to cancel",
     failed: "This window can't be captured. Try a region or another window.",
-    pick: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
+    pick: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · ESC to cancel",
     pickFailed: "Couldn't copy the color. Try picking again.",
     ocrNoLang: "No OCR language is installed. Open Manage languages in the expert menu, then try again.",
-    recHint: "Drag a region · click a window to record · Esc to cancel",
+    recHint: "Drag a region · click a window to record · ESC to cancel",
   },
   de: {
-    hint: "Bereich ziehen · Fenster anklicken · Esc zum Abbrechen",
+    hint: "Bereich ziehen · Fenster anklicken · ESC zum Abbrechen",
     failed: "Dieses Fenster kann nicht aufgenommen werden. Versuche einen Bereich oder ein anderes Fenster.",
-    pick: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
+    pick: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · ESC zum Abbrechen",
     pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
     ocrNoLang: "Es ist keine OCR-Sprache installiert. Öffne Sprachen verwalten im Expertenmenü und versuche es erneut.",
-    recHint: "Bereich ziehen · Fenster zum Aufnehmen anklicken · Esc zum Abbrechen",
+    recHint: "Bereich ziehen · Fenster zum Aufnehmen anklicken · ESC zum Abbrechen",
   },
 };
 // This window's own text lookup once its language is loaded (null before that).
