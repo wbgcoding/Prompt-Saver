@@ -35,7 +35,7 @@ export const HELP_CONTENT = {
         "Pick the language, the theme, and the text size and font of the tiles.",
         "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background when closed.",
         "A portable copy always quits when closed instead of going to the background.",
-        "Set auto-paste on double-click and open the list of all shortcuts.",
+        "Open the list of all shortcuts.",
       ],
       whatHappens:
         "Every change applies at once, with no save button. \"Automatic\" as the language follows Windows and falls back to English. Reset puts every setting back to its default and keeps the tiles; Delete removes all data and asks first.",
@@ -142,7 +142,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A short confirmation bubble or flash confirms the copy; the text size of that bubble has three levels (small, medium, large) in the expert menu. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; Start chain here: right-click a text tile to start a chain with that tile first. A chain stays when you switch to another program. One tap on the chain button in the top bar starts a chain, the next tap ends it. Pasting with Ctrl+V in the app window ends it too. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotation). With the chain option to stay on after copying enabled in the expert menu, chain mode stays on after copying, for building several chains in a row. The strip can also mark a step red when it needs a placeholder that no earlier step fills; the chain still runs.",
-      settings: ["Chaining, and starting a chain from the tile menu: Expert menu → Features → Chain", "What goes between two chained steps: Expert menu → Features → Chain", "Keep chain mode on after copying: Expert menu → Features → Chain", "Auto-paste on double-click: Settings", "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
+      settings: ["Chaining, and starting a chain from the tile menu: Expert menu → Features → Chain", "What goes between two chained steps: Expert menu → Features → Chain", "Keep chain mode on after copying: Expert menu → Features → Chain", "Auto-paste on double-click: Expert menu → Features → Copying", "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -769,7 +769,7 @@ export const HELP_CONTENT = {
         "Sprache, Design sowie Textgröße und Schriftart der Kacheln wählen.",
         "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt.",
         "Eine portable Kopie beendet sich beim Schließen immer, statt in den Hintergrund zu gehen.",
-        "Auto-Einfügen bei Doppelklick einstellen und die Liste aller Tastenkürzel öffnen.",
+        "Die Liste aller Tastenkürzel öffnen.",
       ],
       whatHappens:
         "Jede Änderung gilt sofort, ohne Speichern-Button. „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück. Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln; Löschen entfernt alle Daten und fragt vorher nach.",
@@ -877,7 +877,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang; die Textgröße dieser Blase hat im Expertenmenü drei Stufen (klein, mittel, groß). Verketten fasst mehrere nacheinander angeklickte Kacheln zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben. „Kette hier starten“ im Rechtsklickmenü einer Textkachel beginnt direkt eine Kette mit dieser Kachel. Eine Kette bleibt beim Wechsel in ein anderes Programm bestehen. Ein Tipp auf den Ketten-Button oben startet eine Kette, der nächste beendet sie. Auch Strg+V im App-Fenster beendet sie. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Rotation). Ist im Expertenmenü „Kette: bleibt nach dem Kopieren aktiv“ eingeschaltet, bleibt der Kettenmodus nach dem Kopieren an, um mehrere Ketten nacheinander zu bauen. Der Streifen kann außerdem einen Schritt rot markieren, wenn er einen Platzhalter braucht, den kein früherer Schritt füllt; die Kette läuft trotzdem.",
-      settings: ["Verketten und der Kettenstart im Kachelmenü: Expertenmenü → Funktionen → Kette", "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette", "Kettenmodus nach dem Kopieren eingeschaltet lassen: Expertenmenü → Funktionen → Kette", "Auto-Einfügen bei Doppelklick: Einstellungen", "Eigene Tastenkürzel pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden: Expertenmenü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren"],
+      settings: ["Verketten und der Kettenstart im Kachelmenü: Expertenmenü → Funktionen → Kette", "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette", "Kettenmodus nach dem Kopieren eingeschaltet lassen: Expertenmenü → Funktionen → Kette", "Auto-Einfügen bei Doppelklick: Expertenmenü → Funktionen → Kopieren", "Eigene Tastenkürzel pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden: Expertenmenü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren"],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {

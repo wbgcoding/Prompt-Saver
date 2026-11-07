@@ -87,7 +87,7 @@ export const FLAG_LABELS = {
   similarHint: "flagSimilarHint",
   dupImportCheck: "flagDupImportCheck",
   autoBackup: "flagAutoBackup",
-  autoPaste: "flagAutoPaste",           // a normal setting now (default on)
+  autoPaste: "flagAutoPaste",           // default on
   dynVars: "flagDynVars",               // self-filling placeholder names
   choiceVars: "flagChoiceVars",         // {?name|a,b} dropdown variables
   choiceRemember: "flagChoiceRemember", // reopen a choice on its last pick
@@ -487,7 +487,7 @@ export const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["historyPerPrompt", "notesTipLen", "editorDraftSecs", "nameMaxLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySizeLevel"] },
+    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, "autoPaste", { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySizeLevel"] },
     // Copying several different prompts as one text.
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form, plus the
@@ -613,7 +613,7 @@ export const EXPERT_TIPS = [
   "rotateAuto",
   "firstRunTour",
   // Tiles / copying
-  "tileMenu", "typeBadges", "tileHotkeyBadge", "tileFavBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "autoPasteEnter",
+  "tileMenu", "typeBadges", "tileHotkeyBadge", "tileFavBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "autoPaste", "autoPasteEnter",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelayMs",
   "dragToView",

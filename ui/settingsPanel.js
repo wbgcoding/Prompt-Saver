@@ -541,8 +541,6 @@ export function bindSettingsPanel() {
   });
   // Master tooltip switch (default on): off = no hover tooltips anywhere.
   $("opt-tooltips").addEventListener("change", (e) => persistFlagSwitch(e.target, "tooltipsEnabled"));
-  // Auto-paste (default on): normal setting; enter-after stays in the expert menu.
-  $("opt-autopaste").addEventListener("change", (e) => persistFlagSwitch(e.target, "autoPaste"));
   // Recording copies from other apps is switched in the expert menu and in the copy history tab.
   $("opt-autostart").addEventListener("change", async (e) => {
     try {
@@ -778,7 +776,6 @@ export function syncSettingsControls() {
     setLangSelect();
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-tooltips").checked = flag("tooltipsEnabled");
-    $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autostart").checked = settings.autostart === true;
     $("opt-startmin").checked = settings.start_minimized === true;
     syncStartMinRow();

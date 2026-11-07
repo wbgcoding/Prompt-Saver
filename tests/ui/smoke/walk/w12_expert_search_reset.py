@@ -162,11 +162,11 @@ SECTION = """\
         await sleep(200);
         if (!startminRow.classList.contains('hidden')) out.errors.push('659: the background-start row stays visible after autostart is switched off');
       }
-      search.value = 'auto-paste';
+      search.value = 'always on top';
       search.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(200);
       const foreignRow = [...document.querySelectorAll('.expert-foreign-row')]
-        .find(r => (r.querySelector('span') || {}).textContent === 'Auto-paste on double-click');
+        .find(r => (r.querySelector('span') || {}).textContent === 'Always on top');
       if (!foreignRow) {
         out.errors.push('403: search for a normal-settings-only word found no foreign hit');
       } else {
@@ -181,13 +181,32 @@ SECTION = """\
         if (document.getElementById('settings-main').classList.contains('hidden')) {
           out.errors.push('403: clicking a foreign hit did not reveal the normal settings page');
         }
-        if (!document.getElementById('opt-autopaste').closest('.field').classList.contains('settings-search-hit')) {
+        if (!document.getElementById('opt-ontop').closest('.field').classList.contains('settings-search-hit')) {
           out.errors.push('403: clicking a foreign hit did not flash the target row');
         }
       }
       // Back into the expert menu for the rest of this walk.
       document.getElementById('expert-open').click();
       await sleep(150);
+      // 403-autopaste: the auto-paste switch lives in the expert menu, in the Copying group, ahead of its Enter child.
+      {
+        const apSearch = document.getElementById('expert-search');
+        apSearch.value = 'auto-paste';
+        apSearch.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(250);
+        const apRow = document.querySelector('#settings-expert [data-setting-row="autoPaste"]');
+        const apEnter = document.querySelector('#settings-expert [data-setting-row="autoPasteEnter"]');
+        if (!apRow) out.errors.push('403-autopaste: the expert search finds no auto-paste row');
+        else {
+          const apTitle = apRow.closest('.expert-group')?.querySelector('.expert-group-title');
+          if (!apTitle || !apTitle.textContent.includes('Copying')) out.errors.push('403-autopaste: the auto-paste row is not in the Copying group');
+          if (apEnter && !(apRow.compareDocumentPosition(apEnter) & Node.DOCUMENT_POSITION_FOLLOWING)) out.errors.push('403-autopaste: the auto-paste row sits after its Enter child');
+        }
+        if (document.getElementById('opt-autopaste')) out.errors.push('403-autopaste: the Settings page still has an auto-paste switch');
+        apSearch.value = '';
+        apSearch.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+      }
       // A hit that lives in the backup manager -- a dialog of its own, not the
       // settings page -- must close Settings entirely and open that dialog.
       const search2 = document.getElementById('expert-search');

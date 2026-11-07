@@ -32,7 +32,6 @@ SRC = "\n".join(l for l in SRC.splitlines() if not l.lstrip().startswith("//"))
 # dialog, and the ones the backups dialog renders itself (renderBackupPanel /
 # renderStatsPanel, opened from settings, not from the expert menu).
 NOT_IN_EXPERT = {
-    "autoPaste",
     # Backup settings, rendered by renderBackupPanel.
     "autoBackup", "backupGfs", "backupKeep", "backupIntervalH", "backupStartDelayS",
     "backupDaily", "backupWeekly", "backupMonthly", "backupYearly",

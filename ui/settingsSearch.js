@@ -38,7 +38,6 @@ export const SETTINGS_DIRECTORY = [
   { key: "opt-minimize", area: "normal", label: "minimizeOnClose" },
   { key: "opt-autostart", area: "normal", label: "autostart" },
   { key: "opt-startmin", area: "normal", label: "startMinimized", when: () => $("opt-autostart").checked },
-  { key: "opt-autopaste", area: "normal", label: "autoPasteSetting", tip: "tipAutoPaste" },
   { key: "opt-tooltips", area: "normal", label: "showTooltips", tip: "tipTooltips" },
   { key: "opt-favview", area: "normal", label: "favViewTitle", tip: "favViewOption" },
   { key: "hotkey-list-btn", area: "normal", label: "hotkeysAllBtn", tip: "hotkeysAllTitle" },
