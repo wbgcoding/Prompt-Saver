@@ -1,5 +1,5 @@
 // Tags: editor chips, the type-ahead list, the library filter row and the tag manager.
-import { $, assignSettings, confirmIfNoUndo, errToast, flag, invoke, LANG, modalState, prompts, settings, t, toast, undoToast } from "./core.js";
+import { $, assignSettings, confirmIfNoUndo, errToast, flag, invoke, LANG, modalState, prompts, t, toast, undoToast } from "./core.js";
 import { placePopover } from "./popover.js";
 import { libTags, renderLibrary } from "./library.js";
 import { renderGrid } from "./views.js";
@@ -11,9 +11,7 @@ export const tagsOn = () => flag("tags");
 export const tagKey = (name) => String(name ?? "").trim().toLowerCase();
 export const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in views.rs
 
-// Every tag in the library, first-seen casing, sorted for a stable filter row.
-// tagSort switches alphabetical (default) for usage-count order, ties broken
-// alphabetically either way.
+// Every tag in the library, first-seen casing, sorted alphabetically for a stable filter row.
 export function allTags() {
   const seen = new Map();
   for (const p of prompts) {
@@ -22,14 +20,7 @@ export function allTags() {
       if (key && !seen.has(key)) seen.set(key, name);
     }
   }
-  const names = [...seen.values()];
-  if (settings.ui_texts?.tagSort === "usage") {
-    const counts = tagUsage();
-    names.sort((a, b) => (counts.get(tagKey(b)) || 0) - (counts.get(tagKey(a)) || 0) || a.localeCompare(b, LANG));
-  } else {
-    names.sort((a, b) => a.localeCompare(b, LANG));
-  }
-  return names;
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, LANG));
 }
 
 export function tagUsage() {

@@ -4713,7 +4713,7 @@ body.drag-over::after {
 .tour-dot.active { opacity: 1; }
 .tour-nav { display: flex; gap: 8px; }
 /* A two-column dropdown row is too narrow for label-beside-field: a short
-   label (copySize) fit, a long one (tagFilterMode) wrapped and looked different
+   label (copySize) fit, a long one wrapped and looked different
    from its neighbour. Always stack here; the full-width row above keeps label
    left of field as the standard layout requires. */
 .expert-cols .expert-dropdown-row { flex-direction: column; align-items: stretch; }

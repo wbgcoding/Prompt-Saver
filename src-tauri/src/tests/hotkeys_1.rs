@@ -476,6 +476,18 @@ fn search_caps_merge_to_largest() {
 }
 
 #[test]
+fn tag_filter_choices_are_dropped() {
+    let mut s = Settings::default();
+    s.ui_texts.insert("tagFilterMode".into(), "or".into());
+    s.ui_texts.insert("tagSort".into(), "usage".into());
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    assert!(!s.ui_texts.contains_key("tagFilterMode"));
+    assert!(!s.ui_texts.contains_key("tagSort"));
+    assert!(!s.has_removed_ui_values());
+}
+
+#[test]
 fn toggle_pairs_merge_to_zero() {
     let run = |flags: &[(&str, bool)], values: &[(&str, f64)]| {
         let mut s = Settings::default();

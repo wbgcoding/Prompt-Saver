@@ -536,8 +536,7 @@ export const EXPERT_TABS = [
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
-    { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
-    { title: "expGroupTags", flags: ["tags", "archiveTag"], dropdowns: ["tagFilterMode", "tagSort"] },
+    { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "libraryTiles", "tags", "archiveTag"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "confirmClearHistory", "clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["historyMax", "clipMinChars", "clipInboxMax"], selects: ["historyDays"] },
   ] },
@@ -625,7 +624,7 @@ export const EXPERT_TIPS = [
   "mediaMeta", "mediaMetaBackfill", "ocrIndex",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
   "globalSearch",
-  "tags", "tagFilterMode", "tagSort",
+  "tags",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles",
   // Tools / data

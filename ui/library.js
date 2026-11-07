@@ -667,16 +667,12 @@ export async function editSavedSearch(index) {
   renderSavedSearches();
 }
 
-// Selected tag chips narrow the list, combined with search and the other filters. AND
-// (default) needs every chip, OR any of them. The grid's own filter (gridTags) reuses this
-// with its own Set.
+// Selected tag chips narrow the list, combined with search and the other filters: a prompt
+// needs every selected chip. The grid's own filter (gridTags) reuses this with its own Set.
 export function tagMatches(p, tagSet = libTags) {
   if (!tagsOn() || !tagSet.size) return true;
   const own = new Set((p.tags || []).map(tagKey));
-  const wanted = [...tagSet];
-  return (txt("tagFilterMode") || "and") === "or"
-    ? wanted.some((k) => own.has(k))
-    : wanted.every((k) => own.has(k));
+  return [...tagSet].every((k) => own.has(k));
 }
 
 // "Last edited" per prompt, from prompt_versions (a version row is only written on a real

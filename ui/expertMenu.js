@@ -69,9 +69,6 @@ export const EXPERT_DROPDOWNS = {
   // styles combined cannot be kept by a single choice (see Settings::migrate).
   tileStyle: enumDropdown("tileStyle", "valTileStyle",
     [["plain", "optTileStylePlain"], ["bold", "optTileStyleBold"], ["uppercase", "optTileStyleUpper"], ["mono", "optTileStyleMono"], ["italic", "optTileStyleItalic"], ["shadow", "optTileStyleShadow"], ["compact", "optTileStyleCompact"], ["gradient", "optTileStyleGradient"]], "plain"),
-  // How several selected tag filters combine.
-  tagFilterMode: enumDropdown("tagFilterMode", "valTagFilterMode",
-    [["and", "optTagAnd"], ["or", "optTagOr"]], "and", "tags"),
   // How the self-filling date/time placeholders are written.
   chainSeparator: enumDropdown("chainSeparator", "valChainSeparator",
     [["blank", "optChainSepBlank"], ["break", "optChainSepBreak"], ["space", "optChainSepSpace"], ["none", "optChainSepNone"]], "blank", "chainPrompts"),
@@ -214,9 +211,6 @@ export const EXPERT_DROPDOWNS = {
   // Which edge the toast notifications rise from.
   toastPos: enumDropdown("toastPos", "valToastPos",
     [["bottom", "optToastBottom"], ["top", "optToastTop"]], "bottom"),
-  // Tag manager / filter chip order.
-  tagSort: enumDropdown("tagSort", "valTagSort",
-    [["alpha", "optTagSortAlpha"], ["usage", "optTagSortUsage"]], "alpha", "tags"),
   // Text size of the "Copied!" confirmation on tiles and pills: a share of the
   // size that fits the tile or button.
   copySizeLevel: enumDropdown("copySizeLevel", "valCopySize",

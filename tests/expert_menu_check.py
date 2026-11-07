@@ -117,8 +117,6 @@ DEPENDENCIES = {
     "customThemeMax": "customThemes",
     # Library, history, privacy
     "libraryCols": "librarySearch",
-    "tagFilterMode": "tags",
-    "tagSort": "tags",
     "historyMax": "copyHistory",
     "historyDays": "copyHistory",
     # Media
@@ -315,9 +313,9 @@ for kind, known in (("flags", all_flags), ("values", values),
 
 # ---- gates --------------------------------------------------------------------
 # 105: a group whose ONLY flag is itself (everything else it owns is gated on it,
-# same group -- e.g. expGroupTags: flags=["tags"]) is a whole-subsystem switch, not
+# same group -- e.g. expGroupRecording: flags=["screenRecord"]) is a whole-subsystem switch, not
 # a narrow feature toggle. A row in another group may legitimately depend on it
-# (a tag row needs both its own toggle AND the global tags flag) without
+# (such a row needs both its own toggle AND the subsystem switch) without
 # moving in beside it -- unlike a local flag (chainPrompts, promptHotkeys, ...)
 # whose only sensible dependents are its own immediate parameters.
 # A group also counts when its other flags are all gated on its first one (the

@@ -949,6 +949,9 @@ pub(crate) fn removed_ui_text_keys() -> &'static [&'static str] {
     &[
         "snipScaleFilter",
         "fuzzyMaxTypos",
+        // The tag filter always needs every tag and lists tags alphabetically.
+        "tagFilterMode",
+        "tagSort",
         // The old remote receiver's rows: its password hash and TLS key, certificate and CA
         // must not survive on disk once the feature is gone.
         "remoteAllowedRanges",
