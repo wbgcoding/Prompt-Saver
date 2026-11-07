@@ -20,6 +20,7 @@ const VOICE_PUNCT = {
   nl: { "punt": ".", "komma": ",", "vraagteken": "?", "uitroepteken": "!", "dubbele punt": ":", "puntkomma": ";", "koppelteken": "-", "streepje": "–", "schuine streep": "/", "aanhalingsteken": "\"", "haakje openen": "(", "haakje sluiten": ")", "procent": "%" },
   tr: { "nokta": ".", "virgül": ",", "soru işareti": "?", "ünlem işareti": "!", "iki nokta": ":", "noktalı virgül": ";", "kısa çizgi": "-", "uzun çizgi": "–", "eğik çizgi": "/", "tırnak işareti": "\"", "parantez aç": "(", "parantez kapa": ")", "yüzde": "%" },
   ro: { "punct": ".", "virgulă": ",", "semn de întrebare": "?", "semn de exclamare": "!", "două puncte": ":", "punct și virgulă": ";", "cratimă": "-", "linie de pauză": "–", "bară oblică": "/", "ghilimele": "\"", "paranteză deschisă": "(", "paranteză închisă": ")", "procent": "%" },
+  fr: { "point": ".", "virgule": ",", "point d'interrogation": "?", "point d'exclamation": "!", "deux-points": ":", "point-virgule": ";", "trait d'union": "-", "tiret": "–", "barre oblique": "/", "guillemets": "\"","ouvrir la parenthèse": "(", "fermer la parenthèse": ")", "pour cent": "%" },
 };
 
 const VOICE_FUNCS = {
@@ -34,9 +35,10 @@ const VOICE_FUNCS = {
   nl: { "nieuwe regel": "\n", "nieuwe alinea": "\n\n", "tab": "\t" },
   tr: { "yeni satır": "\n", "yeni paragraf": "\n\n", "sekme": "\t" },
   ro: { "rând nou": "\n", "paragraf nou": "\n\n", "tab": "\t" },
+  fr: { "nouvelle ligne": "\n", "à la ligne": "\n", "nouveau paragraphe": "\n\n", "tabulation": "\t" },
 };
 
-const VOICE_LITERAL_WORD = { en: "literal", de: "wörtlich", es: "literal", it: "letterale", pt: "literal", pl: "dosłownie", zh: "字面量", ja: "文字通り", nl: "letterlijk", tr: "harfi harfine", ro: "literal" };
+const VOICE_LITERAL_WORD = { en: "literal", de: "wörtlich", es: "literal", it: "letterale", pt: "literal", pl: "dosłownie", zh: "字面量", ja: "文字通り", nl: "letterlijk", tr: "harfi harfine", ro: "literal", fr: "littéralement" };
 
 const SENTENCE_END = new Set([".", "!", "?"]);
 

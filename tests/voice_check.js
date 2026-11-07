@@ -39,6 +39,8 @@ check("double application is a no-op", on(once), once);
 
 // English table sanity (hand-written, same shape as German).
 check("english punctuation", applyVoiceCommands("Test comma more period", { punct: true, autoCaps: true, lang: "en" }), "Test, more.");
+check("french multi-word punctuation wins over point", applyVoiceCommands("bonjour point d'interrogation", { punct: true, autoCaps: false, lang: "fr" }), "bonjour?");
+check("french period", applyVoiceCommands("bonjour point", { punct: true, autoCaps: false, lang: "fr" }), "bonjour.");
 
 // A trailing escape word with nothing after it (the recognizer's segment
 // boundary landed right there) must not silently vanish -- it is emitted as
@@ -80,7 +82,7 @@ check("zh comma inside a sentence", applyVoiceCommands("你好逗号再见句号
 // recognition tables instead of ui/i18n.js.
 // Compared by VALUE set, not key count -- a language may use more than one
 // word for the same mark, it just has to cover every mark/function DE covers.
-const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"];
+const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"];
 const dePunctValues = new Set(Object.values(VOICE_PUNCT.de));
 const deFuncValues = new Set(Object.values(VOICE_FUNCS.de));
 for (const lang of LANGS) {
