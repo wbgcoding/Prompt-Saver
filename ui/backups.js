@@ -13,12 +13,13 @@ import { wireClearButtons } from "./windowChrome.js";
 // ---- Backups & restore ----
 // A backup folder name as a readable local date + time ("29.07.2026 18:15" in German,
 // and whatever the picked language writes elsewhere).
-// One stat card: the value on top, its label below.
-export function statCard(value, label) {
+// One stat card: the value on top, its label below (labelFirst: label on top).
+export function statCard(value, label, labelFirst = false) {
   const c = document.createElement("div"); c.className = "stat-card";
   const vv = document.createElement("div"); vv.className = "stat-val"; vv.textContent = value;
   const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = label;
-  c.append(vv, ll); return c;
+  if (labelFirst) { c.classList.add("stat-card-label-first"); c.append(ll, vv); } else c.append(vv, ll);
+  return c;
 }
 
 export function prettyStamp(name) {
@@ -313,10 +314,9 @@ export async function renderBackupPanel(body) {
   catch (e) { errToast(e); return; }
   body.innerHTML = "";
   const nf = (n) => Number(n).toLocaleString(LANG);
-  // Date/time card: date on top, time below (no comma), slightly larger so timestamps
-  // read clearly.
+  // Date/time card: label on top, then the date and the time below it (no comma).
   const dtCard = (l, d) => {
-    const c = document.createElement("div"); c.className = "stat-card";
+    const c = document.createElement("div"); c.className = "stat-card stat-card-label-first";
     const vv = document.createElement("div"); vv.className = "stat-val stat-dt";
     if (d) {
       const dd = document.createElement("div"); dd.className = "dt-date"; dd.textContent = d.toLocaleDateString(LANG);
@@ -324,7 +324,7 @@ export async function renderBackupPanel(body) {
       vv.append(dd, tt);
     } else { vv.textContent = EMPTY_VALUE; }
     const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
-    c.append(vv, ll); return c;
+    c.append(ll, vv); return c;
   };
   const collapseHead = collapsibleHead;
 
@@ -555,13 +555,13 @@ export async function renderBackupPanel(body) {
   // Row 1: how many backups there are and what they cost in disk space.
   // Row 2: the time axis; how far back they reach and when the next one is due.
   cards.append(
-    statCard(nf(backups.length), t("backupCount")),
-    statCard(fmtBytes(total, LANG), t("backupTotalSize")),
-    statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : EMPTY_VALUE, t("backupLargest")),
-    statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : EMPTY_VALUE, t("backupSmallest")),
+    statCard(nf(backups.length), t("backupCount"), true),
+    statCard(fmtBytes(total, LANG), t("backupTotalSize"), true),
+    statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : EMPTY_VALUE, t("backupLargest"), true),
+    statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : EMPTY_VALUE, t("backupSmallest"), true),
     statCard(newest && oldest
       ? fmtUnit(Math.max(0, Math.round((newest - oldest) / 86400000)), "day", LANG, 0, "long")
-      : EMPTY_VALUE, t("backupSpan")),
+      : EMPTY_VALUE, t("backupSpan"), true),
     dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
     dtCard(t("backupNewest"), newest),
     dtCard(t("backupOldest"), oldest),

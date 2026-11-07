@@ -3495,6 +3495,7 @@ select.modal-input { padding-right: 30px; }
 .stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
 .stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
 .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stat-card-label-first .stat-label { margin: 0 0 4px; }
 /* margin-bottom, not just the heading's own padding-bottom, so the first row of
    every section sits off the underline by the same amount instead of touching it. */
 .stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; }

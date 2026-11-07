@@ -1788,6 +1788,27 @@ section(() => {
   check(/document\.addEventListener\("keydown", recCountdownEscape\)/.test(src), "the Escape handler is registered");
 });
 
+// Backup diagnostics cards read label first, then value; the content preview and the
+// statistics panel keep value first (a shared card helper with a labelFirst switch).
+section(() => {
+  const src = read("backups.js");
+  const mkEl = () => ({ className: "", textContent: "", children: [], classList: { add(c) { this.owner.className += " " + c; } },
+    append(...k) { this.children.push(...k); } });
+  const doc = { createElement: () => { const e = mkEl(); e.classList.owner = e; return e; } };
+  const sb = run(extractBlock(src, "export function statCard(").replace("export ", "") + ";globalThis.api = { statCard };", { document: doc });
+  const first = (c) => c.children[0].className;
+  check(first(sb.api.statCard("1", "A")) === "stat-val", "a plain stat card keeps the value first");
+  const lf = sb.api.statCard("1", "A", true);
+  check(first(lf) === "stat-label" && /stat-card-label-first/.test(lf.className), "a label-first stat card puts the label on top and marks itself");
+  const dt = extractBlock(src, "const dtCard = ");
+  check(/c\.append\(ll, vv\)/.test(dt) && /stat-card-label-first/.test(dt), "the date card puts its label on top");
+  const diag = src.slice(src.indexOf("cards.append("), src.indexOf("body.append(collapseHead(t(\"backupDiag\")"));
+  for (const k of ["backupCount", "backupTotalSize", "backupLargest", "backupSmallest", "backupSpan"]) {
+    check(diag.includes(`t("${k}"), true)`), `the ${k} card is label first`);
+  }
+  check(!/statCard\([^\n]*backupContent[^\n]*true\)/.test(src), "the content preview cards stay value first");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
