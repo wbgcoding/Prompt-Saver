@@ -468,6 +468,11 @@ fn an_export_graph_may_only_read_the_source_and_the_media_the_request_names() {
     assert!(check(&format!("movie='{}'[i0];[0:v][i0]overlay=1:2:enable='between(t,0.000,2.000)'[vout]", ff(&badge))).is_ok());
     assert!(check(&format!("amovie='{}':loop=2[a1];[a1]anull[aout]", ff(&badge))).is_ok());
     assert!(check(&format!("movie='{}'[i0]", ff(&src))).is_ok(), "the source itself is fine");
+    // A rounded or elliptical focus area: the mask is generated, never read from a file.
+    let ellipse = "[0:v]split[a][b];[b]crop=400:300:100:80,format=yuva420p[c];color=c=black:s=400x300:d=1,format=gray,geq=lum='255*lte(pow((X-W/2+0.5)/(W/2),2)+pow((Y-H/2+0.5)/(H/2),2),1)',loop=loop=-1:size=1[m];[c][m]alphamerge[clear];[a]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.60:t=fill[dark];[dark][clear]overlay=100:80:shortest=1[vout]";
+    assert!(check(ellipse).is_ok(), "the mask graph of a shaped focus area passes");
+    assert!(check("[0:v]geq=/lum=x[vout]").is_err());
+    assert!(check("[0:v]geq=lum_expr=1:/cb_expr=x[vout]").is_err());
     assert!(check(&format!("movie=filename='{}'[i0]", ff(&badge))).is_ok());
     // File-reading filters and options, and filters the editor never builds.
     assert!(check(r"[0:v]drawtext=textfile='C\:/Users/x/.ssh/config':fontsize=20[vout]").is_err());

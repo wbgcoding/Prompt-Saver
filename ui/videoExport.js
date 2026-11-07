@@ -48,7 +48,7 @@ export function destPath() {
 
 // One explanatory note per format that needs one, kept as a lookup instead of
 // a chain of ifs so a future format only ever needs one new entry here.
-const FORMAT_NOTE_KEY = { gif: "veGifNote", avi: "veAviNote" };
+const FORMAT_NOTE_KEY = { avi: "veAviNote" };
 
 // Builds everything the note can say without asking the backend, so the DOM update stays
 // instant and synchronous. The size estimate (backend-computed) is patched in afterwards by

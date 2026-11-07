@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `sniptext`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -56,7 +56,9 @@ await sleep(800);
 ACTS = {
     "main": "",
     # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
-    **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "sel", "cut", "edit", "ov", "audio", "export", "close", "keys")},
+    **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "cut", "edit", "ov", "export", "keys")},
+    # The overlay editor of a new focus area (shape select, darkening).
+    "veovspot": "await sleep(600); document.getElementById('ve-tab-overlays').click(); await sleep(150); document.getElementById('ve-ov-add-spotlight').click(); await sleep(400); document.getElementById('ve-ov-editor').scrollIntoView({ block: 'center' }); await sleep(200);",
     # The export tab right after a file export: status line with the folder/file buttons under it.
     "veexportdone": "await sleep(600); document.getElementById('ve-tab-export').click(); await sleep(150); document.getElementById('ve-export-status').textContent = 'Exported: C:\\\\Users\\\\name\\\\Videos\\\\My clips\\\\recording-2026-11-07.mp4'; document.getElementById('ve-export-done-row').classList.remove('hidden'); document.getElementById('ve-export-saveas').classList.remove('hidden'); document.getElementById('ve-export-start').scrollIntoView({ block: 'end' }); await sleep(150);",
     "settings": "$('gear').click(); await sleep(300);",
@@ -111,6 +113,7 @@ ACTS = {
                 "const dv = $('snip-edit-live'); const dr = dv.getBoundingClientRect();"
                 "const dp = (t, x, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: dr.left + x, clientY: dr.top + y }));"
                 "dp('pointerdown', 120, 80, dv); dp('pointermove', 260, 150, dv); dp('pointerup', 260, 150); await sleep(300);",
+    "snipcrop": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"crop\"]')?.click(); await sleep(400);",
     "sniptext": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
                 "const lv = $('snip-edit-live'); const lr = lv.getBoundingClientRect();"
                 "lv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
@@ -123,7 +126,7 @@ GROUPS = {
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder", "voicepop"],
     "@recording": ["recresult"],
-    "@snip": ["snipedit", "snipdraw", "sniptext"],
+    "@snip": ["snipedit", "snipdraw", "snipcrop", "sniptext"],
 }
 
 

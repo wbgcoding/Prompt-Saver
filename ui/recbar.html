@@ -10,6 +10,11 @@
 </head>
 <body>
   <div id="bar" class="rec-bar">
+    <button id="stop-btn" class="rec-btn rec-btn-stop" type="button" data-i18n-title="recBarStop" data-i18n-aria="recBarStop">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
+      </svg>
+    </button>
     <span id="dot" class="rec-dot" aria-hidden="true"></span>
     <span id="dot-label" class="rec-dot-label" data-i18n="recLiveLabel">REC</span>
     <span id="time" class="rec-time">00:00</span>
@@ -40,23 +45,12 @@
       </svg>
       <span class="rec-warn-text" data-i18n="recBarDiskLowShort">Disk almost full</span>
     </span>
-
-    <button id="switch-btn" class="rec-btn" type="button">
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-        <path fill="currentColor" d="M7 7h10V4l5 4-5 4V9H7a1 1 0 0 1 0-2Zm10 10H7v3l-5-4 5-4v3h10a1 1 0 0 1 0 2Z"/>
-      </svg>
-    </button>
     <button id="pause-btn" class="rec-btn" type="button" data-i18n-title="recBarPause" data-i18n-aria="recBarPause">
       <svg id="pause-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
         <path fill="currentColor" d="M8 5h3v14H8V5Zm5 0h3v14h-3V5Z"/>
       </svg>
       <svg id="resume-icon" class="hidden" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
         <path fill="currentColor" d="M8 5v14l11-7L8 5Z"/>
-      </svg>
-    </button>
-    <button id="stop-btn" class="rec-btn" type="button" data-i18n-title="recBarStop" data-i18n-aria="recBarStop">
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-        <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
       </svg>
     </button>
     <button id="continue-btn" class="rec-btn" type="button" data-i18n-title="recBarContinue" data-i18n-aria="recBarContinue">
@@ -67,6 +61,11 @@
       </svg>
     </button>
     <span id="continue-gap" class="rec-size hidden"></span>
+    <button id="switch-btn" class="rec-btn" type="button">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="currentColor" d="M7 7h10V4l5 4-5 4V9H7a1 1 0 0 1 0-2Zm10 10H7v3l-5-4 5-4v3h10a1 1 0 0 1 0 2Z"/>
+      </svg>
+    </button>
     <span class="rec-sep" aria-hidden="true"></span>
     <button id="cancel-btn" class="rec-btn rec-btn-danger" type="button" data-i18n-title="recBarCancel" data-i18n-aria="recBarCancel">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">

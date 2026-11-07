@@ -1,4 +1,4 @@
-// Five small diagrams for the in-app help. Plain shapes with theme-coloured
+// Seven small diagrams for the in-app help and the video editor's help. Plain shapes with theme-coloured
 // lines and text (currentColor everywhere), never a screenshot, so they stay
 // correct through any redesign of the window they describe. English and
 // German labels only, matching help.js's own EN/DE scope; every other
@@ -98,6 +98,35 @@ function chainSteps(lang) {
     `</svg>`;
 }
 
+function videoEditorLayout(lang) {
+  const words = lang === "de"
+    ? { preview: "Vorschau", controls: "Wiedergabe und Ton", timeline: "Zeitleiste", tabs: ["Bearbeiten", "Überlagerungen", "Export"] }
+    : { preview: "Preview", controls: "Playback and sound", timeline: "Timeline", tabs: ["Edit", "Overlays", "Export"] };
+  return `<svg viewBox="0 0 560 196" xmlns="http://www.w3.org/2000/svg" role="img">` +
+    box(10, 10, 370, 110) + label(195, 70, words.preview, { size: 14 }) +
+    box(10, 128, 370, 22) + label(195, 143, words.controls, { size: 12 }) +
+    box(10, 158, 370, 28) + label(195, 177, words.timeline, { size: 13 }) +
+    box(390, 10, 160, 176) + [398, 449, 500].map((x) => box(x, 18, 44, 18)).join("") +
+    words.tabs.map((w, i) => label(470, 74 + i * 24, w, { size: 12 })).join("") +
+    `</svg>`;
+}
+
+function videoTrimCut(lang) {
+  const words = lang === "de"
+    ? { trimmed: "gekürzt", sel: "Auswahl", cut: "herausgeschnitten" }
+    : { trimmed: "trimmed", sel: "Selection", cut: "cut out" };
+  const shade = (x, w, o) => `<rect x="${x}" y="31" width="${w}" height="28" fill="currentColor" opacity="${o}"/>`;
+  const edge = (x) => `<line x1="${x}" y1="24" x2="${x}" y2="66" stroke="currentColor" stroke-width="2"/>`;
+  return `<svg viewBox="0 0 560 92" xmlns="http://www.w3.org/2000/svg" role="img">` +
+    shade(21, 59, 0.18) + shade(480, 59, 0.18) + shade(180, 80, 0.35) +
+    `<path d="M 340 31 L 400 59 M 400 31 L 340 59" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+    box(20, 30, 520, 30) + edge(80) + edge(480) +
+    label(180, 18, "I", { size: 13 }) + label(260, 18, "O", { size: 13 }) +
+    label(50, 82, words.trimmed, { size: 12 }) + label(220, 82, words.sel, { size: 12 }) +
+    label(370, 82, words.cut, { size: 12 }) + label(510, 82, words.trimmed, { size: 12 }) +
+    `</svg>`;
+}
+
 // Keyed the same way HELP_CONTENT entries reference them (`cat.sketch`).
 export const HELP_SKETCHES = {
   flowToTarget,
@@ -105,4 +134,6 @@ export const HELP_SKETCHES = {
   placeholderAnatomy,
   editorTimeline,
   chainSteps,
+  videoEditorLayout,
+  videoTrimCut,
 };

@@ -902,6 +902,7 @@ pub fn run() {
             views::delete_view,
             views::set_active_view,
             snip::copy_image_data,
+            snip::snip_edit_close_ack,
             views::save_tile_folder,
             views::take_out_of_tile_folder,
             views::delete_tile_folder,

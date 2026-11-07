@@ -77,9 +77,9 @@ export async function addOverlay(kind) {
   } else if (kind === "text") {
     op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: VE.ovLastTextFontPx ?? Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovTextColorDefault, back: "plate", outlinePx: VE.ovTextOutlineDefault ?? 3 };
   } else if (kind === "pixelate") {
-    op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
+    op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16, shape: VE.ovPixelateShapeDefault || "rect" };
   } else if (kind === "spotlight") {
-    op = { ...base, rect: centeredRect(0.45), dim: VE.ovSpotlightDimDefault ?? 0.6 };
+    op = { ...base, rect: centeredRect(0.45), dim: VE.ovSpotlightDimDefault ?? 0.6, shape: VE.ovSpotlightShapeDefault || "rect" };
   } else if (kind === "keys") {
     op = {
       ...base, rect: centeredRect(0.3), preset: "pressed", keys: [],
@@ -566,10 +566,18 @@ function rememberOverlayValues(kind, changes) {
       VE.ovPixelateBlockDefault = changes.blockPx;
       invoke("set_ui_value", { key: "veOvLastPixelateBlock", value: changes.blockPx }).catch(() => {});
     }
+    if (changes.shape !== undefined) {
+      VE.ovPixelateShapeDefault = changes.shape;
+      invoke("set_ui_text", { key: "veOvLastPixelateShape", value: changes.shape }).catch(() => {});
+    }
   } else if (kind === "spotlight") {
     if (changes.dim !== undefined) {
       VE.ovSpotlightDimDefault = changes.dim;
       invoke("set_ui_value", { key: "veOvLastSpotlightDim", value: Math.round(changes.dim * 100) }).catch(() => {});
+    }
+    if (changes.shape !== undefined) {
+      VE.ovSpotlightShapeDefault = changes.shape;
+      invoke("set_ui_text", { key: "veOvLastSpotlightShape", value: changes.shape }).catch(() => {});
     }
   } else if (kind === "image") {
     if (changes.opacity !== undefined) {
@@ -744,10 +752,12 @@ export function renderOverlayEditor() {
   }
 
   if (op.kind === "pixelate") {
+    box.appendChild(fieldRow(t("veOvShape"), ovTrack("shape", selectInput([["rect", t("veOvShapeRect")], ["round", t("veOvShapeRound")], ["ellipse", t("veOvShapeEllipse")]], op.shape || "rect", (v) => commitOverlay(op, { shape: v })), (o) => o.shape || "rect")));
     box.appendChild(fieldRow(t("veOvBlock"), ovTrack("blockPx", numberInput(op.blockPx, 4, 80, 2, (v) => commitOverlay(op, { blockPx: v }), [8, 12, 16, 24, 32]), (o) => String(o.blockPx))));
   }
 
   if (op.kind === "spotlight") {
+    box.appendChild(fieldRow(t("veOvShape"), ovTrack("shape", selectInput([["rect", t("veOvShapeRect")], ["round", t("veOvShapeRound")], ["ellipse", t("veOvShapeEllipse")]], op.shape || "rect", (v) => commitOverlay(op, { shape: v })), (o) => o.shape || "rect")));
     box.appendChild(fieldRow(t("veOvDim"), ovTrack("dim", numberInput(Math.round(op.dim * 100), 10, 95, 5, (v) => commitOverlay(op, { dim: v / 100 })), (o) => String(Math.round(o.dim * 100)))));
   }
 

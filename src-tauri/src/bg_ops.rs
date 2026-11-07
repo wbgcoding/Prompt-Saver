@@ -498,6 +498,10 @@ pub(crate) fn request_app_quit(app: &AppHandle) {
     if crate::video_editor::ask_editor_before_quit(app) {
         return;
     }
+    // An open screenshot editor with edits that are not in a file is asked next.
+    if crate::snip::ask_snip_editor_before_quit(app) {
+        return;
+    }
     // A live recording is lost as an unplayable file when the process just
     // ends, so it counts as a running job and gets the same question.
     let running = quit_blockers(bg_ops_running_count(), recording_active(app) || REC_STARTING.load(Ordering::SeqCst));

@@ -27,7 +27,7 @@ back to its default and keeps the tiles; Delete removes all data and asks first.
 ### Introduction tour
 
 A four-step walkthrough shown once on first launch, right after the sample tiles
-appear. It changes no setting. Escape or "Skip" closes it at once; after Escape an
+appear. It changes no setting. ESC or "Skip" closes it at once; after ESC an
 Undo notice reopens it. Reopen it anytime from the expert menu.
 
 ### The grid
@@ -269,7 +269,7 @@ app's consent dialog, which also turns on online speech recognition in the
 Windows settings; switching off "Allow online recognition" withdraws that
 consent, and voice input asks again. Click to start: the button
 turns the accent color and pulses while listening, and its title switches from
-"Voice input" to "Stop voice input"; a second click, Escape in the field, saving the
+"Voice input" to "Stop voice input"; a second click, ESC in the field, saving the
 prompt, or closing the window all end the session the same way. Text lands at
 the cursor (or always at the end, an expert setting) and can stop itself after
 a few seconds of silence.
@@ -446,7 +446,7 @@ skipped for as long as it stays focused and shows as a gap instead, though
 this is not guaranteed, since it relies on Windows correctly reporting the
 field as a password field. A "Shortcuts only" switch (in the expert menu,
 next to the keys overlay itself) restricts capture to combinations with
-Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows,
+Ctrl, Alt or Win plus Enter, Tab, ESC, Backspace, Delete, Insert, arrows,
 Home, End, Page Up, Page Down and F keys, letters and digits never included,
 for a recording with confidential input.
 
@@ -549,7 +549,7 @@ of its position, and Shift takes a bigger step. In the video editor the arrow
 keys only take on this job while something is selected, since they normally
 step through frames there; while selected, comma and period step frames
 instead, and a short line above the transport controls always says what the
-arrow keys currently do. Escape deselects and hands the arrow keys back to
+arrow keys currently do. ESC deselects and hands the arrow keys back to
 their usual job.
 
 A toolbar button in either editor compares against the untouched capture:
@@ -657,7 +657,7 @@ move the highlight across group boundaries; Enter runs the fitting action for
 whatever is highlighted: copies a prompt or copy history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
 matching help topic. The field remembers your recent searches (eight; the expert menu sets one number for every search list) and shows them when it
-is empty. Escape, a click outside the card, or the icon again
+is empty. ESC, a click outside the card, or the icon again
 all close it. A flag in the expert menu turns it off.
 
 ### Tags
@@ -1018,8 +1018,8 @@ Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Ka
 Löschen entfernt alle Daten und fragt vorher nach.
 
 **Einführungstour**: vier Schritte beim ersten Start, direkt nach den
-Beispielkacheln; sie ändert keine Einstellung. Escape oder „Überspringen“ schließt
-sofort; nach Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit
+Beispielkacheln; sie ändert keine Einstellung. ESC oder „Überspringen“ schließt
+sofort; nach ESC öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit
 erneut aufrufbar über das Expertenmenü.
 
 **Das Raster**: freie Platzierung, bis 20×20 Zellen (im
@@ -1273,7 +1273,7 @@ diese Zeit ausgelassen und erscheint als Lücke, ohne dass das garantiert ist,
 da es davon abhängt, dass Windows das Feld richtig als Passwortfeld meldet.
 Ein Schalter „Nur Tastenkürzel“ (im Expertenmenü, direkt neben der
 Tastenanzeige) beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt
-oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende,
+oder Win sowie Enter, Tab, ESC, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende,
 Bild auf, Bild ab und F-Tasten, Buchstaben und Ziffern nie eingeschlossen,
 für Aufnahmen mit vertraulichen Eingaben.
 
@@ -1361,7 +1361,7 @@ Im Video-Editor übernehmen die Pfeiltasten diese Aufgabe nur,
 solange etwas ausgewählt ist, weil sie dort sonst durch die Einzelbilder
 schalten; solange ausgewählt, übernehmen stattdessen Komma und Punkt das
 Weiterschalten der Einzelbilder, und eine kurze Zeile über der Wiedergabeleiste
-zeigt immer, was die Pfeiltasten gerade tun. Escape hebt die Auswahl auf und
+zeigt immer, was die Pfeiltasten gerade tun. ESC hebt die Auswahl auf und
 gibt den Pfeiltasten ihre gewohnte Aufgabe zurück.
 
 Ein Button in der Werkzeugleiste beider Editoren vergleicht mit der
@@ -1430,7 +1430,7 @@ die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
 Aktion aus: kopiert einen Prompt oder Eintrag im Kopierverlauf, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
 passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht; das
-Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
+Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. ESC, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
 **Tags**: freie Schlagwörter; der Filter zeigt Kacheln mit allen gewählten Tags. Das Archiv ist ein gewöhnlicher Tag mit

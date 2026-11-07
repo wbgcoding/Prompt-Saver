@@ -3,7 +3,7 @@
 import { contrastTextColor } from "./floatShared.js";
 import { snapMove } from "./snap.js";
 import { keysPreviewModel } from "./videoKeys.js";
-import { typographicApostrophe, videoOverlayWindowOutMs } from "./videoGraph.js";
+import { shapeRadius, typographicApostrophe, videoOverlayWindowOutMs } from "./videoGraph.js";
 import { clamp, convertFileSrc, even, FONT_CSS, NUM_FIELD_BIG_STEP, opOf, opsOf, outMs, overlayStack, pushCrop, pushReplacing, RECT_MIN_PX, selectOverlay, t, VE, videoEl } from "./video.js";
 
 // Own lookup: this module wires its listeners while it loads, before video.js has run.
@@ -323,6 +323,8 @@ export function renderRects() {
     el.style.top = `${vb.top + rect.y * vb.scale}px`;
     el.style.width = `${rect.w * vb.scale}px`;
     el.style.height = `${rect.h * vb.scale}px`;
+    if ((item.kind === "spotlight" || item.kind === "pixelate") && item.op.shape === "ellipse") el.style.borderRadius = "50%";
+    else if ((item.kind === "spotlight" || item.kind === "pixelate") && item.op.shape === "round") el.style.borderRadius = `${shapeRadius(rect) * vb.scale}px`;
     const size = document.createElement("span");
     size.className = "ve-rect-size";
     size.textContent = `${rect.w}×${rect.h}`;
@@ -512,6 +514,7 @@ function buildLiveOverlayEl(op, vb, reuse) {
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     rectStyle(canvas, op.rect);
+    canvas.style.borderRadius = op.shape === "ellipse" ? "50%" : op.shape === "round" ? `${shapeRadius(op.rect) * vb.scale}px` : "";
     // Down-sample the live video frame to the real block grid, then blow it back up with smoothing
     // off: the same two-step mosaic buildVideoChain() asks ffmpeg for. The small sampling canvas
     // is cached on the element, so it is resized rather than reallocated per frame.
@@ -543,8 +546,21 @@ function buildLiveOverlayEl(op, vb, reuse) {
     const hx = op.rect.x * vb.scale, hy = op.rect.y * vb.scale;
     const hw = op.rect.w * vb.scale, hh = op.rect.h * vb.scale;
     const w = vb.width, h = vb.height;
-    el.style.clipPath = `polygon(evenodd, 0 0, 0 ${h}px, ${w}px ${h}px, ${w}px 0, 0 0, `
-      + `${hx}px ${hy}px, ${hx}px ${hy + hh}px, ${hx + hw}px ${hy + hh}px, ${hx + hw}px ${hy}px, ${hx}px ${hy}px)`;
+    if (op.shape === "round" || op.shape === "ellipse") {
+      let hole;
+      if (op.shape === "ellipse") {
+        const rx = hw / 2, ry = hh / 2, cy = hy + ry;
+        hole = `M${hx} ${cy}A${rx} ${ry} 0 1 0 ${hx + hw} ${cy}A${rx} ${ry} 0 1 0 ${hx} ${cy}Z`;
+      } else {
+        const r = shapeRadius(op.rect) * vb.scale;
+        hole = `M${hx + r} ${hy}H${hx + hw - r}A${r} ${r} 0 0 1 ${hx + hw} ${hy + r}V${hy + hh - r}A${r} ${r} 0 0 1 ${hx + hw - r} ${hy + hh}`
+          + `H${hx + r}A${r} ${r} 0 0 1 ${hx} ${hy + hh - r}V${hy + r}A${r} ${r} 0 0 1 ${hx + r} ${hy}Z`;
+      }
+      el.style.clipPath = `path(evenodd, "M0 0H${w}V${h}H0Z ${hole}")`;
+    } else {
+      el.style.clipPath = `polygon(evenodd, 0 0, 0 ${h}px, ${w}px ${h}px, ${w}px 0, 0 0, `
+        + `${hx}px ${hy}px, ${hx}px ${hy + hh}px, ${hx + hw}px ${hy + hh}px, ${hx + hw}px ${hy}px, ${hx}px ${hy}px)`;
+    }
     return el;
   }
   if (op.kind === "keys") {

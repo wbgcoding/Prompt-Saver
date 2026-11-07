@@ -8,10 +8,10 @@ use super::*;
 // file but the source and the media the request names, and names no text file.
 
 // Every filter the video editor (ui/videoGraph.js) builds, and nothing else.
-const EXPORT_GRAPH_FILTERS: [&str; 33] = [
+const EXPORT_GRAPH_FILTERS: [&str; 37] = [
     "fps", "split", "trim", "setpts", "concat", "movie", "amovie", "scale", "format", "colorchannelmixer", "overlay", "drawbox",
     "drawtext", "crop", "fade", "palettegen", "paletteuse", "null", "anullsrc", "atrim", "asetpts", "aresample", "aformat", "apad",
-    "asplit", "volume", "asetrate", "atempo", "afade", "adelay", "amix", "anull", "pad",
+    "asplit", "volume", "asetrate", "atempo", "afade", "adelay", "amix", "anull", "pad", "color", "geq", "loop", "alphamerge",
 ];
 
 // Extensions a media file named by the request may have. Text-like extensions are

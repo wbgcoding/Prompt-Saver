@@ -126,7 +126,7 @@ later(async () => {
   const shortcuts = await import(pathToFileURL(path.join(uiDir, "shortcuts.js")).href);
   const rows = shortcuts.rowsForScope("snipEditor", (k) => k, "en");
   const close = rows.find((r) => r.desc === "snipEditCloseTip");
-  check(close && /Enter/.test(close.keys) && /Esc/.test(close.keys), `the editor close row lists Enter and Esc, got ${close && close.keys}`);
+  check(close && /ESC/.test(close.keys) && !/Enter/.test(close.keys), `the editor close row lists ESC and not Enter, got ${close && close.keys}`);
   check(rows.filter((r) => r.desc === "snipEditCloseTip").length === 1, "the close row appears once");
   const redo = rows.find((r) => r.desc === "snipEditRedoTip");
   check(redo && !/ \/ /.test(redo.keys), `an Alt binding stays folded into its primary row, got ${redo && redo.keys}`);
@@ -247,6 +247,16 @@ later(async () => {
   await sandbox.openPopover("grid");
   check(hiddenAtRender === false, `the grid is rendered while the popover is visible, hidden was ${hiddenAtRender}`);
 });
+
+// The recording bar opens with the red Stop button and ends with Discard.
+{
+  const html = read("recbar.html");
+  const bar = html.slice(html.indexOf('id="bar"'), html.indexOf("</body>"));
+  const buttons = [...bar.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
+  check(buttons.length > 0 && /id="stop-btn"/.test(buttons[0]) && /class="[^"]*\brec-btn-stop\b/.test(buttons[0]),
+    `the first recording bar button is the red Stop, got ${buttons[0]}`);
+  check(/id="cancel-btn"/.test(buttons[buttons.length - 1]), "Discard is the last recording bar button");
+}
 
 Promise.all(pending).then(() => {
   if (problems.length) {

@@ -525,6 +525,7 @@ button.ve-op-label:focus-visible { outline: 2px solid var(--accent); outline-off
 .ve-help-tab.active { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-fg); }
 .ve-help-content { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; padding-right: 6px; }
 .ve-help-h { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
+.ve-help .help-sketch { margin: 0 0 12px; }
 .ve-help-p { margin: 0 0 12px; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
 .ve-help-keys { max-height: none; overflow: visible; margin-top: 4px; }
 @media (max-width: 700px) {

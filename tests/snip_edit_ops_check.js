@@ -48,7 +48,7 @@ function sandbox() {
     numPopEsc: false, numPopClosedByEscape: () => sb.numPopEsc,
     colorPop: { classList: { contains: () => true } }, closeColorPop() {},
     SNIP_EDIT_OVER_DIALOGS: ["ocr-modal", "ocr-langs-modal", "modal"],
-    applied: false, snipEditApply() { sb.applied = true; }, pressed: 0,
+    applied: false, snipEditRequestClose() { sb.applied = true; }, pressed: 0,
     NUM_FIELD_BIG_STEP: 10, snipOriginalToggle: { press() { sb.pressed++; } }, snipEditWrap: { style: {}, classList: { add() {} } },
   };
   vm.createContext(sb);
@@ -116,7 +116,7 @@ function sandbox() {
   sb.snipEditKeydown({ key: "Escape", target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, repeat: false });
   check("Escape closes the resize popover", sb.scaleClosed, true);
 }
-// Escape on the canvas is Close (applies and closes); while a text recognition or other dialog
+// Escape on the canvas is Close (asks to save when edits are not in a file); while a text recognition or other dialog
 // sits over the editor, the editor ignores the key so the dialog gets it.
 {
   const sb = sandbox();
@@ -126,7 +126,7 @@ function sandbox() {
   check("Escape with a dialog over the editor: the editor does nothing", sb.applied, false);
   sb.$ = () => ({ classList: { contains: () => true } });
   sb.snipEditKeydown(esc);
-  check("Escape on the canvas closes the editor", sb.applied, true);
+  check("Escape on the canvas asks to close the editor", sb.applied, true);
 }
 // Keys typed in a field never switch tools; the same key on the canvas does.
 {
@@ -166,14 +166,14 @@ function sandbox() {
   sb.snipEditKeydown(ev({ tagName: "BUTTON", matches: () => true }, "Enter"));
   check("Enter on a keyboard-focused button: no apply", sb.applied, false);
   sb.snipEditKeydown(ev({ tagName: "BUTTON", matches: () => false }, "Enter"));
-  check("Enter after a mouse click on a button: applies", sb.applied, true);
+  check("Enter after a mouse click on a button: still no close", sb.applied, false);
   sb.snipEditKeydown(ev({ tagName: "BODY" }, "v", { ctrlKey: true }));
   check("Ctrl+V: no original toggle", sb.pressed, 0);
   sb.snipEditKeydown(ev({ tagName: "BODY" }, "v"));
   check("plain V: original toggle", sb.pressed, 1);
 }
-// Enter with the crop tool: a box the pointer release already committed closes the editor; a
-// box that differs from the crop op (or has none yet) is committed first.
+// Enter with the crop tool never closes the editor; a box that differs from the crop op (or has
+// none yet) is committed.
 {
   const sb = sandbox();
   const ev = (key, extra = {}) => ({ key, target: { tagName: "BODY" }, preventDefault() {}, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...extra });
@@ -181,7 +181,7 @@ function sandbox() {
   sb.SE.cropRect = { x: 1, y: 1, w: 5, h: 5 };
   sb.SE.ops = [{ tool: "crop", rect: { x: 1, y: 1, w: 5, h: 5 } }];
   sb.snipEditKeydown(ev("Enter"));
-  check("Enter with a committed crop: applies", [sb.applied, sb.cropCommits], [true, 0]);
+  check("Enter with a committed crop: no close, no commit", [sb.applied, sb.cropCommits], [false, 0]);
   sb.applied = false;
   sb.SE.cropRect = { x: 2, y: 1, w: 5, h: 5 };
   sb.snipEditKeydown(ev("Enter"));
