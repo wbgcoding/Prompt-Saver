@@ -1724,7 +1724,7 @@ export default {
     tipBarToggleBoth: "Un doble clic en un botón de mostrar devuelve ambas barras a la vez.",
     tipQuickGrid: "Muestra el número de columnas y filas de la vista activa en la barra superior, para cambiar el tamaño sin abrir sus ajustes.",
     tipMultiView: "Varias vistas con nombre, cada una con su propia cuadrícula y disposición, con pestañas junto al título.",
-    tipLibraryCols: "En cuántas columnas se muestra la lista de la biblioteca.",
+    tipLibraryCols: "El máximo de columnas que usa la lista de la biblioteca. Una ventana estrecha muestra menos.",
     tipCopySizeLevel: "Tamaño del texto de la confirmación “¡Copiado!” en mosaicos y botones flotantes. Grande llena el mosaico o el botón.",
     tipShowLibrary: "Muestra u oculta el botón de la biblioteca en la barra superior.",
     expGroupVars: "Marcadores",

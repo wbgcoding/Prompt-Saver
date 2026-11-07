@@ -4142,11 +4142,12 @@ body.drag-over::after {
 .update-result.update-result-error { color: var(--danger); }
 
 /* ---- Prompt library ---- */
-/* One wide column by default (read more of each prompt); the header toggle sets the
-   column count (up to the libraryMaxCols expert value). */
+/* One wide column by default; the libraryCols expert value sets the most columns, and a
+   column never gets narrower than --lib-col-min, so a narrow window shows fewer. */
 .library-list {
+  --lib-col-min: 320px;
   display: grid;
-  grid-template-columns: repeat(var(--lib-cols, 1), 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(max(var(--lib-col-min), calc((100% - (var(--lib-cols, 1) - 1) * 6px) / var(--lib-cols, 1))), 1fr));
   gap: 6px;
   align-content: start;
   /* The list is the scroll area (not the modal), so the header + search stay put and

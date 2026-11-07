@@ -1724,7 +1724,7 @@ export default {
     tipBarToggleBoth: "Een dubbelklik op een herstelknop brengt beide balken samen terug.",
     tipQuickGrid: "Zet het aantal kolommen en rijen van de actieve weergave in de bovenbalk, zodat je de indeling wijzigt zonder de instellingen te openen.",
     tipMultiView: "Meerdere benoemde weergaven, elk met een eigen raster en indeling, te wisselen via de tabs naast de titel.",
-    tipLibraryCols: "In hoeveel kolommen de lijst van de bibliotheek staat.",
+    tipLibraryCols: "Het maximale aantal kolommen van de lijst van de bibliotheek. Een smal venster toont er minder.",
     tipCopySizeLevel: "Tekstgrootte van de bevestiging “Gekopieerd!” op tegels en zwevende knoppen. Groot vult de tegel of knop.",
     tipShowLibrary: "Toont of verbergt de knop voor de bibliotheek in de bovenbalk.",
     expGroupVars: "Plaatsaanduidingen",

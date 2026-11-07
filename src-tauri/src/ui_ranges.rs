@@ -20,7 +20,7 @@ pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("copyCooldownMs", 0.0, 10000.0, false),
     ("copySoundVolume", 0.0, 100.0, false),
     ("favMaxCols", 0.0, 20.0, false),
-    ("libraryCols", 1.0, 6.0, false),
+    ("libraryCols", 1.0, 4.0, false),
     ("libPreviewLines", 1.0, 4.0, false),
     ("libraryWidth", 520.0, 1400.0, false),
     ("searchListMax", 3.0, 20.0, false),

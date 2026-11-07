@@ -349,7 +349,7 @@ export const EXPERT_VALUES = {
   // Favorites grid: cap the column count (0 = auto-size to the count).
   favMaxCols: { label: "valFavMaxCols", min: 0, max: 20, step: 1, def: 0, unit: "", gate: "favViewButton" },
   // Prompt-list (library) column options: how many columns the header toggle offers.
-  libraryCols: { label: "valLibraryCols", min: 1, max: 6, step: 1, def: 1, unit: "", gate: "librarySearch" },
+  libraryCols: { label: "valLibraryCols", min: 1, max: 4, step: 1, def: 1, unit: "", gate: "librarySearch" },
   libPreviewLines: { label: "valLibPreviewLines", min: 1, max: 4, step: 1, def: 2, unit: "" },
   // Prompt-list (library) dialog width.
   libraryWidth: { label: "valLibraryWidth", min: 520, max: 1400, step: 20, def: 900, unit: "px" },

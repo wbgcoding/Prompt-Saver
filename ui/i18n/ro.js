@@ -1724,7 +1724,7 @@ export default {
     tipBarToggleBoth: "Un dublu clic pe un buton de restaurare readuce ambele bare împreună.",
     tipQuickGrid: "Afișează numărul de coloane și rânduri ale vizualizării active în bara de sus, ca să redimensionezi fără a deschide setările.",
     tipMultiView: "Mai multe vizualizări cu nume, fiecare cu grila și aranjamentul ei, comutate din filele de lângă titlu.",
-    tipLibraryCols: "În câte coloane este afișată lista bibliotecii.",
+    tipLibraryCols: "Numărul maxim de coloane folosite de lista bibliotecii. O fereastră îngustă afișează mai puține.",
     tipCopySizeLevel: "Mărimea textului confirmării „Copiat!” pe dale și pe butoane plutitoare. Mare umple dala sau butonul.",
     tipShowLibrary: "Afișează sau ascunde butonul bibliotecii din bara de sus.",
     expGroupVars: "Substituenți",

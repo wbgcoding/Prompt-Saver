@@ -1731,7 +1731,7 @@ export default {
     tipBarToggleBoth: "Ein Doppelklick auf einen Einblenden-Button bringt beide Leisten gemeinsam zurück.",
     tipQuickGrid: "Zeigt Spalten- und Zeilenzahl der aktiven Ansicht in der Kopfzeile, sodass sich das Raster ohne Umweg über die Einstellungen ändern lässt.",
     tipMultiView: "Mehrere benannte Ansichten mit jeweils eigenem Raster und Layout, umschaltbar über die Tabs neben dem Titel.",
-    tipLibraryCols: "In wie vielen Spalten die Liste der Bibliothek steht.",
+    tipLibraryCols: "Höchstens so viele Spalten zeigt die Liste der Bibliothek. Ein schmales Fenster zeigt weniger.",
     tipCopySizeLevel: "Schriftgröße der „Kopiert!“-Bestätigung auf Kacheln und schwebenden Buttons. „Groß“ füllt Kachel oder Button aus.",
     tipShowLibrary: "Blendet den Button für die Bibliothek in der Kopfzeile ein oder aus.",
     expGroupVars: "Platzhalter",

@@ -1724,7 +1724,7 @@ export default {
     tipBarToggleBoth: "Un doppio clic su un pulsante di ripristino riporta entrambe le barre insieme.",
     tipQuickGrid: "Mostra il numero di colonne e righe della vista attiva nella barra superiore, per ridimensionarla senza aprirne le impostazioni.",
     tipMultiView: "Più viste con nome, ognuna con la propria griglia e disposizione, scambiabili dalle schede accanto al titolo.",
-    tipLibraryCols: "In quante colonne è disposto l'elenco della libreria.",
+    tipLibraryCols: "Il massimo di colonne che l'elenco della libreria usa. Una finestra stretta ne mostra meno.",
     tipCopySizeLevel: "Dimensione del testo della conferma “Copiato!” su riquadri e pulsanti flottanti. Grande riempie il riquadro o il pulsante.",
     tipShowLibrary: "Mostra o nasconde il pulsante della libreria nella barra superiore.",
     expGroupVars: "Segnaposto",

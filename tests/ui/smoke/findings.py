@@ -2669,5 +2669,20 @@ window.__CAMX = { gum: 0, closes: 0, markGate: null, editor: null, pickDir: null
       }
     }
 """)
+    failed += ar_probe('xcols', 'library columns: a narrow list drops columns instead of squeezing rows', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_values: { libraryCols: 4 } };</script>\n', r"""
+    // xcols: the column cap is a ceiling, a column never gets narrower than its floor
+    await bootReady();
+    document.getElementById('library-btn').click(); await sleep(500);
+    const rows = [...document.querySelectorAll('#library-list .lib-item')];
+    if (rows.length < 4) errs.push('xcols: fixture: the library shows fewer than 4 rows');
+    else {
+      const lefts = new Set(rows.map((r) => Math.round(r.getBoundingClientRect().left)));
+      if (lefts.size > 2) errs.push('xcols: ' + lefts.size + ' columns at 880 px, expected at most 2');
+      const narrow = rows.filter((r) => r.getBoundingClientRect().width < 319);
+      if (narrow.length) errs.push('xcols: ' + narrow.length + ' rows narrower than 320 px');
+      const cssCols = getComputedStyle(document.getElementById('library-list')).getPropertyValue('--lib-cols').trim();
+      if (cssCols !== '4') errs.push('xcols: --lib-cols is ' + cssCols + ', the setting no longer reaches CSS');
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

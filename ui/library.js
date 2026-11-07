@@ -1630,7 +1630,7 @@ export function syncLibraryToggle() {
 }
 
 // Library list columns: the expert value is the one place that decides it.
-export const libCols = () => Math.min(6, Math.max(1, Math.round(val("libraryCols"))));
+export const libCols = () => Math.round(val("libraryCols"));
 export function syncLibraryCols() {
   $("library-list").style.setProperty("--lib-cols", libCols());
 }
