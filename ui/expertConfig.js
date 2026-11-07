@@ -374,7 +374,7 @@ export const EXPERT_VALUES = {
   // Days an editor's saved edit state is kept. 0 means forever, like trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "d", zeroLabel: "retentionForever", gate: "editStateKeep" },
   // Delay between picking a recording target and the capture actually starting: 0 disables it.
-  recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
+  recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", zeroLabel: "valOff", gate: "screenRecord" },
   // Capture rate in frames per second, so a 60/144Hz screen can be recorded at its own rate.
   recFps: { label: "valRecFps", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "screenRecord" },
   // Native H.264 bitrate. No effect when recQuality is "lossless": that step is a separate
