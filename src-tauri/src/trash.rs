@@ -852,7 +852,7 @@ pub(crate) async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Resu
     };
     // Another copy's Run entry (portable versus installed) is not this reset's to remove.
     if !autostart_removal_skipped() {
-        let _ = apply_autostart(false, false);
+        let _ = apply_autostart(false, false, false);
     }
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);

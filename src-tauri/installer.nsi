@@ -1251,6 +1251,7 @@ Section Uninstall
   ; We do this when not updating (to preserve the registry value on updates)
   ${If} $UpdateMode <> 1
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${AUTOSTARTKEY}"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${AUTOSTARTKEY}"
   ${EndIf}
 
   ; Delete the data folder if that was chosen on the data page, and if not updating

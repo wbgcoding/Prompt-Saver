@@ -705,7 +705,15 @@ pub fn run() {
             // Refresh the autostart registration (also follows the exe when it moved) and drop the
             // address-scheme entry an earlier version registered. Another copy's entry is never touched.
             let demo = data_dir_is_demo(&handle, &data_dir(&handle));
-            reconcile_windows_state(autostart, start_min, demo);
+            if reconcile_windows_state(autostart, start_min, demo) == BootAutostart::TurnSettingOff {
+                // Task Manager disabled the entry: the switch follows it. The Run value stays so
+                // the entry can be enabled there again.
+                if let Some(state) = handle.try_state::<Db>() {
+                    let mut store = lock(&state);
+                    store.settings.autostart = false;
+                    save_settings(&handle, &store.settings);
+                }
+            }
             remove_legacy_protocol_key();
             // A read-only instance never writes into the folder another machine owns.
             if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
@@ -1017,6 +1025,7 @@ pub fn run() {
             images::pdf_preview,
             images::attachment_text_preview,
             autostart::set_autostart,
+            autostart::autostart_effective,
             autostart::set_start_minimized,
             import_export::export_prompts,
             import_export::preview_import,

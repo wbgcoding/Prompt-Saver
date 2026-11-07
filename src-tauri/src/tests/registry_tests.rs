@@ -46,6 +46,27 @@ fn registry_values_round_trip_and_missing_ones_read_as_not_found() {
 }
 
 #[test]
+fn binary_values_round_trip_and_other_types_are_refused() {
+    let path = scratch_key("bin");
+    let _ = delete_tree(Hive::CurrentUser, &path);
+    let state = [0x03u8, 0, 0, 0, 0xD3, 0x50, 0xB8, 0x0A, 0x2D, 0x06, 0xDD, 0x01];
+    {
+        let key = Key::create_write(Hive::CurrentUser, &path).unwrap();
+        key.set_binary("State", &state).unwrap();
+        key.set_binary("Empty", &[]).unwrap();
+        key.set_string("Text", "x").unwrap();
+    }
+    let key = Key::open_read(Hive::CurrentUser, &path).unwrap();
+    assert_eq!(key.get_binary("State").unwrap(), state.to_vec());
+    assert_eq!(key.get_binary("Empty").unwrap(), Vec::<u8>::new());
+    assert_eq!(key.get_binary("Text").err().map(|e| e.kind()), Some(std::io::ErrorKind::InvalidData));
+    assert_eq!(key.get_string("State").err().map(|e| e.kind()), Some(std::io::ErrorKind::InvalidData));
+    assert_eq!(key.get_binary("Nope").err().map(|e| e.kind()), Some(std::io::ErrorKind::NotFound));
+    drop(key);
+    delete_tree(Hive::CurrentUser, &path).unwrap();
+}
+
+#[test]
 fn the_machine_policy_key_can_be_read_without_elevation() {
     // Present on every Windows install; opening it read-only must work for a standard user.
     let key = Key::open_read(Hive::LocalMachine, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System").unwrap();

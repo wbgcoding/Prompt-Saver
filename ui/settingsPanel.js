@@ -763,6 +763,16 @@ export async function applySettingsUi() {
 export function syncStartMinRow() {
   $("opt-startmin").closest(".field").classList.toggle("hidden", !$("opt-autostart").checked);
 }
+// The autostart entry as Windows sees it (the entry exists, is ours and Task Manager has not
+// disabled it). Runs beside the synchronous sync below and never calls it again.
+async function refreshAutostartEffective() {
+  try {
+    const effective = (await invoke("autostart_effective")) === true;
+    if (!effective && settings.autostart === true) settings.autostart = false;
+    $("opt-autostart").checked = effective;
+    syncStartMinRow();
+  } catch (err) { /* keep what the stored setting showed */ }
+}
 export function syncSettingsControls() {
     fillThemeSelect();
     setLangSelect();
@@ -772,6 +782,7 @@ export function syncSettingsControls() {
     $("opt-autostart").checked = settings.autostart === true;
     $("opt-startmin").checked = settings.start_minimized === true;
     syncStartMinRow();
+    refreshAutostartEffective();
     $("opt-ontop").checked = settings.always_on_top === true;
     $("opt-favview").checked = favViewEnabled();
     $("opt-favview").closest(".field").classList.toggle("hidden", !flag("favorites"));
