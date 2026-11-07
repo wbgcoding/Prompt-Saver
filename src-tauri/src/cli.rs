@@ -2133,7 +2133,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("settings", None) => "prompt-saver settings get <key> [--json]\nprompt-saver settings set <key> <value> --yes".to_string(),
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
         ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
-        ("screenshot", _) => "prompt-saver screenshot\n\nStart a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. Exit 0 once the capture was opened, 3 if it could not start.".to_string(),
+        ("screenshot", _) => "prompt-saver screenshot\n\nStart a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. With the app running, exit 0 once the capture was opened, 3 if it could not start; otherwise this call becomes the app and keeps running, so do not wait for it.".to_string(),
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }

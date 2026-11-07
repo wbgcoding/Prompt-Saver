@@ -128,7 +128,7 @@
   {
     "name": "screenshot",
     "usage": "prompt-saver screenshot",
-    "description": "Start a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. Exit 0 once the capture was opened, 3 if it could not start.",
+    "description": "Start a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. With the app running, exit 0 once the capture was opened, 3 if it could not start; otherwise this call becomes the app and keeps running, so do not wait for it.",
     "mutating": false
   },
   {
