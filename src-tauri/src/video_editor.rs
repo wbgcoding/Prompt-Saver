@@ -1856,6 +1856,11 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(1)
 }
 
+// Stamps the first unanswered question only: asking again must not restart the hung-page clock.
+fn mark_close_asked() {
+    let _ = VE_ASK_SENT_MS.compare_exchange(0, now_ms(), Ordering::SeqCst, Ordering::SeqCst);
+}
+
 pub(crate) fn editor_close_action(page_ready: bool, allowed: bool, unanswered_ms: Option<u64>) -> EditorCloseAction {
     if allowed || !page_ready || unanswered_ms.is_some_and(|ms| ms >= 3000) {
         EditorCloseAction::Allow
@@ -1872,8 +1877,14 @@ pub(crate) fn ask_editor_before_quit(app: &AppHandle) -> bool {
     if app.get_webview_window(VIDEO_WIN_LABEL).is_none() || !VE_CLOSE_READY.load(Ordering::SeqCst) {
         return false;
     }
+    // A page that never confirmed an earlier question is hung: the quit goes through.
+    let asked_at = VE_ASK_SENT_MS.load(Ordering::SeqCst);
+    let unanswered_ms = (asked_at != 0).then(|| now_ms().saturating_sub(asked_at));
+    if editor_close_action(true, false, unanswered_ms) == EditorCloseAction::Allow {
+        return false;
+    }
     VE_QUIT_AFTER_CLOSE.store(true, Ordering::SeqCst);
-    VE_ASK_SENT_MS.store(now_ms(), Ordering::SeqCst);
+    mark_close_asked();
     let _ = app.emit_to(VIDEO_WIN_LABEL, "ve-close-requested", true);
     true
 }
@@ -2131,7 +2142,7 @@ async fn build_video_editor(
             let unanswered_ms = (asked_at != 0).then(|| now_ms().saturating_sub(asked_at));
             if editor_close_action(VE_CLOSE_READY.load(Ordering::SeqCst), allowed, unanswered_ms) == EditorCloseAction::AskPage {
                 api.prevent_close();
-                VE_ASK_SENT_MS.store(now_ms(), Ordering::SeqCst);
+                mark_close_asked();
                 let _ = close_app.emit_to(VIDEO_WIN_LABEL, "ve-close-requested", false);
             }
         }
