@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Laufwerk fast voll",
     recBarHotkeyShort: "Tastenkürzel blockiert",
     camChooseFolder: "Aufnahme-Ordner wählen",
-    notesLabel: "Notiz (nur für dich, wird nicht kopiert)",
+    notesLabel: "Notiz (wird nicht kopiert)",
     varsInsertLink: "Platzhalter einfügen",
     optSnipToolLast: "Zuletzt benutztes",
     libraryTilesLabel: "Kacheln",

@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Disk neredeyse dolu",
     recBarHotkeyShort: "Kısayol engellendi",
     camChooseFolder: "Kayıt klasörünü seç",
-    notesLabel: "Not (yalnızca sizin için, asla kopyalanmaz)",
+    notesLabel: "Not (kopyalanmaz)",
     varsInsertLink: "Yer tutucu ekle",
     optSnipToolLast: "Son kullanılan",
     libraryTilesLabel: "Kutucuklar",

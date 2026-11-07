@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Schijf bijna vol",
     recBarHotkeyShort: "Sneltoets geblokkeerd",
     camChooseFolder: "Opnamemap kiezen",
-    notesLabel: "Notitie (alleen voor jou, wordt nooit meegekopieerd)",
+    notesLabel: "Notitie (wordt niet gekopieerd)",
     varsInsertLink: "Plaatsaanduiding invoegen",
     optSnipToolLast: "Laatst gebruikt",
     libraryTilesLabel: "Tegels",

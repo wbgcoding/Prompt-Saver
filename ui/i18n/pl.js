@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Dysk prawie pełny",
     recBarHotkeyShort: "Skrót zablokowany",
     camChooseFolder: "Wybierz folder nagrań",
-    notesLabel: "Notatka (tylko dla ciebie, nigdy nie jest kopiowana)",
+    notesLabel: "Notatka (nie jest kopiowana)",
     varsInsertLink: "Wstaw symbol zastępczy",
     optSnipToolLast: "Ostatnio użyte",
     libraryTilesLabel: "Kafelki",

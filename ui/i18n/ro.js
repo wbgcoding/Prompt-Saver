@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Disc aproape plin",
     recBarHotkeyShort: "Tastă rapidă blocată",
     camChooseFolder: "Alege folderul înregistrărilor",
-    notesLabel: "Notiță (doar pentru tine, nu se copiază niciodată)",
+    notesLabel: "Notiță (nu se copiază)",
     varsInsertLink: "Inserează substituent",
     optSnipToolLast: "Ultimul folosit",
     libraryTilesLabel: "Dale",

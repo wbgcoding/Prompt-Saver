@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Disco quasi pieno",
     recBarHotkeyShort: "Scelta rapida bloccata",
     camChooseFolder: "Scegli la cartella delle registrazioni",
-    notesLabel: "Nota (solo per te, non viene mai copiata)",
+    notesLabel: "Nota (non viene copiata)",
     varsInsertLink: "Inserisci segnaposto",
     optSnipToolLast: "Ultimo usato",
     libraryTilesLabel: "Riquadri",

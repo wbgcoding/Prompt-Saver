@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Disco casi lleno",
     recBarHotkeyShort: "Atajo bloqueado",
     camChooseFolder: "Elegir la carpeta de grabaciones",
-    notesLabel: "Nota (solo para ti, nunca se copia)",
+    notesLabel: "Nota (no se copia)",
     varsInsertLink: "Insertar marcador",
     optSnipToolLast: "Última usada",
     libraryTilesLabel: "Mosaicos",

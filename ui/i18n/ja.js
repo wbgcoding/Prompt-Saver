@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "ディスクの空きが少ない",
     recBarHotkeyShort: "ホットキーがブロック中",
     camChooseFolder: "録画フォルダーを選択",
-    notesLabel: "メモ（自分用、コピーされません）",
+    notesLabel: "メモ（コピーされません）",
     varsInsertLink: "プレースホルダーを挿入",
     optSnipToolLast: "前回使用したもの",
     libraryTilesLabel: "タイル",

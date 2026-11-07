@@ -1995,7 +1995,7 @@ export default {
     recBarDiskLowShort: "Disk almost full",
     recBarHotkeyShort: "Hotkey blocked",
     camChooseFolder: "Choose the recording folder",
-    notesLabel: "Note (only for you, never copied)",
+    notesLabel: "Note (not copied)",
     varsInsertLink: "Insert placeholder",
     optSnipToolLast: "Last used",
     libraryTilesLabel: "Tiles",
