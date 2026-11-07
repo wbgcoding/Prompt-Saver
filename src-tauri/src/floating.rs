@@ -151,6 +151,7 @@ pub(crate) fn queue_for_snip_restore(hid: &mut Vec<String>, label: &str) {
 // Show without taking the foreground from the app the user is typing in; the window
 // was built always-on-top and stays so.
 pub(crate) fn show_without_focus(win: &tauri::WebviewWindow) {
+    crate::rec_bar::rec_hid_forget(win.label());
     #[cfg(windows)]
     {
         const SW_SHOWNOACTIVATE: i32 = 4;
@@ -416,6 +417,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
                 mark_parked(&app2, &pid, false);
             }
             WindowEvent::Destroyed => {
+                crate::rec_bar::rec_hid_forget(&wlabel);
                 float_destroyed(&app2, &wlabel);
                 save_settings_off_event_loop(&app2);
             }
@@ -1176,6 +1178,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
                 mark_parked(&app2, &fid, false);
             }
             WindowEvent::Destroyed => {
+                crate::rec_bar::rec_hid_forget(&wlabel);
                 float_destroyed(&app2, &wlabel);
                 set_folder_expansion(&app2, &fid, None);
                 save_settings_off_event_loop(&app2);

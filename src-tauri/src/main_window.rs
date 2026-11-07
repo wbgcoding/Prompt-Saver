@@ -5,6 +5,7 @@ use super::*;
 // A window that no longer exists is rebuilt first.
 pub(crate) fn show_main(app: &AppHandle) {
     park_idle_snip_overlay(app);
+    crate::rec_bar::rec_hid_forget("main");
     let win = show_main_seam(app.get_webview_window("main"), || build_main_window(app));
     let Some(win) = win else { return };
     // This runs on the event-loop thread (tray click, global shortcut): while a backup
@@ -150,6 +151,7 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                 voice_shutdown(&handle2);
                 // A hidden window never sends the end of a capture its focused field began.
                 crate::shortcuts::end_hotkey_capture(&handle2);
+                crate::rec_bar::rec_hid_forget("main");
                 if let Some(w) = handle2.get_webview_window("main") {
                     let _ = w.hide();
                 }
@@ -232,6 +234,7 @@ pub(crate) fn summon_launcher(app: &AppHandle) {
 // loaded and calls launcher_ready, since keystrokes sent earlier are lost. A launcher that
 // never reports in is revealed after LAUNCHER_REVEAL_FALLBACK anyway.
 pub(crate) fn open_launcher_window(app: &AppHandle, deferred: bool) {
+    crate::rec_bar::rec_hid_forget(LAUNCHER_WIN_LABEL);
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         let _ = win.close();
         // close() only queues the teardown, and building under the same label before
@@ -296,6 +299,7 @@ fn build_launcher_window(app: &AppHandle, deferred: bool) {
 
 // Shows the launcher and gives it the focus, unless it already is on screen.
 pub(crate) fn reveal_launcher(app: &AppHandle) {
+    crate::rec_bar::rec_hid_forget(LAUNCHER_WIN_LABEL);
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         if !win.is_visible().unwrap_or(false) {
             let _ = win.show();

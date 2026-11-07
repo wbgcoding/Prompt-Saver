@@ -518,6 +518,41 @@ fn rec_windows_to_hide_takes_only_visible_overlapping_app_windows() {
 }
 
 #[test]
+fn a_window_something_else_hid_or_showed_is_not_restored_by_the_recording() {
+    let mut set: Vec<String> = Vec::new();
+    crate::snip::merge_hidden_labels(&mut set, vec!["main".into(), "float-1".into(), "launcher".into()]);
+    // The person closed the main window to the tray during the recording.
+    crate::snip::forget_hidden_label(&mut set, "main");
+    assert_eq!(set, vec!["float-1".to_string(), "launcher".to_string()]);
+    // An unknown label and a repeat change nothing.
+    crate::snip::forget_hidden_label(&mut set, "main");
+    crate::snip::forget_hidden_label(&mut set, "folder-9");
+    assert_eq!(set.len(), 2);
+    // A later hide pass of the same recording (a second region) can queue it again.
+    crate::snip::merge_hidden_labels(&mut set, vec!["main".into()]);
+    assert!(set.contains(&"main".to_string()));
+    // The live set behind the recording uses the same bookkeeping.
+    {
+        let mut live = REC_HID_APP.lock().unwrap_or_else(|e| e.into_inner());
+        live.clear();
+        live.push("video-editor".to_string());
+    }
+    rec_hid_forget("video-editor");
+    assert!(REC_HID_APP.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
+}
+
+#[test]
+fn every_path_that_hides_or_shows_a_recorded_away_window_forgets_it() {
+    let norm = |s: &str| s.replace("\r\n", "\n");
+    let main_window = norm(include_str!("../main_window.rs"));
+    // Close-to-tray, the tray/hotkey show, and both launcher entry points.
+    assert_eq!(main_window.matches("rec_hid_forget(").count(), 4);
+    assert!(norm(include_str!("../floating.rs")).matches("rec_hid_forget(").count() >= 3, "show_without_focus plus the two Destroyed handlers");
+    let ve = norm(include_str!("../video_editor.rs"));
+    assert_eq!(ve.matches("rec_hid_forget(VIDEO_WIN_LABEL)").count(), 2, "opening and destroying the editor");
+}
+
+#[test]
 fn rec_hides_label_covers_the_app_windows_over_the_screen_and_no_helper_window() {
     for yes in ["main", "float-1", "float-12", "folder-3", "video-editor", "launcher"] {
         assert!(rec_hides_label(yes), "{yes} should be hidden");

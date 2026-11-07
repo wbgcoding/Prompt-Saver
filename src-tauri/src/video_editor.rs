@@ -2022,6 +2022,8 @@ pub(crate) async fn open_video_editor(
     .map_err(|e| e.to_string())?;
     let origin_dir = origin_dir.unwrap_or_default();
     let request = (src_path, origin_dir, overlay_path);
+    // The editor opens now: a recording that hid it earlier no longer owns its state.
+    crate::rec_bar::rec_hid_forget(VIDEO_WIN_LABEL);
     // Two rounds at most: the second one only happens when the first found its window gone and
     // another call built a new one in the meantime.
     for _attempt in 0..2 {
@@ -2147,6 +2149,7 @@ async fn build_video_editor(
             }
         }
         tauri::WindowEvent::Destroyed => {
+            crate::rec_bar::rec_hid_forget(VIDEO_WIN_LABEL);
             // A window that lost the label race to a newer one must not reset the live one's state.
             if VE_WIN_GEN.load(Ordering::SeqCst) == my_gen {
                 VE_CLOSE_READY.store(false, Ordering::SeqCst);

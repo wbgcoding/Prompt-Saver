@@ -103,6 +103,12 @@ pub(crate) fn merge_hidden_labels(set: &mut Vec<String>, hid: Vec<String>) {
     }
 }
 
+// Drop a label from a restore set: the window was hidden, closed or shown by something other
+// than the pass that queued it, so that pass no longer owns its state.
+pub(crate) fn forget_hidden_label(set: &mut Vec<String>, label: &str) {
+    set.retain(|l| l != label);
+}
+
 // The hidden windows a snip session put away, as the restore set: only what was
 // visible before the hide pass.
 pub(crate) fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {

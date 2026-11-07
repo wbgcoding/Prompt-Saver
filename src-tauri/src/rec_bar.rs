@@ -423,6 +423,12 @@ pub(crate) fn hide_rec_outline(app: &AppHandle) {
 // shows exactly those again and a window hidden on purpose is never popped up.
 pub(crate) static REC_HID_APP: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
+// A window that something else hid, closed or showed during the recording is no longer in the
+// state the recording left it: the end of the recording leaves it alone.
+pub(crate) fn rec_hid_forget(label: &str) {
+    crate::snip::forget_hidden_label(&mut REC_HID_APP.lock().unwrap_or_else(|e| e.into_inner()), label);
+}
+
 // The app windows a region recording puts away: the ones the screenshot hide pass covers plus the
 // video editor and the launcher. The camera preview, the bar and the outline stay.
 pub(crate) fn rec_hides_label(label: &str) -> bool {
