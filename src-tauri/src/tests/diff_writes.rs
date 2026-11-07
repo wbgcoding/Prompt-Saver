@@ -891,6 +891,32 @@ fn registry_owner_tells_this_copy_from_another() {
 }
 
 #[test]
+fn the_settings_switch_follows_what_windows_backs() {
+    use EffectiveSync::*;
+    use RegistryOwner::*;
+    for owner in [Missing, ThisExe, Gone, OtherExe] {
+        for tm_disabled in [false, true] {
+            for setting_on in [false, true] {
+                let backed = owner == ThisExe && !tm_disabled;
+                let want = match (backed, setting_on) {
+                    (false, true) => SettingOff,
+                    (true, false) => SettingOnAndRefresh,
+                    _ => Keep,
+                };
+                assert_eq!(
+                    effective_sync(owner, tm_disabled, setting_on),
+                    want,
+                    "owner={owner:?} tm_disabled={tm_disabled} setting_on={setting_on}"
+                );
+            }
+        }
+    }
+    // The case behind the rule: a boot turned the setting off, the person then enabled the
+    // entry again in Task Manager.
+    assert_eq!(effective_sync(ThisExe, false, false), SettingOnAndRefresh);
+}
+
+#[test]
 fn boot_reconcile_only_writes_and_never_removes() {
     use BootAutostart::*;
     use RegistryOwner::*;

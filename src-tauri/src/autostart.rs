@@ -288,18 +288,50 @@ pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, demo:
     }
 }
 
+// How the stored setting must change so it agrees with what Windows backs: our own Run
+// entry exists and Task Manager has not disabled it.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum EffectiveSync {
+    Keep,
+    // Windows no longer backs a stored "on": only the setting turns off.
+    SettingOff,
+    // The entry was enabled again in Task Manager: the setting turns on and the Run value is
+    // rewritten, so a moved exe path and the start-minimized flag are current again.
+    SettingOnAndRefresh,
+}
+
+pub(crate) fn effective_sync(owner: RegistryOwner, tm_disabled: bool, setting_on: bool) -> EffectiveSync {
+    let backed = owner == RegistryOwner::ThisExe && !tm_disabled;
+    match (backed, setting_on) {
+        (false, true) => EffectiveSync::SettingOff,
+        (true, false) => EffectiveSync::SettingOnAndRefresh,
+        _ => EffectiveSync::Keep,
+    }
+}
+
 // What the settings switch should show: our own Run entry exists and Task Manager has not
 // disabled it. A stored "on" that Windows no longer backs is turned off here, touching only
-// the setting (the registry stays as it is, so the entry can be enabled again in Task Manager).
+// the setting (the registry stays as it is, so the entry can be enabled again in Task Manager);
+// an entry enabled again there turns the setting back on and refreshes the Run value.
 #[tauri::command(async)]
 pub(crate) fn autostart_effective(app: AppHandle, state: State<Db>) -> Result<bool, String> {
     let cmd = autostart_command()?;
-    let effective = current_registry_owner(cmd.as_deref()) == RegistryOwner::ThisExe && !task_manager_disabled();
-    if !effective {
-        let mut store = lock(&state);
-        if store.settings.autostart {
+    let owner = current_registry_owner(cmd.as_deref());
+    let tm_disabled = task_manager_disabled();
+    let effective = owner == RegistryOwner::ThisExe && !tm_disabled;
+    let mut store = lock(&state);
+    match effective_sync(owner, tm_disabled, store.settings.autostart) {
+        EffectiveSync::Keep => {}
+        EffectiveSync::SettingOff => {
             store.settings.autostart = false;
             save_settings(&app, &store.settings);
+        }
+        EffectiveSync::SettingOnAndRefresh => {
+            store.settings.autostart = true;
+            save_settings(&app, &store.settings);
+            if let Err(e) = apply_autostart(true, store.settings.start_minimized, false) {
+                append_crash_log(&format!("autostart entry could not be refreshed: {e}"));
+            }
         }
     }
     Ok(effective)
