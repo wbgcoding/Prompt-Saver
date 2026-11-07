@@ -319,6 +319,19 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
     if matches!(cmd, Cmd::Screenshot) {
         return screenshot_answer(crate::snip::open_snip(app.clone(), app.state(), app.state()).await);
     }
+    // The image goes to the main window, which loads it the way the "Edit image" menu entry does.
+    if let Cmd::EditImage { path } = &cmd {
+        return match check_image_arg(&cwd, path) {
+            Ok(file) => {
+                set_pending_edit_image(file.to_string_lossy().to_string());
+                match tauri::Emitter::emit_to(app, "main", "edit-image-request", ()) {
+                    Ok(()) => (0, String::new(), String::new()),
+                    Err(e) => (3, String::new(), format!("could not hand the image to the app: {e}\n")),
+                }
+            }
+            Err((code, line)) => (code, String::new(), format!("{line}\n")),
+        };
+    }
 
     // Backup restore reuses the real, tested restore end to end (safety snapshot, staged swap)
     // instead of a second implementation that would have to fake what only a running app can do;
@@ -488,4 +501,14 @@ pub(super) fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Pat
     // as already written.
     store.forget_written_rows();
     Outcome::err(3, "the store refused the write (locked or unavailable)\n")
+}
+
+// The main window asks for the image an `edit-image` call left for it, at boot (cold start) and on
+// the "edit-image-request" event. Handing it over brings the window up, so a launch that stays in
+// the tray shows itself only once there is something to show.
+#[tauri::command]
+pub(crate) fn take_pending_edit_image(app: AppHandle) -> Option<String> {
+    let path = take_pending_edit_image_path()?;
+    crate::snip::reveal_main_for_result(&app);
+    Some(path)
 }

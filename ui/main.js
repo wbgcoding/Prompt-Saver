@@ -71,11 +71,15 @@ wireTags();
 
 wireTheme();
 
+// Set by bind(): opens the image an `edit-image` command line left for this window.
+let requestEditImage = () => {};
+
 // ---- Wire events ----
 function bind() {
   bindEditor();
   bindCopyFlow();
-  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
+  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, openRequestedEditImage, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
+  requestEditImage = openRequestedEditImage;
   bindDictation();
   bindSettingsPanel();
   bindExpertMenu();
@@ -578,6 +582,8 @@ async function init() {
       // The first-run tour comes right after, but only if that offer (the one
       // other dialog that can fire this early) did not itself appear this launch.
       invoke("show_main_window").catch(() => {}).finally(async () => {
+        // An image a cold `edit-image` start left for this window (not awaited: it is a dialog of its own).
+        requestEditImage();
         await runGuarded(offerTakeover);
         // Seeded AFTER the takeover offer, not before: seeding earlier (e.g. from
         // applySettingsUi()) would make the library non-empty and takeover_offer()

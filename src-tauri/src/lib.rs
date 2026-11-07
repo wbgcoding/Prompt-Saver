@@ -1060,6 +1060,7 @@ pub fn run() {
             images::pick_file_path,
             images::pick_media_file_path,
             media_files::open_file_in_editor,
+            cli::take_pending_edit_image,
             images::load_image_file,
             images::missing_files,
             snip::save_screenshot_now,

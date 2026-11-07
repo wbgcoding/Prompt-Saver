@@ -18,6 +18,10 @@ saving, backups, recordings, the editors and the installer.
 - **Screenshot from the command line.** `prompt-saver screenshot` opens the
   region selection at once, in the running app or, if it is not running, in a
   freshly started one that stays in the tray.
+- **Open an image from the command line.** `prompt-saver edit-image <path>`
+  opens a png, jpg, bmp, webp or gif file in the screenshot editor, in the
+  running app or in a freshly started one that stays in the tray. Nothing is
+  saved until you save in the editor.
 
 ### Improved
 

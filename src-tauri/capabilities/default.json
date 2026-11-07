@@ -247,6 +247,7 @@
     "allow-pick-file-path",
     "allow-pick-media-file-path",
     "allow-open-file-in-editor",
+    "allow-take-pending-edit-image",
     "allow-load-image-file",
     "allow-missing-files",
     "allow-save-screenshot-now",

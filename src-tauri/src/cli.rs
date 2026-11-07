@@ -90,6 +90,14 @@ pub(crate) fn dispatch_from_launch_args() -> Option<i32> {
     };
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
+    // A bad image path ends here, before the running instance or any window is involved.
+    if let Some(Cmd::EditImage { path }) = run_cmd_of(&argv) {
+        if let Err((code, line)) = check_image_arg(&cwd, &path) {
+            errln(format_args!("{line}"));
+            return Some(code);
+        }
+    }
+
     let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build();
     if let Ok(rt) = rt {
         if let Some(code) = rt.block_on(try_forward(&argv, &cwd)) {
@@ -99,7 +107,13 @@ pub(crate) fn dispatch_from_launch_args() -> Option<i32> {
     // No instance to hand a capture to: this process becomes the app itself, started like an
     // autostart (tray, no main window), and opens the region capture once it is up.
     if starts_app_for(&argv) {
-        SCREENSHOT_LAUNCH.store(true, Ordering::SeqCst);
+        match edit_image_target(&argv, &cwd) {
+            Some(path) => {
+                set_pending_edit_image(path.to_string_lossy().to_string());
+                EDIT_IMAGE_LAUNCH.store(true, Ordering::SeqCst);
+            }
+            None => SCREENSHOT_LAUNCH.store(true, Ordering::SeqCst),
+        }
         return None;
     }
     Some(run_standalone(&argv, &cwd))
@@ -112,15 +126,70 @@ pub(crate) fn launched_for_screenshot() -> bool {
     SCREENSHOT_LAUNCH.load(Ordering::SeqCst)
 }
 
-// A launch that keeps the main window away: the autostart flag, or the capture command.
-pub(crate) fn launch_stays_in_tray() -> bool {
-    launched_for_screenshot() || std::env::args().any(|a| a == "--minimized")
+// Set when this launch is an `edit-image` command that found no running instance.
+static EDIT_IMAGE_LAUNCH: AtomicBool = AtomicBool::new(false);
+
+// The image an `edit-image` call asked the main window to open, checked and absolute. The window
+// takes it once (take_pending_edit_image): at boot for a cold start, on the event for a running app.
+static EDIT_IMAGE_PENDING: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub(crate) fn set_pending_edit_image(path: String) {
+    *EDIT_IMAGE_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
 }
 
-// Whether a command line is the bare `screenshot` command, the one command that needs the app
-// itself and so starts it when none runs. Help and malformed lines are answered as usual.
+pub(crate) fn take_pending_edit_image_path() -> Option<String> {
+    EDIT_IMAGE_PENDING.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+// A launch that keeps the main window away: the autostart flag, or a command that opens its
+// own window (the capture, the image editor).
+pub(crate) fn launch_stays_in_tray() -> bool {
+    launched_for_screenshot() || EDIT_IMAGE_LAUNCH.load(Ordering::SeqCst) || std::env::args().any(|a| a == "--minimized")
+}
+
+// Whether a command line is one of the commands that need the app itself (`screenshot`,
+// `edit-image`) and so start it when none runs. Help and malformed lines are answered as usual.
 fn starts_app_for(argv: &[String]) -> bool {
-    matches!(parse(argv), Ok(Parsed::Run(Cmd::Screenshot)))
+    matches!(run_cmd_of(argv), Some(Cmd::Screenshot | Cmd::EditImage { .. }))
+}
+
+fn run_cmd_of(argv: &[String]) -> Option<Cmd> {
+    match parse(argv) {
+        Ok(Parsed::Run(cmd)) => Some(cmd),
+        _ => None,
+    }
+}
+
+// The file an `edit-image` line names, resolved against the caller's directory; None for any
+// other line.
+fn edit_image_target(argv: &[String], cwd: &Path) -> Option<PathBuf> {
+    match run_cmd_of(argv) {
+        Some(Cmd::EditImage { path }) => check_image_arg(cwd, &path).ok(),
+        _ => None,
+    }
+}
+
+const EDIT_IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "bmp", "webp", "gif"];
+
+// The checks `edit-image` makes before any window exists: a local path (a network spelling is
+// never touched), a supported extension, an existing readable file. Err is the exit code and
+// the single stderr line. Whether the bytes really are an image is the editor's call.
+pub(crate) fn check_image_arg(cwd: &Path, raw: &str) -> Result<PathBuf, (i32, String)> {
+    if crate::paths::is_foreign_network_path(raw, &[]) {
+        return Err((4, format!("{raw}: network paths are not opened")));
+    }
+    let path = resolve_path_arg(cwd, raw).map_err(|e| (1, e))?;
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+    if !EDIT_IMAGE_EXTS.contains(&ext.as_str()) {
+        return Err((1, format!("{raw}: not a supported image (png, jpg, jpeg, bmp, webp, gif)")));
+    }
+    if !path.is_file() {
+        return Err((2, format!("{raw}: no such file")));
+    }
+    if std::fs::File::open(&path).is_err() {
+        return Err((2, format!("{raw}: the file cannot be read")));
+    }
+    Ok(path)
 }
 
 // The answer to a capture request: exit 0 once the capture was opened, otherwise one stderr line.
@@ -820,6 +889,7 @@ enum Cmd {
     Version,
     Describe,
     Screenshot,
+    EditImage { path: String },
     List { tag: Option<String>, favorite: bool, trash: bool, json: bool },
     Get { id: String, json: bool },
     Copy { id: String },
@@ -981,6 +1051,7 @@ fn parse(argv: &[String]) -> Result<Parsed, String> {
             reject_extra(&a)?;
             Cmd::Screenshot
         }
+        "edit-image" => parse_edit_image(&mut a)?,
         "list" => parse_list(&mut a)?,
         "get" => parse_get(&mut a)?,
         "copy" => parse_copy(&mut a)?,
@@ -1038,6 +1109,13 @@ fn parse_list(a: &mut Args) -> Result<Cmd, String> {
     let _ = take_flag(a, "--quiet");
     reject_extra(a)?;
     Ok(Cmd::List { tag, favorite, trash, json })
+}
+
+fn parse_edit_image(a: &mut Args) -> Result<Cmd, String> {
+    let path = a.next_positional().ok_or_else(|| usage_err("missing image path"))?;
+    reject_extra(a)?;
+    let path = valid_path_arg(&path).map_err(usage_err)?;
+    Ok(Cmd::EditImage { path })
 }
 
 fn parse_get(a: &mut Args) -> Result<Cmd, String> {
@@ -1410,6 +1488,7 @@ fn exec(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path) -> Outcome {
         Cmd::Describe => Outcome::ok(String::new()), // handled before exec() is reached
         // Needs the app's windows: the running instance opens it, a launch without one becomes the app.
         Cmd::Screenshot => Outcome::err(3, "the screenshot needs the app itself; start Prompt Saver first\n"),
+        Cmd::EditImage { .. } => Outcome::err(3, "the image editor needs the app itself; start Prompt Saver first\n"),
         Cmd::List { tag, favorite, trash, json } => cmd_list(store, tag.as_deref(), *favorite, *trash, *json),
         Cmd::Get { id, json } => cmd_get(store, id, *json),
         Cmd::Copy { id } => cmd_copy(store, id),
@@ -2098,6 +2177,7 @@ fn top_level_help() -> String {
      \x20 backup     create|list|restore backups\n\
      \x20 settings   get|set a setting\n\
      \x20 screenshot start a screenshot (region selection)\n\
+     \x20 edit-image open an image in the screenshot editor\n\
      \x20 version    print the app version\n\n\
      Every command takes --help. Every command that changes something needs\n\
      --yes, or it only prints what it would have done. --json switches a\n\
@@ -2134,6 +2214,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
         ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
         ("screenshot", _) => "prompt-saver screenshot\n\nStart a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. With the app running, exit 0 once the capture was opened, 3 if it could not start; otherwise this call becomes the app and keeps running, so do not wait for it.".to_string(),
+        ("edit-image", _) => "prompt-saver edit-image <path>\n\nOpen an existing image (png, jpg, jpeg, bmp, webp, gif) in the screenshot editor, in the running app or, if it is not running, in a freshly started one that stays in the tray. Nothing is saved until you save in the editor. Exit 1 for another file type, 2 if the file is missing or unreadable, 4 for a network path. With the app running, exit 0 once the image was handed over; otherwise this call becomes the app and keeps running, so do not wait for it.".to_string(),
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }
@@ -2169,6 +2250,7 @@ const MANIFEST_ENTRIES: &[(&str, Option<&str>)] = &[
     ("settings", Some("get")),
     ("settings", Some("set")),
     ("screenshot", None),
+    ("edit-image", None),
     ("version", None),
 ];
 

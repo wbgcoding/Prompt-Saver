@@ -140,6 +140,16 @@ export function bindCapture() {
         .catch((e) => errToast(e));
     }
   }
+  // An `edit-image` command line leaves one image for this window: taken at boot (a cold start)
+  // and on the event (a running app). An open editor with unsaved edits is asked first, like a
+  // new capture arriving over it.
+  async function openRequestedEditImage() {
+    const path = await invoke("take_pending_edit_image").catch(() => null);
+    if (!path) return;
+    if (snipEditState().active && !(await snipEditRequestClose({ replacing: true }))) return;
+    await openExternalFileInEditor(path);
+  }
+  listen("edit-image-request", () => { openRequestedEditImage(); });
   // Driven by the recording state, not the click: the backend announces every change with
   // "recording-state", and showing the window again re-syncs it in case one was missed.
   function setRecordBtnState(state) {
@@ -918,7 +928,7 @@ export function bindCapture() {
     if (e.target === ocrModal) closeOcrModal();
   });
 
-  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit };
+  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, openRequestedEditImage, closeRecMorePop, closeRecModal, snipEdit };
 }
 
 export function wireCapture() {

@@ -1491,7 +1491,7 @@ fn the_manifest_mutating_flag_matches_is_mutating_for_every_entry() {
         };
         let extra: &[&str] = match full.as_str() {
             "list" | "version" | "screenshot" | "tag list" | "view list" | "backup create" | "backup list" => &[],
-            "get" | "copy" | "delete" | "restore" | "view remove" | "search" | "export" | "import" | "view add" => &["x"],
+            "get" | "copy" | "delete" | "restore" | "view remove" | "search" | "export" | "import" | "view add" | "edit-image" => &["x"],
             "add" => &["--name", "n", "--text", "t"],
             "edit" => &["x", "--name", "n"],
             "tag add" | "tag remove" => &["x", "t"],
@@ -1880,4 +1880,115 @@ fn a_failed_capture_start_is_one_stderr_line_and_a_non_zero_exit() {
     assert!(stdout.is_empty());
     assert_eq!(stderr.lines().count(), 1);
     assert!(stderr.ends_with('\n'));
+}
+
+// ---- `edit-image <path>` ----
+
+fn edit_image_scratch(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("ps-edit-image-{}-{}", tag, std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn edit_image_takes_exactly_one_path() {
+    assert!(looks_like_cli(&args(&["edit-image", "a.png"])));
+    match parse(&args(&["edit-image", "a.png"])) {
+        Ok(Parsed::Run(Cmd::EditImage { path })) => assert_eq!(path, "a.png"),
+        _ => panic!("edit-image <path> must parse"),
+    }
+    parse_err(&["edit-image"]);
+    parse_err(&["edit-image", "a.png", "b.png"]);
+    parse_err(&["edit-image", "a.png", "--json"]);
+}
+
+#[test]
+fn edit_image_help_names_the_command_and_the_cold_start() {
+    match parse(&args(&["edit-image", "--help"])) {
+        Ok(Parsed::Help(text)) => {
+            assert!(text.starts_with("prompt-saver edit-image <path>"), "{text}");
+            assert!(text.contains("screenshot editor"), "{text}");
+            assert!(text.contains("becomes the app and keeps running"), "{text}");
+        }
+        _ => panic!("edit-image --help must print its help"),
+    }
+}
+
+#[test]
+fn describe_lists_edit_image_as_a_command_that_changes_nothing() {
+    let parsed: serde_json::Value = serde_json::from_str(&describe_json()).unwrap();
+    let entry = parsed["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "edit-image")
+        .expect("describe must list edit-image");
+    assert_eq!(entry["mutating"], false);
+    assert!(entry["usage"].as_str().unwrap().contains("<path>"));
+    assert!(top_level_help().contains("edit-image"));
+    assert!(describe_json().contains("edit-image"));
+}
+
+#[test]
+fn a_missing_image_is_exit_2_with_one_stderr_line() {
+    let dir = edit_image_scratch("missing");
+    let (code, line) = check_image_arg(&dir, "nope.png").unwrap_err();
+    assert_eq!(code, 2);
+    assert!(line.contains("nope.png"), "{line}");
+    assert!(!line.trim_end().contains('\n'), "{line}");
+    // A folder is no image either, even with an image extension.
+    std::fs::create_dir_all(dir.join("folder.png")).unwrap();
+    assert_eq!(check_image_arg(&dir, "folder.png").unwrap_err().0, 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_image_with_another_extension_is_refused_before_any_window() {
+    let dir = edit_image_scratch("ext");
+    std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+    std::fs::write(dir.join("noext"), b"x").unwrap();
+    for name in ["notes.txt", "noext"] {
+        let (code, line) = check_image_arg(&dir, name).unwrap_err();
+        assert_eq!(code, 1, "{name}");
+        assert!(line.contains("png"), "{line}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn every_supported_extension_resolves_against_the_callers_directory() {
+    let dir = edit_image_scratch("ok");
+    for ext in ["png", "jpg", "jpeg", "bmp", "webp", "gif", "PNG", "Jpeg"] {
+        let name = format!("pic.{ext}");
+        std::fs::write(dir.join(&name), b"x").unwrap();
+        assert_eq!(check_image_arg(&dir, &name).unwrap(), dir.join(&name), "{ext}");
+    }
+    let abs = dir.join("pic.png");
+    assert_eq!(check_image_arg(Path::new("Z:\\elsewhere"), &abs.to_string_lossy()).unwrap(), abs);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_network_path_is_refused_without_touching_the_host() {
+    let (code, _) = check_image_arg(Path::new("C:\\"), "\\\\host.invalid\\share\\a.png").unwrap_err();
+    assert_eq!(code, 4);
+}
+
+#[test]
+fn an_edit_image_launch_with_no_instance_starts_the_app_instead_of_running_alone() {
+    assert!(starts_app_for(&args(&["edit-image", "a.png"])));
+    assert!(!starts_app_for(&args(&["edit-image"])));
+    assert!(!starts_app_for(&args(&["edit-image", "--help"])));
+    assert!(matches!(
+        exec(&mut fixture_store(), Path::new("."), &Cmd::EditImage { path: "a.png".into() }, Path::new(".")).code,
+        3
+    ));
+}
+
+#[test]
+fn the_pending_image_is_taken_once() {
+    set_pending_edit_image("C:\\a.png".to_string());
+    assert_eq!(take_pending_edit_image_path().as_deref(), Some("C:\\a.png"));
+    assert_eq!(take_pending_edit_image_path(), None);
 }

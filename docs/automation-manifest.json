@@ -132,6 +132,12 @@
     "mutating": false
   },
   {
+    "name": "edit-image",
+    "usage": "prompt-saver edit-image <path>",
+    "description": "Open an existing image (png, jpg, jpeg, bmp, webp, gif) in the screenshot editor, in the running app or, if it is not running, in a freshly started one that stays in the tray. Nothing is saved until you save in the editor. Exit 1 for another file type, 2 if the file is missing or unreadable, 4 for a network path. With the app running, exit 0 once the image was handed over; otherwise this call becomes the app and keeps running, so do not wait for it.",
+    "mutating": false
+  },
+  {
     "name": "version",
     "usage": "prompt-saver version",
     "description": "Print the app name and version.",
