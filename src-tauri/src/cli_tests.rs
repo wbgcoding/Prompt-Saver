@@ -1490,7 +1490,7 @@ fn the_manifest_mutating_flag_matches_is_mutating_for_every_entry() {
             None => (*name).to_string(),
         };
         let extra: &[&str] = match full.as_str() {
-            "list" | "version" | "tag list" | "view list" | "backup create" | "backup list" => &[],
+            "list" | "version" | "screenshot" | "tag list" | "view list" | "backup create" | "backup list" => &[],
             "get" | "copy" | "delete" | "restore" | "view remove" | "search" | "export" | "import" | "view add" => &["x"],
             "add" => &["--name", "n", "--text", "t"],
             "edit" => &["x", "--name", "n"],
@@ -1827,4 +1827,57 @@ fn a_write_refusal_names_the_unreadable_part() {
     assert!(locked_write_message(true).contains("failed to decrypt"));
     assert!(locked_write_message(false).contains("settings"));
     assert!(!locked_write_message(false).contains("decrypt"));
+}
+
+// ---- `screenshot` ----
+
+#[test]
+fn screenshot_is_a_command_without_arguments() {
+    assert!(looks_like_cli(&args(&["screenshot"])));
+    assert!(matches!(parse(&args(&["screenshot"])), Ok(Parsed::Run(Cmd::Screenshot))));
+    parse_err(&["screenshot", "now"]);
+    parse_err(&["screenshot", "--json"]);
+}
+
+#[test]
+fn screenshot_help_names_the_command() {
+    match parse(&args(&["screenshot", "--help"])) {
+        Ok(Parsed::Help(text)) => {
+            assert!(text.starts_with("prompt-saver screenshot"), "{text}");
+            assert!(text.contains("region"), "{text}");
+        }
+        _ => panic!("screenshot --help must print its help"),
+    }
+}
+
+#[test]
+fn describe_lists_screenshot_as_a_command_that_changes_nothing() {
+    let parsed: serde_json::Value = serde_json::from_str(&describe_json()).unwrap();
+    let entry = parsed["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "screenshot")
+        .expect("describe must list screenshot");
+    assert_eq!(entry["mutating"], false);
+    assert!(!entry["description"].as_str().unwrap().is_empty());
+    assert!(!top_level_help().is_empty() && top_level_help().contains("screenshot"));
+}
+
+#[test]
+fn a_screenshot_launch_with_no_instance_starts_the_app_instead_of_running_alone() {
+    assert!(starts_app_for(&args(&["screenshot"])));
+    for argv in [&["version"][..], &["list"], &["screenshot", "--help"], &["screenshot", "x"], &["lsit"], &[]] {
+        assert!(!starts_app_for(&args(argv)), "{argv:?} must not start the app for a capture");
+    }
+}
+
+#[test]
+fn a_failed_capture_start_is_one_stderr_line_and_a_non_zero_exit() {
+    assert_eq!(screenshot_answer(Ok(())), (0, String::new(), String::new()));
+    let (code, stdout, stderr) = screenshot_answer(Err("could not freeze the screen".to_string()));
+    assert_eq!(code, 3);
+    assert!(stdout.is_empty());
+    assert_eq!(stderr.lines().count(), 1);
+    assert!(stderr.ends_with('\n'));
 }

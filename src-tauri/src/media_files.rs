@@ -1183,7 +1183,7 @@ pub(crate) fn migrate_staging_discards(staging: &Path, recording_root: &Path) ->
 // Called by the frontend once the first render + text fit is complete.
 #[tauri::command]
 pub(crate) fn show_main_window(app: AppHandle) {
-    if std::env::args().any(|a| a == "--minimized") {
+    if crate::cli::launch_stays_in_tray() {
         return;
     }
     if let Some(w) = app.get_webview_window("main") {

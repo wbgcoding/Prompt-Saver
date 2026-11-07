@@ -315,6 +315,10 @@ pub(super) async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd
     if matches!(cmd, Cmd::Describe) {
         return (0, format!("{}\n", describe_json()), String::new());
     }
+    // The same entry the screenshot button uses; it returns once the capture is under way.
+    if matches!(cmd, Cmd::Screenshot) {
+        return screenshot_answer(crate::snip::open_snip(app.clone(), app.state(), app.state()).await);
+    }
 
     // Backup restore reuses the real, tested restore end to end (safety snapshot, staged swap)
     // instead of a second implementation that would have to fake what only a running app can do;

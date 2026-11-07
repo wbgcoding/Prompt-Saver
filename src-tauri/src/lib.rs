@@ -601,7 +601,7 @@ pub fn run() {
             }
 
             // Launched by autostart with --minimized: stay in the tray.
-            let start_hidden = std::env::args().any(|a| a == "--minimized");
+            let start_hidden = cli::launch_stays_in_tray();
 
             // Capture exclusion is re-read fresh from Db state inside build_main_window itself.
             let built = build_main_window(&handle);
@@ -742,13 +742,26 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(600)).await;
                 let h = h_pw.clone();
+                let (built_tx, built_rx) = tokio::sync::oneshot::channel::<()>();
                 let _ = h_pw.run_on_main_thread(move || {
                     if h.get_webview_window("snip-0").is_none() {
                         // Build it hidden so the first snip skips the WebView2 cold start. Waking it from throttle and
                         // its first paint are handled by the off-screen show on the reuse path in open_snip.
                         let _ = build_snip_window(&h);
                     }
+                    let _ = built_tx.send(());
                 });
+                // Started by the `screenshot` command with nothing running: open the region capture the way the
+                // screenshot button does, once the overlay window exists (building it twice would fail).
+                if cli::launched_for_screenshot() {
+                    let h = h_pw.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = tokio::time::timeout(std::time::Duration::from_secs(10), built_rx).await;
+                        if let Err(e) = snip::open_snip(h.clone(), h.state(), h.state()).await {
+                            append_crash_log(&format!("screenshot launch: could not open the capture: {e}"));
+                        }
+                    });
+                }
                 // Same for the tray menu window, so the first right-click opens at once.
                 let custom_tray = tauri::async_runtime::spawn_blocking({
                     let h = h_pw.clone();

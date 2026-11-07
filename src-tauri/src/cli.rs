@@ -96,7 +96,42 @@ pub(crate) fn dispatch_from_launch_args() -> Option<i32> {
             return Some(code);
         }
     }
+    // No instance to hand a capture to: this process becomes the app itself, started like an
+    // autostart (tray, no main window), and opens the region capture once it is up.
+    if starts_app_for(&argv) {
+        SCREENSHOT_LAUNCH.store(true, Ordering::SeqCst);
+        return None;
+    }
     Some(run_standalone(&argv, &cwd))
+}
+
+// Set when this launch is a `screenshot` command that found no running instance.
+static SCREENSHOT_LAUNCH: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn launched_for_screenshot() -> bool {
+    SCREENSHOT_LAUNCH.load(Ordering::SeqCst)
+}
+
+// A launch that keeps the main window away: the autostart flag, or the capture command.
+pub(crate) fn launch_stays_in_tray() -> bool {
+    launched_for_screenshot() || std::env::args().any(|a| a == "--minimized")
+}
+
+// Whether a command line is the bare `screenshot` command, the one command that needs the app
+// itself and so starts it when none runs. Help and malformed lines are answered as usual.
+fn starts_app_for(argv: &[String]) -> bool {
+    matches!(parse(argv), Ok(Parsed::Run(Cmd::Screenshot)))
+}
+
+// The answer to a capture request: exit 0 once the capture was opened, otherwise one stderr line.
+fn screenshot_answer(opened: Result<(), String>) -> (i32, String, String) {
+    match opened {
+        Ok(()) => (0, String::new(), String::new()),
+        Err(e) => {
+            let line = e.lines().next().unwrap_or("the capture could not start");
+            (3, String::new(), format!("could not start the screenshot: {line}\n"))
+        }
+    }
 }
 
 // A windows_subsystem="windows" release build starts with no console, so a launch typed into
@@ -784,6 +819,7 @@ enum Parsed {
 enum Cmd {
     Version,
     Describe,
+    Screenshot,
     List { tag: Option<String>, favorite: bool, trash: bool, json: bool },
     Get { id: String, json: bool },
     Copy { id: String },
@@ -941,6 +977,10 @@ fn parse(argv: &[String]) -> Result<Parsed, String> {
         // Machine-facing only: its JSON self-description, not listed in top_level_help().
         // docs/automation.md's command table is generated from it (see command_manifest() below).
         "describe" => Cmd::Describe,
+        "screenshot" => {
+            reject_extra(&a)?;
+            Cmd::Screenshot
+        }
         "list" => parse_list(&mut a)?,
         "get" => parse_get(&mut a)?,
         "copy" => parse_copy(&mut a)?,
@@ -1368,6 +1408,8 @@ fn exec(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path) -> Outcome {
     match cmd {
         Cmd::Version => Outcome::ok(String::new()), // handled before exec() is reached
         Cmd::Describe => Outcome::ok(String::new()), // handled before exec() is reached
+        // Needs the app's windows: the running instance opens it, a launch without one becomes the app.
+        Cmd::Screenshot => Outcome::err(3, "the screenshot needs the app itself; start Prompt Saver first\n"),
         Cmd::List { tag, favorite, trash, json } => cmd_list(store, tag.as_deref(), *favorite, *trash, *json),
         Cmd::Get { id, json } => cmd_get(store, id, *json),
         Cmd::Copy { id } => cmd_copy(store, id),
@@ -2041,21 +2083,22 @@ fn top_level_help() -> String {
     "Prompt Saver command line\n\n\
      Usage: prompt-saver <command> [arguments] [--json] [--yes]\n\n\
      Commands:\n\
-     \x20 list      list prompts\n\
-     \x20 get       show one prompt\n\
-     \x20 copy      copy a prompt's text to the clipboard\n\
-     \x20 add       add a prompt\n\
-     \x20 edit      change a prompt\n\
-     \x20 delete    move a prompt to the trash\n\
-     \x20 restore   restore a prompt from the trash\n\
-     \x20 tag       list|add|remove tags\n\
-     \x20 view      list|add|remove views\n\
-     \x20 search    search prompts\n\
-     \x20 export    export prompts to a file\n\
-     \x20 import    import prompts from a file\n\
-     \x20 backup    create|list|restore backups\n\
-     \x20 settings  get|set a setting\n\
-     \x20 version   print the app version\n\n\
+     \x20 list       list prompts\n\
+     \x20 get        show one prompt\n\
+     \x20 copy       copy a prompt's text to the clipboard\n\
+     \x20 add        add a prompt\n\
+     \x20 edit       change a prompt\n\
+     \x20 delete     move a prompt to the trash\n\
+     \x20 restore    restore a prompt from the trash\n\
+     \x20 tag        list|add|remove tags\n\
+     \x20 view       list|add|remove views\n\
+     \x20 search     search prompts\n\
+     \x20 export     export prompts to a file\n\
+     \x20 import     import prompts from a file\n\
+     \x20 backup     create|list|restore backups\n\
+     \x20 settings   get|set a setting\n\
+     \x20 screenshot start a screenshot (region selection)\n\
+     \x20 version    print the app version\n\n\
      Every command takes --help. Every command that changes something needs\n\
      --yes, or it only prints what it would have done. --json switches a\n\
      command's output to machine-readable JSON. Exit codes: 0 ok, 1 bad\n\
@@ -2090,6 +2133,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("settings", None) => "prompt-saver settings get <key> [--json]\nprompt-saver settings set <key> <value> --yes".to_string(),
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
         ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
+        ("screenshot", _) => "prompt-saver screenshot\n\nStart a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. Exit 0 once the capture was opened, 3 if it could not start.".to_string(),
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }
@@ -2124,6 +2168,7 @@ const MANIFEST_ENTRIES: &[(&str, Option<&str>)] = &[
     ("backup", Some("restore")),
     ("settings", Some("get")),
     ("settings", Some("set")),
+    ("screenshot", None),
     ("version", None),
 ];
 

@@ -126,6 +126,12 @@
     "mutating": true
   },
   {
+    "name": "screenshot",
+    "usage": "prompt-saver screenshot",
+    "description": "Start a screenshot: the region selection opens at once, in the running app or, if it is not running, in a freshly started one that stays in the tray. Exit 0 once the capture was opened, 3 if it could not start.",
+    "mutating": false
+  },
+  {
     "name": "version",
     "usage": "prompt-saver version",
     "description": "Print the app name and version.",
