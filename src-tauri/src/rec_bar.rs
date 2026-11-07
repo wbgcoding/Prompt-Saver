@@ -431,11 +431,14 @@ pub(crate) fn rec_hides_label(label: &str) -> bool {
         || label == LAUNCHER_WIN_LABEL
 }
 
-// Which of the windows (label, visible, minimized, outer rect in physical px) to hide for a
-// recording of `region`: visible, not minimized, hidable and overlapping the region.
+// A window as the hide decision sees it: label, visible, minimized, outer rect in physical px.
+pub(crate) type RecWinInfo = (String, bool, bool, (i32, i32, u32, u32));
+
+// Which of the windows to hide for a recording of `region`: visible, not minimized, hidable and
+// overlapping the region.
 pub(crate) fn rec_windows_to_hide(
     region: (i32, i32, u32, u32),
-    wins: &[(String, bool, bool, (i32, i32, u32, u32))],
+    wins: &[RecWinInfo],
 ) -> Vec<String> {
     let rect = |r: (i32, i32, u32, u32)| crate::floating::Rect { x: r.0 as f64, y: r.1 as f64, w: r.2 as f64, h: r.3 as f64 };
     let region = rect(region);
@@ -451,7 +454,7 @@ pub(crate) fn rec_windows_to_hide(
 // allowed they would be in the video; with the default they would still cover the region on
 // screen, so what is recorded could not be seen. Returns whether anything was hidden.
 pub(crate) fn hide_app_windows_for_recording(app: &AppHandle, region: (i32, i32, u32, u32)) -> bool {
-    let mut wins: Vec<(String, bool, bool, (i32, i32, u32, u32))> = Vec::new();
+    let mut wins: Vec<RecWinInfo> = Vec::new();
     for (label, win) in app.webview_windows() {
         let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { continue };
         wins.push((
