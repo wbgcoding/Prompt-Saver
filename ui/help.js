@@ -1010,7 +1010,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Eine Sprache im Dropdown für die Erkennungssprache auswählen; fehlt das Paket, öffnet sich der Installationsdialog automatisch.",
         "Zum Installieren eines Pakets sind Administratorrechte erforderlich: Windows fragt einmal über den eigenen Bestätigungsdialog danach.",
-        "„Sprachen der Texterkennung verwalten…“ oder „Sprachen der Spracheingabe verwalten…“ unter dem Sprach-Dropdown im Expertenmenü öffnet diesen Dialog jederzeit erneut.",
+        "„Sprachen der Texterkennung verwalten…“ oder „Sprachen der Spracheingabe verwalten…“ unter dem Sprach-Dropdown im Expertenmenü öffnet diesen Dialog erneut.",
       ],
       whatHappens:
         "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Abbrechen“ im Hinweis lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
