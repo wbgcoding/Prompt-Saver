@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "Miejsce docelowe eksportu jest nieprawidłowe",
     errRecordingUnreadable: "Nie udało się odczytać nagrania",
     errSourceNotAllowed: "Ten plik znajduje się na innym komputerze, więc nie można go tutaj użyć.",
+    errVideoEditorBusy: "Edytor wideo wciąż się otwiera. Spróbuj ponownie za chwilę.",
     errDataMoveRecording: "Zatrzymaj nagrywanie przed przeniesieniem folderu z danymi.",
     errDataMoveBusy: "Folder z danymi jest już przenoszony.",
     errToolStart: "Nie udało się uruchomić narzędzia wideo",

@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "Destinația exportului nu este validă",
     errRecordingUnreadable: "Înregistrarea nu a putut fi citită",
     errSourceNotAllowed: "Acest fișier se află pe alt calculator, așa că nu poate fi folosit aici.",
+    errVideoEditorBusy: "Editorul video se deschide încă. Încearcă din nou peste o clipă.",
     errDataMoveRecording: "Oprește înregistrarea înainte de a muta dosarul de date.",
     errDataMoveBusy: "Dosarul de date este deja în curs de mutare.",
     errToolStart: "Instrumentul video nu a putut fi pornit",

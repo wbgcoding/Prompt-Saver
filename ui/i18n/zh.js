@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "导出目标无效",
     errRecordingUnreadable: "无法读取该录制",
     errSourceNotAllowed: "此文件位于另一台电脑上，因此无法在这里使用。",
+    errVideoEditorBusy: "视频编辑器仍在打开中，请稍后再试。",
     errDataMoveRecording: "请先停止录制，再移动数据文件夹。",
     errDataMoveBusy: "数据文件夹正在移动中。",
     errToolStart: "无法启动视频工具",

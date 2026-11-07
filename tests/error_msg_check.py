@@ -49,7 +49,7 @@ ALLOW = {
         "the new folder lies inside backups/, which the cleanup deletes",
         "the stored prompts are unreadable and cannot be rewritten",
         "the updated paths could not be saved",
-        "could not open the file (ShellExecuteW code {code})", "editor-busy",
+        "could not open the file (ShellExecuteW code {code})",
     ],
     "background save of editor state, the caller ignores the failure": [
         "db unavailable",

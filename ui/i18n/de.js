@@ -1512,6 +1512,7 @@ export default {
     errExportDest: "Das Exportziel ist ungültig",
     errRecordingUnreadable: "Die Aufnahme konnte nicht gelesen werden",
     errSourceNotAllowed: "Diese Datei liegt auf einem anderen PC und kann hier nicht verwendet werden.",
+    errVideoEditorBusy: "Der Video-Editor öffnet sich noch. Versuche es gleich noch einmal.",
     errDataMoveRecording: "Beende zuerst die Aufnahme, dann kannst du den Datenordner verschieben.",
     errDataMoveBusy: "Der Datenordner wird gerade schon verschoben.",
     errToolStart: "Das Videowerkzeug konnte nicht gestartet werden",

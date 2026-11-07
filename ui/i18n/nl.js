@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "De exportbestemming is ongeldig",
     errRecordingUnreadable: "De opname kon niet worden gelezen",
     errSourceNotAllowed: "Dit bestand staat op een andere computer en kan hier niet worden gebruikt.",
+    errVideoEditorBusy: "De video-editor wordt nog geopend. Probeer het zo meteen opnieuw.",
     errDataMoveRecording: "Stop de opname voordat je de gegevensmap verplaatst.",
     errDataMoveBusy: "De gegevensmap wordt al verplaatst.",
     errToolStart: "Het videohulpprogramma kon niet worden gestart",

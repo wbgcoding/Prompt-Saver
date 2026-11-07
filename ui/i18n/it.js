@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "La destinazione dell'esportazione non è valida",
     errRecordingUnreadable: "Non è stato possibile leggere la registrazione",
     errSourceNotAllowed: "Questo file si trova su un altro computer, quindi non può essere usato qui.",
+    errVideoEditorBusy: "L'editor video si sta ancora aprendo. Riprova tra un momento.",
     errDataMoveRecording: "Interrompi la registrazione prima di spostare la cartella dei dati.",
     errDataMoveBusy: "La cartella dei dati è già in fase di spostamento.",
     errToolStart: "Non è stato possibile avviare lo strumento video",

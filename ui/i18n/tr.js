@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "Dışa aktarma hedefi geçerli değil",
     errRecordingUnreadable: "Kayıt okunamadı",
     errSourceNotAllowed: "Bu dosya başka bir bilgisayarda olduğu için burada kullanılamaz.",
+    errVideoEditorBusy: "Video düzenleyici hâlâ açılıyor. Biraz sonra tekrar deneyin.",
     errDataMoveRecording: "Veri klasörünü taşımadan önce kaydı durdurun.",
     errDataMoveBusy: "Veri klasörü zaten taşınıyor.",
     errToolStart: "Video aracı başlatılamadı",

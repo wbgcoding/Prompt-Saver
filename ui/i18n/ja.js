@@ -1505,6 +1505,7 @@ export default {
     errExportDest: "書き出し先が無効です",
     errRecordingUnreadable: "録画を読み込めませんでした",
     errSourceNotAllowed: "このファイルは別のコンピューターにあるため、ここでは使用できません。",
+    errVideoEditorBusy: "動画エディターはまだ開いている途中です。少し待ってからもう一度お試しください。",
     errDataMoveRecording: "データフォルダーを移動する前に録画を停止してください。",
     errDataMoveBusy: "データフォルダーはすでに移動中です。",
     errToolStart: "動画ツールを起動できませんでした",
