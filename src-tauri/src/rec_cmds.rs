@@ -266,6 +266,13 @@ pub(crate) async fn start_recording(
         (keylog::enabled(&g.settings.ui_flags), keylog::HOLD_MS, keylog::shortcuts_only(&g.settings.ui_flags))
     };
     let dir = data_dir(&app).join("recordings");
+    // With screenshots of the app allowed, app windows over a recorded region would be in the
+    // video, and otherwise they still hide what is recorded: they are put away for the recording.
+    if let Some(region) = recording::outline_rect_for_target(target) {
+        if hide_app_windows_for_recording(&app, region) {
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        }
+    }
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
         recording::start(
@@ -283,6 +290,7 @@ pub(crate) async fn start_recording(
             // behind: no control bar, and the composer's record button back to idle. recording::start has
             // already deleted the empty output file.
             super::rec_bar::hide_rec_bar(app.clone());
+            restore_app_windows_after_recording(&app);
             let _ = app.emit("recording-cancelled", ());
             return Err(e);
         }
@@ -613,6 +621,7 @@ pub(crate) async fn finish_and_continue_recording(
         ContinueOutcome::StoppedInstead(err) => {
             // Nothing is recording any more, so the region outline goes too.
             hide_rec_outline(&app);
+            restore_app_windows_after_recording(&app);
             rearm_hotkeys(&app);
             apply_tray_menu(&app);
             emit_recording_state(&app);
@@ -706,6 +715,7 @@ pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayl
     // The outline window (region recordings only) goes on every end path,
     // also when the stop failed.
     hide_rec_outline(app);
+    restore_app_windows_after_recording(app);
     let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = stopped;
     // Stops the key-overlay hook, if running, and writes its sidecar.
     keylog::maybe_stop_and_write(&path);
@@ -807,6 +817,7 @@ pub(crate) async fn cancel_recording(app: AppHandle, rstate: State<'_, Recording
     // Same as a normal stop: the outline window (if this was a region
     // recording) never survives a cancel, even one whose cleanup fails below.
     hide_rec_outline(&app);
+    restore_app_windows_after_recording(&app);
     let trash_root = configured_recording_dir(&app.state::<Db>());
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         recording::cancel(session, &trash_root);
