@@ -309,10 +309,8 @@ export function renderTagFilter() {
   renderTagBar(bar, libTags, renderLibrary);
 }
 
-// Shared markup for the library's tag filter bar (#library-tagbar): label + chips +
-// manage tags button. Only the container, the active set and what to re-render differ per
-// caller. "Manage tags" stays reachable before the first tag exists, otherwise nothing
-// would show that tags exist.
+// Shared markup for the library's tag filter bar (#library-tagbar): label, chips, clear and
+// manage. With no tag in the library the bar stays empty.
 export function renderTagBar(bar, activeSet, rerender) {
   bar.innerHTML = "";
   const names = allTags();
@@ -343,13 +341,13 @@ export function renderTagBar(bar, activeSet, rerender) {
       clear.addEventListener("click", () => { activeSet.clear(); rerender(); });
       bar.appendChild(clear);
     }
+    const manage = document.createElement("button");
+    manage.type = "button";
+    manage.className = "tag-action";
+    manage.textContent = t("tagManager");
+    manage.addEventListener("click", openTagManager);
+    bar.appendChild(manage);
   }
-  const manage = document.createElement("button");
-  manage.type = "button";
-  manage.className = "tag-action";
-  manage.textContent = t("tagManager");
-  manage.addEventListener("click", openTagManager);
-  bar.appendChild(manage);
 }
 
 // Merging is rename_tag with a target that already exists: rename_tag_in dedupes per

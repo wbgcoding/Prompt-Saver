@@ -498,6 +498,33 @@ EXPERT_SYNC_PROBE = """
     }
 """
 
+# 55: with no tag in the library the tag row stays empty and takes no space; the first tag brings
+# back the label, its chip and the manage button.
+TAGBAR_PROBE = """
+    // tagbar-empty:
+    {
+      const core = await import('./core.js');
+      const tg = await import('./tags.js');
+      const saved = core.prompts.map((p) => p.tags);
+      core.prompts.forEach((p) => { p.tags = []; });
+      $('library-btn').click();
+      await until(() => visible($('library')), 40);
+      tg.renderTagFilter();
+      const bar = $('library-tagbar');
+      if (bar.children.length) errs.push('tagbar-empty: the bar holds ' + bar.children.length + ' child(ren) with no tag');
+      if (getComputedStyle(bar).display !== 'none') errs.push('tagbar-empty: the empty bar is ' + getComputedStyle(bar).display + ', not none');
+      core.prompts[0].tags = ['Probe'];
+      tg.renderTagFilter();
+      if (bar.querySelectorAll('.lib-tagbar-label').length !== 1) errs.push('tagbar-empty: no label once a tag exists');
+      const chips = [...bar.querySelectorAll('.tag-filter')];
+      if (chips.length !== 1 || chips[0].textContent.trim() !== 'Probe') errs.push('tagbar-empty: chips read ' + chips.map((c) => c.textContent));
+      const last = [...bar.querySelectorAll('.tag-action')].pop();
+      if (!last || last.textContent !== core.t('tagManager')) errs.push('tagbar-empty: no manage button after the first tag');
+      core.prompts.forEach((p, i) => { p.tags = saved[i]; });
+      tg.renderTagFilter();
+    }
+"""
+
 def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
     side.write_text(
@@ -524,7 +551,8 @@ def run(browser, tmp):
             ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
             ("backup-now", BACKUP_NOW_PROBE, ""),
             ("recent-searches", RECENT_PROBE, RECENT_SEED),
-            ("expert-sync", EXPERT_SYNC_PROBE, "")):
+            ("expert-sync", EXPERT_SYNC_PROBE, ""),
+            ("tagbar-empty", TAGBAR_PROBE, "")):
         errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:
