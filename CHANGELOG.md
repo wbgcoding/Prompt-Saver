@@ -14,6 +14,12 @@ saving, backups, recordings, the editors and the installer.
 - **Quick voice settings.** Right-click the microphone button for quick voice
   input settings.
 
+### Improved
+
+- **Composer buttons reordered.** The order is now Screenshot, Recording, Text
+  recognition, Pipette, File, Voice input; dictation is now called Voice input
+  everywhere.
+
 ### Fixed
 
 - **Data and backups.** Undoing a cleared copy history no longer counts the

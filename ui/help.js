@@ -255,7 +255,7 @@ export const HELP_CONTENT = {
     },
     {
       section: "features",
-      title: "Voice dictation",
+      title: "Voice input",
       id: "voiceDictation",
       whatItIs: "The microphone button {icon:mic} turns speech into text through Microsoft's online speech recognition.",
       howTo: [
@@ -264,17 +264,17 @@ export const HELP_CONTENT = {
         "Click the icon again, press Escape, or save/close to stop.",
       ],
       whatHappens:
-        "Dictation always uses Microsoft's online speech recognition, so your audio goes to Microsoft while you dictate. It starts only after you agree in the app's consent dialog, which also turns on online speech recognition in the Windows settings. Switching off \"Allow online recognition\" withdraws that consent; dictation then asks again. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all. The text goes to the clipboard, is pasted, or lands straight in the composer; the tray icon's tooltip shows \"Recording…\" while it runs.",
-      settings: ["Voice dictation, punctuation commands, auto-capitalize, silence auto-stop, insert position, global hotkey: Expert menu → Features → Dictation"],
+        "Voice input always uses Microsoft's online speech recognition, so your audio goes to Microsoft while you speak. It starts only after you agree in the app's consent dialog, which also turns on online speech recognition in the Windows settings. Switching off \"Allow online recognition\" withdraws that consent; voice input then asks again. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all. The text goes to the clipboard, is pasted, or lands straight in the composer; the tray icon's tooltip shows \"Recording…\" while it runs.",
+      settings: ["Voice input, punctuation commands, auto-capitalize, silence auto-stop, insert position, global hotkey: Expert menu → Features → Voice input"],
     },
     {
       section: "features",
       title: "Language packs",
-      whatItIs: "Text recognition and voice dictation share Windows' own language packs and the same install dialog.",
+      whatItIs: "Text recognition and voice input share Windows' own language packs and the same install dialog.",
       howTo: [
         "Pick a language from the recognition-language dropdown; a missing pack opens the install dialog automatically.",
         "Installing a pack needs administrator rights: Windows asks for them once, through its own confirmation prompt.",
-        "\"Manage text recognition languages…\" or \"Manage dictation languages…\", below the language dropdown in the expert menu, reopens this dialog any time.",
+        "\"Manage text recognition languages…\" or \"Manage voice input languages…\", below the language dropdown in the expert menu, reopens this dialog any time.",
       ],
       whatHappens:
         "On some Windows builds even listing what is installed needs administrator rights; if so, a button re-runs that check through the same elevation prompt. A background watcher notices when an installed pack's version changed or a Windows update silently removed it, and flags it without reinstalling right away. Dismiss it for a while with the notice's \"Cancel\" button, or turn the watcher off entirely.",
@@ -397,7 +397,7 @@ export const HELP_CONTENT = {
         "Review the result, then copy it or insert it directly.",
       ],
       whatHappens:
-        "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice dictation uses; see \"Language packs\" below.",
+        "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice input uses; see \"Language packs\" below.",
       settings: ["Text recognition, auto-copy the result, join lines, recognition language: Expert menu → Capture → Text recognition"],
     },
     {
@@ -613,7 +613,7 @@ export const HELP_CONTENT = {
         "Accept an offered update to download and install it with one click.",
       ],
       whatHappens:
-        "On first launch the app asks whether it may check for updates; until you answer, it never goes online. The update check and, if that runtime is missing, a first-run download of the Microsoft WebView2 installer are the only network traffic the app starts on its own. A downloaded update is verified against a published checksum before it runs: a missing or mismatching checksum blocks the install instead of running an unverified file. Everything else waits for you. ffmpeg, used for video export and conversion, ships with an installed build, so it never touches the network for it. A portable build offers a one-time download only when a video feature needs it, never automatically and never in the background. Voice dictation sends audio to Microsoft's online speech recognition, only after you agree. A language pack for text recognition or dictation comes from Windows Update, only when you start the install. After an update, a small notice links to what changed. The About window, next to \"Check for updates\" in Settings, shows the version, the full history of changes and every bundled open-source component with its license.",
+        "On first launch the app asks whether it may check for updates; until you answer, it never goes online. The update check and, if that runtime is missing, a first-run download of the Microsoft WebView2 installer are the only network traffic the app starts on its own. A downloaded update is verified against a published checksum before it runs: a missing or mismatching checksum blocks the install instead of running an unverified file. Everything else waits for you. ffmpeg, used for video export and conversion, ships with an installed build, so it never touches the network for it. A portable build offers a one-time download only when a video feature needs it, never automatically and never in the background. Voice input sends audio to Microsoft's online speech recognition, only after you agree. A language pack for text recognition or voice input comes from Windows Update, only when you start the install. After an update, a small notice links to what changed. The About window, next to \"Check for updates\" in Settings, shows the version, the full history of changes and every bundled open-source component with its license.",
       settings: ["Auto update and how often it checks: Settings"],
     },
     {
@@ -1000,8 +1000,8 @@ export const HELP_CONTENT = {
         "Erneut klicken, Escape drücken, oder speichern/schließen, um zu stoppen.",
       ],
       whatHappens:
-        "Das Diktat nutzt immer die Online-Spracherkennung von Microsoft, deine Sprachaufnahme geht also während des Diktierens an Microsoft. Es startet erst, wenn du im Zustimmungsdialog der App einwilligst; dabei wird auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet. Das Ausschalten von „Online-Erkennung erlauben“ zieht diese Zustimmung zurück; das Diktat fragt dann erneut. Gesprochene Satzzeichen-Wörter („Komma“, „neue Zeile“, …) werden zu echten Satzzeichen; „wörtlich“ vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen „Aufnahme läuft…“ in der Kurzinfo.",
-      settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globales Tastenkürzel: Expertenmenü → Funktionen → Diktat"],
+        "Die Spracheingabe nutzt immer die Online-Spracherkennung von Microsoft, deine Sprachaufnahme geht also während der Spracheingabe an Microsoft. Es startet erst, wenn du im Zustimmungsdialog der App einwilligst; dabei wird auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet. Das Ausschalten von „Online-Erkennung erlauben“ zieht diese Zustimmung zurück; die Spracheingabe fragt dann erneut. Gesprochene Satzzeichen-Wörter („Komma“, „neue Zeile“, …) werden zu echten Satzzeichen; „wörtlich“ vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen „Aufnahme läuft…“ in der Kurzinfo.",
+      settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globales Tastenkürzel: Expertenmenü → Funktionen → Spracheingabe"],
     },
     {
       section: "features",
@@ -1010,7 +1010,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Eine Sprache im Dropdown für die Erkennungssprache auswählen; fehlt das Paket, öffnet sich der Installationsdialog automatisch.",
         "Zum Installieren eines Pakets sind Administratorrechte erforderlich: Windows fragt einmal über den eigenen Bestätigungsdialog danach.",
-        "„Sprachen der Texterkennung verwalten…“ oder „Diktatsprachen verwalten…“ unter dem Sprach-Dropdown im Expertenmenü öffnet diesen Dialog jederzeit erneut.",
+        "„Sprachen der Texterkennung verwalten…“ oder „Sprachen der Spracheingabe verwalten…“ unter dem Sprach-Dropdown im Expertenmenü öffnet diesen Dialog jederzeit erneut.",
       ],
       whatHappens:
         "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Abbrechen“ im Hinweis lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
@@ -1352,7 +1352,7 @@ export const HELP_CONTENT = {
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:
-        "Beim ersten Start fragt das Programm, ob es nach Updates suchen darf; bis zur Antwort geht es nie online. Die Update-Prüfung und, falls diese Laufzeit fehlt, ein Download des Microsoft-WebView2-Installers beim ersten Start sind der einzige Netzwerkverkehr, den die App von sich aus startet. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Alles andere wartet auf dich. ffmpeg, für Videoexport und -umwandlung, bringt eine installierte Version mit und greift dafür nie auf das Netzwerk zu. Eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es braucht, nie automatisch und nie im Hintergrund. Das Sprachdiktat schickt Ton an die Online-Spracherkennung von Microsoft, erst nach deiner Zustimmung. Ein Sprachpaket für Texterkennung oder Diktat kommt über Windows Update, nur wenn du die Installation startest. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Updates suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
+        "Beim ersten Start fragt das Programm, ob es nach Updates suchen darf; bis zur Antwort geht es nie online. Die Update-Prüfung und, falls diese Laufzeit fehlt, ein Download des Microsoft-WebView2-Installers beim ersten Start sind der einzige Netzwerkverkehr, den die App von sich aus startet. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Alles andere wartet auf dich. ffmpeg, für Videoexport und -umwandlung, bringt eine installierte Version mit und greift dafür nie auf das Netzwerk zu. Eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es braucht, nie automatisch und nie im Hintergrund. Die Spracheingabe schickt Ton an die Online-Spracherkennung von Microsoft, erst nach deiner Zustimmung. Ein Sprachpaket für Texterkennung oder Spracheingabe kommt über Windows Update, nur wenn du die Installation startest. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Updates suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
       settings: ["Automatische Updates und wie oft sie prüfen: Einstellungen"],
     },
     {

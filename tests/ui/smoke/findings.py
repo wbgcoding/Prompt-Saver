@@ -1891,6 +1891,13 @@ def run(browser, tmp):
 """
     for size_lh in ('880x600', '680x460'):
         failed += ar_probe('blh01-' + size_lh, 'library head: Clear copy history shares the first line at ' + size_lh, 'index', size_lh, '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', lib_head_body)
+    # Composer button order: Screenshot, Recording, Text recognition, Pipette, File, Voice input.
+    failed += ar_probe('bco01', 'composer: the buttons sit in the agreed order', 'index', '880x600', '', r"""
+    await bootReady();
+    const ids = [...document.querySelectorAll('footer.composer > button.composer-img-btn')].map(b => b.id);
+    const want = ['snip-btn', 'record-btn', 'ocr-btn', 'picker-btn', 'file-btn', 'voice-btn'];
+    if (JSON.stringify(ids.slice(0, want.length)) !== JSON.stringify(want)) errs.push('bco01: composer order is ' + JSON.stringify(ids));
+    """)
     # Right-click on the microphone opens the quick voice settings menu.
     failed += ar_probe('bvq01', 'voice input: right-click on the microphone opens the quick settings menu', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: false } };</script>\n', r"""
     await bootReady();

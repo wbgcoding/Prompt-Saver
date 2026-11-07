@@ -260,16 +260,16 @@ default). A line at the bottom lists its keys.
 A view is one grid page with its own size and arrangement; a tile can live in
 several views.
 
-### Voice dictation
+### Voice input
 
 A microphone button on the composer and in the edit dialog turns
 speech into text through Microsoft's online speech recognition, so your audio
-goes to Microsoft while you dictate. It starts only after you agree in the
+goes to Microsoft while you speak. It starts only after you agree in the
 app's consent dialog, which also turns on online speech recognition in the
 Windows settings; switching off "Allow online recognition" withdraws that
-consent, and dictation asks again. Click to start: the button
+consent, and voice input asks again. Click to start: the button
 turns the accent color and pulses while listening, and its title switches from
-"Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
+"Voice input" to "Stop voice input"; a second click, Escape in the field, saving the
 prompt, or closing the window all end the session the same way. Text lands at
 the cursor (or always at the end, an expert setting) and can stop itself after
 a few seconds of silence.
@@ -281,12 +281,12 @@ Windows already placed them itself: "comma", "period", "question mark",
 "exclamation mark", "colon", "semicolon", "hyphen", "dash", "slash", "quote",
 "open paren"/"close paren" and "percent" for punctuation, "new line", "new
 paragraph" and "tab" for layout, each glued to the word before it with no
-extra space. Saying "literal" dictates the very next word as-is, instead of
+extra space. Saying "literal" types the very next word as-is, instead of
 matching it as a command, useful for actually saying "comma" out loud. The
 word right after a period, question mark, exclamation mark or paragraph break
 is capitalized automatically. **The exact word matters**: only these specific
 command words (in the app's own language) are recognized; anything else is
-just dictated as plain text.
+just typed as plain text.
 
 Like OCR, it needs a Windows language pack: see "Language packs" below, same
 dialog either way. A global hotkey (in the expert menu) can
@@ -296,12 +296,12 @@ active, or lands in the composer, whichever the setting picks.
 
 ### Language packs
 
-Text recognition and voice dictation both use Windows' own language packs and
+Text recognition and voice input both use Windows' own language packs and
 share one install dialog. The recognition-language dropdown offers a download
 the first time a chosen language has no pack installed; installing needs
 administrator rights, and Windows asks for them once through its own
 confirmation prompt. The "Manage text recognition languages…" button below the language dropdown
-in the expert menu ("Manage dictation languages…" for dictation) reopens that
+in the expert menu ("Manage voice input languages…" for voice input) reopens that
 same dialog any time, listing what's installed and what's available; on most
 systems listing needs no special rights, but on some Windows builds it does
 too, and the dialog offers to run the listing itself with administrator
@@ -819,10 +819,10 @@ file. Video export/conversion needs ffmpeg: an installed build ships it and
 never touches the network for it, while a portable build offers a one-time
 download only when a video feature actually needs it and only with your
 explicit consent, never automatically, never in the background. Voice
-dictation sends audio to Microsoft's online speech recognition, only after you
+input sends audio to Microsoft's online speech recognition, only after you
 agree. Two more things on that same short list are not update-related at all: opening the
 app's GitHub page from the About window or the version label hands the address to
-your default browser, and installing a text-recognition or dictation
+your default browser, and installing a text-recognition or voice input
 language pack (see below) has Windows itself fetch that pack online.
 
 After an update, the update dialog shows once what
@@ -1173,7 +1173,7 @@ Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
 
 **Spracheingabe**: der Mikrofon-Button neben der Eingabeleiste
 und im Kachel-Editor verwandelt Sprache in Text, über die Online-Spracherkennung
-von Microsoft: deine Sprachaufnahme geht während des Diktierens an Microsoft.
+von Microsoft: deine Sprachaufnahme geht während der Spracheingabe an Microsoft.
 Es startet erst, wenn du im Zustimmungsdialog der App einwilligst; dabei wird
 auch die Online-Spracherkennung in den Windows-Einstellungen eingeschaltet.
 „Online-Erkennung erlauben“ auszuschalten zieht diese Zustimmung zurück. Gesprochene Satzzeichen-Wörter („Komma“,
@@ -1186,7 +1186,7 @@ Windows-Sprachpaket (derselbe Dialog wie bei OCR). Ein Rechtsklick auf den Mikro
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
 ersten Bedarf an; die Installation braucht Administratorrechte (übliche
 Windows-Bestätigung). „Sprachen der Texterkennung verwalten…“ (bei der Spracheingabe
-„Diktatsprachen verwalten…“) unter dem Sprach-Dropdown im Expertenmenü listet
+„Sprachen der Spracheingabe verwalten…“) unter dem Sprach-Dropdown im Expertenmenü listet
 Installiertes und Verfügbares und startet Installation/Update erneut; das
 Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
 Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die
@@ -1572,11 +1572,11 @@ veröffentlichte Prüfsumme geprüft; fehlt sie oder passt sie nicht, wird die
 Installation abgebrochen statt eine ungeprüfte Datei auszuführen. Für
 Videoexport/-umwandlung wird ffmpeg gebraucht (siehe oben); eine installierte
 Version bringt es bereits mit, eine portable bietet nur bei Bedarf und nur
-mit Zustimmung einen einmaligen Download an. Das Sprachdiktat schickt Ton an
+mit Zustimmung einen einmaligen Download an. Die Spracheingabe schickt Ton an
 die Online-Spracherkennung von Microsoft, erst nach deiner Zustimmung. Zwei weitere Dinge auf dieser
 kurzen Liste haben mit Updates nichts zu tun: Ein Klick im Fenster „Über“ oder auf die
 Versionsanzeige öffnet die GitHub-Seite des Projekts im Standardbrowser, und
-die Installation eines Sprachpakets für Texterkennung oder Diktat (siehe
+die Installation eines Sprachpakets für Texterkennung oder Spracheingabe (siehe
 unten) lässt Windows selbst dieses Paket herunterladen.
 
 **Was ist neu**: nach einem Update zeigt das Update-Fenster einmal, was sich seit

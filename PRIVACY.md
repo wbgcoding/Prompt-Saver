@@ -24,7 +24,7 @@ Only in these cases, and never with your prompts or files:
 | Installing an update you accepted | GitHub | The download request | Yes: decline the update |
 | WebView2 runtime, only if missing | Microsoft (`go.microsoft.com`) | The download request, after you agree | Install WebView2 yourself |
 | ffmpeg for video export, only if missing | GitHub (the pinned ffmpeg build) | The download request, after you agree | Yes: decline, or place ffmpeg yourself |
-| Voice dictation | Microsoft's online speech recognition | Your voice audio while you dictate, after you agree | Yes: dictation is never used without your consent |
+| Voice input | Microsoft's online speech recognition | Your voice audio while you speak, after you agree | Yes: voice input is never used without your consent |
 | Recognition or speech language packs | Windows Update | Windows' own download request, when you install a pack | Yes: install none |
 | Links you click (project page, releases, this page) | GitHub, through your browser | A normal page visit | Yes |
 
