@@ -17,6 +17,7 @@ import { insertWinButtons, wireWinButtons } from "./winButtons.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 import { stripFormatExt } from "./exportName.js";
+import { HELP_SKETCHES } from "./helpSketches.js";
 import { secs, exportFormat, exportQuality, effectiveSize } from "./videoGraph.js";
 import { destPath, winPath, applyExportGate, updateExportNote, exportRun, setProgress, startExport, videoKbps, noteFfmpeg } from "./videoExport.js";
 import { stopEditStateAutosave, armEditStateAutosave, saveEditStateNow, loadRecording, applyProbe } from "./videoLoad.js";
@@ -329,14 +330,14 @@ export function toast(message) {
 
 // The help dialog: a section list on the left, the text of the chosen section on the right.
 // The last section is the shortcut overview, filled straight from SHORTCUTS.
-const HELP_SECTIONS = ["nav", "sel", "cut", "edit", "ov", "audio", "export", "close", "keys"];
+const HELP_SECTIONS = ["nav", "cut", "edit", "ov", "export", "keys"];
 const HELP_KEYS = {
-  nav: ["veHelpNavTitle", "veHelpNavBody"], sel: ["veHelpSelTitle", "veHelpSelBody"],
-  cut: ["veHelpCutTitle", "veHelpCutBody"], edit: ["veHelpEditTitle", "veHelpEditBody"],
-  ov: ["veHelpOvTitle", "veHelpOvBody"], audio: ["veHelpAudioTitle", "veHelpAudioBody"],
-  export: ["veHelpExportTitle", "veHelpExportBody"], close: ["veHelpCloseTitle", "veHelpCloseBody"],
-  keys: ["veHelpKeysTitle", "veHelpKeysBody"],
+  nav: ["veHelpNavTitle", "veHelpNavBody"], cut: ["veHelpCutTitle", "veHelpCutBody"],
+  edit: ["veHelpEditTitle", "veHelpEditBody"], ov: ["veHelpOvTitle", "veHelpOvBody"],
+  export: ["veHelpExportTitle", "veHelpExportBody"], keys: ["veHelpKeysTitle", "veHelpKeysBody"],
 };
+// A section with a sketch shows it after its first paragraph.
+const HELP_SECTION_SKETCH = { nav: "videoEditorLayout", cut: "videoTrimCut" };
 let helpSection = "nav";
 
 function renderHelp() {
@@ -354,12 +355,19 @@ function renderHelp() {
   h.className = "ve-help-h";
   h.textContent = t(titleKey);
   list.appendChild(h);
-  for (const para of t(bodyKey).split("\n\n")) {
+  t(bodyKey).split("\n\n").forEach((para, i) => {
     const p = document.createElement("p");
     p.className = "ve-help-p";
     p.textContent = para;
     list.appendChild(p);
-  }
+    const sketch = i === 0 && HELP_SKETCHES[HELP_SECTION_SKETCH[helpSection]];
+    if (sketch) {
+      const fig = document.createElement("div");
+      fig.className = "help-sketch";
+      fig.innerHTML = sketch(LANG === "de" ? "de" : "en");
+      list.appendChild(fig);
+    }
+  });
   if (helpSection === "keys") {
     const rows = document.createElement("div");
     rows.className = "shortcuts-list ve-help-keys";

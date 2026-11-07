@@ -56,7 +56,7 @@ await sleep(800);
 ACTS = {
     "main": "",
     # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
-    **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "sel", "cut", "edit", "ov", "audio", "export", "close", "keys")},
+    **{f"vehelp_{k}": "await sleep(600); document.getElementById('ve-shortcuts').click(); await sleep(150); document.querySelector(\"#ve-help-nav .ve-help-tab[data-help='" + k + "']\").click(); await sleep(200);" for k in ("nav", "cut", "edit", "ov", "export", "keys")},
     # The overlay editor of a new focus area (shape select, darkening).
     "veovspot": "await sleep(600); document.getElementById('ve-tab-overlays').click(); await sleep(150); document.getElementById('ve-ov-add-spotlight').click(); await sleep(400); document.getElementById('ve-ov-editor').scrollIntoView({ block: 'center' }); await sleep(200);",
     # The export tab right after a file export: status line with the folder/file buttons under it.
