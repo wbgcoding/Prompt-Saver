@@ -1327,7 +1327,7 @@ fn a_failed_settings_write_seeds_no_example_prompts() {
 fn a_fresh_first_run_starts_with_rotation_off() {
     let mut store = paired_fixture();
     assert!(needs_example_seed(&store));
-    assert!(store.settings.ui_flags.get("rotatingPrompts").is_none());
+    assert!(!store.settings.ui_flags.contains_key("rotatingPrompts"));
     let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
     let seeded = seed_examples_core(&mut store, vec![test_prompt("e1")], paired_save(false, false, &rows, &undone)).unwrap();
     assert_eq!(store.settings.ui_flags.get("rotatingPrompts"), Some(&false));
@@ -1341,7 +1341,7 @@ fn a_failed_first_run_save_leaves_the_rotation_flag_unset() {
     let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
     let r = seed_examples_core(&mut store, vec![test_prompt("e1")], paired_save(true, false, &rows, &undone));
     assert!(r.is_err());
-    assert!(store.settings.ui_flags.get("rotatingPrompts").is_none());
+    assert!(!store.settings.ui_flags.contains_key("rotatingPrompts"));
 }
 
 #[test]
@@ -1350,7 +1350,7 @@ fn an_existing_install_without_the_rotation_key_keeps_rotation_on() {
     let mut store = paired_fixture();
     store.prompts.push(test_prompt("old"));
     assert!(!needs_example_seed(&store), "a library with prompts is never seeded");
-    assert!(store.settings.ui_flags.get("rotatingPrompts").is_none());
+    assert!(!store.settings.ui_flags.contains_key("rotatingPrompts"));
     let mut seeded_before = paired_fixture();
     seeded_before.settings.examples_seeded = true;
     assert!(!needs_example_seed(&seeded_before), "a library emptied by the user is never reseeded");
