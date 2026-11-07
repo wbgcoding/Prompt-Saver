@@ -1870,6 +1870,27 @@ def run(browser, tmp):
     }
     if (!(dotW[1] > dotW[9])) errs.push('250: one dot (' + dotW[1] + ' px) is not bigger than nine (' + dotW[9] + ' px)');
 """)
+    # Clear copy history sits on the first line of the library head, beside the tabs.
+    lib_head_body = r"""
+    await bootReady();
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(400);
+    const clr = document.getElementById('journal-clear');
+    const hTab = document.getElementById('library-tab-history');
+    const cls = document.getElementById('library-close');
+    if (!clr || clr.offsetParent === null) errs.push('blh01: Clear copy history is not visible in the history tab');
+    else {
+      const a = clr.getBoundingClientRect(), b = hTab.getBoundingClientRect(), c = cls.getBoundingClientRect();
+      if (Math.abs(a.top - b.top) > 4) errs.push('blh01: Clear sits ' + Math.round(a.top - b.top) + ' px below the tabs row');
+      if (a.left < b.right) errs.push('blh01: Clear starts left of the history tab end');
+      if (a.right > c.left) errs.push('blh01: Clear overlaps the close button');
+      if (Math.abs(c.top - b.top) > 6) errs.push('blh01: the close button is not on the tabs row');
+    }
+    document.getElementById('library-tab-prompts').click(); await sleep(300);
+    if (document.getElementById('journal-clear').offsetParent !== null) errs.push('blh01: Clear copy history shows in the prompts tab');
+"""
+    for size_lh in ('880x600', '680x460'):
+        failed += ar_probe('blh01-' + size_lh, 'library head: Clear copy history shares the first line at ' + size_lh, 'index', size_lh, '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', lib_head_body)
     # The open grid folder dims the grid, has a title row with rename and close, and fits its rows.
     fpop_body = r"""
     await bootReady();

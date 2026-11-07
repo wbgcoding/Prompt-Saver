@@ -785,5 +785,5 @@ SECTION = """\
     await click('library-btn');
     await click('library-tab-history');
     layoutScan('copy history');
-    mustReach('copy history', '#library .modal-head-actions > button');
+    mustReach('copy history', '#library .modal-head > #journal-clear');
 """
