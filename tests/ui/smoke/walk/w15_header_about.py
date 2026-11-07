@@ -53,7 +53,7 @@ SECTION = """\
       if (document.getElementById('opt-screenshot-folder')) out.errors.push('730: the screenshot switch is still on the Settings page');
     }
     // 96: the short "Latest X.Y.Z" status keeps the first update line no taller than
-    // before, with the longest of the 11 translations (Romanian).
+    // before, with the longest translation (Romanian).
     // 727: the System section is one line: version status, About, the check button, the
     // auto-update switch and the interval, in English and German at every size.
     {
@@ -625,7 +625,7 @@ SECTION = """\
       document.getElementById('settings').classList.add('hidden');
     }
     // 108: Save must fit --winctl-w in every language -- the longest translations
-    // ("Speichern", "Speichern" DE at 9 chars is the longest of the 11) must not
+    // ("Speichern", "Speichern" DE at 9 chars is the longest) must not
     // overflow the fixed-width button.
     {
       const saveBtn = document.getElementById('save');
@@ -641,7 +641,7 @@ SECTION = """\
       }
     }
     // 275: the longest translation of About, Check for updates and the version
-    // status in each of the 11 languages must not overflow its own box, at the
+    // status in each UI language must not overflow its own box, at the
     // two smallest viewports the suite runs.
     if (window.innerWidth <= 740) {
       const aboutBtn = document.getElementById('about-btn');

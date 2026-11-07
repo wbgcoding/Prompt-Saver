@@ -94,7 +94,7 @@ A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
 | **Scaling** | Separate size control for UI, popups, icons and buttons, from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |
-| **11 languages** | Auto-detected from the system: EN, DE, ES, IT, PT, PL, ZH, JA, NL, TR, RO |
+| **12 languages** | Auto-detected from the system: EN, DE, ES, FR, IT, PT, PL, ZH, JA, NL, TR, RO |
 
 ### 🛟 Keep it safe
 

@@ -17,7 +17,7 @@ export function helpCategories() {
 
 // Section ids are stable keys (see ui/help.js), never translated text. The six
 // non-basic areas reuse the expert-menu tab names, so a setting and its help sit
-// under the same word in all 11 languages even though the article content itself
+// under the same word in all UI languages even though the article content itself
 // stays EN/DE-only.
 export const HELP_SECTIONS = ["basics", "features", "capture", "tiles", "appearance", "library", "system", "data"];
 const HELP_SECTION_LABELS = { basics: "helpSecBasics", features: "expTabFeatures", capture: "expTabCapture", tiles: "expTabTiles", appearance: "expTabAppearance", library: "expTabLibrary", system: "expGroupSystem", data: "settingsSecData" };

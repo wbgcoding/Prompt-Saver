@@ -1,6 +1,6 @@
 SECTION = """\
     // 112: walk the same views the 130% pass just covered once per wordy language.
-    // Polish, Romanian and German write the longest labels of the eleven, and a
+    // Polish, Romanian and German write the longest labels, and a
     // clipped label or an overlapping box is exactly what layoutScan already
     // catches -- this just points it at real long strings instead of a synthetic
     // scale. German comes last on purpose: the OCR checks below find their expert

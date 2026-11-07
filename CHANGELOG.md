@@ -11,6 +11,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Added
 
+- **French.** French is now available as a UI language, including the installer,
+  the tray menu, voice commands and the sample library.
 - **Quick voice settings.** Right-click the microphone button for quick voice
   input settings.
 

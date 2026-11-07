@@ -29,7 +29,7 @@ REPO = Path(__file__).resolve().parents[2]
 STYLES = REPO / "ui" / "styles"
 
 # A row is only as tight as its longest label, so every measurement runs three
-# times: English, Polish and Romanian, the two wordiest of the eleven UI
+# times: English, Polish and Romanian, the wordiest of the UI
 # languages. The texts are read out of ui/i18n/ instead of being copied here,
 # so a retranslation cannot leave this test measuring words the app dropped.
 LANGS = ["en", "pl", "ro"]
