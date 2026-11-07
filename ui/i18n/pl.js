@@ -1725,6 +1725,7 @@ export default {
     tipQuickGrid: "Pokazuje liczbę kolumn i wierszy aktywnego widoku na górnym pasku, więc układ zmienisz bez otwierania ustawień.",
     tipMultiView: "Kilka nazwanych widoków, każdy z własną siatką i układem, przełączanych kartami obok tytułu.",
     tipLibraryCols: "Największa liczba kolumn listy biblioteki. W wąskim oknie jest ich mniej.",
+    tipUiScale: "Skaluje całe okno. Rośnie tylko tyle, ile może pokazać ekran.",
     tipCopySizeLevel: "Rozmiar tekstu potwierdzenia „Skopiowano!” na kafelkach i przyciskach pływających. Duży wypełnia kafelek lub przycisk.",
     tipShowLibrary: "Pokazuje lub ukrywa przycisk biblioteki na górnym pasku.",
     expGroupVars: "Symbole zastępcze",

@@ -1725,6 +1725,7 @@ export default {
     tipQuickGrid: "Mostra o número de colunas e linhas da visualização ativa na barra superior, para redimensioná-la sem abrir as configurações.",
     tipMultiView: "Várias visualizações com nome, cada uma com sua grade e disposição, alternadas nas abas ao lado do título.",
     tipLibraryCols: "O máximo de colunas que a lista da biblioteca usa. Uma janela estreita mostra menos.",
+    tipUiScale: "Dimensiona a janela inteira. Ela só cresce até onde a tela consegue mostrar.",
     tipCopySizeLevel: "Tamanho do texto da confirmação “Copiado!” em blocos e botões flutuantes. Grande preenche o bloco ou o botão.",
     tipShowLibrary: "Mostra ou oculta o botão da biblioteca na barra superior.",
     expGroupVars: "Marcadores",

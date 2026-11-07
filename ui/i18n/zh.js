@@ -1725,6 +1725,7 @@ export default {
     tipQuickGrid: "在顶部栏显示当前视图的列数和行数，无需打开设置即可调整布局。",
     tipMultiView: "多个命名视图，每个都有自己的网格和布局，通过标题旁的标签切换。",
     tipLibraryCols: "提示词库列表最多使用的列数。窗口较窄时显示的列数会更少。",
+    tipUiScale: "缩放整个窗口。放大只会到屏幕能够显示的程度为止。",
     tipCopySizeLevel: "磁贴和悬浮按钮上“已复制！”确认文字的大小。“大”会填满磁贴或按钮。",
     tipShowLibrary: "显示或隐藏顶部栏中的提示词库按钮。",
     expGroupVars: "占位符",

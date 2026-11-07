@@ -342,13 +342,36 @@ pub(crate) fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
     (min_w, min_h)
 }
 
+// The zoom a screen can hold: past it the page would show fewer CSS pixels than the smallest
+// window. 100 % always stays allowed.
+pub(crate) fn zoom_fit(factor: f64, area: (u32, u32)) -> f64 {
+    let room = (area.0 as f64 / MAIN_WIN_MIN_W as f64).min(area.1 as f64 / MAIN_WIN_MIN_H as f64);
+    factor.clamp(0.75, 3.0).min(room.max(1.0))
+}
+
+// A monitor's work area (the screen minus the taskbar) in logical pixels, or effectively no
+// limit when no monitor is known.
+fn work_area_logical(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
+    monitor
+        .map(|m| {
+            let s = m.work_area().size;
+            (
+                (s.width as f64 / m.scale_factor()) as u32,
+                (s.height as f64 / m.scale_factor()) as u32,
+            )
+        })
+        .unwrap_or((u32::MAX, u32::MAX))
+}
+
 // Scale the main-window UI with the webview's native zoom (like Ctrl +/-). Unlike a CSS
 // `zoom` on <body>, it keeps event coordinates and getBoundingClientRect in one space, so
-// popup placement and grid hit-testing stay correct. Clamped to the slider's 75-300% range.
+// popup placement and grid hit-testing stay correct. Clamped to the slider's 75-300% range
+// and to what the monitor's work area can hold.
 #[tauri::command]
 pub(crate) fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
-    let f = factor.clamp(0.75, 3.0);
     if let Some(win) = app.get_webview_window("main") {
+        let area = work_area_logical(win.current_monitor().ok().flatten().or_else(|| win.primary_monitor().ok().flatten()));
+        let f = zoom_fit(factor, area);
         win.set_zoom(f).map_err(|e| e.to_string())?;
         // Grow the window's minimum by the zoom factor, and the window itself if it is smaller, so
         // the header and composer stay reachable (the fixed OS minimum shows fewer CSS pixels as

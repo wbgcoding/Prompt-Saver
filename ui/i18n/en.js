@@ -1732,6 +1732,7 @@ export default {
     tipQuickGrid: "Puts the column and row count of the active view into the top bar, so a layout can be resized without opening its settings.",
     tipMultiView: "Several named views, each with its own grid and layout, switched by tabs next to the title.",
     tipLibraryCols: "The most columns the library list uses. A narrow window shows fewer.",
+    tipUiScale: "Scales the whole window. It grows only as far as the screen can show.",
     tipCopySizeLevel: "Text size of the \"Copied!\" confirmation on tiles and floating buttons. Large fills the tile or button.",
     tipShowLibrary: "Shows or hides the library button in the top bar.",
     expGroupVars: "Placeholders",

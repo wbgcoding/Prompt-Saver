@@ -1725,6 +1725,7 @@ export default {
     tipQuickGrid: "Etkin görünümün sütun ve satır sayısını üst çubuğa koyar; düzeni ayarları açmadan değiştirmenizi sağlar.",
     tipMultiView: "Her biri kendi ızgarası ve düzeni olan adlandırılmış birden çok görünüm; başlığın yanındaki sekmelerden geçilir.",
     tipLibraryCols: "Kütüphane listesinin kullandığı en fazla sütun sayısı. Dar bir pencere daha azını gösterir.",
+    tipUiScale: "Pencerenin tamamını ölçekler. Yalnızca ekranın gösterebildiği kadar büyür.",
     tipCopySizeLevel: "Kutucuklar ve yüzen düğmelerdeki “Kopyalandı!” onayının yazı boyutu. Büyük, kutucuğu veya düğmeyi doldurur.",
     tipShowLibrary: "Üst çubuktaki kütüphane düğmesini gösterir veya gizler.",
     expGroupVars: "Yer tutucular",

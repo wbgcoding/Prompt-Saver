@@ -159,6 +159,16 @@ fn zoom_min_size_never_exceeds_the_monitor() {
 }
 
 #[test]
+fn zoom_fit_stops_at_what_the_screen_holds() {
+    assert_eq!(zoom_fit(3.0, (1920, 1040)), 1040.0 / 460.0);
+    assert_eq!(zoom_fit(3.0, (10_000, 10_000)), 3.0);
+    assert_eq!(zoom_fit(0.5, (1920, 1040)), 0.75);
+    // The area is below the window minimum: the 100 % floor wins.
+    assert_eq!(zoom_fit(1.5, (600, 400)), 1.0);
+    assert_eq!(zoom_fit(1.5, (800, 500)), 500.0 / 460.0);
+}
+
+#[test]
 fn tray_recent_is_newest_first_and_capped() {
     let prompts = vec![
         tray_prompt("p1", "One", false),
