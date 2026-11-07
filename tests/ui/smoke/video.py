@@ -34,7 +34,7 @@ VIDEO_DE_PROBE = """
       if (!/Prozent/.test(vt)) errs.push(id + ' aria-valuetext is not translated: ' + vt);
     }
     // 934: the tool row groups its buttons so none wraps alone, Fit is an icon
-    // and Export frame sits in the transport row beside the frame number.
+    // and Save frame sits in the transport row beside the frame number.
     {
       const tools = document.querySelector('.ve-tools');
       const groups = [...tools.querySelectorAll('.ve-tool-group')];
@@ -48,7 +48,11 @@ VIDEO_DE_PROBE = """
         const mids = [...g.children].map((c) => c.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.top + r.height / 2);
         if (Math.max(...mids) - Math.min(...mids) > 2) errs.push('934: a tool group breaks across lines');
       }
-      if (!document.querySelector('.ve-transport #ve-still')) errs.push('934: Export frame is not in the transport row');
+      if (!document.querySelector('.ve-transport #ve-still')) errs.push('934: Save frame is not in the transport row');
+      const trimStartDe = document.querySelector('span[data-i18n="veTrimStart"]');
+      const trimEndDe = document.querySelector('span[data-i18n="veTrimEnd"]');
+      if (!trimStartDe || trimStartDe.textContent !== 'Videoanfang') errs.push('934: the German trim start label reads ' + JSON.stringify(trimStartDe && trimStartDe.textContent));
+      if (!trimEndDe || trimEndDe.textContent !== 'Videoende') errs.push('934: the German trim end label reads ' + JSON.stringify(trimEndDe && trimEndDe.textContent));
       const fit = document.getElementById('ve-zoom-fit');
       if (!fit.classList.contains('icon-btn') || fit.textContent.trim() !== '') errs.push('934: Fit is not an icon-only button');
       document.getElementById('ve-zoom-in').click();
@@ -1725,6 +1729,12 @@ VIDEO_PROBE = """
     // ---- 412: the export format note changes with the format, names the
     // silent formats' missing audio, and carries a size estimate ----
     const exportNoteEl = document.getElementById('ve-export-note');
+    {
+      const trimStartEn = document.querySelector('span[data-i18n="veTrimStart"]');
+      const trimEndEn = document.querySelector('span[data-i18n="veTrimEnd"]');
+      if (!trimStartEn || trimStartEn.textContent !== 'Video start') errs.push('412: the trim start label reads ' + JSON.stringify(trimStartEn && trimStartEn.textContent));
+      if (!trimEndEn || trimEndEn.textContent !== 'Video end') errs.push('412: the trim end label reads ' + JSON.stringify(trimEndEn && trimEndEn.textContent));
+    }
     if (optionValues.includes('avi')) {
       formatSel.value = 'avi';
       formatSel.dispatchEvent(new Event('change'));
@@ -1747,9 +1757,10 @@ VIDEO_PROBE = """
       formatSel.dispatchEvent(new Event('change'));
       await sleep(30);
       const note = exportNoteEl.textContent;
-      if (!note.includes('carries no sound')) {
+      if (!note.includes('cannot carry sound')) {
         errs.push(`412: the export note is missing the no-audio hint for "${fmt}", got ${JSON.stringify(note)}`);
       }
+      if ((note.match(/cannot carry sound/g) || []).length !== 1 || note.includes('GIF carries')) errs.push('412: the gif note names the missing sound more than once, got ' + JSON.stringify(note));
       if (!/\\d/.test(note)) {
         errs.push(`412: the export note carries no size figure for "${fmt}", got ${JSON.stringify(note)}`);
       }
@@ -2424,7 +2435,7 @@ def run_expert(browser, tmp):
     if (toastText() !== 'Added to a tile.') errs.push('742: the tile toast was ' + toastText());
     window.__TILE_FULL__ = true;
     await exportOnce();
-    if (toastText() !== 'Grid is full. Drag onto a tile to swap') errs.push('742: a full grid was not told, toast: ' + toastText());
+    if (toastText() !== 'The grid is full. Drag onto a tile to swap.') errs.push('742: a full grid was not told, toast: ' + toastText());
     window.__TILE_FULL__ = false;
     tileBox.checked = false;
     tileBox.dispatchEvent(new Event('change', { bubbles: true }));
