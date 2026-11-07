@@ -760,6 +760,8 @@ export default {
     aboutTitle: "O programie",
     aboutRepo: "Strona projektu na GitHubie",
     aboutPrivacy: "Prywatność",
+    aboutPrivacyText: "{app} przechowuje Twoje dane tylko na tym komputerze. Nie ma konta, telemetrii ani analityki. Łączy się z internetem wyłącznie po to, by sprawdzić aktualizacje, pobrać pliki, na które się zgodzisz, i obsłużyć wprowadzanie głosowe, gdy je włączysz.",
+    aboutPrivacyLink: "Pełna polityka prywatności na GitHubie",
     aboutLicenses: "Licencje zewnętrznych komponentów",
     licensesIntro: "{app} korzysta z komponentów open source. Poniższa lista jest generowana z rzeczywistej listy zależności przy każdym budowaniu aplikacji.",
     licensesSearchPh: "Szukaj komponentów",

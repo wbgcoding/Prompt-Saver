@@ -760,6 +760,8 @@ export default {
     aboutTitle: "关于",
     aboutRepo: "GitHub上的项目页面",
     aboutPrivacy: "隐私",
+    aboutPrivacyText: "{app} 只把你的数据保存在这台电脑上。没有账号，没有遥测，也没有数据分析。只有检查更新、你同意的下载，以及你允许后的语音输入才会联网。",
+    aboutPrivacyLink: "在 GitHub 上查看完整隐私政策",
     aboutLicenses: "第三方许可证",
     licensesIntro: "{app} 使用了开源组件构建。下面的列表在每次构建应用时根据真实的依赖列表生成。",
     licensesSearchPh: "搜索组件",

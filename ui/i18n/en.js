@@ -738,6 +738,8 @@ export default {
     aboutTitle: "About",
     aboutRepo: "Project page on GitHub",
     aboutPrivacy: "Privacy",
+    aboutPrivacyText: "{app} keeps your data on this computer. There is no account, no telemetry and no analytics. It only goes online to check for updates, for downloads you agree to and for voice input once you allow it.",
+    aboutPrivacyLink: "Full privacy policy on GitHub",
     aboutLicenses: "Third-party licenses",
     licensesIntro: "{app} is built with open-source components. The list below is generated from the real dependency list every time the app is built.",
     licensesSearchPh: "Search components",

@@ -760,6 +760,8 @@ export default {
     aboutTitle: "Hakkında",
     aboutRepo: "GitHub'daki proje sayfası",
     aboutPrivacy: "Gizlilik",
+    aboutPrivacyText: "{app} verilerinizi yalnızca bu bilgisayarda tutar. Hesap, telemetri ya da analiz yoktur. Yalnızca güncellemeleri denetlemek, onayladığınız indirmeler ve izin verdikten sonra sesli giriş için çevrimiçi olur.",
+    aboutPrivacyLink: "GitHub'da tam gizlilik politikası",
     aboutLicenses: "Üçüncü taraf lisansları",
     licensesIntro: "{app} açık kaynaklı bileşenlerle oluşturulmuştur. Aşağıdaki liste, uygulama her derlendiğinde gerçek bağımlılık listesinden oluşturulur.",
     licensesSearchPh: "Bileşenlerde ara",

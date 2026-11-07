@@ -738,6 +738,8 @@ export default {
     aboutTitle: "Über",
     aboutRepo: "Projektseite auf GitHub",
     aboutPrivacy: "Datenschutz",
+    aboutPrivacyText: "{app} speichert deine Daten nur auf diesem PC. Es gibt kein Konto, keine Telemetrie und keine Analyse. Online geht die App nur für die Update-Suche, für Downloads, denen du zustimmst, und für die Spracheingabe, sobald du sie erlaubst.",
+    aboutPrivacyLink: "Vollständige Datenschutzerklärung auf GitHub",
     aboutLicenses: "Lizenzen von Drittanbietern",
     licensesIntro: "{app} verwendet quelloffene Bestandteile. Die folgende Liste wird bei jedem Bauen der App aus der tatsächlichen Abhängigkeitsliste erzeugt.",
     licensesSearchPh: "Bestandteile durchsuchen",

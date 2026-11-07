@@ -2611,6 +2611,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    a license id side by side. */
 .about-licenses-body { max-height: 40vh; overflow: auto; text-align: left; display: flex; flex-direction: column; gap: 8px; }
 .licenses-intro { margin: 0; color: var(--muted); font-size: 13px; }
+.about-privacy-body { display: flex; flex-direction: column; gap: 8px; text-align: left; }
 .licenses-list { display: flex; flex-direction: column; gap: 4px; }
 .license-row-toggle {
   display: flex;

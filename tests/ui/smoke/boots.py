@@ -1567,15 +1567,35 @@ LICENSES_PROBE = """
     await sleep(150);
     document.getElementById('about-btn').click();
     await sleep(150);
-    // privacy-link: About links to the privacy page through the project-page command.
+    // privacy-link: About expands a short privacy summary in place; the full policy opens from its link.
     const privacyBtn = document.getElementById('about-privacy');
-    if (!privacyBtn) errs.push('privacy-link: the About dialog has no privacy button');
+    const privacyBody = document.getElementById('about-privacy-body');
+    const privacyLink = document.getElementById('about-privacy-link');
+    const repoCalls = () => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === 'open_repo').length;
+    if (!privacyBtn || !privacyBody || !privacyLink) errs.push('privacy-link: the About dialog has no privacy button, summary or link');
     else {
+      const callsBefore = repoCalls();
       privacyBtn.click();
+      await sleep(80);
+      if (repoCalls() !== callsBefore) errs.push('privacy-link: the privacy button opened the browser instead of the summary');
+      if (privacyBody.classList.contains('hidden') || privacyBtn.getAttribute('aria-expanded') !== 'true') {
+        errs.push('privacy-link: the privacy button did not expand the summary');
+      }
+      const privacyText = privacyBody.querySelector('[data-i18n="aboutPrivacyText"]');
+      if (!privacyText || !privacyText.textContent.trim() || /aboutPrivacy/.test(privacyText.textContent)) {
+        errs.push('privacy-link: the summary text is empty or a raw key');
+      }
+      if (privacyBody.scrollWidth > privacyBody.clientWidth + 1) errs.push('privacy-link: the summary overflows horizontally');
+      privacyLink.click();
       await sleep(80);
       const opened = (window.__SMOKE_ARGS__ || []).filter(([c]) => c === 'open_repo').at(-1);
       if (!opened || !opened[1] || opened[1].page !== 'privacy') {
-        errs.push('privacy-link: the privacy button did not open the privacy page: ' + JSON.stringify(opened));
+        errs.push('privacy-link: the summary link did not open the privacy page: ' + JSON.stringify(opened));
+      }
+      privacyBtn.click();
+      await sleep(80);
+      if (!privacyBody.classList.contains('hidden') || privacyBtn.getAttribute('aria-expanded') !== 'false') {
+        errs.push('privacy-link: a second click did not collapse the summary');
       }
     }
     const openBtn = document.getElementById('about-licenses');

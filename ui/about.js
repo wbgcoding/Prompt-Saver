@@ -11,7 +11,14 @@ export function bindAbout() {
   $("about-close").addEventListener("click", closeAbout);
   $("about-ok").addEventListener("click", closeAbout);
   $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
-  $("about-privacy").addEventListener("click", () => invoke("open_repo", { page: "privacy" }).catch((e) => errToast(e)));
+  // The privacy summary expands in place, like the license list; the full policy opens from its link.
+  $("about-privacy").addEventListener("click", () => {
+    const body = $("about-privacy-body");
+    const open = body.classList.contains("hidden");
+    body.classList.toggle("hidden", !open);
+    $("about-privacy").setAttribute("aria-expanded", String(open));
+  });
+  $("about-privacy-link").addEventListener("click", () => invoke("open_repo", { page: "privacy" }).catch((e) => errToast(e)));
   aboutEl.addEventListener("pointerdown", (e) => {
     if (e.target === aboutEl) closeAbout();
   });

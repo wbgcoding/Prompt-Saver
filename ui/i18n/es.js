@@ -760,6 +760,8 @@ export default {
     aboutTitle: "Acerca de",
     aboutRepo: "Página del proyecto en GitHub",
     aboutPrivacy: "Privacidad",
+    aboutPrivacyText: "{app} guarda tus datos solo en este equipo. No hay cuenta, ni telemetría, ni analítica. Solo se conecta a internet para buscar actualizaciones, para descargas que aceptes y para la entrada de voz cuando la permitas.",
+    aboutPrivacyLink: "Política de privacidad completa en GitHub",
     aboutLicenses: "Licencias de terceros",
     licensesIntro: "{app} se basa en componentes de código abierto. La siguiente lista se genera a partir de la lista real de dependencias cada vez que se compila la app.",
     licensesSearchPh: "Buscar componentes",

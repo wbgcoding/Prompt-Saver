@@ -760,6 +760,8 @@ export default {
     aboutTitle: "Over",
     aboutRepo: "Projectpagina op GitHub",
     aboutPrivacy: "Privacy",
+    aboutPrivacyText: "{app} bewaart je gegevens alleen op deze computer. Er is geen account, geen telemetrie en geen analyse. De app gaat alleen online om op updates te controleren, voor downloads waarmee je akkoord gaat en voor spraakinvoer zodra je die toestaat.",
+    aboutPrivacyLink: "Volledig privacybeleid op GitHub",
     aboutLicenses: "Licenties van derden",
     licensesIntro: "{app} is gebouwd met opensourcecomponenten. Onderstaande lijst wordt bij elke build van de app gegenereerd uit de echte lijst met afhankelijkheden.",
     licensesSearchPh: "Componenten zoeken",

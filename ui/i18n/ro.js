@@ -760,6 +760,8 @@ export default {
     aboutTitle: "Despre",
     aboutRepo: "Pagina proiectului pe GitHub",
     aboutPrivacy: "Confidențialitate",
+    aboutPrivacyText: "{app} îți păstrează datele doar pe acest calculator. Nu există cont, telemetrie sau analiză. Se conectează la internet doar pentru a căuta actualizări, pentru descărcări pe care le accepți și pentru intrarea vocală după ce o permiți.",
+    aboutPrivacyLink: "Politica de confidențialitate completă pe GitHub",
     aboutLicenses: "Licențe ale componentelor terțe",
     licensesIntro: "{app} este construit cu componente open source. Lista de mai jos este generată din lista reală de dependențe de fiecare dată când aplicația este compilată.",
     licensesSearchPh: "Caută componente",

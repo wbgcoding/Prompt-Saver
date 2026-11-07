@@ -1250,12 +1250,21 @@
           </svg>
           <span data-i18n="aboutRepo">Project page on GitHub</span>
         </button>
-        <button id="about-privacy" class="ghost-btn about-link-btn">
+        <button id="about-privacy" class="ghost-btn about-link-btn" aria-expanded="false" aria-controls="about-privacy-body">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6Z"/>
           </svg>
           <span data-i18n="aboutPrivacy">Privacy</span>
         </button>
+        <div id="about-privacy-body" class="about-privacy-body hidden">
+          <p class="licenses-intro" data-i18n="aboutPrivacyText">This app keeps your data on this computer. There is no account, no telemetry and no analytics. It only goes online to check for updates, for downloads you agree to and for voice input once you allow it.</p>
+          <button id="about-privacy-link" type="button" class="ghost-btn about-link-btn">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M14 4h6v6M20 4l-9 9"/>
+            </svg>
+            <span data-i18n="aboutPrivacyLink">Full privacy policy on GitHub</span>
+          </button>
+        </div>
       </div>
       <div class="modal-actions">
         <button id="about-ok" class="primary-btn" data-i18n="close">Close</button>

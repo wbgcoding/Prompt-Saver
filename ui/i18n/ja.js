@@ -760,6 +760,8 @@ export default {
     aboutTitle: "バージョン情報",
     aboutRepo: "GitHubのプロジェクトページ",
     aboutPrivacy: "プライバシー",
+    aboutPrivacyText: "{app} はデータをこのパソコンの中だけに保存します。アカウントもテレメトリも解析もありません。ネットワークに接続するのは、更新の確認、同意したダウンロード、許可した後の音声入力のときだけです。",
+    aboutPrivacyLink: "GitHubで完全なプライバシーポリシーを見る",
     aboutLicenses: "サードパーティのライセンス",
     licensesIntro: "{app} はオープンソースのコンポーネントを使用しています。以下の一覧はアプリをビルドするたびに実際の依存関係リストから生成されます。",
     licensesSearchPh: "コンポーネントを検索",
