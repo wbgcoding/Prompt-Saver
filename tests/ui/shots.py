@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `sniptext`, or another
+`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -110,6 +110,7 @@ ACTS = {
                 "const dv = $('snip-edit-live'); const dr = dv.getBoundingClientRect();"
                 "const dp = (t, x, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: dr.left + x, clientY: dr.top + y }));"
                 "dp('pointerdown', 120, 80, dv); dp('pointermove', 260, 150, dv); dp('pointerup', 260, 150); await sleep(300);",
+    "snipcrop": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"crop\"]')?.click(); await sleep(400);",
     "sniptext": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
                 "const lv = $('snip-edit-live'); const lr = lv.getBoundingClientRect();"
                 "lv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
@@ -122,7 +123,7 @@ GROUPS = {
     "@library": ["library", "history"],
     "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder"],
     "@recording": ["recresult"],
-    "@snip": ["snipedit", "snipdraw", "sniptext"],
+    "@snip": ["snipedit", "snipdraw", "snipcrop", "sniptext"],
 }
 
 

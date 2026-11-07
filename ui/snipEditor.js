@@ -684,6 +684,15 @@ export function initSnipEditor() {
       sw: { x: r.x, y: r.y + r.h }, s: { x: r.x + r.w / 2, y: r.y + r.h }, se: { x: r.x + r.w, y: r.y + r.h },
     };
   }
+  // Handles keep one on-screen size at every zoom and stay inside the image, so a handle on the
+  // image edge is never cut off.
+  function snipEditPaintHandle(ctx, p) {
+    const hs = 10 / snipEditScale();
+    const x = snipEditClamp(p.x - hs / 2, 0, Math.max(0, SE.w - hs));
+    const y = snipEditClamp(p.y - hs / 2, 0, Math.max(0, SE.h - hs));
+    ctx.fillRect(x, y, hs, hs);
+    ctx.strokeRect(x, y, hs, hs);
+  }
   function snipEditHitCropHandle(pt, r) {
     const tol = 10 / snipEditScale();
     for (const [name, p] of Object.entries(snipEditCropHandlePoints(r))) {
@@ -725,15 +734,11 @@ export function initSnipEditor() {
     // Heavier dim once the box is at rest so the picture reads as cropped; lighter while an edge
     // is dragged so what would come back stays visible.
     snipEditDrawCropDim(snipEditLiveCtx, r, SE.drag ? 0.55 : 0.85);
-    const hs = 8;
     snipEditLiveCtx.save();
     snipEditLiveCtx.fillStyle = "#fff";
     snipEditLiveCtx.strokeStyle = "#2563eb";
-    snipEditLiveCtx.lineWidth = 1.5;
-    for (const p of Object.values(snipEditCropHandlePoints(r))) {
-      snipEditLiveCtx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-      snipEditLiveCtx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-    }
+    snipEditLiveCtx.lineWidth = 1.5 / snipEditScale();
+    for (const p of Object.values(snipEditCropHandlePoints(r))) snipEditPaintHandle(snipEditLiveCtx, p);
     snipEditLiveCtx.restore();
     snipEditDrawGuides();
   }
@@ -925,15 +930,11 @@ export function initSnipEditor() {
     return "";
   }
   function snipEditPaintShapeHandles(op) {
-    const hs = 8;
     snipEditLiveCtx.save();
     snipEditLiveCtx.fillStyle = "#fff";
     snipEditLiveCtx.strokeStyle = "#2563eb";
-    snipEditLiveCtx.lineWidth = 1.5;
-    for (const p of Object.values(snipEditShapeHandlePoints(op))) {
-      snipEditLiveCtx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-      snipEditLiveCtx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-    }
+    snipEditLiveCtx.lineWidth = 1.5 / snipEditScale();
+    for (const p of Object.values(snipEditShapeHandlePoints(op))) snipEditPaintHandle(snipEditLiveCtx, p);
     snipEditLiveCtx.restore();
   }
   function snipEditDrawShapeSelectionLive() {
@@ -1513,6 +1514,11 @@ export function initSnipEditor() {
     const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
     snipEditStage.style.margin = (sw > vw || sh > vh) ? `${Math.round(vh / 2)}px ${Math.round(vw / 2)}px` : "";
     $("snip-edit-zoom-val").textContent = `${Math.round(SE.zoom * 100)}%`;
+    // The handles are sized in screen pixels, so the live layer is redrawn after every zoom.
+    if (SE.active && !SE.drag) {
+      if (SE.tool === "crop" && SE.cropRect) snipEditDrawCropOverlayLive();
+      else if (SE.selOp) snipEditDrawShapeSelectionLive();
+    }
   }
   // Zooms while the picture point under (clientX, clientY) stays where it is.
   function snipEditZoomAt(z, clientX, clientY) {

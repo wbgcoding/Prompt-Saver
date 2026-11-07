@@ -2182,6 +2182,22 @@ def run(browser, tmp):
     await sleepMs(100);
     if (undo.disabled !== before) errs.push('830: a press inside the full-image box changed the crop');
 """)
+    # The crop handles keep their on-screen size at every zoom and stay inside the image.
+    failed += ar_probe('cropgrip1', 'crop handles at the image corners are full white squares at every zoom', 'index', '880x600', '', snip_common + r"""
+    const live = document.getElementById('snip-edit-live');
+    const stage = document.getElementById('snip-edit-stage');
+    const white = (x, y) => { const d = live.getContext('2d').getImageData(x, y, 1, 1).data; return d[3] > 200 && d[0] > 240; };
+    await snipOpen(1400, 800);
+    document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleep(300);
+    let z = stage.getBoundingClientRect().width / live.width;
+    let k = Math.round(6 / z);
+    if (!white(k, k)) errs.push('cropgrip: the top-left corner handle is not white 6 px inside the corner (zoom ' + z.toFixed(2) + ')');
+    if (!white(live.width - 1 - k, live.height - 1 - k)) errs.push('cropgrip: the bottom-right corner handle is not white 6 px inside the corner');
+    for (let i = 0; i < 2; i++) { document.getElementById('snip-edit-zoom-in').click(); await sleep(200); }
+    z = stage.getBoundingClientRect().width / live.width;
+    k = Math.round(6 / z);
+    if (!white(k, k)) errs.push('cropgrip: after zooming in the top-left corner handle is not white (zoom ' + z.toFixed(2) + ')');
+""")
     failed += ar_probe('bq830b', '830: Enter with the untouched full-image box applies the editor without a crop', 'index', '880x600', '', snip_common + r"""
     await snipOpen(1400, 800);
     document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleep(200);
