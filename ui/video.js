@@ -179,6 +179,7 @@ export const VE = {
   defaultPanel: "edit",
   ovPixelateBlockDefault: 16,
   ovSpotlightDimDefault: 0.6,
+  ovSpotlightShapeDefault: "rect",
   ovImageOpacityDefault: 100,
   snapOn: true,
   snapTolPx: 6,
@@ -2541,6 +2542,7 @@ export function applySettings(settings) {
   if (Number.isFinite(lastPixelateBlock) && lastPixelateBlock > 0) VE.ovPixelateBlockDefault = Math.round(lastPixelateBlock);
   const lastSpotlightDim = Number(values.veOvLastSpotlightDim);
   if (Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
+  if (["rect", "round", "ellipse"].includes(texts.veOvLastSpotlightShape)) VE.ovSpotlightShapeDefault = texts.veOvLastSpotlightShape;
   const lastImageOpacity = Number(values.veOvLastImageOpacity);
   if (Number.isFinite(lastImageOpacity) && lastImageOpacity > 0) VE.ovImageOpacityDefault = Math.round(lastImageOpacity);
   VE.ovKeysColorDefault = HEX_RE.test(texts.veOvLastKeysColor || "") ? texts.veOvLastKeysColor : VE.ovColorDefault;

@@ -74,6 +74,8 @@ function makeSandbox(extra) {
       extractBlock("rotationFilter", "function rotationFilter(quarters) {"),
       extractBlock("turnedMovieLabel", "function turnedMovieLabel(op, src, label, parts) {"),
       extractBlock("clipVideoLabel", "function clipVideoLabel(op, label, parts, fps) {"),
+      extractBlock("shapeRadius", "function shapeRadius(rect) {"),
+      extractBlock("shapeMask", "function shapeMask(rect, shape) {"),
       extractBlock("buildVideoChain", "function buildVideoChain() {"),
       extractLine("editDragActive", "const editDragActive = () => !!VE.drag && [\"rect\", \"resize\", \"trim\"].includes(VE.drag.kind);"),
       extractBlock("undo", "function undo() {"),
@@ -1124,6 +1126,34 @@ const pending = [];
   expect("the copy note names the keyframe start", /veCopyNote: "[^"]*nearest keyframe before your start point\."/.test(en));
   const exportSrc = fs.readFileSync(path.join(__dirname, "..", "ui", "videoExport.js"), "utf8");
   expect("the mixed-sound copy has its own note", /copyMode === "mix" \? "veCopyMixNote" : "veCopyNote"/.test(exportSrc) && /veCopyMixNote: "[^"]*mixed into one\./.test(en));
+}
+
+// Focus area and pixelate can be a rectangle, rounded or an ellipse. The rectangle keeps the
+// old graph text exactly; the other two cut the clear/mosaic part with a mask built once.
+{
+  const graphFor = (op) => {
+    const sb = makeSandbox({
+      exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true,
+      SILENT_FORMATS: new Set(["gif"]), MAX_SILENT_DIM: 1280, afterOpsChanged: () => {},
+    });
+    sb.VE = baseState([]);
+    Object.assign(sb.VE, { floor: 0, undoMax: 50, redo: [], w: 1920, h: 1080, fps: 30 });
+    vm.runInContext("pushOp", sb)(Object.assign({ tool: "overlay", id: "S", startMs: 0, endMs: 10000, rect: { x: 100, y: 80, w: 400, h: 300 } }, op));
+    return vm.runInContext("buildVideoChain()", sb) || "";
+  };
+  const spot = { kind: "spotlight", dim: 0.6 };
+  const plainSpot = graphFor(spot);
+  expect("a focus area without a shape has no mask", !/alphamerge|geq/.test(plainSpot) && /overlay=100:80:/.test(plainSpot), plainSpot);
+  expect("a rect shape equals no shape", graphFor({ ...spot, shape: "rect" }) === plainSpot);
+  const ell = graphFor({ ...spot, shape: "ellipse" });
+  expect("an elliptical focus area merges a mask", /alphamerge/.test(ell) && /geq=lum=/.test(ell), ell);
+  expect("the ellipse mask is the size of the area", /color=c=black:s=400x300:d=1,format=gray,geq=lum='/.test(ell), ell);
+  expect("the mask is built once and looped", /loop=loop=-1:size=1/.test(ell), ell);
+  const rnd = graphFor({ ...spot, shape: "round" });
+  expect("a rounded focus area carries its radius", /alphamerge/.test(rnd) && /max\(0,max\(50-X/.test(rnd), rnd);
+  expect("the rounded radius has a floor", vm.runInContext("shapeRadius", makeSandbox({}))({ w: 6, h: 6 }) === 2);
+  const prev = fs.readFileSync(path.join(__dirname, "..", "ui", "videoPreview.js"), "utf8");
+  expect("the preview reads the shape for the mosaic and the focus area", /shapeRadius/.test(prev) && /borderRadius/.test(prev) && /clipPath = `path\(evenodd/.test(prev));
 }
 
 // Clicking the preview picks the overlay under the pointer: the top-most one showing at the

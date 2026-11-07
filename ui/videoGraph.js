@@ -142,6 +142,23 @@ function clipVideoLabel(op, label, parts, fps) {
 // refuse a movie=/amovie= source that is anything else.
 export const exportMediaPaths = () => [...new Set(VE.ops.map((o) => o.path).filter(Boolean))];
 
+// Radius of a rounded focus area or pixelation in source pixels: one sixth of the short side.
+export function shapeRadius(rect) {
+  return Math.max(2, Math.round(Math.min(rect.w, rect.h) / 6));
+}
+
+// The alpha mask of a rounded or elliptical area as a source filter chain (no input): built
+// once and looped, which is much cheaper than a per-frame mask. Null for the plain rectangle.
+// The single quotes keep the commas inside the geq value.
+function shapeMask(rect, shape) {
+  if (shape !== "round" && shape !== "ellipse") return null;
+  const r = shapeRadius(rect);
+  const expr = shape === "ellipse"
+    ? "255*lte(pow((X-W/2+0.5)/(W/2),2)+pow((Y-H/2+0.5)/(H/2),2),1)"
+    : `255*lte(pow(max(0,max(${r}-X,X-(W-1-${r}))),2)+pow(max(0,max(${r}-Y,Y-(H-1-${r}))),2),${r * r})`;
+  return `color=c=black:s=${rect.w}x${rect.h}:d=1,format=gray,geq=lum='${expr}',loop=loop=-1:size=1`;
+}
+
 // The one place the operation list becomes ffmpeg. Produces a complete graph
 // consuming [0:v] and ending on [vout]; the audio half is built separately below
 // and ends on [aout], so the backend joins the two with ";" into a single
@@ -261,10 +278,18 @@ export function buildVideoChain() {
       cur = out;
     } else if (op.kind === "spotlight") {
       const a = label(), b = label(), clear = label(), dark = label(), out = label();
+      const mask = shapeMask(op.rect, op.shape);
       parts.push(`[${cur}]split[${a}][${b}]`);
-      parts.push(`[${b}]crop=${op.rect.w}:${op.rect.h}:${op.rect.x}:${op.rect.y}[${clear}]`);
+      if (mask) {
+        const clear0 = label(), m = label();
+        parts.push(`[${b}]crop=${op.rect.w}:${op.rect.h}:${op.rect.x}:${op.rect.y},format=yuva420p[${clear0}]`);
+        parts.push(`${mask}[${m}]`);
+        parts.push(`[${clear0}][${m}]alphamerge[${clear}]`);
+      } else {
+        parts.push(`[${b}]crop=${op.rect.w}:${op.rect.h}:${op.rect.x}:${op.rect.y}[${clear}]`);
+      }
       parts.push(`[${a}]drawbox=x=0:y=0:w=iw:h=ih:color=black@${op.dim.toFixed(2)}:t=fill:${enable}[${dark}]`);
-      parts.push(`[${dark}][${clear}]overlay=${op.rect.x}:${op.rect.y}:${enable}[${out}]`);
+      parts.push(`[${dark}][${clear}]overlay=${op.rect.x}:${op.rect.y}${mask ? ":shortest=1" : ""}:${enable}[${out}]`);
       cur = out;
     } else if (op.kind === "keys") {
       for (const filter of buildKeysFilters(op)) chain(filter);

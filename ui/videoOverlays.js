@@ -79,7 +79,7 @@ export async function addOverlay(kind) {
   } else if (kind === "pixelate") {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
-    op = { ...base, rect: centeredRect(0.45), dim: VE.ovSpotlightDimDefault ?? 0.6 };
+    op = { ...base, rect: centeredRect(0.45), dim: VE.ovSpotlightDimDefault ?? 0.6, shape: VE.ovSpotlightShapeDefault || "rect" };
   } else if (kind === "keys") {
     op = {
       ...base, rect: centeredRect(0.3), preset: "pressed", keys: [],
@@ -571,6 +571,10 @@ function rememberOverlayValues(kind, changes) {
       VE.ovSpotlightDimDefault = changes.dim;
       invoke("set_ui_value", { key: "veOvLastSpotlightDim", value: Math.round(changes.dim * 100) }).catch(() => {});
     }
+    if (changes.shape !== undefined) {
+      VE.ovSpotlightShapeDefault = changes.shape;
+      invoke("set_ui_text", { key: "veOvLastSpotlightShape", value: changes.shape }).catch(() => {});
+    }
   } else if (kind === "image") {
     if (changes.opacity !== undefined) {
       VE.ovImageOpacityDefault = changes.opacity;
@@ -748,6 +752,7 @@ export function renderOverlayEditor() {
   }
 
   if (op.kind === "spotlight") {
+    box.appendChild(fieldRow(t("veOvShape"), ovTrack("shape", selectInput([["rect", t("veOvShapeRect")], ["round", t("veOvShapeRound")], ["ellipse", t("veOvShapeEllipse")]], op.shape || "rect", (v) => commitOverlay(op, { shape: v })), (o) => o.shape || "rect")));
     box.appendChild(fieldRow(t("veOvDim"), ovTrack("dim", numberInput(Math.round(op.dim * 100), 10, 95, 5, (v) => commitOverlay(op, { dim: v / 100 })), (o) => String(Math.round(o.dim * 100)))));
   }
 
