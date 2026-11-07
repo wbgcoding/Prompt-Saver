@@ -4397,9 +4397,10 @@ body.drag-over::after {
 /* List/tiles toggle next to the type filter. */
 .lib-view-toggle { display: inline-flex; align-items: center; gap: 6px; }
 /* Tiles: same rows, same selection and right-click behaviour; only the layout
-   and what each one shows changes. A tile is just its picture and its name. */
+   and what each one shows changes. A tile is just its picture and its name.
+   A low window shrinks the tiles so one row with its names still fits. */
 .library-list.lib-tiles-view {
-  grid-template-columns: repeat(auto-fill, minmax(var(--lib-tile-size, 140px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--lib-tile-size, 140px), 30vh), 1fr));
   align-content: start;
 }
 .library-list.lib-tiles-view .lib-item {
@@ -4414,7 +4415,7 @@ body.drag-over::after {
 .library-list.lib-tiles-view .lib-item .lib-thumb-wrap,
 .library-list.lib-tiles-view .lib-item .lib-tile-placeholder {
   width: 100%;
-  height: var(--lib-tile-size, 140px);
+  height: min(var(--lib-tile-size, 140px), 30vh);
   align-self: stretch;
 }
 .library-list.lib-tiles-view .lib-item .lib-tile-placeholder {
