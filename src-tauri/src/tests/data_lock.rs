@@ -822,11 +822,12 @@ fn demo_text_is_complete_dash_free_and_keeps_the_placeholder_in_every_language()
 #[test]
 fn demo_text_falls_back_to_english_and_ignores_a_region() {
     let en = demo_text::demo_text("en");
-    for odd in ["", "xx", "klingon", "fr-FR"] {
+    for odd in ["", "xx", "klingon", "ko-KR"] {
         assert_eq!(demo_text::demo_text(odd).welcome_name, en.welcome_name, "{odd:?} must fall back to EN");
     }
     assert_eq!(demo_text::demo_text("pt-BR").welcome_name, demo_text::demo_text("pt").welcome_name);
     assert_eq!(demo_text::demo_text("zh_CN").welcome_name, demo_text::demo_text("zh").welcome_name);
+    assert_eq!(demo_text::demo_text("fr-FR").welcome_name, demo_text::demo_text("fr").welcome_name);
     assert_eq!(demo_text::demo_text("DE").welcome_name, "Willkommen");
 }
 

@@ -118,7 +118,7 @@ fn an_update_does_not_re_vet_the_path_the_prompt_already_holds() {
 fn a_file_on_another_computer_gets_a_translated_message() {
     let map = source!("../../../ui/errors.js");
     assert!(map.contains("\"source-not-allowed\": \"errSourceNotAllowed\""));
-    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"] {
         let path = format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"));
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.contains("    errSourceNotAllowed: \""), "{lang} lacks the message");

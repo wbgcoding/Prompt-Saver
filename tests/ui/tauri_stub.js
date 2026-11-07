@@ -1560,6 +1560,7 @@ const TRAY_TEXT = {
   nl: { open: "Openen", quit: "Afsluiten", recent: "Onlangs gebruikt", favs: "Favorieten", search: "Zoeken…" },
   tr: { open: "Aç", quit: "Çıkış", recent: "Son kullanılanlar", favs: "Favoriler", search: "Ara…" },
   ro: { open: "Deschide", quit: "Ieșire", recent: "Utilizate recent", favs: "Favorite", search: "Caută…" },
+  fr: { open: "Ouvrir", quit: "Quitter", recent: "Utilisés récemment", favs: "Favoris", search: "Rechercher…" },
 };
 
 const noopWindow = {

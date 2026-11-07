@@ -1689,6 +1689,7 @@ pub(crate) fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static 
         "nl" => ["Kies de map voor screenshots", "Kies de exportmap voor video's", "Kies de opnamemap", "Kies de synchronisatiemap", "Kies de gegevensmap"],
         "tr" => ["Ekran görüntüsü klasörünü seçin", "Video dışa aktarma klasörünü seçin", "Kayıt klasörünü seçin", "Eşitleme klasörünü seçin", "Veri klasörünü seçin"],
         "ro" => ["Alegeți folderul pentru capturi de ecran", "Alegeți folderul de export video", "Alegeți folderul pentru înregistrări", "Alegeți folderul de sincronizare", "Alegeți folderul de date"],
+        "fr" => ["Choisir le dossier des captures d'écran", "Choisir le dossier d'export des vidéos", "Choisir le dossier des enregistrements", "Choisir le dossier de synchronisation", "Choisir le dossier des données"],
         _ => ["Choose the screenshot folder", "Choose the video export folder", "Choose the recording folder", "Choose the sync folder", "Choose the data folder"],
     };
     let idx = match purpose {

@@ -38,8 +38,9 @@
       "nsis": {
         "installMode": "both",
         "installerIcon": "icons/installer-icon.ico",
-        "languages": ["English", "German", "Spanish", "Italian", "PortugueseBR", "Polish", "SimpChinese", "Japanese", "Dutch", "Turkish", "Romanian"],
+        "languages": ["English", "German", "Spanish", "French", "Italian", "PortugueseBR", "Polish", "SimpChinese", "Japanese", "Dutch", "Turkish", "Romanian"],
         "customLanguageFiles": {
+          "French": "nsis-languages/French.nsh",
           "German": "nsis-languages/German.nsh",
           "Polish": "nsis-languages/Polish.nsh",
           "Romanian": "nsis-languages/Romanian.nsh"

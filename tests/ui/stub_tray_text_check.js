@@ -3,6 +3,7 @@
 // Run:  node tests/ui/stub_tray_text_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
 const path = require("path");
+const WANT = require("../i18n_load.js").LANGS.length;
 
 const root = path.join(__dirname, "..", "..");
 const rust = fs.readFileSync(path.join(root, "src-tauri", "src", "model.rs"), "utf8").replace(/\r\n/g, "\n");
@@ -47,7 +48,7 @@ const fields = [
   ["favs", (l) => (sections[l] || [])[1]],
   ["search", (l) => (search[l] || [])[0]],
 ];
-if (langs.length !== 11) { console.log("FAIL: expected 11 languages in tray_labels, found " + langs.length); bad++; }
+if (langs.length !== WANT) { console.log("FAIL: expected " + WANT + " languages in tray_labels, found " + langs.length); bad++; }
 for (const lang of langs) {
   if (!table[lang]) { console.log("FAIL: " + lang + ": missing in stub TRAY_TEXT"); bad++; continue; }
   for (const [field, get] of fields) {

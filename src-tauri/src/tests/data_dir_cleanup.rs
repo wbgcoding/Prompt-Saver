@@ -259,7 +259,7 @@ fn moving_the_data_folder_is_refused_while_a_recording_runs() {
     let map = source!("../../../ui/errors.js");
     assert!(map.contains("\"data-move-recording\": \"errDataMoveRecording\""));
     assert!(map.contains("\"recording-active\": \"errUpdateRecordingActive\""));
-    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"] {
         let text = fs::read_to_string(format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
         assert!(text.contains("    errDataMoveRecording: \""), "{lang}");
     }
@@ -295,7 +295,7 @@ fn the_data_folder_move_runs_off_the_runtime_and_one_at_a_time() {
     let menu = source!("../../../ui/expertMenu.js");
     assert!(menu.contains("dataDirMoving = true;") && menu.contains("dataDirMoving = false;"));
     assert!(menu.contains("btn.disabled = true") && menu.contains("btn.disabled = false"));
-    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"] {
+    for lang in ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"] {
         let text = fs::read_to_string(format!("{}/../ui/i18n/{lang}.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
         assert!(text.contains("    errDataMoveBusy: \""), "{lang}");
     }

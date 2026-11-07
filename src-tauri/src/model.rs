@@ -525,6 +525,7 @@ pub(crate) fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
         "nl" => ("WebView2-runtime ontbreekt", "{app} heeft de Microsoft WebView2-runtime nodig.\n\nNu downloaden en installeren? Start {app} daarna gewoon opnieuw."),
         "tr" => ("WebView2 çalışma zamanı eksik", "{app}, Microsoft WebView2 çalışma zamanına ihtiyaç duyar.\n\nŞimdi indirilip kurulsun mu? Ardından {app}'ı yeniden başlatmanız yeterli."),
         "ro" => ("Lipsește WebView2 Runtime", "{app} are nevoie de Microsoft WebView2 Runtime.\n\nDescărcați și instalați acum? Apoi porniți pur și simplu {app} din nou."),
+        "fr" => ("Runtime WebView2 manquant", "{app} a besoin de Microsoft WebView2 Runtime.\n\nLe télécharger et l'installer maintenant ? Relancez ensuite {app}."),
         _ => ("WebView2 runtime missing", "{app} needs the Microsoft WebView2 runtime.\n\nDownload and install it now? Simply start {app} again afterwards."),
     }
 }
@@ -539,8 +540,8 @@ pub(crate) fn webview2_dialog(lang: &str) -> (String, String) {
 }
 
 // Supported UI languages besides English (keep in sync with ui/i18n.js).
-pub(crate) const LANG_CODES: [&str; 10] = [
-    "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro",
+pub(crate) const LANG_CODES: [&str; 11] = [
+    "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr",
 ];
 
 #[link(name = "kernel32")]
@@ -620,6 +621,7 @@ pub(crate) fn tray_labels(lang: &str) -> (&'static str, &'static str) {
         "nl" => ("Openen", "Afsluiten"),
         "tr" => ("Aç", "Çıkış"),
         "ro" => ("Deschide", "Ieșire"),
+        "fr" => ("Ouvrir", "Quitter"),
         _ => ("Open", "Quit"),
     }
 }
@@ -653,6 +655,7 @@ pub(crate) fn tray_recording_label(lang: &str) -> &'static str {
         "nl" => "Opname…",
         "tr" => "Kaydediliyor…",
         "ro" => "Se înregistrează…",
+        "fr" => "Enregistrement…",
         _ => "Recording…",
     }
 }
@@ -671,6 +674,7 @@ pub(crate) fn tray_rec_stop_label(lang: &str) -> &'static str {
         "nl" => "Opname stoppen",
         "tr" => "Kaydı durdur",
         "ro" => "Oprește înregistrarea",
+        "fr" => "Arrêter l'enregistrement",
         _ => "Stop recording",
     }
 }
@@ -687,6 +691,7 @@ pub(crate) fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
             "nl" => "Opname hervatten",
             "tr" => "Kaydı sürdür",
             "ro" => "Reia înregistrarea",
+            "fr" => "Reprendre l'enregistrement",
             _ => "Resume recording",
         }
     } else {
@@ -701,6 +706,7 @@ pub(crate) fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
             "nl" => "Opname pauzeren",
             "tr" => "Kaydı duraklat",
             "ro" => "Pune înregistrarea pe pauză",
+            "fr" => "Mettre l'enregistrement en pause",
             _ => "Pause recording",
         }
     }
@@ -720,6 +726,7 @@ pub(crate) fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
         "nl" => ("Onlangs gebruikt", "Favorieten"),
         "tr" => ("Son kullanılanlar", "Favoriler"),
         "ro" => ("Utilizate recent", "Favorite"),
+        "fr" => ("Utilisés récemment", "Favoris"),
         _ => ("Recently used", "Favorites"),
     }
 }
@@ -738,6 +745,7 @@ pub(crate) fn tray_search_placeholder(lang: &str) -> &'static str {
         "nl" => "Zoeken…",
         "tr" => "Ara…",
         "ro" => "Caută…",
+        "fr" => "Rechercher…",
         _ => "Search…",
     }
 }
@@ -754,6 +762,7 @@ pub(crate) fn home_name(lang: &str) -> &'static str {
         "ja" => "ホーム",
         "tr" => "Ana sayfa",
         "ro" => "Acasă",
+        "fr" => "Accueil",
         _ => "Home", // en + it + nl
     }
 }

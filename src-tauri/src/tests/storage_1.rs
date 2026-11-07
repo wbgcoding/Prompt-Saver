@@ -359,7 +359,8 @@ fn folder_picker_title_maps_every_known_purpose_by_language() {
     assert_eq!(folder_picker_title("data", "de"), Some("Datenordner wählen"));
     // Any other UI language falls back to English, same as the rest of
     // the app's backend-side strings.
-    assert_eq!(folder_picker_title("sync", "fr"), Some("Choose the sync folder"));
+    assert_eq!(folder_picker_title("sync", "ko"), Some("Choose the sync folder"));
+    assert_eq!(folder_picker_title("sync", "fr"), Some("Choisir le dossier de synchronisation"));
 }
 
 #[test]

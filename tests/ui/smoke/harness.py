@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parents[1]
 # is preloaded in the staged main page.
 LANG_PRELOADS = "".join(
     f'<link rel="modulepreload" href="i18n/{c}.js" />'
-    for c in ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"))
+    for c in ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"))
 
 # The floor is the app's own minimum window size: read it, so this sweep follows
 # tauri.conf.json instead of drifting away from it.

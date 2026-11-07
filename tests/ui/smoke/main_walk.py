@@ -7,7 +7,7 @@ import re
 from .harness import LANG_PRELOADS, SIZES, WRAPPER, unescape, run_chrome
 from .walk import SECTIONS
 
-ALL_LANGS = ["de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"]
+ALL_LANGS = ["de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"]
 
 
 HEAD = """

@@ -333,6 +333,39 @@ const RO: DemoText = DemoText {
     folder: "Dosar de exemplu",
 };
 
+const FR: DemoText = DemoText {
+    tag_demo: "Démo",
+    tag_favorite: "Favori",
+    welcome_name: "Bienvenue",
+    welcome_text: "Ceci est une entrée d'exemple en mode démo. Un clic la copie comme n'importe quelle autre.",
+    image_name: "Vignette image",
+    image_text: "Cette vignette affiche une image à la place de son nom.",
+    rotating_name: "Salutation changeante",
+    rotating_text: "Bonjour !",
+    rotating_a: "Bon après-midi !",
+    rotating_b: "Bonsoir !",
+    placeholder_name: "Salutation personnelle",
+    placeholder_text: "Bonjour {?Nom}, merci pour votre message.",
+    favorite_name: "Prompt favori",
+    favorite_text: "Une entrée d'exemple favorite.",
+    chain_a_name: "Premier élément",
+    chain_a_text: "La première partie d'une chaîne possible.",
+    chain_b_name: "Deuxième élément",
+    chain_b_text: "La deuxième partie d'une chaîne possible.",
+    attach_name: "Fichier joint",
+    attach_file: "Pièce jointe.txt",
+    attach_body: "Un fichier d'exemple inoffensif pour le mode démo.\n",
+    folder_a_name: "Entrée du dossier 1",
+    folder_a_text: "Première entrée du dossier d'exemple.",
+    folder_b_name: "Entrée du dossier 2",
+    folder_b_text: "Deuxième entrée du dossier d'exemple.",
+    video_name: "Enregistrement d'écran",
+    video_file: "Enregistrement d'écran.mp4",
+    view_home: "Accueil",
+    view_team: "Équipe",
+    folder: "Dossier d'exemple",
+};
+
 const TR: DemoText = DemoText {
     tag_demo: "Demo",
     tag_favorite: "Favori",
@@ -400,7 +433,7 @@ const ZH: DemoText = DemoText {
 };
 
 #[cfg(test)]
-pub const DEMO_LANGS: [&str; 11] = ["en", "de", "es", "it", "ja", "nl", "pl", "pt", "ro", "tr", "zh"];
+pub const DEMO_LANGS: [&str; 12] = ["en", "de", "es", "fr", "it", "ja", "nl", "pl", "pt", "ro", "tr", "zh"];
 
 // The row for a UI language code. A region suffix ("pt-BR", "zh_CN") is
 // ignored; anything unknown falls back to English.
@@ -410,6 +443,7 @@ pub fn demo_text(lang: &str) -> &'static DemoText {
     match base {
         "de" => &DE,
         "es" => &ES,
+        "fr" => &FR,
         "it" => &IT,
         "ja" => &JA,
         "nl" => &NL,

@@ -631,7 +631,7 @@ pub(crate) fn is_video_format(format: &str) -> bool {
 // ffmpeg's own log lines ("moov atom not found", "Invalid data found when processing input")
 // diagnose for someone who knows what they mean, not a message to show a user. Every ffmpeg
 // (and ffmpeg-adjacent Windows IO) failure goes through classify_ffmpeg_error() to one of
-// these stable keys, translated in all eleven languages; the exact wording stays reachable
+// these stable keys, translated in all UI languages; the exact wording stays reachable
 // as a collapsible "technical details" line, never the headline. A user-triggered cancel is
 // handled separately (see is_cancelled() below) and never reaches this classifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

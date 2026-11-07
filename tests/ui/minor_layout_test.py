@@ -433,7 +433,7 @@ CASES = (
     ("folder-names-narrow", FOLDER_NAMES, 680, 460, "de"),
 )
 
-LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro")
+LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr")
 PRELOADS = "".join(f'<link rel="modulepreload" href="i18n/{c}.js" />' for c in LANGS)
 
 
