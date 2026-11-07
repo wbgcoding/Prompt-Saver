@@ -433,6 +433,24 @@ SECTION = """\
           }
         }
       }
+      // The X at the strip's top left ends the chain.
+      {
+        const ovBar = document.getElementById('chain-overview');
+        const cancelX = ovBar && ovBar.querySelector('.chain-ov-cancel');
+        const ovTitle2 = ovBar && ovBar.querySelector('.chain-ov-title');
+        if (!cancelX) {
+          out.errors.push('61: the chain overview has no cancel X');
+        } else {
+          if (ovTitle2 && cancelX.getBoundingClientRect().right > ovTitle2.getBoundingClientRect().left) {
+            out.errors.push('61: the cancel X is not left of the strip title');
+          }
+          cancelX.click();
+          await sleep(150);
+          if (!ovBar.classList.contains('hidden')) out.errors.push('61: the cancel X left the chain overview open');
+          if (document.body.classList.contains('chain-mode')) out.errors.push('61: the cancel X left chain mode on');
+          if (document.getElementById('chain-btn').classList.contains('active')) out.errors.push('61: the chain button stayed active after the cancel X');
+        }
+      }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
       await sleep(150);
       // 510: with the chain off again, the grid must sit exactly where it did

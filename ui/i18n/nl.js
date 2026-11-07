@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "De tegel krimpt licht zolang hij wordt ingedrukt.",
     tipChainPrompts: "Meerdere VERSCHILLENDE items die samen als één tekst worden gekopieerd. Om bouwstenen achter elkaar te zetten.",
     chainOverviewTitle: "Stappen van de keten",
+    chainCancelTip: "Keten annuleren",
     chainNeeds: "heeft nodig",
     chainFills: "vult in",
     chainMissing: "niets ervoor vult dit in:",

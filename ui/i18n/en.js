@@ -273,6 +273,7 @@ export default {
     tipTilePressScale: "The tile shrinks slightly while it is pressed.",
     tipChainPrompts: "Several DIFFERENT entries copied together as one text. For putting building blocks in a row.",
     chainOverviewTitle: "Chain steps",
+    chainCancelTip: "Cancel chain",
     chainNeeds: "needs",
     chainFills: "fills",
     chainMissing: "nothing earlier fills:",

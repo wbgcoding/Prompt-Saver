@@ -273,6 +273,7 @@ export default {
     tipTilePressScale: "Die Kachel schrumpft leicht, solange sie gedrückt wird.",
     tipChainPrompts: "Kopiert mehrere VERSCHIEDENE Einträge zusammen als einen Text, um Bausteine hintereinander zu setzen.",
     chainOverviewTitle: "Schritte der Kette",
+    chainCancelTip: "Kette abbrechen",
     chainNeeds: "braucht",
     chainFills: "füllt",
     chainMissing: "von nichts davor gefüllt:",

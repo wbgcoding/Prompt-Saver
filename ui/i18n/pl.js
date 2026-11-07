@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "Kafelek lekko się kurczy, gdy jest wciśnięty.",
     tipChainPrompts: "Kilka RÓŻNYCH wpisów skopiowanych razem jako jeden tekst. Do ustawiania klocków jeden za drugim.",
     chainOverviewTitle: "Kroki łańcucha",
+    chainCancelTip: "Anuluj łańcuch",
     chainNeeds: "wymaga",
     chainFills: "wypełnia",
     chainMissing: "nic wcześniej nie wypełnia:",

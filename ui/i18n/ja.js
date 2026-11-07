@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "押している間、タイルがわずかに縮みます。",
     tipChainPrompts: "複数の異なる項目をまとめて一つのテキストとしてコピーします。パーツを順に並べるためのものです。",
     chainOverviewTitle: "チェーンの手順",
+    chainCancelTip: "チェーンをキャンセル",
     chainNeeds: "必要",
     chainFills: "満たす",
     chainMissing: "それより前に満たす手順がありません：",

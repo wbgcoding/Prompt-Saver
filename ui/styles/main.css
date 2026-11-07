@@ -1758,6 +1758,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex: 0 0 auto;
 }
 .chain-ov-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+/* The X at the strip's top left ends the chain. */
+.chain-ov-head { display: flex; align-items: center; gap: 4px; }
+.chain-ov-cancel { width: 22px; height: 22px; padding: 0; margin: -4px 0 -4px -4px; align-items: center; justify-content: center; }
 /* The steps' own container: flows them left to right and wraps, instead of
    the title's column sharing space with a full-width stack of rows. */
 .chain-ov-list {

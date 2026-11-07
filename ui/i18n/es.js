@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "El botón se encoge ligeramente mientras se pulsa.",
     tipChainPrompts: "Varias entradas DISTINTAS copiadas juntas como un solo texto. Para poner bloques en fila.",
     chainOverviewTitle: "Pasos de la cadena",
+    chainCancelTip: "Cancelar cadena",
     chainNeeds: "necesita",
     chainFills: "rellena",
     chainMissing: "nada anterior lo rellena:",

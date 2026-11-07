@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "Il riquadro si restringe leggermente mentre viene premuto.",
     tipChainPrompts: "Più voci DIVERSE copiate insieme come un unico testo. Per mettere in fila dei blocchi.",
     chainOverviewTitle: "Passaggi della catena",
+    chainCancelTip: "Annulla catena",
     chainNeeds: "richiede",
     chainFills: "compila",
     chainMissing: "nessun passaggio precedente lo compila:",

@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "Butonul se micșorează ușor cât timp este apăsat.",
     tipChainPrompts: "Mai multe intrări DIFERITE copiate împreună ca un singur text. Pentru a pune piese una după alta.",
     chainOverviewTitle: "Pașii lanțului",
+    chainCancelTip: "Anulează lanțul",
     chainNeeds: "are nevoie de",
     chainFills: "completează",
     chainMissing: "niciun pas anterior nu completează:",

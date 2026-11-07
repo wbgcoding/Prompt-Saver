@@ -89,10 +89,22 @@ export function renderChainOverview() {
   if (!(chainMode && chainSel.length > 0)) { bar.innerHTML = ""; return; }
   const report = chainVarReport(chainSel.map((id) => chainRaw.get(id) ?? (prompts.find((x) => x.id === id) || {}).text ?? ""));
   bar.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "chain-ov-head";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "icon-btn chain-ov-cancel";
+  cancel.title = t("chainCancelTip");
+  cancel.setAttribute("aria-label", t("chainCancelTip"));
+  cancel.tabIndex = 0;
+  cancel.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+  cancel.addEventListener("click", () => setChainMode(false));
+  head.appendChild(cancel);
   const title = document.createElement("div");
   title.className = "chain-ov-title";
   title.textContent = t("chainOverviewTitle");
-  bar.appendChild(title);
+  head.appendChild(title);
+  bar.appendChild(head);
   // Rows get their own wrapping row instead of sharing the column with the
   // title above, so the steps flow left to right and wrap as a block.
   const list = document.createElement("div");

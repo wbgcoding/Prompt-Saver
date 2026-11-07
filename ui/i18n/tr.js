@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "Basılı tutulduğu sürece kutucuk hafifçe küçülür.",
     tipChainPrompts: "Birden çok FARKLI girdi birlikte tek bir metin olarak kopyalanır. Yapı taşlarını art arda dizmek için.",
     chainOverviewTitle: "Zincir adımları",
+    chainCancelTip: "Zinciri iptal et",
     chainNeeds: "gerektirir",
     chainFills: "doldurur",
     chainMissing: "önceki hiçbir adım doldurmuyor:",

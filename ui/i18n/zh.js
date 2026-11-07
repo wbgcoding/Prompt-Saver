@@ -296,6 +296,7 @@ export default {
     tipTilePressScale: "按下时磁贴会略微缩小。",
     tipChainPrompts: "多个不同的条目合并复制为一段文本。用于把若干构建块依次排列。",
     chainOverviewTitle: "链的步骤",
+    chainCancelTip: "取消链",
     chainNeeds: "需要",
     chainFills: "填充",
     chainMissing: "之前没有步骤填充：",
