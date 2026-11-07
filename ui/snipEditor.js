@@ -2051,16 +2051,23 @@ export function initSnipEditor() {
   // it stays open. `replacing`: a new capture takes the editor over, so nothing goes to the
   // clipboard.
   // A second request while one is running (a capture or a quit during the question or the save)
-  // waits for that one instead of asking again.
+  // waits for that one instead of asking again. A capture joining a user-started close turns it
+  // into a replacing one: the old edited image must not reach the clipboard after the new shot.
   let snipCloseRun = null;
+  let snipCloseReplacing = false;
   function snipEditRequestClose(opts) {
-    if (!snipCloseRun) snipCloseRun = snipEditRequestCloseRun(opts).finally(() => { snipCloseRun = null; });
+    if (snipCloseRun) {
+      if (opts?.replacing) snipCloseReplacing = true;
+      return snipCloseRun;
+    }
+    snipCloseReplacing = !!opts?.replacing;
+    snipCloseRun = snipEditRequestCloseRun(opts).finally(() => { snipCloseRun = null; snipCloseReplacing = false; });
     return snipCloseRun;
   }
-  async function snipEditRequestCloseRun({ replacing = false } = {}) {
+  async function snipEditRequestCloseRun() {
     snipEditFinishTextIfOpen();
     const leave = (opts) => {
-      if (replacing) { snipEditCancel(); return Promise.resolve(); }
+      if (snipCloseReplacing) { snipEditCancel(); return Promise.resolve(); }
       return snipEditApply(undefined, opts);
     };
     if (!snipEditDirty()) { await leave(); return true; }
