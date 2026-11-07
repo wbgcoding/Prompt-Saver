@@ -1891,6 +1891,19 @@ def run(browser, tmp):
 """
     for size_lh in ('880x600', '680x460'):
         failed += ar_probe('blh01-' + size_lh, 'library head: Clear copy history shares the first line at ' + size_lh, 'index', size_lh, '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', lib_head_body)
+    # The two bar-restore buttons draw a centred, mirrored icon.
+    failed += ar_probe('brs01', 'bar restore buttons: both icons are centred and the same height', 'index', '880x600', '', r"""
+    await bootReady();
+    (await import('./windowChrome.js')).setBars(false, false);
+    await sleep(300);
+    const bb = (id) => document.querySelector('#' + id + ' path').getBBox();
+    const t = bb('show-top'), b = bb('show-bottom');
+    for (const [n, r] of [['show-top', t], ['show-bottom', b]]) {
+      const cy = r.y + r.height / 2;
+      if (cy < 11 || cy > 13) errs.push('brs01: ' + n + ' icon centre y is ' + cy);
+    }
+    if (Math.abs(t.height - b.height) > 0.5) errs.push('brs01: icon heights differ: ' + t.height + ' vs ' + b.height);
+    """)
     # Composer button order: Screenshot, Recording, Text recognition, Pipette, File, Voice input.
     failed += ar_probe('bco01', 'composer: the buttons sit in the agreed order', 'index', '880x600', '', r"""
     await bootReady();
