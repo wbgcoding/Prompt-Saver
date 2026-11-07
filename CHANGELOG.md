@@ -9,6 +9,11 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 A maintenance release: a full pass over the code fixed many small faults in
 saving, backups, recordings, the editors and the installer.
 
+### Added
+
+- **Quick voice settings.** Right-click the microphone button for quick voice
+  input settings.
+
 ### Fixed
 
 - **Data and backups.** Undoing a cleared copy history no longer counts the

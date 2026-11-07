@@ -1095,6 +1095,8 @@ pub fn run() {
             ocr_cmds::speech_install_result,
             ocr_cmds::voice_lang_snooze,
             voice_cmds::open_privacy_mic,
+            voice_cmds::voice_default_mic,
+            voice_cmds::open_sound_settings,
             shortcuts::set_voice_hotkey,
             shortcuts::set_rec_stop_hotkey,
             shortcuts::set_rec_pause_hotkey,

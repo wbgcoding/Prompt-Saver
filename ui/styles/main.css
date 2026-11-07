@@ -1666,6 +1666,20 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 .grid-tag-pop > .tag-action, .grid-tag-pop > .hint { flex: 1 1 100%; }
 .grid-tag-pop > .tag-action { margin-left: 0; text-align: center; }
 .grid-tag-pop .tag-chip { min-width: 0; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Quick voice settings: the right-click menu of the microphone buttons. */
+.ctx.voice-pop { width: 320px; max-width: calc(100vw - 12px); padding: 10px 12px; gap: 8px; z-index: 90; }
+.voice-pop-title { font-weight: 600; font-size: 13px; }
+.voice-pop-mic { display: flex; gap: 6px; align-items: baseline; font-size: 12px; min-width: 0; }
+.voice-pop-mic-label { color: var(--muted); flex: 0 0 auto; }
+.voice-pop-mic-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* The generic .ctx button rule flattens buttons; this one keeps the bordered head-toggle look. */
+.ctx.voice-pop .voice-pop-sound { align-self: flex-start; text-align: center; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); }
+.ctx.voice-pop .voice-pop-sound:hover { border-color: var(--accent); background: var(--surface-2); }
+.voice-pop-sep { height: 1px; background: var(--border); margin: 2px 0; }
+.voice-pop .field { margin: 0; }
+/* Narrow box: the label sits above the field, same as paired expert rows. */
+.voice-pop .field.expert-dropdown-row { flex-direction: column; align-items: stretch; }
+.voice-pop .field.expert-dropdown-row .expert-select { align-self: stretch; width: 100%; flex: 0 0 auto; }
 /* A tile that does not match the active filter stays in place (drag/reorder,
    grid geometry unaffected) but reads as excluded, not deleted. */
 .tile.tile-dimmed { opacity: 0.35; }

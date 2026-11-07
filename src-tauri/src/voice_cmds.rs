@@ -161,27 +161,46 @@ pub(crate) async fn voice_enable_online_speech(app: AppHandle, state: State<'_, 
     }
 }
 
+// Name of the microphone voice input records from (the Windows default capture device), shown
+// read-only in the microphone's right-click menu. Async so the COM call stays off the UI thread.
+#[tauri::command]
+pub(crate) async fn voice_default_mic() -> Option<String> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(crate::audio::default_mic_name).await.ok().flatten()
+    }
+}
+
+// Plain "open" verb on ShellExecuteW; a settings URI needs no admin rights. Callers pass only
+// their own fixed constant, never a value from the frontend.
+#[cfg(windows)]
+fn open_settings_uri(uri: &str) -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let code = unsafe {
+        ShellExecuteW(None, &HSTRING::from("open"), &HSTRING::from(uri), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
+    };
+    if (code.0 as isize) <= 32 { return Err("open-failed".to_string()); }
+    Ok(())
+}
+
 // Opens Windows' microphone privacy page, offered from the voice-denied dialog: the app cannot
-// grant mic access itself. Plain "open" verb on ShellExecuteW; a settings URI needs no admin rights.
+// grant mic access itself.
 #[tauri::command]
 pub(crate) fn open_privacy_mic() -> Result<(), String> {
     #[cfg(windows)]
     {
-        use windows::core::{HSTRING, PCWSTR};
-        use windows::Win32::UI::Shell::ShellExecuteW;
-        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-        let code = unsafe {
-            ShellExecuteW(
-                None,
-                &HSTRING::from("open"),
-                &HSTRING::from("ms-settings:privacy-microphone"),
-                PCWSTR::null(),
-                PCWSTR::null(),
-                SW_SHOWNORMAL,
-            )
-        };
-        if (code.0 as isize) <= 32 { return Err("open-failed".to_string()); }
-        Ok(())
+        open_settings_uri("ms-settings:privacy-microphone")
+    }
+}
+
+// Opens Windows' sound settings, where the default microphone is chosen.
+#[tauri::command]
+pub(crate) fn open_sound_settings() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        open_settings_uri("ms-settings:sound")
     }
 }
 

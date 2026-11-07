@@ -47,6 +47,26 @@ pub fn list_mic_devices() -> Vec<MicDevice> {
     out
 }
 
+// The device Windows speech recognition records from: the default capture endpoint. None when
+// there is no microphone or the audio stack fails.
+pub fn default_mic_name() -> Option<String> {
+    let com_ref = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).is_ok() };
+    let name = default_mic_name_inner();
+    if com_ref {
+        unsafe { CoUninitialize() };
+    }
+    name
+}
+
+// Kept apart so every COM object is dropped before the caller's CoUninitialize.
+fn default_mic_name_inner() -> Option<String> {
+    unsafe {
+        let enumerator = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let device = enumerator.GetDefaultAudioEndpoint(eCapture, eConsole).ok()?;
+        device_friendly_name(&device)
+    }
+}
+
 // Kept apart so every COM object is dropped before the caller's CoUninitialize.
 fn list_mic_devices_into(out: &mut Vec<MicDevice>) {
     unsafe {

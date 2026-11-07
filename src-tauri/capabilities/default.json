@@ -295,6 +295,8 @@
     "allow-speech-install-result",
     "allow-voice-lang-snooze",
     "allow-open-privacy-mic",
+    "allow-voice-default-mic",
+    "allow-open-sound-settings",
     "allow-set-voice-hotkey",
     "allow-set-rec-stop-hotkey",
     "allow-set-rec-pause-hotkey",

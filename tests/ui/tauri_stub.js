@@ -773,6 +773,8 @@ const RESULTS = {
   speech_install_result: () => ({ ok: true }),
   voice_lang_snooze: () => null,
   open_privacy_mic: () => null,
+  voice_default_mic: () => (window.__DEFAULT_MIC__ === undefined ? "Stub Microphone" : window.__DEFAULT_MIC__),
+  open_sound_settings: () => { window.__SOUND_SETTINGS_OPENED__ = true; return null; },
   set_voice_hotkey: (a) => {
     const accel = String((a && a.hotkey) || "").toLowerCase();
     if (/^(commandorcontrol|ctrl)\+[a-z]$/.test(accel)) throw new Error("hotkey-system");

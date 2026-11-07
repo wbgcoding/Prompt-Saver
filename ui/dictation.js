@@ -3,7 +3,8 @@ import { $, autoGrow, EMPTY_VALUE, errText, errToast, EXPERT_ACTIONS, flag, inpu
 import { confirmDialog } from "./dialog.js";
 import { fmtCopyTime } from "./journal.js";
 import { copyTextChecked, fmtBytes } from "./floatShared.js";
-import { applyFlags, assignOcrLangsCache, assignVoiceLangsCache } from "./expertMenu.js";
+import { applyFlags, assignOcrLangsCache, assignVoiceLangsCache, dropdownRow, flagRow, valueRow } from "./expertMenu.js";
+import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
 import { autoPasteNow } from "./tiles.js";
 
@@ -413,7 +414,7 @@ export function setVoiceBtnState(activeBtn, cls) {
   for (const b of voiceButtonsAll()) {
     b.classList.remove("is-arming", "is-listening");
     b.setAttribute("aria-pressed", "false");
-    b.title = t("voiceBtnTitle");
+    b.title = t("voiceBtnTip");
   }
   if (!activeBtn || !cls) return;
   activeBtn.classList.add(cls);
@@ -568,6 +569,58 @@ export function wireVoiceButton(btn, targetFn) {
     if (voiceState !== "idle") { stopVoice(); return; }
     startVoice(targetFn(), btn);
   });
+  btn.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (voiceState !== "idle") return;
+    openVoicePop(btn);
+  });
+}
+
+// ---- Quick voice settings (right-click on a mic button) ----
+// A second view of the existing voice settings (same rows, same storage as the expert menu)
+// plus the name of the microphone in use. Voice input records from the Windows default
+// capture device, so the name is read-only and a button opens the Windows sound settings.
+export const voicePop = document.createElement("div");
+export function closeVoicePop() { voicePop.classList.add("hidden"); }
+function syncVoicePopGate() {
+  voicePop.querySelector('[data-setting-row="voiceAutoStopSec"]')?.classList.toggle("hidden", !flag("voiceAutoStop"));
+}
+async function openVoicePop(anchorEl) {
+  if (!flag("voice")) return;
+  const mic = await invoke("voice_default_mic").catch(() => null);
+  voicePop.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "voice-pop-title";
+  title.textContent = t("voicePopTitle");
+  const micRow = document.createElement("div");
+  micRow.className = "voice-pop-mic";
+  micRow.title = t("voicePopMicTip");
+  const micLabel = document.createElement("span");
+  micLabel.className = "voice-pop-mic-label";
+  micLabel.textContent = t("voicePopMic");
+  const micName = document.createElement("span");
+  micName.className = "voice-pop-mic-name";
+  micName.textContent = mic || t("voicePopMicNone");
+  micRow.append(micLabel, micName);
+  const sound = document.createElement("button");
+  sound.type = "button";
+  sound.className = "head-toggle voice-pop-sound";
+  sound.textContent = t("voicePopOpenSound");
+  sound.addEventListener("click", () => {
+    closeVoicePop();
+    invoke("open_sound_settings").catch((e) => errToast(e));
+  });
+  const sep = document.createElement("div");
+  sep.className = "voice-pop-sep";
+  voicePop.append(
+    title, micRow, sound, sep,
+    dropdownRow("voiceLang"), dropdownRow("voiceInsert"),
+    flagRow("voiceAutoStop"), valueRow("voiceAutoStopSec"),
+    flagRow("voicePunct"), flagRow("voiceInterim"),
+  );
+  syncVoicePopGate();
+  placePopover(voicePop, anchorEl.getBoundingClientRect());
+  voicePop.querySelector("select")?.focus();
 }
 export async function openVoiceOnlineConsent() {
   const ok = await confirmDialog({
@@ -689,6 +742,13 @@ export async function deliverVoiceHotkeyText(text) {
 }
 
 export function bindDictation() {
+  voicePop.className = "ctx voice-pop hidden";
+  voicePop.setAttribute("role", "dialog");
+  voicePop.setAttribute("aria-label", t("voicePopTitle"));
+  document.body.appendChild(voicePop);
+  voicePop.addEventListener("change", (e) => {
+    if (e.target.closest('[data-setting-row="voiceAutoStop"]')) syncVoicePopGate();
+  });
   // Voice dictation: the two buttons (composer, edit dialog) share one wiring helper and one
   // event pipeline (see the section above).
   wireVoiceButton($("voice-btn"), () => inputEl);

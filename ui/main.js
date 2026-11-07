@@ -20,7 +20,7 @@ import { bindAbout } from "./about.js";
 import { applyFlags, applyIconZoom, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, warnDataDirSyncFolder } from "./expertMenu.js";
 import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
-import { bindDictation, closeLangsModal, wireDictation } from "./dictation.js";
+import { bindDictation, closeLangsModal, closeVoicePop, voicePop, wireDictation } from "./dictation.js";
 import { bindEditor, closeModal, confirmDiscardIfDirty, editPrompt, openModal, promptToModal, setupDragDrop, wireEditor } from "./editor.js";
 import { cacheFloatingState, closeTileFolderPop, tileFolderPop, wireGridFolders } from "./gridFolders.js";
 import { bgOpsPop, closeBgOpsPop, wireBgOps } from "./bgOps.js";
@@ -119,6 +119,8 @@ function bind() {
     // The two composer buttons toggle it themselves (their own contextmenu handler).
     if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
         !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
+    if (!voicePop.classList.contains("hidden") && !voicePop.contains(e.target) && !e.target.closest(".select-pop") &&
+        !e.target.closest("#voice-btn, #modal-voice-btn")) closeVoicePop();
   });
   // Ctrl+Tab walks the views in the order the tab bar shows them.
   document.addEventListener("keydown", (e) => {
@@ -181,6 +183,7 @@ function bind() {
     if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
+    if (!voicePop.classList.contains("hidden")) { trapTabWithin(voicePop, e); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
     if (!$("import-menu-pop").classList.contains("hidden")) { trapTabWithin($("import-menu-pop"), e); return; }
     if (!bgOpsPop.classList.contains("hidden")) { trapTabWithin(bgOpsPop, e); return; }
@@ -223,6 +226,7 @@ function bind() {
     if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
+    if (!voicePop.classList.contains("hidden")) { closeVoicePop(); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
     if (!$("import-menu-pop").classList.contains("hidden")) { closeImportMenu(); return; }
     if (!bgOpsPop.classList.contains("hidden")) { closeBgOpsPop(); return; }

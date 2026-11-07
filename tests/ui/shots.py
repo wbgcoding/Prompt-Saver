@@ -93,6 +93,7 @@ ACTS = {
                     "const hb = $('help-body'); const gt = [...hb.querySelectorAll('.expert-group-title')].find((e) => /Screen recording|Bildschirmaufnahme/.test(e.textContent));"
                     "if (gt) hb.scrollTop = gt.offsetTop - hb.offsetTop; await sleep(300);",
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
+    "voicepop": "$('voice-btn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(400);",
     "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
     "stats_off": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);"
                  "const sw = () => document.querySelector('#settings-expert [data-setting-row=usageStats] input');"
@@ -120,7 +121,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "history"],
-    "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder"],
+    "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder", "voicepop"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "sniptext"],
 }

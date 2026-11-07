@@ -1891,6 +1891,66 @@ def run(browser, tmp):
 """
     for size_lh in ('880x600', '680x460'):
         failed += ar_probe('blh01-' + size_lh, 'library head: Clear copy history shares the first line at ' + size_lh, 'index', size_lh, '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', lib_head_body)
+    # Right-click on the microphone opens the quick voice settings menu.
+    failed += ar_probe('bvq01', 'voice input: right-click on the microphone opens the quick settings menu', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: false } };</script>\n', r"""
+    await bootReady();
+    const core = await import('./core.js');
+    const pop = () => document.querySelector('.voice-pop:not(.hidden)');
+    const rowOf = (k) => document.querySelector('.voice-pop [data-setting-row="' + k + '"]');
+    const rightClick = async (id) => {
+      document.getElementById(id).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(400);
+    };
+    await rightClick('voice-btn');
+    const p = pop();
+    if (!p) errs.push('bvq01: no menu after the right-click on the microphone');
+    else {
+      const r = p.getBoundingClientRect();
+      if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) errs.push('bvq01: the menu leaves the window: ' + JSON.stringify([r.left, r.top, r.right, r.bottom]));
+      for (const k of ['voiceLang', 'voiceInsert', 'voiceAutoStop', 'voicePunct', 'voiceInterim']) if (!rowOf(k)) errs.push('bvq01: the row ' + k + ' is missing');
+      const sec = rowOf('voiceAutoStopSec');
+      if (!sec || !sec.classList.contains('hidden')) errs.push('bvq01: the silence seconds row should be hidden while auto-stop is off');
+      const nm = p.querySelector('.voice-pop-mic-name');
+      if (!nm || nm.textContent !== 'Stub Microphone') errs.push('bvq01: the microphone name reads ' + (nm && nm.textContent));
+      const sw = rowOf('voiceAutoStop') && rowOf('voiceAutoStop').querySelector('input');
+      if (sw) {
+        sw.click(); await sleep(300);
+        if (sec && sec.classList.contains('hidden')) errs.push('bvq01: the silence seconds row stays hidden after auto-stop is switched on');
+        if (core.settings.ui_flags.voiceAutoStop !== true) errs.push('bvq01: the auto-stop switch did not reach the settings');
+      }
+      p.querySelector('.voice-pop-sound').click(); await sleep(200);
+      if (window.__SOUND_SETTINGS_OPENED__ !== true) errs.push('bvq01: the sound settings button did not call the backend');
+      if (pop()) errs.push('bvq01: the menu stays open after the sound settings button');
+    }
+    await rightClick('voice-btn');
+    if (!pop()) errs.push('bvq01: the menu did not reopen');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(200);
+    if (pop()) errs.push('bvq01: Escape did not close the menu');
+    window.__DEFAULT_MIC__ = null;
+    await rightClick('voice-btn');
+    const nm2 = document.querySelector('.voice-pop-mic-name');
+    if (!nm2 || nm2.textContent !== 'No microphone found') errs.push('bvq01: without a microphone the name reads ' + (nm2 && nm2.textContent));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(200);
+    // From the editor: the menu sits above the dialog.
+    window.__DEFAULT_MIC__ = undefined;
+    document.querySelector('#grid .tile') && document.querySelector('#grid .tile').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+    await sleep(300);
+    const ed = document.querySelector('#ctx [data-act="edit"]');
+    if (!ed) errs.push('bvq01: no edit entry in the tile menu (fixture)');
+    else {
+      ed.click(); await sleep(500);
+      await rightClick('modal-voice-btn');
+      const p2 = pop();
+      if (!p2) errs.push('bvq01: no menu from the editor microphone');
+      else {
+        const zp = parseInt(getComputedStyle(p2).zIndex, 10);
+        const zm = parseInt(getComputedStyle(document.getElementById('modal')).zIndex, 10);
+        if (!(zp > zm)) errs.push('bvq01: the menu (z ' + zp + ') is not above the editor (z ' + zm + ')');
+      }
+    }
+""")
     # The open grid folder dims the grid, has a title row with rename and close, and fits its rows.
     fpop_body = r"""
     await bootReady();
