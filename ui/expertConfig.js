@@ -436,7 +436,7 @@ export const EXPERT_VALUES = {
   // How far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
   // How many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
-  pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
+  pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", zeroLabel: "valOff", gate: "colorPicker" },
   // Cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
   // Minutes a finished background job stays listed in the header popover.
