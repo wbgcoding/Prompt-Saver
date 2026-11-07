@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Laatst gekopieerd: {time}",
     tipLastEdited: "Laatst bewerkt: {time}",
     valNotesTipLen: "Notitielengte in de tooltip",
+    valWholeNote: "Hele notitie",
     tipPromptNotes: "Voegt de editor een inklapbaar notitieveld toe voor alles wat je bij een prompt wilt bewaren: waar hij vandaan komt, wat nog beter kan, wanneer je hem gebruikt. Expertmenu: toon de notitie ook in de tegeltooltip en beperk hoeveel daar verschijnt.",
     tipNotesInTooltip: "Bij het zweven over een tegel verschijnt de notitie als gedempt blok onder het voorbeeld. De notitie wordt nooit gekopieerd, wat deze instelling ook zegt.",
     tipNotesTipLen: "Een langere notitie wordt in de tooltip na dit aantal tekens afgekapt. 0 toont hem volledig.",

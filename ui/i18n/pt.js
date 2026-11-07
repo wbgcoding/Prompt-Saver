@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Copiado pela última vez: {time}",
     tipLastEdited: "Editado pela última vez: {time}",
     valNotesTipLen: "Tamanho da nota na dica",
+    valWholeNote: "Nota inteira",
     tipPromptNotes: "Acrescenta ao editor um campo de notas recolhível para o que você quiser guardar junto do prompt: de onde veio, o que falta ajustar, quando usá-lo. Menu avançado: mostrar a nota também na dica do bloco e limitar quanto aparece ali.",
     tipNotesInTooltip: "Ao passar o mouse por um bloco, a nota aparece como uma seção esmaecida abaixo da pré-visualização. A nota nunca é copiada, independentemente desta opção.",
     tipNotesTipLen: "Uma nota mais longa é cortada na dica depois desta quantidade de caracteres. 0 mostra tudo.",

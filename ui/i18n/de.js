@@ -1599,6 +1599,7 @@ export default {
     tipLastCopied: "Zuletzt kopiert: {time}",
     tipLastEdited: "Zuletzt geändert: {time}",
     valNotesTipLen: "Notizlänge in der Kurzinfo",
+    valWholeNote: "Ganze Notiz",
     tipPromptNotes: "Ergänzt den Editor um ein aufklappbares Notizfeld für alles, was du beim Prompt behalten willst: Herkunft, offene Punkte, wann du ihn einsetzt. Expertenmenü: Notiz zusätzlich in der Kachel-Kurzinfo anzeigen und dort in der Länge begrenzen.",
     tipNotesInTooltip: "Beim Überfahren einer Kachel erscheint die Notiz als gedämpfter Abschnitt unter der Vorschau. Kopiert wird die Notiz nie, unabhängig von dieser Einstellung.",
     tipNotesTipLen: "Eine längere Notiz wird in der Kurzinfo nach so vielen Zeichen abgeschnitten. 0 zeigt sie vollständig.",

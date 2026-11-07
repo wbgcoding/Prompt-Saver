@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "上次复制：{time}",
     tipLastEdited: "上次编辑：{time}",
     valNotesTipLen: "工具提示中的备注长度",
+    valWholeNote: "完整备注",
     tipPromptNotes: "在编辑器中加入可折叠的备注栏，用来记录与提示词相关的一切：出处、待改进之处、适用场景。专家菜单：可同时在磁贴工具提示中显示备注，并限制其显示长度。",
     tipNotesInTooltip: "鼠标悬停在磁贴上时，备注会以淡色区块显示在预览下方。无论此设置如何，备注都不会被复制。",
     tipNotesTipLen: "较长的备注会在工具提示中于达到此字符数后被截断，填 0 则完整显示。",

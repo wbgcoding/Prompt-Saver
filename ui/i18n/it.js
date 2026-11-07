@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Ultima copia: {time}",
     tipLastEdited: "Ultima modifica: {time}",
     valNotesTipLen: "Lunghezza della nota nel suggerimento",
+    valWholeNote: "Nota intera",
     tipPromptNotes: "Aggiunge all’editor un campo note richiudibile per tutto ciò che vuoi tenere accanto al prompt: da dove arriva, cosa manca, quando usarlo. Menu esperto: mostrare la nota anche nel suggerimento del riquadro e limitarne la lunghezza lì.",
     tipNotesInTooltip: "Passando il mouse su un riquadro la nota compare come sezione attenuata sotto l’anteprima. La nota non viene mai copiata, qualunque sia questa impostazione.",
     tipNotesTipLen: "Una nota più lunga viene troncata nel suggerimento dopo questo numero di caratteri. 0 la mostra per intero.",

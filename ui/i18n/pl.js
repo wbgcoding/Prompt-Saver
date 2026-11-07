@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Ostatnio skopiowano: {time}",
     tipLastEdited: "Ostatnio edytowano: {time}",
     valNotesTipLen: "Długość notatki w podpowiedzi",
+    valWholeNote: "Cała notatka",
     tipPromptNotes: "Dodaje do edytora zwijane pole notatek na wszystko, co chcesz trzymać przy prompcie: skąd pochodzi, co jeszcze poprawić, kiedy go używać. Menu eksperta: pokazuj notatkę także w podpowiedzi kafelka i ogranicz jej długość w tym miejscu.",
     tipNotesInTooltip: "Po najechaniu na kafelek notatka pojawia się jako przygaszona sekcja pod podglądem. Notatka nigdy nie jest kopiowana, niezależnie od tego ustawienia.",
     tipNotesTipLen: "Dłuższa notatka jest w podpowiedzi ucinana po tylu znakach. 0 pokazuje ją w całości.",

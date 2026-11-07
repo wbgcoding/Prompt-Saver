@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Ultima copiere: {time}",
     tipLastEdited: "Ultima editare: {time}",
     valNotesTipLen: "Lungimea notiței în indiciu",
+    valWholeNote: "Notița întreagă",
     tipPromptNotes: "Adaugă în editor un câmp de notițe pliabil pentru tot ce vrei să păstrezi lângă prompt: de unde vine, ce mai are de șlefuit, când să-l folosești. Meniu expert: arată notița și în indiciul dalei și limitează cât apare acolo.",
     tipNotesInTooltip: "La trecerea cu mouse-ul peste o dală, notița apare ca o secțiune estompată sub previzualizare. Notița nu se copiază niciodată, indiferent de această setare.",
     tipNotesTipLen: "O notiță mai lungă este tăiată în indiciu după acest număr de caractere. 0 o arată integral.",

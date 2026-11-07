@@ -1599,6 +1599,7 @@ export default {
     tipLastCopied: "Last copied: {time}",
     tipLastEdited: "Last edited: {time}",
     valNotesTipLen: "Note length in the tooltip",
+    valWholeNote: "Whole note",
     tipPromptNotes: "Adds a collapsible notes field to the editor for whatever you want to keep next to a prompt: where it came from, what still needs work, when to use it. Expert menu: show the note in the tile tooltip as well and limit how much of it appears there.",
     tipNotesInTooltip: "Hovering a tile shows its note as a dimmed section below the preview. The note is never copied, whatever this setting says.",
     tipNotesTipLen: "A longer note is cut off in the tooltip after this many characters. 0 shows all of it.",

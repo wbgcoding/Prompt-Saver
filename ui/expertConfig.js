@@ -432,7 +432,7 @@ export const EXPERT_VALUES = {
   trayRecentN: { label: "valTrayRecentN", min: 1, max: 10, step: 1, def: 5, unit: "", gate: "trayRecent" },
   trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
   // How much of a private note the tile tooltip shows (0 = the whole note).
-  notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
+  notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", zeroLabel: "valWholeNote", gate: "notesInTooltip" },
   // How far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
   // How many recent picks the right-click popover (and the overlay strip) keep. 0 = off.

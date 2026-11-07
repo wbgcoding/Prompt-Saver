@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Son kopyalama: {time}",
     tipLastEdited: "Son düzenleme: {time}",
     valNotesTipLen: "Araç ipucundaki not uzunluğu",
+    valWholeNote: "Notun tamamı",
     tipPromptNotes: "İstemin yanında tutmak istediğiniz her şey için düzenleyiciye katlanabilir bir not alanı ekler: nereden geldiği, nesi eksik, ne zaman kullanılacağı. Uzman menüsü: notu kutucuk araç ipucunda da gösterin ve orada ne kadarının görüneceğini sınırlayın.",
     tipNotesInTooltip: "Bir kutucuğun üzerine gelindiğinde not, önizlemenin altında soluk bir bölüm olarak görünür. Bu ayar ne olursa olsun not asla kopyalanmaz.",
     tipNotesTipLen: "Uzun bir not, araç ipucunda bu karakter sayısından sonra kesilir. 0 tamamını gösterir.",

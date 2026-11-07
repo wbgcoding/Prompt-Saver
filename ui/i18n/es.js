@@ -1592,6 +1592,7 @@ export default {
     tipLastCopied: "Copiado por última vez: {time}",
     tipLastEdited: "Editado por última vez: {time}",
     valNotesTipLen: "Longitud de la nota en el tooltip",
+    valWholeNote: "Nota completa",
     tipPromptNotes: "Añade al editor un campo de notas plegable para lo que quieras guardar junto al prompt: de dónde salió, qué falta pulir, cuándo usarlo. Menú experto: mostrar la nota también en el tooltip de la tarjeta y limitar cuánto aparece allí.",
     tipNotesInTooltip: "Al pasar el ratón por un mosaico, la nota aparece como una sección atenuada bajo la vista previa. La nota nunca se copia, diga lo que diga este ajuste.",
     tipNotesTipLen: "Una nota larga se corta en el tooltip tras esta cantidad de caracteres. 0 la muestra entera.",
