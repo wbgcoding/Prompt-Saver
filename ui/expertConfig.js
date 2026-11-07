@@ -347,7 +347,7 @@ export const EXPERT_VALUES = {
   copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
   copySoundVolume: { label: "valCopySoundVolume", min: 0, max: 100, step: 5, def: COPY_SOUND_VOLUME_DEFAULT, unit: "%", gate: "copySound" },
   // Favorites grid: cap the column count (0 = auto-size to the count).
-  favMaxCols: { label: "valFavMaxCols", min: 0, max: 20, step: 1, def: 0, unit: "", gate: "favViewButton" },
+  favMaxCols: { label: "valFavMaxCols", min: 0, max: 20, step: 1, def: 0, unit: "", zeroLabel: "valAuto", gate: "favViewButton" },
   // Prompt-list (library) column options: how many columns the header toggle offers.
   libraryCols: { label: "valLibraryCols", min: 1, max: 4, step: 1, def: 1, unit: "", gate: "librarySearch" },
   libPreviewLines: { label: "valLibPreviewLines", min: 1, max: 4, step: 1, def: 2, unit: "" },
