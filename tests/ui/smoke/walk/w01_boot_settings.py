@@ -121,7 +121,11 @@ SECTION = """\
         // itself would be wrong, that flex container always spans the full inner
         // width regardless of justify-content; only its child moves.
         const aboutBox = aboutModal.querySelector('.modal');
-        const firstBtn = document.getElementById('about-whats-new');
+        const firstBtn = document.getElementById('about-repo');
+        const linksBox = aboutModal.querySelector('.about-links');
+        if (!linksBox || !linksBox.firstElementChild || linksBox.firstElementChild.id !== 'about-repo') {
+          out.errors.push('about links: the project page link is not the first button');
+        }
         const closeBtn = document.getElementById('about-ok');
         // Skipped once the box actually scrolls: a shown scrollbar eats into
         // the content width on the right only, which shifts the centered
