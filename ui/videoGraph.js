@@ -272,9 +272,17 @@ export function buildVideoChain() {
       // Sampled down and blown back up with nearest-neighbour: a real mosaic,
       // not a blur that a sharpening pass could partly undo.
       const a = label(), b = label(), small = label(), out = label();
+      const mask = shapeMask(op.rect, op.shape);
       parts.push(`[${cur}]split[${a}][${b}]`);
-      parts.push(`[${b}]crop=${op.rect.w}:${op.rect.h}:${op.rect.x}:${op.rect.y},scale=${Math.max(1, Math.round(op.rect.w / op.blockPx))}:${Math.max(1, Math.round(op.rect.h / op.blockPx))},scale=${op.rect.w}:${op.rect.h}:flags=neighbor[${small}]`);
-      parts.push(`[${a}][${small}]overlay=${op.rect.x}:${op.rect.y}:${enable}[${out}]`);
+      parts.push(`[${b}]crop=${op.rect.w}:${op.rect.h}:${op.rect.x}:${op.rect.y},scale=${Math.max(1, Math.round(op.rect.w / op.blockPx))}:${Math.max(1, Math.round(op.rect.h / op.blockPx))},scale=${op.rect.w}:${op.rect.h}:flags=neighbor${mask ? ",format=yuva420p" : ""}[${small}]`);
+      let shown = small;
+      if (mask) {
+        const m = label(), smallm = label();
+        parts.push(`${mask}[${m}]`);
+        parts.push(`[${small}][${m}]alphamerge[${smallm}]`);
+        shown = smallm;
+      }
+      parts.push(`[${a}][${shown}]overlay=${op.rect.x}:${op.rect.y}${mask ? ":shortest=1" : ""}:${enable}[${out}]`);
       cur = out;
     } else if (op.kind === "spotlight") {
       const a = label(), b = label(), clear = label(), dark = label(), out = label();

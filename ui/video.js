@@ -178,6 +178,7 @@ export const VE = {
   ovFontDefault: "segoeui",
   defaultPanel: "edit",
   ovPixelateBlockDefault: 16,
+  ovPixelateShapeDefault: "rect",
   ovSpotlightDimDefault: 0.6,
   ovSpotlightShapeDefault: "rect",
   ovImageOpacityDefault: 100,
@@ -2540,6 +2541,7 @@ export function applySettings(settings) {
   VE.ovLastFrameThickness = Number.isFinite(lastThickness) && lastThickness > 0 ? Math.round(lastThickness) : null;
   const lastPixelateBlock = Number(values.veOvLastPixelateBlock);
   if (Number.isFinite(lastPixelateBlock) && lastPixelateBlock > 0) VE.ovPixelateBlockDefault = Math.round(lastPixelateBlock);
+  if (["rect", "round", "ellipse"].includes(texts.veOvLastPixelateShape)) VE.ovPixelateShapeDefault = texts.veOvLastPixelateShape;
   const lastSpotlightDim = Number(values.veOvLastSpotlightDim);
   if (Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
   if (["rect", "round", "ellipse"].includes(texts.veOvLastSpotlightShape)) VE.ovSpotlightShapeDefault = texts.veOvLastSpotlightShape;

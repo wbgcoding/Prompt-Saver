@@ -1152,7 +1152,15 @@ const pending = [];
   const rnd = graphFor({ ...spot, shape: "round" });
   expect("a rounded focus area carries its radius", /alphamerge/.test(rnd) && /max\(0,max\(50-X/.test(rnd), rnd);
   expect("the rounded radius has a floor", vm.runInContext("shapeRadius", makeSandbox({}))({ w: 6, h: 6 }) === 2);
+  const pix = { kind: "pixelate", blockPx: 16 };
+  const plainPix = graphFor(pix);
+  expect("pixelate without a shape stays a plain overlay", !/alphamerge/.test(plainPix) && /flags=neighbor\[/.test(plainPix) && /overlay=100:80:enable/.test(plainPix), plainPix);
+  expect("a rect shape pixelates like no shape", graphFor({ ...pix, shape: "rect" }) === plainPix);
+  const pe = graphFor({ ...pix, shape: "ellipse" });
+  expect("an elliptical pixelation merges a mask over the mosaic", /alphamerge/.test(pe) && /flags=neighbor,format=yuva420p/.test(pe) && /overlay=100:80:shortest=1:/.test(pe), pe);
+  expect("a rounded pixelation carries the radius", /alphamerge/.test(graphFor({ ...pix, shape: "round" })) && /max\(0,max\(50-X/.test(graphFor({ ...pix, shape: "round" })));
   const prev = fs.readFileSync(path.join(__dirname, "..", "ui", "videoPreview.js"), "utf8");
+  expect("the pixelate canvas takes and resets its radius", /canvas\.style\.borderRadius = /.test(prev));
   expect("the preview reads the shape for the mosaic and the focus area", /shapeRadius/.test(prev) && /borderRadius/.test(prev) && /clipPath = `path\(evenodd/.test(prev));
 }
 

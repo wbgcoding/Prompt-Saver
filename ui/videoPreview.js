@@ -323,8 +323,8 @@ export function renderRects() {
     el.style.top = `${vb.top + rect.y * vb.scale}px`;
     el.style.width = `${rect.w * vb.scale}px`;
     el.style.height = `${rect.h * vb.scale}px`;
-    if (item.kind === "spotlight" && item.op.shape === "ellipse") el.style.borderRadius = "50%";
-    else if (item.kind === "spotlight" && item.op.shape === "round") el.style.borderRadius = `${shapeRadius(rect) * vb.scale}px`;
+    if ((item.kind === "spotlight" || item.kind === "pixelate") && item.op.shape === "ellipse") el.style.borderRadius = "50%";
+    else if ((item.kind === "spotlight" || item.kind === "pixelate") && item.op.shape === "round") el.style.borderRadius = `${shapeRadius(rect) * vb.scale}px`;
     const size = document.createElement("span");
     size.className = "ve-rect-size";
     size.textContent = `${rect.w}×${rect.h}`;
@@ -514,6 +514,7 @@ function buildLiveOverlayEl(op, vb, reuse) {
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     rectStyle(canvas, op.rect);
+    canvas.style.borderRadius = op.shape === "ellipse" ? "50%" : op.shape === "round" ? `${shapeRadius(op.rect) * vb.scale}px` : "";
     // Down-sample the live video frame to the real block grid, then blow it back up with smoothing
     // off: the same two-step mosaic buildVideoChain() asks ffmpeg for. The small sampling canvas
     // is cached on the element, so it is resized rather than reallocated per frame.
