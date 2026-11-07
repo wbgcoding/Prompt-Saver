@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "Naam onder de map. Laat leeg voor geen label.",
     valSnipDelayMs: "Vertraging van schermafbeelding",
     valUpdateCheckH: "Interval voor updatecontrole",
+    updateIntervalLabel: "Frequentie",
     valToastPos: "Positie van melding",
     valTagSort: "Volgorde van tags",
     optToastBottom: "Onder",

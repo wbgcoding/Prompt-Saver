@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "Klasörün altında görünen ad. Etiket istemiyorsanız boş bırakın.",
     valSnipDelayMs: "Ekran görüntüsü yakalama gecikmesi",
     valUpdateCheckH: "Güncelleme denetimi aralığı",
+    updateIntervalLabel: "Sıklık",
     valToastPos: "Bildirim konumu",
     valTagSort: "Etiket sırası",
     optToastBottom: "Alt",

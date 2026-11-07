@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "Nombre que se muestra bajo la carpeta. Déjalo vacío para no mostrar ninguno.",
     valSnipDelayMs: "Retardo de captura",
     valUpdateCheckH: "Intervalo de comprobación de actualizaciones",
+    updateIntervalLabel: "Frecuencia",
     valToastPos: "Posición de notificación",
     valTagSort: "Orden de etiquetas",
     optToastBottom: "Abajo",

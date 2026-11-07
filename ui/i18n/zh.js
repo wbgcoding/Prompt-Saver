@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "显示在文件夹下方的名称。留空则不显示。",
     valSnipDelayMs: "截图延迟",
     valUpdateCheckH: "更新检查间隔",
+    updateIntervalLabel: "频率",
     valToastPos: "通知位置",
     valTagSort: "标签顺序",
     optToastBottom: "底部",

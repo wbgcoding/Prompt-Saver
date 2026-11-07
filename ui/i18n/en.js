@@ -1744,6 +1744,7 @@ export default {
     folderRenameMsg: "Name shown under the folder. Leave it empty for no label.",
     valSnipDelayMs: "Screenshot capture delay",
     valUpdateCheckH: "Update check interval",
+    updateIntervalLabel: "Frequency",
     valToastPos: "Toast position",
     valTagSort: "Tag order",
     optToastBottom: "Bottom",

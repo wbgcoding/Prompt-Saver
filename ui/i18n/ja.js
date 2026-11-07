@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "フォルダーの下に表示する名前。空欄にするとラベルなしになります。",
     valSnipDelayMs: "スクリーンショット取得遅延",
     valUpdateCheckH: "更新確認の間隔",
+    updateIntervalLabel: "頻度",
     valToastPos: "通知の位置",
     valTagSort: "タグの順序",
     optToastBottom: "下",

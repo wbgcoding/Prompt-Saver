@@ -99,20 +99,28 @@ SECTION = """\
             const gr = rect(behaviorGrid727);
             if (Math.abs(rect(ub).right - gr.right) > 1.5) out.errors.push('727: the check button misses the right edge of the switch grid in ' + label + ' at ' + window.innerWidth + 'px');
             if (Math.abs(rect(ui727.closest('.update-interval')).left - rect(colRight727).left) > 1.5) out.errors.push('727: the interval misses the right grid column in ' + label + ' at ' + window.innerWidth + 'px');
+            if (Math.abs(rect(ui727).right - gr.right) > 1.5) out.errors.push('727: the interval list is not flush with the right edge in ' + label + ' at ' + window.innerWidth + 'px');
+            if (!(rect(ui727).width < rect(ui727.closest('.update-interval')).width - 40)) out.errors.push('727: the interval list is not sized to its content in ' + label + ' at ' + window.innerWidth + 'px');
             if (Math.abs(rect(ex727).left - gr.left) > 1.5 || Math.abs(rect(ex727).right - gr.right) > 1.5) out.errors.push('727: the Expert menu button does not span the grid in ' + label + ' at ' + window.innerWidth + 'px');
           }
+          const ivLabel727 = document.querySelector('.update-interval-label');
+          if (!ivLabel727 || ivLabel727.scrollWidth > ivLabel727.clientWidth + 1) out.errors.push('727: the interval label is missing or cut in ' + label + ' at ' + window.innerWidth + 'px');
           const swLabel727 = sw727.closest('label').querySelector('span');
           if (swLabel727.scrollWidth > swLabel727.clientWidth + 1 || rect(swLabel727).height > 40) out.errors.push('727: the auto update label wraps in ' + label + ' at ' + window.innerWidth + 'px');
         };
         check727('the page language');
         const swSpan727 = sw727.closest('label').querySelector('span');
+        const ivLabelEl727 = document.querySelector('.update-interval-label');
         const prev727 = [aboutBtn.textContent, ub.textContent, swSpan727.textContent];
+        const prevIvLabel727 = ivLabelEl727 ? ivLabelEl727.textContent : '';
+        if (ivLabelEl727) ivLabelEl727.textContent = 'Häufigkeit';
         aboutBtn.textContent = 'Über';
         ub.textContent = 'Updates suchen';
         swSpan727.textContent = 'Automatische Updates';
         uv.textContent = 'Update v2.10.0';
         check727('German');
         [aboutBtn.textContent, ub.textContent, swSpan727.textContent] = prev727;
+        if (ivLabelEl727) ivLabelEl727.textContent = prevIvLabel727;
         if (window.innerWidth >= 680 && !(rect(aboutBtn).left > rect(uv).left && rect(ub).left > rect(aboutBtn).left && rect(ui727).top > rect(ub).top && rect(ex727).top > rect(ui727).top)) {
           out.errors.push('727: the System rows are not in the order version row, switch row, Expert menu');
         }

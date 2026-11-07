@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "Nome mostrato sotto la cartella. Lascia vuoto per non mostrarne alcuno.",
     valSnipDelayMs: "Ritardo acquisizione screenshot",
     valUpdateCheckH: "Intervallo controllo aggiornamenti",
+    updateIntervalLabel: "Frequenza",
     valToastPos: "Posizione notifica",
     valTagSort: "Ordine tag",
     optToastBottom: "In basso",

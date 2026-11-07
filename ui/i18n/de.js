@@ -1744,6 +1744,7 @@ export default {
     folderRenameMsg: "Name unter dem Ordner. Leer lassen für keine Beschriftung.",
     valSnipDelayMs: "Verzögerung der Screenshot-Aufnahme",
     valUpdateCheckH: "Intervall der Updateprüfung",
+    updateIntervalLabel: "Häufigkeit",
     valToastPos: "Position des Hinweises",
     valTagSort: "Tag-Reihenfolge",
     optToastBottom: "Unten",

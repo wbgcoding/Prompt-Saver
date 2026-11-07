@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "Numele afișat sub folder. Lasă gol dacă nu vrei etichetă.",
     valSnipDelayMs: "Întârziere captură de ecran",
     valUpdateCheckH: "Interval verificare actualizări",
+    updateIntervalLabel: "Frecvență",
     valToastPos: "Poziție notificare",
     valTagSort: "Ordine etichete",
     optToastBottom: "Jos",

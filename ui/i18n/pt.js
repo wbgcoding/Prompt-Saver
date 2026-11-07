@@ -1737,6 +1737,7 @@ export default {
     folderRenameMsg: "Nome mostrado sob a pasta. Deixe vazio para não exibir rótulo.",
     valSnipDelayMs: "Atraso da captura",
     valUpdateCheckH: "Intervalo de procura de atualizações",
+    updateIntervalLabel: "Frequência",
     valToastPos: "Posição da notificação",
     valTagSort: "Ordem das etiquetas",
     optToastBottom: "Em baixo",

@@ -4116,11 +4116,12 @@ body.drag-over::after {
 .update-line { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
 .update-btns { display: flex; flex: 0 1 auto; gap: 8px; min-width: 0; }
 .update-btns > .ghost-btn { flex: 0 1 auto; padding-inline: 12px; }
-/* Row 2: the switch row in the left column, the interval list filling the right one.
-   Both are as tall as a switch row, so the rows keep the grid's spacing. */
+/* Auto-update row: the switch in the left column; the right column reads like a switch row, its
+   label on the left and the content-sized interval list flush with the right edge. */
 .update-auto { align-items: center; }
-.update-interval { min-width: 0; }
-.update-interval > select { width: 100%; padding-block: 6px; }
+.update-interval { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.update-interval-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--fg); }
+.update-interval > select { flex: 0 0 auto; width: auto; padding-block: 6px; }
 /* Row 3: the Expert menu button across the full content width. */
 #updates-field > #expert-open { width: 100%; }
 /* Clickable version/status label, plain text look → releases page, or the update
