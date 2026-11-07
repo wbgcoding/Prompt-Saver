@@ -308,7 +308,7 @@ SECTION = """\
           out.errors.push('998: the article with the hit in its tip stays collapsed');
         }
         // Several hits, every article whose marked word sits below the overview opens.
-        search.value = 'toast';
+        search.value = 'confirm';
         search.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(200);
         let deepHits = 0;
