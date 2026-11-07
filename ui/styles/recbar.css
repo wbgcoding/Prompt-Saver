@@ -7,7 +7,7 @@
   align-items: center;
   gap: 10px;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 12px 0 5px;
   margin: 8px;
   border-radius: 999px;
   background: var(--menu-bg);
@@ -98,3 +98,9 @@
    be found, rather than disappearing and reappearing as settings change. */
 .rec-btn:disabled { opacity: 0.35; cursor: default; }
 .rec-btn:disabled:hover { background: transparent; }
+/* Stop and save is the bar's main action: red and first, like a recorder's stop key. */
+.rec-btn-stop { width: 30px; height: 30px; background: var(--danger); color: #fff; margin-right: 2px; }
+.rec-btn-stop:hover { background: color-mix(in srgb, var(--danger) 82%, #000); }
+.rec-btn-stop:disabled, .rec-btn-stop:disabled:hover { background: var(--danger); }
+/* A visual break between the status readout and the controls. */
+.rec-bar #pause-btn { margin-left: 6px; }

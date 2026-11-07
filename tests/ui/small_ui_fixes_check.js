@@ -248,6 +248,16 @@ later(async () => {
   check(hiddenAtRender === false, `the grid is rendered while the popover is visible, hidden was ${hiddenAtRender}`);
 });
 
+// The recording bar opens with the red Stop button and ends with Discard.
+{
+  const html = read("recbar.html");
+  const bar = html.slice(html.indexOf('id="bar"'), html.indexOf("</body>"));
+  const buttons = [...bar.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
+  check(buttons.length > 0 && /id="stop-btn"/.test(buttons[0]) && /class="[^"]*\brec-btn-stop\b/.test(buttons[0]),
+    `the first recording bar button is the red Stop, got ${buttons[0]}`);
+  check(/id="cancel-btn"/.test(buttons[buttons.length - 1]), "Discard is the last recording bar button");
+}
+
 Promise.all(pending).then(() => {
   if (problems.length) {
     console.log(`small_ui_fixes_check: ${problems.length} problem(s)`);
