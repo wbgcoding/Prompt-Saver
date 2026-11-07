@@ -97,7 +97,7 @@ later(async () => {
 later(async () => {
   const src = read("tags.js");
   const a = src.indexOf("let tagSuggestActive");
-  const b = src.indexOf("export const closeTagPop");
+  const b = src.indexOf("// ---- Editor: assigned chips");
   if (a === -1 || b === -1) { check(false, "tag suggestion keyboard state missing"); return; }
   const code = src.slice(a, b).replace(/export /g, "") + "\n" + extractBlock(src, "export function wireTagInput").replace(/export /g, "")
     + "\n;globalThis.wire = wireTagInput; globalThis.unhighlight = () => { tagSuggestActive = -1; };";

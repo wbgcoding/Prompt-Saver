@@ -511,13 +511,11 @@ fn a_failed_settings_save_rolls_the_tag_rename_back_on_disk_too() {
     let mut p = test_prompt("p1");
     p.tags = vec!["Old".to_string()];
     let mut store = secret_test_store(vec![p]);
-    store.settings.tag_colors.insert("old".to_string(), "#111111".to_string());
     let mut disk: Vec<Vec<String>> = Vec::new();
     let result = rename_tag_in_store(
         &mut store,
         "old",
         "New",
-        "new",
         &mut |st| {
             disk.push(st.prompts[0].tags.clone());
             true
@@ -526,7 +524,6 @@ fn a_failed_settings_save_rolls_the_tag_rename_back_on_disk_too() {
     );
     assert!(result.is_err());
     assert_eq!(store.prompts[0].tags, vec!["Old".to_string()]);
-    assert_eq!(store.settings.tag_colors.get("old").map(String::as_str), Some("#111111"));
     assert_eq!(disk.last().unwrap(), &vec!["Old".to_string()], "the last write to disk is the original");
     assert_eq!(disk.len(), 2);
 }
@@ -537,13 +534,13 @@ fn renaming_the_archive_tag_moves_the_archive_name_and_rolls_back() {
     p.tags = vec!["Archive".to_string()];
     let mut store = secret_test_store(vec![p]);
     store.settings.ui_texts.insert("archiveTag".to_string(), "Archive".to_string());
-    let failed = rename_tag_in_store(&mut store, "archive", "Old", "old", &mut |_| true, &mut |_| false);
+    let failed = rename_tag_in_store(&mut store, "archive", "Old", &mut |_| true, &mut |_| false);
     assert!(failed.is_err());
     assert_eq!(store.settings.ui_texts.get("archiveTag").map(String::as_str), Some("Archive"));
-    rename_tag_in_store(&mut store, "archive", "Old", "old", &mut |_| true, &mut |_| true).unwrap();
+    rename_tag_in_store(&mut store, "archive", "Old", &mut |_| true, &mut |_| true).unwrap();
     assert_eq!(store.settings.ui_texts.get("archiveTag").map(String::as_str), Some("Old"));
     // Another tag's rename leaves the archive name alone.
-    rename_tag_in_store(&mut store, "other", "Else", "else", &mut |_| true, &mut |_| true).unwrap();
+    rename_tag_in_store(&mut store, "other", "Else", &mut |_| true, &mut |_| true).unwrap();
     assert_eq!(store.settings.ui_texts.get("archiveTag").map(String::as_str), Some("Old"));
 }
 
@@ -552,7 +549,6 @@ fn a_failed_settings_save_rolls_the_tag_delete_back_on_disk_too() {
     let mut p = test_prompt("p1");
     p.tags = vec!["Old".to_string(), "Keep".to_string()];
     let mut store = secret_test_store(vec![p]);
-    store.settings.tag_colors.insert("old".to_string(), "#111111".to_string());
     let mut disk: Vec<Vec<String>> = Vec::new();
     let result = delete_tag_in_store(
         &mut store,
@@ -565,28 +561,14 @@ fn a_failed_settings_save_rolls_the_tag_delete_back_on_disk_too() {
     );
     assert!(result.is_err());
     assert_eq!(store.prompts[0].tags, vec!["Old".to_string(), "Keep".to_string()]);
-    assert_eq!(store.settings.tag_colors.get("old").map(String::as_str), Some("#111111"));
     assert_eq!(disk.last().unwrap(), &vec!["Old".to_string(), "Keep".to_string()]);
     assert_eq!(disk.len(), 2, "the delete and its undo were both written");
 
-    // A clean run removes the tag and its colour and writes once.
+    // A clean run removes the tag and writes once.
     let mut writes = 0;
     delete_tag_in_store(&mut store, "old", &mut |_| { writes += 1; true }, &mut |_| true).unwrap();
     assert_eq!(store.prompts[0].tags, vec!["Keep".to_string()]);
-    assert!(!store.settings.tag_colors.contains_key("old"));
     assert_eq!(writes, 1);
-}
-
-#[test]
-fn a_palette_edit_remaps_tag_colors_too() {
-    let mut colors: HashMap<String, String> = HashMap::new();
-    colors.insert("a".to_string(), "#old".to_string());
-    colors.insert("b".to_string(), "#keep".to_string());
-    let map: HashMap<String, String> = [("#old".to_string(), "#new".to_string())].into_iter().collect();
-    assert!(remap_tag_colors(&mut colors, &map));
-    assert_eq!(colors["a"], "#new");
-    assert_eq!(colors["b"], "#keep");
-    assert!(!remap_tag_colors(&mut colors, &map), "a second pass changes nothing");
 }
 
 #[test]

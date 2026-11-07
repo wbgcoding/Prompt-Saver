@@ -317,10 +317,6 @@ pub(crate) struct Settings {
     // pair-shaped saves need no migration.
     #[serde(default)]
     pub(crate) dup_ignored: Vec<Vec<String>>,
-    // Tag key (the lowercased name) -> chip color (#rrggbb). Keyed lowercase so a
-    // recased tag keeps its color. A tag without an entry renders neutral.
-    #[serde(default)]
-    pub(crate) tag_colors: HashMap<String, String>,
     // User-defined themes. `theme` points at one of them with "custom:<id>";
     // each carries only the variables that differ from its built-in base.
     #[serde(default)]
@@ -464,7 +460,6 @@ impl Default for Settings {
             example_prompt_ids: Vec::new(),
             example_prompt_seeds: HashMap::new(),
             dup_ignored: Vec::new(),
-            tag_colors: HashMap::new(),
             custom_themes: Vec::new(),
             copy_log: Vec::new(),
             usage: HashMap::new(),

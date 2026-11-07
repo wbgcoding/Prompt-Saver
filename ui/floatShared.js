@@ -439,8 +439,6 @@ const ORDERED_KEYS = {
   set_view_grid: () => "views",
   rename_view: () => "views",
   set_view_color: () => "views",
-  set_tag_color: () => "tags",
-  set_tag_colors: () => "tags",
 };
 
 // The window's invoke: ordered commands go through serialInvoke, the rest straight on.

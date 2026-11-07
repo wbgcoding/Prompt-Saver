@@ -4,7 +4,7 @@ import { DYN_VARS, dynToken, extractVars, hasEmptyVarToken, readFixedVars, resol
 import { ATTACH_PREVIEW_KB } from "./expertConfig.js";
 import { EXPERT_DROPDOWNS, renderExpert } from "./expertMenu.js";
 import { normSize } from "./settingsPanel.js";
-import { closeTagPop, closeTagSuggest, renderTagChips } from "./tags.js";
+import { closeTagSuggest, renderTagChips } from "./tags.js";
 import { bindHotkeyField, HOTKEY_ERRORS, hotkeyMessage, promptHotkeysOn, renderPromptHotkey, setPromptHotkey, showHotkeyError } from "./hotkeys.js";
 import { confirmDialog } from "./dialog.js";
 import { openMiniMenu, renderGrid } from "./views.js";
@@ -1255,7 +1255,6 @@ export function closeModal() {
   if (voiceState !== "idle" && voiceTargetEl === modal.text) stopVoice(); // its field is about to disappear
   closeColorPop();
   closeTagSuggest();
-  closeTagPop();
   modal.root.classList.add("hidden");
   modalSession++; // a late reply for the closed editor must not write into it
   // Removing the attribute alone neither stops the playback nor releases the file.

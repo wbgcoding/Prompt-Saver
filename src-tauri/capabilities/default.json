@@ -94,8 +94,6 @@
     "allow-set-view-grid",
     "allow-rename-tag",
     "allow-delete-tag",
-    "allow-set-tag-color",
-    "allow-set-tag-colors",
     "allow-add-view",
     "allow-rename-view",
     "allow-set-view-color",

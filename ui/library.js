@@ -9,7 +9,7 @@ import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
 import { copyOnCooldown, peekResolveCommit, recordCopy } from "./copyFlow.js";
 import { attachSelectPicker, isValuePopOpen } from "./selectpop.js";
-import { allTags, renderTagFilter, tagColor, tagKey, tagsOn } from "./tags.js";
+import { allTags, renderTagFilter, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
 import { closeStats, openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
 import { closeBackups } from "./backups.js";
@@ -977,19 +977,14 @@ function buildLibRow(p, { tilesMode, placed, hasQuery }) {
   if (tagsOn() && (p.tags || []).length) {
     const marks = document.createElement("span");
     marks.className = "lib-tag-marks";
-    const mark = (label, colorOf) => {
+    const mark = (label) => {
       const m = document.createElement("span");
       m.className = "tag-mark";
       m.textContent = label;
-      const c = colorOf ? tagColor(colorOf) : "";
-      if (c) {
-        m.style.setProperty("--chip-color", c);
-        m.classList.add("tag-colored");
-      }
       marks.appendChild(m);
     };
-    for (const tn of p.tags.slice(0, 3)) mark(tn, tn);
-    if (p.tags.length > 3) mark(`+${p.tags.length - 3}`, "");
+    for (const tn of p.tags.slice(0, 3)) mark(tn);
+    if (p.tags.length > 3) mark(`+${p.tags.length - 3}`);
     nameRow.appendChild(marks);
   }
 

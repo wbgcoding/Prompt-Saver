@@ -259,7 +259,6 @@ const SETTINGS = {
   // fixture with BOTH a copy and an edit timestamp; p2 (untouched) has neither.
   usage: { p1: 3 }, last_used: { p1: 1700000000 },
   example_prompt_ids: [], example_prompt_seeds: {},
-  tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
   tile_font: "system", tile_size: 0,
   // Point 419: membership lives in `members`, never derived from `layouts` any
@@ -1331,7 +1330,6 @@ const RESULTS = {
   rename_tag: (a) => {
     const oldKey = String((a && a.old) || "").trim().toLowerCase();
     const newName = String((a && a.new) || "").trim();
-    const newKey = newName.toLowerCase();
     for (const p of PROMPTS) {
       if (!(p.tags || []).some((t) => t.toLowerCase() === oldKey)) continue;
       const kept = [];
@@ -1341,28 +1339,9 @@ const RESULTS = {
       }
       p.tags = kept;
     }
-    if (oldKey in SETTINGS.tag_colors) {
-      const color = SETTINGS.tag_colors[oldKey];
-      delete SETTINGS.tag_colors[oldKey];
-      if (!(newKey in SETTINGS.tag_colors)) SETTINGS.tag_colors[newKey] = color;
-    }
     return clone();
   },
   delete_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
-  set_tag_color: (a) => {
-    const key = String((a && a.name) || "").toLowerCase();
-    if (a && a.color) SETTINGS.tag_colors[key] = a.color;
-    else delete SETTINGS.tag_colors[key];
-    return clone();
-  },
-  set_tag_colors: (a) => {
-    for (const e of (a && a.entries) || []) {
-      const key = String(e.name || "").toLowerCase();
-      if (e.color) SETTINGS.tag_colors[key] = e.color;
-      else delete SETTINGS.tag_colors[key];
-    }
-    return clone();
-  },
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
   // 32: order-mode only (random's shuffle-bag is covered by the 5 Rust unit tests,

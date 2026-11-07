@@ -894,8 +894,6 @@ pub fn run() {
             views::set_view_grid,
             views::rename_tag,
             views::delete_tag,
-            views::set_tag_color,
-            views::set_tag_colors,
             views::add_view,
             views::rename_view,
             views::set_view_color,

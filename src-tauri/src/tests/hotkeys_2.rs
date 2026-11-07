@@ -456,27 +456,6 @@ fn renaming_a_tag_rewrites_every_prompt_at_once() {
     assert!(!rename_tag_in(&mut prompts, "nothing", "Else"));
 }
 
-// The merge color rule: the surviving (target) tag keeps its own color if it
-// has one, and only borrows the source's color when it had none at all.
-#[test]
-fn merging_a_tag_keeps_the_targets_color_if_it_has_one() {
-    let mut colors = HashMap::new();
-    colors.insert("work".to_string(), "#ff0000".to_string());
-    colors.insert("job".to_string(), "#00ff00".to_string());
-    transfer_tag_color(&mut colors, "work", "job");
-    assert_eq!(colors.get("job"), Some(&"#00ff00".to_string()), "target's own color must win");
-    assert_eq!(colors.get("work"), None, "the merged-away key's color entry is gone");
-}
-
-#[test]
-fn merging_a_tag_into_an_uncolored_one_transfers_the_color() {
-    let mut colors = HashMap::new();
-    colors.insert("work".to_string(), "#ff0000".to_string());
-    transfer_tag_color(&mut colors, "work", "job");
-    assert_eq!(colors.get("job"), Some(&"#ff0000".to_string()));
-    assert_eq!(colors.get("work"), None);
-}
-
 #[test]
 fn deleting_a_tag_clears_it_everywhere() {
     let mut prompts = sample_prompts();

@@ -1,18 +1,14 @@
-// Tags: editor chips, the type-ahead list, the colour palette, the library filter row
-// and the tag manager.
-import { $, assignSettings, COLORS, confirmIfNoUndo, errToast, flag, invoke, LANG, modalState, openColorPop, prompts, settings, t, toast, undoToast } from "./core.js";
+// Tags: editor chips, the type-ahead list, the library filter row and the tag manager.
+import { $, assignSettings, confirmIfNoUndo, errToast, flag, invoke, LANG, modalState, prompts, settings, t, toast, undoToast } from "./core.js";
 import { placePopover } from "./popover.js";
 import { libTags, renderLibrary } from "./library.js";
 import { renderGrid } from "./views.js";
 import { confirmDialog } from "./dialog.js";
-import { buildSwatches } from "./editor.js";
 
 // ---- Tags: chips in the editor, filter row + manager in the library ----
-// Names are compared case-insensitively; the backend keeps one canonical casing
-// and stores chip colors under the lowercase key, so a recased tag keeps its color.
+// Names are compared case-insensitively; the backend keeps one canonical casing.
 export const tagsOn = () => flag("tags");
 export const tagKey = (name) => String(name ?? "").trim().toLowerCase();
-export const tagColor = (name) => settings.tag_colors?.[tagKey(name)] || "";
 export const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in views.rs
 
 // Every tag in the library, first-seen casing, sorted for a stable filter row.
@@ -51,11 +47,6 @@ export function tagChipEl(name, as = "span") {
   const chip = document.createElement(as);
   chip.className = "tag-chip";
   if (as === "button") chip.type = "button";
-  const color = tagColor(name);
-  if (color) {
-    chip.style.setProperty("--chip-color", color);
-    chip.classList.add("tag-colored");
-  }
   const label = document.createElement("span");
   label.className = "tag-chip-label";
   label.textContent = name;
@@ -63,10 +54,8 @@ export function tagChipEl(name, as = "span") {
   return chip;
 }
 
-// Shared floating layers: the type-ahead list and the per-chip palette.
+// Shared floating layer: the type-ahead list.
 export const tagSuggest = document.createElement("div");
-
-export const tagPop = document.createElement("div");
 
 export const placePop = (el, anchor) => placePopover(el, anchor.getBoundingClientRect());
 let tagSuggestActive = -1;
@@ -91,21 +80,6 @@ export const closeTagSuggest = () => {
   tagSuggest.classList.add("hidden");
   setTagSuggestActive(-1);
 };
-export const closeTagPop = () => tagPop.classList.add("hidden");
-
-// Palette for one tag. Colors are global (settings), so this writes through at once.
-export function openTagColorPop(anchor, name, after) {
-  const box = tagPop.querySelector(".swatches");
-  const apply = async (hex) => {
-    try {
-      assignSettings(await invoke("set_tag_color", { name, color: hex }));
-    } catch (err) { errToast(err); return; }
-    after?.();
-  };
-  buildSwatches(box, tagColor(name), (hex) => { closeTagPop(); apply(hex); },
-    (swatch, cur) => openColorPop(swatch, cur, apply));
-  placePop(tagPop, anchor);
-}
 
 // ---- Editor: assigned chips + type-ahead input ----
 export function renderTagChips() {
@@ -114,14 +88,6 @@ export function renderTagChips() {
   box.innerHTML = "";
   for (const name of modalState.tags || []) {
     const chip = tagChipEl(name);
-    const dot = document.createElement("button");
-    dot.type = "button";
-    dot.className = "tag-dot";
-    dot.title = t("tagColor");
-    dot.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openTagColorPop(dot, name, renderTagChips);
-    });
     const del = document.createElement("button");
     del.type = "button";
     del.className = "tag-x";
@@ -132,7 +98,6 @@ export function renderTagChips() {
       modalState.tags = modalState.tags.filter((n) => tagKey(n) !== tagKey(name));
       renderTagChips();
     });
-    chip.prepend(dot);
     chip.append(del);
     box.appendChild(chip);
   }
@@ -303,7 +268,7 @@ export function renderTagFilter() {
   // A tag renamed or deleted elsewhere must not keep filtering the list.
   const live = new Set(names.map(tagKey));
   for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
-  const sig = LANG + "|" + names.join("") + "" + [...libTags].sort().join("") + JSON.stringify(settings.tag_colors || {});
+  const sig = LANG + "|" + names.join("") + "" + [...libTags].sort().join("");
   if (sig === _lastTagFilterSig) return;
   _lastTagFilterSig = sig;
   renderTagBar(bar, libTags, renderLibrary);
@@ -350,11 +315,9 @@ export function renderTagBar(bar, activeSet, rerender) {
   }
 }
 
-// Merging is rename_tag with a target that already exists: rename_tag_in dedupes per
-// prompt and its color rule (keep the target's color, borrow the source's only if the
-// target has none) is what a merge needs. Used by the Merge button and by a rename that
-// collides with an existing tag. It runs at once; the snapshot taken here is what the
-// undo toast puts back.
+// Merging is rename_tag onto a tag that already exists: rename_tag_in dedupes per prompt.
+// Used by the Merge button and by a rename that collides with an existing tag. It runs at
+// once; the snapshot taken here is what the undo toast puts back.
 export async function mergeTagWithUndo(from, into, refresh) {
   const sure = await confirmIfNoUndo({
     title: t("tagMergeTargetTitle"),
@@ -368,21 +331,18 @@ export async function mergeTagWithUndo(from, into, refresh) {
   const hasTag = (p, key) => (p.tags || []).some((x) => tagKey(x) === key);
   const fromIds = prompts.filter((p) => hasTag(p, fromKey)).map((p) => p.id);
   const intoIds = prompts.filter((p) => hasTag(p, intoKey)).map((p) => p.id);
-  const fromColor = tagColor(from);
-  const intoColor = tagColor(into);
   try { assignSettings(await invoke("rename_tag", { old: from, new: into })); }
   catch (err) { errToast(err); return; }
   await refresh();
   undoToast(
     t("tagMergeDone").replace("{from}", () => from).replace("{into}", () => into),
-    () => undoTagMerge(from, into, fromIds, intoIds, fromColor, intoColor, refresh),
+    () => undoTagMerge(from, into, fromIds, intoIds, refresh),
   );
 }
 
-// Undo for a merge: the source tag goes back onto its prompts, the target leaves
-// the prompts that only got it through the merge, and the colours return to what
-// they were (the merge lends the source's colour to a target that had none).
-export async function undoTagMerge(from, into, fromIds, intoIds, fromColor, intoColor, refresh) {
+// Undo for a merge: the source tag goes back onto its prompts and the target leaves the
+// prompts that only got it through the merge.
+export async function undoTagMerge(from, into, fromIds, intoIds, refresh) {
   try {
     if (fromIds.length) {
       assignSettings(await invoke("batch_prompts", { ids: fromIds, action: "tag-add", tag: from, color: null, favorite: null, viewId: null }));
@@ -392,8 +352,6 @@ export async function undoTagMerge(from, into, fromIds, intoIds, fromColor, into
         assignSettings(await invoke("batch_prompts", { ids: onlyMerged, action: "tag-remove", tag: into, color: null, favorite: null, viewId: null }));
       }
     }
-    if (fromColor) assignSettings(await invoke("set_tag_color", { name: from, color: fromColor }));
-    if (tagColor(into) !== intoColor) assignSettings(await invoke("set_tag_color", { name: into, color: intoColor }));
   } catch (err) { errToast(err); }
   await refresh();
 }
@@ -404,13 +362,12 @@ export function openTagManager() {
 }
 export function closeTagManager() {
   $("tag-modal").classList.add("hidden");
-  closeTagPop();
 }
 
-// Undo for a deleted tag: re-adds the tag text to every prompt that had it and restores
-// its color, through the batch/tag-color commands (rewrite through the store, not prompt
-// by prompt, as in the tag manager's refresh()).
-export async function restoreDeletedTag(name, ids, color) {
+// Undo for a deleted tag: re-adds the tag text to every prompt that had it, through the
+// batch command (rewrite through the store, not prompt by prompt, as in the tag manager's
+// refresh()).
+export async function restoreDeletedTag(name, ids) {
   const idset = new Set(ids);
   if (ids.length) {
     try {
@@ -420,9 +377,6 @@ export async function restoreDeletedTag(name, ids, color) {
     for (const p of prompts) {
       if (idset.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)) p.tags = [...(p.tags || []), name];
     }
-  }
-  if (color) {
-    try { assignSettings(await invoke("set_tag_color", { name, color })); } catch (err) { errToast(err); }
   }
   await renderGrid();
   renderTagManager();
@@ -452,17 +406,6 @@ export function renderTagManager() {
   for (const name of names) {
     const row = document.createElement("div");
     row.className = "tag-manage-row";
-    const dot = document.createElement("button");
-    dot.type = "button";
-    dot.className = "tag-dot";
-    dot.title = t("tagColor");
-    const color = tagColor(name);
-    if (color) dot.style.setProperty("--chip-color", color);
-    dot.classList.toggle("tag-colored", !!color);
-    dot.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openTagColorPop(dot, name, refresh);
-    });
     const label = document.createElement("span");
     label.className = "tag-manage-name";
     label.textContent = name;
@@ -524,15 +467,14 @@ export function renderTagManager() {
       if (!ok) return;
       const key = tagKey(name);
       const hadIds = prompts.filter((p) => (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
-      const color = tagColor(name);
       try { assignSettings(await invoke("delete_tag", { name })); }
       catch (err) { errToast(err); return; }
       libTags.delete(key);
       for (const p of prompts) p.tags = (p.tags || []).filter((x) => tagKey(x) !== key);
       await refresh();
-      undoToast(t("tagDeletedToast").replace("{name}", () => name), () => restoreDeletedTag(name, hadIds, color));
+      undoToast(t("tagDeletedToast").replace("{name}", () => name), () => restoreDeletedTag(name, hadIds));
     });
-    row.append(dot, label, count, rename, merge, del);
+    row.append(label, count, rename, merge, del);
     list.appendChild(row);
   }
 }
@@ -540,32 +482,13 @@ export function renderTagManager() {
 export function wireTags() {
   tagSuggest.className = "tag-suggest hidden";
   document.body.appendChild(tagSuggest);
-  tagPop.className = "tag-pop hidden";
-  tagPop.innerHTML = '<div class="swatches"></div>';
-  document.body.appendChild(tagPop);
   document.addEventListener("pointerdown", (e) => {
     if (!tagSuggest.classList.contains("hidden") &&
         !tagSuggest.contains(e.target) && e.target !== $("modal-tag-input") &&
         !e.target.closest?.(".tag-pick")) closeTagSuggest();
-    if (!tagPop.classList.contains("hidden") &&
-        !tagPop.contains(e.target) && !e.target.closest(".tag-dot") && !e.target.closest(".color-pop")) closeTagPop();
   });
   wireTagInput();
   $("tag-modal-close")?.addEventListener("click", closeTagManager);
-  // One click assigns the palette to every tag that has no color yet, in the
-  // order the palette lists them: round-robin once past the end.
-  $("tag-colorize")?.addEventListener("click", async () => {
-    const palette = COLORS.slice(1);
-    if (!palette.length) return;
-    const uncolored = allTags().filter((n) => !tagColor(n));
-    if (!uncolored.length) return;
-    const entries = uncolored.map((name, i) => ({ name, color: palette[i % palette.length] }));
-    try { assignSettings(await invoke("set_tag_colors", { entries })); }
-    catch (err) { errToast(err); return; }
-    renderTagManager();
-    renderLibrary();
-    await renderGrid();
-  });
   $("tag-modal")?.addEventListener("pointerdown", (e) => {
     if (e.target === $("tag-modal")) closeTagManager();
   });

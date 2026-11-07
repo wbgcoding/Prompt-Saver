@@ -192,7 +192,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     # Tag chips wrap over several lines on a narrow dialog; the harness carries the
     # feature class so that extra row counts against the available height.
     tag_chips = "".join(
-        f'<span class="tag-chip"><button type="button" class="tag-dot"></button>'
+        f'<span class="tag-chip">'
         f'<span class="tag-chip-label">Tag {i}</span>'
         f'<button type="button" class="tag-x">&times;</button></span>'
         for i in range(6)

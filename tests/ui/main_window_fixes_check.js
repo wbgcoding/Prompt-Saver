@@ -1830,6 +1830,15 @@ later(async () => {
   }
 });
 
+// Tags carry no colour: no chip colour, no dot, no colour command, no colorize button.
+section(() => {
+  const tags = read("tags.js");
+  for (const needle of ["tagColor", "tag-dot", "set_tag_color", "--chip-color"]) {
+    check(!tags.includes(needle), "tags.js still has " + needle);
+  }
+  check(!read("index.html").includes("tag-colorize"), "index.html still has the colorize button");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

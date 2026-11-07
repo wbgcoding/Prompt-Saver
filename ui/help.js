@@ -531,7 +531,7 @@ export const HELP_CONTENT = {
         "Use the tag filter row in the library to narrow the list.",
         "To archive a tile, choose \"Archive\" in its menu: it gets the archive tag and leaves the grid and the list until you show it again.",
       ],
-      whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step. The archive is an ordinary tag with a reserved name: an archived tile still turns up in search and stays in exports and backups, and \"Unarchive\" in the same menu brings it back.",
+      whatHappens: "Renaming, merging, or deleting a tag from the tag manager applies everywhere it is used, in one step. The archive is an ordinary tag with a reserved name: an archived tile still turns up in search and stays in exports and backups, and \"Unarchive\" in the same menu brings it back.",
       settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & copy history → Tags", "Archive tag: Expert menu → Library & copy history → Tags"],
     },
     {
@@ -1268,7 +1268,7 @@ export const HELP_CONTENT = {
         "Die Tag-Filterleiste in der Bibliothek nutzen, um die Liste auf ein oder mehrere Tags einzugrenzen.",
         "Zum Archivieren im Menü einer Kachel „Archivieren“ wählen: sie bekommt den Archiv-Tag und verschwindet aus Raster und Liste, bis du sie wieder anzeigst.",
       ],
-      whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt. Das Archiv ist ein gewöhnlicher Tag mit reserviertem Namen: Eine archivierte Kachel taucht weiterhin in der Suche auf und bleibt in Exporten und Sicherungen, und „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
+      whatHappens: "Umbenennen, Zusammenführen oder Löschen eines Tags in der Tag-Verwaltung wirkt überall dort, wo er genutzt wird, in einem Schritt. Das Archiv ist ein gewöhnlicher Tag mit reserviertem Namen: Eine archivierte Kachel taucht weiterhin in der Suche auf und bleibt in Exporten und Sicherungen, und „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
       settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Kopierverlauf → Tags", "Archiv-Tag: Expertenmenü → Bibliothek & Kopierverlauf → Tags"],
     },
     {

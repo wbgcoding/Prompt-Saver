@@ -116,7 +116,6 @@ def perf_seed(n):
   SETTINGS.active_view = "home";
   SETTINGS.ui_flags.multiView = true;
   SETTINGS.tile_folders = [];
-  SETTINGS.tag_colors = { work: "#3b82f6" };
 
   RESULTS.get_state = () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) });
   RESULTS.set_active_view = (a) => {

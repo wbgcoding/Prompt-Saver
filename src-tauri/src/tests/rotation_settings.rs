@@ -229,29 +229,6 @@ fn a_non_utf8_attachment_is_reported_unreadable_not_guessed() {
 }
 
 #[test]
-fn colouring_every_tag_at_once_is_all_or_nothing() {
-    let entry = |name: &str, color: &str| TagColor { name: name.into(), color: color.into() };
-    let mut settings = Settings::default();
-    settings.tag_colors.insert("kept".into(), "#111111".into());
-
-    apply_tag_colors(&mut settings, vec![entry("Work", "#ff0000"), entry("Home", "#00ff00")]).unwrap();
-    assert_eq!(settings.tag_colors.get("work"), Some(&"#ff0000".to_string()));
-    assert_eq!(settings.tag_colors.get("home"), Some(&"#00ff00".to_string()));
-
-    // A single bad colour rejects the whole batch: nothing before it in the
-    // list may already have been written.
-    let before = settings.tag_colors.clone();
-    let err = apply_tag_colors(&mut settings, vec![entry("Fresh", "#0000ff"), entry("Bad", "red")]);
-    assert!(err.is_err());
-    assert_eq!(settings.tag_colors, before, "a rejected batch must change nothing");
-
-    // An empty colour clears one, exactly like the single-tag command.
-    apply_tag_colors(&mut settings, vec![entry("Work", "")]).unwrap();
-    assert!(!settings.tag_colors.contains_key("work"));
-    assert_eq!(settings.tag_colors.get("kept"), Some(&"#111111".to_string()));
-}
-
-#[test]
 fn auto_eligible_rejects_placeholders_images_and_files() {
     // "placeholders" (variable text) are explicitly ALLOWED: this test
     // instead covers every gate auto_eligible actually enforces.

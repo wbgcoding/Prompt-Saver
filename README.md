@@ -34,7 +34,7 @@ A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 | **Saved searches** | Star a query, its tag filters and sort to bring it back with one click from a chip above the search field |
 | **Search everything** | A toolbar icon or Ctrl+K opens an overlay that searches prompts, copy history, attachments, views, settings and help at once, arrow keys move across the groups, Enter runs the fitting action for whatever is highlighted |
 | **Library tiles** | Switch the library from a list to big preview tiles, name below, same click/select/right-click behavior either way |
-| **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
+| **Tags** | Label prompts with your own tags and narrow the library down to the prompts that carry all of them |
 | **Archive** | Set a prompt aside without deleting it, hidden from the library and grid but still findable by search and included in export and backups |
 | **Trash** | A deleted prompt goes to a trash first: restore it or delete it for good, or let it clear itself after a retention period you choose (30 days by default, or never) |
 | **Private notes** | A notes field per prompt for context you keep but never copy, searchable and shown in the tooltip |

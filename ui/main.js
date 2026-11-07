@@ -11,7 +11,7 @@ import { applyMissingFiles, fitAllTiles, fitCache, pollMissingFiles, wireTiles }
 import { bindWindowChrome, closeLightbox, closeShortcutsModal, wireClearButtons, wireLightbox, wireTooltips, wireWindowControls } from "./windowChrome.js";
 import { bindHelpView } from "./helpView.js";
 import { bindLibrary, hideLibrary, renderLibrary } from "./library.js";
-import { closeTagManager, closeTagPop, tagPop, wireTags } from "./tags.js";
+import { closeTagManager, wireTags } from "./tags.js";
 import { bindJournal } from "./journal.js";
 import { applyTheme, applyTileStyle, bindTheme, closeThemeEditor, wireTheme } from "./theme.js";
 import { applySettingsCore, applySettingsUi, bindSettingsPanel, closeImportMenu, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
@@ -191,7 +191,6 @@ function bind() {
     if (!$("global-search").classList.contains("hidden")) { trapTabWithin($("global-search"), e); return; }
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
-    if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
     if (!$("compare-modal").classList.contains("hidden")) { trapTabWithin($("compare-modal"), e); return; }
     if (!$("theme-modal").classList.contains("hidden")) { trapTabWithin($("theme-modal"), e); return; }
     if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
@@ -234,7 +233,6 @@ function bind() {
     else if (!$("global-search").classList.contains("hidden")) closeGlobalSearch();
     else if (dismissConfirm()) { /* the dialog closed itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
-    else if (!tagPop.classList.contains("hidden")) closeTagPop();
     else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
     else if (!$("theme-modal").classList.contains("hidden")) closeThemeEditor();
     else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();

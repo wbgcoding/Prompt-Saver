@@ -326,15 +326,6 @@ pub(crate) fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) ->
     changed
 }
 
-// Move `old_key`'s color onto `new_key` unless `new_key` already has one: the surviving
-// tag's color wins. This is what makes renaming onto an existing tag a merge; rename_tag
-// handles both.
-pub(crate) fn transfer_tag_color(colors: &mut HashMap<String, String>, old_key: &str, new_key: &str) {
-    if let Some(color) = colors.remove(old_key) {
-        colors.entry(new_key.to_string()).or_insert(color);
-    }
-}
-
 // Drop one tag key from every prompt. Returns whether anything changed.
 pub(crate) fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
     let mut changed = false;
@@ -389,13 +380,12 @@ pub(crate) async fn rename_tag(
 ) -> Result<Settings, String> {
     let old = valid_tag_name(&old)?;
     let new = valid_tag_name(&new)?;
-    let (old_key, new_key) = (tag_key(&old), tag_key(&new));
+    let old_key = tag_key(&old);
     let mut store = lock(&state);
     rename_tag_in_store(
         &mut store,
         &old_key,
         &new,
-        &new_key,
         &mut |st| save_prompts(&app, st),
         &mut |settings| save_settings(&app, settings),
     )?;
@@ -410,7 +400,6 @@ pub(crate) fn rename_tag_in_store(
     store: &mut Store,
     old_key: &str,
     new: &str,
-    new_key: &str,
     save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
     save_settings_fn: &mut dyn FnMut(&Settings) -> bool,
 ) -> Result<(), String> {
@@ -423,9 +412,6 @@ pub(crate) fn rename_tag_in_store(
         restore_tags(store, original_tags);
         return Err("save-failed".into());
     }
-    let original_old_color = store.settings.tag_colors.get(old_key).cloned();
-    let original_new_color = store.settings.tag_colors.get(new_key).cloned();
-    transfer_tag_color(&mut store.settings.tag_colors, old_key, new_key);
     // The archive tag is known by name (ui_texts["archiveTag"]): renaming it has to move that
     // name too, or every archived entry would stop counting as archived.
     let original_archive = store.settings.ui_texts.get("archiveTag").cloned();
@@ -436,14 +422,6 @@ pub(crate) fn rename_tag_in_store(
         match original_archive {
             Some(a) => { store.settings.ui_texts.insert("archiveTag".to_string(), a); }
             None => { store.settings.ui_texts.remove("archiveTag"); }
-        }
-        match original_old_color {
-            Some(c) => { store.settings.tag_colors.insert(old_key.to_string(), c); }
-            None => { store.settings.tag_colors.remove(old_key); }
-        }
-        match original_new_color {
-            Some(c) => { store.settings.tag_colors.insert(new_key.to_string(), c); }
-            None => { store.settings.tag_colors.remove(new_key); }
         }
         if prompts_changed {
             restore_tags(store, original_tags);
@@ -508,11 +486,7 @@ pub(crate) fn delete_tag_in_store(
         restore_tags(store, original_tags);
         return Err("save-failed".into());
     }
-    let original_color = store.settings.tag_colors.remove(key);
     if !save_settings_fn(&store.settings) {
-        if let Some(c) = original_color {
-            store.settings.tag_colors.insert(key.to_string(), c);
-        }
         // The prompts without the tag are already on disk: put them back there too.
         if prompts_changed {
             restore_tags(store, original_tags);
@@ -521,53 +495,6 @@ pub(crate) fn delete_tag_in_store(
         return Err("save-failed".into());
     }
     Ok(())
-}
-
-#[derive(Deserialize)]
-pub(crate) struct TagColor {
-    pub(crate) name: String,
-    pub(crate) color: String,
-}
-
-// Every name and colour is validated before anything is stored, so one bad entry
-// rejects the whole call instead of leaving half the tags coloured.
-pub(crate) fn apply_tag_colors(settings: &mut Settings, entries: Vec<TagColor>) -> Result<(), String> {
-    let checked: Vec<(String, String)> = entries
-        .into_iter()
-        .map(|e| Ok((tag_key(&valid_tag_name(&e.name)?), valid_tag_color(&e.color)?)))
-        .collect::<Result<_, String>>()?;
-    for (key, color) in checked {
-        if color.is_empty() {
-            settings.tag_colors.remove(&key);
-        } else {
-            settings.tag_colors.insert(key, color);
-        }
-    }
-    Ok(())
-}
-
-// "Colour every tag at once": one lock and one settings write for the whole set, instead of
-// an immediate write per tag through set_tag_color.
-#[tauri::command(async)]
-pub(crate) fn set_tag_colors(app: AppHandle, state: State<Db>, entries: Vec<TagColor>) -> Result<Settings, String> {
-    let mut store = lock(&state);
-    apply_tag_colors(&mut store.settings, entries)?;
-    save_settings(&app, &store.settings);
-    Ok(webview_settings(&store.settings))
-}
-
-#[tauri::command(async)]
-pub(crate) fn set_tag_color(app: AppHandle, state: State<Db>, name: String, color: String) -> Result<Settings, String> {
-    let key = tag_key(&valid_tag_name(&name)?);
-    let color = valid_tag_color(&color)?;
-    let mut store = lock(&state);
-    if color.is_empty() {
-        store.settings.tag_colors.remove(&key);
-    } else {
-        store.settings.tag_colors.insert(key, color);
-    }
-    save_settings(&app, &store.settings);
-    Ok(webview_settings(&store.settings))
 }
 
 // ---------- View commands ----------
@@ -653,19 +580,6 @@ pub(crate) fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>
     webview_settings(&store.settings)
 }
 
-// Moves every tag colour equal to an old palette hex to its new one. Returns
-// whether anything changed.
-pub(crate) fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashMap<String, String>) -> bool {
-    let mut changed = false;
-    for c in colors.values_mut() {
-        if let Some(nc) = map.get(c.as_str()) {
-            *c = nc.clone();
-            changed = true;
-        }
-    }
-    changed
-}
-
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
 #[tauri::command(async)]
@@ -718,12 +632,7 @@ pub(crate) fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String,
             views_changed = true;
         }
     }
-    // Tag colours are picked from the same palette swatches, so a tag set to an old
-    // palette hue would otherwise keep the old hex and read as a custom colour.
-    let original_tag_colors = store.settings.tag_colors.clone();
-    views_changed |= remap_tag_colors(&mut store.settings.tag_colors, &map);
     if views_changed && !save_settings(&app, &store.settings) {
-        store.settings.tag_colors = original_tag_colors;
         for (id, c) in original_view_colors {
             if let Some(v) = store.settings.views.iter_mut().find(|v| v.id == id) {
                 v.color = c;

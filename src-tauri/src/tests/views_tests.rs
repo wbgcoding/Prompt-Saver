@@ -67,14 +67,11 @@ fn a_stale_layout_drops_the_ids_of_deleted_prompts() {
 }
 
 #[test]
-fn renaming_a_tag_to_another_casing_keeps_its_colour() {
+fn renaming_a_tag_to_another_casing_recases_it() {
     let mut prompts = vec![test_prompt("a")];
     prompts[0].tags = vec!["css".to_string()];
     assert!(rename_tag_in(&mut prompts, "css", "CSS"));
     assert_eq!(prompts[0].tags, vec!["CSS".to_string()]);
-    let mut colors = HashMap::from([("css".to_string(), "#ff0000".to_string())]);
-    transfer_tag_color(&mut colors, "css", "css");
-    assert_eq!(colors.get("css").map(String::as_str), Some("#ff0000"));
 }
 
 // A refused new-folder save must not have pulled members out of their old folders first.
@@ -134,4 +131,13 @@ fn hot_path_commands_run_off_the_main_thread() {
             "{name} must be an async command"
         );
     }
+}
+
+// Settings saved with the removed tag-colour field still load, and the next write drops it.
+#[test]
+fn old_settings_with_tag_colors_load_and_lose_the_field() {
+    let loaded: Settings = serde_json::from_str(r##"{"tag_colors":{"work":"#3b82f6"},"theme":"dark"}"##).unwrap();
+    assert_eq!(loaded.theme, "dark");
+    let written = serde_json::to_string(&loaded).unwrap();
+    assert!(!written.contains("tag_colors"), "the next settings write must not carry the old field");
 }

@@ -4560,7 +4560,6 @@ body.drag-over::after {
 .lib-name-row > .lib-name { flex: 0 1 auto; min-width: 0; }
 .lib-tag-marks { display: inline-flex; gap: 4px; flex: 0 0 auto; pointer-events: none; }
 .tag-mark { padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 500; line-height: 1.6; color: var(--muted); background: var(--surface); white-space: nowrap; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; }
-.tag-mark.tag-colored { background: color-mix(in srgb, var(--chip-color) 22%, transparent); color: var(--fg); }
 .lib-sub-right { flex: 0 0 auto; font-weight: 600; }
 .lib-text {
   color: var(--muted);
@@ -5234,26 +5233,11 @@ body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
   line-height: 1.45;
   letter-spacing: 0.01em;
 }
-.tag-chip.tag-colored {
-  border-color: var(--chip-color);
-  background: color-mix(in srgb, var(--chip-color) 22%, transparent);
-}
 .tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 button.tag-chip { cursor: pointer; transition: border-color var(--transition), background var(--transition); }
 button.tag-chip:hover { border-color: var(--accent); }
 .tag-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
-.tag-dot {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--chip-color, var(--surface));
-  cursor: pointer;
-}
-.tag-dot.tag-colored { border-color: var(--chip-color); }
 .tag-x {
   flex: 0 0 auto;
   padding: 0 0 0 2px;
@@ -5266,8 +5250,8 @@ button.tag-chip:hover { border-color: var(--accent); }
 }
 .tag-x:hover { color: var(--danger); }
 
-/* Type-ahead list and the per-chip palette float above the dialog they belong to. */
-.tag-suggest, .tag-pop {
+/* The type-ahead list floats above the dialog it belongs to. */
+.tag-suggest {
   position: fixed;
   z-index: 140;
   max-width: min(340px, 92vw);
@@ -5278,9 +5262,8 @@ button.tag-chip:hover { border-color: var(--accent); }
   border-radius: 10px;
   box-shadow: var(--shadow);
 }
-/* The palette stays a grid of swatches; the type-ahead is a LIST, like every other
-   dropdown in the app; chips floating in a box read as a stray tooltip. */
-.tag-pop { z-index: 141; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
+/* The type-ahead is a LIST, like every other dropdown in the app; chips floating in a
+   box read as a stray tooltip. */
 .tag-suggest { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
 /* The row is full width so the whole line is clickable, but the HIGHLIGHT belongs to
    the chip: a 40px tag lighting up a 200px band looked like the wrong thing was
@@ -5321,8 +5304,6 @@ button.tag-chip:hover { border-color: var(--accent); }
 }
 .tag-chip.tag-filter:hover { border-color: var(--accent); color: var(--fg); }
 .tag-chip.tag-filter.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.tag-chip.tag-filter.tag-colored { border-color: var(--chip-color); }
-.tag-chip.tag-filter.tag-colored.active { background: var(--chip-color); border-color: var(--chip-color); }
 /* Clearing the filter and opening the manager are ACTIONS, not filters: they must
    not look like one more tag to click. */
 .tag-action {
