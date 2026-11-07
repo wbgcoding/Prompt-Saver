@@ -9,7 +9,7 @@ use windows::Win32::Foundation::WIN32_ERROR;
 use windows::Win32::System::Registry::{
     RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW,
     RegSetValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE,
-    REG_DWORD, REG_EXPAND_SZ, REG_OPTION_NON_VOLATILE, REG_SAM_FLAGS, REG_SZ, REG_VALUE_TYPE,
+    REG_BINARY, REG_DWORD, REG_EXPAND_SZ, REG_OPTION_NON_VOLATILE, REG_SAM_FLAGS, REG_SZ, REG_VALUE_TYPE,
 };
 
 #[derive(Clone, Copy)]
@@ -134,6 +134,14 @@ impl Key {
         }
     }
 
+    pub(crate) fn get_binary(&self, name: &str) -> io::Result<Vec<u8>> {
+        let (kind, bytes) = self.query(name)?;
+        if kind != REG_BINARY {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "registry value is not binary data"));
+        }
+        Ok(bytes)
+    }
+
     pub(crate) fn set_string(&self, name: &str, value: &str) -> io::Result<()> {
         let name = wide(name);
         let data: Vec<u8> = wide(value).into_iter().flat_map(u16::to_le_bytes).collect();
@@ -143,6 +151,11 @@ impl Key {
     pub(crate) fn set_u32(&self, name: &str, value: u32) -> io::Result<()> {
         let name = wide(name);
         unsafe { check(RegSetValueExW(self.0, PCWSTR(name.as_ptr()), None, REG_DWORD, Some(&value.to_le_bytes()))) }
+    }
+
+    pub(crate) fn set_binary(&self, name: &str, value: &[u8]) -> io::Result<()> {
+        let name = wide(name);
+        unsafe { check(RegSetValueExW(self.0, PCWSTR(name.as_ptr()), None, REG_BINARY, Some(value))) }
     }
 
     pub(crate) fn delete_value(&self, name: &str) -> io::Result<()> {

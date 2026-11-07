@@ -2,9 +2,56 @@ use super::*;
 
 // ---------- Background / autostart ----------
 
-// Add/remove the app in the per-user Windows autostart registry key.
+// Task Manager keeps each entry's on/off state here, next to (not inside) the Run key.
 #[cfg(windows)]
-pub(crate) fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), String> {
+const STARTUP_APPROVED_RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+// What Task Manager reads as "enabled": flag 0x02, no change time.
+#[cfg(windows)]
+const STARTUP_APPROVED_ENABLED: [u8; 12] = [0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+// Task Manager's stored state for our entry. A missing key or value is None.
+#[cfg(windows)]
+pub(crate) fn startup_approved_bytes() -> Result<Option<Vec<u8>>, String> {
+    use crate::registry::{Hive, Key};
+    let key = match Key::open_read(Hive::CurrentUser, STARTUP_APPROVED_RUN) {
+        Ok(k) => k,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    match key.get_binary(AUTOSTART_KEY) {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+// True when Task Manager's switch for our entry is off. Unreadable counts as on.
+#[cfg(windows)]
+pub(crate) fn task_manager_disabled() -> bool {
+    startup_approved_disabled(startup_approved_bytes().ok().flatten().as_deref())
+}
+
+// Removes a value from Task Manager's state key; a missing key or value is fine.
+#[cfg(windows)]
+fn delete_startup_approved(name: &str) -> Result<(), String> {
+    use crate::registry::{Hive, Key};
+    match Key::open_write(Hive::CurrentUser, STARTUP_APPROVED_RUN) {
+        Ok(key) => match key.delete_value(name) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+// Add/remove the app in the per-user Windows autostart registry key. `approve` also marks the
+// entry enabled for Task Manager (switching on in the app re-enables one it had disabled);
+// changing only the start-minimized flag passes false and leaves that choice alone.
+#[cfg(windows)]
+pub(crate) fn apply_autostart(enabled: bool, minimized: bool, approve: bool) -> Result<(), String> {
     use crate::registry::{Hive, Key};
     let run = Key::open_write(Hive::CurrentUser, r"Software\Microsoft\Windows\CurrentVersion\Run")
         .map_err(|e| e.to_string())?;
@@ -12,18 +59,26 @@ pub(crate) fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), Stri
     // app twice; drop it whichever way the setting goes.
     if !brand::LEGACY_AUTOSTART_KEY.is_empty() {
         let _ = run.delete_value(brand::LEGACY_AUTOSTART_KEY);
+        let _ = delete_startup_approved(brand::LEGACY_AUTOSTART_KEY);
     }
     if enabled {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let flag = if minimized { " --minimized" } else { "" };
         run.set_string(AUTOSTART_KEY, &format!("\"{}\"{}", exe.display(), flag))
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        if approve {
+            Key::create_write(Hive::CurrentUser, STARTUP_APPROVED_RUN)
+                .and_then(|key| key.set_binary(AUTOSTART_KEY, &STARTUP_APPROVED_ENABLED))
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
     } else {
         match run.delete_value(AUTOSTART_KEY) {
-            Ok(_) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.to_string()),
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
         }
+        delete_startup_approved(AUTOSTART_KEY)
     }
 }
 
@@ -143,13 +198,40 @@ pub(crate) fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl
     }
 }
 
+// What start-up does about the autostart entry.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum BootAutostart {
+    // Refresh the Run value.
+    Write,
+    // Task Manager disabled the entry: the stored setting turns off, the Run value stays.
+    TurnSettingOff,
+    Nothing,
+}
+
 // Start-up only ever writes or refreshes an entry whose setting is on, and only
-// when it is missing or points at this exe or one that no longer exists. It never
+// when it is missing or points at this exe or one that no longer exists, and Task Manager
+// has not disabled it (then the setting turns off and the entry stays). It never
 // removes anything: a restart into default settings (demo mode, a missing or
 // unreadable settings row) must not delete the user's real registrations, and
 // removal belongs to the switches. Demo mode skips the whole pass.
 pub(crate) fn boot_reconcile_writes(setting_on: bool, demo: bool, owner: RegistryOwner) -> bool {
     setting_on && !demo && owner != RegistryOwner::OtherExe
+}
+
+pub(crate) fn boot_reconcile_action(setting_on: bool, demo: bool, owner: RegistryOwner, tm_disabled: bool) -> BootAutostart {
+    if !boot_reconcile_writes(setting_on, demo, owner) {
+        BootAutostart::Nothing
+    } else if tm_disabled {
+        BootAutostart::TurnSettingOff
+    } else {
+        BootAutostart::Write
+    }
+}
+
+// Whether the StartupApproved bytes Task Manager keeps per entry say "disabled": the low bit
+// of the first byte (0x02 / 0x06 enabled, 0x03 / 0x07 disabled). No value counts as enabled.
+pub(crate) fn startup_approved_disabled(bytes: Option<&[u8]>) -> bool {
+    bytes.and_then(|b| b.first()).is_some_and(|b| b & 1 == 1)
 }
 
 // Turning a switch off must not remove an entry another copy (portable versus
@@ -181,18 +263,46 @@ pub(crate) fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
     }
 }
 
-// Start-up: refresh the autostart registration that the stored settings ask for.
-pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, demo: bool) {
+// Start-up: refresh the autostart registration that the stored settings ask for. Returns what
+// was decided; the caller turns the stored setting off for `TurnSettingOff`.
+pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, demo: bool) -> BootAutostart {
     match autostart_command() {
         Ok(cmd) => {
-            if boot_reconcile_writes(autostart_on, demo, current_registry_owner(cmd.as_deref())) {
-                if let Err(e) = apply_autostart(true, start_min) {
+            let action = boot_reconcile_action(
+                autostart_on,
+                demo,
+                current_registry_owner(cmd.as_deref()),
+                task_manager_disabled(),
+            );
+            if action == BootAutostart::Write {
+                if let Err(e) = apply_autostart(true, start_min, true) {
                     append_crash_log(&format!("autostart reconcile failed: {e}"));
                 }
             }
+            action
         }
-        Err(e) => append_crash_log(&format!("autostart reconcile could not read the entry: {e}")),
+        Err(e) => {
+            append_crash_log(&format!("autostart reconcile could not read the entry: {e}"));
+            BootAutostart::Nothing
+        }
     }
+}
+
+// What the settings switch should show: our own Run entry exists and Task Manager has not
+// disabled it. A stored "on" that Windows no longer backs is turned off here, touching only
+// the setting (the registry stays as it is, so the entry can be enabled again in Task Manager).
+#[tauri::command(async)]
+pub(crate) fn autostart_effective(app: AppHandle, state: State<Db>) -> Result<bool, String> {
+    let cmd = autostart_command()?;
+    let effective = current_registry_owner(cmd.as_deref()) == RegistryOwner::ThisExe && !task_manager_disabled();
+    if !effective {
+        let mut store = lock(&state);
+        if store.settings.autostart {
+            store.settings.autostart = false;
+            save_settings(&app, &store.settings);
+        }
+    }
+    Ok(effective)
 }
 
 // ---------- Leftover address-scheme registration ----------
@@ -270,7 +380,7 @@ pub(crate) fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> 
             st.settings.autostart = prior;
             !persist || save_settings(&app, &st.settings)
         },
-        || if skip { Ok(()) } else { apply_autostart(enabled, minimized) },
+        || if skip { Ok(()) } else { apply_autostart(enabled, minimized, true) },
         autostart_restore,
     )?;
     Ok(enabled)
@@ -296,7 +406,7 @@ pub(crate) fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: boo
             st.settings.start_minimized = prior;
             !persist || save_settings(&app, &st.settings)
         },
-        || if rewrite { apply_autostart(true, enabled) } else { Ok(()) },
+        || if rewrite { apply_autostart(true, enabled, false) } else { Ok(()) },
         |prior_os| if rewrite { autostart_restore(prior_os) } else { Ok(()) },
     )?;
     Ok(enabled)

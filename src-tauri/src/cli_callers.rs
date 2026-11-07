@@ -220,7 +220,7 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
                     .as_ref()
                     .map(|entry| crate::skip_registry_removal(on, crate::current_registry_owner(entry.as_deref())))
                     .unwrap_or(false);
-                let applied = if skip { Ok(()) } else { crate::apply_autostart(on, store.settings.start_minimized) };
+                let applied = if skip { Ok(()) } else { crate::apply_autostart(on, store.settings.start_minimized, true) };
                 if let Err(e) = applied {
                     // Same as the app's own switch: neither side keeps the change.
                     if let Some(entry) = prior_entry {

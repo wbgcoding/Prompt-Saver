@@ -892,13 +892,42 @@ fn registry_owner_tells_this_copy_from_another() {
 
 #[test]
 fn boot_reconcile_only_writes_and_never_removes() {
+    use BootAutostart::*;
     use RegistryOwner::*;
-    for owner in [Missing, ThisExe, Gone] {
-        assert!(boot_reconcile_writes(true, false, owner));
-        assert!(!boot_reconcile_writes(false, false, owner), "a setting that reads as off must not delete an entry at boot");
-        assert!(!boot_reconcile_writes(true, true, owner), "demo mode skips the pass");
+    for owner in [Missing, ThisExe, Gone, OtherExe] {
+        for demo in [false, true] {
+            for setting_on in [false, true] {
+                for tm_disabled in [false, true] {
+                    let got = boot_reconcile_action(setting_on, demo, owner, tm_disabled);
+                    let want = if demo || owner == OtherExe || !setting_on {
+                        Nothing
+                    } else if tm_disabled {
+                        TurnSettingOff
+                    } else {
+                        Write
+                    };
+                    assert_eq!(got, want, "setting_on={setting_on} demo={demo} owner={owner:?} tm_disabled={tm_disabled}");
+                }
+            }
+        }
     }
-    assert!(!boot_reconcile_writes(true, false, OtherExe), "another copy's entry is left alone");
+}
+
+#[test]
+fn startup_approved_bytes_tell_disabled_from_enabled() {
+    let with = |first: u8| {
+        let mut b = vec![0u8; 12];
+        b[0] = first;
+        b
+    };
+    assert!(!startup_approved_disabled(None));
+    assert!(!startup_approved_disabled(Some(&[])));
+    for enabled in [0x02u8, 0x06] {
+        assert!(!startup_approved_disabled(Some(&with(enabled))), "{enabled:#x} is enabled");
+    }
+    for disabled in [0x03u8, 0x07] {
+        assert!(startup_approved_disabled(Some(&with(disabled))), "{disabled:#x} is disabled");
+    }
 }
 
 #[test]

@@ -225,6 +225,7 @@
     "allow-pdf-preview",
     "allow-attachment-text-preview",
     "allow-set-autostart",
+    "allow-autostart-effective",
     "allow-set-start-minimized",
     "allow-export-prompts",
     "allow-preview-import",
