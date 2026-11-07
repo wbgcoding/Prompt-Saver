@@ -517,8 +517,13 @@ SECTION = """\
         const favText = (document.querySelector('#ctx [data-act="favorite"] .ctx-label') || {}).textContent || '';
         if (favText !== 'Remove from favorites') out.errors.push('698: the favorite entry reads: ' + favText);
         const seps = [...document.querySelectorAll('#ctx .ctx-sep')].filter((s) => getComputedStyle(s).display !== 'none');
-        if (seps.length < 3) out.errors.push('698: the tile menu has ' + seps.length + ' visible separators, expected at least 3');
+        if (seps.length !== 3) out.errors.push('698: the tile menu has ' + seps.length + ' visible separators, expected 3');
         const shown = [...document.querySelectorAll('#ctx > button')].filter(ctxVisible);
+        // Order: use (copy, chain, select, favorite), change, place, remove.
+        const order = shown.map((b) => b.dataset.act);
+        if (order.slice(0, 4).join(',') !== 'copy,chain,select,favorite') {
+          out.errors.push('698: the tile menu starts with ' + order.slice(0, 4).join(',') + ', expected copy,chain,select,favorite');
+        }
         const lastBtn = shown[shown.length - 1];
         if (!lastBtn || lastBtn.dataset.act !== 'delete') {
           out.errors.push('698: the last tile menu entry is ' + (lastBtn ? lastBtn.dataset.act : 'none') + ', expected delete');
