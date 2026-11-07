@@ -43,6 +43,9 @@ async function main() {
   expect("fmtUnit seconds with a decimal comma", fmtUnit(1.5, "second", "de", 1), "1,5 Sek.");
   expect("fmtUnitName days in German", fmtUnitName(7, "day", "de"), "Tg.");
   expect("fmtUnitName follows the count in Polish", fmtUnitName(1, "day", "pl") !== fmtUnitName(7, "day", "pl"), true);
+  expect("fmtUnit long days in German", fmtUnit(1, "day", "de", 0, "long"), "1 Tag");
+  expect("fmtUnit long hours in German", fmtUnit(6, "hour", "de", 0, "long"), "6 Stunden");
+  expect("fmtUnit short stays the default", fmtUnit(30, "day", "de"), "30 Tg.");
   expect("fmtUnit unknown language falls back to English", fmtUnit(7, "day", "not a language"), "7 days");
 
   // Every call site passes its window's language, so no size reads in English by accident.

@@ -328,7 +328,7 @@ export async function renderBackupPanel(body) {
   };
   const collapseHead = collapsibleHead;
 
-  const fmtInterval = (h) => (h < 24 ? fmtUnit(h, "hour", LANG) : fmtUnit(h / 24, "day", LANG, 1)); // ≥24h shown in days
+  const fmtInterval = (h) => (h < 24 ? fmtUnit(h, "hour", LANG, 0, "long") : fmtUnit(h / 24, "day", LANG, 1, "long")); // ≥24h shown in days
 
   const switchRow = (labelText, on, onChange, tipKey) => {
     const l = document.createElement("label"); l.className = "field switch-field";
@@ -560,7 +560,7 @@ export async function renderBackupPanel(body) {
     statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : EMPTY_VALUE, t("backupLargest")),
     statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : EMPTY_VALUE, t("backupSmallest")),
     statCard(newest && oldest
-      ? fmtUnit(Math.max(0, Math.round((newest - oldest) / 86400000)), "day", LANG)
+      ? fmtUnit(Math.max(0, Math.round((newest - oldest) / 86400000)), "day", LANG, 0, "long")
       : EMPTY_VALUE, t("backupSpan")),
     dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
     dtCard(t("backupNewest"), newest),
