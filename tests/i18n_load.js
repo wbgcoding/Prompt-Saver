@@ -7,7 +7,7 @@ const path = require("path");
 const vm = require("vm");
 
 const DIR = path.join(__dirname, "..", "ui", "i18n");
-const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"];
+const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"];
 
 const read = (name) => fs.readFileSync(path.join(DIR, name + ".js"), "utf8").replace(/\r\n/g, "\n");
 
@@ -28,7 +28,7 @@ const FLOAT_TXT = evalDefault("float");
 
 function combinedSource() {
   let out = "// Shared translations: main window (I18N), floating pills (FLOAT_TXT).\n" +
-    "// 11 languages; EN is the fallback for missing keys.\n";
+    `// ${LANGS.length} languages; EN is the fallback for missing keys.\n`;
   out += `export const LANGS = [\n  ${LANGS.map((c) => `"${c}"`).join(", ")},\n];\n\nexport const I18N = {\n`;
   for (const c of LANGS) out += `  ${c}: {\n${bodyOf(c)}\n  },\n`;
   out += `};\n\n// Compact strings for the floating pill windows.\nexport const FLOAT_TXT = {\n${bodyOf("float")}\n};\n`;

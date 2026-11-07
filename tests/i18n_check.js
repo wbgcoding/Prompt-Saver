@@ -172,6 +172,26 @@ const unused = [...en].filter((k) =>
 
 console.log(`languages: ${langs.length}, keys per language: ${en.size}`);
 if (unused.length) console.log(`note: ${unused.length} key(s) never referenced literally: ${unused.join(", ")}`);
+// The language picker lists "auto" first, then the Latin-script names sorted by their own
+// spelling, then the non-Latin ones (zh, ja), and offers exactly the codes in LANGS.
+{
+  const html = fs.readFileSync(path.join(UI, "index.html"), "utf8");
+  const from = html.indexOf('<select id="lang-select"');
+  const sel = from < 0 ? "" : html.slice(from, html.indexOf("</select>", from));
+  const opts = [...sel.matchAll(/<option value="([^"]*)"[^>]*>([^<]*)<\/option>/g)].map((m) => ({ code: m[1], name: m[2].trim() }));
+  if (!opts.length) problems.push("ui/index.html: no #lang-select options found");
+  else {
+    if (opts[0].code !== "auto") problems.push("lang-select: 'auto' must be the first option");
+    const rest = opts.filter((o) => o.code !== "auto");
+    if ([...rest.map((o) => o.code)].sort().join(",") !== [...LANGS].sort().join(",")) problems.push("lang-select: option values differ from LANGS");
+    const latin = rest.filter((o) => /^[\p{Script=Latin}]/u.test(o.name));
+    const other = rest.filter((o) => !/^[\p{Script=Latin}]/u.test(o.name));
+    if (rest.slice(0, latin.length).some((o, i) => o !== latin[i])) problems.push("lang-select: Latin-script names must come before the others");
+    for (let i = 1; i < latin.length; i++) if (latin[i - 1].name.localeCompare(latin[i].name, "en") > 0) problems.push(`lang-select: '${latin[i - 1].name}' must not come before '${latin[i].name}'`);
+    if (other.map((o) => o.code).join(",") !== "zh,ja") problems.push("lang-select: the non-Latin names must be zh, then ja");
+  }
+}
+
 for (const p of problems) console.log("FAIL", p);
 console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
 process.exit(problems.length ? 1 : 0);

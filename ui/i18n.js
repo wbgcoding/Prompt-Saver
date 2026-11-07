@@ -4,7 +4,7 @@
 import FLOAT_TXT from "./i18n/float.js";
 import { applyTerms } from "./terms.js";
 import { APP_NAME } from "./brand.js";
-export const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"];
+export const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro", "fr"];
 export { FLOAT_TXT };
 const loaded = new Map();
 export function primeLang(code, dict) { loaded.set(code, Promise.resolve(dict)); }
