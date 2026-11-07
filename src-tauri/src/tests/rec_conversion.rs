@@ -494,6 +494,56 @@ fn outline_rect_for_target_is_none_for_monitor_and_window_targets() {
 }
 
 #[test]
+fn rec_windows_to_hide_takes_only_visible_overlapping_app_windows() {
+    let region = (100, 100, 400, 300);
+    let w = |label: &str, visible: bool, minimized: bool, r: (i32, i32, u32, u32)| (label.to_string(), visible, minimized, r);
+    let wins = vec![
+        w("main", true, false, (200, 150, 800, 600)),
+        w("float-1", true, false, (450, 350, 60, 40)),
+        w("folder-1", true, false, (900, 900, 200, 200)),
+        w("float-3", true, false, (500, 100, 100, 100)), // touches the region's right edge only
+        w("video-editor", true, false, (0, 0, 2000, 1200)),
+        w("launcher", true, false, (120, 120, 50, 50)),
+        w("float-2", false, false, (150, 150, 60, 40)),
+        w("float-4", true, false, (150, 150, 0, 0)),
+        w("camera", true, false, (150, 150, 100, 100)),
+        w("rec-bar", true, false, (150, 150, 100, 100)),
+        w("rec-outline", true, false, (100, 100, 400, 300)),
+        w("snip-0", true, false, (100, 100, 400, 300)),
+    ];
+    assert_eq!(rec_windows_to_hide(region, &wins), ["main", "float-1", "video-editor", "launcher"]);
+    // A minimized main window is not visible on screen: it stays as it is.
+    let min = vec![w("main", true, true, (200, 150, 800, 600))];
+    assert!(rec_windows_to_hide(region, &min).is_empty());
+}
+
+#[test]
+fn rec_hides_label_covers_the_app_windows_over_the_screen_and_no_helper_window() {
+    for yes in ["main", "float-1", "float-12", "folder-3", "video-editor", "launcher"] {
+        assert!(rec_hides_label(yes), "{yes} should be hidden");
+    }
+    for no in ["camera", "rec-bar", "rec-outline", "snip-0", "vars-0", "tray-menu", "mainx", "floater"] {
+        assert!(!rec_hides_label(no), "{no} must stay");
+    }
+}
+
+#[test]
+fn every_recording_end_path_restores_the_windows_it_hid() {
+    let src = include_str!("../rec_cmds.rs");
+    let lines: Vec<&str> = src.lines().collect();
+    let mut seen = 0;
+    for (i, l) in lines.iter().enumerate() {
+        if l.contains("hide_rec_outline(") && !l.contains("fn ") {
+            seen += 1;
+            let tail = lines[i + 1..(i + 4).min(lines.len())].join("\n");
+            assert!(tail.contains("restore_app_windows_after_recording("), "no restore after the call on line {}", i + 1);
+        }
+    }
+    assert_eq!(seen, 3, "the end paths changed: update this test");
+    assert_eq!(src.matches("restore_app_windows_after_recording(").count(), 4, "the failed start restores too");
+}
+
+#[test]
 fn outline_reapply_guard_ignores_a_two_pixel_rounding_difference() {
     let want = (2020, 50, 400, 300);
     assert!(!outline_rect_needs_reapply(want, want));

@@ -174,9 +174,9 @@ SEARCH_RACE_PROBE = """
       if (visible(gs)) errs.push('855: Escape did not close the search overlay');
     }
 """
-# 856: a new screenshot arriving over an editor with edits asks before it replaces them. Keep
-# editing leaves the session (and the file Apply will clean up) untouched; Replace cancels the
-# old session once and opens the new shot.
+# 856: a new screenshot arriving over an editor with edits asks Save / Don't save / Cancel before it
+# replaces them. Cancel leaves the session (and the file Save will clean up) untouched; Don't save
+# ends the old session once and opens the new shot.
 SNIP_REPLACE_SEED = '<script>window.__SEED_SETTINGS__ = { ui_flags: { screenshotSave: true } };</script>'
 SNIP_REPLACE_PROBE = """
     // 856:
@@ -213,7 +213,7 @@ SNIP_REPLACE_PROBE = """
         if (!visible(cm)) {
           errs.push('856: a new shot over an edited editor did not ask');
         } else {
-          if ($('confirm-title').textContent.trim() !== 'Replace the open screenshot?') errs.push('856: unexpected dialog: ' + $('confirm-title').textContent);
+          if ($('confirm-title').textContent.trim() !== 'Save the edited screenshot?') errs.push('856: unexpected dialog: ' + $('confirm-title').textContent);
           $('confirm-cancel').click();
         }
         await sleep(300);
@@ -221,6 +221,8 @@ SNIP_REPLACE_PROBE = """
         // Apply cleans up the file the OPEN session belongs to: still the clean shot's.
         window.__SMOKE_ARGS__.length = 0;
         $('snip-edit-apply').click();
+        await until(() => visible(cm), 40);
+        if (visible(cm)) $('confirm-ok').click(); // Close asks too: Save writes the folder file and removes the old one
         await until(() => argsOf('delete_screenshot_file').length > 0, 40);
         const del = argsOf('delete_screenshot_file').map((c) => c[1].path);
         if (del.join() !== 'C:/shots/clean.png') errs.push('856: after Keep editing Apply cleaned up ' + JSON.stringify(del) + ' instead of the open shot');
@@ -231,9 +233,9 @@ SNIP_REPLACE_PROBE = """
         await stroke();
         window.__FIRE__('snip-captured', { data_url: shot(120, 80), path: 'C:/shots/fourth.png', name: 'fourth.png' });
         await until(() => visible(cm), 40);
-        if (visible(cm)) $('confirm-ok').click();
+        if (visible(cm)) $('confirm-alt').click(); // Don't save
         await until(() => live.width === 120, 40);
-        if (live.width !== 120) errs.push('856: Replace did not open the new shot: ' + live.width);
+        if (live.width !== 120) errs.push('856: Discarding did not open the new shot: ' + live.width);
         if (!undo.disabled) errs.push('856: the replaced editor kept the old history');
         window.__SMOKE_ARGS__.length = 0;
         $('snip-edit-apply').click();
@@ -373,10 +375,12 @@ SNIP_HOLD_PROBE = """
         let redos = 0;
         while (!redo.disabled && redos < 80) { redo.click(); redos++; await sleep(20); }
         if (redos !== 50) errs.push('859: redo walked ' + redos + ' resizes, wanted 50');
-        // The session holds edits: the header X is Close, it keeps the result and asks nothing.
+        // The session holds edits: the header X is Close and asks; Don't save ends the session.
         $('snip-edit-close').click();
+        await until(() => visible($('confirm-modal')), 40);
+        if (!visible($('confirm-modal'))) errs.push('859: closing the editor with edits did not ask');
+        else $('confirm-alt').click();
         await sleep(300);
-        if (visible($('confirm-modal'))) errs.push('859: closing the editor with edits asked a question');
         if (visible(edit)) errs.push('859: the header close did not close the editor');
         const after = window.__snipEditHeld();
         if (after.ops || after.redo || after.img || after.raw || after.resizes) errs.push('859: closing the editor left the session alive: ' + JSON.stringify(after));

@@ -104,6 +104,7 @@
     "allow-delete-view",
     "allow-set-active-view",
     "allow-copy-image-data",
+    "allow-snip-edit-close-ack",
     "allow-save-tile-folder",
     "allow-take-out-of-tile-folder",
     "allow-delete-tile-folder",

@@ -10,6 +10,7 @@ import { recordToolUsage } from "./management.js";
 import { buildSwatches } from "./editor.js";
 import { createSnipDraw, snipEditNormRect } from "./snipDraw.js";
 import { insertWinButtons, wireWinButtons } from "./winButtons.js";
+import { confirmDialog } from "./dialog.js";
 
 // The expert switch for the mouse wheel on number fields, read when a field is built.
 const snipWheelOn = () => settings.ui_flags?.numFieldWheel !== false;
@@ -166,7 +167,9 @@ export function initSnipEditor() {
     ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
     cropRect: null, lastNudged: null, eyedropArm: null, textEdit: null, selOp: null,
-    onClose: null, onCancel: null, actions: null,
+    onClose: null, onCancel: null, actions: null, autoSaves: null,
+    // rev counts every change to the edits, savedRev the revision last written to a file.
+    rev: 0, savedRev: 0,
   };
 
   const {
@@ -332,9 +335,21 @@ export function initSnipEditor() {
     snipLiveCopyTimer = 0;
   }
   function snipEditNoteChange() {
+    SE.rev++;
     snipEditCancelLiveCopy();
     if (!SE.active) return;
     snipLiveCopyTimer = setTimeout(snipEditLiveCopy, SNIP_LIVE_COPY_MS);
+    snipEditSyncDirty();
+  }
+  // Edits that are not in a file yet: some operation exists and changed since the last file save.
+  function snipEditDirty() { return SE.active && SE.ops.length > 0 && SE.rev !== SE.savedRev; }
+  // The backend learns when unsaved edits exist, so a quit (tray, Alt+F4) can ask first.
+  let snipSentDirty = false;
+  function snipEditSyncDirty() {
+    const d = snipEditDirty();
+    if (d === snipSentDirty) return;
+    snipSentDirty = d;
+    invoke("snip_edit_close_ack", { state: d ? "dirty" : "clean" }).catch(() => {});
   }
   // Every editor copy waits for the one before it, so a live copy still running can never land
   // on the clipboard after the copy made on close.
@@ -349,7 +364,7 @@ export function initSnipEditor() {
     if (!SE.active) return;
     // A drag, an open text box or the held "show original" means the image is mid-change: look
     // again after another quiet period instead of copying a half state.
-    if (SE.drag || SE.textEdit || SE.showRaw) { snipEditNoteChange(); return; }
+    if (SE.drag || SE.textEdit || SE.showRaw) { snipLiveCopyTimer = setTimeout(snipEditLiveCopy, SNIP_LIVE_COPY_MS); return; }
     try {
       // Transient: in-between states stay out of the Windows clipboard history.
       await snipCopyImage(snipEditExportDataUrl(false), true);
@@ -684,6 +699,15 @@ export function initSnipEditor() {
       sw: { x: r.x, y: r.y + r.h }, s: { x: r.x + r.w / 2, y: r.y + r.h }, se: { x: r.x + r.w, y: r.y + r.h },
     };
   }
+  // Handles keep one on-screen size at every zoom and stay inside the image, so a handle on the
+  // image edge is never cut off.
+  function snipEditPaintHandle(ctx, p) {
+    const hs = 10 / snipEditScale();
+    const x = snipEditClamp(p.x - hs / 2, 0, Math.max(0, SE.w - hs));
+    const y = snipEditClamp(p.y - hs / 2, 0, Math.max(0, SE.h - hs));
+    ctx.fillRect(x, y, hs, hs);
+    ctx.strokeRect(x, y, hs, hs);
+  }
   function snipEditHitCropHandle(pt, r) {
     const tol = 10 / snipEditScale();
     for (const [name, p] of Object.entries(snipEditCropHandlePoints(r))) {
@@ -725,15 +749,11 @@ export function initSnipEditor() {
     // Heavier dim once the box is at rest so the picture reads as cropped; lighter while an edge
     // is dragged so what would come back stays visible.
     snipEditDrawCropDim(snipEditLiveCtx, r, SE.drag ? 0.55 : 0.85);
-    const hs = 8;
     snipEditLiveCtx.save();
     snipEditLiveCtx.fillStyle = "#fff";
     snipEditLiveCtx.strokeStyle = "#2563eb";
-    snipEditLiveCtx.lineWidth = 1.5;
-    for (const p of Object.values(snipEditCropHandlePoints(r))) {
-      snipEditLiveCtx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-      snipEditLiveCtx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-    }
+    snipEditLiveCtx.lineWidth = 1.5 / snipEditScale();
+    for (const p of Object.values(snipEditCropHandlePoints(r))) snipEditPaintHandle(snipEditLiveCtx, p);
     snipEditLiveCtx.restore();
     snipEditDrawGuides();
   }
@@ -925,15 +945,11 @@ export function initSnipEditor() {
     return "";
   }
   function snipEditPaintShapeHandles(op) {
-    const hs = 8;
     snipEditLiveCtx.save();
     snipEditLiveCtx.fillStyle = "#fff";
     snipEditLiveCtx.strokeStyle = "#2563eb";
-    snipEditLiveCtx.lineWidth = 1.5;
-    for (const p of Object.values(snipEditShapeHandlePoints(op))) {
-      snipEditLiveCtx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-      snipEditLiveCtx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-    }
+    snipEditLiveCtx.lineWidth = 1.5 / snipEditScale();
+    for (const p of Object.values(snipEditShapeHandlePoints(op))) snipEditPaintHandle(snipEditLiveCtx, p);
     snipEditLiveCtx.restore();
   }
   function snipEditDrawShapeSelectionLive() {
@@ -1513,6 +1529,11 @@ export function initSnipEditor() {
     const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
     snipEditStage.style.margin = (sw > vw || sh > vh) ? `${Math.round(vh / 2)}px ${Math.round(vw / 2)}px` : "";
     $("snip-edit-zoom-val").textContent = `${Math.round(SE.zoom * 100)}%`;
+    // The handles are sized in screen pixels, so the live layer is redrawn after every zoom.
+    if (SE.active && !SE.drag) {
+      if (SE.tool === "crop" && SE.cropRect) snipEditDrawCropOverlayLive();
+      else if (SE.selOp) snipEditDrawShapeSelectionLive();
+    }
   }
   // Zooms while the picture point under (clientX, clientY) stays where it is.
   function snipEditZoomAt(z, clientX, clientY) {
@@ -1722,6 +1743,9 @@ export function initSnipEditor() {
   window.addEventListener("blur", () => {
     if (SE.spaceDown) { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
     snipOriginalToggle.reset();
+    // Leaving the window is the moment someone pastes elsewhere: a copy still waiting for its quiet
+    // period is made now, so the paste matches what the editor shows.
+    if (snipLiveCopyTimer) setTimeout(() => { if (snipLiveCopyTimer) { snipEditCancelLiveCopy(); snipEditLiveCopy(); } }, 0);
   });
   snipEditWrap.addEventListener("wheel", (e) => {
     if (!SE.active) return;
@@ -1801,7 +1825,7 @@ export function initSnipEditor() {
       // A selected or just-drawn shape gives up only the arrow keys, never the whole editor;
       // closing on Escape here would throw away every edit just because something is selected.
       if (SE.lastNudged) { snipEditDeselectShape(); return; }
-      snipEditApply();
+      snipEditRequestClose();
       return;
     }
     if (document.activeElement === snipEditTextInput) return; // input owns its own keys
@@ -1809,20 +1833,18 @@ export function initSnipEditor() {
     // typed there must not switch tools, and arrows must move its caret.
     if (snipEditFieldOwnsKeys(e.target)) return;
     // A button reached by keyboard owns Enter and Space: pressing it must not apply the
-    // editor or start a pan. After a mouse click the focus stays on it, and Enter still closes.
+    // editor or start a pan. After a mouse click the focus stays on it.
     const onKeyboardButton = ["BUTTON", "A", "SUMMARY"].includes(e.target?.tagName) && e.target.matches(":focus-visible");
     if (onKeyboardButton && (e.key === "Enter" || e.key === " ")) return;
     if (e.key === "F2" && SE.lastNudged && SE.lastNudged.tool === "text") { e.preventDefault(); snipEditEditText(SE.lastNudged); return; }
     if (e.key === "Enter") {
       e.preventDefault();
-      // The untouched full-image box is no crop, so Enter then closes the editor. So does a box
-      // the pointer release already committed: Enter only has something to commit when the box
-      // differs from the crop op.
+      // Enter commits a changed crop box and never closes the editor. A box the pointer release
+      // already committed has nothing left to commit.
       if (SE.tool === "crop" && SE.cropRect && !snipEditCropIsFull(SE.cropRect)) {
         const committed = SE.ops.find((o) => o.tool === "crop");
         if (!committed || JSON.stringify(committed.rect) !== JSON.stringify(SE.cropRect)) { snipEditCropCommit(); return; }
       }
-      snipEditApply();
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) snipEditRedo(); else snipEditUndo(); return; }
@@ -1857,13 +1879,13 @@ export function initSnipEditor() {
   document.addEventListener("keyup", snipEditKeyup);
 
   // ---- open / cancel / apply / export ----
-  // onClose(editedDataUrl | null): the editor closed (Close, Esc, Enter, X); null = nothing was
+  // onClose(editedDataUrl | null, { writeFile }): the editor closed (Close, Esc, X); null = nothing was
   // edited. actions: { save, saveAs, keep, ocr, retry } called with the current edited image;
   // `retry` is absent for an opened file, which hides "New screenshot".
   // Counts the opens: images decode asynchronously, so a slow one finishing after a newer open
   // must not take the editor over from it.
   let snipEditOpenSeq = 0;
-  function snipEditOpen(dataUrl, { onClose, onCancel, actions }) {
+  function snipEditOpen(dataUrl, { onClose, onCancel, actions, autoSaves }) {
     const img = new Image();
     const seq = ++snipEditOpenSeq;
     // A capture that fails to decode (truncated data URL, broken picked file) takes the same
@@ -1884,6 +1906,9 @@ export function initSnipEditor() {
       SE.ops = [];
       SE.redo = [];
       SE.floor = 0;
+      SE.rev = 0;
+      SE.savedRev = 0;
+      SE.autoSaves = autoSaves || null;
       SE.perTool = {};
       SE.tool = SNIP_EDIT_DEFAULT_TOOL();
       SE.cropRect = null;
@@ -1958,6 +1983,8 @@ export function initSnipEditor() {
     snipEditLiveCv.width = 0;
     snipEditLiveCv.height = 0;
     snipEditReleaseMarkerLayer();
+    SE.autoSaves = null;
+    snipEditSyncDirty();
   }
   function snipEditCancel() {
     const cb = SE.onCancel;
@@ -2000,24 +2027,71 @@ export function initSnipEditor() {
   // Close (button, X, Esc, Enter): nothing is thrown away. The edited image goes to onClose, or null
   // when nothing was edited, and `after` (keep, with the image either way) runs once the editor is
   // gone.
-  function snipEditApply(after) {
+  function snipEditApply(after, { writeFile = true } = {}) {
     snipEditFinishTextIfOpen();
     if (SE.tool === "crop") snipEditCropCommit();
     const edited = SE.ops.length > 0;
     const dataUrl = edited || after ? snipEditExportDataUrl() : null;
     const cb = SE.onClose;
     snipEditClose();
-    cb?.(edited ? dataUrl : null);
+    // writeFile false tells the opener not to write the folder file on this close.
+    const done = Promise.resolve(cb?.(edited ? dataUrl : null, { writeFile }));
     after?.(dataUrl);
+    return done;
   }
   // A bar action that hands the current edited image to the opener without closing the editor.
   function snipEditAction(name, ...extra) {
     const fn = SE.actions?.[name];
     if (!fn) return;
     snipEditFinishTextIfOpen();
-    fn(snipEditExportDataUrl(), ...extra);
+    return fn(snipEditExportDataUrl(), ...extra);
   }
-  $("snip-edit-close").addEventListener("click", () => snipEditApply());
+  // Closes the editor; with edits that are not in a file it asks Save / Don't save / Cancel first
+  // (also when the close would save by itself). Resolves true when the editor closed, false when
+  // it stays open. `replacing`: a new capture takes the editor over, so nothing goes to the
+  // clipboard.
+  // A second request while one is running (a capture or a quit during the question or the save)
+  // waits for that one instead of asking again.
+  let snipCloseRun = null;
+  function snipEditRequestClose(opts) {
+    if (!snipCloseRun) snipCloseRun = snipEditRequestCloseRun(opts).finally(() => { snipCloseRun = null; });
+    return snipCloseRun;
+  }
+  async function snipEditRequestCloseRun({ replacing = false } = {}) {
+    snipEditFinishTextIfOpen();
+    const leave = (opts) => {
+      if (replacing) { snipEditCancel(); return Promise.resolve(); }
+      return snipEditApply(undefined, opts);
+    };
+    if (!snipEditDirty()) { await leave(); return true; }
+    const autoSave = !!SE.autoSaves?.();
+    const answer = await confirmDialog({
+      title: t("snipCloseAskTitle"),
+      message: t("snipCloseAskMsg"),
+      confirmLabel: t("snipCloseAskSave"),
+      altLabel: t("snipCloseAskDiscard"),
+      cancelLabel: t("cancel"),
+      danger: false,
+    });
+    if (answer === false) return false;
+    if (answer === "alt") { await leave({ writeFile: false }); return true; }
+    if (autoSave) {
+      // Exporting commits a pending crop box, which counts as a change: read the revision after it.
+      const dataUrl = snipEditExportDataUrl();
+      const rev = SE.rev;
+      const ok = await SE.actions.saveToFolder?.(dataUrl);
+      if (!ok) return false;
+      SE.savedRev = rev;
+      snipEditSyncDirty();
+      await leave({ writeFile: false });
+      return true;
+    }
+    const path = await SE.actions.saveAs?.(snipEditExportDataUrl(), $("snip-edit-saveas-format").value || undefined);
+    if (!path) return false;
+    await leave({ writeFile: false });
+    return true;
+  }
+  $("snip-edit-close").addEventListener("click", () => snipEditRequestClose());
   // The bar is the window's only title bar while the editor is open, so it carries
   // the minimize and maximize buttons too; they act on the main window.
   const snipWinButtons = insertWinButtons($("snip-edit-close"), "snip-edit");
@@ -2025,7 +2099,7 @@ export function initSnipEditor() {
   $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
   $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
   $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
-  $("snip-edit-apply").addEventListener("click", () => snipEditApply());
+  $("snip-edit-apply").addEventListener("click", () => snipEditRequestClose());
   $("snip-edit-keep").addEventListener("click", () => {
     const keep = SE.actions?.keep;
     snipEditApply((url) => keep?.(url));
@@ -2169,7 +2243,13 @@ export function initSnipEditor() {
     if (snipScalePop.contains(e.target) || e.target.closest("#snip-edit-scale")) return;
     closeSnipScalePop();
   });
-  $("snip-edit-saveas").addEventListener("click", () => snipEditAction("saveAs", $("snip-edit-saveas-format").value || undefined));
+  $("snip-edit-saveas").addEventListener("click", async () => {
+    snipEditFinishTextIfOpen();
+    if (SE.tool === "crop") snipEditCropCommit(); // a pending crop box counts as a change before the save
+    const rev = SE.rev;
+    const path = await snipEditAction("saveAs", $("snip-edit-saveas-format").value || undefined);
+    if (path && SE.active) { SE.savedRev = rev; snipEditSyncDirty(); }
+  });
   // South-east resize handle. Moving the window needs no JS (data-tauri-drag-region), but
   // resizing has no HTML-attribute equivalent, so this calls the window API directly.
   $("snip-edit-resize-grip").addEventListener("pointerdown", (e) => {
@@ -2180,7 +2260,7 @@ export function initSnipEditor() {
   // What a new capture has to know before it takes the editor over: whether a session is
   // open and whether it holds edits that would be lost (any operation drawn so far).
   function snipEditState() {
-    return { active: SE.active, dirty: SE.ops.length > 0 };
+    return { active: SE.active, dirty: snipEditDirty() };
   }
   // Read by the smoke test: what the session still keeps alive, counting the resizes whose
   // earlier image is still held (also inside the history a resize carries) and the redo list.
@@ -2198,5 +2278,5 @@ export function initSnipEditor() {
     };
     return { resizes: heldResizes([...SE.ops, ...SE.redo]), ops: SE.ops.length, redo: SE.redo.length, img: !!SE.img, raw: !!SE.rawCanvas };
   };
-  return { snipEditOpen, snipEdit, snipEditState, snipEditCancel, snipCopyImage };
+  return { snipEditOpen, snipEdit, snipEditState, snipEditCancel, snipEditRequestClose, snipCopyImage };
 }

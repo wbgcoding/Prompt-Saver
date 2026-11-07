@@ -419,6 +419,72 @@ pub(crate) fn hide_rec_outline(app: &AppHandle) {
     }
 }
 
+// Labels of the app windows a region recording hid at its start, so every way the recording ends
+// shows exactly those again and a window hidden on purpose is never popped up.
+pub(crate) static REC_HID_APP: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+// The app windows a region recording puts away: the ones the screenshot hide pass covers plus the
+// video editor and the launcher. The camera preview, the bar and the outline stay.
+pub(crate) fn rec_hides_label(label: &str) -> bool {
+    crate::snip::is_snip_hidden_label(label)
+        || label == crate::video_editor::VIDEO_WIN_LABEL
+        || label == LAUNCHER_WIN_LABEL
+}
+
+// A window as the hide decision sees it: label, visible, minimized, outer rect in physical px.
+pub(crate) type RecWinInfo = (String, bool, bool, (i32, i32, u32, u32));
+
+// Which of the windows to hide for a recording of `region`: visible, not minimized, hidable and
+// overlapping the region.
+pub(crate) fn rec_windows_to_hide(
+    region: (i32, i32, u32, u32),
+    wins: &[RecWinInfo],
+) -> Vec<String> {
+    let rect = |r: (i32, i32, u32, u32)| crate::floating::Rect { x: r.0 as f64, y: r.1 as f64, w: r.2 as f64, h: r.3 as f64 };
+    let region = rect(region);
+    wins.iter()
+        .filter(|(label, visible, minimized, r)| {
+            rec_hides_label(label) && *visible && !*minimized && r.2 > 0 && r.3 > 0 && region.overlaps(&rect(*r))
+        })
+        .map(|(label, ..)| label.clone())
+        .collect()
+}
+
+// Put the overlapping app windows away for a region recording. With screenshots of the app
+// allowed they would be in the video; with the default they would still cover the region on
+// screen, so what is recorded could not be seen. Returns whether anything was hidden.
+pub(crate) fn hide_app_windows_for_recording(app: &AppHandle, region: (i32, i32, u32, u32)) -> bool {
+    let mut wins: Vec<RecWinInfo> = Vec::new();
+    for (label, win) in app.webview_windows() {
+        let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { continue };
+        wins.push((
+            label,
+            win.is_visible().unwrap_or(false),
+            win.is_minimized().unwrap_or(false),
+            (pos.x, pos.y, size.width, size.height),
+        ));
+    }
+    let hide = rec_windows_to_hide(region, &wins);
+    for label in &hide {
+        if let Some(win) = app.get_webview_window(label) {
+            let _ = win.hide();
+        }
+    }
+    let any = !hide.is_empty();
+    crate::snip::merge_hidden_labels(&mut REC_HID_APP.lock().unwrap_or_else(|e| e.into_inner()), hide);
+    any
+}
+
+// Show exactly the windows the recording hid, without taking the focus from the app being recorded.
+pub(crate) fn restore_app_windows_after_recording(app: &AppHandle) {
+    let hid = std::mem::take(&mut *REC_HID_APP.lock().unwrap_or_else(|e| e.into_inner()));
+    for label in hid {
+        if let Some(win) = app.get_webview_window(&label) {
+            crate::floating::show_without_focus(&win);
+        }
+    }
+}
+
 #[derive(serde::Serialize)]
 pub(crate) struct RecordingStatus {
     pub(crate) paused: bool,

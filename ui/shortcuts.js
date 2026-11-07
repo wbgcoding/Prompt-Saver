@@ -30,7 +30,6 @@ export const SHORTCUTS = [
   { action: "snipZoomIn", code: "Equal", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditZoomIn" },
   { action: "snipZoomOut", code: "Minus", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditZoomOut" },
   { action: "snipZoomReset", code: "Digit0", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditFitTip" },
-  { action: "snipApply", code: "Enter", mods: [], scopes: ["snipEditor"], descKey: "snipEditCloseTip" },
   { action: "snipCancel", code: "Escape", mods: [], scopes: ["snipEditor"], descKey: "snipEditCloseTip" },
   { action: "snipEditText", code: "F2", mods: [], scopes: ["snipEditor"], descKey: "snipEditTextAgain" },
   { action: "snipShowOriginal", code: "KeyV", mods: [], scopes: ["snipEditor"], descKey: "showOriginalTip" },
