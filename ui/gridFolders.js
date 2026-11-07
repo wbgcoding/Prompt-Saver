@@ -158,6 +158,9 @@ export async function takeOutOfFolder(id, cell) {
   await renderGrid(true);
 }
 
+// Dot size per number of dots shown, in cqmin: few dots are big, eight still fit one row.
+const FOLDER_DOT_K = [14, 14, 14, 13, 12, 11, 10, 9, 8];
+
 // A folder cell: the number of tiles it holds, large, and one colour dot per tile (at most eight).
 export function buildFolderTile(f) {
   const tile = document.createElement("div");
@@ -173,6 +176,8 @@ export function buildFolderTile(f) {
   const mini = document.createElement("span");
   mini.className = "folder-mini";
   const members = folderMembers(f);
+  const shown = Math.min(members.length, 8);
+  mini.style.setProperty("--dot-k", String(FOLDER_DOT_K[shown] ?? 8));
   mini.setAttribute("role", "img");
   mini.setAttribute("aria-label", t("tileFolderCount").replace("{n}", String(members.length)));
   const count = document.createElement("span");

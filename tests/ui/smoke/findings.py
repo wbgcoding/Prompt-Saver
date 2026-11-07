@@ -1845,15 +1845,22 @@ def run(browser, tmp):
         dots: tile.querySelectorAll('.folder-dot').length,
         parts: mini.children.length,
         label: mini.getAttribute('aria-label'),
+        fs: parseFloat(getComputedStyle(tile.querySelector('.folder-count')).fontSize),
+        dw: tile.querySelector('.folder-dot').getBoundingClientRect().width,
+        rows: new Set([...tile.querySelectorAll('.folder-dot')].map((d) => Math.round(d.getBoundingClientRect().top))).size,
         inside: mini.getBoundingClientRect().bottom <= tile.querySelector('.folder-title').getBoundingClientRect().top + 1 &&
           mini.getBoundingClientRect().top >= tile.getBoundingClientRect().top - 1,
       };
       box.remove();
       return res;
     };
+    const dotW = {};
     for (const n of [1, 2, 4, 6, 9]) {
-      for (const [w, h] of [[207, 148], [260, 150]]) {
+      for (const [w, h] of [[207, 148], [260, 150], [120, 86]]) {
         const r = build(n, w, h);
+        if (w === 207) dotW[n] = r.dw;
+        if (w === 207 && r.fs < 50) errs.push('250: the count is only ' + r.fs + ' px at 207x148, want at least 50');
+        if (r.rows !== 1) errs.push('250: ' + n + ' members: the dots sit in ' + r.rows + ' rows at ' + w + 'x' + h);
         if (r.count !== String(n)) errs.push('250: ' + n + ' members show the count ' + r.count);
         if (r.dots !== Math.min(n, 8)) errs.push('250: ' + n + ' members show ' + r.dots + ' dots, want ' + Math.min(n, 8));
         if (r.parts !== 2) errs.push('250: the preview holds ' + r.parts + ' parts, want the count and the dots only');
@@ -1861,6 +1868,7 @@ def run(browser, tmp):
         if (!r.inside) errs.push('250: ' + n + ' members: the preview is not inside the tile above the title at ' + w + 'x' + h);
       }
     }
+    if (!(dotW[1] > dotW[9])) errs.push('250: one dot (' + dotW[1] + ' px) is not bigger than nine (' + dotW[9] + ' px)');
 """)
     # The open grid folder dims the grid, has a title row with rename and close, and fits its rows.
     fpop_body = r"""

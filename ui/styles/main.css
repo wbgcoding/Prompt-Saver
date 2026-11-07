@@ -912,7 +912,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(4px, 4cqi, 10px);
+  gap: clamp(4px, 5cqmin, 14px);
   /* Takes all the room above the caption; min-height 0 lets the column flex shrink
      it with the card instead of pushing the caption out. */
   flex: 1 1 auto;
@@ -924,11 +924,12 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   box-shadow: none;
   transition: filter var(--transition);
 }
-/* The number carries the exact count; the dots (at most eight) show the colours. */
-.folder-count { font-size: clamp(16px, 22cqi, 44px); font-weight: 700; line-height: 1; }
-.folder-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(3px, 2.5cqi, 6px); max-width: 90%; }
+/* The number carries the exact count and fills the tile; the dots (at most eight, one row) shrink as their number grows (`--dot-k` from gridFolders.js). */
+.folder-count { font-size: clamp(18px, 40cqmin, 110px); font-weight: 700; line-height: 1; }
+.folder-dots { display: flex; flex-wrap: nowrap; justify-content: center; gap: clamp(3px, 2.5cqmin, 8px); max-width: 92%; }
 .folder-dot {
-  width: clamp(7px, 6cqi, 14px);
+  flex: 0 0 auto;
+  width: clamp(6px, calc(var(--dot-k, 8) * 1cqmin), 28px);
   aspect-ratio: 1;
   border-radius: 50%;
   overflow: hidden;
