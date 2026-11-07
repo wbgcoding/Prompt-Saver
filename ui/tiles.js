@@ -510,7 +510,7 @@ export function buildTile(p) {
     tile.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      openTileCtx(p.id, e.clientX, e.clientY);
+      openTileCtx(p.id, e.clientX, e.clientY, e.isTrusted);
     });
   }
 

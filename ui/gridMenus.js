@@ -21,11 +21,17 @@ export let ctxId = null;
 // ---- Context menu ----
 // A second right-click on the same tile within this window skips the menu and opens the
 // editor. The menu opens under the cursor, so that second click usually lands on the menu
-// itself; both paths go through openTileCtx.
+// itself; both paths go through openTileCtx. Only real mouse clicks count: the Menu key
+// sends a synthetic contextmenu, and pressing it twice must not open the editor.
 export const CTX_DOUBLE_MS = 400;
 let lastCtxId = null;
 let lastCtxAt = 0;
-export function openTileCtx(id, x, y, now = performance.now()) {
+export function openTileCtx(id, x, y, trusted = true, now = performance.now()) {
+  if (!trusted) {
+    lastCtxId = null;
+    openCtx(id, x, y);
+    return;
+  }
   if (id && id === lastCtxId && now - lastCtxAt <= CTX_DOUBLE_MS) {
     lastCtxId = null;
     closeCtx();
@@ -353,7 +359,7 @@ export function bindGridMenus({ openExternalFileInEditor }) {
   ctxEl.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (ctxId) openTileCtx(ctxId, e.clientX, e.clientY);
+    if (ctxId) openTileCtx(ctxId, e.clientX, e.clientY, e.isTrusted);
   });
   ctxEl.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");

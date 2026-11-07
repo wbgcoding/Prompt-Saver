@@ -17,7 +17,7 @@ for (let i = src.indexOf("{", fnAt); i < src.length; i++) {
   else if (src[i] === "}" && --depth === 0) { end = i + 1; break; }
 }
 const problems = [];
-if (!/ctxEl\.addEventListener\("contextmenu"[\s\S]{0,200}openTileCtx\(ctxId/.test(src)) {
+if (!/ctxEl\.addEventListener\("contextmenu"[\s\S]{0,200}openTileCtx\(ctxId, e\.clientX, e\.clientY, e\.isTrusted\)/.test(src)) {
   problems.push("the open menu does not route its own right-click through openTileCtx");
 }
 const log = [];
@@ -29,12 +29,13 @@ const sb = {
 };
 vm.createContext(sb);
 vm.runInContext(src.slice(start, end).replace(/export /g, "") + "\nthis.openTileCtx = openTileCtx; this.MS = CTX_DOUBLE_MS;", sb);
-const run = (id, t) => { log.length = 0; sb.openTileCtx(id, 0, 0, t); return log.join(","); };
+const run = (id, t, trusted = true) => { log.length = 0; sb.openTileCtx(id, 0, 0, trusted, t); return log.join(","); };
 if (run("a", 1000) !== "menu:a") problems.push("first right-click did not open the menu");
 if (run("a", 1000 + sb.MS - 50) !== "close,edit:a") problems.push("quick second right-click did not open the editor");
 if (run("a", 1000 + sb.MS) !== "menu:a") problems.push("a third right-click after a double did not start over with the menu");
 if (run("a", 1000 + 3 * sb.MS) !== "menu:a") problems.push("slow second right-click opened the editor");
 if (run("b", 1000 + 3 * sb.MS + 10) !== "menu:b") problems.push("right-click on another tile opened the editor");
+if (run("c", 9000, false) !== "menu:c" || run("c", 9010, false) !== "menu:c") problems.push("two synthetic right-clicks (Menu key) opened the editor");
 if (problems.length) {
   console.error("ctx_double_edit_check: FAILED\n  " + problems.join("\n  "));
   process.exit(1);
