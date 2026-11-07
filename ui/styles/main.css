@@ -440,13 +440,6 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
    close to the button edge instead of floating in a wide margin. */
 .header-actions .icon-btn { padding: 4px; }
 .header-actions .icon-btn > svg { width: 22px; height: 22px; }
-/* Tag-filter glyph fills its viewBox almost edge-to-edge (unlike its
-   neighbours, drawn with more internal padding); shrink it alone so it
-   reads the same visual size instead of looking oversized. */
-#grid-tag-btn > svg { width: 20px; height: 20px; }
-/* The tag filter sits after the view tabs, outside .header-actions, so it
-   carries the header icon size itself. */
-#grid-tag-btn { padding: 4px; flex: 0 0 auto; }
 /* The restore chevrons share one bolder look. */
 .bar-restore > svg { width: 22px; height: 22px; }
 .bar-restore > svg path { stroke-width: 2.6px; }
@@ -1636,7 +1629,6 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 .flag-quickGrid #quick-grid { display: flex; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
-.noflag-tags #grid-tag-btn { display: none; }
 .noflag-librarySearch #library-q { display: none; }
 .noflag-savedSearches #library-search-save,
 .noflag-savedSearches #library-saved-searches { display: none; }
@@ -1656,16 +1648,6 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
   background: var(--accent);
 }
 .pin-toggle.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
-/* Grid tag filter: same filled-look active state as the pin toggle. */
-.grid-tag-btn.active { color: var(--accent-fg); background: var(--accent); }
-.grid-tag-btn.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
-/* The popover is as wide as its chips need: they wrap in a flex row, so one tag gives a
-   narrow box and a dozen fill rows up to the maximum, with no empty column. The hint and the
-   clear button take a full row of their own. */
-.ctx.grid-tag-pop { flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: flex-start; align-content: flex-start; width: max-content; min-width: 0; max-width: 420px; padding: 10px; z-index: 90; }
-.grid-tag-pop > .tag-action, .grid-tag-pop > .hint { flex: 1 1 100%; }
-.grid-tag-pop > .tag-action { margin-left: 0; text-align: center; }
-.grid-tag-pop .tag-chip { min-width: 0; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Quick voice settings: the right-click menu of the microphone buttons. */
 .ctx.voice-pop { width: 320px; max-width: calc(100vw - 12px); padding: 10px 12px; gap: 8px; z-index: 90; }
 .voice-pop-title { font-weight: 600; font-size: 13px; }
@@ -1680,9 +1662,6 @@ body:has(#snip-edit:not(.hidden)) :is(#ocr-modal, #ocr-langs-modal, #modal).over
 /* Narrow box: the label sits above the field, same as paired expert rows. */
 .voice-pop .field.expert-dropdown-row { flex-direction: column; align-items: stretch; }
 .voice-pop .field.expert-dropdown-row .expert-select { align-self: stretch; width: 100%; flex: 0 0 auto; }
-/* A tile that does not match the active filter stays in place (drag/reorder,
-   grid geometry unaffected) but reads as excluded, not deleted. */
-.tile.tile-dimmed { opacity: 0.35; }
 
 /* ---- Prompt chaining ---- */
 /* Two-stage state: first click outlines the button (chain armed for one copy),

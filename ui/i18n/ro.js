@@ -1208,8 +1208,6 @@ export default {
     tagManager: "Gestionează etichetele",
     tagRemove: "Elimină eticheta",
     tagClearFilter: "Șterge filtrul",
-    gridTagFilter: "Filtrează după etichetă",
-    tagFilterEmpty: "Încă nu există etichete",
     tagPick: "Alege o etichetă existentă",
     tagAllTaken: "Toate etichetele sunt deja atribuite",
     tagFilterLabel: "Filtrează după etichetă",

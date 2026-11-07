@@ -1208,8 +1208,6 @@ export default {
     tagManager: "Tags beheren",
     tagRemove: "Tag verwijderen",
     tagClearFilter: "Filter wissen",
-    gridTagFilter: "Filteren op tag",
-    tagFilterEmpty: "Nog geen tags",
     tagPick: "Bestaande tag kiezen",
     tagAllTaken: "Alle tags zijn al toegewezen",
     tagFilterLabel: "Filteren op tag",

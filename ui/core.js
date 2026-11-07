@@ -126,8 +126,6 @@ export function assignModalState(v) { modalState = v; }
 export let drag = null;
 export function assignDrag(v) { drag = v; }
 
-export const gridTags = new Set(); // same idea, independent selection for the grid
-
 // Single-slot undo for a destructive action outside the editors (which have their own undo
 // stack). A new destructive action replaces whatever was pending; there is no history.
 export let pendingUndo = null; // { restore }

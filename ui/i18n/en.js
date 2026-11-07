@@ -1179,8 +1179,6 @@ export default {
     tagManager: "Manage tags",
     tagRemove: "Remove tag",
     tagClearFilter: "Clear filter",
-    gridTagFilter: "Filter by tag",
-    tagFilterEmpty: "No tags yet",
     tagPick: "Choose an existing tag",
     tagAllTaken: "Every tag is already on this prompt",
     tagFilterLabel: "Filter by tag",

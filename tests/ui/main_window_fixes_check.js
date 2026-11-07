@@ -1067,13 +1067,10 @@ section(() => {
   check(/classList\.contains\("active"\)\) btn\.setAttribute\("aria-current", "true"\)/.test(src), "the active view tab carries aria-current");
 });
 
-// 58. The folder and tag filter popovers are named containers, not empty menus.
+// 58. The folder popover is a named container, not an empty menu.
 section(() => {
   const f = read("gridFolders.js");
   check(/tileFolderPop\.setAttribute\("role", "dialog"\)/.test(f) && /tileFolderPop\.setAttribute\("aria-label", title\.textContent\)/.test(f), "the folder popover is a dialog named by the folder");
-  const g = read("gridMenus.js");
-  check(/gridTagPop\.setAttribute\("role", "group"\)/.test(g), "the tag filter popover is a group");
-  check(extractBlock(g, "export function renderGridTagPop(").includes('gridTagPop.setAttribute("aria-label", t("gridTagFilter"))'), "it is named per open, so the name follows the language");
 });
 
 // 59. The themed select list announces its keyboard cursor through the active descendant.
@@ -1837,6 +1834,13 @@ section(() => {
     check(!tags.includes(needle), "tags.js still has " + needle);
   }
   check(!read("index.html").includes("tag-colorize"), "index.html still has the colorize button");
+});
+
+// Only the library filters by tag: no grid tag button or popover, no dimmed tiles.
+section(() => {
+  check(!read("index.html").includes("grid-tag"), "index.html still has the grid tag button");
+  check(!read("gridMenus.js").includes("grid-tag"), "gridMenus.js still has the grid tag popover");
+  check(!read("tiles.js").includes("tile-dimmed"), "tiles.js still dims tiles");
 });
 
 let guard;

@@ -668,11 +668,11 @@ export async function editSavedSearch(index) {
 }
 
 // Selected tag chips narrow the list, combined with search and the other filters: a prompt
-// needs every selected chip. The grid's own filter (gridTags) reuses this with its own Set.
-export function tagMatches(p, tagSet = libTags) {
-  if (!tagsOn() || !tagSet.size) return true;
+// needs every selected chip.
+export function tagMatches(p) {
+  if (!tagsOn() || !libTags.size) return true;
   const own = new Set((p.tags || []).map(tagKey));
-  return [...tagSet].every((k) => own.has(k));
+  return [...libTags].every((k) => own.has(k));
 }
 
 // "Last edited" per prompt, from prompt_versions (a version row is only written on a real

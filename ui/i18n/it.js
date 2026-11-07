@@ -1208,8 +1208,6 @@ export default {
     tagManager: "Gestisci tag",
     tagRemove: "Rimuovi tag",
     tagClearFilter: "Azzera filtro",
-    gridTagFilter: "Filtra per tag",
-    tagFilterEmpty: "Nessun tag ancora",
     tagPick: "Scegli un tag esistente",
     tagAllTaken: "Tutti i tag sono già assegnati",
     tagFilterLabel: "Filtra per tag",

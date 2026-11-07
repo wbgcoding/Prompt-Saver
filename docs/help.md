@@ -707,8 +707,8 @@ all close it. A flag in the expert menu turns it off.
 
 ### Tags
 
-Free-form labels assigned to tiles; filter the library or the grid down to a set
-of tags, matching any or all of them. The archive is one of them, an ordinary
+Free-form labels assigned to tiles; filter the library down to the tiles that
+carry every selected tag. The archive is one of them, an ordinary
 tag with a reserved name: "Archive" in a tile's right-click menu (or the
 library's batch bar) gives a tile that tag, and it disappears from the library
 list and the grid until the archive chip above the list shows it again. Export,
@@ -1479,7 +1479,7 @@ passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht; das
 Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
-**Tags**: freie Schlagwörter, UND/ODER-Filter. Das Archiv ist ein gewöhnlicher Tag mit
+**Tags**: freie Schlagwörter; der Filter zeigt Kacheln mit allen gewählten Tags. Das Archiv ist ein gewöhnlicher Tag mit
 reserviertem Namen: „Archivieren“ im Rechtsklickmenü einer Kachel (oder in der
 Sammelleiste der Bibliothek) gibt ihr diesen Tag, sie verschwindet aus
 Bibliothek und Raster, bis der Archiv-Chip über der Liste sie wieder anzeigt.

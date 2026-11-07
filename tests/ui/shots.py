@@ -102,11 +102,6 @@ ACTS = {
                  "for (const tab of document.querySelectorAll('#expert-tabs-bar .expert-tab')) { if (sw()) break; tab.click(); await sleep(150); }"
                  "sw().click(); await sleep(300);"
                  "$('expert-back').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
-    "tagpop": "$('grid-tag-btn').click(); await sleep(300);",
-    "tagpop1": "$('grid-tag-btn').click(); await sleep(300);",
-    "tagpop3": "$('grid-tag-btn').click(); await sleep(300);",
-    "tagpop12": "$('grid-tag-btn').click(); await sleep(300);",
-    "tagpop_on": "$('grid-tag-btn').click(); await sleep(300); document.querySelector('.grid-tag-pop .tag-filter').click(); await sleep(300);",
     "recresult": "window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' }); await sleep(900);",
     "snipedit": SNIP_OPEN,
     "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);"
@@ -123,7 +118,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "history"],
-    "@tiles": ["main", "tagpop", "tagpop1", "tagpop3", "tagpop12", "tagpop_on", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder", "voicepop"],
+    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder", "voicepop"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "sniptext"],
 }
@@ -157,13 +152,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             theme = q.get("theme", "")
             if theme.isalpha():
                 head += f'<script>SETTINGS.theme = "{theme}"; window.__SHOT_THEME__ = "{theme}";</script>\n'
-            # The tag popover surfaces: one, three or twelve distinct tags across the demo prompts.
-            m = re.fullmatch(r"tagpop(\d+)", q.get("act", ""))
-            if m:
-                names = ["Work", "Draft", "Idea", "Research", "Personal", "Marketing", "Support", "Ops",
-                         "Legal", "Billing", "Roadmap", "Archive-2024"][:int(m.group(1))]
-                head += ("<script>PROMPTS.forEach((p, i) => { p.tags = " + repr(names).replace("'", '"') +
-                         ".filter((_, j) => j % PROMPTS.length === i); });</script>\n")
             # A headless shot freezes colour transitions part way (the theme fades in from the
             # light default), which paints the whole page washed out; shoot the settled state.
             head += '<style>*, *::before, *::after { transition: none !important; animation: none !important; }</style>\n'

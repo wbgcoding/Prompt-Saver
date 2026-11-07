@@ -1208,8 +1208,6 @@ export default {
     tagManager: "Etiketleri yönet",
     tagRemove: "Etiketi kaldır",
     tagClearFilter: "Filtreyi temizle",
-    gridTagFilter: "Etikete göre filtrele",
-    tagFilterEmpty: "Henüz etiket yok",
     tagPick: "Mevcut bir etiket seç",
     tagAllTaken: "Tüm etiketler zaten ekli",
     tagFilterLabel: "Etikete göre filtrele",

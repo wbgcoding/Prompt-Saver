@@ -1,5 +1,5 @@
-// Tile context menu, views popup, move-to-folder popup, grid tag popup and the toolbar menu.
-import { $, assignSettings, ctxEl, errToast, favView, flag, gridTags, invoke, libraryEl, openVideoEditor, optFlag, prompts, settings, t, TB_CHECK, toast } from "./core.js";
+// Tile context menu, views popup, move-to-folder popup and the toolbar menu.
+import { $, assignSettings, ctxEl, errToast, favView, flag, invoke, libraryEl, openVideoEditor, optFlag, prompts, settings, t, TB_CHECK, toast } from "./core.js";
 import { chainMode, isTextPrompt, startChainWith } from "./chain.js";
 import { hasMarkdownSyntax } from "./markdown.js";
 import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, toggleFavoritePrompt, toggleGridSelect, trashPromptWithUndo } from "./library.js";
@@ -7,7 +7,7 @@ import { cacheFloatingState, folderCandidates, foldersOfView, folderTitle, newTi
 import { mediaKind } from "./media.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { activeView, layoutOf, refreshFavViewUi, renderGrid, renderViews, viewRowBase } from "./views.js";
-import { allTags, tagChipEl, tagKey } from "./tags.js";
+import { tagKey } from "./tags.js";
 import { FLAG_LABELS, OPT_FLAG_KEYS, OPT_FLAG_LABELS } from "./expertConfig.js";
 import { applyFlags } from "./expertMenu.js";
 import { duplicatePrompt, editPrompt } from "./editor.js";
@@ -245,59 +245,6 @@ export function openMoveToFolderPop(id, rect) {
   placePopover(moveToFolderPop, rect);
 }
 
-// ---- Grid tag filter: header toolbar popover, own Set from the library's ----
-export const gridTagPop = document.createElement("div");
-
-export function closeGridTagPop() {
-  gridTagPop.classList.add("hidden");
-}
-export function updateGridTagBtn() {
-  $("grid-tag-btn")?.classList.toggle("active", gridTags.size > 0);
-}
-export function renderGridTagPop() {
-  gridTagPop.innerHTML = "";
-  gridTagPop.setAttribute("aria-label", t("gridTagFilter")); // rebuilt per open, so it follows the language
-  const names = allTags();
-  for (const name of names) {
-    const chip = tagChipEl(name, "button");
-    chip.classList.add("tag-filter");
-    const on = gridTags.has(tagKey(name));
-    chip.classList.toggle("active", on);
-    chip.setAttribute("aria-pressed", String(on));
-    chip.addEventListener("click", () => {
-      const key = tagKey(name);
-      if (gridTags.has(key)) gridTags.delete(key); else gridTags.add(key);
-      renderGridTagPop();
-      updateGridTagBtn();
-      renderGrid(true);
-    });
-    gridTagPop.appendChild(chip);
-  }
-  if (gridTags.size) {
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "tag-action";
-    clear.textContent = t("tagClearFilter");
-    clear.addEventListener("click", () => {
-      gridTags.clear();
-      renderGridTagPop();
-      updateGridTagBtn();
-      renderGrid(true);
-    });
-    gridTagPop.appendChild(clear);
-  }
-  if (!names.length && !gridTags.size) {
-    const hint = document.createElement("div");
-    hint.className = "hint";
-    hint.textContent = t("tagFilterEmpty");
-    gridTagPop.appendChild(hint);
-  }
-}
-export function openGridTagPop() {
-  renderGridTagPop();
-  placePopover(gridTagPop, $("grid-tag-btn").getBoundingClientRect());
-}
-
 // ---- Right-click toolbar menu: show or hide header buttons. Whole features (views, quick grid, clipboard watcher, chaining) are switched in the expert menu, never here. ----
 export const TOOLBAR_TOOLS = ["favViewButton", "showLibrary", "barToggles", "showLogo", "showTitle"];
 // Little glyph shown beside each tool name so the menu reads at a glance.
@@ -386,11 +333,6 @@ export function openToolbarMenu(x, y) {
 export function closeToolbarMenu() { toolbarMenu.classList.add("hidden"); }
 
 export function bindGridMenus({ openExternalFileInEditor }) {
-  $("grid-tag-btn").addEventListener("click", () => {
-    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
-    openGridTagPop();
-  });
-
   ctxEl.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
     const act = btn?.dataset.act;
@@ -490,9 +432,6 @@ export function wireGridMenus() {
   moveToFolderPop.className = "ctx move-to-folder-pop hidden";
   moveToFolderPop.setAttribute("role", "menu");
   document.body.appendChild(moveToFolderPop);
-  gridTagPop.className = "ctx grid-tag-pop hidden";
-  gridTagPop.setAttribute("role", "group"); // toggle chips, not menu items
-  document.body.appendChild(gridTagPop);
   toolbarMenu.className = "ctx toolbar-menu hidden";
   toolbarMenu.setAttribute("role", "menu");
   document.body.appendChild(toolbarMenu);

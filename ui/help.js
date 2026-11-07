@@ -525,7 +525,7 @@ export const HELP_CONTENT = {
     {
       section: "library",
       title: "Tags",
-      whatItIs: "Tags are free-form labels assigned to tiles, used to filter the library or the grid.",
+      whatItIs: "Tags are free-form labels assigned to tiles, used to filter the library.",
       howTo: [
         "Type a tag name in a tile's editor to add it, or pick an existing one.",
         "Use the tag filter row in the library to narrow the list.",
@@ -1262,7 +1262,7 @@ export const HELP_CONTENT = {
     {
       section: "library",
       title: "Tags",
-      whatItIs: "Tags sind Freitext-Etiketten, die Kacheln zugewiesen werden, um Bibliothek oder Raster zu filtern.",
+      whatItIs: "Tags sind Freitext-Etiketten, die Kacheln zugewiesen werden, um die Bibliothek zu filtern.",
       howTo: [
         "Editor einer Kachel öffnen und einen Tag-Namen eintippen, um ihn hinzuzufügen, oder einen vorhandenen wählen.",
         "Die Tag-Filterleiste in der Bibliothek nutzen, um die Liste auf ein oder mehrere Tags einzugrenzen.",

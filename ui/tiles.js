@@ -1,5 +1,5 @@
 // Grid tiles: building, auto-fit, images, video thumbs, drag-out and auto-paste.
-import { assignDrag, assignMemberDrag, assignSettings, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, LOCK_SVG, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, undoToast, val, videoCache } from "./core.js";
+import { assignDrag, assignMemberDrag, assignSettings, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, LOCK_SVG, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, undoToast, val, videoCache } from "./core.js";
 import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
@@ -8,7 +8,7 @@ import { applyCopySizeLevel, DRAG_OUT_MODS, fileUri, rotateBadgeLabel } from "./
 import { activeView, clearViewDropHover, dropTilesOnView, gridKeyOf, layoutOf, openGridSizeFor, openMiniMenu, placeFav, renderGrid, resolveViewDropTarget, updateViewDropHover, viewsContaining } from "./views.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { blockedByCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
-import { copyResolved, dropLibraryFront, tagMatches, thumbEl, toggleGridSelect } from "./library.js";
+import { copyResolved, dropLibraryFront, thumbEl, toggleGridSelect } from "./library.js";
 import { tileTimeLines } from "./journal.js";
 import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
 import { recordToolUsage } from "./management.js";
@@ -347,9 +347,6 @@ export function buildTile(p) {
   tile.setAttribute("role", "button");
   tile.setAttribute("aria-label", p.locked ? t("editorSecretLabel") : p.name);
   if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
-  // A tag filter dims what does not match instead of hiding it: the cell stays occupied, so
-  // drag, reorder and grid geometry never treat it as empty.
-  if (gridTags.size && !tagMatches(p, gridTags)) tile.classList.add("tile-dimmed");
   // Confidential and no vault key right now: the name is redacted behind a bar and a lock
   // badge replaces the type badge. Text and variants are already blank in `p` (see
   // slim_prompts on the backend), so nothing here has the real text to show.

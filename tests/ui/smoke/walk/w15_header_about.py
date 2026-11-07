@@ -261,9 +261,8 @@ SECTION = """\
         }
       }
     }
-    // 700 / 701: the top bar keeps five buttons with the chain button, the tag filter sits after
-    // the view tabs, hiding the bar lives in the right-click menu,
-    // and the header dividers group content from window controls.
+    // 700 / 701: the top bar keeps five buttons with the chain button, hiding the bar lives in
+    // the right-click menu, and the header dividers group content from window controls.
     {
       if (!document.getElementById('settings').classList.contains('hidden')) {
         await click('settings-close');
@@ -275,11 +274,7 @@ SECTION = """\
       // Search is hidden below 760px by design.
       const want = window.innerWidth <= 760 ? 'library-btn,chain-btn,pin-top,gear' : 'library-btn,global-search-btn,chain-btn,pin-top,gear';
       if (got !== want) out.errors.push('700: the visible top bar buttons are ' + got);
-      const tagBtn = document.getElementById('grid-tag-btn');
-      const viewsNav = document.getElementById('views');
-      if (!tagBtn || !tagBtn.parentElement.classList.contains('brand') || tagBtn.previousElementSibling !== viewsNav) {
-        out.errors.push('700: the tag filter button is not right after the view tabs inside the brand area');
-      }
+      if (document.getElementById('grid-tag-btn')) out.errors.push('700: the grid tag filter button is back');
       const chainBtn = document.getElementById('chain-btn');
       if (!shown(chainBtn)) out.errors.push('700: the chain button is hidden while no chain runs');
       // 701: one divider between content and window buttons without the grid size fields.

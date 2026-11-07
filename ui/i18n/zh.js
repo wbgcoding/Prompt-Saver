@@ -1208,8 +1208,6 @@ export default {
     tagManager: "管理标签",
     tagRemove: "移除标签",
     tagClearFilter: "清除筛选",
-    gridTagFilter: "按标签筛选",
-    tagFilterEmpty: "尚无标签",
     tagPick: "选择已有标签",
     tagAllTaken: "所有标签都已添加",
     tagFilterLabel: "按标签筛选",

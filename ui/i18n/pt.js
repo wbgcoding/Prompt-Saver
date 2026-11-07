@@ -1208,8 +1208,6 @@ export default {
     tagManager: "Gerenciar etiquetas",
     tagRemove: "Remover etiqueta",
     tagClearFilter: "Limpar filtro",
-    gridTagFilter: "Filtrar por etiqueta",
-    tagFilterEmpty: "Ainda sem etiquetas",
     tagPick: "Escolher uma etiqueta existente",
     tagAllTaken: "Todas as etiquetas já estão atribuídas",
     tagFilterLabel: "Filtrar por etiqueta",

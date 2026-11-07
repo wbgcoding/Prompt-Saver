@@ -1208,8 +1208,6 @@ export default {
     tagManager: "タグを管理",
     tagRemove: "タグを外す",
     tagClearFilter: "フィルターを解除",
-    gridTagFilter: "タグで絞り込み",
-    tagFilterEmpty: "まだタグがありません",
     tagPick: "既存のタグを選ぶ",
     tagAllTaken: "すべてのタグが割り当て済みです",
     tagFilterLabel: "タグで絞り込む",

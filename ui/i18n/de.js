@@ -1179,8 +1179,6 @@ export default {
     tagManager: "Tags verwalten",
     tagRemove: "Tag entfernen",
     tagClearFilter: "Filter zurücksetzen",
-    gridTagFilter: "Nach Tag filtern",
-    tagFilterEmpty: "Noch keine Tags",
     tagPick: "Vorhandenes Tag wählen",
     tagAllTaken: "Alle Tags sind hier schon vergeben",
     tagFilterLabel: "Nach Tag filtern",

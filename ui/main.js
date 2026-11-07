@@ -27,7 +27,7 @@ import { bgOpsPop, closeBgOpsPop, wireBgOps } from "./bgOps.js";
 import { bindTour, openTour, wireTour } from "./tour.js";
 import { bindGlobalSearch, closeGlobalSearch } from "./globalSearch.js";
 import { bindCapture, wireCapture } from "./capture.js";
-import { bindGridMenus, closeCtx, closeGridTagPop, closeMoveToFolderPop, closeToolbarMenu, closeViewsPop, gridTagPop, moveToFolderPop, toolbarMenu, viewsPop, wireGridMenus } from "./gridMenus.js";
+import { bindGridMenus, closeCtx, closeMoveToFolderPop, closeToolbarMenu, closeViewsPop, moveToFolderPop, toolbarMenu, viewsPop, wireGridMenus } from "./gridMenus.js";
 primeLang("en", EN);
 
 // Surface unexpected errors as a toast instead of failing silently.
@@ -113,9 +113,6 @@ function bind() {
     // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
     if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
     if (!moveToFolderPop.classList.contains("hidden") && !moveToFolderPop.contains(e.target)) closeMoveToFolderPop();
-    // The toolbar button toggles its own popover, so let its own press through.
-    if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
-        !e.target.closest("#grid-tag-btn")) closeGridTagPop();
     // The two composer buttons toggle it themselves (their own contextmenu handler).
     if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
         !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
@@ -181,7 +178,6 @@ function bind() {
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
-    if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!voicePop.classList.contains("hidden")) { trapTabWithin(voicePop, e); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
@@ -223,7 +219,6 @@ function bind() {
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
-    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!voicePop.classList.contains("hidden")) { closeVoicePop(); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
