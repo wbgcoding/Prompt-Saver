@@ -476,6 +476,90 @@ fn search_caps_merge_to_largest() {
 }
 
 #[test]
+fn saved_searches_become_pins() {
+    let saved = serde_json::json!([
+        { "name": "Old", "query": "Alpha", "tags": ["work"], "sort": "az" },
+        { "name": "Newer", "query": "beta", "tags": [], "sort": "" },
+        { "name": "Empty", "query": "  ", "tags": [], "sort": "" },
+        { "name": "Dup", "query": "ALPHA ", "tags": ["Work"], "sort": "" },
+        { "name": "Tags only", "query": "", "tags": ["b", "a"], "sort": "" },
+    ])
+    .to_string();
+    let mut s = Settings::default();
+    s.ui_texts.insert("savedSearches".into(), saved.clone());
+    s.ui_flags.insert("savedSearches".into(), true);
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    assert!(!s.ui_texts.contains_key("savedSearches"));
+    assert!(!s.ui_flags.contains_key("savedSearches"));
+    let pins: Vec<serde_json::Value> = serde_json::from_str(s.ui_texts.get("pinnedSearches").unwrap()).unwrap();
+    // Newest first; the empty entry and the case-insensitive duplicate (the newer one wins) are gone.
+    let shape: Vec<(String, Vec<String>, String)> = pins
+        .iter()
+        .map(|p| {
+            (
+                p["query"].as_str().unwrap().to_string(),
+                p["tags"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect(),
+                p["sort"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            ("".to_string(), vec!["a".to_string(), "b".to_string()], "".to_string()),
+            ("ALPHA".to_string(), vec!["work".to_string()], "".to_string()),
+            ("beta".to_string(), vec![], "".to_string()),
+        ]
+    );
+    assert!(pins.iter().all(|p| p.get("name").is_none()));
+    // A second run changes nothing.
+    let before = s.ui_texts.get("pinnedSearches").cloned();
+    s.migrate();
+    assert_eq!(s.ui_texts.get("pinnedSearches").cloned(), before);
+
+    // Existing pins stay untouched and the old list is still dropped.
+    let mut s = Settings::default();
+    s.ui_texts.insert("pinnedSearches".into(), "[{\"query\":\"keep\",\"tags\":[],\"sort\":\"\"}]".into());
+    s.ui_texts.insert("savedSearches".into(), saved.clone());
+    s.migrate();
+    assert_eq!(s.ui_texts.get("pinnedSearches").unwrap(), "[{\"query\":\"keep\",\"tags\":[],\"sort\":\"\"}]");
+    assert!(!s.ui_texts.contains_key("savedSearches"));
+
+    // Recent searches were switched off: pins would be hidden, so the switch turns on.
+    let mut s = Settings::default();
+    s.ui_texts.insert("savedSearches".into(), saved.clone());
+    s.ui_flags.insert("searchSuggest".into(), false);
+    s.migrate();
+    assert_eq!(s.ui_flags.get("searchSuggest"), Some(&true));
+    // Saved searches were switched off by the user: the pins are kept, the switch stays off.
+    let mut s = Settings::default();
+    s.ui_texts.insert("savedSearches".into(), saved);
+    s.ui_flags.insert("searchSuggest".into(), false);
+    s.ui_flags.insert("savedSearches".into(), false);
+    s.migrate();
+    assert_eq!(s.ui_flags.get("searchSuggest"), Some(&false));
+    assert!(s.ui_texts.contains_key("pinnedSearches"));
+
+    // At most ten pins; nothing usable stores no key; garbage is dropped without a panic.
+    let many: Vec<serde_json::Value> = (0..14).map(|i| serde_json::json!({ "query": format!("q{i}"), "tags": [], "sort": "" })).collect();
+    let mut s = Settings::default();
+    s.ui_texts.insert("savedSearches".into(), serde_json::Value::Array(many).to_string());
+    s.migrate();
+    let pins: Vec<serde_json::Value> = serde_json::from_str(s.ui_texts.get("pinnedSearches").unwrap()).unwrap();
+    assert_eq!(pins.len(), 10);
+    assert_eq!(pins[0]["query"], "q13");
+    let mut s = Settings::default();
+    s.ui_texts.insert("savedSearches".into(), "[{\"name\":\"x\",\"query\":\"\",\"tags\":[]}]".into());
+    s.migrate();
+    assert!(!s.ui_texts.contains_key("pinnedSearches"));
+    let mut s = Settings::default();
+    s.ui_texts.insert("savedSearches".into(), "not json".into());
+    s.migrate();
+    assert!(!s.ui_texts.contains_key("pinnedSearches") && !s.ui_texts.contains_key("savedSearches"));
+}
+
+#[test]
 fn tag_filter_choices_are_dropped() {
     let mut s = Settings::default();
     s.ui_texts.insert("tagFilterMode".into(), "or".into());

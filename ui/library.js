@@ -1,8 +1,9 @@
 // The prompt library: search, filters, batch selection, list and tile rendering.
-import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, DRAG_THRESHOLD, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
+import { PINNED_SEARCH_MAX, pinSearch } from "./recentSearches.js";
 import { fillVideoFormatSelect, fmtBytes, varPreview } from "./floatShared.js";
 import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, resolveVars, resolveVarsList, varTokens } from "./promptVars.js";
 import { confirmDialog } from "./dialog.js";
@@ -513,104 +514,8 @@ export function libMatches(p) {
   return libSearchScore(p).score > 0;
 }
 
-// Saved searches: query text, active tag filters and sort, kept as one JSON blob in a single
-// settings slot (the generic set_ui_text command persists any string).
-const SAVED_SEARCH_MAX = 5; // saved searches kept
-export function loadSavedSearches() {
-  try {
-    const list = JSON.parse(txt("savedSearches") || "[]");
-    return Array.isArray(list) ? list : [];
-  } catch {
-    return [];
-  }
-}
-export async function persistSavedSearches(list) {
-  const value = JSON.stringify(list);
-  settings.ui_texts = { ...(settings.ui_texts || {}), savedSearches: value };
-  await invoke("set_ui_text", { key: "savedSearches", value }).catch((err) => errToast(err));
-}
-// A long query would blow up the chip row, so the suggested name is a plain truncation,
-// editable in the same dialog before saving.
-export function suggestedSearchName(query) {
-  const s = query.trim();
-  const chars = Array.from(s);
-  return chars.length > 40 ? chars.slice(0, 40).join("").trim() + "…" : s;
-}
-// Reordering the saved-search chips uses pointer events, since the webview reserves HTML5
-// drag-and-drop for file drops (same as the view tabs).
-let savedChipDrag = null;
-let savedChipDragBlockClick = false;
-function endSavedChipDrag() {
-  const d = savedChipDrag;
-  savedChipDrag = null;
-  if (!d) return null;
-  d.el.classList.remove("tab-dragging");
-  d.target?.classList.remove("drag-over");
-  return d;
-}
-window.addEventListener("pointermove", (e) => {
-  const d = savedChipDrag;
-  if (!d) return;
-  if (!d.moved) {
-    if (Math.abs(e.clientX - d.startX) < DRAG_THRESHOLD && Math.abs(e.clientY - d.startY) < DRAG_THRESHOLD) return;
-    d.moved = true;
-    d.el.classList.add("tab-dragging");
-  }
-  const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lib-saved-search-chip");
-  const next = hit && hit !== d.el ? hit : null;
-  if (next === d.target) return;
-  d.target?.classList.remove("drag-over");
-  d.target = next;
-  next?.classList.add("drag-over");
-});
-window.addEventListener("pointercancel", () => { endSavedChipDrag(); });
-window.addEventListener("pointerup", async () => {
-  const d = endSavedChipDrag();
-  if (!d || !d.moved) return;
-  savedChipDragBlockClick = true; // the click that follows the release must not apply the search
-  setTimeout(() => { savedChipDragBlockClick = false; }, 0);
-  const to = d.target ? Number(d.target.dataset.idx) : NaN;
-  if (!Number.isFinite(to) || to === d.from) return;
-  const cur = loadSavedSearches();
-  const [moved] = cur.splice(d.from, 1);
-  if (!moved) return;
-  cur.splice(to, 0, moved);
-  await persistSavedSearches(cur);
-  renderSavedSearches();
-});
-export function renderSavedSearches() {
-  const bar = $("library-saved-searches");
-  if (!bar) return;
-  bar.innerHTML = "";
-  if (!flag("savedSearches")) return;
-  const list = loadSavedSearches();
-  list.forEach((entry, i) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "tag-chip lib-saved-search-chip";
-    chip.title = entry.query || entry.name;
-    const label = document.createElement("span");
-    label.className = "tag-chip-label";
-    label.textContent = entry.name;
-    chip.appendChild(label);
-    chip.dataset.idx = String(i);
-    chip.addEventListener("click", () => {
-      if (savedChipDragBlockClick) { savedChipDragBlockClick = false; return; } // the click that ends a drag
-      applySavedSearch(entry);
-    });
-    chip.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      editSavedSearch(i);
-    });
-    chip.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      savedChipDrag = { from: i, el: chip, startX: e.clientX, startY: e.clientY, moved: false, target: null };
-    });
-    bar.appendChild(chip);
-  });
-}
-export function applySavedSearch(entry) {
+// Pinned searches (see recentSearches.js): query text, active tag filters and sort.
+export function applyPinnedSearch(entry) {
   libQuery = entry.query || "";
   $("library-q").value = libQuery;
   libTags.clear();
@@ -623,48 +528,14 @@ export function applySavedSearch(entry) {
   renderTagFilter();
   renderLibrary();
 }
-export async function saveSavedSearch() {
-  const list = loadSavedSearches();
-  const max = SAVED_SEARCH_MAX;
-  if (list.length >= max) {
-    const oldest = list[0];
-    toast(t("savedSearchLimitToast").replace("{max}", String(max)).replace("{name}", () => oldest ? oldest.name : ""));
+// Pins the whole current search: query, tag filters and sort.
+export function pinCurrentSearch() {
+  if (!libQuery.trim() && !libTags.size) { toast(t("pinSearchEmptyToast")); return; }
+  if (!pinSearch({ query: libQuery, tags: [...libTags], sort: txt("librarySort") || "" })) {
+    toast(t("pinSearchLimitToast").replace("{max}", String(PINNED_SEARCH_MAX)));
     return;
   }
-  const suggested = suggestedSearchName(libQuery);
-  const name = await confirmDialog({
-    title: t("savedSearchSaveTitle"),
-    confirmLabel: t("save"),
-    input: { type: "text", value: suggested, placeholder: t("savedSearchNamePh") },
-    danger: false,
-  });
-  if (!name) return;
-  const entry = { name: name.trim() || suggested, query: libQuery, tags: [...libTags], sort: txt("librarySort") || "" };
-  list.push(entry);
-  await persistSavedSearches(list);
-  renderSavedSearches();
-}
-export async function editSavedSearch(index) {
-  const list = loadSavedSearches();
-  const entry = list[index];
-  if (!entry) return;
-  const answer = await confirmDialog({
-    title: t("savedSearchEditTitle"),
-    message: t("savedSearchEditMsg"),
-    confirmLabel: t("save"),
-    altLabel: t("delete"),
-    input: { type: "text", value: entry.name },
-    danger: false,
-  });
-  if (answer === null || answer === false) return;
-  if (answer === "alt") {
-    list.splice(index, 1);
-  } else {
-    const name = answer.trim();
-    if (name) entry.name = name;
-  }
-  await persistSavedSearches(list);
-  renderSavedSearches();
+  toast(t("pinSearchDoneToast"));
 }
 
 // Selected tag chips narrow the list, combined with search and the other filters: a prompt
@@ -836,7 +707,6 @@ export function renderLibrary() {
     viewToggle.setAttribute("aria-pressed", String(tilesMode));
   }
   renderTagFilter();
-  renderSavedSearches();
   $("library-search").classList.toggle("hidden", !prompts.length);
   $("library-filter-rows").classList.toggle("hidden", !(flag("libraryTypeFilter") || flag("favorites") || tagsOn()));
   if (!prompts.length) {
@@ -1677,8 +1547,8 @@ export function bindLibrary() {
       refreshImageHitsDebounced();
     }
   });
-  wireSearchSuggest($("library-q"));
-  $("library-search-save").addEventListener("click", () => saveSavedSearch());
+  wireSearchSuggest($("library-q"), { onPickPinned: applyPinnedSearch });
+  $("library-search-pin").addEventListener("click", () => pinCurrentSearch());
   $("library-sort").addEventListener("change", (e) => {
     settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };
     invoke("set_ui_text", { key: "librarySort", value: e.target.value }).catch((err) => errToast(err));

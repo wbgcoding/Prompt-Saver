@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `sniptext`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `sniptext`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -71,6 +71,9 @@ ACTS = {
     **{f"expert_t{i}": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); [...document.querySelectorAll('#expert-tabs-bar .expert-tab')][" + str(i) + "].click(); await sleep(300);" for i in range(6)},
     "library": "$('library-btn').click(); await sleep(400);",
     "history": "$('library-btn').click(); await sleep(400); $('library-tab-history').click(); await sleep(400);",
+    # The library search dropdown with two pinned searches (one with tags) over three recent terms.
+    "library_pins": "const core = await import('./core.js'); core.settings.ui_texts = { ...core.settings.ui_texts, recentSearches: JSON.stringify(['Invoice', 'Weekly report', 'Beta']), pinnedSearches: JSON.stringify([{ query: 'meeting notes', tags: ['work', 'weekly', 'team'], sort: '' }, { query: '', tags: ['private'], sort: '' }]) };"
+                      "$('library-btn').click(); await sleep(400); $('library-q').dispatchEvent(new Event('pointerdown')); await sleep(300);",
     "tilemenu": TILE_MENU,
     "movefolder": TILE_MENU + "document.querySelector('#ctx [data-act=\"moveToFolder\"]').click(); await sleep(300);",
     "folderpick": TILE_MENU + "document.querySelector('#ctx [data-act=\"moveToFolder\"]').click(); await sleep(300);"
@@ -117,7 +120,7 @@ ACTS = {
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
-    "@library": ["library", "history"],
+    "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder", "voicepop"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "sniptext"],

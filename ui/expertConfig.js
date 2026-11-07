@@ -37,7 +37,6 @@ export const FLAG_LABELS = {
   // which only ever covers the prompt grid.
   globalSearch: "flagGlobalSearch",
   searchSuggest: "flagSearchSuggest",
-  savedSearches: "flagSavedSearches",
   libraryTiles: "flagLibraryTiles",
   closeAfterCopy: "flagCloseAfterCopy",
   imagePreview: "flagImagePreview",
@@ -534,7 +533,7 @@ export const EXPERT_TABS = [
     { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["iconScale", "frostedBlur", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
+    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "fuzzySearch", "libraryTypeFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "libraryTiles", "tags", "archiveTag"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
     // Everything that records or shows copy history lives with the history view.

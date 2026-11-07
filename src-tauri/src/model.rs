@@ -941,6 +941,8 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
         "tileReorder",
         "favViewReorder",
         "snipEditor",
+        // Saved searches became pins in the recent-searches list.
+        "savedSearches",
     ]
 }
 
@@ -952,6 +954,8 @@ pub(crate) fn removed_ui_text_keys() -> &'static [&'static str] {
         // The tag filter always needs every tag and lists tags alphabetically.
         "tagFilterMode",
         "tagSort",
+        // Saved searches became pinned searches (migrate() converts them first).
+        "savedSearches",
         // The old remote receiver's rows: its password hash and TLS key, certificate and CA
         // must not survive on disk once the feature is gone.
         "remoteAllowedRanges",
@@ -1193,6 +1197,47 @@ impl Settings {
             let both_off = self.ui_flags.get("tileFolders") == Some(&false)
                 && self.ui_flags.get("pillFolders") == Some(&false);
             self.ui_flags.insert("folders".into(), !both_off);
+        }
+        // Saved searches and recent searches became one list: a saved search is now a pinned
+        // one (query, tag keys, sort; the name is gone). The stored order is oldest first, pins are
+        // newest first, so it is reversed. Identity is the trimmed lowercase query plus the sorted
+        // tag keys; an empty entry (no query, no tags) and a twin are skipped, at most ten are
+        // kept. Pins already stored are never touched. Runs while the old list is stored and
+        // the removal below drops it, so it happens once. Pins are only visible with the recent
+        // searches switched on, so that switch comes on unless saved searches were switched off.
+        if let Some(raw) = self.ui_texts.get("savedSearches") {
+            if !self.ui_texts.contains_key("pinnedSearches") {
+                if let Ok(old) = serde_json::from_str::<Vec<serde_json::Value>>(raw) {
+                    let mut seen: Vec<String> = Vec::new();
+                    let mut pins: Vec<serde_json::Value> = Vec::new();
+                    for e in old.iter().rev() {
+                        let query = e.get("query").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                        let mut tags: Vec<String> = e
+                            .get("tags")
+                            .and_then(|v| v.as_array())
+                            .map(|a| a.iter().filter_map(|t| t.as_str()).map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty()).collect())
+                            .unwrap_or_default();
+                        tags.sort();
+                        tags.dedup();
+                        if query.is_empty() && tags.is_empty() {
+                            continue;
+                        }
+                        let key = format!("{}\u{0}{}", query.to_lowercase(), tags.join(","));
+                        if seen.contains(&key) || pins.len() >= 10 {
+                            continue;
+                        }
+                        seen.push(key);
+                        let sort = e.get("sort").and_then(|v| v.as_str()).unwrap_or("");
+                        pins.push(serde_json::json!({ "query": query, "tags": tags, "sort": sort }));
+                    }
+                    if !pins.is_empty() {
+                        self.ui_texts.insert("pinnedSearches".into(), serde_json::Value::Array(pins).to_string());
+                        if self.ui_flags.get("searchSuggest") == Some(&false) && self.ui_flags.get("savedSearches") != Some(&false) {
+                            self.ui_flags.insert("searchSuggest".into(), true);
+                        }
+                    }
+                }
+            }
         }
         for k in removed_ui_value_keys() {
             self.ui_values.remove(*k);

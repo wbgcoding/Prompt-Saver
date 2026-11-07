@@ -1,9 +1,12 @@
 // The one recent-search list shared by the library, the journal and the global search.
 // Terms live in ui_texts (encrypted like the rest of the settings), newest first, deduped
-// case-insensitively, capped at the searchListMax expert value.
+// case-insensitively, capped at the searchListMax expert value. Pinned searches live beside
+// them in their own key, newest first, at most 10, and hide a recent twin.
 import { flag, invoke, settings, t, val } from "./core.js";
 
 const KEY = "recentSearches";
+const PIN_KEY = "pinnedSearches";
+export const PINNED_SEARCH_MAX = 10;
 // Per-field lists of earlier versions, merged into the shared one on first read.
 const OLD_KEYS = ["globalSearchRecent", "recentSearchLib", "recentSearchJournal"];
 
@@ -51,9 +54,70 @@ function rsStored() {
   return rsParse(settings.ui_texts?.[KEY]).slice(0, val("searchListMax"));
 }
 
-// The terms to offer; nothing while the recent-searches switch is off.
+// ---- Pinned searches: {query, tags (lowercase keys, sorted), sort}, newest first ----
+function pinNorm(e) {
+  const tags = [...new Set((Array.isArray(e?.tags) ? e.tags : []).map((x) => String(x ?? "").trim().toLowerCase()).filter(Boolean))].sort();
+  return { query: String(e?.query ?? "").trim(), tags, sort: typeof e?.sort === "string" ? e.sort : "" };
+}
+
+// Same search = same query (case-insensitive) and the same tag set.
+const pinKey = (e) => e.query.toLowerCase() + "\u0000" + e.tags.join(",");
+
+function pinStored() {
+  try {
+    const a = JSON.parse(settings.ui_texts?.[PIN_KEY] || "[]");
+    if (!Array.isArray(a)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const raw of a) {
+      const e = pinNorm(raw);
+      if ((!e.query && !e.tags.length) || seen.has(pinKey(e))) continue;
+      seen.add(pinKey(e));
+      out.push(e);
+    }
+    return out.slice(0, PINNED_SEARCH_MAX);
+  } catch { return []; }
+}
+
+function pinSave(list) {
+  rsWrite(PIN_KEY, JSON.stringify(list.slice(0, PINNED_SEARCH_MAX)));
+}
+
+// The pinned searches to offer, newest first; nothing while the recent-searches switch is off.
+export function pinnedList() {
+  return flag("searchSuggest") ? pinStored() : [];
+}
+
+// Pins a search (moves an existing twin to the top). False at the cap, nothing saved then.
+export function pinSearch(entry) {
+  const e = pinNorm(entry);
+  if (!e.query && !e.tags.length) return false;
+  const rest = pinStored().filter((x) => pinKey(x) !== pinKey(e));
+  const had = rest.length !== pinStored().length;
+  if (!had && rest.length >= PINNED_SEARCH_MAX) return false;
+  pinSave([e, ...rest]);
+  return true;
+}
+
+// Removes the pin and gives its query back to the top of the recent searches.
+export function unpinSearch(entry) {
+  forgetPinned(entry);
+  rememberSearch(entry.query);
+}
+
+// Removes the pin only.
+export function forgetPinned(entry) {
+  const e = pinNorm(entry);
+  pinSave(pinStored().filter((x) => pinKey(x) !== pinKey(e)));
+}
+
+// The terms to offer; nothing while the recent-searches switch is off. A term a pin already
+// holds is left out; the cap counts the terms shown, not the pins.
 export function recentList() {
-  return flag("searchSuggest") ? rsStored() : [];
+  if (!flag("searchSuggest")) return [];
+  rsMigrate();
+  const pinned = new Set(pinStored().map((e) => e.query.toLowerCase()));
+  return rsParse(settings.ui_texts?.[KEY]).filter((x) => !pinned.has(x.toLowerCase())).slice(0, val("searchListMax"));
 }
 
 export function rememberSearch(term) {
@@ -71,7 +135,9 @@ export function clearSearches() {
 }
 
 // One row of the list, the same markup and classes in every place that shows it.
-// opts: id, rowClass / delClass (extra hooks), onPick(term), onForget(term).
+// opts: id, rowClass / delClass (extra hooks), onPick(term), onForget(term). With onPin (a
+// recent row) or onUnpin (a pinned one) a pin button sits before the x; a pinned row also
+// passes pinned: true and its entry, which adds its tags after the text.
 export function recentRow(term, opts) {
   const row = document.createElement("div");
   row.className = "search-suggest-item" + (opts.rowClass ? " " + opts.rowClass : "");
@@ -82,6 +148,32 @@ export function recentRow(term, opts) {
   const label = document.createElement("span");
   label.className = "search-suggest-text";
   label.textContent = term;
+  const parts = term ? [label] : [];
+  if (opts.pinned) {
+    row.dataset.pinned = "1";
+    const tags = opts.entry?.tags || [];
+    if (tags.length) {
+      const span = document.createElement("span");
+      span.className = "search-suggest-tags";
+      span.textContent = tags.map((x) => "#" + x).join(" ");
+      parts.push(span);
+    }
+  }
+  if (opts.onPin || opts.onUnpin) {
+    const pin = document.createElement("button");
+    pin.type = "button";
+    pin.className = "search-suggest-pin";
+    const name = t(opts.pinned ? "searchUnpin" : "searchPin");
+    pin.title = name;
+    pin.setAttribute("aria-label", name);
+    pin.setAttribute("aria-pressed", String(!!opts.pinned));
+    pin.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/></svg>';
+    pin.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (opts.pinned) opts.onUnpin?.(opts.entry); else opts.onPin?.(term);
+    });
+    parts.push(pin);
+  }
   const del = document.createElement("button");
   del.type = "button";
   del.className = "search-suggest-del" + (opts.delClass ? " " + opts.delClass : "");
@@ -95,6 +187,6 @@ export function recentRow(term, opts) {
     opts.onForget(term);
   });
   row.addEventListener("click", () => opts.onPick(term));
-  row.append(label, del);
+  row.append(...parts, del);
   return row;
 }

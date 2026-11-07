@@ -683,10 +683,7 @@ Expert menu → Appearance → Visual.
 The library lists every tile as a searchable, filterable list: fuzzy search,
 smart sort (most-used / most-recent), and the type filter. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
-names. A bookmark button inside the search field saves the current query, tag filters
-and sort as a chip shown above the field; click it to bring the whole search
-back. Right-click a saved search to rename or delete it, or drag it to
-reorder the row. Up to five can be saved at once. The Tiles button next to the sort order switches the list to
+names. A pin button inside the search field pins the current query, tag filters and sort; a pinned search stays at the top of the recent searches and brings the whole search back with one click. Up to ten can be pinned. The Tiles button next to the sort order switches the list to
 tiles: a big preview picture with the name below, nothing else. Click,
 double-click, the right-click menu and multi-select all work the same as in
 the list, it is the same selection drawn differently. The toggle remembers
@@ -1459,10 +1456,8 @@ im Expertenmenü → Aussehen → Visuell.
 ### Bibliothek & Kopierverlauf
 
 **Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Typfilter,
-`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
-speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
-bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Es sind
-höchstens fünf möglich. Ein Umschalter neben dem
+`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stecknadel-Button im Suchfeld
+heftet Anfrage, Tag-Filter und Sortierung an; eine angeheftete Suche bleibt oben in den letzten Suchen und holt mit einem Klick die ganze Suche zurück. Bis zu zehn sind möglich. Ein Umschalter neben dem
 Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
 darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt

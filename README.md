@@ -31,7 +31,7 @@ A tiny, local prompt manager for Windows. No account, no cloud, no telemetry.
 | **Grid & views** | Free placement on a per-view grid (1×1 up to 20×20), drag tiles anywhere, drop on an occupied cell to swap. Up to 20 named views, each with its own size and layout. Drop a tile on a view tab to move it into that view, Ctrl to copy it there instead |
 | **Library** | Every saved prompt in one searchable list: copy, edit, drag onto the grid, filter by type or tag |
 | **Search & sort** | Typo-tolerant search ("promt" still finds "prompt"), sorted by most used or recently used |
-| **Saved searches** | Star a query, its tag filters and sort to bring it back with one click from a chip above the search field |
+| **Pinned searches** | Pin a query with its tag filters and sort; it stays at the top of the recent searches and comes back with one click |
 | **Search everything** | A toolbar icon or Ctrl+K opens an overlay that searches prompts, copy history, attachments, views, settings and help at once, arrow keys move across the groups, Enter runs the fitting action for whatever is highlighted |
 | **Library tiles** | Switch the library from a list to big preview tiles, name below, same click/select/right-click behavior either way |
 | **Tags** | Label prompts with your own tags and narrow the library down to the prompts that carry all of them |

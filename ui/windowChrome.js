@@ -7,7 +7,7 @@ import { fillVarHighlighted } from "./promptVars.js";
 import { placePopover } from "./popover.js";
 import { buildShortcutRows, closeShortcutsOverlay, keysLabel, openShortcutsOverlay, SCOPE_TITLE_KEYS } from "./shortcuts.js";
 import { renderHotkeysList } from "./hotkeys.js";
-import { forgetSearch, recentList, recentRow, rememberSearch } from "./recentSearches.js";
+import { forgetPinned, forgetSearch, pinnedList, pinSearch, recentList, recentRow, rememberSearch, unpinSearch } from "./recentSearches.js";
 
 export function applyI18n() {
   document.documentElement.lang = LANG;
@@ -291,10 +291,11 @@ export async function wireWindowControls() {
 }
 
 // Themed recent-searches dropdown for a search field, replacing the browser's
-// unstyled native autofill. The terms are the shared list in recentSearches.js;
-// picking one re-runs the field's own search.
+// unstyled native autofill. The terms are the shared list in recentSearches.js, pinned
+// searches first; picking a term re-runs the field's own search. A pinned row restores the
+// whole search through opts.onPickPinned(entry) when given, else it sets the query only.
 let searchSuggestSeq = 0;
-export function wireSearchSuggest(input) {
+export function wireSearchSuggest(input, opts = {}) {
   if (!input) return;
   input.setAttribute("autocomplete", "off");
   const pop = document.createElement("div");
@@ -334,18 +335,42 @@ export function wireSearchSuggest(input) {
     rememberSearch(term);
     hide();
   };
+  const pickPinned = (entry) => {
+    hide();
+    if (opts.onPickPinned) { opts.onPickPinned(entry); return; }
+    input.value = entry.query;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  // The rows as shown, in order: {entry} for a pinned one, {term} for a recent one.
+  let shown = [];
   const show = () => {
     activeIdx = -1;
     input.removeAttribute("aria-activedescendant");
     if (!flag("searchSuggest")) { hide(); return; }
     const q = input.value.trim().toLowerCase();
+    const pins = pinnedList().filter((e) => !q || e.query.toLowerCase().includes(q) || e.tags.some((x) => x.includes(q)));
     const items = recentList().filter((x) => !q || x.toLowerCase().includes(q));
     pop.innerHTML = "";
-    if (!items.length) { hide(); return; }
+    shown = [...pins.map((entry) => ({ entry })), ...items.map((term) => ({ term }))];
+    if (!shown.length) { hide(); return; }
+    for (const entry of pins) {
+      pop.appendChild(recentRow(entry.query, {
+        id: `${popId}-opt-${pop.children.length}`,
+        pinned: true,
+        entry,
+        onPick: () => pickPinned(entry),
+        onUnpin: (e) => { unpinSearch(e); show(); },
+        onForget: () => {
+          forgetPinned(entry);
+          show();
+        },
+      }));
+    }
     for (const term of items) {
       pop.appendChild(recentRow(term, {
         id: `${popId}-opt-${pop.children.length}`,
         onPick: pick,
+        onPin: (x) => { pinSearch({ query: x, tags: [], sort: "" }); show(); },
         onForget: (x) => {
           forgetSearch(x);
           show(); // re-render the shortened list, keeping the popup open
@@ -376,12 +401,18 @@ export function wireSearchSuggest(input) {
       hide();
     } else if (e.key === "Delete" && e.shiftKey && activeIdx >= 0 && rows[activeIdx]) {
       e.preventDefault();
-      forgetSearch(rows[activeIdx].dataset.term);
+      const cur = shown[activeIdx];
+      if (cur?.entry) forgetPinned(cur.entry); else forgetSearch(rows[activeIdx].dataset.term);
       const keep = activeIdx;
       show();
       setActive(keep);
     } else if (e.key === "Enter") {
-      if (activeIdx >= 0 && rows[activeIdx]) { e.preventDefault(); pick(rows[activeIdx].dataset.term); return; }
+      if (activeIdx >= 0 && rows[activeIdx]) {
+        e.preventDefault();
+        const cur = shown[activeIdx];
+        if (cur?.entry) pickPinned(cur.entry); else pick(rows[activeIdx].dataset.term);
+        return;
+      }
       rememberSearch(input.value);
       hide();
     }

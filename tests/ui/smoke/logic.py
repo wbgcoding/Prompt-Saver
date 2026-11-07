@@ -475,6 +475,52 @@ RECENT_PROBE = """
     }
 """
 
+# pinned-searches: one list under the field, pinned rows first with their tags, a recent twin hidden,
+# pinning and unpinning move a row between the two parts.
+PIN_SEED = ('<script>window.__SEED_SETTINGS__ = { ui_texts: {'
+            ' recentSearches: JSON.stringify(["Alpha", "Beta"]),'
+            ' pinnedSearches: JSON.stringify([{ query: "alpha", tags: ["work"], sort: "" }]) } };</script>')
+PIN_PROBE = """
+    // pinned-searches:
+    {
+      const core = await import('./core.js');
+      const lib = $('library-q');
+      const openList = async () => {
+        lib.value = '';
+        lib.dispatchEvent(new Event('pointerdown'));
+        await sleep(100);
+        const pop = [...document.querySelectorAll('.search-suggest')].find((p) => !p.classList.contains('hidden'));
+        return pop ? [...pop.querySelectorAll('.search-suggest-item')] : [];
+      };
+      const terms = (rows) => rows.map((r) => (r.dataset.pinned === '1' ? '*' : '') + r.dataset.term).join(',');
+      let rows = await openList();
+      if (terms(rows) !== '*alpha,Beta') errs.push('pinned-searches: the list reads ' + terms(rows) + ', wanted *alpha,Beta');
+      const tagSpan = rows[0] && rows[0].querySelector('.search-suggest-tags');
+      if (!tagSpan || tagSpan.textContent.trim() !== '#work') errs.push('pinned-searches: the pinned row shows the tags "' + (tagSpan && tagSpan.textContent) + '"');
+      const pinBtn = (row) => row && row.querySelector('.search-suggest-pin');
+      if (!pinBtn(rows[0]) || pinBtn(rows[0]).getAttribute('aria-pressed') !== 'true') errs.push('pinned-searches: the pinned row has no pressed pin button');
+      if (!pinBtn(rows[1]) || pinBtn(rows[1]).getAttribute('aria-pressed') !== 'false') errs.push('pinned-searches: the recent row has no unpressed pin button');
+      // Unpin: the query goes to the top of the recents.
+      pinBtn(rows[0])?.click();
+      await sleep(100);
+      rows = [...document.querySelectorAll('.search-suggest:not(.hidden) .search-suggest-item')];
+      if (terms(rows) !== 'alpha,Beta') errs.push('pinned-searches: after unpinning the list reads ' + terms(rows) + ', wanted alpha,Beta');
+      if (JSON.parse(core.settings.ui_texts.pinnedSearches || '[]').length) errs.push('pinned-searches: the pin is still stored after unpinning');
+      // Pin the second recent: it becomes the first pinned row.
+      pinBtn(rows[1])?.click();
+      await sleep(100);
+      rows = [...document.querySelectorAll('.search-suggest:not(.hidden) .search-suggest-item')];
+      if (terms(rows) !== '*Beta,alpha') errs.push('pinned-searches: after pinning Beta the list reads ' + terms(rows) + ', wanted *Beta,alpha');
+      const stored = JSON.parse(core.settings.ui_texts.pinnedSearches || '[]');
+      if (stored.length !== 1 || stored[0].query !== 'Beta' || stored[0].sort !== '' || !Array.isArray(stored[0].tags)) errs.push('pinned-searches: the stored pins read ' + JSON.stringify(stored));
+      // The x on a pinned row deletes the pin without moving it to the recents.
+      rows[0].querySelector('.search-suggest-del')?.click();
+      await sleep(100);
+      rows = [...document.querySelectorAll('.search-suggest:not(.hidden) .search-suggest-item')];
+      if (terms(rows) !== 'alpha,Beta') errs.push('pinned-searches: after deleting the pin the list reads ' + terms(rows) + ', wanted alpha,Beta');
+    }
+"""
+
 # 1246: every expert path row carries the jump-to-setting hook, and picking a recording quality
 # step moves the visible bitrate slider and readout with the value it just stored.
 EXPERT_SYNC_PROBE = """
@@ -551,6 +597,7 @@ def run(browser, tmp):
             ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
             ("backup-now", BACKUP_NOW_PROBE, ""),
             ("recent-searches", RECENT_PROBE, RECENT_SEED),
+            ("pinned-searches", PIN_PROBE, PIN_SEED),
             ("expert-sync", EXPERT_SYNC_PROBE, ""),
             ("tagbar-empty", TAGBAR_PROBE, "")):
         errs = _boot(browser, tmp, tag, body, seed=seed)

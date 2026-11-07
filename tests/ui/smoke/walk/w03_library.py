@@ -306,11 +306,11 @@ SECTION = """\
         }
       }
     }
-    // 268: the save-search button is a bookmark drawing, not a text glyph.
+    // 268: the pin-search button is a pin drawing, not a text glyph.
     {
-      const save268 = document.getElementById('library-search-save');
-      if (!save268 || !save268.querySelector('svg')) out.errors.push('268: the save-search button has no drawing');
-      else if (save268.textContent.trim() !== '') out.errors.push('268: the save-search button still carries text: ' + save268.textContent.trim());
+      const save268 = document.getElementById('library-search-pin');
+      if (!save268 || !save268.querySelector('svg')) out.errors.push('268: the pin-search button has no drawing');
+      else if (save268.textContent.trim() !== '') out.errors.push('268: the pin-search button still carries text: ' + save268.textContent.trim());
     }
     // tag269: tags in a library row are flat, non-clickable marks beside the name, so a
     // tagged row is no taller than an untagged one with the same text.
@@ -372,21 +372,31 @@ SECTION = """\
         if (tg271.getAttribute('aria-pressed') !== 'false') out.errors.push('271: aria-pressed did not turn false after the second click');
       }
     }
-    // 436: saved searches keep a query, its active tag filters and the current
-    // sort together as one chip. Saving, applying, the cap, renaming and
-    // deleting are all self-contained here and end with the list empty again.
+    // 436: a pinned search keeps a query, its active tag filters and the current sort
+    // together. Pinning, restoring from the dropdown, persistence, the cap and unpinning are
+    // all self-contained here and end with no pin left.
     {
-      const saveBtn436 = document.getElementById('library-search-save');
+      const pinBtn436 = document.getElementById('library-search-pin');
       const firstTagChip436 = document.querySelector('#library-tagbar .tag-chip.tag-filter');
-      if (!saveBtn436 || !firstTagChip436) {
-        out.errors.push('436: the search-save button or a tag filter chip is missing');
+      if (!pinBtn436 || !firstTagChip436) {
+        out.errors.push('436: the pin-search button or a tag filter chip is missing');
       } else {
         // Every tag toggle rebuilds #library-tagbar from scratch, so a chip
         // reference from before that rebuild is stale -- always look it back
         // up by its name instead of holding onto the DOM node.
         const tagName436 = firstTagChip436.textContent;
         const findTagChip436 = () => [...document.querySelectorAll('#library-tagbar .tag-chip.tag-filter')].find((c) => c.textContent === tagName436);
-        q.value = 'zzsaved436';
+        const openList436 = async () => {
+          q.value = '';
+          q.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(200);
+          q.dispatchEvent(new Event('pointerdown'));
+          await sleep(120);
+          const pop = [...document.querySelectorAll('.search-suggest')].find((p) => !p.classList.contains('hidden'));
+          return pop ? [...pop.querySelectorAll('.search-suggest-item')] : [];
+        };
+        const pinned436 = (rows) => rows.filter((r) => r.dataset.pinned === '1');
+        q.value = 'zzpin436';
         q.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(250);
         findTagChip436().click();
@@ -399,28 +409,25 @@ SECTION = """\
           sortSel436.dispatchEvent(new Event('change', { bubbles: true }));
           await sleep(150);
         }
-        saveBtn436.click();
+        pinBtn436.click();
         await sleep(200);
-        document.getElementById('confirm-input').value = 'SmokeSaved1';
-        document.getElementById('confirm-ok').click();
-        await sleep(250);
-        const chipsOf436 = () => [...document.querySelectorAll('#library-saved-searches .lib-saved-search-chip')];
-        if (!chipsOf436().some((c) => c.textContent === 'SmokeSaved1')) {
-          out.errors.push('436: saving a search did not add a chip for it');
+        let rows436 = await openList436();
+        if (!pinned436(rows436).some((r) => r.dataset.term === 'zzpin436')) {
+          out.errors.push('436: pinning a search did not add a pinned row to the dropdown');
         }
-        // Forget the search, then bring it back with one click.
+        // Forget the search, then bring it back with one click on the pinned row.
         q.value = '';
         q.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(200);
         findTagChip436().click(); // deselect
         await sleep(150);
         if (altSort436) { sortSel436.value = sortBefore436; sortSel436.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150); }
-        const savedChip436 = chipsOf436().find((c) => c.textContent === 'SmokeSaved1');
-        savedChip436?.click();
+        rows436 = await openList436();
+        pinned436(rows436).find((r) => r.dataset.term === 'zzpin436')?.click();
         await sleep(250);
-        if (q.value !== 'zzsaved436') out.errors.push('436: clicking a saved search did not restore the query text');
-        if (!findTagChip436()?.classList.contains('active')) out.errors.push('436: clicking a saved search did not restore its tag filter');
-        if (altSort436 && sortSel436.value !== altSort436) out.errors.push('436: clicking a saved search did not restore its sort');
+        if (q.value !== 'zzpin436') out.errors.push('436: picking a pinned search did not restore the query text');
+        if (!findTagChip436()?.classList.contains('active')) out.errors.push('436: picking a pinned search did not restore its tag filter');
+        if (altSort436 && sortSel436.value !== altSort436) out.errors.push('436: picking a pinned search did not restore its sort');
         // Leave the tag filter the way this block found it, so later checks see
         // the full, unfiltered library list again.
         findTagChip436()?.click();
@@ -430,65 +437,54 @@ SECTION = """\
         await sleep(150);
         await click('library-btn');
         await sleep(250);
-        if (!chipsOf436().some((c) => c.textContent === 'SmokeSaved1')) {
-          out.errors.push('436: a saved search did not survive closing and reopening the library');
+        rows436 = await openList436();
+        if (!pinned436(rows436).some((r) => r.dataset.term === 'zzpin436')) {
+          out.errors.push('436: a pinned search did not survive closing and reopening the library');
         }
-        // The cap: 4 more reach the default limit of 5, a 6th is refused and
-        // names the oldest one instead of silently dropping it.
-        for (let i = 2; i <= 5; i++) {
-          saveBtn436.click();
-          await sleep(200);
-          document.getElementById('confirm-input').value = 'SmokeSaved' + i;
-          document.getElementById('confirm-ok').click();
-          await sleep(200);
+        // The cap: nine more reach the limit of ten, the eleventh is refused with a toast.
+        for (let i = 2; i <= 10; i++) {
+          q.value = 'zzpin436-' + i;
+          q.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(120);
+          pinBtn436.click();
+          await sleep(80);
         }
-        if (chipsOf436().length !== 5) {
-          out.errors.push('436: expected exactly 5 saved searches at the cap, found ' + chipsOf436().length);
-        }
+        rows436 = await openList436();
+        if (pinned436(rows436).length !== 10) out.errors.push('436: expected exactly 10 pinned searches at the cap, found ' + pinned436(rows436).length);
         const toastBefore436 = document.getElementById('toast').textContent;
-        saveBtn436.click();
+        q.value = 'zzpin436-11';
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(120);
+        pinBtn436.click();
         await sleep(200);
-        const dialogOpen436 = !document.getElementById('confirm-modal').classList.contains('hidden');
-        if (dialogOpen436) {
-          out.errors.push('436: saving past the cap opened a dialog instead of being refused up front');
-          document.getElementById('confirm-cancel').click();
-          await sleep(150);
-        } else {
-          const toastAfter436 = document.getElementById('toast').textContent;
-          if (toastAfter436 === toastBefore436 || !toastAfter436.includes('SmokeSaved1')) {
-            out.errors.push('436: the at-cap message did not name the oldest saved search');
-          }
+        const toastAfter436 = document.getElementById('toast').textContent;
+        if (toastAfter436 === toastBefore436 || !toastAfter436.includes('10')) {
+          out.errors.push('436: the at-cap message did not name the limit');
         }
-        if (chipsOf436().length !== 5) out.errors.push('436: a refused save past the cap changed the saved search count');
-        // Rename, then delete, through the same right-click dialog.
-        const renameTarget436 = chipsOf436().find((c) => c.textContent === 'SmokeSaved2');
-        if (!renameTarget436) {
-          out.errors.push('436: "SmokeSaved2" is missing before the rename check');
-        } else {
-          renameTarget436.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
-          await sleep(150);
-          document.getElementById('confirm-input').value = 'SmokeRenamed436';
-          document.getElementById('confirm-ok').click();
-          await sleep(250);
-          if (!chipsOf436().some((c) => c.textContent === 'SmokeRenamed436')) {
-            out.errors.push('436: renaming a saved search did not change its chip label');
-          }
-          if (chipsOf436().some((c) => c.textContent === 'SmokeSaved2')) {
-            out.errors.push('436: the old name is still shown after renaming a saved search');
-          }
-        }
-        // Clean up every chip this block created, through its own delete path,
-        // so later checks see an empty saved-search row again.
+        rows436 = await openList436();
+        if (pinned436(rows436).length !== 10) out.errors.push('436: a refused pin past the cap changed the pinned count');
+        // Unpinning through the pin button moves the row out of the pinned part.
+        const unpin436 = pinned436(rows436).find((r) => r.dataset.term === 'zzpin436-2');
+        unpin436?.querySelector('.search-suggest-pin')?.click();
+        await sleep(150);
+        rows436 = [...document.querySelectorAll('.search-suggest:not(.hidden) .search-suggest-item')];
+        if (pinned436(rows436).some((r) => r.dataset.term === 'zzpin436-2')) out.errors.push('436: unpinning left the row in the pinned part');
+        if (!rows436.some((r) => r.dataset.term === 'zzpin436-2' && r.dataset.pinned !== '1')) out.errors.push('436: an unpinned search is not listed among the recents');
+        // Clean up every pin this block created, through the x so nothing lands in the recents.
         let guard436 = 0;
-        while (chipsOf436().length && guard436 < 10) {
-          const c = chipsOf436()[0];
-          c.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
-          await sleep(150);
-          document.getElementById('confirm-alt').click();
-          await sleep(200);
+        while (guard436 < 15) {
+          rows436 = await openList436();
+          const first = pinned436(rows436)[0];
+          if (!first) break;
+          first.querySelector('.search-suggest-del').click();
+          await sleep(100);
           guard436++;
         }
-        if (chipsOf436().length) out.errors.push('436: deleting saved searches did not empty the list again');
+        rows436 = await openList436();
+        if (pinned436(rows436).length) out.errors.push('436: deleting the pins did not empty the pinned part again');
+        q.value = '';
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
       }
     }
     // 437: the list/tiles toggle draws the very same rows differently -- a

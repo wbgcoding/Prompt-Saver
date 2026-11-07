@@ -5,7 +5,7 @@ import { $, debounced, flag, gateOpen, invoke, optFlag, prompts, settings, t, va
 import { editPrompt } from "./editor.js";
 import { switchToView } from "./views.js";
 import { varPreview } from "./floatShared.js";
-import { clearSearches, forgetSearch, recentList, recentRow, rememberSearch } from "./recentSearches.js";
+import { clearSearches, forgetPinned, forgetSearch, pinnedList, pinSearch, recentList, recentRow, rememberSearch, unpinSearch } from "./recentSearches.js";
 import { EXPERT_DEFS, EXPERT_LABEL_KEYS, jumpToExpertSetting } from "./expertMenu.js";
 import { openSettingsDirectoryEntry, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit } from "./settingsSearch.js";
 import { EXPERT_TABS, flagLabelKey, groupFlags, SETTINGS_AREA_LABEL } from "./expertConfig.js";
@@ -254,7 +254,23 @@ export function gsRecentRow(term) {
     rowClass: "gs-recent-row",
     delClass: "gs-recent-del",
     onPick: gsPickRecent,
+    onPin: (x) => { pinSearch({ query: x, tags: [], sort: "" }); gsRender(); },
     onForget: gsForgetRecent,
+  });
+}
+
+// A pinned-search row: same markup with the tags span and the lit pin button. Picking it
+// sets the query only; the pin button unpins, the x deletes the pin.
+export function gsPinnedRow(entry) {
+  return recentRow(entry.query, {
+    id: `gs-opt-${++gsRowSeq}`,
+    rowClass: "gs-recent-row",
+    delClass: "gs-recent-del",
+    pinned: true,
+    entry,
+    onPick: () => gsPickRecent(entry.query),
+    onUnpin: (e) => { unpinSearch(e); gsRender(); },
+    onForget: () => gsForgetPinned(entry),
   });
 }
 
@@ -267,8 +283,17 @@ function gsPickRecent(term) {
 // Deleting a term keeps keyboard focus on a delete button at (or near) the
 // same position so repeated Tab + Enter can clear several terms in a row.
 export function gsForgetRecent(term) {
-  const idx = recentList().findIndex((x) => x.toLowerCase() === term.toLowerCase());
+  const idx = pinnedList().length + recentList().findIndex((x) => x.toLowerCase() === term.toLowerCase());
   forgetSearch(term);
+  gsRender();
+  const dels = $("gs-results").querySelectorAll(".gs-recent-del");
+  if (dels.length) dels[Math.max(0, Math.min(idx, dels.length - 1))].focus();
+  else $("gs-input").focus();
+}
+
+export function gsForgetPinned(entry) {
+  const idx = pinnedList().findIndex((x) => x.query.toLowerCase() === entry.query.toLowerCase() && x.tags.join(",") === entry.tags.join(","));
+  forgetPinned(entry);
   gsRender();
   const dels = $("gs-results").querySelectorAll(".gs-recent-del");
   if (dels.length) dels[Math.max(0, Math.min(idx, dels.length - 1))].focus();
@@ -317,14 +342,21 @@ export function gsRender(keep = null) {
   const q = gsQuery.trim();
   if (q.length < 2) {
     const list = recentList();
-    if (!list.length) {
+    const pins = pinnedList();
+    if (!list.length && !pins.length) {
       empty.textContent = t("globalSearchHint");
       empty.classList.remove("hidden");
       gsSetActive(-1);
       return;
     }
     empty.classList.add("hidden");
-    box.appendChild(gsGroupHead("globalSearchRecentLabel", "recent", true));
+    box.appendChild(gsGroupHead("globalSearchRecentLabel", "recent", list.length > 0));
+    for (const entry of pins) {
+      const run = () => gsPickRecent(entry.query);
+      const row = gsPinnedRow(entry);
+      box.appendChild(row);
+      gsFlatRows.push({ el: row, run });
+    }
     for (const term of list) {
       const run = () => gsPickRecent(term);
       const row = gsRecentRow(term);
