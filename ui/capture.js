@@ -710,7 +710,7 @@ export function bindCapture() {
 
   // Switching to another program never touches a chain, locked or not: it ends only through
   // the chain button or Ctrl+V pressed inside this window.
-  const { snipEditOpen, snipEdit, snipEditState, snipEditCancel, snipCopyImage } = initSnipEditor();
+  const { snipEditOpen, snipEdit, snipEditState, snipEditRequestClose, snipCopyImage } = initSnipEditor();
 
   let pendingSnipPath = ""; // disk path if this shot was saved to the folder
   // Bumped by every new capture: an async save finishing after a newer shot arrived must not
@@ -749,8 +749,11 @@ export function bindCapture() {
           defaultName: pendingSnipOriginDir ? pendingSnipName : pendingSnipStem || undefined,
         });
         if (path) toast(t("snipEditSavedTo").replace("{path}", () => path));
-      } catch (err) { errToast(err); }
+        return path || "";
+      } catch (err) { errToast(err); return ""; }
     },
+    // The automatic-save write into the screenshot folder, used by the close question's Save.
+    saveToFolder: (dataUrl) => saveSnipToFolder(dataUrl),
     // The screenshot becomes a button that copies the image on click. The editor has closed by now.
     keep: (dataUrl) => {
       openModal({
@@ -763,25 +766,15 @@ export function bindCapture() {
       });
     },
     // A new capture arrives through "snip-captured", which asks before it replaces an editor that
-    // holds edits; cancelling the capture leaves this editor as it is.
+    // holds unsaved edits; Cancel there leaves this editor as it is.
     retry: () => { invoke("open_snip").catch((err) => errToast(err)); },
   };
   listen("snip-captured", async (e) => {
     const shot = e.payload?.data_url || "";
     // A shot arriving over an open editor must not wipe the open session's state before the user
-    // agrees: ask first when it holds edits, then run that session's own cancel.
+    // agrees: the editor asks first when it holds unsaved edits, then closes without a clipboard copy.
     if (shot && snipEditState().active) {
-      if (snipEditState().dirty) {
-        const ok = await confirmDialog({
-          title: t("snipReplaceTitle"),
-          message: t("snipReplaceMsg"),
-          confirmLabel: t("snipReplaceOk"),
-          cancelLabel: t("snipReplaceKeep"),
-          danger: false,
-        });
-        if (!ok) return; // the new shot stays as every capture does (clipboard, folder)
-      }
-      if (snipEditState().active) snipEditCancel();
+      if (!(await snipEditRequestClose({ replacing: true }))) return; // the new shot stays as every capture does (clipboard, folder)
     }
     if (!shot) return;
     snipCaptureGen++;
@@ -800,11 +793,12 @@ export function bindCapture() {
       // finalize_capture already put the unedited image on the clipboard (and optionally on disk).
       // Closing an edited shot redoes both side effects on the edited result; an untouched one
       // leaves them as they are.
-      onClose: async (editedDataUrl) => {
+      onClose: async (editedDataUrl, { writeFile = true } = {}) => {
         if (!editedDataUrl) return;
         snipCopyImage(editedDataUrl, false).catch((err) => errToast(err));
-        if (optFlag("screenshotSave")) await saveSnipToFolder(editedDataUrl);
+        if (writeFile && optFlag("screenshotSave")) await saveSnipToFolder(editedDataUrl);
       },
+      autoSaves: () => optFlag("screenshotSave"),
       onCancel: () => {
         pendingSnipPath = "";
         pendingSnipName = "";
@@ -822,7 +816,7 @@ export function bindCapture() {
     pendingSnipName = res.name || "";
     pendingSnipStem = "";
     pendingSnipOriginDir = res.origin_dir || "";
-    const { retry, ...fileActions } = snipEditActions;
+    const { retry, saveToFolder, ...fileActions } = snipEditActions;
     snipEditOpen(res.data_url, {
       onClose: (editedDataUrl) => {
         if (!editedDataUrl) return;
@@ -833,6 +827,13 @@ export function bindCapture() {
       actions: fileActions,
     });
   }
+
+  // A quit (tray, Alt+F4) waits for the editor: close it through the same question, then tell the
+  // backend whether the quit may go on.
+  listen("snip-edit-close-requested", async () => {
+    const ok = snipEditState().active ? await snipEditRequestClose() : true;
+    invoke("snip_edit_close_ack", { state: ok ? "allow" : "cancel" }).catch(() => {});
+  });
 
   // ---- OCR (text recognition, on by default: flag "ocr") ----
   const ocrModal = $("ocr-modal");

@@ -250,6 +250,26 @@ fn a_close_the_page_cannot_answer_goes_through_and_any_other_is_held_for_it() {
     let quit = source!("../bg_ops.rs");
     let at = quit.find("pub(crate) fn request_app_quit").unwrap();
     assert!(quit[at..at + 400].contains("ask_editor_before_quit"));
+    // The screenshot editor is asked right after the video editor.
+    let video = quit[at..].find("ask_editor_before_quit").unwrap();
+    let snip = quit[at..].find("ask_snip_editor_before_quit").expect("the quit must ask the screenshot editor");
+    assert!(snip > video && snip - video < 300);
+}
+
+// The screenshot editor's close handshake: the page reports dirty/clean, a quit asks it, and
+// "allow" resumes the quit while "cancel" drops it.
+#[test]
+fn snip_close_ack_step_covers_every_state() {
+    use crate::snip::snip_close_ack_step as step;
+    assert_eq!(step("dirty", false, false), (true, false, false));
+    assert_eq!(step("dirty", false, true), (true, true, false));
+    assert_eq!(step("clean", true, false), (false, false, false));
+    assert_eq!(step("clean", true, true), (false, true, false));
+    assert_eq!(step("allow", true, true), (false, false, true));
+    assert_eq!(step("allow", false, false), (false, false, false));
+    assert_eq!(step("cancel", true, true), (true, false, false));
+    assert_eq!(step("cancel", false, true), (false, false, false));
+    assert_eq!(step("other", true, true), (true, true, false));
 }
 
 // Structural fix, no red unit test: a panic inside the export task cannot be provoked here.

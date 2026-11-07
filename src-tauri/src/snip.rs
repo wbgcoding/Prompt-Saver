@@ -1537,6 +1537,49 @@ fn image_data_too_large(data_url: &str) -> String {
     )
 }
 
+// Screenshot editor close handshake, same shape as the video editor's: the page reports whether
+// it holds edits that are not in a file ("dirty" / "clean"); a quit then asks the page first and
+// the page answers "allow" (closed, the quit goes on) or "cancel" (kept open).
+static SNIP_EDIT_DIRTY: AtomicBool = AtomicBool::new(false);
+static SNIP_QUIT_AFTER_CLOSE: AtomicBool = AtomicBool::new(false);
+
+// Pure step of the handshake: (dirty, quit_pending) in, the new pair and whether the pending quit
+// resumes out.
+pub(crate) fn snip_close_ack_step(state: &str, dirty: bool, quit_pending: bool) -> (bool, bool, bool) {
+    match state {
+        "dirty" => (true, quit_pending, false),
+        "clean" => (false, quit_pending, false),
+        "allow" => (false, false, quit_pending),
+        "cancel" => (dirty, false, false),
+        _ => (dirty, quit_pending, false),
+    }
+}
+
+#[tauri::command]
+pub(crate) fn snip_edit_close_ack(app: AppHandle, state: String) {
+    let dirty = SNIP_EDIT_DIRTY.load(Ordering::SeqCst);
+    let pending = SNIP_QUIT_AFTER_CLOSE.load(Ordering::SeqCst);
+    let (dirty, pending, resume_quit) = snip_close_ack_step(&state, dirty, pending);
+    SNIP_EDIT_DIRTY.store(dirty, Ordering::SeqCst);
+    SNIP_QUIT_AFTER_CLOSE.store(pending, Ordering::SeqCst);
+    if resume_quit {
+        // The quit goes on from a plain thread, never from inside a window event.
+        std::thread::spawn(move || crate::bg_ops::request_app_quit(&app));
+    }
+}
+
+// Asks the open screenshot editor before the app quits. True means the quit waits for the
+// editor's answer; false means no edits stand in the way.
+pub(crate) fn ask_snip_editor_before_quit(app: &AppHandle) -> bool {
+    if !SNIP_EDIT_DIRTY.load(Ordering::SeqCst) {
+        return false;
+    }
+    SNIP_QUIT_AFTER_CLOSE.store(true, Ordering::SeqCst);
+    crate::main_window::show_main(app);
+    let _ = app.emit_to("main", "snip-edit-close-requested", true);
+    true
+}
+
 // Screenshot editor: the live copy while editing (`transient`, kept out of the clipboard history)
 // and the final copy on close. The edited image never goes through finalize_capture, so it has
 // its own thin path onto the clipboard. Async: decoding a large image and waiting for a busy

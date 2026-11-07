@@ -677,6 +677,13 @@ def run(browser, tmp):
     };
     const baUndo = async () => { document.getElementById('snip-edit-undo').click(); await sleep(60); };
     const baRedo = async () => { document.getElementById('snip-edit-redo').click(); await sleep(60); };
+    // Answers the question a close with unsaved edits asks: confirm-ok = Save, confirm-alt = Don't save.
+    const baAsk = async (id) => {
+      await until(() => visible(document.getElementById('confirm-modal')), 30);
+      const b = document.getElementById(id || 'confirm-ok');
+      if (visible(document.getElementById('confirm-modal'))) b.click();
+      await sleep(150);
+    };
     const baCtxPop = () => [...document.body.children].find((e) => e.classList.contains('ctx') && !e.id && !e.classList.contains('hidden'));
     const baCtx = async (x, y) => {
       const a = baPt(x, y);
@@ -694,7 +701,7 @@ def run(browser, tmp):
       await baTool('pen'); await baDrag(20, 20, 90, 70);
       window.__SMOKE_ARGS__.length = 0;
       document.getElementById('toast').textContent = '';
-      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      document.getElementById('snip-edit-apply').click(); await baAsk('confirm-ok'); await sleep(500);
       if (!callsFor('save_screenshot_now').length) errs.push('597: fixture: Apply did not try to save the edited shot');
       if (callsFor('delete_screenshot_file').length) errs.push('597: the unedited file was deleted although the edited shot was not saved');
       if (!/could not be saved/i.test(document.getElementById('toast').textContent)) errs.push('597: no error toast after the failed save, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
@@ -707,7 +714,7 @@ def run(browser, tmp):
       RESULTS.delete_screenshot_file = () => true;
       await baTool('pen'); await baDrag(20, 20, 90, 70);
       window.__SMOKE_ARGS__.length = 0;
-      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      document.getElementById('snip-edit-apply').click(); await baAsk('confirm-ok'); await sleep(500);
       const order = (window.__SMOKE_ARGS__ || []).map(([c]) => c).filter((c) => c === 'save_screenshot_now' || c === 'delete_screenshot_file');
       if (order.join() !== 'save_screenshot_now,delete_screenshot_file') errs.push('597: expected save then delete, got ' + order.join());
       const sv = callsFor('save_screenshot_now')[0];
@@ -720,7 +727,7 @@ def run(browser, tmp):
       RESULTS.save_screenshot_now = () => 'C:/shots/same.png';
       await baTool('pen'); await baDrag(20, 20, 90, 70);
       window.__SMOKE_ARGS__.length = 0;
-      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      document.getElementById('snip-edit-apply').click(); await baAsk('confirm-ok'); await sleep(500);
       if (callsFor('delete_screenshot_file').length) errs.push('597: the freshly saved file was deleted because it reused the old name');
     }
 """)
@@ -952,7 +959,7 @@ def run(browser, tmp):
       RESULTS.delete_screenshot_file = () => true;
       await baTool('pen'); await baDrag(20, 20, 90, 70);
       window.__SMOKE_ARGS__.length = 0;
-      document.getElementById('snip-edit-apply').click(); await sleep(150);
+      document.getElementById('snip-edit-apply').click(); await baAsk('confirm-ok'); await sleep(150);
       // a hotkey capture lands while the re-encode is still running
       window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/new.png', name: 'new.png' });
       await sleep(400);
@@ -967,7 +974,7 @@ def run(browser, tmp):
         RESULTS.save_screenshot_now = () => 'C:/shots/e2.png';
         await baTool('pen'); await baDrag(20, 20, 90, 70);
         window.__SMOKE_ARGS__.length = 0;
-        document.getElementById('snip-edit-apply').click(); await sleep(400);
+        document.getElementById('snip-edit-apply').click(); await baAsk('confirm-ok'); await sleep(400);
         const dels2 = callsFor('delete_screenshot_file').map((a) => a.path);
         if (dels2.join() !== 'C:/shots/new.png') errs.push('599: applying the new capture deleted ' + JSON.stringify(dels2) + ', expected only its own file');
       }
@@ -1123,7 +1130,7 @@ def run(browser, tmp):
       }
     }
 """)
-    failed += ar_probe('bz980a', 'screenshot editor: Close keeps the edited image on the clipboard, Escape, Enter and the header X do the same, and nothing asks', 'index', '1000x780', ba_seed, ba_common + r"""
+    failed += ar_probe('bz980a', 'screenshot editor: Close, Escape and the header X keep the edited image on the clipboard after the question, Enter never closes', 'index', '1000x780', ba_seed, ba_common + r"""
     // 980: the bar is format + Save as, Keep as tile, New screenshot, Close.
     if (!(await baOpen('C:/shots/first.png'))) { errs.push('980: the editor did not open'); }
     else {
@@ -1145,7 +1152,7 @@ def run(browser, tmp):
       if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('980: Close did not close the editor');
       if (callsFor('copy_image_data').length || callsFor('save_screenshot_now').length || callsFor('delete_screenshot_file').length) errs.push('980: an untouched Close touched the clipboard or the files');
       // each way to close, after an edit
-      for (const how of ['apply', 'x', 'escape', 'enter']) {
+      for (const how of ['apply', 'x', 'escape']) {
         window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/' + how + '.png', name: how + '.png' });
         await sleep(400);
         await baTool('pen'); await baDrag(20, 20, 90, 70);
@@ -1153,10 +1160,11 @@ def run(browser, tmp):
         if (how === 'apply') apply.click();
         else if (how === 'x') document.getElementById('snip-edit-close').click();
         else if (how === 'escape') { baKey('Escape'); await sleep(100); baKey('Escape'); } // the first one only deselects the just-drawn shape
-        else baKey('Enter');
+        await until(() => visible(document.getElementById('confirm-modal')), 30);
+        if (!visible(document.getElementById('confirm-modal'))) errs.push('980: ' + how + ' closed an edited shot without asking');
+        else document.getElementById('confirm-alt').click(); // Don't save: the clipboard still gets the edit
         await sleep(500);
         if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('980: ' + how + ' did not close the editor');
-        if (visible(document.getElementById('confirm-modal'))) errs.push('980: ' + how + ' asked a question');
         const c = callsFor('copy_image_data');
         if (c.length !== 1) errs.push('980: ' + how + ' made ' + c.length + ' clipboard copies, expected 1');
         else {
@@ -1164,8 +1172,17 @@ def run(browser, tmp):
           const inked = [0, 1, 2, 3, 4, 5].some((k) => !near(im.px(20 + k * 12, 20 + k * 8), BGC, 6));
           if (!inked) errs.push('980: ' + how + ' copied the image without the stroke');
         }
-        if (!callsFor('save_screenshot_now').length) errs.push('980: ' + how + ' did not save the edited shot with the folder save on');
+        if (callsFor('save_screenshot_now').length) errs.push('980: ' + how + ' with Don\'t save wrote the folder file');
       }
+      // Enter never closes the editor, edited or not.
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/enter.png', name: 'enter.png' });
+      await sleep(400);
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      baKey('Enter'); await sleep(400);
+      if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('980: Enter closed the editor');
+      if (visible(document.getElementById('confirm-modal'))) errs.push('980: Enter asked a question');
+      if (callsFor('copy_image_data').length || callsFor('save_screenshot_now').length) errs.push('980: Enter copied or saved');
     }
 """)
     failed += ar_probe('bz980b', 'screenshot editor: each bar action works on the edited image and keeps the editor open, except Keep as tile', 'index', '1000x780', ba_seed, ba_common + r"""
@@ -1210,7 +1227,7 @@ def run(browser, tmp):
         if (getComputedStyle(retry).display !== 'none') errs.push('980: an opened file shows New screenshot');
         await baTool('pen'); await baDrag(20, 20, 90, 70);
         window.__SMOKE_ARGS__.length = 0;
-        document.getElementById('snip-edit-apply').click(); await sleep(400);
+        document.getElementById('snip-edit-apply').click(); await baAsk('confirm-alt'); await sleep(400);
         if (callsFor('copy_image_data').length !== 1) errs.push('980: Close did not copy the edited file image');
         if (callsFor('save_screenshot_now').length) errs.push('980: Close saved an opened file into the screenshot folder');
       }
@@ -1254,6 +1271,7 @@ def run(browser, tmp):
       window.__SMOKE_ARGS__.length = 0;
       await baDrag(20, 20, 40, 40);
       document.getElementById('snip-edit-apply').click();
+      await baAsk('confirm-alt');
       await sleep(900);
       if (copies().length !== 1) errs.push('livecopy1: Close with a pending copy made ' + copies().length + ' copies, expected the final 1');
       else if (copies()[0].transient) errs.push('livecopy1: the final copy on Close is kept out of the clipboard history');
@@ -1278,6 +1296,7 @@ def run(browser, tmp):
       await sleep(650);
       if (copies().length !== 1) errs.push('livecopy2: fixture: expected the live copy to be running, calls ' + copies().length);
       document.getElementById('snip-edit-apply').click();
+      await baAsk('confirm-alt');
       await sleep(200);
       if (copies().length !== 1) errs.push('livecopy2: the copy on Close started while the live copy was still running');
       await sleep(1200);
@@ -1286,6 +1305,151 @@ def run(browser, tmp):
       if (c.length !== 2 || c[1].transient) errs.push('livecopy2: expected the live copy then the final copy, got ' + JSON.stringify(c.map((x) => x.transient)));
     }
 ''')
+    failed += ar_probe('closeask1', 'screenshot editor: closing with edits that are in no file asks Save / Don\'t save / Cancel', 'index', '1000x780', '', ba_common + r"""
+    const cm = document.getElementById('confirm-modal'), edit = document.getElementById('snip-edit');
+    const isOpen = () => !edit.classList.contains('hidden');
+    const draw = async () => { await baTool('pen'); await baDrag(20, 20, 90, 70); };
+    const esc2 = async () => { baKey('Escape'); await sleep(100); baKey('Escape'); await sleep(250); }; // the first one only deselects the just-drawn shape
+    if (!(await baOpen(''))) { errs.push('closeask1: the editor did not open'); }
+    else {
+      await draw();
+      await esc2();
+      if (!visible(cm)) errs.push('closeask1: Escape on an edited shot did not ask');
+      else {
+        const lab = (id) => document.getElementById(id).textContent.trim();
+        if (lab('confirm-ok') !== 'Save' || lab('confirm-alt') !== "Don't save" || lab('confirm-cancel') !== 'Cancel') errs.push('closeask1: buttons read ' + [lab('confirm-ok'), lab('confirm-alt'), lab('confirm-cancel')].join(' / '));
+        document.getElementById('confirm-cancel').click(); await sleep(250);
+        if (!isOpen()) errs.push('closeask1: Cancel closed the editor');
+      }
+      // Dont save: closed, the clipboard gets the edit once (not transient), no file is written.
+      window.__SMOKE_ARGS__.length = 0;
+      await esc2();
+      await baAsk('confirm-alt'); await sleep(300);
+      if (isOpen()) errs.push('closeask1: Dont save left the editor open');
+      const cp = callsFor('copy_image_data');
+      if (cp.length !== 1 || cp[0].transient !== false) errs.push('closeask1: Dont save made ' + cp.length + ' copies, first transient ' + JSON.stringify(cp[0] && cp[0].transient));
+      if (callsFor('save_screenshot_as').length) errs.push('closeask1: Dont save wrote a file');
+      // Save without the folder save: the Save as dialog; a refused path keeps the editor, a path closes it.
+      if (!(await baOpen(''))) { errs.push('closeask1: the editor did not reopen'); }
+      else {
+        await draw();
+        RESULTS.save_screenshot_as = () => null;
+        document.getElementById('snip-edit-close').click();
+        await baAsk('confirm-ok'); await sleep(300);
+        if (!isOpen()) errs.push('closeask1: a Save as that gave no path closed the editor');
+        RESULTS.save_screenshot_as = () => 'C:/x.png';
+        document.getElementById('snip-edit-close').click();
+        await baAsk('confirm-ok'); await sleep(300);
+        if (isOpen()) errs.push('closeask1: Save with a path left the editor open');
+      }
+      // Saved through Save as: Close asks nothing.
+      if (!(await baOpen(''))) { errs.push('closeask1: the editor did not reopen (2)'); }
+      else {
+        await draw();
+        RESULTS.save_screenshot_as = () => 'C:/y.png';
+        document.getElementById('snip-edit-saveas').click(); await sleep(300);
+        document.getElementById('snip-edit-close').click(); await sleep(300);
+        if (visible(cm)) errs.push('closeask1: Close after Save as asked again');
+        if (isOpen()) errs.push('closeask1: Close after Save as left the editor open');
+      }
+    }
+""")
+    failed += ar_probe('closeask2', 'screenshot editor: a new capture over an edited shot asks the same question', 'index', '1000x780', '', ba_common + r"""
+    const cm = document.getElementById('confirm-modal'), live = document.getElementById('snip-edit-live');
+    const shot = (w) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = 90; const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, w, 90); return cv.toDataURL('image/png'); };
+    const second = async (name) => { window.__FIRE__('snip-captured', { data_url: shot(160), path: 'C:/shots/' + name + '.png', name: name + '.png' }); await sleep(300); };
+    if (!(await baOpen('C:/shots/old.png'))) { errs.push('closeask2: the editor did not open'); }
+    else {
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      await second('new');
+      if (!visible(cm)) errs.push('closeask2: a new shot over an edited one did not ask');
+      else document.getElementById('confirm-alt').click();
+      await sleep(400);
+      if (live.width !== 160) errs.push('closeask2: Dont save did not open the new shot, width ' + live.width);
+      if (callsFor('copy_image_data').length) errs.push('closeask2: the replaced shot reached the clipboard');
+    }
+""")
+    failed += ar_probe('closeask2b', 'screenshot editor: a new capture over an edited, auto-saved shot asks Save / Don\'t save / Cancel', 'index', '1000x780', ba_seed, ba_common + r"""
+    const cm = document.getElementById('confirm-modal'), live = document.getElementById('snip-edit-live');
+    const shot = (w) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = 90; const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, w, 90); return cv.toDataURL('image/png'); };
+    const second = async (name) => { window.__FIRE__('snip-captured', { data_url: shot(160), path: 'C:/shots/' + name + '.png', name: name + '.png' }); await sleep(300); };
+    RESULTS.save_screenshot_now = () => 'C:/shots/saved.png';
+    RESULTS.delete_screenshot_file = () => true;
+    if (!(await baOpen('C:/shots/old.png'))) { errs.push('closeask2b: the editor did not open'); }
+    else {
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      await second('n1');
+      if (!visible(cm)) errs.push('closeask2b: a new shot over an edited one did not ask');
+      else document.getElementById('confirm-cancel').click();
+      await sleep(300);
+      if (live.width !== 200) errs.push('closeask2b: Cancel did not keep the old editor, width ' + live.width);
+      if (callsFor('save_screenshot_now').length) errs.push('closeask2b: Cancel saved the old shot');
+      window.__SMOKE_ARGS__.length = 0;
+      await second('n2');
+      if (visible(cm)) document.getElementById('confirm-ok').click();
+      await until(() => live.width === 160, 40);
+      const saves = callsFor('save_screenshot_now');
+      if (saves.length !== 1 || saves[0].replace !== 'C:/shots/old.png') errs.push('closeask2b: Save wrote ' + saves.length + ' files for the old shot: ' + JSON.stringify(saves.map((x) => x.replace)));
+      if (live.width !== 160) errs.push('closeask2b: Save did not open the new shot, width ' + live.width);
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/n3.png', name: 'n3.png' });
+      await sleep(300);
+      if (visible(cm)) document.getElementById('confirm-alt').click();
+      await until(() => live.width === 200, 40);
+      if (callsFor('save_screenshot_now').length) errs.push('closeask2b: Dont save still saved the old shot');
+      if (live.width !== 200) errs.push('closeask2b: Dont save did not open the new shot, width ' + live.width);
+    }
+""")
+    failed += ar_probe('closeask3', 'screenshot editor: with the folder save on the question still comes and Save writes the folder file once', 'index', '1000x780', ba_seed, ba_common + r"""
+    const cm = document.getElementById('confirm-modal'), edit = document.getElementById('snip-edit');
+    const isOpen = () => !edit.classList.contains('hidden');
+    const draw = async () => { await baTool('pen'); await baDrag(20, 20, 90, 70); };
+    const esc2 = async () => { baKey('Escape'); await sleep(100); baKey('Escape'); await sleep(250); };
+    RESULTS.save_screenshot_now = () => 'C:/shots/saved.png';
+    RESULTS.delete_screenshot_file = () => true;
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('closeask3: the editor did not open'); }
+    else {
+      await draw();
+      window.__SMOKE_ARGS__.length = 0;
+      await esc2();
+      if (!visible(cm)) errs.push('closeask3: Escape on an edited shot did not ask with the folder save on');
+      document.getElementById('confirm-alt').click(); await sleep(400);
+      if (isOpen()) errs.push('closeask3: Dont save left the editor open');
+      if (callsFor('save_screenshot_now').length) errs.push('closeask3: Dont save wrote the folder file');
+      const cp = callsFor('copy_image_data');
+      if (cp.length !== 1 || cp[0].transient !== false) errs.push('closeask3: Dont save made ' + cp.length + ' copies');
+      if (!(await baOpen('C:/shots/second.png'))) { errs.push('closeask3: reopen failed'); }
+      else {
+        await draw();
+        window.__SMOKE_ARGS__.length = 0;
+        document.getElementById('snip-edit-close').click();
+        await baAsk('confirm-ok'); await sleep(400);
+        if (isOpen()) errs.push('closeask3: Save left the editor open');
+        if (callsFor('save_screenshot_now').length !== 1) errs.push('closeask3: Save wrote ' + callsFor('save_screenshot_now').length + ' folder files, expected 1');
+        if (callsFor('save_screenshot_as').length) errs.push('closeask3: Save opened Save as with the folder save on');
+      }
+      if (!(await baOpen('C:/shots/third.png'))) { errs.push('closeask3: reopen 2 failed'); }
+      else {
+        await draw();
+        RESULTS.save_screenshot_now = () => '';
+        document.getElementById('snip-edit-close').click();
+        await baAsk('confirm-ok'); await sleep(400);
+        if (!isOpen()) errs.push('closeask3: a failed folder save closed the editor');
+        RESULTS.save_screenshot_now = () => 'C:/shots/saved.png';
+        document.getElementById('snip-edit-close').click();
+        await baAsk('confirm-alt'); await sleep(300);
+      }
+      if (!(await baOpen('C:/shots/fourth.png'))) { errs.push('closeask3: reopen 3 failed'); }
+      else {
+        document.getElementById('snip-edit-close').click(); await sleep(300);
+        if (visible(cm)) errs.push('closeask3: closing an untouched shot asked');
+        if (isOpen()) errs.push('closeask3: closing an untouched shot left the editor open');
+      }
+    }
+""")
     failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>
 """, r"""
     await bootReady();
@@ -2057,10 +2221,12 @@ def run(browser, tmp):
     if (panelOpen()) errs.push('829: the first Escape left the panel open');
     if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the first Escape closed the whole editor');
     await esc();
-    // Escape is Close, which keeps the edited result: no question, the editor just closes.
+    // Escape is Close: the edit is not in a file, so it asks, and Don't save closes the editor.
     await sleep(120);
-    if (!document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('829: the second Escape asked before closing although Close keeps the edit');
-    if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the second Escape did not close the editor');
+    if (document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('829: the second Escape closed an edited shot without asking');
+    else document.getElementById('confirm-alt').click();
+    await sleep(300);
+    if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the second Escape did not close the editor after Don\'t save');
 """)
     failed += ar_probe('bq829c', '829: popups that belong to the panel do not close it', 'index', '880x600', '', snip_panel_common + r"""
     await snipOpen(300, 200);
@@ -2198,13 +2364,12 @@ def run(browser, tmp):
     k = Math.round(6 / z);
     if (!white(k, k)) errs.push('cropgrip: after zooming in the top-left corner handle is not white (zoom ' + z.toFixed(2) + ')');
 """)
-    failed += ar_probe('bq830b', '830: Enter with the untouched full-image box applies the editor without a crop', 'index', '880x600', '', snip_common + r"""
+    failed += ar_probe('bq830b', '830: Enter with the untouched full-image box leaves the editor open', 'index', '880x600', '', snip_common + r"""
     await snipOpen(1400, 800);
     document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleep(200);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await sleep(500);
-    if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('830: Enter with the full-image box did not apply the editor');
-    // Nothing was edited: Close leaves the clipboard with the capture as it was.
+    if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('830: Enter with the full-image box closed the editor');
     if (callsFor('copy_image_data').length) errs.push('830: an untouched full-image box put a new image on the clipboard');
 """)
     failed += ar_probe('bq830c', '830: Apply after a dragged crop exports the cropped picture', 'index', '880x600', '', snip_common + r"""
@@ -2221,6 +2386,8 @@ def run(browser, tmp):
     firePtr('pointerup', sr.right - 200 * z, sr.top + sr.height / 2, window);
     await sleep(150);
     document.getElementById('snip-edit-apply').click();
+    await until(() => visible(document.getElementById('confirm-modal')), 30);
+    document.getElementById('confirm-alt').click();
     await sleep(500);
     const copied = callsFor('copy_image_data').pop();
     if (!copied) errs.push('830: Close after a dragged crop put nothing on the clipboard');
