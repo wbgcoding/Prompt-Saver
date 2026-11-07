@@ -1,6 +1,7 @@
 // Backup dialog: storage and retention panels, restore and selective restore.
-import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
-import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, rowResetBtn, withTip } from "./expertMenu.js";
+import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, gateOpen, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
+import { applyFlags, applyValues, EXPERT_PATHS, rowResetBtn, withTip } from "./expertMenu.js";
+import { EXPERT_SELECTS, EXPERT_VALUES } from "./expertConfig.js";
 import { openVideoCleanup } from "./recordingTools.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
 import { fmtBytes, fmtUnit } from "./floatShared.js";
@@ -178,12 +179,12 @@ export async function renderStoragePanel(root, force) {
 }
 
 // How long a throwaway video clip export survives before the background sweep
-// removes it; fixed, so its row has a number but no setting to jump to.
+// removes it; fixed, so its row has a number but no setting behind it.
 const VIDEO_CLIP_TTL_MIN = 60;
 
 // One row per kept-data category. Each entry names its own value/select key (for the
-// retention wording and the jump-to-setting button, which needs the EXPERT_TABS list the
-// key lives in) and its own on-demand cleanup action. Rows share the wording order (what,
+// retention wording and the in-place control that edits it) and its own on-demand cleanup
+// action. Rows share the wording order (what,
 // how much, how long) but keep their own unit: days for trash/recordings/discarded
 // recordings/edit states, a plain count for copy history/clipboard inbox, minutes for
 // temporary exports.
@@ -192,9 +193,9 @@ export const RETENTION_ROWS = [
   { key: "copyHistory", nameKey: "retentionCatCopyHistory", settingKey: "historyMax", settingKind: "values", wording: "count" },
   { key: "clipInbox", nameKey: "flagClipWatcher", settingKey: "clipInboxMax", settingKind: "values", wording: "count" },
   { key: "recordings", nameKey: "storageKeyRecordings", settingKey: "recordingRetentionDays", settingKind: "selects", wording: "days" },
-  { key: "discardedRecordings", nameKey: "storageKeyDiscardedRecordings", settingKey: "recDiscardKeepH", settingKind: "values", wording: "hours" },
+  { key: "discardedRecordings", nameKey: "storageKeyDiscardedRecordings", settingKey: "recDiscardKeepH", settingKind: "values", wording: "hours", presets: [0, 6, 12, 24, 48, 168, 720] },
   { key: "tempExports", nameKey: "retentionCatTempExports", fixed: VIDEO_CLIP_TTL_MIN, wording: "minutes" },
-  { key: "editStates", nameKey: "storageKeyEditStates", settingKey: "editStateKeepDays", settingKind: "values", wording: "days" },
+  { key: "editStates", nameKey: "storageKeyEditStates", settingKey: "editStateKeepDays", settingKind: "values", wording: "days", presets: [0, 7, 14, 30, 90, 365] },
 ];
 
 // "0 means unlimited" always says so in words (retentionForever), never a bare "0d".
@@ -242,6 +243,47 @@ export const RETENTION_CLEANUP = {
   },
 };
 
+// The in-place control of a retention row: a number field for a count, a preset list with the
+// unit written out for a duration. Null while the row's feature is off (the row then keeps its
+// read-only text) or when the row has no setting behind it.
+function retentionControl(row, rerender) {
+  const cfg = row.settingKey && (row.settingKind === "selects" ? EXPERT_SELECTS : EXPERT_VALUES)[row.settingKey];
+  if (!cfg || !gateOpen(cfg.gate)) return null;
+  if (row.wording === "count") {
+    const min = cfg.stops ? cfg.stops[0] : cfg.min;
+    const max = cfg.stops ? cfg.stops.at(-1) : cfg.max;
+    return numRow("retentionKeepCount", row.settingKey, min, max, async (v) => {
+      await saveBackupSetting("value", row.settingKey, v);
+      rerender();
+    }, "retention-set-row", rerender);
+  }
+  const label = document.createElement("label");
+  label.className = "field backup-set-row retention-set-row";
+  const text = document.createElement("span"); text.textContent = t("retentionKeepFor");
+  const sel = document.createElement("select"); sel.className = "modal-input retention-keep";
+  const cur = val(row.settingKey);
+  const presets = [...(cfg.options || row.presets)];
+  if (!presets.includes(cur)) { presets.push(cur); presets.sort((a, b) => a - b); }
+  const unit = row.wording === "hours" ? "hour" : "day";
+  for (const v of presets) {
+    const o = document.createElement("option"); o.value = String(v);
+    o.textContent = v === 0 ? t("retentionForever") : fmtUnit(v, unit, LANG, 0, "long");
+    sel.appendChild(o);
+  }
+  sel.value = String(cur);
+  sel.addEventListener("change", async () => {
+    await saveBackupSetting("value", row.settingKey, Number(sel.value));
+    rerender();
+  });
+  attachSelectPicker(sel);
+  const right = document.createElement("span"); right.className = "numrow-right";
+  const reset = rowResetBtn(row.settingKind, row.settingKey, rerender);
+  if (reset) right.append(reset);
+  right.append(sel);
+  label.append(text, right);
+  return label;
+}
+
 export async function renderRetentionPanel(root, force) {
   let data;
   try { data = await invoke("retention_overview", { force: !!force }); }
@@ -282,23 +324,18 @@ export async function renderRetentionPanel(root, force) {
     keep.textContent = retentionKeepText(row);
     const btns = document.createElement("div");
     btns.className = "import-preview-actions";
-    const jumpBtn = document.createElement("button");
-    jumpBtn.type = "button";
-    jumpBtn.className = "ghost-btn";
-    jumpBtn.textContent = t("retentionJumpToSetting");
-    jumpBtn.addEventListener("click", () => jumpToExpertSetting(row.settingKey, row.settingKind));
+    const ctl = retentionControl(row, () => renderRetentionPanel(root));
     const cleanBtn = document.createElement("button");
     cleanBtn.type = "button";
-    cleanBtn.className = "ghost-btn";
+    cleanBtn.className = "ghost-btn retention-clean";
     cleanBtn.textContent = t("recSweepNowAction");
     cleanBtn.disabled = item.count === 0 && row.key !== "recordings";
     cleanBtn.addEventListener("click", async () => {
       await RETENTION_CLEANUP[row.key]();
       if (row.key !== "recordings") renderRetentionPanel(root, true);
     });
-    if (row.settingKey) btns.append(jumpBtn);
     btns.append(cleanBtn);
-    bottom.append(keep, btns);
+    bottom.append(ctl ?? keep, btns);
 
     wrap.append(top, bottom);
     list.appendChild(wrap);

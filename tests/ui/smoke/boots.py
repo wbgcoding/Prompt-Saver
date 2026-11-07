@@ -1790,7 +1790,7 @@ EXTRA_CLIPS_MAX_PROBE = """
 
 # 413: the statistics/backups window's retention overview -- one row per
 # kept-data category, in the fixed order the spec names, each with an amount,
-# how long it is kept, a jump-to-setting button and a cleanup button.
+# how long it is kept (an in-place control while its feature is on) and a cleanup button.
 RETENTION_PANEL_PROBE = """
 <script>
 (async () => {
@@ -1830,36 +1830,38 @@ RETENTION_PANEL_PROBE = """
     }
 
     const discardedRow = document.querySelector('#retention-panel [data-setting-row="retention-discardedRecordings"]');
-    const discardedCleanBtn = discardedRow && discardedRow.querySelectorAll('.import-preview-actions button')[1];
+    const discardedCleanBtn = discardedRow && discardedRow.querySelector('.retention-clean');
     if (!discardedCleanBtn || !discardedCleanBtn.disabled) {
       errs.push('413: the discarded-recordings cleanup button should be disabled when its count is zero');
     }
 
-    // Jump-to-setting from the trash row must land on trashRetentionDays,
-    // in the expert menu, flashed.
-    const trashJumpBtn = trashRow.querySelectorAll('.import-preview-actions button')[0];
-    trashJumpBtn.click();
-    await sleep(250);
-    if (document.getElementById('backup-modal').classList.contains('hidden') !== true) {
-      errs.push('413: jumping to a setting did not close the backups dialog behind it');
+    // The trash row keeps its retention in place: a keep-for list that writes the
+    // setting, no jump button to the expert menu.
+    const keepSel = trashRow.querySelector('select.retention-keep');
+    if (!keepSel) {
+      errs.push('413: the trash row has no in-place keep-for list');
+    } else {
+      if (keepSel.value !== '30') errs.push('413: the trash keep-for list should read 30, got ' + keepSel.value);
+      window.__SMOKE_ARGS__.length = 0;
+      keepSel.value = '7';
+      keepSel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+      const sets = (window.__SMOKE_ARGS__ || []).filter(([c, a]) => c === 'set_ui_value' && a && a.key === 'trashRetentionDays');
+      if (!sets.length || sets[sets.length - 1][1].value !== 7) {
+        errs.push('413: changing the trash keep-for list did not store 7 for trashRetentionDays: ' + JSON.stringify(sets));
+      }
     }
-    if (document.getElementById('settings').classList.contains('hidden')) {
-      errs.push('413: jumping to a setting did not open the settings dialog');
-    }
-    const flashedTarget = document.querySelector('#settings-expert [data-setting-row="trashRetentionDays"]');
-    if (!flashedTarget) {
-      errs.push('413: the jump target trashRetentionDays is not present in the expert menu DOM');
-    } else if (!flashedTarget.classList.contains('settings-search-hit')) {
-      errs.push('413: the jump target was not flashed');
+    const rawJump = [...document.querySelectorAll('#retention-panel .import-preview-actions button')]
+      .filter((b) => /retentionJumpToSetting|go to setting|zur einstellung/i.test(b.textContent));
+    if (rawJump.length) errs.push('413: a retention row still shows a go-to-setting button');
+    const histInput = document.querySelector('#retention-panel [data-setting-row="retention-copyHistory"] input[type=number]');
+    if (!histInput || histInput.value !== '100') {
+      errs.push('413: the copy history row should hold a number field with the stored limit 100: ' + (histInput && histInput.value));
     }
 
-    // Back to the panel for the cleanup-button round trip.
-    document.getElementById('gear').click();
-    await sleep(150);
-    document.getElementById('settings-backup-btn').click();
-    await sleep(300);
+    // The cleanup-button round trip on the redrawn panel.
     const trashRow2 = document.querySelector('#retention-panel [data-setting-row="retention-trash"]');
-    const trashCleanBtn = trashRow2.querySelectorAll('.import-preview-actions button')[1];
+    const trashCleanBtn = trashRow2.querySelector('.retention-clean');
     trashCleanBtn.click();
     await sleep(250);
     const toastEl = document.getElementById('toast');

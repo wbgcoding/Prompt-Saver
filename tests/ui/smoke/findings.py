@@ -478,7 +478,7 @@ def run(browser, tmp):
     document.getElementById('gear').click(); await sleep(200);
     document.getElementById('settings-backup-btn').click(); await sleep(400);
     const row = document.querySelector('#retention-panel [data-setting-row="retention-clipInbox"]');
-    const clean = row && row.querySelectorAll('.import-preview-actions button')[1];
+    const clean = row && row.querySelector('.retention-clean');
     if (!clean) { errs.push('564-c3: the cleanup button for copies from other apps was not found'); }
     else {
       window.__SMOKE_ARGS__.length = 0;
