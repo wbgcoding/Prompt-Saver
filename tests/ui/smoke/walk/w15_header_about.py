@@ -101,6 +101,7 @@ SECTION = """\
             if (Math.abs(rect(ui727.closest('.update-interval')).left - rect(colRight727).left) > 1.5) out.errors.push('727: the interval misses the right grid column in ' + label + ' at ' + window.innerWidth + 'px');
             if (Math.abs(rect(ui727).right - gr.right) > 1.5) out.errors.push('727: the interval list is not flush with the right edge in ' + label + ' at ' + window.innerWidth + 'px');
             if (!(rect(ui727).width < rect(ui727.closest('.update-interval')).width - 40)) out.errors.push('727: the interval list is not sized to its content in ' + label + ' at ' + window.innerWidth + 'px');
+            if (rect(ex727).top - rect(sw727.closest('label')).bottom < 14) out.errors.push('727: the Expert menu button has no room above it in ' + label + ' at ' + window.innerWidth + 'px');
             if (Math.abs(rect(ex727).left - gr.left) > 1.5 || Math.abs(rect(ex727).right - gr.right) > 1.5) out.errors.push('727: the Expert menu button does not span the grid in ' + label + ' at ' + window.innerWidth + 'px');
           }
           const ivLabel727 = document.querySelector('.update-interval-label');

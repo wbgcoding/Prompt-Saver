@@ -4122,8 +4122,8 @@ body.drag-over::after {
 .update-interval { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .update-interval-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--fg); }
 .update-interval > select { flex: 0 0 auto; width: auto; padding-block: 6px; }
-/* Row 3: the Expert menu button across the full content width. */
-#updates-field > #expert-open { width: 100%; }
+/* Last row: the Expert menu button across the full content width, set off from the rows around it. */
+#updates-field > #expert-open { width: 100%; margin-block: 12px 8px; }
 /* Clickable version/status label, plain text look → releases page, or the update
    dialog once an update is pending. */
 .update-version {
