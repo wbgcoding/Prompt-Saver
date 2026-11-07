@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "新导出的保存文件夹。留空则直接保存到源文件所在目录。可随时在编辑器中通过\"导出至…\"进行修改。",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "记住未完成的视频编辑",
-    valEditStateKeepDays: "保留未完成编辑（天）",
+    valEditStateKeepDays: "保留未完成编辑的时间",
     tipEditStateKeep: "记住尚未导出的剪辑和叠加层，以防意外关闭视频编辑器导致丢失。重新打开同一录像时可选择继续此前的编辑。",
     tipEditStateKeepDays: "超过此天数的未完成编辑将被自动清除。设置为 0 则永久保留。",
     editStateRestoreTitle: "从上次离开的地方继续？",

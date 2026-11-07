@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "Folderul în care ajung noile exporturi. Lăsați necompletat pentru a salva lângă fișierul sursă. Poate fi modificat oricând din \"Export către…\" în editor.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Reține editările video nefinalizate",
-    valEditStateKeepDays: "Păstrează editările nefinalizate timp de (zile)",
+    valEditStateKeepDays: "Păstrează editările nefinalizate timp de",
     tipEditStateKeep: "Reține tăieturile și suprapunerile pe care nu le-ați exportat încă, astfel încât închiderea accidentală a editorului video să nu le piardă. Redeschiderea aceleiași înregistrări oferă posibilitatea de a continua de unde ați rămas.",
     tipEditStateKeepDays: "Editările nefinalizate mai vechi de această perioadă sunt șterse automat. Valoarea zero le păstrează permanent.",
     editStateRestoreTitle: "Continuați de unde ați rămas?",

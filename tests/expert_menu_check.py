@@ -237,6 +237,12 @@ colors = set(top_keys(colors_src))
 
 problems = []
 
+# ---- a value whose 0 means something special must say so ------------------------
+ZERO_LABELS = {"editStateKeepDays": "retentionForever"}
+for key, label in ZERO_LABELS.items():
+    if not re.search(r'\b' + key + r'\s*:\s*\{[^{}]*\bzeroLabel:\s*"' + label + '"', values_src):
+        problems.append(f"{key}: its 0 means something special but shows a bare 0 (zeroLabel {label} missing)")
+
 # ---- gates declared per setting kind ------------------------------------------
 # Values/selects/paths spell `gate:` inside their own definition; the enum dropdowns
 # are built by enumDropdown(key, label, opts, default, gate) and pass it positionally.

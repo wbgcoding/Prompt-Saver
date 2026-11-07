@@ -1833,7 +1833,7 @@ export default {
     tipVideoExportDir: "Folder new exports land in. Leave empty to save next to the source file. Can be changed any time from “Export to…” in the editor itself.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Remember unfinished video edits",
-    valEditStateKeepDays: "Keep unfinished edits for (days)",
+    valEditStateKeepDays: "Keep unfinished edits for",
     tipEditStateKeep: "Remembers cuts and overlays you have not exported yet, so closing the video editor by accident does not lose them. Reopening the same recording offers to continue where you left off.",
     tipEditStateKeepDays: "Unfinished edits older than this are dropped automatically. Zero keeps them forever.",
     editStateRestoreTitle: "Continue where you left off?",

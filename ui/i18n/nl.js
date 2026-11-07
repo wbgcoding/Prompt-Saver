@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "Map waarin nieuwe exportbestanden terechtkomen. Laat leeg om naast het bronbestand op te slaan. Kan op elk gewenst moment worden gewijzigd via \"Exporteren naar…\" in de editor zelf.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Niet-voltooide videobewerkingen onthouden",
-    valEditStateKeepDays: "Niet-voltooide bewerkingen bewaren gedurende (dagen)",
+    valEditStateKeepDays: "Niet-voltooide bewerkingen bewaren gedurende",
     tipEditStateKeep: "Onthoudt knippunten en overlays die je nog niet hebt geëxporteerd, zodat je ze niet kwijtraakt als de video-editor per ongeluk wordt gesloten. Bij het heropenen van dezelfde opname kun je verdergaan waar je was gebleven.",
     tipEditStateKeepDays: "Niet-voltooide bewerkingen die ouder zijn dan dit aantal dagen, worden automatisch verwijderd. Nul bewaart ze voor altijd.",
     editStateRestoreTitle: "Verdergaan waar je was gebleven?",

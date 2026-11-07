@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "Carpeta de destino para nuevas exportaciones. Déjala vacía para guardar junto al archivo de origen. Puedes cambiarla en cualquier momento desde «Exportar a…» en el propio editor.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Recordar ediciones de video sin terminar",
-    valEditStateKeepDays: "Conservar ediciones sin terminar durante (días)",
+    valEditStateKeepDays: "Conservar ediciones sin terminar durante",
     tipEditStateKeep: "Recuerda los cortes y superposiciones que aún no has exportado, para no perderlos si se cierra el editor de video por accidente. Al volver a abrir la misma grabación, se ofrecerá continuar donde lo dejaste.",
     tipEditStateKeepDays: "Las ediciones sin terminar anteriores a este plazo se eliminan automáticamente. Cero las conserva indefinidamente.",
     editStateRestoreTitle: "¿Continuar donde lo dejaste?",

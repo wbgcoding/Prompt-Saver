@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "Yeni dışa aktarmaların kaydedileceği klasör. Doğrudan kaynak dosyanın yanına kaydetmek için boş bırakın. Düzenleyicinin içindeki \"Şuraya aktar…\" seçeneğinden dilediğiniz zaman değiştirilebilir.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Tamamlanmamış video düzenlemelerini hatırla",
-    valEditStateKeepDays: "Tamamlanmamış düzenlemeleri saklama süresi (gün)",
+    valEditStateKeepDays: "Tamamlanmamış düzenlemeleri saklama süresi",
     tipEditStateKeep: "Henüz dışa aktarmadığınız kesmeleri ve katmanları hatırlar; böylece video düzenleyici yanlışlıkla kapatıldığında kaybolmazlar. Aynı kaydı yeniden açtığınızda kaldığınız yerden devam etme seçeneği sunulur.",
     tipEditStateKeepDays: "Bundan daha eski olan tamamlanmamış düzenlemeler otomatik olarak silinir. Sıfır değeri süresiz olarak saklar.",
     editStateRestoreTitle: "Kaldığınız yerden devam edilsin mi?",

@@ -372,7 +372,7 @@ export const EXPERT_VALUES = {
   // or not, shares this one value (see SNIP_SAVE_Q in snip.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
   // Days an editor's saved edit state is kept. 0 means forever, like trashRetentionDays.
-  editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
+  editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "d", zeroLabel: "retentionForever", gate: "editStateKeep" },
   // Delay between picking a recording target and the capture actually starting: 0 disables it.
   recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
   // Capture rate in frames per second, so a 60/144Hz screen can be recorded at its own rate.

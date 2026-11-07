@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "Folder, do którego trafiają nowe eksporty. Pozostaw puste, aby zapisywać obok pliku źródłowego. Można go zmienić w dowolnym momencie za pomocą „Eksportuj do…” w samym edytorze.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Pamiętaj niedokończone edycje wideo",
-    valEditStateKeepDays: "Przechowuj niedokończone edycje przez (dni)",
+    valEditStateKeepDays: "Przechowuj niedokończone edycje przez",
     tipEditStateKeep: "Zapamiętuje cięcia i nakładki, które nie zostały jeszcze wyeksportowane, dzięki czemu przypadkowe zamknięcie edytora wideo nie powoduje ich utraty. Ponowne otwarcie tego samego nagrania pozwala kontynuować od miejsca, w którym przerwano.",
     tipEditStateKeepDays: "Niedokończone edycje starsze niż podana wartość są usuwane automatycznie. Wartość zero zachowuje je na zawsze.",
     editStateRestoreTitle: "Kontynuować od miejsca przerwania?",

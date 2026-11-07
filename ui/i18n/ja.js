@@ -1826,7 +1826,7 @@ export default {
     tipVideoExportDir: "新しいエクスポートファイルの保存先フォルダーです。空欄にすると、元のファイルと同じフォルダーに保存されます。エディター内の「エクスポート先…」からいつでも変更できます。",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "未完了の動画編集を記憶する",
-    valEditStateKeepDays: "未完了の編集を保持する期間（日数）",
+    valEditStateKeepDays: "未完了の編集を保持する期間",
     tipEditStateKeep: "まだエクスポートされていないカットやオーバーレイを記憶し、動画エディターを誤って閉じた場合でも失われないようにします。同じ録画を再度開くと、前回の続きから再開できます。",
     tipEditStateKeepDays: "これより古い未完了の編集は自動的に削除されます。0 を指定すると無期限に保持されます。",
     editStateRestoreTitle: "前回の続きから再開しますか？",

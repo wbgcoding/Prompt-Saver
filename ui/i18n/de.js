@@ -1833,7 +1833,7 @@ export default {
     tipVideoExportDir: "Ordner, in dem neue Exporte landen. Leer lassen speichert neben der Quelldatei. Jederzeit auch über „Exportieren nach…“ im Editor selbst änderbar.",
     // --- remembered unfinished video edits ---
     flagEditStateKeep: "Unfertige Video-Bearbeitungen merken",
-    valEditStateKeepDays: "Unfertige Bearbeitungen aufbewahren (Tage)",
+    valEditStateKeepDays: "Unfertige Bearbeitungen aufbewahren für",
     tipEditStateKeep: "Merkt sich Schnitte und Überlagerungen, die du noch nicht exportiert hast, damit sie beim versehentlichen Schließen des Video-Editors nicht verloren gehen. Beim erneuten Öffnen derselben Aufnahme wird angeboten, dort weiterzumachen.",
     tipEditStateKeepDays: "Unfertige Bearbeitungen, die älter sind, werden automatisch entfernt. Null bewahrt sie für immer.",
     editStateRestoreTitle: "Dort weitermachen, wo du aufgehört hast?",
