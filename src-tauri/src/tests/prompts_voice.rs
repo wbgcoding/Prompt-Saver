@@ -1324,6 +1324,45 @@ fn a_failed_settings_write_seeds_no_example_prompts() {
 }
 
 #[test]
+fn a_fresh_first_run_starts_with_rotation_off() {
+    let mut store = paired_fixture();
+    assert!(needs_example_seed(&store));
+    assert!(store.settings.ui_flags.get("rotatingPrompts").is_none());
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let seeded = seed_examples_core(&mut store, vec![test_prompt("e1")], paired_save(false, false, &rows, &undone)).unwrap();
+    assert_eq!(store.settings.ui_flags.get("rotatingPrompts"), Some(&false));
+    assert!(seeded.iter().all(|p| p.variants.is_empty()), "no rotating example prompt");
+    assert!(!needs_example_seed(&store), "a second call never seeds again");
+}
+
+#[test]
+fn a_failed_first_run_save_leaves_the_rotation_flag_unset() {
+    let mut store = paired_fixture();
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    let r = seed_examples_core(&mut store, vec![test_prompt("e1")], paired_save(true, false, &rows, &undone));
+    assert!(r.is_err());
+    assert!(store.settings.ui_flags.get("rotatingPrompts").is_none());
+}
+
+#[test]
+fn an_existing_install_without_the_rotation_key_keeps_rotation_on() {
+    // Settings saved by an older version carry no rotatingPrompts key; they must keep reading as on.
+    let mut store = paired_fixture();
+    store.prompts.push(test_prompt("old"));
+    assert!(!needs_example_seed(&store), "a library with prompts is never seeded");
+    assert!(store.settings.ui_flags.get("rotatingPrompts").is_none());
+    let mut seeded_before = paired_fixture();
+    seeded_before.settings.examples_seeded = true;
+    assert!(!needs_example_seed(&seeded_before), "a library emptied by the user is never reseeded");
+    // An explicit "on" survives a first-run seed as well.
+    let mut on = paired_fixture();
+    on.settings.ui_flags.insert("rotatingPrompts".into(), true);
+    let (rows, undone) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
+    seed_examples_core(&mut on, vec![test_prompt("e1")], paired_save(false, false, &rows, &undone)).unwrap();
+    assert_eq!(on.settings.ui_flags.get("rotatingPrompts"), Some(&true));
+}
+
+#[test]
 fn leftover_picture_text_is_cleared_at_boot_only_when_the_index_is_off_and_the_set_is_writable() {
     let _epoch = OCR_EPOCH_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = secret_test_store(vec![image_text_prompt("p1", "read from a picture")]);

@@ -18,6 +18,9 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Rotation off on a new installation.** A fresh install starts with rotation
+  switched off (Expert menu, Rotation); existing installations keep their
+  setting, and the sample library no longer holds a rotating tile.
 - **Composer buttons reordered.** The order is now Screenshot, Recording, Text
   recognition, Pipette, File, Voice input; dictation is now called Voice input
   everywhere.

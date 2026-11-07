@@ -195,6 +195,7 @@ export const HELP_CONTENT = {
       title: "Rotation",
       whatItIs: "A tile can hold a list of texts instead of one; each copy serves the next rotation text.",
       howTo: [
+        "Switch rotation on first (off in a new installation): Expert menu → Features → Rotation.",
         "In a tile's editor, turn on \"Rotation\" above the text area.",
         "The list of rotation texts then replaces the plain text field.",
         "Add more rotation texts with \"+ Rotation text\"; icons beside each one reorder or remove it.",
@@ -652,7 +653,7 @@ export const HELP_CONTENT = {
         "Turn it off to go back; the app asks first and restarts into your own data.",
       ],
       whatHappens:
-        "The sample library is built fresh each time and covers most features: tiles with and without a picture, a tile with rotation, a placeholder, tags, a favorite, two views, a folder, an attachment and a video. Your own data is never opened or changed while it runs. Anything changed during the demo is discarded when it ends.",
+        "The sample library is built fresh each time and covers most features: tiles with and without a picture, a placeholder, tags, a favorite, two views, a folder, an attachment and a video. Your own data is never opened or changed while it runs. Anything changed during the demo is discarded when it ends.",
       settings: ["Demo mode: Expert menu → System & data → Troubleshooting"],
     },
     {
@@ -968,6 +969,7 @@ export const HELP_CONTENT = {
       title: "Rotation",
       whatItIs: "Eine Kachel kann eine Liste von Texten statt nur einem tragen; jede Kopie liefert den nächsten Eintrag.",
       howTo: [
+        "Zuerst die Rotation einschalten (neu installiert ist sie aus): Expertenmenü → Funktionen → Rotation.",
         "Im Editor einer Kachel „Rotation“ über dem Textbereich einschalten.",
         "Die Liste der Rotationstexte ersetzt dann das normale Textfeld.",
         "Mit „+ Rotationstext“ weitere Rotationstexte hinzufügen; Symbole daneben sortieren um oder entfernen sie.",
@@ -1437,7 +1439,7 @@ export const HELP_CONTENT = {
         "Zum Zurückkehren ausschalten; die App fragt zuerst nach und startet neu in die eigenen Daten.",
       ],
       whatHappens:
-        "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab. Sie enthält Kacheln mit und ohne Bild, eine Kachel mit Rotation, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was im Vorführmodus geändert wurde, wird beim Beenden verworfen.",
+        "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab. Sie enthält Kacheln mit und ohne Bild, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was im Vorführmodus geändert wurde, wird beim Beenden verworfen.",
       settings: ["Vorführmodus: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {

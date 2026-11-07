@@ -27,8 +27,8 @@ pub(crate) fn demo_prompt(id: &str, name: &str, text: &str) -> Prompt {
     Prompt { name: name.to_string(), text: text.to_string(), ..sync_blank_prompt(id.to_string()) }
 }
 
-// Ten prompts covering as many features at once as one harmless example
-// reasonably can: plain text, an image tile, a rotating prompt, a self-fill
+// Nine prompts (ten with the video) covering as many features at once as one harmless example
+// reasonably can: plain text, an image tile, a self-fill
 // placeholder, a favorite, two members of the sample folder, and (best
 // effort, skipped if ffmpeg is not on hand) a real attached video next to a
 // plain attached text file.
@@ -43,10 +43,6 @@ pub(crate) fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Vec
             image: format!("data:image/png;base64,{DEMO_IMAGE_PNG_BASE64}"),
             show_image: true,
             ..demo_prompt("demo-image", d.image_name, d.image_text)
-        },
-        Prompt {
-            variants: vec![d.rotating_a.to_string(), d.rotating_b.to_string()],
-            ..demo_prompt("demo-rotating", d.rotating_name, d.rotating_text)
         },
         demo_prompt("demo-placeholder", d.placeholder_name, d.placeholder_text),
         Prompt {
@@ -115,7 +111,6 @@ pub(crate) fn demo_settings(has_video: bool, lang: &str) -> Settings {
             let mut m = vec![
                 "demo-welcome".to_string(),
                 "demo-image".to_string(),
-                "demo-rotating".to_string(),
                 "demo-placeholder".to_string(),
                 "demo-favorite".to_string(),
                 "demo-chain-a".to_string(),

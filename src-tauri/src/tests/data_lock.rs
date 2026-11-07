@@ -797,8 +797,8 @@ fn demo_text_is_complete_dash_free_and_keeps_the_placeholder_in_every_language()
     for lang in demo_text::DEMO_LANGS {
         let d = demo_text::demo_text(lang);
         let all = [
-            d.tag_demo, d.tag_favorite, d.welcome_name, d.welcome_text, d.image_name, d.image_text, d.rotating_name,
-            d.rotating_text, d.rotating_a, d.rotating_b, d.placeholder_name, d.placeholder_text, d.favorite_name,
+            d.tag_demo, d.tag_favorite, d.welcome_name, d.welcome_text, d.image_name, d.image_text,
+            d.placeholder_name, d.placeholder_text, d.favorite_name,
             d.favorite_text, d.chain_a_name, d.chain_a_text, d.chain_b_name, d.chain_b_text, d.attach_name,
             d.attach_file, d.attach_body, d.folder_a_name, d.folder_a_text, d.folder_b_name, d.folder_b_text,
             d.video_name, d.video_file, d.view_home, d.view_team, d.folder,
@@ -847,7 +847,6 @@ fn demo_german_content_is_what_it_was_before_the_table() {
     assert_eq!(by("demo-welcome").name, "Willkommen");
     assert_eq!(by("demo-welcome").text, "Das hier ist ein Beispieleintrag im Vorführmodus. Ein Klick kopiert ihn wie jeden anderen.");
     assert_eq!(by("demo-image").name, "Bild-Kachel");
-    assert_eq!(by("demo-rotating").variants, vec!["Guten Tag!".to_string(), "Guten Abend!".to_string()]);
     assert_eq!(by("demo-placeholder").text, "Hallo {?Name}, vielen Dank für deine Nachricht.");
     assert_eq!(by("demo-favorite").tags, vec!["Demo".to_string(), "Favorit".to_string()]);
     assert_eq!(by("demo-attachment").file_path, "Anhang.txt");
@@ -888,7 +887,7 @@ fn demo_store_contains_every_sample_kind() {
 
     assert!(by_id.get("demo-image").is_some_and(|p| !p.image.is_empty()), "an image tile");
     assert!(by_id.get("demo-welcome").unwrap().image.is_empty(), "a tile without an image");
-    assert!(!by_id.get("demo-rotating").unwrap().variants.is_empty(), "a rotating prompt");
+    assert!(!by_id.contains_key("demo-rotating"), "no rotating sample");
     assert!(by_id.get("demo-placeholder").unwrap().text.contains("{?"), "a self-fill placeholder");
     assert!(by_id.get("demo-favorite").unwrap().favorite, "a favorite");
     assert!(!by_id.get("demo-attachment").unwrap().file_path.is_empty(), "an attachment");

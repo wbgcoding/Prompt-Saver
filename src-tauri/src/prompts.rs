@@ -1006,7 +1006,7 @@ pub(crate) struct NewExample {
 pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Vec<NewExample>) -> Result<Vec<Prompt>, String> {
     let created = {
         let mut store = lock(&state);
-        if !store.prompts.is_empty() || store.settings.examples_seeded {
+        if !needs_example_seed(&store) {
             return Ok(Vec::new());
         }
         let mut created = Vec::new();
@@ -1054,6 +1054,12 @@ pub(crate) async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, e
     Ok(created)
 }
 
+// True only on a first run: an empty library whose examples were never seeded. Anything an
+// earlier version stored has prompts or the seeded mark, so an existing install never counts.
+pub(crate) fn needs_example_seed(store: &Store) -> bool {
+    store.prompts.is_empty() && !store.settings.examples_seeded
+}
+
 // Places the seeded examples in the active view, flags the library as seeded and persists the
 // settings row and the prompt rows as one unit. A failed write puts the store back exactly as it
 // was (nothing seeded, no placement), so a retry cannot duplicate a batch that half landed.
@@ -1074,6 +1080,9 @@ pub(crate) fn seed_examples_core(store: &mut Store, created: Vec<Prompt>, save: 
         store.prompts.push(prompt.clone());
     }
     store.settings.examples_seeded = true;
+    // A fresh install starts with rotation off. A missing key means "on" everywhere else, so this
+    // is the one place that writes it, and only for a store seeded for the first time.
+    store.settings.ui_flags.entry("rotatingPrompts".to_string()).or_insert(false);
     if !save(store, &original_settings) {
         let ids: std::collections::HashSet<&str> = created.iter().map(|p| p.id.as_str()).collect();
         store.prompts.retain(|p| !ids.contains(p.id.as_str()));
