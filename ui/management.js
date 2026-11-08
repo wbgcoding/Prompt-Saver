@@ -81,8 +81,8 @@ export function recordToolUsage(tool) {
   invoke("record_tool_usage", { tool }).catch(() => {});
 }
 
-// The usage statistics dialog: the export row, two figures, the most
-// used prompts by name and the never used ones. The full numbers stay in the export.
+// The usage statistics dialog: the export row, eight figures, the most used prompts by name
+// and the never used ones. The full numbers stay in the export.
 const STATS_TOP_CHOICES = [5, 10, 20];
 export async function renderStatsPanel(body) {
   const on = optFlag("usageStats");
@@ -137,11 +137,20 @@ export async function renderStatsPanel(body) {
   exportRow.append(exportSelect, exportBtn);
   body.appendChild(exportRow);
   const nf = (n) => Number(n).toLocaleString(LANG);
+  // Row 1: the library itself. Row 2: copies over time; the dated counts come from the copy
+  // history, so they show a dash while that is off.
+  const fromHistory = (n) => (s.history_on ? nf(n ?? 0) : EMPTY_VALUE);
   const cards = document.createElement("div");
   cards.className = "stat-cards";
   cards.append(
     statCard(nf(s.total_prompts), t("statTotalPrompts")),
-    statCard(s.history_on ? nf(s.copies7) : EMPTY_VALUE, t("statCopies7")),
+    statCard(nf(s.favorites ?? 0), t("expGroupFavorites")),
+    statCard(`${nf(s.used_prompts ?? 0)} / ${nf(s.total_prompts)}`, t("statUsedPrompts")),
+    statCard(nf(s.archived ?? 0), t("statArchived")),
+    statCard(fromHistory(s.copies_today), t("statCopiesToday")),
+    statCard(fromHistory(s.copies7), t("statCopies7")),
+    statCard(fromHistory(s.copies30), t("statCopies30")),
+    statCard(nf(s.copies_total ?? 0), t("statCopiesTotal")),
   );
   body.appendChild(cards);
   // Most used: the heading shares its row with the list length choice.
@@ -197,10 +206,6 @@ export async function renderStatsPanel(body) {
     }
     body.appendChild(list);
   }
-  const note = document.createElement("div");
-  note.className = "stat-local-only";
-  note.textContent = t("statsLocalOnly");
-  body.appendChild(note);
 }
 export async function openStats() {
   $("stats-modal").classList.remove("hidden");

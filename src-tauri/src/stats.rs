@@ -22,6 +22,38 @@ pub(crate) struct UsageStats {
     pub(crate) top: Vec<StatBar>,
     pub(crate) never_used: Vec<StatBar>,
     pub(crate) history_on: bool,
+    pub(crate) copies_today: u64,
+    pub(crate) copies30: u64,
+    #[serde(flatten)]
+    pub(crate) summary: UsageSummary,
+}
+
+// Library-wide figures the dashboard shows beside the copy counts.
+#[derive(Serialize, Default, Debug, PartialEq)]
+pub(crate) struct UsageSummary {
+    // Sum of every current prompt's copy counter (all time, not limited by the copy history).
+    pub(crate) copies_total: u64,
+    pub(crate) used_prompts: usize,
+    pub(crate) favorites: usize,
+    pub(crate) archived: usize,
+}
+
+pub(crate) fn usage_summary(prompts: &[Prompt], usage: &std::collections::HashMap<String, u32>, archive_tag_key: Option<&str>) -> UsageSummary {
+    let mut out = UsageSummary::default();
+    for p in prompts {
+        let n = usage.get(&p.id).copied().unwrap_or(0);
+        out.copies_total += u64::from(n);
+        if n > 0 {
+            out.used_prompts += 1;
+        }
+        if p.favorite {
+            out.favorites += 1;
+        }
+        if is_archived(p, archive_tag_key) {
+            out.archived += 1;
+        }
+    }
+    out
 }
 
 // ---- Most-used tools ----
@@ -109,12 +141,19 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
     // before the store is locked; running the query under that lock made every copy and save
     // wait for the statistics dialog to open.
     let now = now_secs();
-    let copies7 = db_conn(&app)
+    let conn = db_conn(&app);
+    let copies7 = conn
+        .as_ref()
         .map(|c| {
             c.query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
                 .unwrap_or(0) as u64
         })
         .unwrap_or(0);
+    // Local calendar days, so "today" starts at the user's midnight.
+    let days30 = conn.as_ref().map(|c| db_daily_copies(c, 30, local_utc_offset_secs())).unwrap_or_default();
+    drop(conn);
+    let copies_today = days30.last().map(|d| d.count as u64).unwrap_or(0);
+    let copies30 = days30.iter().map(|d| d.count as u64).sum();
 
     let store = lock(&state);
     let usage = &store.settings.usage;
@@ -145,7 +184,8 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
         .collect();
     never_used.truncate(top_n.max(10) * 2);
     let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
-    Ok(UsageStats { total_prompts, copies7, top, never_used, history_on })
+    let summary = usage_summary(&store.prompts, usage, archive_tag_key.as_deref());
+    Ok(UsageStats { total_prompts, copies7, top, never_used, history_on, copies_today, copies30, summary })
 }
 
 // ---- Usage statistics export ----

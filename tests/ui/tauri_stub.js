@@ -1485,6 +1485,7 @@ const RESULTS = {
     total_prompts: 12, copies7: 5, history_on: true,
     top: [{ name: "Prompt 1", count: 9 }, { name: "Prompt 2", count: 6 }, { name: "Prompt 3", count: 2 }],
     never_used: [{ name: "Prompt 9", count: 0 }],
+    copies_today: 2, copies30: 23, copies_total: 87, used_prompts: 8, favorites: 3, archived: 1,
   }),
   export_stats: () => 12,
   storage_breakdown: () => ({
