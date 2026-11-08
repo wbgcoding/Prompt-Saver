@@ -423,11 +423,14 @@ Function PageLeaveReinstall
   reinst_done:
 FunctionEnd
 
-; Deletes the ffmpeg files the old uninstaller kept in $ToolsKeptIn, and the folder once empty.
+; Deletes the ffmpeg files the old uninstaller kept in $ToolsKeptIn, its own leftover
+; uninstall.exe, and the folder once empty.
 Function RemoveKeptTools
   Delete "$ToolsKeptIn\ffmpeg.exe"
   Delete "$ToolsKeptIn\ffmpeg-LICENSE"
   Delete "$ToolsKeptIn\ffprobe.exe"
+  ; The old uninstaller ran in place (_?=) and cannot delete itself; its app is gone.
+  Delete "$ToolsKeptIn\uninstall.exe"
   RMDir "$ToolsKeptIn"
   StrCpy $ToolsKeptIn ""
 FunctionEnd
