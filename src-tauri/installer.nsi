@@ -82,6 +82,8 @@ Var PassiveMode
 Var UpdateMode
 Var KeepTools
 Var ToolsKeptIn ; folder whose ffmpeg files the old uninstaller left for this install
+; Modern UI owns .onUserAbort and calls this from it.
+!define MUI_CUSTOMFUNCTION_ABORT ToolsOnAbort
 Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
@@ -431,7 +433,7 @@ Function RemoveKeptTools
 FunctionEnd
 
 ; Leaving the setup after the old version is already gone must not strand its ffmpeg files.
-Function .onUserAbort
+Function ToolsOnAbort
   ${If} $ToolsKeptIn != ""
     Call RemoveKeptTools
   ${EndIf}
