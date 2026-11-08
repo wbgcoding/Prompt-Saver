@@ -81,6 +81,7 @@ ${StrLoc}
 Var PassiveMode
 Var UpdateMode
 Var KeepTools
+Var ToolsKeptIn ; folder whose ffmpeg files the old uninstaller left for this install
 Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
@@ -392,6 +393,7 @@ Function PageLeaveReinstall
       StrCpy $R1 "$R1 /KEEPTOOLS" ; a fresh install follows, so the downloaded ffmpeg tools stay
       StrCpy $R1 "$R1 /S" ; silent: the auto-uninstall of the old version shows no window (data kept)
       StrCpy $R1 "$R1 _?=$4" ; append uninstall directory -- forces ExecWait to actually wait
+      StrCpy $ToolsKeptIn $4
       ExecWait '$R1' $0
     ${EndIf}
 
@@ -399,6 +401,8 @@ Function PageLeaveReinstall
 
     ${If} $0 <> 0
     ${OrIf} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+      ; The old version is still there and still needs its ffmpeg files.
+      StrCpy $ToolsKeptIn ""
       ; User cancelled wix uninstaller? return to select un/reinstall page
       ${If} $WixMode = 1
       ${AndIf} $0 = 1602
@@ -415,6 +419,22 @@ Function PageLeaveReinstall
       Abort
     ${EndIf}
   reinst_done:
+FunctionEnd
+
+; Deletes the ffmpeg files the old uninstaller kept in $ToolsKeptIn, and the folder once empty.
+Function RemoveKeptTools
+  Delete "$ToolsKeptIn\ffmpeg.exe"
+  Delete "$ToolsKeptIn\ffmpeg-LICENSE"
+  Delete "$ToolsKeptIn\ffprobe.exe"
+  RMDir "$ToolsKeptIn"
+  StrCpy $ToolsKeptIn ""
+FunctionEnd
+
+; Leaving the setup after the old version is already gone must not strand its ffmpeg files.
+Function .onUserAbort
+  ${If} $ToolsKeptIn != ""
+    Call RemoveKeptTools
+  ${EndIf}
 FunctionEnd
 
 ; 5. Combined location + portable page (one page instead of two = fewer steps).
@@ -1040,6 +1060,13 @@ SectionEnd
 
 Section Install
   SetOutPath $INSTDIR
+
+  ; The old version was removed with its ffmpeg files kept for this install. When the
+  ; install goes to another folder they would be left there with no uninstaller.
+  ${If} $ToolsKeptIn != ""
+  ${AndIf} $ToolsKeptIn != $INSTDIR
+    Call RemoveKeptTools
+  ${EndIf}
 
   !ifmacrodef NSIS_HOOK_PREINSTALL
     !insertmacro NSIS_HOOK_PREINSTALL
