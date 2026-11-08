@@ -236,6 +236,8 @@ SECTION = """\
           if (!hit || !ctx.contains(hit)) out.errors.push('the folder member context menu sits behind ' + (hit ? (hit.id || hit.className) : 'nothing'));
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
           await sleep(100);
+          if (!ctx.classList.contains('hidden')) out.errors.push('Escape left the folder member menu open');
+          if (pop.classList.contains('hidden')) out.errors.push('Escape closed the folder before the menu above it');
         }
         const gm = await import('./gridMenus.js');
         const id = mem.dataset.id;

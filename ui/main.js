@@ -220,6 +220,8 @@ function bind() {
     if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
+    // A member's menu sits above its open folder, so it goes first.
+    if (!tileFolderPop.classList.contains("hidden") && !ctxEl.classList.contains("hidden")) { closeCtx(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
