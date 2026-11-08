@@ -1054,9 +1054,14 @@ Section Install
   {{#each resources_dirs}}
     CreateDirectory "$INSTDIR\\{{this}}"
   {{/each}}
+  ; The resources are the ffmpeg files (100+ MB). An update or reinstall keeps them, so a
+  ; copy with the same file time is left alone instead of being unpacked again; a newer
+  ; ffmpeg in the installer carries another file time and replaces it.
+  SetOverwrite ifdiff
   {{#each resources}}
     File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
+  SetOverwrite on
 
   ; Copy external binaries
   {{#each binaries}}
@@ -1182,10 +1187,12 @@ Section Uninstall
   ; Copy main executable
   Delete "$INSTDIR\${MAINBINARYNAME}.exe"
 
-  ; Delete resources
+  ; Delete resources (only the ffmpeg files; kept when an install follows right away)
+  ${If} $KeepTools <> 1
   {{#each resources}}
     Delete "$INSTDIR\\{{this.[1]}}"
   {{/each}}
+  ${EndIf}
 
   ; Delete external binaries
   {{#each binaries}}
