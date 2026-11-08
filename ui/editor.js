@@ -728,10 +728,13 @@ export const versionEntries = (v) => (v.variants?.length ? [v.text || "", ...v.v
 // The editor's current, unsaved state: the "newer" side of the newest row's diff.
 export const liveEntries = () => (modalState?.rotateEntries?.length ? [...modalState.rotateEntries] : [modal.text.value || ""]);
 let historySeq = 0;
+// Versions listed before the "show more" button.
+const HISTORY_VISIBLE = 3;
 export async function loadHistory(id) {
   const body = $("modal-history-body");
   if (!body || !id) return;
   body.innerHTML = "";
+  body.classList.remove("hist-all");
   const seq = ++historySeq;
   let list = [];
   try { list = await invoke("list_versions", { promptId: id }); } catch (_) {}
@@ -745,6 +748,23 @@ export async function loadHistory(id) {
     e.textContent = t("historyEmpty");
     body.appendChild(e);
     return;
+  }
+  // The newest few show at once; the rest wait behind one button and then scroll inside the
+  // section instead of stretching the dialog.
+  const extra = list.length - HISTORY_VISIBLE;
+  let moreBtn = null;
+  if (extra > 0) {
+    moreBtn = document.createElement("button");
+    moreBtn.type = "button";
+    moreBtn.className = "ghost-btn hist-more";
+    moreBtn.setAttribute("aria-expanded", "false");
+    moreBtn.textContent = t("historyShowMore").replace("{n}", String(extra));
+    moreBtn.addEventListener("click", () => {
+      const showing = body.classList.toggle("hist-all");
+      moreBtn.setAttribute("aria-expanded", String(showing));
+      moreBtn.textContent = showing ? t("historyShowLess") : t("historyShowMore").replace("{n}", String(extra));
+      if (!showing) body.scrollTop = 0;
+    });
   }
   list.forEach((v, idx) => {
     // Diff against whatever came right after this snapshot: the live editor
@@ -915,8 +935,10 @@ export async function loadHistory(id) {
     expand.addEventListener("click", toggle);
     prev.addEventListener("click", toggle); // clicking the preview also expands
     row.append(head, full);
+    if (idx >= HISTORY_VISIBLE) row.classList.add("hist-older");
     body.appendChild(row);
   });
+  if (moreBtn) body.appendChild(moreBtn);
 }
 
 // Keep all image/file modal controls consistent with modalState.
@@ -1281,12 +1303,22 @@ export async function confirmDiscardIfDirty() {
   if (!flag("confirmDiscard")) return true;
   const isNew = modalState && modalState.mode !== "edit";
   if (!isNew && modalSnapshot() === modalInitial) return true;
-  return confirmDialog({
+  // Save is the primary answer (Enter saves), Discard the second way out, Keep editing stays.
+  const answer = await confirmDialog({
     title: t("discardTitle"),
     message: t("discardMsg"),
-    confirmLabel: t("discardConfirm"),
+    confirmLabel: t("save"),
+    altLabel: t("discardConfirm"),
+    altDanger: true,
     cancelLabel: t("keepEditing"),
+    danger: false,
   });
+  if (answer === "alt") return true;
+  if (answer !== true) return false;
+  // A save that stops short (missing name, refused hotkey, locked vault) keeps the editor open,
+  // so the caller must not go on as if it had closed.
+  await confirmModal();
+  return !modalState;
 }
 
 // Same guard as the X button/backdrop/Escape, for an action (drag-drop) that can

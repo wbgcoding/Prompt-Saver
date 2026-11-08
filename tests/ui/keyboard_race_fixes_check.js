@@ -159,7 +159,7 @@ later(async () => {
   const gates = [deferred(), deferred()];
   let n = 0;
   const kids = [];
-  const body = { children: kids, set innerHTML(v) { kids.length = 0; }, appendChild(e) { kids.push(e); } };
+  const body = { children: kids, classList: { remove() {}, add() {}, toggle() {} }, set innerHTML(v) { kids.length = 0; }, appendChild(e) { kids.push(e); } };
   const sandbox = run(code + "\n;globalThis.load = loadHistory;", {
     $: () => body, modalState: { id: "p" }, t: (k) => k,
     invoke: () => gates[n++].promise,

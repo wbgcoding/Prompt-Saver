@@ -1119,7 +1119,7 @@ SECTION = """\
           document.getElementById('modal-close-x').click();
           await sleep(150);
           // The swapped preview image makes the editor dirty, so closing it asks; answer yes.
-          if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
+          if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')).click();
           await sleep(100);
         }
       }

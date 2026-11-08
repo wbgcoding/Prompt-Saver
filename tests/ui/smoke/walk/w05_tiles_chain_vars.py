@@ -924,7 +924,7 @@ SECTION = """\
       await sleep(250);
       // Editing made the dialog dirty, so the discard confirmation may step in.
       const cm2 = document.getElementById('confirm-modal');
-      if (!cm2.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      if (!cm2.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
     }
     // Item 1: "All hotkeys" popup - global + every per-prompt hotkey in one list,
     // each row live-rebindable with the same collision/free-combo behaviour the

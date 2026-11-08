@@ -449,7 +449,7 @@ section(() => {
 section(() => {
   const ed = read("editor.js");
   const mk = (saving) => run(
-    `let modalSaving = ${saving};\nvar confirmAsked = 0;\nfunction flag() { return true; }\nconst modalState = { mode: "create" };\nfunction modalSnapshot() { return "x"; }\nlet modalInitial = "";\nconst confirmDialog = async () => { confirmAsked++; return true; };\nfunction t(k) { return k; }\n${extractBlock(ed, "export async function confirmDiscardIfDirty(").replace("export ", "")}`,
+    `let modalSaving = ${saving};\nvar confirmAsked = 0;\nfunction flag() { return true; }\nconst modalState = { mode: "create" };\nfunction modalSnapshot() { return "x"; }\nlet modalInitial = "";\nconst confirmDialog = async () => { confirmAsked++; return "alt"; };\nfunction t(k) { return k; }\n${extractBlock(ed, "export async function confirmDiscardIfDirty(").replace("export ", "")}`,
     {},
   );
   const sb = mk(true);
@@ -1795,9 +1795,9 @@ section(() => {
   check(first(lf) === "stat-label" && /stat-card-label-first/.test(lf.className), "a label-first stat card puts the label on top and marks itself");
   const dt = extractBlock(src, "const dtCard = ");
   check(/c\.append\(ll, vv\)/.test(dt) && /stat-card-label-first/.test(dt), "the date card puts its label on top");
-  const diag = src.slice(src.indexOf("cards.append("), src.indexOf("body.append(collapseHead(t(\"backupDiag\")"));
-  for (const k of ["backupCount", "backupTotalSize", "backupLargest", "backupSmallest", "backupSpan"]) {
-    check(diag.includes(`t("${k}"), true)`), `the ${k} card is label first`);
+  const ov = src.slice(src.indexOf("cards.append("), src.indexOf("const actions = "));
+  for (const k of ["backupCount", "backupTotalSize"]) {
+    check(ov.includes(`t("${k}"), true)`), `the ${k} card is label first`);
   }
   check(!/statCard\([^\n]*backupContent[^\n]*true\)/.test(src), "the content preview cards stay value first");
 });

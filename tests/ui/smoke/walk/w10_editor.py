@@ -71,7 +71,78 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(200);
       const cmHist = document.getElementById('confirm-modal');
-      if (!cmHist.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      if (!cmHist.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
+    }
+    // Versions list: only the newest three show; one button reveals the rest in a scrolling
+    // list and folds them away again.
+    {
+      const stubVer = window.__STUB_RESULTS__;
+      const realList = stubVer.list_versions;
+      stubVer.list_versions = () => Array.from({ length: 7 }, (_, i) => ({ id: 70 - i, ts: 1700000000 + (7 - i) * 100, name: 'Prompt 7', text: 'Version text ' + (7 - i) }));
+      if (!await openEditor('p6')) {
+        out.errors.push('versions: the prompt did not open in the editor');
+      } else {
+        document.getElementById('modal-advanced-head').click();
+        await sleep(250);
+        const hb = document.getElementById('modal-history-body');
+        const shown = () => [...hb.querySelectorAll('.hist-row')].filter((r) => r.getClientRects().length).length;
+        const more = hb.querySelector('.hist-more');
+        if (hb.querySelectorAll('.hist-row').length !== 7) out.errors.push('versions: expected 7 rows built, found ' + hb.querySelectorAll('.hist-row').length);
+        if (shown() !== 3) out.errors.push('versions: ' + shown() + ' versions visible before expanding, expected 3');
+        if (!more || !more.textContent.includes('4')) out.errors.push('versions: the show-more button is missing or does not count the 4 hidden versions');
+        else {
+          more.click();
+          await sleep(100);
+          if (shown() !== 7) out.errors.push('versions: ' + shown() + ' versions visible after expanding, expected 7');
+          if (getComputedStyle(hb).overflowY !== 'auto') out.errors.push('versions: the expanded list does not scroll inside its section');
+          if (more.getAttribute('aria-expanded') !== 'true') out.errors.push('versions: the button does not report the expanded state');
+          more.click();
+          await sleep(100);
+          if (shown() !== 3) out.errors.push('versions: folding back left ' + shown() + ' versions visible');
+        }
+        await click('modal-close-x');
+        await sleep(200);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
+      }
+      stubVer.list_versions = realList;
+    }
+    // The discard question offers Save beside Discard and Keep editing: Save stores the edit and
+    // closes the editor, Discard closes it without saving.
+    for (const answer of ['save', 'discard', 'keep']) {
+      if (!await openEditor('p1')) { out.errors.push('discard-save: the editor did not open'); break; }
+      const nm = document.getElementById('modal-name');
+      const origName = nm.value;
+      nm.value = origName + ' x';
+      nm.dispatchEvent(new Event('input', { bubbles: true }));
+      const before = (window.__SMOKE_CALLS__ || []).filter((c) => c === 'update_prompt').length;
+      await click('modal-close-x');
+      await sleep(200);
+      const cmD = document.getElementById('confirm-modal');
+      const okD = document.getElementById('confirm-ok'), altD = document.getElementById('confirm-alt'), cancelD = document.getElementById('confirm-cancel');
+      if (cmD.classList.contains('hidden')) { out.errors.push('discard-save: no question after editing'); continue; }
+      if (okD.textContent !== 'Save' || altD.textContent !== 'Discard' || cancelD.textContent !== 'Keep editing' || altD.classList.contains('hidden')) {
+        out.errors.push('discard-save: buttons read ' + [okD.textContent, altD.textContent, cancelD.textContent].join(' / '));
+      }
+      await click(answer === 'save' ? 'confirm-ok' : answer === 'discard' ? 'confirm-alt' : 'confirm-cancel');
+      await sleep(400);
+      const saved = (window.__SMOKE_CALLS__ || []).filter((c) => c === 'update_prompt').length > before;
+      const open = !document.getElementById('modal').classList.contains('hidden');
+      if (answer === 'save' && (!saved || open)) out.errors.push('discard-save: Save did not store and close (saved ' + saved + ', open ' + open + ')');
+      if (answer === 'save' && saved) {
+        // Put the stored name back so later checks find the prompt as they expect it.
+        const coreD = await import('./core.js');
+        await coreD.invoke('update_prompt', { id: 'p1', name: origName });
+        await (await import('./views.js')).renderGrid(true);
+      }
+      if (answer === 'discard' && (saved || open)) out.errors.push('discard-save: Discard did not close without saving (saved ' + saved + ', open ' + open + ')');
+      if (answer === 'keep' && (saved || !open)) out.errors.push('discard-save: Keep editing did not leave the editor open and unsaved');
+      if (open) {
+        nm.value = origName;
+        nm.dispatchEvent(new Event('input', { bubbles: true }));
+        await click('modal-close-x');
+        await sleep(200);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-alt'); await sleep(200); }
+      }
     }
     // 408: "Save as new entry" leaves the original prompt alone and adds the
     // snapshot's content as its own new entry instead, closing the editor and
@@ -140,7 +211,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(200);
       const cmHist10 = document.getElementById('confirm-modal');
-      if (!cmHist10.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      if (!cmHist10.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
     }
     // 79: a file/image prompt has no text field but still gets version history -
     // only a name change to show, never an empty box.
@@ -155,7 +226,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(200);
       const cmHist9 = document.getElementById('confirm-modal');
-      if (!cmHist9.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      if (!cmHist9.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
     }
     // 749: font and tile text size live in the Advanced options body, and the
     // Advanced head stays visible even with tags, hotkeys and history all off.
@@ -178,7 +249,7 @@ SECTION = """\
         await click('modal-close-x');
         await sleep(200);
         const cm749 = document.getElementById('confirm-modal');
-        if (!cm749.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+        if (!cm749.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
       }
       for (const f of flags749) await setExpertFlag(f, true);
     }
@@ -209,7 +280,7 @@ SECTION = """\
         await click('modal-close-x');
         await sleep(200);
         const cm750 = document.getElementById('confirm-modal');
-        if (!cm750.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+        if (!cm750.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
       }
       await setExpertFlag('Live length counter', false);
     }
@@ -233,7 +304,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(200);
       const cmHist11 = document.getElementById('confirm-modal');
-      if (!cmHist11.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      if (!cmHist11.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
     }
     // 429: the same prompt without a file attachment must NOT show the hint - it is
     // only for the case where the two things could actually be confused.
@@ -247,7 +318,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(200);
       const cmHist7b = document.getElementById('confirm-modal');
-      if (!cmHist7b.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      if (!cmHist7b.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
     }
     // 466: a text attachment (txt/md/json/csv) previews its start right in the
     // editor, and injected markup in it must show up literally, never rendered.
@@ -269,7 +340,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(200);
       const cmAttach = document.getElementById('confirm-modal');
-      if (!cmAttach.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      if (!cmAttach.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
     }
     // Duplicates: its own dialog, reachable from the library header, and the last
     // window of the main surface that no scan had ever opened.
@@ -425,7 +496,7 @@ SECTION = """\
         await click('modal-close-x');
         await sleep(200);
         const cmAfterOpen = document.getElementById('confirm-modal');
-        if (!cmAfterOpen.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+        if (!cmAfterOpen.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(200); }
       }
     }
     delete window.__SIMILAR_HINT_FIXTURE__;
@@ -596,7 +667,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(250);
       const cm5 = document.getElementById('confirm-modal');
-      if (!cm5.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      if (!cm5.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
     } else {
       out.errors.push('the editor did not open for the colour-picker check');
     }
@@ -608,7 +679,7 @@ SECTION = """\
         await click('modal-close-x');
         await sleep(250);
         const cm259 = document.getElementById('confirm-modal');
-        if (!cm259.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        if (!cm259.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
       };
       if (await openEditor('p1')) {
         const ta259 = document.getElementById('modal-text');
@@ -673,7 +744,7 @@ SECTION = """\
         await sleep(300);
         const cm260 = document.getElementById('confirm-modal');
         if (cm260.classList.contains('hidden')) out.errors.push('act260: Cancel after typing did not ask about discarding');
-        else { await click('confirm-ok'); await sleep(300); }
+        else { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(300); }
         if (!document.getElementById('modal').classList.contains('hidden')) out.errors.push('act260: the editor stayed open after confirming the discard');
       } else out.errors.push('act260: the editor did not reopen');
       const free260 = [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild);
@@ -685,7 +756,7 @@ SECTION = """\
         if (create260 !== 'modal-cancel,modal-confirm') out.errors.push('act260: the create footer is ' + create260);
         await click('modal-close-x');
         await sleep(250);
-        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
       }
     }
     // ico261: the tile-picture well sits before the name for a prompt without media and
@@ -694,7 +765,7 @@ SECTION = """\
       const closeEd261 = async () => {
         await click('modal-close-x');
         await sleep(250);
-        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
       };
       if (await openEditor('p1')) {
         const well = document.getElementById('modal-add-icon');
@@ -721,7 +792,7 @@ SECTION = """\
       const closeEd262 = async () => {
         await click('modal-close-x');
         await sleep(250);
-        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
       };
       if (await openEditor('p1')) {
         const ta262 = document.getElementById('modal-text');
@@ -766,7 +837,7 @@ SECTION = """\
       const closeEd263 = async () => {
         await click('modal-close-x');
         await sleep(250);
-        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
       };
       const shown263 = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none'; };
       if (await openEditor('p1')) {

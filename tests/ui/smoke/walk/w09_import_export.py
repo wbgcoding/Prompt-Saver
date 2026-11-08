@@ -534,7 +534,7 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(250);
       const cm3 = document.getElementById('confirm-modal');
-      if (!cm3.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      if (!cm3.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
     }
     // There is no second layout any more: one field, and the rendered pane and the
     // textarea must be the same box so the swap is invisible.
@@ -565,6 +565,6 @@ SECTION = """\
       await click('modal-close-x');
       await sleep(250);
       const cm4 = document.getElementById('confirm-modal');
-      if (!cm4.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      if (!cm4.classList.contains('hidden')) { await click((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')); await sleep(250); }
     }
 """

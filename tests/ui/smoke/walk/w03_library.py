@@ -559,7 +559,7 @@ SECTION = """\
         await sleep(200);
         const discardAsk = document.getElementById('confirm-modal');
         if (discardAsk && !discardAsk.classList.contains('hidden')) {
-          document.getElementById('confirm-ok').click();
+          document.getElementById((document.getElementById('confirm-alt').classList.contains('hidden') ? 'confirm-ok' : 'confirm-alt')).click();
           await sleep(200);
         }
       }

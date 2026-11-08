@@ -62,9 +62,9 @@ let confirmCleanup = null;
 // button.
 // `altLabel` adds a third choice between Cancel and confirm and resolves to the string
 // "alt": a question with two ways to go ahead (delete the old sync folder, keep it) plus
-// the way out.
+// the way out. `altDanger` gives it the red text of a destructive choice.
 // `focusCancel` puts the initial focus on Cancel, so a stray Enter declines a destructive question.
-function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false, focusCancel = false }, onClosed) {
+function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, altDanger = false, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false, focusCancel = false }, onClosed) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
   const opener = document.activeElement;
@@ -87,6 +87,7 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
   cancel.classList.toggle("hidden", oneButton);
   alt.classList.toggle("hidden", !altLabel);
   alt.textContent = altLabel || "";
+  alt.classList.toggle("alt-danger", !!altDanger);
   ok.classList.toggle("danger-confirm", danger);
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel || t("cancel");
