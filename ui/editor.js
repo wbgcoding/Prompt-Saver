@@ -758,11 +758,12 @@ export async function loadHistory(id) {
     moreBtn.type = "button";
     moreBtn.className = "ghost-btn hist-more";
     moreBtn.setAttribute("aria-expanded", "false");
-    moreBtn.textContent = t("historyShowMore").replace("{n}", String(extra));
+    const moreLabel = () => (extra === 1 ? t("historyShowMoreOne") : t("historyShowMore").replace("{n}", String(extra)));
+    moreBtn.textContent = moreLabel();
     moreBtn.addEventListener("click", () => {
       const showing = body.classList.toggle("hist-all");
       moreBtn.setAttribute("aria-expanded", String(showing));
-      moreBtn.textContent = showing ? t("historyShowLess") : t("historyShowMore").replace("{n}", String(extra));
+      moreBtn.textContent = showing ? t("historyShowLess") : moreLabel();
       if (!showing) body.scrollTop = 0;
     });
   }

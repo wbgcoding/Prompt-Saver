@@ -1,5 +1,5 @@
 // Grid folders: folder tiles, the folder popup, drag in and out.
-import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_EDIT, inkShadow, invoke, memberDrag, openColorPop, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
+import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, ctxEl, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_EDIT, inkShadow, invoke, memberDrag, openColorPop, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, layoutOf, openMiniMenu, renderGrid } from "./views.js";
 import { recordToolUsage } from "./management.js";
@@ -356,7 +356,12 @@ export function openTileFolderPop(f, anchor) {
       btn.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        openTileCtx(p.id, ev.clientX, ev.clientY, ev.isTrusted);
+        // The menu key fires this without a pointer (button 0): open at the tile and hand
+        // the focus to the menu, as the grid's own keyboard menu does.
+        const fromKey = ev.button !== 2;
+        const r = btn.getBoundingClientRect();
+        openTileCtx(p.id, fromKey ? r.left + r.width / 2 : ev.clientX, fromKey ? r.top + r.height / 2 : ev.clientY, ev.isTrusted);
+        if (fromKey && !ctxEl.classList.contains("hidden")) ctxEl.querySelector("button:not(.hidden):not(:disabled)")?.focus();
       });
     }
     // Press and pull onto a cell to take the prompt out of the folder again.

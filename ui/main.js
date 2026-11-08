@@ -179,6 +179,8 @@ function bind() {
     if (!$("shortcuts-modal").classList.contains("hidden")) { trapTabWithin($("shortcuts-modal"), e); return; }
     if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
     if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
+    // A member's menu sits above its open folder, so Tab stays in the menu first.
+    if (!tileFolderPop.classList.contains("hidden") && !ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
