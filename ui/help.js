@@ -92,8 +92,8 @@ export const HELP_CONTENT = {
         "Adjust Markdown preview, syntax highlighting, versions, or private notes in the expert menu.",
       ],
       whatHappens:
-        "Versions keep every saved change: Restore brings an earlier one back, and the button next to it keeps that version as a new tile instead. Markdown preview shows next to or instead of the text box and never changes what is stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers it back once. A confidential tile never gets a draft. \"Copy formatted\" also puts the rendered Markdown on the clipboard, so Word or a mail app shows the formatting. Saving a new tile that closely matches an existing one shows a hint but still saves.",
-      settings: ["Markdown preview, syntax highlighting, versions, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
+        "Versions keep every saved change, up to the cap set in the expert menu (20 by default); the oldest go once a save passes it, and all go when the tile leaves the trash. The list shows the newest 3, a button below shows the rest. Restore brings an earlier one back, and the button next to it keeps that version as a new tile instead. Markdown preview shows next to or instead of the text box and never changes what is stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers it back once. A confidential tile never gets a draft. \"Copy formatted\" also puts the rendered Markdown on the clipboard, so Word or a mail app shows the formatting. Saving a new tile that closely matches an existing one shows a hint but still saves.",
+      settings: ["Markdown preview, syntax highlighting, versions and how many per prompt, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
     },
     {
       section: "basics",
@@ -675,8 +675,8 @@ export const HELP_CONTENT = {
       whatItIs: "The backup manager creates encrypted, compressed snapshots of the entire library and settings.",
       howTo: [
         "Open the Backup manager from Settings.",
-        "Turn on automatic backups and pick an interval, or create one manually.",
-        "Save a backup to a file of your choice or import one from a file with the two buttons beside Create backup.",
+        "Set automatic backups under Schedule and how many to keep under How many to keep, or create one manually.",
+        "The overview shows the newest and next backup, their count and size, plus Create backup, Open folder, Save to file and Import from file.",
         "Restore from the snapshot list, choosing data only, settings only, or both.",
       ],
       whatHappens:
@@ -756,7 +756,7 @@ export const HELP_CONTENT = {
     {
       section: "data",
       title: "Usage statistics",
-      whatItIs: "A small window with the number of prompts, the copies of the last 7 days, the most used and the never used prompts.",
+      whatItIs: "A small window with eight figures at the top (prompts, favorites, prompts used at least once, archived, and copies today, in 7 days, in 30 days and in total), then the most used and the never used prompts.",
       howTo: [
         "Switch on \"Show statistics\" in the expert menu under \"Data & maintenance\".",
         "Open Settings and click \"Usage statistics\".",
@@ -865,8 +865,8 @@ export const HELP_CONTENT = {
         "Markdown-Vorschau, Syntax-Hervorhebung, Versionen oder private Notizen im Expertenmenü anpassen.",
       ],
       whatHappens:
-        "Die Versionen speichern jede Änderung: Wiederherstellen holt eine frühere zurück, und der Button daneben behält diese Fassung stattdessen als neue Kachel. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds und ändert nie den gespeicherten Inhalt. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gespeichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start ihn einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. „Formatiert kopieren“ legt zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder eine Mail-App die Formatierung zeigt. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen Hinweis, gespeichert wird trotzdem.",
-      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
+        "Die Versionen speichern jede Änderung bis zur Obergrenze im Expertenmenü (Standard 20); die ältesten fallen weg, sobald ein Speichern sie überschreitet, und alle, wenn die Kachel den Papierkorb verlässt. Die Liste zeigt die neuesten 3, ein Button darunter den Rest. Wiederherstellen holt eine frühere zurück, und der Button daneben behält diese Fassung stattdessen als neue Kachel. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds und ändert nie den gespeicherten Inhalt. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gespeichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start ihn einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. „Formatiert kopieren“ legt zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder eine Mail-App die Formatierung zeigt. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen Hinweis, gespeichert wird trotzdem.",
+      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen und wie viele je Prompt, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
       section: "basics",
@@ -1461,8 +1461,8 @@ export const HELP_CONTENT = {
       whatItIs: "Das Fenster „Sicherungen“ erstellt verschlüsselte, komprimierte Snapshots der gesamten Bibliothek und Einstellungen.",
       howTo: [
         "„Sicherungen“ in den Einstellungen öffnen.",
-        "Automatische Sicherungen aktivieren und ein Intervall wählen, oder manuell eine erstellen.",
-        "Mit den zwei Buttons neben „Sicherung erstellen“ eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei importieren.",
+        "Automatische Sicherungen unter „Zeitplan“ einstellen und unter „Wie viele behalten“ die Anzahl festlegen, oder manuell eine erstellen.",
+        "Der Überblick zeigt neueste und nächste Sicherung, Anzahl und Größe, dazu Erstellen, Ordner öffnen, in Datei speichern und aus Datei importieren.",
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
@@ -1543,7 +1543,7 @@ export const HELP_CONTENT = {
     {
       section: "data",
       title: "Nutzungsstatistik",
-      whatItIs: "Ein kleines Fenster mit der Zahl der Prompts, den Kopien der letzten 7 Tage, den meistgenutzten und den nie genutzten Prompts.",
+      whatItIs: "Ein kleines Fenster mit acht Kennzahlen oben (Prompts, Favoriten, schon genutzte, archivierte sowie Kopien heute, in 7 Tagen, in 30 Tagen und gesamt), darunter die meistgenutzten und die nie genutzten Prompts.",
       howTo: [
         "Im Expertenmenü unter „Daten & Wartung“ „Statistik anzeigen“ einschalten.",
         "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",

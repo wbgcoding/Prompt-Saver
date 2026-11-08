@@ -124,13 +124,13 @@ SECTION = """\
         const bodies = document.querySelectorAll('#stats-panel .stats-panel-body');
         if (bodies.length !== 1) out.errors.push('toggling stats twice left ' + bodies.length + ' stats-panel-body elements instead of 1');
         const cardEls = document.querySelectorAll('#stats-panel .stat-cards .stat-card');
-        if (cardEls.length !== 2) out.errors.push('903: the statistics show ' + cardEls.length + ' cards instead of 2');
+        if (cardEls.length !== 8) out.errors.push('the statistics show ' + cardEls.length + ' figure cards instead of 8');
         const names = [...document.querySelectorAll('#stats-panel .stat-bar-name')].map((n) => n.textContent);
         if (names.join(',') !== 'Prompt 1,Prompt 2,Prompt 3') out.errors.push('903: the most used list does not show the prompt names: ' + names.join(','));
         if (document.querySelector('#stats-panel .stat-daily-chart, #stats-panel .stat-tool-views, #stats-panel .stat-overview-split')) {
           out.errors.push('903: the statistics still carry the chart, tool or overview blocks');
         }
-        if (!document.querySelector('#stats-panel .stat-local-only')) out.errors.push('903: the statistics lose the stays-on-this-computer note');
+        if (document.querySelector('#stats-panel .stat-local-only')) out.errors.push('the statistics still carry the stays-on-this-computer note');
         // 906: the list length is a choice of 5, 10 or 20.
         const topSel = document.getElementById('stats-topn');
         if (!topSel) {
@@ -206,24 +206,29 @@ SECTION = """\
     } else {
       layoutScan('backups');
       mustReach('backups', '#backup-modal .modal-head-actions > button');
-      // The manager's left column holds Create backup, Open in Explorer, Save
-      // backup, Import backup, stacked in that order inside the column.
+      // The overview card holds Create backup, Open in Explorer, Save backup,
+      // Import backup, in that order, inside the card and without overlap.
       {
-        const col = document.querySelector('#backup-panel .backup-col');
+        const col = document.querySelector('#backup-panel .backup-overview .backup-actions');
         const kids = col ? [...col.children].filter(c => c.tagName === 'BUTTON') : [];
-        if (kids.length < 4 || !kids[0].classList.contains('backup-now-btn') || kids[2].id !== 'backup-save-file' || kids[3].id !== 'backup-import-file') {
-          out.errors.push('backup manager: the left column does not start with the four backup buttons in order: ' + kids.map(k => k.id || k.className).join(','));
+        if (kids.length !== 4 || !kids[0].classList.contains('backup-now-btn') || kids[2].id !== 'backup-save-file' || kids[3].id !== 'backup-import-file') {
+          out.errors.push('backup manager: the overview does not hold the four backup buttons in order: ' + kids.map(k => k.id || k.className).join(','));
         } else {
           const cr = col.getBoundingClientRect();
-          let prevBottom = -1;
-          for (const k of kids.slice(0, 4)) {
-            const r = k.getBoundingClientRect();
+          const rs = kids.map(k => k.getBoundingClientRect());
+          rs.forEach((r, i) => {
+            const k = kids[i];
             if (!r.width || !r.height) out.errors.push('backup manager: a backup button has no size: ' + (k.id || k.className));
-            if (r.left < cr.left - 1 || r.right > cr.right + 1) out.errors.push('backup manager: a backup button sticks out of its column: ' + (k.id || k.className));
-            if (r.top < prevBottom - 1) out.errors.push('backup manager: the backup buttons overlap: ' + (k.id || k.className));
-            prevBottom = r.bottom;
-          }
+            if (r.left < cr.left - 1 || r.right > cr.right + 1) out.errors.push('backup manager: a backup button sticks out of its row: ' + (k.id || k.className));
+            for (let j = 0; j < i; j++) {
+              const o = rs[j];
+              if (r.left < o.right - 1 && o.left < r.right - 1 && r.top < o.bottom - 1 && o.top < r.bottom - 1) out.errors.push('backup manager: the backup buttons overlap: ' + (k.id || k.className));
+            }
+          });
         }
+        const titles = [...document.querySelectorAll('#backup-panel .backup-card-title')].map(h => h.textContent.trim());
+        if (titles.length < 4) out.errors.push('backup manager: expected overview, schedule, keep and password cards, got ' + titles.join(' | '));
+        if (document.querySelectorAll('#backup-panel .backup-overview .stat-card').length !== 4) out.errors.push('backup manager: the overview does not show 4 figure cards');
       }
       // P63: the consequence of forgetting the backup password is spelled out
       // right where the field is, not just in a toast after saving it.
@@ -231,9 +236,12 @@ SECTION = """\
       if (!pwHint || !pwHint.textContent.trim()) {
         out.errors.push('the backup password field has no forget-consequence warning');
       }
-      // Two-column settings and 8 diagnostic cards.
-      if (document.querySelectorAll('#backup-panel .backup-col').length !== 2) {
-        out.errors.push('the backup settings are not split in two columns');
+      // Schedule and keep cards side by side above the one-column breakpoint.
+      {
+        const sc = document.querySelector('#backup-panel .backup-schedule');
+        const kp = document.querySelector('#backup-panel .backup-keep');
+        if (!sc || !kp) out.errors.push('the backup settings lack the schedule or keep card');
+        else if (window.innerWidth > 720 && Math.abs(sc.getBoundingClientRect().top - kp.getBoundingClientRect().top) > 1) out.errors.push('the schedule and keep cards are not side by side');
       }
       // 46: a typed 0 in a min-0 number field (a GFS retention tier, "none") used to
       // silently reset to the default via Number(raw) || def, since 0 is falsy.
@@ -269,8 +277,8 @@ SECTION = """\
             'px does not match open-folder width ' + Math.round(openFolderBtn.getBoundingClientRect().width) + 'px');
         }
       }
-      if (document.querySelectorAll('#backup-panel .stat-cards .stat-card').length !== 8) {
-        out.errors.push('the backup diagnostics do not show 8 cards');
+      if (document.querySelectorAll('#backup-panel .backup-details .backup-detail').length !== 4) {
+        out.errors.push('the backup detail line does not show oldest, span, largest and smallest');
       }
       // 414: the three sections appear in the fixed order backups, storage,
       // retention, and the storage section lists every row the backend sent

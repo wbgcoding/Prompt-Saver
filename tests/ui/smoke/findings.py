@@ -1610,18 +1610,21 @@ def run(browser, tmp):
     if (!callsFor('preview_import').length) errs.push('910: From file did not start the import preview');
     if (!pop.classList.contains('hidden')) errs.push('910: choosing an entry left the menu open');
 """)
-    failed += ar_probe('bm912', 'settings: the expert menu button spans the System section as its last row', 'index', '880x600', '', r"""
-    // 912: the button is one primary button across the full width of the System section.
+    failed += ar_probe('bm912', 'settings: About and the expert menu button share the last System row', 'index', '880x600', '', r"""
+    // The System section ends with About (left) and the primary Expert menu button (right),
+    // two equal halves across the section.
     await bootReady();
     document.getElementById('gear').click();
     await sleep(300);
     const eo = document.getElementById('expert-open');
-    const r = eo.getBoundingClientRect();
+    const ab = document.getElementById('about-btn');
+    const r = eo.getBoundingClientRect(), ra = ab.getBoundingClientRect();
     if (!(r.width > 0)) errs.push('912: the expert menu button is not visible');
-    const fw = eo.parentElement.getBoundingClientRect().width;
-    if (Math.abs(r.width - fw) > 2) errs.push('912: the expert menu button is ' + Math.round(r.width) + 'px wide, expected the section width ' + Math.round(fw));
+    const fw = document.getElementById('updates-field').getBoundingClientRect();
+    if (Math.abs(r.width - ra.width) > 1.5) errs.push('912: About is ' + Math.round(ra.width) + 'px, Expert menu ' + Math.round(r.width) + 'px');
+    if (Math.abs(ra.left - fw.left) > 1.5 || Math.abs(r.right - fw.right) > 1.5) errs.push('912: the About/Expert row does not span the System section');
     if (!eo.classList.contains('primary-btn')) errs.push('912: the expert menu button is not primary-styled');
-    if (eo !== eo.parentElement.lastElementChild) errs.push('912: the expert menu button is not the last item of the System section');
+    if (eo !== eo.parentElement.lastElementChild || ab !== eo.parentElement.firstElementChild) errs.push('912: the last System row is not About then Expert menu');
     if (eo.scrollWidth > eo.clientWidth + 1) errs.push('912: the expert menu label is cut');
 """)
     failed += ar_probe('bm913', 'settings: the update interval sits beside the Auto update switch and shows only while it is on', 'index', '880x600', '', r"""

@@ -57,6 +57,12 @@ The editor is a plain text box at heart; a few features (**Markdown preview**,
 a rendered Markdown preview with syntax-highlighted code blocks, a full list of
 versions, and a private note field never copied or exported with the text.
 
+The versions list under Advanced options shows the newest three; a button below
+them reveals the older ones in a scrolling list. Each save keeps one version,
+and every prompt keeps at most 20 (Expert menu, Features, Editor: Versions kept
+per prompt, 5 to 100); the oldest goes once a new one would pass that limit.
+A prompt's versions are deleted for good when the prompt leaves the trash.
+
 For a file/PDF/video tile that also carries its own stored preview picture, the
 image shown above the file row is only that tile's preview; the attached file
 below it is a separate thing, and copying the tile puts the file's path on the
@@ -854,8 +860,10 @@ Markdown folder sync below is the built path.
 
 Encrypted, compressed snapshots of the entire library and settings, on an
 automatic schedule with daily, weekly, monthly and yearly retention tiers, and a restore that can
-target data only, settings only, or both. Two buttons beside Create backup
-save a backup to a file of your choice or import one from a file. The same
+target data only, settings only, or both. The window is split into cards: an
+overview with the newest and next backup, their count and size, and the four
+actions (create, open the folder, save to a file of your choice, import from a
+file); then the schedule, how many backups are kept, and the backup password. The same
 window also has a storage section that shows how much disk
 space the database, attachments, screenshots, recordings, backups, temporary
 files and the error log each use, with a button to open a listed folder.
@@ -975,10 +983,11 @@ menu.
 
 ### Usage statistics
 
-A small window opened from Settings → Usage statistics, with four things: the
-number of prompts, the copies of the last 7 days, the most used prompts by
-name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
-which you can click to find them in the library. The "Show statistics" switch
+A small window opened from Settings → Usage statistics. On top, eight figures:
+prompts, favorites, how many were used at least once, archived ones, and copies
+today, in the last 7 and 30 days and of all time. Below them the most used
+prompts by name (a list of 5, 10 or 20, your choice) and the prompts that were
+never used, which you can click to find them in the library. The "Show statistics" switch
 in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
 history. Everything stays on this computer. The export button saves the full
 numbers, including daily counts and tool use, as CSV, TXT or JSON.
@@ -1033,7 +1042,12 @@ Raster unter Rastergröße.
 Ziehen & Ablegen.
 
 **Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private
-Notizen. Bei einer Datei-Kachel
+Notizen. Die Versionsliste unter Erweiterte Optionen zeigt die neuesten drei, ein
+Knopf darunter blendet die älteren in einer scrollbaren Liste ein. Jedes
+Speichern legt eine Version an, jeder Prompt behält höchstens 20 (Expertenmenü,
+Funktionen, Editor: Versionen je Prompt, 5 bis 100); die älteste fällt weg,
+sobald eine neue die Grenze überschreiten würde. Endgültig gelöscht werden die
+Versionen eines Prompts, wenn er den Papierkorb verlässt. Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
 Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt
@@ -1603,9 +1617,11 @@ Weg, die Bibliothek über PCs hinweg zu teilen: dafür ist die
 Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 
 **Sicherungen.** Verschlüsselte Sicherungen, Aufbewahrung nach Tag, Woche, Monat und Jahr,
-gezieltes Wiederherstellen. Mit den zwei Buttons neben „Sicherung erstellen“ lässt
-sich eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei
-importieren. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
+gezieltes Wiederherstellen. Das Fenster ist in Karten geteilt: ein Überblick mit
+der neuesten und der nächsten Sicherung, ihrer Anzahl und Größe und den vier
+Aktionen (erstellen, Ordner öffnen, in eine Datei deiner Wahl speichern, aus einer
+Datei importieren); dann Zeitplan, wie viele Sicherungen bleiben, und das
+Sicherungspasswort. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
 wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
 temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Button,
 um einen aufgeführten Ordner zu öffnen. Ein Aufbewahrungsbereich listet eine Zeile je Art
@@ -1710,10 +1726,11 @@ seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster mit vier Dingen: der Zahl der
-Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
-(eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und den nie genutzten
-Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
+**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster. Oben acht Zahlen:
+Prompts, Favoriten, wie viele schon genutzt wurden, archivierte, und Kopien
+heute, in den letzten 7 und 30 Tagen und insgesamt. Darunter die meistgenutzten
+Prompts mit Namen (eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und die nie
+genutzten Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
 Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
 sammelt der Kopierverlauf. Alles bleibt auf diesem PC. Der Export-Button
 speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,

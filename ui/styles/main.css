@@ -3485,12 +3485,12 @@ select.modal-input { padding-right: 30px; }
 
 /* Usage statistics dashboard. */
 .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
-/* Fixed column counts so the grids come out as full rows (backup diagnostics 8 =
-   2x4, the two statistics figures side by side) instead of a ragged last row.
-   Narrow windows fall back to the auto-fit above. */
+/* Fixed column counts so the grids come out as full rows (backup overview 4, the
+   statistics figures 2x4) instead of a ragged last row. Narrow windows fall back to the
+   auto-fit above. */
 @media (min-width: 640px) {
   #backup-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  #stats-panel .stat-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #stats-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 .stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
 .stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -3512,7 +3512,6 @@ select.modal-input { padding-right: 30px; }
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stat-cleanup-item:hover { border-color: var(--accent); color: var(--fg); }
-.stat-local-only { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
 /* Duplicate finder. */
 .dupes-body { max-height: 70vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; }
@@ -3626,10 +3625,23 @@ select.modal-input { padding-right: 30px; }
 /* The interval dropdown is at least as wide as the number fields of the column (90px, see
    .backup-set-row .clear-wrap) and grows to its longest option, so a written-out unit never clips. */
 .backup-interval-row .backup-interval { min-width: 90px; width: auto; }
-/* Settings split in two: left "make a backup / how often", right "how many are kept". */
-.backup-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 24px; align-items: start; }
-.backup-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-@media (max-width: 720px) { .backup-cols { grid-template-columns: minmax(0, 1fr); } }
+/* Category cards: overview on top, schedule and "how many to keep" side by side, the
+   password across both columns. */
+.backup-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+.backup-card-title { margin: 0 0 2px; font-size: 13px; font-weight: 700; color: var(--fg); }
+.backup-card-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.backup-card-grid > .backup-pw-card { grid-column: 1 / -1; }
+@media (max-width: 720px) { .backup-card-grid { grid-template-columns: minmax(0, 1fr); } }
+.backup-overview .stat-card { background: var(--surface); }
+/* The four actions share one row, equal widths; a narrow window wraps them two by two. */
+.backup-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.backup-actions > button { min-width: 0; white-space: normal; }
+@media (max-width: 720px) { .backup-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The figures the overview leaves out, as one quiet wrapping line above the list. */
+.backup-details { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 2px 2px 6px; font-size: 12px; }
+.backup-detail { display: inline-flex; gap: 6px; white-space: nowrap; }
+.backup-detail-key { color: var(--muted); }
+.backup-detail-val { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
 /* The slot takes its height from the tier grid itself, which is always rendered and
    only parked when smart retention is off: that is what stops picking a preset tile
@@ -3646,18 +3658,12 @@ select.modal-input { padding-right: 30px; }
 /* Optional backup password: label left, field + eye button right. */
 .field.backup-pw-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .backup-pw-row > span { font-size: 13px; }
-/* In the narrow settings column the label would wrap next to the field, so it
-   gets its own line and the input keeps the full width. */
-.backup-col .field.backup-pw-row { flex-wrap: wrap; justify-content: flex-start; gap: 6px 8px; }
-/* The password row spans both columns: label left, field + Save + Remove right. */
-.backup-cols > .backup-pw-row { grid-column: 1 / -1; }
+/* The card title names the password, so the row holds only field, Save and Remove. */
+.backup-pw-card .field.backup-pw-row { justify-content: flex-start; }
 .backup-pw-controls { display: flex; flex-wrap: wrap; row-gap: 8px; align-items: center; gap: 8px; min-width: 0; }
-/* The consequence-of-forgetting warning is a grid child like everything else here,
-   so it used to be squeezed into one column and wrapped over three lines. Full
-   width plus a slightly smaller size fits it on one line in most languages; it
-   still wraps by itself where a translation is genuinely too long. */
-.backup-cols > .backup-pw-hint { grid-column: 1 / -1; margin: 0; font-size: 11.5px; }
-.backup-pw-wrap { position: relative; flex: 1 1 120px; min-width: 0; max-width: 240px; display: flex; align-items: center; }
+/* The consequence-of-forgetting warning, a touch smaller under the field. */
+.backup-pw-card > .backup-pw-hint { margin: 0; font-size: 11.5px; }
+.backup-pw-wrap { position: relative; flex: 1 1 200px; min-width: 0; max-width: 320px; display: flex; align-items: center; }
 .backup-pw-wrap .modal-input { padding-right: 36px; }
 .backup-pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
 /* Saving the backup password is an explicit click, never a side effect of leaving
@@ -4112,18 +4118,21 @@ body.drag-over::after {
 @media (max-width: 468px) {
   #impexp-field .export-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
-/* System, row 1: the version status on the left, About and the check button at the right edge. */
-.update-line { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
-.update-btns { display: flex; flex: 0 1 auto; gap: 8px; min-width: 0; }
-.update-btns > .ghost-btn { flex: 0 1 auto; padding-inline: 12px; }
-/* Auto-update row: the switch in the left column; the right column reads like a switch row, its
-   label on the left and the content-sized interval list flush with the right edge. */
-.update-auto { align-items: center; }
-.update-interval { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.update-interval-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--fg); }
+/* System, row 1: the check button and the version status on the left, the auto-update switch
+   and its interval flush right. A narrow window or a long translation moves the right group to
+   a line of its own instead of cutting a label. */
+.update-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
+.update-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 0 1 auto; }
+.update-left > .ghost-btn { flex: 0 0 auto; padding-inline: 12px; }
+.update-auto { display: flex; align-items: center; gap: 16px; margin-inline-start: auto; min-width: 0; }
+.update-auto > .switch-field { flex: 0 0 auto; padding: 0; }
+.update-auto > .switch-field > span { white-space: nowrap; }
+.update-interval { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.update-interval-label { min-width: 0; white-space: nowrap; font-size: 13px; color: var(--fg); }
 .update-interval > select { flex: 0 0 auto; width: auto; padding-block: 6px; }
-/* Last row: the Expert menu button across the full content width, set off from the rows around it. */
-#updates-field > #expert-open { width: 100%; margin-block: 12px 8px; }
+/* Row 2: About and the Expert menu as two equal buttons side by side. */
+.update-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-block: 12px 8px; }
+.update-nav > button { min-width: 0; }
 /* Clickable version/status label, plain text look → releases page, or the update
    dialog once an update is pending. */
 .update-version {
@@ -4871,6 +4880,9 @@ body.drag-over::after {
 }
 .text-danger-btn:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .text-danger-btn:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+/* The dialog's third choice when it throws work away (Discard beside Save). */
+#confirm-alt.alt-danger { color: var(--danger); }
+#confirm-alt.alt-danger:hover { border-color: var(--danger); }
 
 /* ---- Context menu ---- */
 .ctx {
@@ -4886,6 +4898,9 @@ body.drag-over::after {
   flex-direction: column;
   animation: pop-in var(--transition);
 }
+/* The tile menu opens over an open folder (a .ctx at 70 too, appended later), so it sits one
+   layer higher or it would show behind the folder it was opened from. */
+#ctx.ctx { z-index: 71; }
 .ctx button {
   text-align: left;
   padding: 8px 10px;
@@ -5190,6 +5205,12 @@ body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
    .modal-tags, which keeps its own single-row wrapping layout. */
 #modal-hotkey, #modal-history { display: flex; flex-direction: column; gap: 4px; }
 .modal-advanced-history-body { display: flex; flex-direction: column; gap: 4px; }
+/* Only the newest three versions show; the button reveals the rest, which then scroll inside
+   the section (the button stays below the list, outside the scroll). */
+.modal-advanced-history-body:not(.hist-all) > .hist-older { display: none; }
+.modal-advanced-history-body.hist-all { max-height: min(50vh, 420px); overflow-y: auto; }
+.modal-advanced-history-body.hist-all > .hist-more { position: sticky; bottom: 0; background: var(--surface); box-shadow: 0 -6px 10px var(--surface); }
+.hist-more { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 /* The 3 most-used tags, offered right in the editor so adding a common one
    is one click instead of typing it out. */

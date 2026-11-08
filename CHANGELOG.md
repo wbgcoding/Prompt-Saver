@@ -33,9 +33,24 @@ saving, backups, recordings, the editors and the installer.
   everywhere.
 - **Save as new entry.** In the version list, right-click a version to keep it
   as a new entry; the extra button next to Restore is gone.
+- **Save from the discard prompt.** Closing the editor with unsaved changes
+  now offers Save next to Discard and Keep editing.
+- **Shorter version list.** The editor shows the newest three versions; a
+  button below shows the rest in a scrolling list.
+- **Clearer backup manager.** Backups are grouped into Overview, Schedule, How
+  many to keep and Password, with the four backup actions in one row.
+- **More usage figures.** The statistics show favorites, prompts used at least
+  once, archived prompts and copies today, in 30 days and in total.
+- **Tidier System section.** Check for updates and the version sit on the left,
+  automatic updates on the right, with About and Expert menu below.
+- **New pin icon.** The always-on-top icon is redrawn and no longer looks cut
+  off at the top.
 
 ### Fixed
 
+- **Context menu in an open folder.** Right-clicking a tile inside an open
+  folder showed the menu behind the folder; it now opens on top, and a double
+  right-click opens the editor like on any other tile.
 - **Data and backups.** Undoing a cleared copy history no longer counts the
   copies twice, an undone delete gets a new id when its old one is taken again,
   a selective backup restore keeps the journal, a restore with neither scope

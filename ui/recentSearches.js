@@ -167,7 +167,7 @@ export function recentRow(term, opts) {
     pin.title = name;
     pin.setAttribute("aria-label", name);
     pin.setAttribute("aria-pressed", String(!!opts.pinned));
-    pin.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/></svg>';
+    pin.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><g transform="rotate(45 12 12)"><path fill="currentColor" d="M8.5 2.5h7a1.25 1.25 0 0 1 0 2.5H15v4.2l2.6 2.6c.25.25.4.6.4.95V14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-1.25c0-.35.15-.7.4-.95L9 9.2V5h-.5a1.25 1.25 0 0 1 0-2.5Z"/><path fill="currentColor" d="M11.1 15h1.8v5.3L12 22l-.9-1.7Z"/></g></svg>';
     pin.addEventListener("click", (e) => {
       e.stopPropagation();
       if (opts.pinned) opts.onUnpin?.(opts.entry); else opts.onPin?.(term);

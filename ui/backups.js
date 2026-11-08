@@ -3,7 +3,7 @@ import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, 
 import { applyFlags, applyValues, EXPERT_PATHS, rowResetBtn, withTip } from "./expertMenu.js";
 import { EXPERT_SELECTS, EXPERT_VALUES } from "./expertConfig.js";
 import { openVideoCleanup } from "./recordingTools.js";
-import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
+import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage } from "./management.js";
 import { fmtBytes, fmtUnit } from "./floatShared.js";
 import { restoreClipInbox } from "./journal.js";
 import { runExportAll, runImportAll } from "./settingsPanel.js";
@@ -376,15 +376,39 @@ export async function renderBackupPanel(body) {
     return tipKey ? withTip(l, tipKey) : l;
   };
 
-  // ---- Settings ---- Left column: making a backup and when it happens by itself.
-  // Right column: how many of them survive.
-  body.appendChild(statSection(t("backupSettings")));
-  const set = document.createElement("div"); set.className = "backup-settings backup-cols";
-  const left = document.createElement("div"); left.className = "backup-col";
-  const right = document.createElement("div"); right.className = "backup-col";
+  // Category cards: an overview with the actions, then schedule and how many to keep side by
+  // side, then the password, then the stored backups.
+  const card = (titleText, extraClass) => {
+    const c = document.createElement("section"); c.className = "backup-card" + (extraClass ? " " + extraClass : "");
+    const h = document.createElement("h3"); h.className = "backup-card-title"; h.textContent = titleText;
+    c.appendChild(h);
+    return c;
+  };
+  const newest = backups.length ? parseStamp(backups[0].name) : null;
+  const oldest = backups.length ? parseStamp(backups[backups.length - 1].name) : null;
+  const total = backups.reduce((s, b) => s + b.size, 0);
+
+  // ---- Overview: where things stand at a glance, then the four actions in one row ----
+  const overview = card(t("backupSecOverview"), "backup-overview");
+  const cards = document.createElement("div"); cards.className = "stat-cards backup-overview-cards";
+  cards.append(
+    dtCard(t("backupNewest"), newest),
+    // An overdue backup runs on the next check (every few minutes), so never show a past date.
+    dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(Math.max(Date.now(), newest.getTime() + val("backupIntervalH") * 3600000)) : null),
+    statCard(nf(backups.length), t("backupCount"), true),
+    statCard(fmtBytes(total, LANG), t("backupTotalSize"), true),
+  );
+  overview.appendChild(cards);
+  const actions = document.createElement("div"); actions.className = "backup-actions";
+  overview.appendChild(actions);
+  body.appendChild(overview);
+
+  const set = document.createElement("div"); set.className = "backup-settings backup-card-grid";
+  const left = card(t("backupSecSchedule"), "backup-schedule");
+  const right = card(t("backupSecKeep"), "backup-keep");
   set.append(left, right);
 
-  const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "ghost-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
+  const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "primary-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
   nowBtn.addEventListener("click", async () => {
     // A second click while the first backup is still being written would start another one.
     nowBtn.disabled = true;
@@ -396,13 +420,13 @@ export async function renderBackupPanel(body) {
     await saveUiState("backupListOpen", true); // reveal the fresh backup right away
     renderBackupPanel(body);
   });
-  left.appendChild(nowBtn);
+  actions.appendChild(nowBtn);
   const openFolderBtn = document.createElement("button");
   openFolderBtn.type = "button";
   openFolderBtn.className = "ghost-btn";
   openFolderBtn.textContent = t("backupOpenFolder");
   openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => errToast(e)));
-  left.appendChild(openFolderBtn);
+  actions.appendChild(openFolderBtn);
   const saveFileBtn = document.createElement("button");
   saveFileBtn.type = "button";
   saveFileBtn.id = "backup-save-file";
@@ -410,7 +434,7 @@ export async function renderBackupPanel(body) {
   saveFileBtn.dataset.settingRow = "backup-save-file";
   saveFileBtn.textContent = t("backupSave");
   saveFileBtn.addEventListener("click", () => runExportAll());
-  left.appendChild(saveFileBtn);
+  actions.appendChild(saveFileBtn);
   const importFileBtn = document.createElement("button");
   importFileBtn.type = "button";
   importFileBtn.id = "backup-import-file";
@@ -418,7 +442,7 @@ export async function renderBackupPanel(body) {
   importFileBtn.dataset.settingRow = "backup-import-file";
   importFileBtn.textContent = t("backupImport");
   importFileBtn.addEventListener("click", async () => { await runImportAll(); renderBackupPanel(body); });
-  left.appendChild(importFileBtn);
+  actions.appendChild(importFileBtn);
   const autoBackupRow = switchRow(t("flagAutoBackup"), flag("autoBackup"), async (on) => {
     await saveBackupSetting("flag", "autoBackup", on);
     renderBackupPanel(body);
@@ -573,41 +597,42 @@ export async function renderBackupPanel(body) {
   // neither column alone is wide enough for all three.
   const pwControls = document.createElement("div"); pwControls.className = "backup-pw-controls";
   pwControls.append(pwWrap, save, remove);
-  pwRow.append(pwLabel, pwControls);
-  set.appendChild(pwRow);
+  pwRow.append(pwControls);
+  const pwCard = card(pwLabel.textContent, "backup-pw-card");
+  pwCard.appendChild(pwRow);
+  set.appendChild(pwCard);
   // The consequence of forgetting it is spelled out where it is set, not only in a toast
   // that is easy to miss.
   const pwWarn = document.createElement("p");
   pwWarn.className = "modal-hint backup-pw-hint";
   pwWarn.textContent = t("backupPasswordForgetWarn");
-  set.appendChild(pwWarn);
+  pwCard.appendChild(pwWarn);
   body.appendChild(set);
 
-  // ---- Diagnostics (collapsible) ----
-  const total = backups.reduce((s, b) => s + b.size, 0);
-  const newest = backups.length ? parseStamp(backups[0].name) : null;
-  const oldest = backups.length ? parseStamp(backups[backups.length - 1].name) : null;
+  // The remaining figures as one quiet line above the list.
   const sizes = backups.map((b) => b.size);
-  const cards = document.createElement("div"); cards.className = "stat-cards";
-  // Row 1: how many backups there are and what they cost in disk space.
-  // Row 2: the time axis; how far back they reach and when the next one is due.
-  cards.append(
-    statCard(nf(backups.length), t("backupCount"), true),
-    statCard(fmtBytes(total, LANG), t("backupTotalSize"), true),
-    statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : EMPTY_VALUE, t("backupLargest"), true),
-    statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : EMPTY_VALUE, t("backupSmallest"), true),
-    statCard(newest && oldest
-      ? fmtUnit(Math.max(0, Math.round((newest - oldest) / 86400000)), "day", LANG, 0, "long")
-      : EMPTY_VALUE, t("backupSpan"), true),
-    dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
-    dtCard(t("backupNewest"), newest),
-    dtCard(t("backupOldest"), oldest),
-  );
-  body.append(collapseHead(t("backupDiag"), cards, "backupDiagOpen"), cards);
+  const details = document.createElement("div"); details.className = "backup-details";
+  if (backups.length) {
+    const parts = [
+      [t("backupOldest"), oldest ? prettyStamp(backups[backups.length - 1].name) : EMPTY_VALUE],
+      [t("backupSpan"), newest && oldest ? fmtUnit(Math.max(0, Math.round((newest - oldest) / 86400000)), "day", LANG, 0, "long") : EMPTY_VALUE],
+      [t("backupLargest"), fmtBytes(Math.max(...sizes), LANG)],
+      [t("backupSmallest"), fmtBytes(Math.min(...sizes), LANG)],
+    ];
+    for (const [k, v] of parts) {
+      const item = document.createElement("span"); item.className = "backup-detail";
+      const kk = document.createElement("span"); kk.className = "backup-detail-key"; kk.textContent = k;
+      const vv = document.createElement("span"); vv.className = "backup-detail-val"; vv.textContent = v;
+      item.append(kk, vv);
+      details.appendChild(item);
+    }
+  }
 
   // ---- List (opened right after a manual backup, otherwise last known state) ----
   const list = document.createElement("div"); list.className = "backups-list";
   const listHead = collapseHead(`${t("backupList")} (${backups.length})`, list, "backupListOpen");
+  listHead.classList.add("backup-split");
+  if (details.childElementCount) list.appendChild(details);
   if (!backups.length) {
     const e = document.createElement("div"); e.className = "hint"; e.textContent = t("backupsEmpty");
     list.appendChild(e);

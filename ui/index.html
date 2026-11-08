@@ -59,7 +59,7 @@
       <!-- Window / app: always-on-top · settings -->
       <button id="pin-top" class="icon-btn pin-toggle" aria-pressed="false" data-i18n-title="alwaysOnTop" data-i18n-aria="alwaysOnTop">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M16 3.2A3.4 3.4 0 0 1 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/>
+          <g transform="rotate(45 12 12)"><path fill="currentColor" d="M8.5 2.5h7a1.25 1.25 0 0 1 0 2.5H15v4.2l2.6 2.6c.25.25.4.6.4.95V14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-1.25c0-.35.15-.7.4-.95L9 9.2V5h-.5a1.25 1.25 0 0 1 0-2.5Z"/><path fill="currentColor" d="M11.1 15h1.8v5.3L12 22l-.9-1.7Z"/></g>
         </svg>
       </button>
       <button id="gear" class="icon-btn" data-i18n-aria="settings">
@@ -621,7 +621,7 @@
           <div class="lib-toolbar">
             <div class="lib-q-wrap">
               <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
-              <button id="library-search-pin" type="button" class="icon-btn lib-search-pin" data-i18n-title="pinSearchAction" data-i18n-aria="pinSearchAction"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/></svg></button>
+              <button id="library-search-pin" type="button" class="icon-btn lib-search-pin" data-i18n-title="pinSearchAction" data-i18n-aria="pinSearchAction"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><g transform="rotate(45 12 12)"><path fill="currentColor" d="M8.5 2.5h7a1.25 1.25 0 0 1 0 2.5H15v4.2l2.6 2.6c.25.25.4.6.4.95V14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-1.25c0-.35.15-.7.4-.95L9 9.2V5h-.5a1.25 1.25 0 0 1 0-2.5Z"/><path fill="currentColor" d="M11.1 15h1.8v5.3L12 22l-.9-1.7Z"/></g></svg></button>
             </div>
             <label class="head-sort">
               <span class="cols-label" data-i18n="sortBy">Sort</span>
@@ -1080,29 +1080,31 @@
       </section>
       <section class="settings-sec">
         <h3 class="settings-sec-title" data-i18n="settingsSecUpdates">System</h3>
-        <!-- Rows on the same two-column grid as the switches above: version status with
-             About and the check button, the result of the last check, the auto-update switch with its interval, then the
-             Expert menu button across the full width. -->
+        <!-- Row 1: the check button with the version status beside it on the left, the
+             auto-update switch and its interval at the right edge. Then the result of the
+             last check, then About and the Expert menu as two buttons side by side. -->
         <div id="updates-field" class="field">
           <div class="update-line">
-            <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
-            <span class="update-btns">
-              <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
+            <span class="update-left">
               <button id="update-btn" class="ghost-btn btn-busyable"><span class="btn-label" data-i18n="checkUpdate">Check for updates</span><span class="btn-spinner" aria-hidden="true"></span></button>
+              <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
+            </span>
+            <span class="update-auto">
+              <label class="field switch-field" data-i18n-title="autoUpdateHint">
+                <span data-i18n="autoUpdate">Automatic updates</span>
+                <input id="opt-autoupdate" type="checkbox" class="switch" />
+              </label>
+              <span class="update-interval">
+                <span class="update-interval-label" data-i18n="updateIntervalLabel" aria-hidden="true">Frequency</span>
+                <select id="opt-update-interval" class="batch-view-select" data-i18n-aria="valUpdateCheckH"></select>
+              </span>
             </span>
           </div>
           <p id="update-result" class="update-result hidden"></p>
-          <div class="update-auto switch-grid">
-            <label class="field switch-field" data-i18n-title="autoUpdateHint">
-              <span data-i18n="autoUpdate">Automatic updates</span>
-              <input id="opt-autoupdate" type="checkbox" class="switch" />
-            </label>
-            <div class="update-interval">
-              <span class="update-interval-label" data-i18n="updateIntervalLabel" aria-hidden="true">Frequency</span>
-              <select id="opt-update-interval" class="batch-view-select" data-i18n-aria="valUpdateCheckH"></select>
-            </div>
+          <div class="update-nav">
+            <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
+            <button id="expert-open" type="button" class="primary-btn" data-i18n="expertMenu">Expert menu</button>
           </div>
-          <button id="expert-open" type="button" class="primary-btn" data-i18n="expertMenu">Expert menu</button>
         </div>
       </section>
       <section class="settings-sec settings-sec-danger">
@@ -1541,7 +1543,7 @@
          keyboard equivalent of dragging this tile onto another. -->
     <button data-act="moveToFolder" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2.4 2.4h8.4A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg></span><span class="ctx-label" data-i18n="moveToFolderMenu">Move to folder…</span></button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
-    <button data-act="pin" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3.2A3.4 3.4 0 0 1 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/></svg></span><span class="ctx-label" data-i18n="showFloating">Show floating button</span></button>
+    <button data-act="pin" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(45 12 12)"><path d="M9 3h6M10 3v6l-3 3v2h10v-2l-3-3V3M12 14v7"/></g></svg></span><span class="ctx-label" data-i18n="showFloating">Show floating button</span></button>
     <button data-act="hide" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg></span><span class="ctx-label" data-i18n="hideInView">Hide in this view</span></button>
     <div class="ctx-sep" role="separator"></div>
     <!-- Only shown when the archive feature is on (openCtx toggles .hidden); label
