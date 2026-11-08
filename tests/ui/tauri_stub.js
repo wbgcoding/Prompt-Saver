@@ -1486,6 +1486,9 @@ const RESULTS = {
     top: [{ name: "Prompt 1", count: 9 }, { name: "Prompt 2", count: 6 }, { name: "Prompt 3", count: 2 }],
     never_used: [{ name: "Prompt 9", count: 0 }],
     copies_today: 2, copies30: 23, copies_total: 87, used_prompts: 8, favorites: 3, archived: 1,
+    // 14 local days, oldest first (ts = local midnight written as UTC).
+    daily: [0, 1, 0, 3, 2, 0, 0, 4, 1, 0, 2, 1, 0, 2].map((count, i) => ({ ts: Date.UTC(2026, 6, 12 + i) / 1000, count })),
+    tools: [{ name: "screenshot", count: 14, last_used: 1784000000 }, { name: "ocr", count: 5, last_used: 0 }, { name: "no_such_tool", count: 1, last_used: 0 }],
   }),
   export_stats: () => 12,
   storage_breakdown: () => ({

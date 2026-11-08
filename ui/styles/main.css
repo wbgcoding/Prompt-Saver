@@ -3490,7 +3490,7 @@ select.modal-input { padding-right: 30px; }
    auto-fit above. */
 @media (min-width: 640px) {
   #backup-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  #stats-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #stats-panel .stat-cards { grid-template-columns: repeat(var(--stat-cols, 4), minmax(0, 1fr)); }
 }
 .stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
 .stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -3500,6 +3500,15 @@ select.modal-input { padding-right: 30px; }
    every section sits off the underline by the same amount instead of touching it. */
 .stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; }
 .stat-bars { display: flex; flex-direction: column; gap: 6px; }
+.stat-daily-chart { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 4px; margin-bottom: 4px; }
+.stat-daily-col { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.stat-daily-val { font-size: 10px; line-height: 12px; height: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-daily-slot { width: 100%; height: 74px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
+.stat-daily-bar { width: min(100%, 22px); border-radius: 4px 4px 0 0; background: var(--accent); opacity: 0.75; }
+.stat-daily-bar.zero { height: 2px; opacity: 1; background: var(--border); border-radius: 1px; }
+.stat-daily-col:hover .stat-daily-bar:not(.zero), .stat-daily-col.today .stat-daily-bar:not(.zero) { opacity: 1; }
+.stat-daily-day { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stat-daily-col.today .stat-daily-day { color: var(--fg); font-weight: 700; }
 .stat-bar-row { display: flex; align-items: center; gap: 8px; }
 .stat-bar-name { flex: 0 0 34%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .stat-bar-track { flex: 1 1 auto; height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }

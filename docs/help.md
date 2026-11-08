@@ -985,9 +985,12 @@ menu.
 
 A small window opened from Settings → Usage statistics. On top, eight figures:
 prompts, favorites, how many were used at least once, archived ones, and copies
-today, in the last 7 and 30 days and of all time. Below them the most used
+today, in the last 7 and 30 days and of all time. Below them a chart of the
+copies per day over the last 14 days (hover a day for its date), the most used
 prompts by name (a list of 5, 10 or 20, your choice) and the prompts that were
-never used, which you can click to find them in the library. The "Show statistics" switch
+never used, which you can click to find them in the library, and the tools you
+used most (screenshots, text recognition, recordings and more; hover one for its
+last use). The "Show statistics" switch
 in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
 history. Everything stays on this computer. The export button saves the full
 numbers, including daily counts and tool use, as CSV, TXT or JSON.
@@ -1728,9 +1731,12 @@ Beide teilen sich eine Schwelle im Expertenmenü.
 
 **Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster. Oben acht Zahlen:
 Prompts, Favoriten, wie viele schon genutzt wurden, archivierte, und Kopien
-heute, in den letzten 7 und 30 Tagen und insgesamt. Darunter die meistgenutzten
+heute, in den letzten 7 und 30 Tagen und insgesamt. Darunter ein Diagramm der
+Kopien pro Tag der letzten 14 Tage (beim Überfahren erscheint das Datum), die meistgenutzten
 Prompts mit Namen (eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und die nie
-genutzten Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
+genutzten Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden, und
+die meistgenutzten Werkzeuge (Screenshots, Texterkennung, Aufnahmen und mehr; beim
+Überfahren erscheint die letzte Nutzung). Der
 Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
 sammelt der Kopierverlauf. Alles bleibt auf diesem PC. Der Export-Button
 speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,

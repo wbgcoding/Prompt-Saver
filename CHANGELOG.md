@@ -40,7 +40,8 @@ saving, backups, recordings, the editors and the installer.
 - **Clearer backup manager.** Backups are grouped into Overview, Schedule, How
   many to keep and Password, with the four backup actions in one row.
 - **More usage figures.** The statistics show favorites, prompts used at least
-  once, archived prompts and copies today, in 30 days and in total.
+  once, archived prompts and copies today, in 30 days and in total, plus a chart
+  of the copies per day over the last 14 days and the most used tools.
 - **Tidier System section.** Check for updates and the version sit on the left,
   automatic updates on the right, with About and Expert menu below.
 - **New pin icon.** The always-on-top icon is redrawn and no longer looks cut

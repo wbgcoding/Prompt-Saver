@@ -47,3 +47,40 @@ fn usage_summary_counts_copies_favorites_and_archive() {
     assert_eq!(s.favorites, 1);
     assert_eq!(s.archived, 1);
 }
+
+#[test]
+fn used_tools_lists_only_used_tools_most_used_first() {
+    let mut usage = std::collections::HashMap::new();
+    let mut last = std::collections::HashMap::new();
+    usage.insert(tool_usage_key("ocr"), 3u32);
+    usage.insert(tool_usage_key("screenshot"), 7u32);
+    usage.insert(tool_usage_key("chain"), 3u32);
+    usage.insert(tool_usage_key("dictation"), 0u32);
+    usage.insert("tool:unknown".to_string(), 50u32); // not a counted tool
+    usage.insert("p1".to_string(), 99u32); // a prompt, not a tool
+    last.insert(tool_usage_key("screenshot"), 1_700_000_000u64);
+    let t = used_tools(&usage, &last);
+    let names: Vec<&str> = t.iter().map(|x| x.name.as_str()).collect();
+    assert_eq!(names, ["screenshot", "chain", "ocr"]);
+    assert_eq!(t[0].count, 7);
+    assert_eq!(t[0].last_used, 1_700_000_000);
+    assert_eq!(t[1].last_used, 0);
+}
+
+#[test]
+fn live_daily_counts_skip_deleted_prompts_and_old_days() {
+    let live: std::collections::HashSet<&str> = ["a", "b"].into_iter().collect();
+    let rows = vec![
+        (100u64, "a".to_string(), 2usize),
+        (100, "gone".to_string(), 9), // a deleted prompt's copies do not count
+        (102, "b".to_string(), 1),
+        (102, "a".to_string(), 3),
+        (99, "a".to_string(), 5), // before the window
+        (110, "a".to_string(), 7), // after the window
+    ];
+    let d = live_daily_counts(100, 3, &rows, &live);
+    let counts: Vec<usize> = d.iter().map(|x| x.count).collect();
+    assert_eq!(counts, [2, 0, 4]);
+    assert_eq!(d[0].ts, 100 * 86400);
+    assert_eq!(d[2].ts, 102 * 86400);
+}

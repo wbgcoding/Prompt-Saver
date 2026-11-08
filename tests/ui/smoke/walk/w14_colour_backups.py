@@ -125,11 +125,31 @@ SECTION = """\
         if (bodies.length !== 1) out.errors.push('toggling stats twice left ' + bodies.length + ' stats-panel-body elements instead of 1');
         const cardEls = document.querySelectorAll('#stats-panel .stat-cards .stat-card');
         if (cardEls.length !== 8) out.errors.push('the statistics show ' + cardEls.length + ' figure cards instead of 8');
-        const names = [...document.querySelectorAll('#stats-panel .stat-bar-name')].map((n) => n.textContent);
+        const lists = [...document.querySelectorAll('#stats-panel .stat-bars')];
+        const names = lists[0] ? [...lists[0].querySelectorAll('.stat-bar-name')].map((n) => n.textContent) : [];
         if (names.join(',') !== 'Prompt 1,Prompt 2,Prompt 3') out.errors.push('903: the most used list does not show the prompt names: ' + names.join(','));
-        if (document.querySelector('#stats-panel .stat-daily-chart, #stats-panel .stat-tool-views, #stats-panel .stat-overview-split')) {
-          out.errors.push('903: the statistics still carry the chart, tool or overview blocks');
+        // The 14-day chart: one column per day, the newest marked as today, day numbers on the
+        // user's calendar (12 to 25), counts above the non-empty days only.
+        const cols = [...document.querySelectorAll('#stats-panel .stat-daily-chart .stat-daily-col')];
+        if (cols.length !== 14) out.errors.push('the 14-day chart shows ' + cols.length + ' days');
+        else {
+          const days = cols.map((c) => c.querySelector('.stat-daily-day').textContent).join(',');
+          if (days !== '12,13,14,15,16,17,18,19,20,21,22,23,24,25') out.errors.push('the 14-day chart day labels are ' + days);
+          if (!cols[13].classList.contains('today')) out.errors.push('the last chart column is not marked as today');
+          if (cols[0].querySelector('.stat-daily-val').textContent !== '' || cols[7].querySelector('.stat-daily-val').textContent !== '4') out.errors.push('the chart counts are wrong');
+          // The busiest day gets the full bar height and its count sits right on top of the bar.
+          const bar7 = cols[7].querySelector('.stat-daily-bar').getBoundingClientRect();
+          const val7 = cols[7].querySelector('.stat-daily-val').getBoundingClientRect();
+          const slot7 = cols[7].querySelector('.stat-daily-slot').getBoundingClientRect();
+          if (bar7.height < 50) out.errors.push('the busiest day bar is only ' + Math.round(bar7.height) + 'px tall');
+          if (val7.top < slot7.top - 1 || Math.abs(bar7.top - val7.bottom) > 4) out.errors.push('the busiest day count does not sit on its bar inside the chart');
+          const cr = document.querySelector('#stats-panel .stat-daily-chart').getBoundingClientRect();
+          if (cols.some((c) => c.getBoundingClientRect().right > cr.right + 1)) out.errors.push('a chart column sticks out of the chart');
         }
+        // Tools: labelled, most used first, an unknown key falls back to its name.
+        const tools = lists[1] ? [...lists[1].querySelectorAll('.stat-bar-name')].map((n) => n.textContent) : [];
+        if (tools.length !== 3 || tools[0] !== 'Screenshot taken' || tools[1] !== 'Text recognized') out.errors.push('the tool list reads ' + tools.join(','));
+        if (document.querySelector('#stats-panel .stat-overview-split')) out.errors.push('903: the statistics still carry the overview block');
         if (document.querySelector('#stats-panel .stat-local-only')) out.errors.push('the statistics still carry the stays-on-this-computer note');
         // 906: the list length is a choice of 5, 10 or 20.
         const topSel = document.getElementById('stats-topn');

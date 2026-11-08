@@ -140,19 +140,30 @@ export async function renderStatsPanel(body) {
   // Row 1: the library itself. Row 2: copies over time; the dated counts come from the copy
   // history, so they show a dash while that is off.
   const fromHistory = (n) => (s.history_on ? nf(n ?? 0) : EMPTY_VALUE);
-  const cards = document.createElement("div");
-  cards.className = "stat-cards";
-  cards.append(
-    statCard(nf(s.total_prompts), t("statTotalPrompts")),
-    statCard(nf(s.favorites ?? 0), t("expGroupFavorites")),
-    statCard(`${nf(s.used_prompts ?? 0)} / ${nf(s.total_prompts)}`, t("statUsedPrompts")),
-    statCard(nf(s.archived ?? 0), t("statArchived")),
-    statCard(fromHistory(s.copies_today), t("statCopiesToday")),
-    statCard(fromHistory(s.copies7), t("statCopies7")),
-    statCard(fromHistory(s.copies30), t("statCopies30")),
-    statCard(nf(s.copies_total ?? 0), t("statCopiesTotal")),
+  const cardRow = (list) => {
+    const row = document.createElement("div");
+    row.className = "stat-cards";
+    // As many equal columns as cards, so a row with a feature switched off has no hole.
+    row.style.setProperty("--stat-cols", String(list.length));
+    row.append(...list);
+    return row;
+  };
+  body.append(
+    cardRow([
+      statCard(nf(s.total_prompts), t("statTotalPrompts")),
+      // Favorites and Archived only while their feature is on.
+      ...(flag("favorites") ? [statCard(nf(s.favorites ?? 0), t("expGroupFavorites"))] : []),
+      statCard(`${nf(s.used_prompts ?? 0)} / ${nf(s.total_prompts)}`, t("statUsedPrompts")),
+      ...(flag("archiveTag") ? [statCard(nf(s.archived ?? 0), t("statArchived"))] : []),
+    ]),
+    cardRow([
+      statCard(fromHistory(s.copies_today), t("statCopiesToday")),
+      statCard(fromHistory(s.copies7), t("statCopies7")),
+      statCard(fromHistory(s.copies30), t("statCopies30")),
+      statCard(nf(s.copies_total ?? 0), t("statCopiesTotal")),
+    ]),
   );
-  body.appendChild(cards);
+  if (s.history_on && s.daily && s.daily.length) body.append(statSection(t("statDaily")), dailyChart(s.daily));
   // Most used: the heading shares its row with the list length choice.
   const topHead = document.createElement("div");
   topHead.className = "stats-top-head";
@@ -176,20 +187,7 @@ export async function renderStatsPanel(body) {
   topHead.append(statSection(t("statTop")), topSel);
   body.appendChild(topHead);
   if (s.top.length) {
-    const list = document.createElement("div"); list.className = "stat-bars";
-    const max = s.top[0].count || 1;
-    for (const b of s.top) {
-      const row = document.createElement("div"); row.className = "stat-bar-row";
-      const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = b.name;
-      const track = document.createElement("div"); track.className = "stat-bar-track";
-      const fill = document.createElement("div"); fill.className = "stat-bar-fill";
-      fill.style.width = `${Math.max(4, (b.count / max) * 100)}%`;
-      track.appendChild(fill);
-      const cnt = document.createElement("span"); cnt.className = "stat-bar-count"; cnt.textContent = nf(b.count);
-      row.append(name, track, cnt);
-      list.appendChild(row);
-    }
-    body.appendChild(list);
+    body.appendChild(statBars(s.top.map((b) => ({ label: b.name, count: b.count }))));
   } else {
     const none = document.createElement("div"); none.className = "hint"; none.textContent = t("statTopEmpty");
     body.appendChild(none);
@@ -206,6 +204,83 @@ export async function renderStatsPanel(body) {
     }
     body.appendChild(list);
   }
+  // Tools used at least once; the counters run only while the statistics are on.
+  if (s.tools && s.tools.length) {
+    body.appendChild(statSection(t("statsTools")));
+    body.appendChild(statBars(s.tools.map((x) => ({
+      label: t(STATS_TOOL_LABELS[x.name] || x.name),
+      count: x.count,
+      title: x.last_used ? `${t("statLastUsed")}: ${new Date(x.last_used * 1000).toLocaleDateString(LANG)}` : "",
+    }))));
+  }
+}
+
+// Label key per counted tool, in the backend's TOOL_KEYS order.
+export const STATS_TOOL_LABELS = {
+  screenshot: "statsToolScreenshot",
+  screenshot_editor: "statsToolScreenshotEditor",
+  ocr: "statsToolOcr",
+  recording_start: "statsToolRecordingStart",
+  video_editor: "statsToolVideoEditor",
+  video_export: "statsToolVideoExport",
+  dictation: "statsToolDictation",
+  color_pick: "statsToolColorPick",
+  chain: "statsToolChain",
+  rotation_advance: "statsToolRotationAdvance",
+  folder_create: "statsToolFolderCreate",
+  duplicate_finder: "statsToolDuplicateFinder",
+  backup_create: "statsToolBackupCreate",
+};
+
+// Name, proportional bar, count: one row per item, scaled to the largest count.
+function statBars(items) {
+  const nf = (n) => Number(n).toLocaleString(LANG);
+  const list = document.createElement("div"); list.className = "stat-bars";
+  const max = Math.max(1, ...items.map((x) => x.count));
+  for (const it of items) {
+    const row = document.createElement("div"); row.className = "stat-bar-row";
+    if (it.title) row.title = it.title;
+    const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = it.label;
+    const track = document.createElement("div"); track.className = "stat-bar-track";
+    const fill = document.createElement("div"); fill.className = "stat-bar-fill";
+    fill.style.width = `${Math.max(4, (it.count / max) * 100)}%`;
+    track.appendChild(fill);
+    const cnt = document.createElement("span"); cnt.className = "stat-bar-count"; cnt.textContent = nf(it.count);
+    row.append(name, track, cnt);
+    list.appendChild(row);
+  }
+  return list;
+}
+
+// Copies per day as columns with the day of the month below. `ts` is the local midnight
+// written as UTC, so it is formatted in UTC to land on the user's calendar day.
+const DAILY_BAR_MAX_PX = 56;
+export function dailyChart(daily) {
+  const nf = (n) => Number(n).toLocaleString(LANG);
+  const chart = document.createElement("div"); chart.className = "stat-daily-chart";
+  chart.setAttribute("role", "img");
+  const max = Math.max(1, ...daily.map((d) => d.count));
+  const parts = [];
+  daily.forEach((d, i) => {
+    const date = new Date(d.ts * 1000);
+    const long = date.toLocaleDateString(LANG, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+    parts.push(`${long}: ${nf(d.count)}`);
+    const col = document.createElement("div");
+    col.className = "stat-daily-col" + (i === daily.length - 1 ? " today" : "");
+    col.title = `${long}: ${nf(d.count)}`;
+    const val = document.createElement("span"); val.className = "stat-daily-val"; val.textContent = d.count ? nf(d.count) : "";
+    const slot = document.createElement("div"); slot.className = "stat-daily-slot";
+    const bar = document.createElement("div"); bar.className = "stat-daily-bar" + (d.count ? "" : " zero");
+    // Pixels, not percent: the count sits right on top of its bar inside the same slot.
+    bar.style.height = d.count ? `${Math.max(4, Math.round((d.count / max) * DAILY_BAR_MAX_PX))}px` : "";
+    slot.append(val, bar);
+    const day = document.createElement("span"); day.className = "stat-daily-day";
+    day.textContent = date.toLocaleDateString(LANG, { timeZone: "UTC", day: "numeric" });
+    col.append(slot, day);
+    chart.appendChild(col);
+  });
+  chart.setAttribute("aria-label", parts.join(", "));
+  return chart;
 }
 export async function openStats() {
   $("stats-modal").classList.remove("hidden");

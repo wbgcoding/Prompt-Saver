@@ -756,7 +756,7 @@ export const HELP_CONTENT = {
     {
       section: "data",
       title: "Usage statistics",
-      whatItIs: "A small window with eight figures at the top (prompts, favorites, prompts used at least once, archived, and copies today, in 7 days, in 30 days and in total), then the most used and the never used prompts.",
+      whatItIs: "A small window with eight figures on top: prompts, favorites, used, archived and copies today, in 7 and 30 days and in total. Below them come a 14-day chart, the most and never used prompts and the most used tools.",
       howTo: [
         "Switch on \"Show statistics\" in the expert menu under \"Data & maintenance\".",
         "Open Settings and click \"Usage statistics\".",
@@ -1543,7 +1543,7 @@ export const HELP_CONTENT = {
     {
       section: "data",
       title: "Nutzungsstatistik",
-      whatItIs: "Ein kleines Fenster mit acht Kennzahlen oben (Prompts, Favoriten, schon genutzte, archivierte sowie Kopien heute, in 7 Tagen, in 30 Tagen und gesamt), darunter die meistgenutzten und die nie genutzten Prompts.",
+      whatItIs: "Ein kleines Fenster mit acht Kennzahlen oben: Prompts, Favoriten, genutzte, archivierte und Kopien heute, in 7 und 30 Tagen und gesamt. Darunter folgen ein 14-Tage-Diagramm, meist- und nie genutzte Prompts und die meistgenutzten Werkzeuge.",
       howTo: [
         "Im Expertenmenü unter „Daten & Wartung“ „Statistik anzeigen“ einschalten.",
         "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",

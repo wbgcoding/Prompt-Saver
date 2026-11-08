@@ -24,8 +24,34 @@ pub(crate) struct UsageStats {
     pub(crate) history_on: bool,
     pub(crate) copies_today: u64,
     pub(crate) copies30: u64,
+    // The last 14 local days, oldest first; empty while the copy history is off.
+    pub(crate) daily: Vec<DayCount>,
+    // Every tool used at least once, most used first.
+    pub(crate) tools: Vec<ToolStat>,
     #[serde(flatten)]
     pub(crate) summary: UsageSummary,
+}
+
+// One counted tool for the dashboard: its key (the UI maps it to a label), uses, last use.
+#[derive(Serialize, Debug, PartialEq)]
+pub(crate) struct ToolStat {
+    pub(crate) name: String,
+    pub(crate) count: u32,
+    pub(crate) last_used: u64,
+}
+
+// The used tools, most used first, ties by key so the order is stable.
+pub(crate) fn used_tools(usage: &std::collections::HashMap<String, u32>, last_used: &std::collections::HashMap<String, u64>) -> Vec<ToolStat> {
+    let mut out: Vec<ToolStat> = TOOL_KEYS
+        .iter()
+        .filter_map(|k| {
+            let key = tool_usage_key(k);
+            let count = usage.get(&key).copied().unwrap_or(0);
+            (count > 0).then(|| ToolStat { name: (*k).to_string(), count, last_used: last_used.get(&key).copied().unwrap_or(0) })
+        })
+        .collect();
+    out.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    out
 }
 
 // Library-wide figures the dashboard shows beside the copy counts.
@@ -134,26 +160,45 @@ pub(crate) fn prompt_stat_type(p: &Prompt) -> &'static str {
     }
 }
 
+// Copies per local day and prompt over the last `days` days: the first day's bucket and
+// (bucket, id, count) rows. Read without the store lock; filtered to live ids afterwards.
+pub(crate) fn db_daily_copies_by_id(conn: &rusqlite::Connection, days: u32, offset_secs: i64) -> (u64, Vec<(u64, String, usize)>) {
+    const DAY: u64 = 86400;
+    let today_bucket = (now_secs() as i64 + offset_secs).max(0) as u64 / DAY;
+    let start = today_bucket.saturating_sub(u64::from(days).saturating_sub(1));
+    let mut out = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT (ts + ?2) / 86400, id, COUNT(*) FROM copy_log WHERE ts >= ?1 GROUP BY 1, 2") {
+        if let Ok(rows) = stmt.query_map(params![(start * DAY) as i64 - offset_secs, offset_secs], |r| {
+            Ok((r.get::<_, i64>(0)? as u64, r.get::<_, String>(1)?, r.get::<_, i64>(2)? as usize))
+        }) {
+            out.extend(rows.flatten());
+        }
+    }
+    (start, out)
+}
+
+// One DayCount per day from `start`, summing only the rows whose id is in `live`.
+pub(crate) fn live_daily_counts(start: u64, days: u32, rows: &[(u64, String, usize)], live: &std::collections::HashSet<&str>) -> Vec<DayCount> {
+    const DAY: u64 = 86400;
+    let mut counts = vec![0usize; days as usize];
+    for (bucket, id, n) in rows {
+        if live.contains(id.as_str()) {
+            if let Some(slot) = bucket.checked_sub(start).and_then(|i| counts.get_mut(i as usize)) {
+                *slot += n;
+            }
+        }
+    }
+    counts.into_iter().enumerate().map(|(i, count)| DayCount { ts: (start + i as u64) * DAY, count }).collect()
+}
+
 // Aggregate everything in Rust so a 1000-prompt library returns one compact struct.
 #[tauri::command]
 pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Result<UsageStats, String> {
     // The copy journal lives in SQLite and does not need the in-memory store, so it is read
     // before the store is locked; running the query under that lock made every copy and save
     // wait for the statistics dialog to open.
-    let now = now_secs();
-    let conn = db_conn(&app);
-    let copies7 = conn
-        .as_ref()
-        .map(|c| {
-            c.query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64
-        })
-        .unwrap_or(0);
     // Local calendar days, so "today" starts at the user's midnight.
-    let days30 = conn.as_ref().map(|c| db_daily_copies(c, 30, local_utc_offset_secs())).unwrap_or_default();
-    drop(conn);
-    let copies_today = days30.last().map(|d| d.count as u64).unwrap_or(0);
-    let copies30 = days30.iter().map(|d| d.count as u64).sum();
+    let rows = db_conn(&app).map(|c| db_daily_copies_by_id(&c, 30, local_utc_offset_secs()));
 
     let store = lock(&state);
     let usage = &store.settings.usage;
@@ -184,8 +229,22 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
         .collect();
     never_used.truncate(top_n.max(10) * 2);
     let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
+    // Only copies of prompts still in the library, like the all-time total beside them, so a
+    // deleted prompt's copies cannot make "today" larger than "all time".
+    let live: std::collections::HashSet<&str> = store.prompts.iter().map(|p| p.id.as_str()).collect();
+    let days30 = rows.map(|(start, rows)| live_daily_counts(start, 30, &rows, &live)).unwrap_or_default();
+    let copies_today = days30.last().map(|d| d.count as u64).unwrap_or(0);
+    let copies7 = days30.iter().rev().take(7).map(|d| d.count as u64).sum();
+    let copies30 = days30.iter().map(|d| d.count as u64).sum();
+    let mut daily = days30;
+    let skip = daily.len().saturating_sub(14);
+    daily.drain(..skip);
     let summary = usage_summary(&store.prompts, usage, archive_tag_key.as_deref());
-    Ok(UsageStats { total_prompts, copies7, top, never_used, history_on, copies_today, copies30, summary })
+    let tools = used_tools(usage, &store.settings.last_used);
+    if !history_on {
+        daily.clear();
+    }
+    Ok(UsageStats { total_prompts, copies7, top, never_used, history_on, copies_today, copies30, daily, tools, summary })
 }
 
 // ---- Usage statistics export ----
