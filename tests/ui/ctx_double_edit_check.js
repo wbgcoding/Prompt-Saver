@@ -24,6 +24,7 @@ const log = [];
 const sb = {
   openCtx: (id) => log.push("menu:" + id),
   closeCtx: () => log.push("close"),
+  closeTileFolderPop: () => log.push("folder"),
   editPrompt: (id) => log.push("edit:" + id),
   performance: { now: () => 0 },
 };
@@ -31,7 +32,7 @@ vm.createContext(sb);
 vm.runInContext(src.slice(start, end).replace(/export /g, "") + "\nthis.openTileCtx = openTileCtx; this.MS = CTX_DOUBLE_MS;", sb);
 const run = (id, t, trusted = true) => { log.length = 0; sb.openTileCtx(id, 0, 0, trusted, t); return log.join(","); };
 if (run("a", 1000) !== "menu:a") problems.push("first right-click did not open the menu");
-if (run("a", 1000 + sb.MS - 50) !== "close,edit:a") problems.push("quick second right-click did not open the editor");
+if (run("a", 1000 + sb.MS - 50) !== "close,folder,edit:a") problems.push("quick second right-click did not close the menu and an open folder, then open the editor");
 if (run("a", 1000 + sb.MS) !== "menu:a") problems.push("a third right-click after a double did not start over with the menu");
 if (run("a", 1000 + 3 * sb.MS) !== "menu:a") problems.push("slow second right-click opened the editor");
 if (run("b", 1000 + 3 * sb.MS + 10) !== "menu:b") problems.push("right-click on another tile opened the editor");

@@ -3,7 +3,7 @@ import { $, assignSettings, ctxEl, errToast, favView, flag, invoke, libraryEl, o
 import { chainMode, isTextPrompt, startChainWith } from "./chain.js";
 import { hasMarkdownSyntax } from "./markdown.js";
 import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, toggleFavoritePrompt, toggleGridSelect, trashPromptWithUndo } from "./library.js";
-import { cacheFloatingState, folderCandidates, foldersOfView, folderTitle, newTileFolder, saveFolder, tileFoldersOn } from "./gridFolders.js";
+import { cacheFloatingState, closeTileFolderPop, folderCandidates, foldersOfView, folderTitle, newTileFolder, saveFolder, tileFoldersOn } from "./gridFolders.js";
 import { mediaKind } from "./media.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { activeView, layoutOf, refreshFavViewUi, renderGrid, renderViews, viewRowBase } from "./views.js";
@@ -35,6 +35,8 @@ export function openTileCtx(id, x, y, trusted = true, now = performance.now()) {
   if (id && id === lastCtxId && now - lastCtxAt <= CTX_DOUBLE_MS) {
     lastCtxId = null;
     closeCtx();
+    // The editor opens under an open folder's layer: a member edited from there leaves it first.
+    closeTileFolderPop();
     editPrompt(id);
     return;
   }
@@ -388,6 +390,9 @@ export function bindGridMenus({ openExternalFileInEditor }) {
       return;
     }
     closeCtx();
+    // These open a dialog or editor, which sits under an open folder's layer (keyboard path;
+    // a mouse press on the menu has already closed the folder).
+    if (act === "edit" || act === "duplicate" || act === "editImage" || act === "editVideo") closeTileFolderPop();
     if (act === "copy") {
       await activateTile(id, false); // copy only, even with auto-paste on
     } else if (act === "favorite") {

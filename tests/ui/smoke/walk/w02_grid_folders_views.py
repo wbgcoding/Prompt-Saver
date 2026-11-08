@@ -220,6 +220,35 @@ SECTION = """\
         }
       }
       layoutScan('grid folder');
+      // A member's context menu opens above the open folder, not behind its layer, and a
+      // double right-click on a member opens the editor like on a grid tile.
+      if (pop) {
+        const mem = pop.querySelector('.folder-member-tile');
+        const mr = mem.getBoundingClientRect();
+        mem.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: mr.left + 10, clientY: mr.top + 10 }));
+        await sleep(150);
+        const ctx = document.getElementById('ctx');
+        if (!ctx || ctx.classList.contains('hidden')) {
+          out.errors.push('a folder member right-click opened no context menu');
+        } else {
+          const cr = ctx.getBoundingClientRect();
+          const hit = document.elementFromPoint(cr.left + cr.width / 2, cr.top + Math.min(cr.height / 2, 20));
+          if (!hit || !ctx.contains(hit)) out.errors.push('the folder member context menu sits behind ' + (hit ? (hit.id || hit.className) : 'nothing'));
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          await sleep(100);
+        }
+        const gm = await import('./gridMenus.js');
+        const id = mem.dataset.id;
+        const t0 = performance.now();
+        gm.openTileCtx(id, mr.left + 10, mr.top + 10, true, t0);
+        gm.openTileCtx(id, mr.left + 10, mr.top + 10, true, t0 + 120);
+        await sleep(250);
+        const editor = document.getElementById('modal');
+        if (!editor || editor.classList.contains('hidden')) out.errors.push('a double right-click on a folder member did not open the editor');
+        if (document.querySelector('.tile-folder-pop:not(.hidden)')) out.errors.push('the folder stays open over the editor after a double right-click');
+        if (ctx && !ctx.classList.contains('hidden')) out.errors.push('the context menu stays open after a double right-click');
+        if (editor && !editor.classList.contains('hidden')) { document.getElementById('modal-cancel').click(); await sleep(200); }
+      }
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
       // 70: dragging in the colour picker fires on every pointer-move frame - must

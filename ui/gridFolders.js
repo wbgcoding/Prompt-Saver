@@ -11,7 +11,7 @@ import { chainMode, toggleChainPick } from "./chain.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
 import { copyResolved, isArchived } from "./library.js";
-import { openCtx } from "./gridMenus.js";
+import { openTileCtx } from "./gridMenus.js";
 
 const TILE_FOLDER_COLS = 3; // most columns of the open grid-folder popover
 const TILE_FOLDER_GAP = 6; // gap between member tiles, matches .tile-folder-grid
@@ -351,11 +351,14 @@ export function openTileFolderPop(f, anchor) {
       btn.appendChild(err);
       if (missingFiles.has(p.id)) btn.classList.add("file-missing");
     }
-    btn.addEventListener("contextmenu", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      openCtx(p.id, ev.clientX, ev.clientY);
-    });
+    // Same rules as a grid tile: the menu can be switched off, a second right-click opens the editor.
+    if (flag("tileMenu")) {
+      btn.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openTileCtx(p.id, ev.clientX, ev.clientY, ev.isTrusted);
+      });
+    }
     // Press and pull onto a cell to take the prompt out of the folder again.
     btn.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
