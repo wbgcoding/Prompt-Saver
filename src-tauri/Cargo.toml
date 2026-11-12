@@ -35,7 +35,7 @@ serde_json = "=1.0.154"
 arboard = "=3.7.0"
 rfd = "=0.17.2"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
-ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
+ureq = { version = "=3.5.1", default-features = false, features = ["rustls"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
 # Ed25519 check of signed updates; already in the tree through rustls.
 ring = "=0.17.14"
@@ -53,10 +53,10 @@ rusqlite = { version = "=0.41.1", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use - see pdfium_lib_path in images.rs).
-pdfium-render = "=0.9.4"
+pdfium-render = "=0.9.5"
 # Extract ffmpeg.exe from its downloaded release zip. Deflate only:
 # gyan.dev's archive needs no other compression method.
-zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "=9.3.0", default-features = false, features = ["deflate-flate2"] }
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "=5.4.3"
