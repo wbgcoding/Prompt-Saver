@@ -18,14 +18,14 @@ pub(super) static DDLOCK_TEST_LOCK: Mutex<()> = Mutex::new(());
 // Saves/restores the two globals the way settings_locked_command_reports_the_flag
 // does for SETTINGS_LOCKED: these tests are the only ones in the suite that
 // touch them, but the same courtesy avoids surprising a future one.
-pub(super) struct DdlockGuard {
+pub(crate) struct DdlockGuard {
     _serial: std::sync::MutexGuard<'static, ()>,
     was_readonly: bool,
     was_owned: bool,
     was_host: Option<String>,
 }
 impl DdlockGuard {
-    pub(super) fn capture() -> Self {
+    pub(crate) fn capture() -> Self {
         Self {
             _serial: DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner()),
             was_readonly: DATA_DIR_READONLY.load(Ordering::Relaxed),

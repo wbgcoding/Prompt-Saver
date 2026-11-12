@@ -1,5 +1,12 @@
 use super::*;
 
+// A write command claims the data folder through the process-wide lock state the data-lock
+// tests also drive, so every standalone run here holds their serial guard.
+fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &[String], cwd: &Path) -> i32 {
+    let _g = crate::tests::DdlockGuard::capture();
+    super::run_standalone_with(resolve_dir, argv, cwd)
+}
+
 // ---- the pipe server is created inside the runtime, never beside it ----
 
 // Pins the platform fact install_server's shape rests on: a tokio named

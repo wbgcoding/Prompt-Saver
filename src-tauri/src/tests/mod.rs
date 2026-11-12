@@ -20,6 +20,8 @@ mod storage_1;
 mod storage_2;
 mod diff_writes;
 mod data_lock;
+// The data-folder lock is process-wide state; the command-line tests serialize on the same guard.
+pub(crate) use data_lock::DdlockGuard;
 mod backup_import_1;
 mod backup_import_2;
 mod rotation_settings;
