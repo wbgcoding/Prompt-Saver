@@ -1054,3 +1054,421 @@ fn after_the_marker_was_read_any_leftover_is_extra() {
     assert_eq!(a.next_positional().as_deref(), Some("x"));
     assert_eq!(reject_extra(&a), Err(format!("unexpected argument \"y\"{CLI_HINT}")));
 }
+
+// ---- Backup names, dates and retention settings ----
+
+fn leap_year(y: i64) -> bool {
+    y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
+}
+
+fn month_length(y: i64, m: u8) -> u8 {
+    match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        _ if leap_year(y) => 29,
+        _ => 28,
+    }
+}
+
+#[test]
+fn known_days_convert_to_their_calendar_dates() {
+    assert_eq!(civil_from_days(0), (1970, 1, 1));
+    assert_eq!(civil_from_days(1), (1970, 1, 2));
+    assert_eq!(civil_from_days(-1), (1969, 12, 31));
+    assert_eq!(civil_from_days(10_957), (2000, 1, 1));
+    assert_eq!(civil_from_days(11_016), (2000, 2, 29));
+    assert_eq!(civil_from_days(11_017), (2000, 3, 1));
+    assert_eq!(civil_from_days(11_574), (2001, 9, 9));
+    assert_eq!(civil_from_days(19_782), (2024, 2, 29));
+    assert_eq!(civil_from_days(24_855), (2038, 1, 19));
+    assert_eq!(civil_from_days(-25_508), (1900, 3, 1));
+    assert_eq!(civil_from_days(47_541), (2100, 3, 1));
+    assert_eq!(civil_from_days(2_932_896), (9999, 12, 31));
+    assert_eq!(civil_from_days(-719_162), (1, 1, 1));
+}
+
+#[test]
+fn known_dates_convert_to_their_day_counts() {
+    assert_eq!(days_from_civil(1970, 1, 1), 0);
+    assert_eq!(days_from_civil(1970, 1, 2), 1);
+    assert_eq!(days_from_civil(1969, 12, 31), -1);
+    assert_eq!(days_from_civil(2000, 1, 1), 10_957);
+    assert_eq!(days_from_civil(2000, 2, 29), 11_016);
+    assert_eq!(days_from_civil(2000, 3, 1), 11_017);
+    assert_eq!(days_from_civil(2001, 9, 9), 11_574);
+    assert_eq!(days_from_civil(2024, 2, 29), 19_782);
+    assert_eq!(days_from_civil(2038, 1, 19), 24_855);
+    assert_eq!(days_from_civil(1900, 3, 1), -25_508);
+    assert_eq!(days_from_civil(2100, 3, 1), 47_541);
+    assert_eq!(days_from_civil(9999, 12, 31), 2_932_896);
+    assert_eq!(days_from_civil(1, 1, 1), -719_162);
+}
+
+#[test]
+fn the_century_years_follow_the_leap_rule() {
+    // 1900 and 2100 are not leap years, 2000 and 2400 are.
+    assert_eq!(days_from_civil(1900, 3, 1) - days_from_civil(1900, 2, 28), 1);
+    assert_eq!(days_from_civil(2100, 3, 1) - days_from_civil(2100, 2, 28), 1);
+    assert_eq!(days_from_civil(2000, 3, 1) - days_from_civil(2000, 2, 28), 2);
+    assert_eq!(days_from_civil(2400, 3, 1) - days_from_civil(2400, 2, 28), 2);
+    assert_eq!(days_from_civil(2025, 1, 1) - days_from_civil(2024, 1, 1), 366);
+    assert_eq!(days_from_civil(2023, 1, 1) - days_from_civil(2022, 1, 1), 365);
+    assert_eq!(days_from_civil(2001, 1, 1) - days_from_civil(2000, 1, 1), 366);
+    assert_eq!(days_from_civil(1901, 1, 1) - days_from_civil(1900, 1, 1), 365);
+}
+
+#[test]
+fn a_walk_forward_from_the_epoch_matches_a_hand_counted_calendar() {
+    let (mut y, mut m, mut d) = (1970i64, 1u8, 1u8);
+    for z in 0..=200_000i64 {
+        assert_eq!(civil_from_days(z), (y as i32, m, d), "day {z}");
+        d += 1;
+        if d > month_length(y, m) {
+            d = 1;
+            m += 1;
+            if m > 12 {
+                m = 1;
+                y += 1;
+            }
+        }
+    }
+}
+
+#[test]
+fn a_walk_backward_from_the_epoch_matches_a_hand_counted_calendar() {
+    let (mut y, mut m, mut d) = (1969i64, 12u8, 31u8);
+    for z in (-200_000..=-1i64).rev() {
+        assert_eq!(civil_from_days(z), (y as i32, m, d), "day {z}");
+        if d == 1 {
+            if m == 1 {
+                m = 12;
+                y -= 1;
+            } else {
+                m -= 1;
+            }
+            d = month_length(y, m);
+        } else {
+            d -= 1;
+        }
+    }
+}
+
+#[test]
+fn days_and_dates_round_trip_over_a_wide_range() {
+    for z in -800_000..=3_000_000i64 {
+        let (y, m, d) = civil_from_days(z);
+        assert!((1..=12).contains(&m), "month of day {z}");
+        assert!(d >= 1 && d <= month_length(y as i64, m), "day of day {z}");
+        assert_eq!(days_from_civil(y as i64, m as i64, d as i64), z, "round trip of day {z}");
+    }
+}
+
+#[test]
+fn every_date_in_leap_and_common_years_round_trips() {
+    for y in [1600i64, 1900, 1999, 2000, 2023, 2024, 2100, 2400] {
+        for m in 1..=12u8 {
+            for d in 1..=month_length(y, m) {
+                let z = days_from_civil(y, m as i64, d as i64);
+                assert_eq!(civil_from_days(z), (y as i32, m, d), "{y}-{m}-{d}");
+            }
+        }
+    }
+}
+
+#[test]
+fn consecutive_dates_differ_by_exactly_one_day() {
+    for y in [1999i64, 2000, 2023, 2024, 2100] {
+        let mut prev = days_from_civil(y, 1, 1);
+        for m in 1..=12u8 {
+            for d in 1..=month_length(y, m) {
+                let z = days_from_civil(y, m as i64, d as i64);
+                if (m, d) != (1, 1) {
+                    assert_eq!(z, prev + 1, "{y}-{m}-{d}");
+                }
+                prev = z;
+            }
+        }
+    }
+}
+
+#[test]
+fn a_backup_folder_name_holds_only_digits_dash_and_underscore() {
+    for n in ["2024-01-02_03-04-05", "20240102", "-", "_", "0", "2024-01-02_03-04-05_2"] {
+        assert!(valid_backup_name(n), "{n:?}");
+    }
+}
+
+#[test]
+fn a_backup_folder_name_can_never_leave_the_backups_folder() {
+    for n in [
+        "",
+        "..",
+        "1..2",
+        "../x",
+        "..\\x",
+        "1/2",
+        "1\\2",
+        "C:\\x",
+        "2024-01-02 03",
+        "2024-01-02_03-04-05.zip",
+        "a",
+        "\u{663}",
+        "2024\n",
+        "2024\0",
+        ".",
+        "~1",
+    ] {
+        assert!(!valid_backup_name(n), "{n:?}");
+    }
+}
+
+fn gfs_settings(flag: Option<bool>, values: &[(&str, f64)]) -> Settings {
+    let mut s = Settings::default();
+    if let Some(f) = flag {
+        s.ui_flags.insert("backupGfs".to_string(), f);
+    }
+    for (k, v) in values {
+        s.ui_values.insert(k.to_string(), *v);
+    }
+    s
+}
+
+fn gfs_tuple(c: GfsConfig) -> (usize, usize, usize, usize) {
+    (c.daily, c.weekly, c.monthly, c.yearly)
+}
+
+#[test]
+fn tiered_retention_is_off_unless_its_flag_is_true() {
+    assert!(gfs_from_settings(&gfs_settings(None, &[])).is_none());
+    assert!(gfs_from_settings(&gfs_settings(Some(false), &[])).is_none());
+    assert!(gfs_from_settings(&gfs_settings(Some(false), &[("backupDaily", 9.0)])).is_none());
+    assert!(gfs_from_settings(&Settings::default()).is_none());
+}
+
+#[test]
+fn tiered_retention_defaults_to_three_four_six_and_one() {
+    assert_eq!(gfs_tuple(gfs_from_settings(&gfs_settings(Some(true), &[])).unwrap()), (3, 4, 6, 1));
+}
+
+#[test]
+fn tiered_retention_reads_each_count_from_its_own_value() {
+    let s = gfs_settings(Some(true), &[("backupDaily", 7.0), ("backupWeekly", 8.0), ("backupMonthly", 9.0), ("backupYearly", 10.0)]);
+    assert_eq!(gfs_tuple(gfs_from_settings(&s).unwrap()), (7, 8, 9, 10));
+    let s = gfs_settings(Some(true), &[("backupMonthly", 12.0)]);
+    assert_eq!(gfs_tuple(gfs_from_settings(&s).unwrap()), (3, 4, 12, 1), "unset tiers keep their defaults");
+}
+
+#[test]
+fn tiered_retention_clamps_negative_counts_to_zero_and_truncates_fractions() {
+    let s = gfs_settings(Some(true), &[("backupDaily", -5.0), ("backupWeekly", 2.9), ("backupMonthly", 0.0), ("backupYearly", -0.5)]);
+    assert_eq!(gfs_tuple(gfs_from_settings(&s).unwrap()), (0, 2, 0, 0));
+}
+
+#[test]
+fn tiered_retention_survives_a_not_a_number_value() {
+    let s = gfs_settings(Some(true), &[("backupDaily", f64::NAN)]);
+    assert_eq!(gfs_from_settings(&s).unwrap().daily, 0);
+}
+
+#[test]
+fn backup_tier_keys_follow_day_week_month_and_year() {
+    assert_eq!(backup_date_keys("2024-03-15_10-00-00"), Some((19_797, 2_828, 24_291, 2_024)));
+    assert_eq!(backup_date_keys("1970-01-01_00-00-00"), Some((0, 0, 23_641, 1_970)));
+}
+
+#[test]
+fn a_backup_week_runs_from_monday_to_sunday() {
+    let week = |d: &str| backup_date_keys(&format!("{d}_00-00-00")).unwrap().1;
+    assert_eq!(week("2024-03-11"), week("2024-03-17"));
+    assert_ne!(week("2024-03-17"), week("2024-03-18"));
+    assert_eq!(week("2024-03-18") - week("2024-03-11"), 1);
+    // The epoch day is a Thursday, so its week began on Monday 1969-12-29.
+    assert_eq!(week("1969-12-29"), week("1970-01-01"));
+    assert_eq!(week("1969-12-28") + 1, week("1969-12-29"));
+}
+
+#[test]
+fn a_month_key_changes_at_the_year_boundary_by_one() {
+    let month = |d: &str| backup_date_keys(&format!("{d}_00-00-00")).unwrap().2;
+    assert_eq!(month("2023-12-31"), 24_288);
+    assert_eq!(month("2024-01-01"), 24_289);
+}
+
+#[test]
+fn a_name_without_a_readable_date_has_no_tier_keys() {
+    for n in ["", "garbage", "2024-03", "2024-03-xx_10-00-00", "xx-03-15_10", "-03-15_1", "2024--15_1"] {
+        assert_eq!(backup_date_keys(n), None, "{n:?}");
+    }
+}
+
+#[test]
+fn a_stamp_counts_seconds_on_a_local_timeline() {
+    assert_eq!(stamp_secs("1970-01-01_00-00-00"), Some(0));
+    assert_eq!(stamp_secs("1970-01-01_00-00-01"), Some(1));
+    assert_eq!(stamp_secs("1970-01-01_01-02-03"), Some(3_723));
+    assert_eq!(stamp_secs("1970-01-02_00-00-00"), Some(86_400));
+    assert_eq!(stamp_secs("1969-12-31_23-59-59"), Some(-1));
+    assert_eq!(stamp_secs("2000-01-01_00-00-00"), Some(946_684_800));
+}
+
+#[test]
+fn a_stamp_without_seconds_counts_them_as_zero() {
+    assert_eq!(stamp_secs("1970-01-01_01-02"), Some(3_720));
+}
+
+#[test]
+fn a_stamp_that_is_not_one_has_no_seconds() {
+    for n in ["", "2024-01-02", "2024-01-02_", "2024-01-02_xx-00-00", "a-b-c_1-2-3", "2024-01_00-00-00", "2024-01-02_00-00-zz", "_00-00-00"] {
+        assert_eq!(stamp_secs(n), None, "{n:?}");
+    }
+}
+
+#[test]
+fn the_newest_stamp_age_ignores_stamps_more_than_a_day_ahead() {
+    let now = 1_000_000i64;
+    assert_eq!(newest_stamp_age(now, &[]), None);
+    assert_eq!(newest_stamp_age(now, &[now - 50]), Some(50));
+    assert_eq!(newest_stamp_age(now, &[now - 50, now - 10, now - 99]), Some(10));
+    assert_eq!(newest_stamp_age(now, &[now + 86_400]), Some(0), "exactly a day ahead is still believed");
+    assert_eq!(newest_stamp_age(now, &[now + 86_401]), None);
+    assert_eq!(newest_stamp_age(now, &[now + 86_401, now - 7]), Some(7));
+}
+
+#[test]
+fn a_backup_is_due_by_whole_intervals() {
+    assert!(backup_is_due(None, 0));
+    assert!(backup_is_due(Some(0), 0), "an interval of zero hours is always due");
+    assert!(!backup_is_due(Some(3_599), 1));
+    assert!(backup_is_due(Some(3_600), 1));
+    assert!(!backup_is_due(Some(u64::MAX - 1), u64::MAX), "a huge interval saturates instead of wrapping");
+}
+
+#[test]
+fn leftover_temp_files_of_an_interrupted_backup_are_recognised() {
+    for n in ["data.db.tmp", "data.db.gz.part", "count.tmp", "names.tmp", "purge.tmp", "refs.tmp", "count.tmp-12ab", "refs.tmp-x"] {
+        assert!(is_backup_stray(n), "{n:?}");
+    }
+    for n in ["data.db.gz", "data.db", "count.tmp2", "count.tmp.", "xcount.tmp", "prompts.count", "", "-", "version.txt", "COUNT.TMP"] {
+        assert!(!is_backup_stray(n), "{n:?}");
+    }
+}
+
+#[test]
+fn a_restore_scope_is_one_of_all_data_or_settings() {
+    assert_eq!(valid_scope("all"), Ok("all"));
+    assert_eq!(valid_scope("data"), Ok("data"));
+    assert_eq!(valid_scope("settings"), Ok("settings"));
+    assert_eq!(valid_scope("x"), Err("unknown scope \"x\", expected all, data or settings".to_string()));
+    assert!(valid_scope("").is_err());
+    assert!(valid_scope("ALL").is_err());
+    assert!(valid_scope(" all").is_err());
+}
+
+#[test]
+fn retention_without_tiers_keeps_the_newest_and_never_drops_everything() {
+    let names: Vec<String> = ["2024-01-01_00-00-00", "2024-01-02_00-00-00", "2024-01-03_00-00-00"].iter().map(|s| s.to_string()).collect();
+    assert_eq!(backups_to_drop(&names, 1, None), names[..2].to_vec());
+    assert_eq!(backups_to_drop(&names, 3, None), Vec::<String>::new());
+    assert_eq!(backups_to_drop(&names, 0, None), names[..2].to_vec(), "zero means one, never all");
+    assert_eq!(backups_to_drop(&[], 5, None), Vec::<String>::new());
+}
+
+#[test]
+fn tiered_retention_keeps_one_backup_per_day_up_to_its_count() {
+    let names: Vec<String> = ["2024-01-01_09-00-00", "2024-01-01_18-00-00", "2024-01-02_09-00-00", "2024-01-03_09-00-00"].iter().map(|s| s.to_string()).collect();
+    let g = GfsConfig { daily: 2, weekly: 0, monthly: 0, yearly: 0 };
+    // keep=1 keeps the newest; two daily slots add the newest of the two latest days.
+    let dropped = backups_to_drop(&names, 1, Some(&g));
+    assert_eq!(dropped, ["2024-01-01_09-00-00", "2024-01-01_18-00-00"]);
+}
+
+#[test]
+fn tiered_retention_ignores_names_without_a_date_for_its_tiers() {
+    let names: Vec<String> = ["junk", "2024-01-01_00-00-00", "2024-01-02_00-00-00"].iter().map(|s| s.to_string()).collect();
+    let g = GfsConfig { daily: 5, weekly: 0, monthly: 0, yearly: 0 };
+    assert_eq!(backups_to_drop(&names, 1, Some(&g)), ["junk"]);
+}
+
+// ---- Rotation on disk ----
+
+fn rotation_dir(tag: &str, names: &[&str]) -> PathBuf {
+    let dir = fmt2_scratch(tag);
+    for n in names {
+        diff_writes::fake_snapshot(&dir, n);
+    }
+    dir
+}
+
+fn rotation_left(dir: &Path) -> Vec<String> {
+    let mut left: Vec<String> = fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    left.sort();
+    left
+}
+
+#[test]
+fn rotation_keeps_the_newest_snapshots_by_name() {
+    let dir = rotation_dir("rot-plain", &["2026-01-01_10-00-00", "2026-01-02_10-00-00", "2026-01-03_10-00-00"]);
+    rotate_backups_at(&dir, 2, None, None);
+    assert_eq!(rotation_left(&dir), ["2026-01-02_10-00-00", "2026-01-03_10-00-00"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn rotation_with_a_keep_of_zero_still_leaves_the_newest_snapshot() {
+    let dir = rotation_dir("rot-zero", &["2026-01-01_10-00-00", "2026-01-02_10-00-00"]);
+    rotate_backups_at(&dir, 0, None, None);
+    assert_eq!(rotation_left(&dir), ["2026-01-02_10-00-00"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_protected_snapshot_survives_tiered_rotation_too() {
+    let names = ["2026-01-01_10-00-00", "2026-01-02_10-00-00", "2026-01-03_10-00-00", "2026-01-04_10-00-00"];
+    let dir = rotation_dir("rot-protect-gfs", &names);
+    let g = GfsConfig { daily: 1, weekly: 0, monthly: 0, yearly: 0 };
+    rotate_backups_at(&dir, 1, Some(g), Some("2026-01-01_10-00-00"));
+    assert_eq!(rotation_left(&dir), ["2026-01-01_10-00-00", "2026-01-04_10-00-00"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_protected_name_that_is_not_on_disk_changes_nothing() {
+    let dir = rotation_dir("rot-protect-none", &["2026-01-01_10-00-00", "2026-01-02_10-00-00"]);
+    rotate_backups_at(&dir, 1, None, Some("2030-01-01_00-00-00"));
+    assert_eq!(rotation_left(&dir), ["2026-01-02_10-00-00"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn rotation_of_a_missing_folder_does_nothing() {
+    let dir = fmt2_scratch("rot-missing");
+    let gone = dir.join("nope");
+    rotate_backups_at(&gone, 1, None, None);
+    assert!(!gone.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_folder_with_a_plain_database_counts_as_a_snapshot() {
+    let dir = fmt2_scratch("rot-plain-db");
+    for n in ["2026-01-01_10-00-00", "2026-01-02_10-00-00"] {
+        fs::create_dir_all(dir.join(n)).unwrap();
+        fs::write(dir.join(n).join("data.db"), b"x").unwrap();
+    }
+    assert!(backup_db_file(&dir.join("2026-01-01_10-00-00")).is_some_and(|p| p.ends_with("data.db")));
+    rotate_backups_at(&dir, 1, None, None);
+    assert_eq!(rotation_left(&dir), ["2026-01-02_10-00-00"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_compressed_snapshot_is_found_before_a_plain_one() {
+    let dir = fmt2_scratch("rot-gz-first");
+    fs::write(dir.join("data.db"), b"x").unwrap();
+    fs::write(dir.join(BACKUP_DB_GZ), b"x").unwrap();
+    assert!(backup_db_file(&dir).is_some_and(|p| p.ends_with(BACKUP_DB_GZ)));
+    let empty = fmt2_scratch("rot-no-db");
+    assert!(backup_db_file(&empty).is_none());
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&empty);
+}
