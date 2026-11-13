@@ -151,6 +151,9 @@ ACTS = {
                 "lv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
                 "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1, clientX: lr.left + 200, clientY: lr.top + 120 }));"
                 "await sleep(200); const ti = $('snip-edit-text-input'); ti.value = 'Hi'; ti.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200);",
+    # The composer with a 12 line prompt typed in: the tool buttons stack into rows beside the tall box.
+    "composer_tall": "const core = await import('./core.js'); core.inputEl.value = Array.from({ length: 12 }, (_, i) => 'Line ' + (i + 1) + ' of a long prompt').join('\\n');"
+                    "core.autoGrow(core.inputEl); await sleep(300);",
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
@@ -159,6 +162,7 @@ GROUPS = {
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "snipcrop", "sniptext"],
+    "@composer": ["main", "composer_tall"],
 }
 
 

@@ -2128,9 +2128,34 @@ def run(browser, tmp):
     # Composer button order: Screenshot, Recording, Text recognition, Pipette, File, Voice input.
     failed += ar_probe('bco01', 'composer: the buttons sit in the agreed order', 'index', '880x600', '', r"""
     await bootReady();
-    const ids = [...document.querySelectorAll('footer.composer > button.composer-img-btn')].map(b => b.id);
+    const ids = [...document.querySelectorAll('footer.composer > .composer-tools > button.composer-img-btn')].map(b => b.id);
     const want = ['snip-btn', 'record-btn', 'ocr-btn', 'picker-btn', 'file-btn', 'voice-btn'];
     if (JSON.stringify(ids.slice(0, want.length)) !== JSON.stringify(want)) errs.push('bco01: composer order is ' + JSON.stringify(ids));
+    """)
+    # A tall composer text box stacks the tool buttons into rows (same order, bottom aligned); a single line puts them in one row again.
+    failed += ar_probe('bco02', 'composer: the tool buttons stack beside a tall text box and return to one row', 'index', '880x600', '', r"""
+    await bootReady();
+    const core = await import('./core.js');
+    const tools = document.querySelector('.composer-tools');
+    const rowsOf = () => new Set([...tools.children].map((b) => Math.round(b.getBoundingClientRect().top))).size;
+    core.inputEl.value = '';
+    core.autoGrow(core.inputEl);
+    await sleep(100);
+    if (rowsOf() !== 1) errs.push('bco02: one line should give one row, got ' + rowsOf());
+    core.inputEl.value = Array.from({ length: 12 }, (_, i) => 'line ' + i).join(String.fromCharCode(10));
+    core.autoGrow(core.inputEl);
+    await sleep(100);
+    if (tools.style.getPropertyValue('--tool-cols') !== '2') errs.push('bco02: tall box should give 2 columns, got ' + tools.style.getPropertyValue('--tool-cols'));
+    if (rowsOf() < 2) errs.push('bco02: tall box should stack the buttons, got ' + rowsOf() + ' row(s)');
+    const ids = [...tools.children].map((b) => b.id).join();
+    if (ids !== 'snip-btn,record-btn,ocr-btn,picker-btn,file-btn,voice-btn') errs.push('bco02: order changed: ' + ids);
+    const lastBottom = Math.round(tools.lastElementChild.getBoundingClientRect().bottom);
+    const inBottom = Math.round(core.inputEl.getBoundingClientRect().bottom);
+    if (Math.abs(inBottom - lastBottom) > 6) errs.push('bco02: tools not bottom aligned: ' + lastBottom + ' vs ' + inBottom);
+    core.inputEl.value = '';
+    core.autoGrow(core.inputEl);
+    await sleep(100);
+    if (rowsOf() !== 1) errs.push('bco02: clearing should give one row again, got ' + rowsOf());
     """)
     # Right-click on the microphone opens the quick voice settings menu.
     failed += ar_probe('bvq01', 'voice input: right-click on the microphone opens the quick settings menu', 'index', '880x600', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voice: true, voiceAutoStop: false } };</script>\n', r"""

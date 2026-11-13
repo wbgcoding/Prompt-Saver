@@ -19,6 +19,7 @@ import { varFixedListRow } from "./editor.js";
 import { openVideoCleanup } from "./recordingTools.js";
 import { i18nHit, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit, flashSettingsRow, openSettingsDirectoryEntry } from "./settingsSearch.js";
 import { EXPERT_NOTICES, noticeRow, noticeActionRow, actionRow } from "./expertNotices.js";
+import { fitComposerTools } from "./composerTools.js";
 
 export let expertResetTimer = null;
 
@@ -232,6 +233,7 @@ export function applyFlags() {
   // Not a setting: a runtime fact from voice_support(). A Windows build
   // with no speech engine at all must hide the button regardless of the flag.
   document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);
+  fitComposerTools(); // a flag flip shows or hides composer tool buttons
   refreshCustomThemes(); // The feature may have just been switched on or off
   // Flags that change .tile-name metrics via CSS have no apply* path, so a cached fit size from
   // before the toggle would linger until fitCache's own eviction. (The tile style refits itself

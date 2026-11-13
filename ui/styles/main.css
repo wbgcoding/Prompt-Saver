@@ -1186,12 +1186,24 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   background: var(--bg);
   flex: 0 0 auto;
 }
+/* The tool buttons sit in a row-major grid whose column count follows the input
+   height (fitComposerTools), so a tall text box gets them stacked in rows instead of
+   one wide row. The block wraps as a whole on a narrow window. Tracks size to the
+   buttons (they carry the icon zoom), the row gap follows that zoom too. */
+.composer-tools {
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: repeat(var(--tool-cols, 6), max-content);
+  gap: calc(6px * var(--icon-zoom, 1)) 10px;
+  align-self: flex-end;
+  flex: 0 0 auto;
+  margin-bottom: calc(2px * var(--icon-zoom, 1)); /* (40px Save height - 36px) / 2 */
+}
 /* Image button: compact frame around the icon, centered on the Save line. */
 .composer-img-btn {
   flex: 0 0 auto;
   width: 36px;
   height: 36px;
-  margin-bottom: 2px; /* (40px Save height - 36px) / 2 */
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);

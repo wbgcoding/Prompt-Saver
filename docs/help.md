@@ -12,6 +12,8 @@ A tile is a saved item on the grid. Double-click an empty grid cell (or type int
 the box at the bottom and press Save) to create one, click any tile to copy it. Three sample tiles (an email with
 placeholders, an image, and a Markdown template) are already there on first launch;
 a button above the grid removes them with one click once they're no longer needed.
+The tool buttons next to the text box (screenshot, recording, text recognition, pipette, file, microphone)
+stack into rows as the box grows, so a long text keeps more width.
 
 ### Settings
 
@@ -1019,6 +1021,8 @@ auf eine leere Rasterzelle (oder Text ins Feld unten tippen und „Speichern“ 
 legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
+Die Werkzeug-Buttons neben dem Textfeld (Screenshot, Aufnahme, Texterkennung, Pipette, Datei, Mikrofon)
+stapeln sich in Zeilen, wenn das Feld wächst, damit langer Text mehr Breite behält.
 
 **Einstellungen**: Das Zahnrad in der oberen Leiste öffnet das Einstellungsfenster
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das

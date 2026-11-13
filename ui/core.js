@@ -10,6 +10,7 @@ import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
 import { errMessage } from "./errors.js";
 import { rowsForScope as rowsForScopeRaw, sectionsForScopes as sectionsForScopesRaw, withShortcut as withShortcutRaw } from "./shortcuts.js";
 import { confirmDialog } from "./dialog.js";
+import { fitComposerTools } from "./composerTools.js";
 import { EXPERT_SELECTS, EXPERT_VALUES, FLAG_GATES, isOptFlag } from "./expertConfig.js";
 import { createColorPop } from "./colorpop.js";
 import EN from "./i18n/en.js";
@@ -632,6 +633,7 @@ export function autoGrow(el) {
   const target = el.scrollHeight + 2;
   el.style.height = `${Math.min(target, INPUT_MAX)}px`;
   el.style.overflowY = target > INPUT_MAX ? "auto" : "hidden";
+  if (el === inputEl) fitComposerTools(); // the composer's tool buttons follow the input height
 }
 
 export const cellKey = (c, r) => `${c},${r}`;

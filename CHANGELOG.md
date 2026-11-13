@@ -25,6 +25,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Composer tool buttons stack.** The tool buttons next to the text box stack into rows when the box grows,
+  so the text gets more width.
 - **Folder tiles show their members.** A folder in the grid now draws its members as small cards in a
   2x2 or 3x3 grid (their colour or picture and, where there is room, their name; "+N" beyond nine)
   with a small count badge in the corner, instead of one big number and a row of dots.
