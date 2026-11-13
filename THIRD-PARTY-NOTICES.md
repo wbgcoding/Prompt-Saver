@@ -109,7 +109,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | password-hash | 0.6.1 | MIT OR Apache-2.0 |
-| pdfium-render | 0.9.4 | MIT OR Apache-2.0 |
+| pdfium-render | 0.9.5 | MIT OR Apache-2.0 |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
 | phc | 0.6.1 | Apache-2.0 OR MIT |
 | phf | 0.13.1 | MIT |
@@ -177,8 +177,8 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 |
 | untrusted | 0.9.0 | ISC |
-| ureq | 3.5.0 | MIT OR Apache-2.0 |
-| ureq-proto | 0.6.5 | MIT OR Apache-2.0 |
+| ureq | 3.5.1 | MIT OR Apache-2.0 |
+| ureq-proto | 0.7.1 | MIT OR Apache-2.0 |
 | url | 2.5.8 | MIT OR Apache-2.0 |
 | urlpattern | 0.6.0 | MIT |
 | utf16string | 0.2.0 | MIT OR Apache-2.0 |
@@ -217,7 +217,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | zeroize | 1.9.1 | Apache-2.0 OR MIT |
 | zerotrie | 0.2.5 | Unicode-3.0 |
 | zerovec | 0.11.9 | Unicode-3.0 |
-| zip | 9.1.3 | MIT |
+| zip | 9.3.0 | MIT |
 | zmij | 1.0.23 | MIT |
 | zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib |
