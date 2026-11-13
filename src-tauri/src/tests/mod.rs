@@ -53,6 +53,7 @@ mod os_integration;
 mod float_resize;
 mod clipboard_image;
 mod format_helpers;
+mod format_helpers_2;
 mod util_helpers;
 
 #[allow(unused_imports)]
