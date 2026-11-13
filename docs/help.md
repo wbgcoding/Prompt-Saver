@@ -676,6 +676,8 @@ list and the grid until the archive chip above the list shows it again. Export,
 backup and search still treat it like any other tile. "Unarchive" removes the
 tag again.
 
+In the prompt editor the "Available tags" row offers every tag the tile does not have yet, most used first: the first 12 show, a "+N more" chip reveals the rest.
+
 ### Copy history
 
 A tab of the library (Library → Copy history): a log of what was copied and when, through the app and, if "Record copies from
@@ -1455,6 +1457,8 @@ Sammelleiste der Bibliothek) gibt ihr diesen Tag, sie verschwindet aus
 Bibliothek und Raster, bis der Archiv-Chip über der Liste sie wieder anzeigt.
 Export, Sicherung und Suche behandeln sie wie jede andere Kachel; „Aus dem Archiv
 holen“ entfernt den Tag wieder.
+
+Im Prompt-Editor bietet die Zeile „Verfügbare Tags“ alle Tags an, die die Kachel noch nicht hat, die meistgenutzten zuerst: die ersten 12 erscheinen, ein Chip „+N weitere“ zeigt den Rest.
 
 **Kopierverlauf** (Bibliothek → Reiter Kopierverlauf): Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen.

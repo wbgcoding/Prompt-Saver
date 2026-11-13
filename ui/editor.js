@@ -4,7 +4,7 @@ import { DYN_VARS, dynToken, extractVars, hasEmptyVarToken, readFixedVars, resol
 import { ATTACH_PREVIEW_KB } from "./expertConfig.js";
 import { EXPERT_DROPDOWNS, renderExpert } from "./expertMenu.js";
 import { normSize } from "./settingsPanel.js";
-import { closeTagSuggest, renderTagChips } from "./tags.js";
+import { closeTagSuggest, renderTagChips, resetTagQuickAdd } from "./tags.js";
 import { bindHotkeyField, HOTKEY_ERRORS, hotkeyMessage, promptHotkeysOn, renderPromptHotkey, setPromptHotkey, showHotkeyError } from "./hotkeys.js";
 import { confirmDialog } from "./dialog.js";
 import { openMiniMenu, renderGrid } from "./views.js";
@@ -401,6 +401,7 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   const tagInput = $("modal-tag-input");
   if (tagInput) tagInput.value = "";
   closeTagSuggest();
+  resetTagQuickAdd();
   renderTagChips();
   renderPromptHotkey();
   // Show the dialog before wiring the preview so the <video>/<img> decode and

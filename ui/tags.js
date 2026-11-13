@@ -95,8 +95,12 @@ export function renderTagChips() {
   renderTagQuickAdd();
 }
 
-// The 3 most-used tags across the library, minus ones already on this
-// prompt: click to add without typing.
+// Every tag not yet on this prompt, most used first (ties by name): click to add
+// without typing. The first 12 show; a "+N more" chip reveals the rest for the
+// current editor session.
+const QUICK_ADD_SHOWN = 12;
+let quickAddExpanded = false;
+export function resetTagQuickAdd() { quickAddExpanded = false; }
 export function renderTagQuickAdd() {
   const box = $("modal-tag-quickadd");
   if (!box || !modalState) return;
@@ -104,20 +108,29 @@ export function renderTagQuickAdd() {
   if (!tagsOn()) { box.classList.add("hidden"); return; }
   const counts = tagUsage();
   const assigned = new Set((modalState.tags || []).map(tagKey));
-  const top = allTags()
+  const open = allTags()
     .filter((n) => !assigned.has(tagKey(n)))
-    .sort((a, b) => (counts.get(tagKey(b)) || 0) - (counts.get(tagKey(a)) || 0))
-    .slice(0, 3);
-  box.classList.toggle("hidden", !top.length);
-  if (!top.length) return;
+    .sort((a, b) => (counts.get(tagKey(b)) || 0) - (counts.get(tagKey(a)) || 0) || a.localeCompare(b, LANG));
+  box.classList.toggle("hidden", !open.length);
+  box.classList.toggle("expanded", quickAddExpanded);
+  if (!open.length) return;
   const label = document.createElement("span");
   label.className = "tag-quickadd-label";
   label.textContent = t("tagQuickAddLabel");
   box.appendChild(label);
-  for (const name of top) {
+  const shown = quickAddExpanded ? open : open.slice(0, QUICK_ADD_SHOWN);
+  for (const name of shown) {
     const chip = tagChipEl(name, "button");
     chip.addEventListener("click", () => { addTagToModal(name); renderTagChips(); });
     box.appendChild(chip);
+  }
+  if (shown.length < open.length) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "tag-chip tag-quickadd-more";
+    more.textContent = t("tagQuickAddMore").replace("{n}", String(open.length - shown.length));
+    more.addEventListener("click", () => { quickAddExpanded = true; renderTagQuickAdd(); });
+    box.appendChild(more);
   }
 }
 

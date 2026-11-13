@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -53,6 +53,13 @@ for (let i = 0; i < 30; i++) c.fillText('Sample text line ' + i + ' 0123456789',
 window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'x.png' });
 await sleep(800);
 """
+EDITOR_TAGS = (
+    "const core = await import('./core.js'); const extra = Array.from({ length: 14 }, (_, i) => 'Tag ' + String.fromCharCode(65 + i) + ' sample');"
+    "core.prompts[core.prompts.length - 1].tags = [...(core.prompts[core.prompts.length - 1].tags || []), ...extra];"
+    + TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
+    "$('modal-advanced-head').click(); await sleep(400); for (let e = $('modal-tag-quickadd').parentElement; e; e = e.parentElement) e.scrollTop = 1e6; await sleep(200);"
+)
+
 ACTS = {
     "main": "",
     # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
@@ -85,6 +92,10 @@ ACTS = {
     "editor_long": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
                    "const ta = $('modal-text'); ta.value = Array.from({ length: 60 }, (_, i) => 'Line ' + (i + 1) + ' of a long prompt').join(String.fromCharCode(10));"
                    "ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(400);",
+    # The prompt editor over a library with many unassigned tags: 12 chips plus the "+N more" chip,
+    # and the same editor after the chip expanded the rest.
+    "editor_tags": EDITOR_TAGS + "await sleep(200);",
+    "editor_tags_all": EDITOR_TAGS + "document.querySelector('.tag-quickadd-more')?.click(); await sleep(300);",
     "editor_adv": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
                   "$('modal-advanced-head').click(); await sleep(400);",
     "editor_rotate": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
@@ -124,7 +135,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "library_pins", "history"],
-    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "editor_rotate", "folder", "voicepop"],
+    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "voicepop"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "snipcrop", "sniptext"],
 }

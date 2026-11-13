@@ -25,6 +25,9 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Available tags in the editor.** The quick-add row in the prompt editor now lists every tag the
+  tile does not have yet (most used first, 12 at a time with a "+N more" chip) instead of only the
+  three most used.
 - **Rotation off on a new installation.** A fresh install starts with rotation
   switched off (Expert menu, Rotation); existing installations keep their
   setting, and the sample library no longer holds a rotating tile.
