@@ -354,7 +354,7 @@ pub(super) fn caps_elevation_error(raw: &str) -> String {
 
 // The PowerShell query's JSON -> the UI's list; shared by the unelevated and elevated
 // queries so both are localized the same way.
-fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
+pub(super) fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
     ensure_winrt();
     let raw = ocr_parse_capabilities_json(kind.prefix(), output)?;
     let mut out = Vec::with_capacity(raw.len());
@@ -432,7 +432,7 @@ pub(crate) fn run_with_deadline(mut cmd: std::process::Command, deadline: std::t
 // PowerShell single-quoted-string escaping (doubles an embedded quote). Applied
 // unconditionally to the validated capability name and our temp paths, which may contain
 // non-ASCII profile-path characters.
-fn ps_single_quote(s: &str) -> String {
+pub(super) fn ps_single_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 
