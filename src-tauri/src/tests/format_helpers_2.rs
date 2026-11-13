@@ -1,5 +1,7 @@
-// Pure helpers of the Markdown sync files and the sync lock text.
+// Pure helpers: Markdown sync files and lock text, the export filter graph, command-line
+// argument checks, backup dates and retention settings.
 use super::*;
+use crate::cli::{reject_extra, split_tags, take_flag, take_flag_value, usage_err, valid_id, valid_name, valid_path_arg, valid_text, wants_help, Args, VALUE_FLAGS};
 use std::time::Duration;
 
 fn fmt2_scratch(tag: &str) -> PathBuf {
@@ -757,4 +759,298 @@ fn a_named_media_file_that_is_a_folder_or_missing_is_not_allowed() {
         assert!(r.is_err(), "{media:?} must not be readable by a graph");
     }
     let _ = fs::remove_dir_all(&dir);
+}
+
+// ---- Command-line argument checks ----
+
+fn cli_args(items: &[&str]) -> Args {
+    let owned: Vec<String> = items.iter().map(|s| s.to_string()).collect();
+    Args::new(&owned)
+}
+
+const CLI_HINT: &str = "\nRun \"prompt-saver --help\" for the full command list.";
+
+#[test]
+fn a_usage_error_names_the_help_command() {
+    assert_eq!(usage_err("bad thing"), format!("bad thing{CLI_HINT}"));
+    assert_eq!(usage_err(String::from("x")), format!("x{CLI_HINT}"));
+}
+
+#[test]
+fn an_id_is_ascii_letters_digits_dash_and_underscore() {
+    for id in ["a", "A-b_9", "0", "_", "-"] {
+        assert!(valid_id(id), "{id:?}");
+    }
+    assert!(valid_id(&"a".repeat(128)));
+}
+
+#[test]
+fn an_id_that_is_empty_long_or_odd_is_refused() {
+    assert!(!valid_id(""));
+    assert!(!valid_id(&"a".repeat(129)));
+    for id in ["a b", "a/b", "a\\b", "a.b", "caf\u{e9}", "a\0", "a\n", "id;rm", "--x=1", "\u{1f600}"] {
+        assert!(!valid_id(id), "{id:?}");
+    }
+}
+
+#[test]
+fn a_name_may_not_be_empty_or_longer_than_five_hundred_characters() {
+    assert_eq!(valid_name(""), Err("name is empty".to_string()));
+    assert_eq!(valid_name("x"), Ok("x".to_string()));
+    assert_eq!(valid_name("  "), Ok("  ".to_string()), "blanks are not trimmed here");
+    assert_eq!(valid_name(&"a".repeat(500)), Ok("a".repeat(500)));
+    assert_eq!(valid_name(&"a".repeat(501)), Err("name longer than 500 characters".to_string()));
+}
+
+#[test]
+fn a_name_length_counts_characters_not_bytes() {
+    let ok = "\u{e9}".repeat(500);
+    assert_eq!(valid_name(&ok), Ok(ok.clone()));
+    assert!(valid_name(&"\u{1f600}".repeat(501)).is_err());
+}
+
+#[test]
+fn a_text_may_be_empty_but_not_longer_than_the_limit() {
+    assert_eq!(valid_text(""), Ok(String::new()));
+    assert_eq!(valid_text("line\r\nline"), Ok("line\r\nline".to_string()));
+    assert_eq!(valid_text(&"a".repeat(500_000)).map(|s| s.len()), Ok(500_000));
+    assert_eq!(valid_text(&"a".repeat(500_001)), Err("text longer than 500000 characters".to_string()));
+}
+
+#[test]
+fn a_text_length_counts_characters_not_bytes() {
+    assert!(valid_text(&"\u{e9}".repeat(500_000)).is_ok());
+    assert!(valid_text(&"\u{e9}".repeat(500_001)).is_err());
+}
+
+#[test]
+fn a_path_argument_is_refused_when_empty_nul_or_too_long() {
+    let why = "path is empty, contains a NUL byte, or is too long".to_string();
+    assert_eq!(valid_path_arg(""), Err(why.clone()));
+    assert_eq!(valid_path_arg("a\0b"), Err(why.clone()));
+    assert_eq!(valid_path_arg("\0"), Err(why.clone()));
+    assert_eq!(valid_path_arg(&"a".repeat(32_001)), Err(why.clone()));
+    assert_eq!(valid_path_arg(&"a".repeat(32_000)).map(|s| s.len()), Ok(32_000));
+    assert_eq!(valid_path_arg("C:\\dir\\file name.txt"), Ok("C:\\dir\\file name.txt".to_string()));
+}
+
+#[test]
+fn a_path_argument_length_counts_bytes() {
+    // 16001 two-byte characters are 32002 bytes.
+    assert!(valid_path_arg(&"\u{e9}".repeat(16_001)).is_err());
+    assert!(valid_path_arg(&"\u{e9}".repeat(16_000)).is_ok());
+}
+
+#[test]
+fn a_tag_list_is_split_at_commas_trimmed_and_stripped_of_empties() {
+    assert_eq!(split_tags("a, b ,,c"), ["a", "b", "c"]);
+    assert_eq!(split_tags(""), Vec::<String>::new());
+    assert_eq!(split_tags(" , ,"), Vec::<String>::new());
+    assert_eq!(split_tags("one"), ["one"]);
+    assert_eq!(split_tags("a b, c"), ["a b", "c"]);
+    assert_eq!(split_tags("a;b"), ["a;b"]);
+    assert_eq!(split_tags("\u{e9}, \u{fc}\t,\n\u{4e2d}"), ["\u{e9}", "\u{fc}", "\u{4e2d}"]);
+}
+
+#[test]
+fn a_tag_list_keeps_duplicates() {
+    assert_eq!(split_tags("a,a, a"), ["a", "a", "a"]);
+}
+
+#[test]
+fn the_cursor_hands_out_items_in_order() {
+    let mut a = cli_args(&["x", "y"]);
+    assert_eq!(a.peek(), Some("x"));
+    assert_eq!(a.next().as_deref(), Some("x"));
+    assert_eq!(a.next().as_deref(), Some("y"));
+    assert_eq!(a.next(), None);
+    assert_eq!(a.next(), None);
+    assert_eq!(a.peek(), None);
+    assert_eq!(a.pos, 2, "reading past the end does not move the cursor");
+}
+
+#[test]
+fn an_empty_cursor_has_nothing() {
+    let mut a = cli_args(&[]);
+    assert_eq!(a.peek(), None);
+    assert_eq!(a.next(), None);
+    assert_eq!(a.next_positional(), None);
+    assert_eq!(a.find_flag("--json"), None);
+}
+
+#[test]
+fn a_positional_is_any_item_that_does_not_start_with_two_dashes() {
+    let mut a = cli_args(&["x", "-y", "-", ""]);
+    assert_eq!(a.next_positional().as_deref(), Some("x"));
+    assert_eq!(a.next_positional().as_deref(), Some("-y"));
+    assert_eq!(a.next_positional().as_deref(), Some("-"));
+    assert_eq!(a.next_positional().as_deref(), Some(""));
+    assert_eq!(a.next_positional(), None);
+}
+
+#[test]
+fn a_flag_is_not_taken_as_a_positional_and_stays_in_place() {
+    let mut a = cli_args(&["--json", "x"]);
+    assert_eq!(a.next_positional(), None);
+    assert_eq!(a.pos, 0);
+    assert_eq!(a.next_positional(), None);
+    assert_eq!(a.peek(), Some("--json"));
+}
+
+#[test]
+fn a_bare_double_dash_makes_everything_after_it_a_value() {
+    let mut a = cli_args(&["--", "--json", "--"]);
+    assert_eq!(a.next_positional().as_deref(), Some("--json"));
+    assert!(a.end_of_flags);
+    assert_eq!(a.next_positional().as_deref(), Some("--"), "a second marker is just a value");
+    assert_eq!(a.next_positional(), None);
+}
+
+#[test]
+fn a_double_dash_with_nothing_after_it_gives_no_value() {
+    let mut a = cli_args(&["--"]);
+    assert_eq!(a.next_positional(), None);
+    assert!(a.end_of_flags);
+    assert_eq!(a.pos, 1);
+}
+
+#[test]
+fn a_flag_is_found_at_its_own_index() {
+    assert_eq!(cli_args(&["--json", "x"]).find_flag("--json"), Some(0));
+    assert_eq!(cli_args(&["--favorite", "--json"]).find_flag("--json"), Some(1));
+    assert_eq!(cli_args(&["x", "--json"]).find_flag("--json"), Some(1));
+    assert_eq!(cli_args(&["x"]).find_flag("--json"), None);
+}
+
+#[test]
+fn a_flag_search_starts_at_the_cursor() {
+    let mut a = cli_args(&["--json", "get", "--json"]);
+    a.next();
+    assert_eq!(a.find_flag("--json"), Some(2));
+}
+
+#[test]
+fn a_flag_search_steps_over_the_values_of_value_flags() {
+    assert_eq!(cli_args(&["--name", "--json"]).find_flag("--json"), None);
+    assert_eq!(cli_args(&["--text", "--name", "--name", "v"]).find_flag("--name"), Some(2));
+    assert_eq!(cli_args(&["--tags", "a", "--json"]).find_flag("--json"), Some(2));
+    assert_eq!(cli_args(&["--name"]).find_flag("--name"), Some(0));
+    assert_eq!(cli_args(&["--name"]).find_flag("--json"), None);
+}
+
+#[test]
+fn a_flag_search_stops_at_a_bare_double_dash() {
+    assert_eq!(cli_args(&["a", "--", "--json"]).find_flag("--json"), None);
+    let mut a = cli_args(&["--", "--json"]);
+    a.next_positional();
+    assert_eq!(a.find_flag("--json"), None, "after the marker nothing is a flag");
+}
+
+#[test]
+fn every_value_flag_is_skipped_with_its_value() {
+    for f in VALUE_FLAGS {
+        assert_eq!(cli_args(&[*f, "--json", "--json"]).find_flag("--json"), Some(2), "{f}");
+    }
+}
+
+#[test]
+fn help_is_wanted_only_when_a_lone_help_flag_is_all_that_is_left() {
+    assert!(wants_help(&cli_args(&["--help"])));
+    assert!(wants_help(&cli_args(&["-h"])));
+    assert!(!wants_help(&cli_args(&["--help", "x"])));
+    assert!(!wants_help(&cli_args(&["x", "--help"])));
+    assert!(!wants_help(&cli_args(&["--HELP"])));
+    assert!(!wants_help(&cli_args(&[])));
+    assert!(!wants_help(&cli_args(&["-h", "-h"])));
+}
+
+#[test]
+fn help_is_judged_from_the_cursor_on() {
+    let mut a = cli_args(&["get", "--help"]);
+    assert!(!wants_help(&a));
+    a.next();
+    assert!(wants_help(&a));
+    a.next();
+    assert!(!wants_help(&a));
+}
+
+#[test]
+fn taking_a_flag_removes_it_and_what_was_consumed() {
+    let mut a = cli_args(&["head", "x", "--json", "y"]);
+    a.next();
+    assert!(take_flag(&mut a, "--json"));
+    assert_eq!(a.items, ["x", "y"]);
+    assert_eq!(a.pos, 0);
+    assert!(!take_flag(&mut a, "--json"));
+    assert_eq!(a.items, ["x", "y"]);
+}
+
+#[test]
+fn taking_a_flag_that_is_not_there_changes_nothing() {
+    let mut a = cli_args(&["a", "b"]);
+    assert!(!take_flag(&mut a, "--json"));
+    assert_eq!(a.items, ["a", "b"]);
+}
+
+#[test]
+fn taking_a_flag_removes_only_the_first_occurrence() {
+    let mut a = cli_args(&["--json", "--json"]);
+    assert!(take_flag(&mut a, "--json"));
+    assert_eq!(a.items, ["--json"]);
+}
+
+#[test]
+fn taking_a_flag_value_removes_the_pair() {
+    let mut a = cli_args(&["--tag", "t", "x"]);
+    assert_eq!(take_flag_value(&mut a, "--tag"), Ok(Some("t".to_string())));
+    assert_eq!(a.items, ["x"]);
+    let mut a = cli_args(&["x", "--tag", "t"]);
+    assert_eq!(take_flag_value(&mut a, "--tag"), Ok(Some("t".to_string())));
+    assert_eq!(a.items, ["x"]);
+}
+
+#[test]
+fn a_flag_value_may_itself_look_like_a_flag() {
+    let mut a = cli_args(&["--tag", "--json", "x"]);
+    assert_eq!(take_flag_value(&mut a, "--tag"), Ok(Some("--json".to_string())));
+    assert_eq!(a.items, ["x"]);
+    assert!(!take_flag(&mut cli_args(&["--text", "--json"]), "--json"));
+}
+
+#[test]
+fn a_flag_without_its_value_is_a_usage_error() {
+    let mut a = cli_args(&["x", "--tag"]);
+    assert_eq!(take_flag_value(&mut a, "--tag"), Err(format!("--tag needs a value{CLI_HINT}")));
+}
+
+#[test]
+fn a_missing_flag_value_is_none_and_a_flag_after_the_marker_is_ignored() {
+    let mut a = cli_args(&["x"]);
+    assert_eq!(take_flag_value(&mut a, "--tag"), Ok(None));
+    let mut a = cli_args(&["--", "--tag", "t"]);
+    assert_eq!(take_flag_value(&mut a, "--tag"), Ok(None));
+    assert_eq!(a.items, ["--", "--tag", "t"]);
+}
+
+#[test]
+fn leftover_arguments_are_rejected_by_name() {
+    assert_eq!(reject_extra(&cli_args(&[])), Ok(()));
+    assert_eq!(reject_extra(&cli_args(&["a"])), Err(format!("unexpected argument \"a\"{CLI_HINT}")));
+    assert_eq!(reject_extra(&cli_args(&["--json"])), Err(format!("unexpected argument \"--json\"{CLI_HINT}")));
+    assert_eq!(reject_extra(&cli_args(&["--", "x"])), Err(format!("unexpected argument \"--\"{CLI_HINT}")));
+}
+
+#[test]
+fn a_lone_trailing_double_dash_is_not_an_extra_argument() {
+    assert_eq!(reject_extra(&cli_args(&["--"])), Ok(()));
+    let mut a = cli_args(&["x", "--"]);
+    a.next();
+    assert_eq!(reject_extra(&a), Ok(()));
+}
+
+#[test]
+fn after_the_marker_was_read_any_leftover_is_extra() {
+    let mut a = cli_args(&["--", "x", "y"]);
+    assert_eq!(a.next_positional().as_deref(), Some("x"));
+    assert_eq!(reject_extra(&a), Err(format!("unexpected argument \"y\"{CLI_HINT}")));
 }
