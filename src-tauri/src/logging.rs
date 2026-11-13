@@ -52,7 +52,7 @@ const CRASH_LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
 // A marker without a readable process id gets this long to be filled in by its creator.
 const CRASH_LOCK_UNPARSABLE_AFTER: Duration = Duration::from_secs(2);
 
-fn process_is_running(pid: u32) -> bool {
+pub(crate) fn process_is_running(pid: u32) -> bool {
     use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
     use windows::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
     // GetExitCodeProcess reports this while the process still runs.
@@ -73,7 +73,7 @@ fn process_is_running(pid: u32) -> bool {
 }
 
 // True when the marker exists and nothing alive owns it any more.
-fn crash_lock_is_stale(lock_path: &Path) -> bool {
+pub(crate) fn crash_lock_is_stale(lock_path: &Path) -> bool {
     let Ok(meta) = fs::metadata(lock_path) else { return false };
     let age = meta.modified().ok().and_then(|m| m.elapsed().ok()).unwrap_or(Duration::ZERO);
     if age > CRASH_LOCK_STALE_AFTER {
