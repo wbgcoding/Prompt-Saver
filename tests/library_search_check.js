@@ -212,6 +212,7 @@ async function main() {
   sb.OPT.ocrIndex = true;
   check("a picture hit scores ninety", score(pic, "needle", fz, hits("needle", [pic.id])), { score: 90, fuzzy: false, entryIndex: 0, fromImage: true });
   check("a picture hit also counts while the typo tier is off", score(pic, "needle", {}, hits("needle", [pic.id])), { score: 90, fuzzy: false, entryIndex: 0, fromImage: true });
+  check("a picture hit counts for a query without word tokens", score(pic, "!?", fz, hits("!?", [pic.id])), { score: 90, fuzzy: false, entryIndex: 0, fromImage: true });
   check("a picture hit for another query does not count", score(pic, "needle", fz, hits("needl", [pic.id])), none);
   check("a picture hit for another prompt does not count", score(pic, "needle", fz, hits("needle", [pic.id + 1000])), none);
   check("the query is compared trimmed and folded", score(pic, "  NeEdLe ", fz, hits("needle", [pic.id])).score, 90);

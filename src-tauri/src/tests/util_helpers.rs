@@ -112,7 +112,7 @@ fn scrub_log_line_replaces_the_temp_folder_and_cuts_unknown_paths() {
 
 #[test]
 fn scrub_log_line_names_the_user_profile_with_a_placeholder() {
-    let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else { return };
+    let home = PathBuf::from(std::env::var_os("USERPROFILE").expect("USERPROFILE is set on Windows"));
     let line = format!("{}\\Documents\\a.txt broke", home.display());
     let out = scrub_log_line(&line);
     assert!(!out.contains(&*home.to_string_lossy()), "{out}");
