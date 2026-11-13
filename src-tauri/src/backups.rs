@@ -970,7 +970,7 @@ pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Pa
     let result: rusqlite::Result<()> = (|| {
         let tx = conn.transaction()?;
         if scope == "data" {
-            for table in ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox"] {
+            for table in ["prompts", "trash", "prompt_versions", "copy_log", "usage_daily", "clip_inbox"] {
                 // A snapshot's table need not have today's columns: one written before a column was added
                 // (prompt_versions and `variants`) has one fewer. `SELECT *` makes the column count part of
                 // the deal and would fail the restore outright, taking every other table in the transaction

@@ -580,19 +580,42 @@ pub(crate) fn trim_copy_history_now(app: AppHandle, state: State<'_, Db>) -> (u3
     ((before.0 - after.0).max(0) as u32, (before.1 - after.1).max(0) as u64)
 }
 
+// Counts one copy into the per-day table behind the statistics periods. Quiet like the journal
+// row: another machine owning the folder or a missing connection skips it without an error.
+fn record_usage_daily(app: &AppHandle, id: &str) {
+    if data_dir_write_blocked_quiet() {
+        return;
+    }
+    let Some(conn) = db_conn_write(app) else { return };
+    if let Err(e) = db_usage_daily_record(&conn, id, now_secs(), local_utc_offset_secs()) {
+        append_crash_log(&format!("usage_daily write failed: {e}"));
+    }
+}
+
 // Record a copy in the history + usage stats (called by the UI after any copy).
 #[tauri::command]
 pub(crate) async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
+    let mut daily_id: Option<String> = None;
     let (entry, cap, cutoff, dedup) = {
         let mut store = lock(&state);
+        if !store.prompts.iter().any(|p| p.id == id) {
+            return Ok(());
+        }
+        // The per-day counts of the statistics periods depend on the usage statistics switch
+        // only, not on the copy history, so they are written before that toggle can end the call.
+        let count_daily = tool_usage_enabled(&store.settings);
         // Respect the privacy toggle (expert menu): off = don't track.
         if store.settings.ui_flags.get("copyHistory") == Some(&false) {
+            drop(store);
+            if count_daily {
+                record_usage_daily(&app, &id);
+            }
             return Ok(());
         }
         // Expert opt: skip logging a copy identical to the previous one.
         let dedup = store.settings.ui_flags.get("dedupCopyLog") == Some(&true);
-        if !store.prompts.iter().any(|p| p.id == id) {
-            return Ok(());
+        if count_daily {
+            daily_id = Some(id.clone());
         }
         let usage = {
             let slot = store.settings.usage.entry(id.clone()).or_insert(0);
@@ -622,6 +645,9 @@ pub(crate) async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String
         );
         (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
+    if let Some(id) = daily_id {
+        record_usage_daily(&app, &id);
+    }
     // The history itself lives in its own table: appended outside the lock so a
     // huge log never blocks other DB work and never bloats the settings blob.
     // No connection (a data-folder switch or a blocked folder) means no journal row either: said
@@ -684,6 +710,14 @@ pub(crate) fn clear_history_and_save(
     (cleared, saved)
 }
 
+// The history rows and the per-day counts go together or not at all.
+pub(crate) fn db_clear_copy_tables(conn: &Connection) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("DELETE FROM copy_log", [])?;
+    tx.execute("DELETE FROM usage_daily", [])?;
+    tx.commit()
+}
+
 // Wipe copy history + usage counters (privacy / journal "clear").
 #[tauri::command]
 pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
@@ -693,7 +727,7 @@ pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> 
         let mut store = lock(&state);
         clear_history_and_save(
             || match db_conn_write(&app) {
-                Some(conn) => conn.execute("DELETE FROM copy_log", []).is_ok(),
+                Some(conn) => db_clear_copy_tables(&conn).is_ok(),
                 None => false,
             },
             |settings| save_settings(&app, settings),
@@ -717,6 +751,22 @@ pub(crate) async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> 
 pub(crate) struct CopyLogRow {
     pub(crate) ts: u64,
     pub(crate) id: String,
+}
+
+// One per-day count as the frontend keeps it between a clear and its Undo.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct UsageDailyRow {
+    pub(crate) day: u64,
+    pub(crate) id: String,
+    pub(crate) n: u64,
+}
+
+// Snapshot of the per-day counts for the Undo of "clear copy history".
+#[tauri::command]
+pub(crate) async fn usage_daily_snapshot(app: AppHandle) -> Vec<UsageDailyRow> {
+    db_conn(&app)
+        .map(|c| db_usage_daily_rows(&c, 0).into_iter().map(|(day, id, n)| UsageDailyRow { day, id, n: n as u64 }).collect())
+        .unwrap_or_default()
 }
 
 // The insert loop behind restore_copy_history, kept apart from the command so it
@@ -753,6 +803,7 @@ pub(crate) async fn restore_copy_history(
     entries: Vec<CopyLogRow>,
     usage: HashMap<String, u32>,
     last_used: HashMap<String, u64>,
+    daily: Option<Vec<UsageDailyRow>>,
 ) -> Result<(), String> {
     let Some(conn) = db_conn_write(&app) else {
         return Err("history-failed".into());
@@ -760,6 +811,14 @@ pub(crate) async fn restore_copy_history(
     if db_restore_copy_log(&conn, &entries).is_err() {
         append_crash_log("restore_copy_history: the rows could not be reinserted");
         return Err("history-failed".into());
+    }
+    // The per-day counts of the statistics periods come back with the history; counts made
+    // since the clear stay and the snapshot adds to them.
+    if let Some(daily) = daily {
+        let rows: Vec<(u64, String, usize)> = daily.into_iter().map(|r| (r.day, r.id, r.n as usize)).collect();
+        if db_restore_usage_daily(&conn, &rows).is_err() {
+            append_crash_log("restore_copy_history: the per-day counts could not be reinserted");
+        }
     }
     let saved = {
         let mut store = lock(&state);

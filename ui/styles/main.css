@@ -3576,7 +3576,11 @@ select.modal-input { padding-right: 30px; }
    every section sits off the underline by the same amount instead of touching it. */
 .stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; }
 .stat-bars { display: flex; flex-direction: column; gap: 6px; }
-.stat-daily-chart { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 4px; margin-bottom: 4px; }
+.stat-daily-chart { display: grid; grid-template-columns: repeat(var(--stat-chart-cols, 14), minmax(0, 1fr)); gap: 4px; margin-bottom: 4px; }
+/* 52 weeks or many months: tighter gap, thin bars, the date label may spill over its column. */
+.stat-daily-chart.dense { gap: 1px; }
+.stat-daily-chart.dense .stat-daily-bar { width: min(100%, 8px); border-radius: 2px 2px 0 0; }
+.stat-daily-chart.dense .stat-daily-day { white-space: nowrap; }
 .stat-daily-col { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
 .stat-daily-val { font-size: 10px; line-height: 12px; height: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stat-daily-slot { width: 100%; height: 74px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
@@ -3775,6 +3779,11 @@ input[type="password"]::-ms-clear { display: none; }
 .stats-export-row { align-items: center; }
 #stats-panel .stats-export-row .ghost-btn { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
 .stats-export-row .batch-view-select { padding: 4px 28px 4px 10px; font-size: 12px; }
+/* Period pills above the export row; they wrap on a narrow window. */
+.stats-period-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.stats-period-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.stats-period-row .expert-chip { font-family: inherit; padding: 4px 11px; }
+.stats-period-since, .stats-tools-note { margin: 0; color: var(--muted); font-size: 12px; }
 /* Statistics off: the hint and its jump button, left aligned. */
 #stats-panel > .stats-panel-body > #stats-off-open { align-self: flex-start; }
 /* "Most used" heading with the list length choice at its right end. */

@@ -987,16 +987,22 @@ menu.
 
 ### Usage statistics
 
-A small window opened from Settings → Usage statistics. On top, eight figures:
-prompts, favorites, how many were used at least once, archived ones, and copies
-today, in the last 7 and 30 days and of all time. Below them a chart of the
-copies per day over the last 14 days (hover a day for its date), the most used
+A small window opened from Settings → Usage statistics. At the top a period
+choice: the last 7 days, the last 30 days, the last 12 months or all time. It
+sets the most used and never used lists, the chart and the "Copies in this
+period" figure. Then the figures: prompts, favorites, how many were used at
+least once, archived ones, and copies today, in the last 7 and 30 days and of
+all time. Below them a chart of the copies per day (7 and 30 days), per week
+(12 months) or per month (all time); hover a bar for its date. Then the most used
 prompts by name (a list of 5, 10 or 20, your choice) and the prompts that were
 never used, which you can click to find them in the library, and the tools you
 used most (screenshots, text recognition, recordings and more; hover one for its
-last use). The "Show statistics" switch
-in the expert menu (Data & maintenance) turns the display on; the numbers themselves are collected by the copy
-history. Everything stays on this computer. The export button saves the full
+last use; these always count over all time). The "Show statistics" switch
+in the expert menu (Data & maintenance) turns the display and the counting on: while it is on, every copy is
+counted per day and kept for 400 days, even with the copy history switched off,
+and clearing the copy history clears these counts too. A hint above the figures
+tells you when the per-day counts begin later than the period you picked.
+Everything stays on this computer. The export button saves the full
 numbers, including daily counts and tool use, as CSV, TXT or JSON.
 
 ### Data maintenance
@@ -1737,16 +1743,21 @@ seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster. Oben acht Zahlen:
+**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster. Ganz oben die Wahl
+des Zeitraums: letzte 7 Tage, letzte 30 Tage, letzte 12 Monate oder gesamter Verlauf. Sie bestimmt die
+Listen der meist- und nie genutzten Prompts, das Diagramm und die Zahl „Kopien im Zeitraum“. Dann die Zahlen:
 Prompts, Favoriten, wie viele schon genutzt wurden, archivierte, und Kopien
 heute, in den letzten 7 und 30 Tagen und insgesamt. Darunter ein Diagramm der
-Kopien pro Tag der letzten 14 Tage (beim Überfahren erscheint das Datum), die meistgenutzten
+Kopien pro Tag (7 und 30 Tage), pro Woche (12 Monate) oder pro Monat (gesamter Verlauf); beim Überfahren
+erscheint das Datum. Dann die meistgenutzten
 Prompts mit Namen (eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und die nie
 genutzten Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden, und
 die meistgenutzten Werkzeuge (Screenshots, Texterkennung, Aufnahmen und mehr; beim
-Überfahren erscheint die letzte Nutzung). Der
-Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet die Anzeige ein; die Zahlen selbst
-sammelt der Kopierverlauf. Alles bleibt auf diesem PC. Der Export-Button
+Überfahren erscheint die letzte Nutzung; sie zählen immer über den gesamten Verlauf). Der
+Schalter „Statistik anzeigen“ im Expertenmenü (Daten & Wartung) schaltet Anzeige und Zählung ein: Solange er an ist,
+wird jede Kopie pro Tag gezählt und 400 Tage aufbewahrt, auch bei ausgeschaltetem Kopierverlauf; das Leeren des
+Kopierverlaufs leert diese Zählung mit. Ein Hinweis über den Zahlen zeigt, wenn die Tageszählung später beginnt
+als der gewählte Zeitraum. Alles bleibt auf diesem PC. Der Export-Button
 speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
 TXT oder JSON.
 

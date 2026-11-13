@@ -134,6 +134,9 @@ ACTS = {
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
     "voicepop": "$('voice-btn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(400);",
     "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
+    # The statistics dialog on each period pill (the default, 30 days, is "stats").
+    **{f"stats_{k}": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);"
+                  f"document.querySelector('#stats-panel [data-period=\"{k}\"]').click(); await sleep(600);" for k in ("7", "365", "all")},
     "stats_off": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);"
                  "const sw = () => document.querySelector('#settings-expert [data-setting-row=usageStats] input');"
                  "for (const tab of document.querySelectorAll('#expert-tabs-bar .expert-tab')) { if (sw()) break; tab.click(); await sleep(150); }"
@@ -157,7 +160,7 @@ ACTS = {
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
-    "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
+    "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_7", "stats_365", "stats_all", "stats_off", "backup"],
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],

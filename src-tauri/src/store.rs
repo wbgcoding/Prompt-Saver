@@ -647,6 +647,7 @@ pub(crate) fn db_conn_init_schema(conn: &Connection) -> bool {
              CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
              CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
              CREATE INDEX IF NOT EXISTS idx_copy_log_id ON copy_log(id);
+             CREATE TABLE IF NOT EXISTS usage_daily(day INTEGER NOT NULL, id TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(day, id));
              CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
              CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
@@ -1127,6 +1128,99 @@ pub(crate) fn db_daily_copies(conn: &Connection, days: u32, offset_secs: i64) ->
             DayCount { ts: bucket * DAY, count: counts.get(&bucket).copied().unwrap_or(0) }
         })
         .collect()
+}
+
+// ---- Per-day copy counts for the statistics periods ----
+// Counted only while the usage statistics are on, independent of the copy history (its own
+// cap and retention do not apply); rows older than USAGE_DAILY_KEEP_DAYS are dropped.
+pub(crate) const USAGE_DAILY_KEEP_DAYS: u64 = 400;
+
+// The local-day bucket of a moment, the same one db_daily_copies_by_id groups by.
+pub(crate) fn usage_day(ts: u64, offset_secs: i64) -> u64 {
+    (ts as i64 + offset_secs).max(0) as u64 / 86400
+}
+
+// One copy of prompt `id` on local day `day`.
+pub(crate) fn db_usage_daily_add(conn: &Connection, day: u64, id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO usage_daily(day, id, n) VALUES(?1, ?2, 1) ON CONFLICT(day, id) DO UPDATE SET n = n + 1",
+        params![day as i64, id],
+    )
+    .map(|_| ())
+}
+
+// Drops the rows older than the retention window.
+pub(crate) fn db_usage_daily_prune(conn: &Connection, today: u64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM usage_daily WHERE day < ?1", params![today.saturating_sub(USAGE_DAILY_KEEP_DAYS) as i64])
+        .map(|_| ())
+}
+
+// One-time seed from the copy history already on disk, so the periods are not empty right after
+// the update. Marker and rows commit together; a table that already holds rows is only marked.
+pub(crate) fn db_seed_usage_daily_once(conn: &Connection, offset_secs: i64) -> rusqlite::Result<()> {
+    if conn.query_row("SELECT 1 FROM meta WHERE key='usage_daily_seeded'", [], |_| Ok(())).is_ok() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    let has_rows = tx.query_row("SELECT EXISTS(SELECT 1 FROM usage_daily)", [], |r| r.get::<_, i64>(0))? != 0;
+    if !has_rows {
+        // A row without a timestamp (timestamps switched off) has no day and is skipped.
+        tx.execute(
+            "INSERT INTO usage_daily(day, id, n) SELECT (ts + ?1) / 86400, id, COUNT(*) FROM copy_log WHERE ts > 0 GROUP BY 1, 2",
+            params![offset_secs],
+        )?;
+    }
+    tx.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('usage_daily_seeded', '1')", [])?;
+    tx.commit()
+}
+
+// Day of the last prune in this process: the delete runs at most once per local day.
+static USAGE_DAILY_PRUNED_DAY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+// Counts one copy of `id` at `now`: seeds once, upserts today's row, prunes once per day.
+pub(crate) fn db_usage_daily_record(conn: &Connection, id: &str, now: u64, offset_secs: i64) -> rusqlite::Result<()> {
+    db_seed_usage_daily_once(conn, offset_secs)?;
+    let today = usage_day(now, offset_secs);
+    db_usage_daily_add(conn, today, id)?;
+    if USAGE_DAILY_PRUNED_DAY.swap(today, std::sync::atomic::Ordering::Relaxed) != today {
+        db_usage_daily_prune(conn, today)?;
+    }
+    Ok(())
+}
+
+// (day, id, n) rows from `from_day` on.
+pub(crate) fn db_usage_daily_rows(conn: &Connection, from_day: u64) -> Vec<(u64, String, usize)> {
+    let mut out = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT day, id, n FROM usage_daily WHERE day >= ?1") {
+        if let Ok(rows) = stmt.query_map(params![from_day as i64], |r| {
+            Ok((r.get::<_, i64>(0)?.max(0) as u64, r.get::<_, String>(1)?, r.get::<_, i64>(2)?.max(0) as usize))
+        }) {
+            out.extend(rows.flatten());
+        }
+    }
+    out
+}
+
+// Whether any per-day row exists (the periods then read from it instead of the copy history).
+pub(crate) fn db_usage_daily_has_rows(conn: &Connection) -> bool {
+    conn.query_row("SELECT EXISTS(SELECT 1 FROM usage_daily)", [], |r| r.get::<_, i64>(0)).map(|v| v != 0).unwrap_or(false)
+}
+
+// The oldest local day that has a per-day row.
+pub(crate) fn db_usage_daily_min_day(conn: &Connection) -> Option<u64> {
+    conn.query_row("SELECT MIN(day) FROM usage_daily", [], |r| r.get::<_, Option<i64>>(0)).ok().flatten().map(|d| d.max(0) as u64)
+}
+
+// Undo of "clear copy history": the snapshot's counts are added to what was counted since.
+pub(crate) fn db_restore_usage_daily(conn: &Connection, rows: &[(u64, String, usize)]) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    for (day, id, n) in rows {
+        tx.execute(
+            "INSERT INTO usage_daily(day, id, n) VALUES(?1, ?2, ?3) ON CONFLICT(day, id) DO UPDATE SET n = n + excluded.n",
+            params![*day as i64, id, *n as i64],
+        )?;
+    }
+    tx.commit()
 }
 
 // Newest copy events for the journal. grouped = one row per prompt (its most

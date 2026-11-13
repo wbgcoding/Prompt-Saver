@@ -25,6 +25,10 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Statistics period.** The usage statistics have a period choice (last 7 days, last 30 days,
+  last 12 months, all time) that sets the most used and never used lists, the chart (per day,
+  per week or per month) and a new "Copies in this period" figure. While the statistics are on,
+  copies are also counted per day and kept for 400 days, independent of the copy history.
 - **Composer tool buttons stack.** The tool buttons next to the text box stack into rows when the box grows,
   so the text gets more width.
 - **Folder tiles show their members.** A folder in the grid now draws its members as small cards in a
@@ -49,7 +53,7 @@ saving, backups, recordings, the editors and the installer.
   many to keep and Password, with the four backup actions in one row.
 - **More usage figures.** The statistics show favorites, prompts used at least
   once, archived prompts and copies today, in 30 days and in total, plus a chart
-  of the copies per day over the last 14 days and the most used tools.
+  of the copies per day and the most used tools.
 - **Tidier System section.** Check for updates and the version sit on the left,
   automatic updates on the right, with About and Expert menu below.
 - **New pin icon.** The always-on-top icon is redrawn and no longer looks cut

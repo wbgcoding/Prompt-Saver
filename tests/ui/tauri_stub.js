@@ -882,6 +882,7 @@ const RESULTS = {
   }),
   recent_copies: () => window.__JOURNAL_LOG__ || PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
   restore_copy_history: () => null,
+  usage_daily_snapshot: () => [],
   delete_copy_entry: () => true,
   // 2: the fixture library is never empty, so the real seeding never actually
   // triggers (matches the backend's own "already has prompts" guard); the mock
@@ -1481,15 +1482,32 @@ const RESULTS = {
   snip_background: () => null,
   snip_windows: () => [],
   snip_present: () => false,
-  usage_stats: () => ({
-    total_prompts: 12, copies7: 5, history_on: true,
-    top: [{ name: "Prompt 1", count: 9 }, { name: "Prompt 2", count: 6 }, { name: "Prompt 3", count: 2 }],
-    never_used: [{ name: "Prompt 9", count: 0 }],
-    copies_today: 2, copies30: 23, copies_total: 87, used_prompts: 8, favorites: 3, archived: 1,
-    // 14 local days, oldest first (ts = local midnight written as UTC).
-    daily: [0, 1, 0, 3, 2, 0, 0, 4, 1, 0, 2, 1, 0, 2].map((count, i) => ({ ts: Date.UTC(2026, 6, 12 + i) / 1000, count })),
-    tools: [{ name: "screenshot", count: 14, last_used: 1784000000 }, { name: "ocr", count: 5, last_used: 0 }, { name: "no_such_tool", count: 1, last_used: 0 }],
-  }),
+  // The period (periodDays 7, 30, 365 or 0 = all time) changes the ranking, the chart and the
+  // figures; 30 keeps the original 14 chart days the layout probes count.
+  usage_stats: (a) => {
+    const days = a && a.periodDays != null ? a.periodDays : 0;
+    const wk = (n) => Array.from({ length: n }, (_, i) => ({ ts: Date.UTC(2025, 6, 28 + 7 * i) / 1000, count: (i * 7) % 11 }));
+    const months = [3, 0, 12, 7].map((count, i) => ({ ts: Date.UTC(2026, 3 + i, 1) / 1000, count }));
+    const chart = days === 7 ? [1, 0, 3, 2, 0, 4, 1].map((count, i) => ({ ts: Date.UTC(2026, 6, 19 + i) / 1000, count }))
+      : days === 365 ? wk(52)
+      : days === 0 ? months
+      // 14 local days, oldest first (ts = local midnight written as UTC).
+      : [0, 1, 0, 3, 2, 0, 0, 4, 1, 0, 2, 1, 0, 2].map((count, i) => ({ ts: Date.UTC(2026, 6, 12 + i) / 1000, count }));
+    const top = days === 7 ? [{ name: "Prompt 2", count: 5 }, { name: "Prompt 1", count: 3 }]
+      : [{ name: "Prompt 1", count: 9 }, { name: "Prompt 2", count: 6 }, { name: "Prompt 3", count: 2 }];
+    return {
+      total_prompts: 12, copies7: 5, history_on: true, daily_counted: true,
+      top,
+      never_used: [{ name: "Prompt 9", count: 0 }],
+      copies_today: 2, copies30: 23, copies_total: 87, used_prompts: 8, favorites: 3, archived: 1,
+      period_days: days, period_copies: days === 7 ? 8 : days === 365 ? 61 : days === 0 ? 87 : 23,
+      // The per-day counts begin inside the longer periods, so their "since" hint shows.
+      data_since: Date.UTC(2026, 3, 9) / 1000,
+      period_start: days === 0 ? null : Date.UTC(2026, 6, 25 - days) / 1000,
+      daily: chart,
+      tools: [{ name: "screenshot", count: 14, last_used: 1784000000 }, { name: "ocr", count: 5, last_used: 0 }, { name: "no_such_tool", count: 1, last_used: 0 }],
+    };
+  },
   export_stats: () => 12,
   storage_breakdown: () => ({
     items: [

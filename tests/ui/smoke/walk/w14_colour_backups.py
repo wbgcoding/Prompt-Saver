@@ -124,7 +124,7 @@ SECTION = """\
         const bodies = document.querySelectorAll('#stats-panel .stats-panel-body');
         if (bodies.length !== 1) out.errors.push('toggling stats twice left ' + bodies.length + ' stats-panel-body elements instead of 1');
         const cardEls = document.querySelectorAll('#stats-panel .stat-cards .stat-card');
-        if (cardEls.length !== 8) out.errors.push('the statistics show ' + cardEls.length + ' figure cards instead of 8');
+        if (cardEls.length !== 9) out.errors.push('the statistics show ' + cardEls.length + ' figure cards instead of 9');
         const lists = [...document.querySelectorAll('#stats-panel .stat-bars')];
         const names = lists[0] ? [...lists[0].querySelectorAll('.stat-bar-name')].map((n) => n.textContent) : [];
         if (names.join(',') !== 'Prompt 1,Prompt 2,Prompt 3') out.errors.push('903: the most used list does not show the prompt names: ' + names.join(','));
@@ -166,6 +166,28 @@ SECTION = """\
           const setCall = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'set_ui_value' && c[1] && c[1].key === 'statsTopN');
           if (!setCall || setCall[1].value !== 20) out.errors.push('906: picking 20 did not store statsTopN 20');
           if (document.getElementById('stats-topn')?.value !== '20') out.errors.push('906: the list length choice did not keep 20');
+        }
+        // The period pills: 30 days is the default, each pill asks for its own day count, keeps
+        // the choice as a ui text and swaps the chart heading and the cards.
+        const chips = () => [...document.querySelectorAll('#stats-panel .stats-period-row .expert-chip')];
+        if (chips().map((c) => c.dataset.period).join(',') !== '7,30,365,all') out.errors.push('the period pills are ' + chips().map((c) => c.dataset.period).join(','));
+        else if (chips().find((c) => c.classList.contains('active'))?.dataset.period !== '30') out.errors.push('the period does not start at 30 days');
+        for (const [key, days, cols, cardsN] of [['7', 7, 7, 9], ['365', 365, 52, 9], ['all', 0, 4, 8], ['30', 30, 14, 9]]) {
+          window.__SMOKE_ARGS__ = [];
+          chips().find((c) => c.dataset.period === key)?.click();
+          await waitFor(() => document.querySelector('#stats-panel .stats-period-row .expert-chip.active')?.dataset.period === key
+            && document.querySelectorAll('#stats-panel .stat-daily-col').length === cols);
+          const calls = window.__SMOKE_ARGS__ || [];
+          const asked = calls.find((c) => c[0] === 'usage_stats');
+          if (!asked || asked[1].periodDays !== days) out.errors.push('period ' + key + ' asked for ' + JSON.stringify(asked && asked[1]));
+          const saved = calls.find((c) => c[0] === 'set_ui_text' && c[1] && c[1].key === 'statsPeriod');
+          if (!saved || saved[1].value !== key) out.errors.push('period ' + key + ' was not saved');
+          const n = document.querySelectorAll('#stats-panel .stat-daily-col').length;
+          if (n !== cols) out.errors.push('period ' + key + ' draws ' + n + ' chart columns instead of ' + cols);
+          const nCards = document.querySelectorAll('#stats-panel .stat-cards .stat-card').length;
+          if (nCards !== cardsN) out.errors.push('period ' + key + ' shows ' + nCards + ' cards instead of ' + cardsN);
+          const hasNote = !!document.querySelector('#stats-panel .stats-tools-note');
+          if (hasNote === (key === 'all')) out.errors.push('period ' + key + ': the tools all-time note is ' + (hasNote ? 'shown' : 'missing'));
         }
         // 407: the export button rides the same switch as the rest of the dashboard.
         if (!document.getElementById('stats-export-btn')) out.errors.push('407: the statistics export button is missing while statistics are on');

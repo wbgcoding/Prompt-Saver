@@ -24,8 +24,17 @@ pub(crate) struct UsageStats {
     pub(crate) history_on: bool,
     pub(crate) copies_today: u64,
     pub(crate) copies30: u64,
-    // The last 14 local days, oldest first; empty while the copy history is off.
+    // The chart of the chosen period, oldest first: one entry per local day (7, 30), per week
+    // (12 months) or per month (all time, from the first per-day row; empty without one).
     pub(crate) daily: Vec<DayCount>,
+    // The chosen period in days (0 = all time) and the copies counted inside it.
+    pub(crate) period_days: u32,
+    pub(crate) period_copies: u64,
+    // Local midnight (written as UTC) of the oldest per-day row, and of the period's first day.
+    pub(crate) data_since: Option<u64>,
+    pub(crate) period_start: Option<u64>,
+    // Whether the per-day counts hold anything yet (else today/7/30 still come from the history).
+    pub(crate) daily_counted: bool,
     // Every tool used at least once, most used first.
     pub(crate) tools: Vec<ToolStat>,
     #[serde(flatten)]
@@ -191,61 +200,243 @@ pub(crate) fn live_daily_counts(start: u64, days: u32, rows: &[(u64, String, usi
     counts.into_iter().enumerate().map(|(i, count)| DayCount { ts: (start + i as u64) * DAY, count }).collect()
 }
 
+// ---- Statistics periods ----
+// The period the dashboard asks for: the last n local days (7, 30), the last 52 calendar weeks
+// ("12 months", 365 and up) or everything counted.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum StatsPeriod {
+    Days(u32),
+    Year,
+    All,
+}
+
+// `None` and 0 mean all time; anything from 365 up is the weekly year view.
+pub(crate) fn stats_period(days: Option<u32>) -> StatsPeriod {
+    match days {
+        None | Some(0) => StatsPeriod::All,
+        Some(n) if n >= 365 => StatsPeriod::Year,
+        Some(n) => StatsPeriod::Days(n),
+    }
+}
+
+// Weeks run Monday to Sunday: day 0 (1970-01-01) is a Thursday, hence the shift of three.
+fn week_of(day: u64) -> u64 {
+    (day + 3) / 7
+}
+fn week_start_day(week: u64) -> u64 {
+    (week * 7).saturating_sub(3)
+}
+const YEAR_WEEKS: u64 = 52;
+
+// First local day a period covers (None = no lower bound).
+pub(crate) fn period_start_day(today: u64, period: StatsPeriod) -> Option<u64> {
+    match period {
+        StatsPeriod::Days(n) => Some(today.saturating_sub(u64::from(n).saturating_sub(1))),
+        StatsPeriod::Year => Some(week_start_day(week_of(today).saturating_sub(YEAR_WEEKS - 1))),
+        StatsPeriod::All => None,
+    }
+}
+
+// Year and month of a day count (the calendar helper the backup rotation already uses).
+fn month_index(day: u64) -> i64 {
+    let (y, m, _) = crate::backups::civil_from_days(day as i64);
+    i64::from(y) * 12 + i64::from(m) - 1
+}
+fn month_start_day(index: i64) -> u64 {
+    crate::backups::days_from_civil(index.div_euclid(12), index.rem_euclid(12) + 1, 1).max(0) as u64
+}
+
+// The chart of a period from its per-day rows (day, id, n), counting only ids in `live`:
+// days for 7/30, 52 weeks for the year, months from the oldest row for all time.
+pub(crate) fn period_daily(rows: &[(u64, String, usize)], today: u64, period: StatsPeriod, live: &std::collections::HashSet<&str>) -> Vec<DayCount> {
+    const DAY: u64 = 86400;
+    match period {
+        StatsPeriod::Days(n) => live_daily_counts(period_start_day(today, period).unwrap_or(0), n, rows, live),
+        StatsPeriod::Year => {
+            let last = week_of(today);
+            let first = last.saturating_sub(YEAR_WEEKS - 1);
+            let mut counts = vec![0usize; (last - first + 1) as usize];
+            for (day, id, n) in rows {
+                if live.contains(id.as_str()) {
+                    if let Some(slot) = week_of(*day).checked_sub(first).and_then(|i| counts.get_mut(i as usize)) {
+                        *slot += n;
+                    }
+                }
+            }
+            counts.into_iter().enumerate().map(|(i, count)| DayCount { ts: week_start_day(first + i as u64) * DAY, count }).collect()
+        }
+        StatsPeriod::All => {
+            let Some(oldest) = rows.iter().map(|r| r.0).min() else { return Vec::new() };
+            let first = month_index(oldest);
+            let last = month_index(today).max(first);
+            let mut counts = vec![0usize; (last - first + 1) as usize];
+            for (day, id, n) in rows {
+                if live.contains(id.as_str()) {
+                    if let Some(slot) = usize::try_from(month_index(*day) - first).ok().and_then(|i| counts.get_mut(i)) {
+                        *slot += n;
+                    }
+                }
+            }
+            counts.into_iter().enumerate().map(|(i, count)| DayCount { ts: month_start_day(first + i as i64) * DAY, count }).collect()
+        }
+    }
+}
+
+// Copies per live prompt inside a period (`start` = first day, None = no lower bound).
+pub(crate) fn period_totals<'a>(rows: &'a [(u64, String, usize)], start: Option<u64>, live: &std::collections::HashSet<&str>) -> std::collections::HashMap<&'a str, u64> {
+    let mut out: std::collections::HashMap<&str, u64> = std::collections::HashMap::new();
+    for (day, id, n) in rows {
+        if start.is_none_or(|s| *day >= s) && live.contains(id.as_str()) {
+            *out.entry(id.as_str()).or_insert(0) += *n as u64;
+        }
+    }
+    out
+}
+
+fn bar_count(n: u64) -> u32 {
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+// The prompts copied inside the period, most copied first, ties by name.
+pub(crate) fn period_top(prompts: &[Prompt], totals: &std::collections::HashMap<&str, u64>, top_n: usize) -> Vec<StatBar> {
+    let mut used: Vec<&Prompt> = prompts.iter().filter(|p| totals.get(p.id.as_str()).copied().unwrap_or(0) > 0).collect();
+    used.sort_by_cached_key(|p| (std::cmp::Reverse(totals.get(p.id.as_str()).copied().unwrap_or(0)), stats_display_name(p).to_lowercase()));
+    used.iter()
+        .take(top_n)
+        .map(|p| StatBar { id: p.id.clone(), name: stats_display_name(p), count: bar_count(totals.get(p.id.as_str()).copied().unwrap_or(0)) })
+        .collect()
+}
+
+// Live, non-archived prompts without a copy inside the period.
+pub(crate) fn period_never_used(prompts: &[Prompt], totals: &std::collections::HashMap<&str, u64>, archive_tag_key: Option<&str>, limit: usize) -> Vec<StatBar> {
+    let mut out: Vec<StatBar> = prompts
+        .iter()
+        .filter(|p| totals.get(p.id.as_str()).copied().unwrap_or(0) == 0)
+        .filter(|p| !is_archived(p, archive_tag_key))
+        .map(|p| StatBar { id: p.id.clone(), name: stats_display_name(p), count: 0 })
+        .collect();
+    out.truncate(limit);
+    out
+}
+
+type DayRows = Vec<(u64, String, usize)>;
+
+// What usage_stats reads from SQLite, off the store lock.
+struct StatsReads {
+    // Any per-day row exists at all (else today/7/30 still come from the copy history).
+    counted: bool,
+    rows: DayRows,
+    oldest_day: Option<u64>,
+    // The copy-history fallback for the 30-day figures.
+    legacy: Option<(u64, DayRows)>,
+}
+
 // Aggregate everything in Rust so a 1000-prompt library returns one compact struct.
 #[tauri::command]
-pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Result<UsageStats, String> {
-    // The copy journal lives in SQLite and does not need the in-memory store, so it is read
-    // before the store is locked; running the query under that lock made every copy and save
-    // wait for the statistics dialog to open.
+pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize, period_days: Option<u32>) -> Result<UsageStats, String> {
+    let period = stats_period(period_days);
     // Local calendar days, so "today" starts at the user's midnight.
-    let rows = db_conn(&app).map(|c| db_daily_copies_by_id(&c, 30, local_utc_offset_secs()));
+    let offset = local_utc_offset_secs();
+    let today = usage_day(now_secs(), offset);
+    // The first day any figure needs: the period and the 30 days behind today/7/30.
+    let from_day = period_start_day(today, period).map_or(0, |s| s.min(today.saturating_sub(29)));
+    let counting = tool_usage_enabled(&lock(&state).settings);
+    // The first open after the update fills the per-day table from the copy history.
+    if counting && !data_dir_write_blocked_quiet() {
+        if let Some(conn) = db_conn_write(&app) {
+            let _ = db_seed_usage_daily_once(&conn, offset);
+        }
+    }
+    // The per-day counts and the copy journal live in SQLite and do not need the in-memory
+    // store, so they are read before the store is locked; running the queries under that lock
+    // made every copy and save wait for the statistics dialog to open.
+    let reads = db_conn(&app).map(|c| {
+        let counted = db_usage_daily_has_rows(&c);
+        StatsReads {
+            counted,
+            rows: if counted { db_usage_daily_rows(&c, from_day) } else { Vec::new() },
+            oldest_day: if counted { db_usage_daily_min_day(&c) } else { None },
+            legacy: if counted { None } else { Some(db_daily_copies_by_id(&c, 30, offset)) },
+        }
+    });
+    let reads = reads.unwrap_or(StatsReads { counted: false, rows: Vec::new(), oldest_day: None, legacy: None });
 
     let store = lock(&state);
     let usage = &store.settings.usage;
     let name_of = stats_display_name;
     let total_prompts = store.prompts.len();
-    let mut used: Vec<&Prompt> = store
-        .prompts
-        .iter()
-        .filter(|p| usage.get(&p.id).copied().unwrap_or(0) > 0)
-        .collect();
-    // The lowercase name is built once per row, not twice per comparison under the lock.
-    used.sort_by_cached_key(|p| (std::cmp::Reverse(usage.get(&p.id).copied().unwrap_or(0)), name_of(p).to_lowercase()));
-    let top: Vec<StatBar> = used
-        .iter()
-        .take(top_n)
-        .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
-        .collect();
     // An archived-and-unused prompt is not flagged here too: the user
     // already set it aside on purpose, so it does not need a second nudge.
     let archive_tag_key = store.settings.ui_texts.get("archiveTag").map(|s| tag_key(s));
-    let mut never_used: Vec<StatBar> = store
-        .prompts
-        .iter()
-        // Never copied: not "not lately", so the list means exactly what it says.
-        .filter(|p| usage.get(&p.id).copied().unwrap_or(0) == 0)
-        .filter(|p| !is_archived(p, archive_tag_key.as_deref()))
-        .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
-        .collect();
-    never_used.truncate(top_n.max(10) * 2);
-    let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
+    let never_limit = top_n.max(10) * 2;
     // Only copies of prompts still in the library, like the all-time total beside them, so a
     // deleted prompt's copies cannot make "today" larger than "all time".
     let live: std::collections::HashSet<&str> = store.prompts.iter().map(|p| p.id.as_str()).collect();
-    let days30 = rows.map(|(start, rows)| live_daily_counts(start, 30, &rows, &live)).unwrap_or_default();
+    let summary = usage_summary(&store.prompts, usage, archive_tag_key.as_deref());
+    let (top, never_used, period_copies) = if period == StatsPeriod::All {
+        // All time: the lifetime counters, which also cover the time before the per-day table.
+        let mut used: Vec<&Prompt> = store.prompts.iter().filter(|p| usage.get(&p.id).copied().unwrap_or(0) > 0).collect();
+        // The lowercase name is built once per row, not twice per comparison under the lock.
+        used.sort_by_cached_key(|p| (std::cmp::Reverse(usage.get(&p.id).copied().unwrap_or(0)), name_of(p).to_lowercase()));
+        let top: Vec<StatBar> = used
+            .iter()
+            .take(top_n)
+            .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
+            .collect();
+        let mut never_used: Vec<StatBar> = store
+            .prompts
+            .iter()
+            // Never copied: not "not lately", so the list means exactly what it says.
+            .filter(|p| usage.get(&p.id).copied().unwrap_or(0) == 0)
+            .filter(|p| !is_archived(p, archive_tag_key.as_deref()))
+            .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: 0 })
+            .collect();
+        never_used.truncate(never_limit);
+        (top, never_used, summary.copies_total)
+    } else {
+        let totals = period_totals(&reads.rows, period_start_day(today, period), &live);
+        let copies = totals.values().sum();
+        (
+            period_top(&store.prompts, &totals, top_n),
+            period_never_used(&store.prompts, &totals, archive_tag_key.as_deref(), never_limit),
+            copies,
+        )
+    };
+    let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
+    // Today/7/30 come from the per-day counts once they exist, else from the copy history.
+    let days30 = if reads.counted {
+        live_daily_counts(today.saturating_sub(29), 30, &reads.rows, &live)
+    } else {
+        reads.legacy.map(|(start, rows)| live_daily_counts(start, 30, &rows, &live)).unwrap_or_default()
+    };
     let copies_today = days30.last().map(|d| d.count as u64).unwrap_or(0);
     let copies7 = days30.iter().rev().take(7).map(|d| d.count as u64).sum();
     let copies30 = days30.iter().map(|d| d.count as u64).sum();
-    let mut daily = days30;
-    let skip = daily.len().saturating_sub(14);
-    daily.drain(..skip);
-    let summary = usage_summary(&store.prompts, usage, archive_tag_key.as_deref());
+    let daily = if reads.counted { period_daily(&reads.rows, today, period, &live) } else { Vec::new() };
     let tools = used_tools(usage, &store.settings.last_used);
-    if !history_on {
-        daily.clear();
-    }
-    Ok(UsageStats { total_prompts, copies7, top, never_used, history_on, copies_today, copies30, daily, tools, summary })
+    Ok(UsageStats {
+        total_prompts,
+        copies7,
+        top,
+        never_used,
+        history_on,
+        copies_today,
+        copies30,
+        daily,
+        period_days: match period {
+            StatsPeriod::Days(n) => n,
+            StatsPeriod::Year => 365,
+            StatsPeriod::All => 0,
+        },
+        period_copies,
+        data_since: reads.oldest_day.map(|d| d * 86400),
+        period_start: period_start_day(today, period).map(|d| d * 86400),
+        daily_counted: reads.counted,
+        tools,
+        summary,
+    })
 }
+
 
 // ---- Usage statistics export ----
 // One row per prompt (not just the dashboard's top-N) plus the daily copy counts of the

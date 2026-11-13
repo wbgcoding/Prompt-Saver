@@ -1,5 +1,5 @@
 // Statistics, duplicate finder, compare view, trash, error log.
-import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, rememberOpener, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, rememberOpener, settings, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
 import { applyFlags, applyValues, jumpToExpertSetting, renderExpert, rowResetBtn } from "./expertMenu.js";
 import { loadPalette, refreshColorUI } from "./theme.js";
@@ -84,13 +84,23 @@ export function recordToolUsage(tool) {
 // The usage statistics dialog: the export row, eight figures, the most used prompts by name
 // and the never used ones. The full numbers stay in the export.
 const STATS_TOP_CHOICES = [5, 10, 20];
+// The period choice (ui text `statsPeriod`) and the day count the backend takes for it.
+const STATS_PERIODS = [["7", 7, "statsPeriod7"], ["30", 30, "statsPeriod30"], ["365", 365, "statsPeriod365"], ["all", 0, "statsPeriodAll"]];
+export function statsPeriodKey() {
+  const k = settings.ui_texts?.statsPeriod;
+  return STATS_PERIODS.some((p) => p[0] === k) ? k : "30";
+}
 export async function renderStatsPanel(body) {
   const on = optFlag("usageStats");
+  const periodKey = statsPeriodKey();
   // Fetch BEFORE clearing, or the panel paints empty during the await and flashes on
   // every re-render.
   let s = null;
   if (on) {
-    try { s = await invoke("usage_stats", { topN: Math.round(val("statsTopN")) }); }
+    try { s = await invoke("usage_stats", {
+      topN: Math.round(val("statsTopN")),
+      periodDays: STATS_PERIODS.find((p) => p[0] === periodKey)[1],
+    }); }
     catch (e) { errToast(e); return; }
   }
   body.innerHTML = "";
@@ -115,6 +125,38 @@ export async function renderStatsPanel(body) {
     body.append(hint, openBtn);
     return;
   }
+  // Period: the pill row of the expert menu; the choice is kept and the panel is drawn again.
+  const periodRow = document.createElement("div");
+  periodRow.className = "stats-period-row";
+  periodRow.setAttribute("role", "group");
+  periodRow.setAttribute("aria-label", t("statsPeriodLabel"));
+  const periodLabel = document.createElement("span");
+  periodLabel.className = "stats-period-label";
+  periodLabel.textContent = t("statsPeriodLabel");
+  periodRow.appendChild(periodLabel);
+  for (const [key, , labelKey] of STATS_PERIODS) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "expert-chip" + (key === periodKey ? " active" : "");
+    chip.dataset.period = key;
+    chip.setAttribute("aria-pressed", key === periodKey ? "true" : "false");
+    chip.textContent = t(labelKey);
+    chip.addEventListener("click", () => {
+      if (key === periodKey) return;
+      settings.ui_texts = { ...(settings.ui_texts || {}), statsPeriod: key };
+      invoke("set_ui_text", { key: "statsPeriod", value: key }).catch((err) => errToast(err));
+      renderStatsPanel(root);
+    });
+    periodRow.appendChild(chip);
+  }
+  body.appendChild(periodRow);
+  // Counted per day only since the first stored day: say so when that is inside the period.
+  if (s.data_since != null && (s.period_start == null || s.data_since > s.period_start)) {
+    const since = document.createElement("div");
+    since.className = "hint stats-period-since";
+    since.textContent = t("statsPeriodSince").replace("{date}", () => new Date(s.data_since * 1000).toLocaleDateString(LANG, { timeZone: "UTC" }));
+    body.appendChild(since);
+  }
   const exportRow = document.createElement("div");
   exportRow.className = "export-row stats-export-row";
   const exportSelect = document.createElement("select");
@@ -137,9 +179,9 @@ export async function renderStatsPanel(body) {
   exportRow.append(exportSelect, exportBtn);
   body.appendChild(exportRow);
   const nf = (n) => Number(n).toLocaleString(LANG);
-  // Row 1: the library itself. Row 2: copies over time; the dated counts come from the copy
-  // history, so they show a dash while that is off.
-  const fromHistory = (n) => (s.history_on ? nf(n ?? 0) : EMPTY_VALUE);
+  // Row 1: the library itself. Row 2: copies over time. The dated counts come from the per-day
+  // counts (or, before any exist, the copy history), so they show a dash only when neither is there.
+  const fromHistory = (n) => (s.history_on || s.daily_counted ? nf(n ?? 0) : EMPTY_VALUE);
   const cardRow = (list) => {
     const row = document.createElement("div");
     row.className = "stat-cards";
@@ -157,13 +199,17 @@ export async function renderStatsPanel(body) {
       ...(flag("archiveTag") ? [statCard(nf(s.archived ?? 0), t("statArchived"))] : []),
     ]),
     cardRow([
+      ...(periodKey === "all" ? [] : [statCard(nf(s.period_copies ?? 0), t("statCopiesPeriod"))]),
       statCard(fromHistory(s.copies_today), t("statCopiesToday")),
       statCard(fromHistory(s.copies7), t("statCopies7")),
       statCard(fromHistory(s.copies30), t("statCopies30")),
       statCard(nf(s.copies_total ?? 0), t("statCopiesTotal")),
     ]),
   );
-  if (s.history_on && s.daily && s.daily.length) body.append(statSection(t("statDaily")), dailyChart(s.daily));
+  if (s.daily && s.daily.length) {
+    const kind = periodKey === "365" ? "weeks" : periodKey === "all" ? "months" : "days";
+    body.append(statSection(t(kind === "weeks" ? "statChartWeeks" : kind === "months" ? "statChartMonths" : "statChartDays")), dailyChart(s.daily, kind));
+  }
   // Most used: the heading shares its row with the list length choice.
   const topHead = document.createElement("div");
   topHead.className = "stats-top-head";
@@ -212,6 +258,12 @@ export async function renderStatsPanel(body) {
       count: x.count,
       title: x.last_used ? `${t("statLastUsed")}: ${new Date(x.last_used * 1000).toLocaleDateString(LANG)}` : "",
     }))));
+    if (periodKey !== "all") {
+      const note = document.createElement("div");
+      note.className = "hint stats-tools-note";
+      note.textContent = t("statsToolsAllTime");
+      body.appendChild(note);
+    }
   }
 }
 
@@ -255,27 +307,41 @@ function statBars(items) {
 // Copies per day as columns with the day of the month below. `ts` is the local midnight
 // written as UTC, so it is formatted in UTC to land on the user's calendar day.
 const DAILY_BAR_MAX_PX = 56;
-export function dailyChart(daily) {
+// `kind` is "days" (7, 30), "weeks" or "months" (all time). Many columns get thin bars,
+// no value labels above 14 and a date label only under every k-th column.
+const DAILY_CHART_LABELS = 14;
+export function dailyChart(daily, kind = "days") {
   const nf = (n) => Number(n).toLocaleString(LANG);
   const chart = document.createElement("div"); chart.className = "stat-daily-chart";
   chart.setAttribute("role", "img");
+  chart.style.setProperty("--stat-chart-cols", String(daily.length));
+  const dense = daily.length > DAILY_CHART_LABELS;
+  if (dense) chart.classList.add("dense");
+  const step = Math.ceil(daily.length / DAILY_CHART_LABELS);
   const max = Math.max(1, ...daily.map((d) => d.count));
   const parts = [];
   daily.forEach((d, i) => {
     const date = new Date(d.ts * 1000);
-    const long = date.toLocaleDateString(LANG, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+    const long = kind === "months"
+      ? date.toLocaleDateString(LANG, { timeZone: "UTC", month: "long", year: "numeric" })
+      : date.toLocaleDateString(LANG, { timeZone: "UTC", weekday: kind === "days" ? "short" : undefined, day: "numeric", month: "short", year: kind === "weeks" ? "numeric" : undefined });
     parts.push(`${long}: ${nf(d.count)}`);
     const col = document.createElement("div");
     col.className = "stat-daily-col" + (i === daily.length - 1 ? " today" : "");
     col.title = `${long}: ${nf(d.count)}`;
-    const val = document.createElement("span"); val.className = "stat-daily-val"; val.textContent = d.count ? nf(d.count) : "";
+    const val = document.createElement("span"); val.className = "stat-daily-val"; val.textContent = d.count && !dense ? nf(d.count) : "";
     const slot = document.createElement("div"); slot.className = "stat-daily-slot";
     const bar = document.createElement("div"); bar.className = "stat-daily-bar" + (d.count ? "" : " zero");
     // Pixels, not percent: the count sits right on top of its bar inside the same slot.
     bar.style.height = d.count ? `${Math.max(4, Math.round((d.count / max) * DAILY_BAR_MAX_PX))}px` : "";
     slot.append(val, bar);
     const day = document.createElement("span"); day.className = "stat-daily-day";
-    day.textContent = date.toLocaleDateString(LANG, { timeZone: "UTC", day: "numeric" });
+    // The last column always carries its label; the others every `step`-th counted back from it.
+    const labelled = (daily.length - 1 - i) % step === 0;
+    day.textContent = !labelled ? ""
+      : kind === "months" ? date.toLocaleDateString(LANG, { timeZone: "UTC", month: "short" })
+      : kind === "weeks" ? date.toLocaleDateString(LANG, { timeZone: "UTC", day: "numeric", month: "numeric" })
+      : date.toLocaleDateString(LANG, { timeZone: "UTC", day: "numeric" });
     col.append(slot, day);
     chart.appendChild(col);
   });

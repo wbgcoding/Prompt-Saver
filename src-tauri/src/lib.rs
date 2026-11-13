@@ -955,6 +955,7 @@ pub fn run() {
             copy::record_copy,
             copy::clear_copy_history,
             copy::restore_copy_history,
+            copy::usage_daily_snapshot,
             copy::recent_copies,
             copy::delete_copy_entry,
             floating::toggle_floating,

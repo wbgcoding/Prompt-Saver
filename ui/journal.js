@@ -219,7 +219,7 @@ export function mergeRestoredCounts(usage, lastUsed, curUsage, curLastUsed) {
   return { usage: u, lastUsed: l };
 }
 
-export async function restoreCopyHistory(rows, usage, lastUsed) {
+export async function restoreCopyHistory(rows, usage, lastUsed, daily) {
   let cur = null;
   try { cur = await invoke("get_settings"); } catch (_) { cur = null; }
   const merged = mergeRestoredCounts(usage, lastUsed, cur ? cur.usage : settings.usage, cur ? cur.last_used : settings.last_used);
@@ -228,6 +228,7 @@ export async function restoreCopyHistory(rows, usage, lastUsed) {
       entries: rows.map((r) => ({ ts: r.ts, id: r.id })),
       usage: merged.usage,
       lastUsed: merged.lastUsed,
+      daily: Array.isArray(daily) ? daily : null,
     });
   } catch (err) { errToast(err); return; }
   settings.usage = merged.usage;
@@ -551,8 +552,10 @@ export function bindJournal() {
     let items = [];
     let usage = { ...(settings.usage || {}) };
     let lastUsed = { ...(settings.last_used || {}) };
+    let daily = null;
     try {
       if (clearApp) rows = await invoke("recent_copies", { limit: 1000000, grouped: false });
+      if (clearApp) daily = await invoke("usage_daily_snapshot");
       if (clearElsewhere) items = await invoke("clip_inbox_list");
     } catch (e) { errToast(e); return; }
     const appAffected = clearApp && (rows.length > 0 || Object.keys(usage).length > 0 || Object.keys(lastUsed).length > 0);
@@ -572,7 +575,7 @@ export function bindJournal() {
     // the backups stay untouched.
     const offerPurge = sourcesOn && clearElsewhere;
     const failAfterClear = (e) => {
-      if (appAffected) errUndoToast(e, () => restoreCopyHistory(rows, usage, lastUsed));
+      if (appAffected) errUndoToast(e, () => restoreCopyHistory(rows, usage, lastUsed, daily));
       else errToast(e);
     };
     if (!appAffected && !clipAffected) {
@@ -604,6 +607,7 @@ export function bindJournal() {
       if (flag("confirmClearHistory")) {
         try {
           rows = await invoke("recent_copies", { limit: 1000000, grouped: false });
+          daily = await invoke("usage_daily_snapshot");
           const fresh = await invoke("get_settings");
           usage = { ...(fresh.usage || {}) };
           lastUsed = { ...(fresh.last_used || {}) };
@@ -644,7 +648,7 @@ export function bindJournal() {
       return;
     }
     undoToast(purgeMsg ? `${clearedMsg}. ${purgeMsg}` : clearedMsg, async () => {
-      if (appAffected) await restoreCopyHistory(rows, usage, lastUsed);
+      if (appAffected) await restoreCopyHistory(rows, usage, lastUsed, daily);
       if (!purgeBackups) await restoreClipInbox(items);
     });
   });

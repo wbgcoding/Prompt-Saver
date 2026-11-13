@@ -564,8 +564,8 @@ pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
 // tables are in the list although the two saves just emptied them: a save only
 // removes rows this process had loaded, so a row it could not decrypt (the very
 // reason a store can be locked) would otherwise survive the wipe.
-pub(crate) const DATA_WIPE_TABLES: [&str; 7] =
-    ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox", "edit_state", "editor_drafts"];
+pub(crate) const DATA_WIPE_TABLES: [&str; 8] =
+    ["prompts", "trash", "prompt_versions", "copy_log", "usage_daily", "clip_inbox", "edit_state", "editor_drafts"];
 
 // A repack that meets another connection mid-write answers SQLITE_BUSY; it is tried again this
 // far apart, and the whole wait is capped by a budget (a connection's own lock wait is 3 s per

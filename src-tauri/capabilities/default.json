@@ -142,6 +142,7 @@
     "allow-record-copy",
     "allow-clear-copy-history",
     "allow-restore-copy-history",
+    "allow-usage-daily-snapshot",
     "allow-recent-copies",
     "allow-delete-copy-entry",
     "allow-toggle-floating",
