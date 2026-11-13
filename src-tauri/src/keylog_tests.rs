@@ -1040,3 +1040,173 @@ fn a_stopping_capture_leaves_the_sender_of_a_newer_capture_alone() {
     clear_raw_tx_if_owner(9002);
     assert!(raw_tx_slot().lock().unwrap().is_none(), "the owner clears its own sender");
 }
+
+// ---------- modifier and numpad classifiers ----------
+
+#[test]
+fn each_modifier_family_is_recognised_in_its_generic_and_side_forms() {
+    for vk in [0x11, 0xA2, 0xA3] {
+        assert!(is_ctrl_vk(vk) && is_modifier_vk(vk), "{vk:#x}");
+        assert!(!is_alt_vk(vk) && !is_win_vk(vk) && !is_shift_vk(vk), "{vk:#x}");
+    }
+    for vk in [0x12, 0xA4, 0xA5] {
+        assert!(is_alt_vk(vk) && is_modifier_vk(vk), "{vk:#x}");
+        assert!(!is_ctrl_vk(vk) && !is_win_vk(vk) && !is_shift_vk(vk), "{vk:#x}");
+    }
+    for vk in [0x5B, 0x5C] {
+        assert!(is_win_vk(vk) && is_modifier_vk(vk), "{vk:#x}");
+        assert!(!is_ctrl_vk(vk) && !is_alt_vk(vk) && !is_shift_vk(vk), "{vk:#x}");
+    }
+    for vk in [0x10, 0xA0, 0xA1] {
+        assert!(is_shift_vk(vk) && is_modifier_vk(vk), "{vk:#x}");
+        assert!(!is_ctrl_vk(vk) && !is_alt_vk(vk) && !is_win_vk(vk), "{vk:#x}");
+    }
+}
+
+#[test]
+fn ordinary_keys_are_not_modifiers() {
+    // A, Z, 0, Space, Return, Tab, Caps Lock, the Apps key, a numpad key and a function key.
+    for vk in [0x41, 0x5A, 0x30, 0x20, 0x0D, 0x09, 0x14, 0x5D, 0x60, 0x70, 0x00, 0xFF] {
+        assert!(!is_modifier_vk(vk), "{vk:#x}");
+    }
+}
+
+#[test]
+fn a_numpad_scan_must_be_in_range_and_not_extended() {
+    assert!(is_numpad_scan(0x47, false));
+    assert!(is_numpad_scan(0x4E, false));
+    assert!(is_numpad_scan(0x53, false));
+    assert!(!is_numpad_scan(0x46, false));
+    assert!(!is_numpad_scan(0x54, false));
+    // The real navigation cluster reports the same scan codes with the extended flag.
+    assert!(!is_numpad_scan(0x47, true));
+    assert!(!is_numpad_scan(0x53, true));
+    assert!(!is_numpad_scan(0, false));
+}
+
+#[test]
+fn a_numpad_vk_spans_numpad_zero_through_divide() {
+    assert!(!is_numpad_vk(0x5F));
+    assert!(is_numpad_vk(0x60));
+    assert!(is_numpad_vk(0x69));
+    assert!(is_numpad_vk(0x6F));
+    assert!(!is_numpad_vk(0x70));
+}
+
+#[test]
+fn alt_numpad_entry_matches_the_vk_with_numlock_on_or_the_scan_with_it_off() {
+    // NumLock on: the numpad VK decides, whatever the scan says.
+    assert!(is_alt_numpad_entry(0x65, 0x00, false));
+    assert!(is_alt_numpad_entry(0x65, 0x4C, true));
+    // NumLock off: the VK is a nav key (Left = 0x25) but the scan is a non-extended numpad scan.
+    assert!(is_alt_numpad_entry(0x25, 0x4B, false));
+    // The same VK from the real arrow key is extended and does not count.
+    assert!(!is_alt_numpad_entry(0x25, 0x4B, true));
+    // A letter key is never part of it.
+    assert!(!is_alt_numpad_entry(0x41, 0x1E, false));
+}
+
+#[test]
+fn navigation_and_editing_keys_are_recognised() {
+    for vk in [0x0D, 0x09, 0x1B, 0x08, 0x2E, 0x2D, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22] {
+        assert!(is_nav_or_edit_key(vk), "{vk:#x}");
+    }
+    assert!(is_nav_or_edit_key(0x70), "F1");
+    assert!(is_nav_or_edit_key(0x87), "F24");
+    for vk in [0x41, 0x20, 0x30, 0x6F, 0x88, 0x6F, 0x11, 0x20, 0x29, 0x2C] {
+        assert!(!is_nav_or_edit_key(vk), "{vk:#x}");
+    }
+}
+
+#[test]
+fn a_sidecar_without_a_stored_hold_time_gets_the_default() {
+    assert_eq!(default_hold_ms(), 400);
+    let parsed: KeySidecar = serde_json::from_str(r#"{"events":[],"gaps":[]}"#).unwrap();
+    assert_eq!(parsed.hold_ms, 400);
+    let parsed: KeySidecar = serde_json::from_str(r#"{"events":[],"gaps":[],"hold_ms":900}"#).unwrap();
+    assert_eq!(parsed.hold_ms, 900);
+}
+
+// ---------- ledger cap and blind window ----------
+
+#[test]
+fn a_ledger_exactly_at_its_cap_keeps_its_history() {
+    let mut ledger = Ledger::default();
+    for i in 0..LEDGER_HARD_CAP {
+        ledger.push_arrival((i as u64) * 10_000);
+    }
+    assert!(!ledger.fail_closed);
+    assert_eq!(ledger.arrivals.len(), 20_000);
+}
+
+#[test]
+fn checks_and_arrivals_count_together_toward_the_cap() {
+    let mut ledger = Ledger::default();
+    for i in 0..10_000u64 {
+        ledger.push_arrival(i * 10_000);
+    }
+    for i in 0..10_000u64 {
+        ledger.push_check(i * 10_000 + 5_000, FieldClass::Text);
+    }
+    assert!(!ledger.fail_closed, "10000 + 10000 is exactly the cap");
+    ledger.push_check(1, FieldClass::Text);
+    assert!(ledger.fail_closed, "one more crosses it");
+    assert!(ledger.checks.is_empty() && ledger.arrivals.is_empty());
+}
+
+#[test]
+fn enforce_cap_on_a_small_ledger_changes_nothing() {
+    let mut ledger = Ledger::default();
+    ledger.push_arrival(5);
+    ledger.push_check(7, FieldClass::Password);
+    ledger.enforce_cap();
+    assert!(!ledger.fail_closed);
+    assert_eq!(ledger.arrivals, vec![5]);
+    assert_eq!(ledger.checks.len(), 1);
+}
+
+#[test]
+fn the_blind_window_runs_from_three_hundred_before_to_three_hundred_after() {
+    let mut ledger = Ledger::default();
+    ledger.push_arrival(1_000);
+    assert!(!ledger.in_blind_window(699));
+    assert!(ledger.in_blind_window(700));
+    assert!(ledger.in_blind_window(1_000));
+    assert!(ledger.in_blind_window(1_300));
+    assert!(!ledger.in_blind_window(1_301));
+}
+
+#[test]
+fn the_blind_window_near_time_zero_does_not_underflow() {
+    let mut ledger = Ledger::default();
+    ledger.push_arrival(100);
+    assert!(ledger.in_blind_window(0));
+    assert!(ledger.in_blind_window(400));
+    assert!(!ledger.in_blind_window(401));
+}
+
+#[test]
+fn the_blind_window_at_the_largest_time_does_not_overflow() {
+    let mut ledger = Ledger::default();
+    ledger.push_arrival(u64::MAX);
+    assert!(ledger.in_blind_window(u64::MAX));
+    assert!(ledger.in_blind_window(u64::MAX - 300));
+    assert!(!ledger.in_blind_window(u64::MAX - 301));
+}
+
+#[test]
+fn an_empty_ledger_has_no_blind_window() {
+    let ledger = Ledger::default();
+    assert!(!ledger.in_blind_window(0));
+    assert!(!ledger.in_blind_window(123_456));
+}
+
+#[test]
+fn every_arrival_opens_its_own_blind_window() {
+    let mut ledger = Ledger::default();
+    ledger.push_arrival(5_000);
+    ledger.push_arrival(1_000);
+    assert!(ledger.in_blind_window(1_100));
+    assert!(ledger.in_blind_window(5_200));
+    assert!(!ledger.in_blind_window(3_000));
+}

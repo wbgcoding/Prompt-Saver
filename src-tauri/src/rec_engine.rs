@@ -64,7 +64,7 @@ pub(crate) fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u
 // kept take's mic and key sidecars or replace its converted file.
 // Any continuation part of the take (`<stem>_part<N>.<ext>`), whichever of them are left: a
 // user may have deleted part 2 and kept part 3.
-fn has_continuation_part(dir: &Path, stem: &str) -> bool {
+pub(crate) fn has_continuation_part(dir: &Path, stem: &str) -> bool {
     let prefix = format!("{stem}_part");
     let Ok(entries) = fs::read_dir(dir) else { return false };
     entries.flatten().any(|e| {
@@ -73,7 +73,7 @@ fn has_continuation_part(dir: &Path, stem: &str) -> bool {
     })
 }
 
-fn rec_stem_taken(dir: &Path, stem: &str) -> bool {
+pub(crate) fn rec_stem_taken(dir: &Path, stem: &str) -> bool {
     let video = |name: String| VIDEO_FORMATS.iter().any(|ext| dir.join(format!("{name}.{ext}")).exists());
     video(stem.to_string())
         || has_continuation_part(dir, stem)

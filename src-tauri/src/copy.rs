@@ -87,7 +87,7 @@ pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, S
 
 // A stored shuffle bag counts only when it fits the prompt as it is now: no more entries than
 // the prompt has (a hand-edited bag with repeats would underflow the position), none out of range.
-fn bag_is_valid(bag: &[u32], total: usize) -> bool {
+pub(crate) fn bag_is_valid(bag: &[u32], total: usize) -> bool {
     !bag.is_empty() && bag.len() <= total && bag.iter().all(|&i| (i as usize) < total)
 }
 

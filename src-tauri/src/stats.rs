@@ -328,7 +328,7 @@ pub(crate) struct StatsTxtLabels {
 }
 
 impl StatsTxtLabels {
-    fn or_english(mut self) -> Self {
+    pub(crate) fn or_english(mut self) -> Self {
         let fill = |s: &mut String, en: &str| {
             if s.trim().is_empty() {
                 *s = en.to_string();

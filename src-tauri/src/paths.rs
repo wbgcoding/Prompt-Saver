@@ -501,7 +501,7 @@ pub(crate) fn is_foreign_network_path(raw: &str, own_dirs: &[PathBuf]) -> bool {
     is_network_path(raw) && !is_inside_own_network_dir(raw, own_dirs)
 }
 
-fn is_inside_own_network_dir(raw: &str, own_dirs: &[PathBuf]) -> bool {
+pub(crate) fn is_inside_own_network_dir(raw: &str, own_dirs: &[PathBuf]) -> bool {
     let t = raw.trim();
     if t.split(['\\', '/']).any(|c| c == "..") {
         return false;
@@ -537,7 +537,7 @@ pub(crate) fn attachment_path_refused(own_dirs: &[PathBuf], data_dir: &Path, raw
 }
 
 // `Volume{01234567-89ab-cdef-0123-456789abcdef}` followed by nothing or a separator.
-fn is_volume_guid_path(rest: &str) -> bool {
+pub(crate) fn is_volume_guid_path(rest: &str) -> bool {
     let b = rest.as_bytes();
     const HEAD: &[u8] = b"volume{";
     if b.len() < HEAD.len() + 37 || !b[..HEAD.len()].eq_ignore_ascii_case(HEAD) {
