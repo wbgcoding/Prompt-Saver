@@ -1330,6 +1330,16 @@ export function pathRow(key) {
 export let expertTab = 0;
 export let expertQuery = ""; // expert-menu search filter
 export let expertOnlyChanged = false; // hide every row still at its default
+// Rows shown as changed in the current "only changed" view (`kind:key`). A row reset
+// while the view is open stays until the view changes, so it does not vanish under the
+// pointer; every view change clears the set.
+const expertShownChanged = new Set();
+export function keepChangedRow(kind, key, changed, shownSet) {
+  const id = `${kind}:${key}`;
+  if (!changed && !shownSet.has(id)) return false;
+  shownSet.add(id);
+  return true;
+}
 // The filter is a pill whose checkbox is visually hidden, so the "on" look is a
 // class rather than :checked (:has() is avoided project-wide, see main.css:733).
 export const syncOnlyChangedChip = () =>
@@ -1547,6 +1557,7 @@ export function jumpToExpertSetting(key, kind) {
   expertQuery = "";
   $("expert-search").value = "";
   expertOnlyChanged = false;
+  expertShownChanged.clear();
   $("expert-only-changed").checked = false;
   syncOnlyChangedChip();
   showExpertPage(true);
@@ -1758,11 +1769,11 @@ export function renderExpert() {
       // changed" stacks on top: a row also needs to differ from its default.
       const keep = (kind) => (group[kind] || []).filter((k) => {
         if (!gateOpen(EXPERT_DEFS[kind]?.[k]?.gate)) return false;
-        if (expertOnlyChanged && !isRowChanged(kind, k)) return false;
+        if (expertOnlyChanged && !keepChangedRow(kind, k, isRowChanged(kind, k), expertShownChanged)) return false;
         return !searching || groupHit || settingHit(k, EXPERT_LABEL_KEYS[kind](k), q);
       });
       const flags = groupFlags(group)
-        .filter((f) => gateOpen(f.gate) && (!expertOnlyChanged || isRowChanged("flags", f.key)))
+        .filter((f) => gateOpen(f.gate) && (!expertOnlyChanged || keepChangedRow("flags", f.key, isRowChanged("flags", f.key), expertShownChanged)))
         .filter((f) => !searching || groupHit || settingHit(f.key, flagLabelKey(f.key), q))
         .map((f) => f.key);
       const values = keep("values");
@@ -2053,6 +2064,7 @@ export function showExpertPage(on) {
   // wider 3-across settings width.
   settingsEl.classList.toggle("expert-active", on);
   $("settings-title").textContent = on ? t("expertMenu") : t("settings");
+  if (!on) expertShownChanged.clear();
   if (on) {
     syncStatusAsked = false; // the sync readout is live: ask again on every open
     renderExpert();
@@ -2064,15 +2076,17 @@ export function bindExpertMenu() {
     expertQuery = "";
     $("expert-search").value = "";
     expertOnlyChanged = false;
+    expertShownChanged.clear();
     $("expert-only-changed").checked = false;
     syncOnlyChangedChip();
     showExpertPage(true);
   });
   $("expert-back").addEventListener("click", () => showExpertPage(false));
   const renderExpertDebounced = debounced(renderExpert);
-  $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; renderExpertDebounced(); });
+  $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; expertShownChanged.clear(); renderExpertDebounced(); });
   $("expert-only-changed").addEventListener("change", (e) => {
     expertOnlyChanged = e.target.checked;
+    expertShownChanged.clear();
     syncOnlyChangedChip();
     renderExpert();
   });

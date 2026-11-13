@@ -52,6 +52,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **"Only changed" in the expert menu.** A setting you reset while the filter is on now stays in
+  the list until you change the view, instead of disappearing the moment it is back at its default.
 - **Underscores in the Markdown preview.** Names such as `snake_case` or
   `{?first_name}` keep their underscores instead of turning into italics.
 - **Text in pictures with typo search off.** The library search finds text

@@ -388,12 +388,22 @@ SECTION = """\
           if (!changedRow) {
             out.errors.push('"only changed" did not surface a flag flipped away from its default');
           }
-          // Flip it straight back to its default - must vanish from the filtered view.
+          // Flip it straight back to its default - it stays in this view so it does not
+          // vanish under the pointer, and is gone once the filter is switched off and on.
           const swAgain = rowByLabel('Always show grid lines')?.querySelector('input.switch');
           if (swAgain) swAgain.click();
           await sleep(150);
+          if (!rowByLabel('Always show grid lines')) {
+            out.errors.push('"only changed" dropped a flag the moment it was restored to its default');
+          }
+          onlyChanged.checked = false;
+          onlyChanged.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(150);
+          onlyChanged.checked = true;
+          onlyChanged.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(200);
           if (rowByLabel('Always show grid lines')) {
-            out.errors.push('"only changed" kept showing a flag restored to its default');
+            out.errors.push('"only changed" kept showing a restored flag in a new view');
           }
           onlyChanged.checked = false;
           onlyChanged.dispatchEvent(new Event('change', { bubbles: true }));
