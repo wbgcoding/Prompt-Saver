@@ -4,7 +4,6 @@
 // hasMarkdownSyntax. Runs the real file in a node vm with its core.js import stubbed
 // (flag() reads the FLAGS object, t() returns "T:<key>").
 // Run:  node tests/markdown_check.js      Exit: 0 = clean, 1 = problems.
-// KNOWN_BUGS=1 also runs the assertions that currently fail on a real defect.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
@@ -26,10 +25,6 @@ let count = 0;
 const check = (label, actual, expected) => {
   count++;
   if (actual !== expected) problems.push(`${label}: got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
-};
-const knownBug = (label, actual, expected) => {
-  if (process.env.KNOWN_BUGS === "1") return check(label, actual, expected);
-  console.log(`known bug skipped: ${label}`);
 };
 const md = (text, flags) => {
   sb.FLAGS = Object.assign({ codeHighlight: true, codeAutoDetect: false }, flags || {});
@@ -154,6 +149,7 @@ check("bold stars", md("**b**"), "<p><strong>b</strong></p>");
 check("bold underscores", md("__b__"), "<p><strong>b</strong></p>");
 check("italic star", md("*i*"), "<p><em>i</em></p>");
 check("italic underscore", md("_i_"), "<p><em>i</em></p>");
+check("italic underscore between words", md("a _b_ c"), "<p>a <em>b</em> c</p>");
 check("inline code", md("`c`"), '<p><code class="md-inline-code">c</code></p>');
 check("inline code keeps marks literal", md("`**x**`"), '<p><code class="md-inline-code">**x**</code></p>');
 check("all inline kinds in one line", md("**b** *i* `c`"), '<p><strong>b</strong> <em>i</em> <code class="md-inline-code">c</code></p>');
@@ -241,8 +237,8 @@ check("syntax: a number with a dot is no list", has("3.14"), false);
 check("syntax: repeated calls agree (shared regex state)", [has("**a**"), has("**a**"), has("plain")].join(), "true,true,false");
 
 // ---- known defect: intraword underscores must not italicise
-knownBug("renderMarkdown keeps snake_case_name literal", md("use my_var_name here"), "<p>use my_var_name here</p>");
-knownBug("renderMarkdown keeps two placeholder names literal", md("{?first_name} {?last_name}"), "<p>{?first_name} {?last_name}</p>");
+check("renderMarkdown keeps snake_case_name literal", md("use my_var_name here"), "<p>use my_var_name here</p>");
+check("renderMarkdown keeps two placeholder names literal", md("{?first_name} {?last_name}"), "<p>{?first_name} {?last_name}</p>");
 
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);

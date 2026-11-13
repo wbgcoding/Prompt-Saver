@@ -136,7 +136,9 @@ export const MD_HR = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
 export const MD_QUOTE = /^\s{0,3}&gt;\s?(.*)$/; // ">" is already escaped at this point
 export const MD_UL = /^\s{0,3}[-*+]\s+(.*)$/;
 export const MD_OL = /^\s{0,3}\d{1,9}[.)]\s+(.*)$/;
-export const MD_INLINE = /`([^`\n]+)`|\[([^\]\n]*)\]\([^)\n]*\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_/g;
+// Underscore emphasis needs a word boundary on both sides, so snake_case names and
+// placeholder names keep their underscores.
+export const MD_INLINE = /`([^`\n]+)`|\[([^\]\n]*)\]\([^)\n]*\)|\*\*([^*\n]+)\*\*|(?<![\p{L}\p{N}_])__([^_\n]+)__(?![\p{L}\p{N}_])|\*([^*\n]+)\*|(?<![\p{L}\p{N}_])_([^_\n]+)_(?![\p{L}\p{N}_])/gu;
 
 export function mdInline(s) {
   MD_INLINE.lastIndex = 0;
