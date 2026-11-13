@@ -486,10 +486,7 @@ pub(crate) fn is_network_path(raw: &str) -> bool {
         return !is_volume_guid_path(rest);
     }
     // Any two leading separators, mixed kinds included, reach a host.
-    if b.len() >= 2 && sep(b[0]) && sep(b[1]) {
-        return true;
-    }
-    false
+    b.len() >= 2 && sep(b[0]) && sep(b[1])
 }
 
 // The network gate for a path that may sit in one of the app's own folders (the data folder,
