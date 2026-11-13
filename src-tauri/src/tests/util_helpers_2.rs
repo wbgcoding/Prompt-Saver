@@ -461,7 +461,6 @@ fn mp4_child_boxes_refuses_a_cut_or_undersized_wide_header() {
 }
 
 #[test]
-#[ignore = "bug: mp4_child_boxes overflows when a later box declares a 64-bit size near u64::MAX"]
 fn mp4_child_boxes_survives_a_wide_size_near_the_integer_limit() {
     let mut data = mp4_box("ftyp", b"isom");
     data.extend_from_slice(&[0, 0, 0, 1]);

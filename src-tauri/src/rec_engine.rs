@@ -549,11 +549,11 @@ pub(crate) fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize
         } else {
             (8usize, size32)
         };
-        if box_size < header_len as u64 {
+        if box_size < header_len as u64 || box_size > (data.len() - i) as u64 {
             break;
         }
         let end = i + box_size as usize;
-        if end > data.len() || end <= i {
+        if end <= i {
             break;
         }
         out.push((typ, (i + header_len)..end));
