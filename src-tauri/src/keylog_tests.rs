@@ -1065,7 +1065,7 @@ fn each_modifier_family_is_recognised_in_its_generic_and_side_forms() {
 
 #[test]
 fn ordinary_keys_are_not_modifiers() {
-    // A, Z, 0, Space, Return, Tab, Caps Lock, the Apps key, a numpad key and F1.
+    // A, Z, 0, Space, Return, Tab, Caps Lock, the Apps key, a numpad key and a function key.
     for vk in [0x41, 0x5A, 0x30, 0x20, 0x0D, 0x09, 0x14, 0x5D, 0x60, 0x70, 0x00, 0xFF] {
         assert!(!is_modifier_vk(vk), "{vk:#x}");
     }
