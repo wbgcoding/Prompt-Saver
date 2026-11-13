@@ -160,35 +160,6 @@ fn caps_from_json_refuses_malformed_or_oddly_shaped_output() {
 }
 
 #[test]
-fn caps_from_json_maps_one_row_and_localizes_its_label() {
-    use crate::ocr::{caps_from_json, CapKind};
-    let json = r#"{"Name":"Language.OCR~~~en-US~0.0.1.0","State":4,"Version":"1.2","DownloadSize":0,"InstallSize":2048}"#;
-    let caps = caps_from_json(CapKind::Ocr, json).unwrap();
-    assert_eq!(caps.len(), 1);
-    assert_eq!(caps[0].name, "Language.OCR~~~en-US~0.0.1.0");
-    assert_eq!(caps[0].tag, "en-US");
-    assert_eq!(caps[0].state, "Installed");
-    assert_eq!(caps[0].version, "1.2");
-    assert_eq!(caps[0].download_size, None, "a reported 0 means not reported");
-    assert_eq!(caps[0].install_size, Some(2048));
-    assert!(!caps[0].label.is_empty());
-}
-
-#[test]
-fn caps_from_json_keeps_the_row_order_and_uses_the_kind_prefix() {
-    use crate::ocr::{caps_from_json, CapKind};
-    let json = r#"[{"Name":"Language.Speech~~~de-DE~0.0.1.0","State":"NotPresent"},{"Name":"Language.Speech~~~fr-FR~0.0.1.0","State":0},{"Name":""}]"#;
-    let caps = caps_from_json(CapKind::Speech, json).unwrap();
-    let tags: Vec<&str> = caps.iter().map(|c| c.tag.as_str()).collect();
-    assert_eq!(tags, ["de-DE", "fr-FR"], "a row without a name is dropped");
-    assert_eq!(caps[0].state, "NotPresent");
-    assert_eq!(caps[1].state, "NotPresent");
-    // The same names read as OCR capabilities carry no tag: the prefix belongs to the kind.
-    let as_ocr = caps_from_json(CapKind::Ocr, json).unwrap();
-    assert!(as_ocr.iter().all(|c| c.tag.is_empty()));
-}
-
-#[test]
 fn a_capability_that_was_never_listed_is_not_known() {
     use crate::ocr::{is_known_capability, CapKind};
     assert!(!is_known_capability(CapKind::Ocr, "Language.OCR~~~zz-ZZ~0.0.1.0"));

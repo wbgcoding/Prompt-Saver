@@ -55,6 +55,7 @@ mod clipboard_image;
 mod format_helpers;
 mod util_helpers;
 mod util_helpers_2;
+mod util_helpers_3;
 
 #[allow(unused_imports)]
 pub(super) use shots::*;

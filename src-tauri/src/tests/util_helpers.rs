@@ -578,9 +578,7 @@ fn active_index_finds_the_active_view_or_falls_back_to_the_first() {
 
 #[test]
 fn active_view_mut_edits_the_active_view() {
-    let mut s = Settings::default();
-    s.views = vec![hotkeys_2::test_view("a"), hotkeys_2::test_view("b")];
-    s.active_view = "b".to_string();
+    let mut s = Settings { views: vec![hotkeys_2::test_view("a"), hotkeys_2::test_view("b")], active_view: "b".to_string(), ..Default::default() };
     s.active_view_mut().name = "Second".to_string();
     assert_eq!(s.views[1].name, "Second");
     assert_eq!(s.views[0].name, "A");
@@ -588,9 +586,7 @@ fn active_view_mut_edits_the_active_view() {
 
 #[test]
 fn migrate_repoints_a_dangling_active_view_and_clamps_the_numbers() {
-    let mut s = Settings::default();
-    s.views = vec![hotkeys_2::test_view("a"), hotkeys_2::test_view("b")];
-    s.active_view = "deleted".to_string();
+    let mut s = Settings { views: vec![hotkeys_2::test_view("a"), hotkeys_2::test_view("b")], active_view: "deleted".to_string(), ..Default::default() };
     s.ui_values.insert("uiScale".into(), 5000.0);
     s.migrate();
     assert_eq!(s.active_view, "a");
