@@ -169,7 +169,8 @@ pub(crate) fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&s
 
 pub(crate) fn hex_to_color(hex: &str) -> Option<tauri::webview::Color> {
     let d = hex.strip_prefix('#')?;
-    if d.len() != 6 {
+    // from_str_radix takes a leading sign, so the digits are checked first.
+    if d.len() != 6 || !d.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     let n = u32::from_str_radix(d, 16).ok()?;

@@ -690,7 +690,6 @@ fn hex_to_color_refuses_a_wrong_shape() {
 }
 
 #[test]
-#[ignore = "bug: hex_to_color accepts a leading plus sign as a hex digit"]
 fn hex_to_color_refuses_a_sign_in_place_of_a_digit() {
     assert!(hex_to_color("#+12345").is_none());
 }
@@ -721,7 +720,6 @@ fn picker_hex_to_rgb_refuses_a_wrong_shape() {
 }
 
 #[test]
-#[ignore = "bug: hex_to_rgb accepts a leading plus sign as a hex digit"]
 fn picker_hex_to_rgb_refuses_a_sign_in_place_of_a_digit() {
     assert_eq!(hex_to_rgb("#+12345"), None);
 }

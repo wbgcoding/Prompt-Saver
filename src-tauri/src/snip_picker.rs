@@ -55,7 +55,8 @@ pub(crate) fn pick_history_max(settings: &Settings) -> usize {
 
 pub(crate) fn hex_to_rgb(hex: &str) -> Option<[u8; 3]> {
     let d = hex.trim().strip_prefix('#')?;
-    if d.len() != 6 {
+    // from_str_radix takes a leading sign, so the digits are checked first.
+    if d.len() != 6 || !d.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     let n = u32::from_str_radix(d, 16).ok()?;
