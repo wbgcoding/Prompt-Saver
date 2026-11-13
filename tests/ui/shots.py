@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -60,6 +60,24 @@ EDITOR_TAGS = (
     "$('modal-advanced-head').click(); await sleep(400); for (let e = $('modal-tag-quickadd').parentElement; e; e = e.parentElement) e.scrollTop = 1e6; await sleep(200);"
 )
 
+# Four folders of 2, 3, 6 and 12 members over a mix of coloured, plain and image prompts, drawn on
+# the home grid after boot. `small` also shrinks the tiles to the densest grid used in practice.
+def _folders_mix(small):
+    grid = "view.cols = 8; view.rows = 6; view.layouts = {}; const cells = [[0, 0], [2, 0], [4, 0], [6, 0]];" if small else "const cells = [[0, 1], [2, 1], [0, 2], [2, 2]];"
+    return (
+        "const core = await import('./core.js'); const views = await import('./views.js');"
+        "const view = core.settings.views.find((v) => v.id === core.settings.active_view);"
+        + grid +
+        "const names = ['Cold email draft', 'Bug report', 'Meeting notes', 'Translate', 'Release checklist', 'Standup', 'Idea', 'Weekly review', 'SQL helper', 'Code review', 'Refactor plan', 'Thank you note', 'Summary', 'Pitch'];"
+        "const cols = ['#3b82f6', '', '#ef4444', '#10b981', '', '#f59e0b'];"
+        "const svg = (c) => 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"><rect width=\"40\" height=\"40\" fill=\"' + c + '\"/><circle cx=\"20\" cy=\"20\" r=\"10\" fill=\"#fff\"/></svg>');"
+        "const mk = (i) => ({ id: 'fx' + i, name: names[i % names.length], text: 'Body ' + i, color: cols[i % cols.length], tags: [], notes: '', hotkey: '', file_path: '', variants: [], image: i === 4 ? svg('#8b5cf6') : '' });"
+        "const ids = Array.from({ length: 23 }, (_, i) => mk(i)).map((p) => { core.prompts.push(p); return p.id; });"
+        "core.settings.tile_folders = [2, 3, 6, 12].map((n, k) => ({ id: 'fm' + k, name: 'Folder ' + n, color: k === 3 ? '#8b5cf6' : '', view_id: view.id, cell: cells[k], members: ids.splice(0, n) }));"
+        "await views.renderGrid(true); await sleep(400);"
+    )
+
+
 ACTS = {
     "main": "",
     # The video editor help dialog, one section per surface (`video.html:vehelp_cut`).
@@ -105,6 +123,9 @@ ACTS = {
                "t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "await sleep(600);"),
+    # Four folders of 2, 3, 6 and 12 members on the grid (`folders_mix_small` on a denser grid).
+    "folders_mix": _folders_mix(False),
+    "folders_mix_small": _folders_mix(True),
     "help": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);",
     "help_capture": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);"
                     "document.querySelectorAll('#help-tabs-bar .expert-tab')[2].click(); await sleep(400);"
@@ -135,7 +156,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "expert_system", "expert_t0", "expert_t1", "expert_t2", "expert_t3", "expert_t4", "expert_t5", "help", "help_capture", "stats", "stats_off", "backup"],
     "@library": ["library", "library_pins", "history"],
-    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "voicepop"],
+    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
     "@snip": ["snipedit", "snipdraw", "snipcrop", "sniptext"],
 }

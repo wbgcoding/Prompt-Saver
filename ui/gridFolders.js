@@ -158,10 +158,34 @@ export async function takeOutOfFolder(id, cell) {
   await renderGrid(true);
 }
 
-// Dot size per number of dots shown, in cqmin: few dots are big, eight still fit one row.
-const FOLDER_DOT_K = [14, 14, 14, 13, 12, 11, 10, 9, 8];
+// One mini card of the folder preview: the member's colour or image, its name as a caption.
+function folderMiniCard(p) {
+  const card = document.createElement("span");
+  card.className = "folder-card";
+  const img = p.color ? "" : imageOf(p);
+  if (p.color) {
+    card.style.background = p.color;
+    card.style.color = readableInk(p.color);
+    card.style.setProperty("--ink-shadow", inkShadow(p.color));
+  } else if (img) {
+    card.classList.add("folder-card-img");
+    const im = document.createElement("img");
+    im.src = img;
+    im.draggable = false;
+    im.alt = "";
+    card.appendChild(im);
+  } else card.classList.add("folder-card-plain");
+  if (!img) {
+    const label = document.createElement("span");
+    label.className = "folder-card-name";
+    label.textContent = p.name || "";
+    card.appendChild(label);
+  }
+  return card;
+}
 
-// A folder cell: the number of tiles it holds, large, and one colour dot per tile (at most eight).
+// A folder cell: a grid of mini cards (2x2 up to four members, 3x3 up to nine, eight plus a
+// "+N" cell beyond that), a small count badge in the corner and the folder name as caption.
 export function buildFolderTile(f) {
   const tile = document.createElement("div");
   tile.className = "tile folder-tile";
@@ -176,32 +200,30 @@ export function buildFolderTile(f) {
   const mini = document.createElement("span");
   mini.className = "folder-mini";
   const members = folderMembers(f);
-  const shown = Math.min(members.length, 8);
-  mini.style.setProperty("--dot-k", String(FOLDER_DOT_K[shown] ?? 8));
   mini.setAttribute("role", "img");
   mini.setAttribute("aria-label", t("tileFolderCount").replace("{n}", String(members.length)));
-  const count = document.createElement("span");
-  count.className = "folder-count";
-  count.textContent = String(members.length);
-  mini.appendChild(count);
-  const dots = document.createElement("span");
-  dots.className = "folder-dots";
-  for (const p of members.slice(0, 8)) {
-    const dot = document.createElement("span");
-    dot.className = "folder-dot";
-    if (p.color) dot.style.background = p.color;
-    else {
-      const dotImg = imageOf(p);
-      if (dotImg) {
-        const img = document.createElement("img");
-        img.src = dotImg;
-        img.draggable = false;
-        dot.appendChild(img);
-      } else dot.classList.add("folder-dot-plain");
-    }
-    dots.appendChild(dot);
+  const n = members.length;
+  const side = n <= 4 ? 2 : 3;
+  const cards = document.createElement("span");
+  cards.className = "folder-cards";
+  cards.dataset.side = String(side);
+  // Two members sit in one row of two; every other count fills a square of side x side.
+  cards.dataset.rows = String(n <= 2 ? 1 : side);
+  for (const p of members.slice(0, n > 9 ? 8 : 9)) cards.appendChild(folderMiniCard(p));
+  if (n > 9) {
+    const more = document.createElement("span");
+    more.className = "folder-card folder-card-more";
+    const label = document.createElement("span");
+    label.className = "folder-card-name";
+    label.textContent = "+" + (n - 8);
+    more.appendChild(label);
+    cards.appendChild(more);
   }
-  mini.appendChild(dots);
+  mini.appendChild(cards);
+  const badge = document.createElement("span");
+  badge.className = "folder-count-badge";
+  badge.textContent = String(n);
+  tile.appendChild(badge);
   tile.appendChild(mini);
   const name = document.createElement("span");
   // NOT .tile-name: that class is what the auto-fitter scales, and a folder label at

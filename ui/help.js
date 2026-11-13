@@ -227,7 +227,7 @@ export const HELP_CONTENT = {
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "A folder lives where it was made, in the grid or on the desktop. A desktop folder shows up to four member previews and a count; a grid folder shows how many tiles it holds and one color dot per tile. Dragging a member out frees it, and the folder dissolves once one member is left; a tile belongs to only one grid folder at a time.",
+        "A folder lives where it was made, in the grid or on the desktop. A desktop folder shows up to four member previews and a count. A grid folder shows its members as small cards, with the name where there is room, and a count badge in the corner. Dragging a member out frees it, and the folder dissolves once one member is left; a tile belongs to only one grid folder at a time.",
       settings: ["Folders: Expert menu → Features → Floating buttons & folders"],
       sketches: ["folderTypes"],
     },
@@ -1001,7 +1001,7 @@ export const HELP_CONTENT = {
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Ein Ordner liegt dort, wo er angelegt wurde, im Raster oder auf dem Desktop. Ein Desktop-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Raster-Ordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.",
+        "Ein Ordner liegt dort, wo er angelegt wurde, im Raster oder auf dem Desktop. Ein Desktop-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl. Ein Raster-Ordner zeigt seine Mitglieder als kleine Karten, mit Namen, wo Platz ist, und eine Zähl-Plakette in der Ecke. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.",
       settings: ["Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
       sketches: ["folderTypes"],
     },

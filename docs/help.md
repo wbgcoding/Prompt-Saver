@@ -237,7 +237,7 @@ One gesture works in two places: drop one onto another to gather it into a
 folder. A floating
 button dropped onto another makes a folder on the desktop. A tile dropped onto
 another tile makes a folder in the grid, and belongs to only one grid folder at a
-time. A folder lives where it was made.
+time. A grid folder shows its members as small cards, with the name where there is room, and a count badge in the corner. A folder lives where it was made.
 
 <p>
 <svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Desktop folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Grid folder</text></svg>
@@ -1171,7 +1171,7 @@ Fenster auf einmal auf den Hauptbildschirm.
 **Ordner:** eine Geste an zwei Stellen, ein Ziehen auf ein anderes fasst es zu
 einem Ordner zusammen. Ein schwebender Button auf einen anderen ergibt einen
 Ordner auf dem Desktop. Eine Kachel auf eine andere ergibt einen Ordner im Raster, und
-gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Ordner liegt dort, wo er angelegt wurde.
+gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Raster-Ordner zeigt seine Mitglieder als kleine Karten, mit Namen, wo Platz ist, und eine Zähl-Plakette in der Ecke. Ein Ordner liegt dort, wo er angelegt wurde.
 
 <p>
 <svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Desktop-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Raster-Ordner</text></svg>

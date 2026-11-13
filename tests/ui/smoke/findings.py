@@ -1991,8 +1991,8 @@ def run(browser, tmp):
 """
     for size_824 in ('880x600', '680x460'):
         failed += ar_probe('bh824-' + size_824, '824: help close button inset matches settings at ' + size_824, 'index', size_824, '', help_close_body)
-    # The folder tile shows how many tiles it holds and one colour dot per tile.
-    failed += ar_probe('bf250', '250: the folder tile shows the member count and one dot per tile', 'index', '880x600', '', r"""
+    # The folder tile shows its members as a grid of mini cards plus a count badge.
+    failed += ar_probe('bf250', '250: the folder tile shows mini cards per member and a count badge', 'index', '880x600', '', r"""
     await bootReady();
     const gf = await import('./gridFolders.js');
     const real = document.querySelector('#grid .folder-tile');
@@ -2006,45 +2006,68 @@ def run(browser, tmp):
       const mr = mini.getBoundingClientRect();
       const room = title.getBoundingClientRect().top - top;
       if (mr.height / room < 0.75) errs.push('250: the preview fills only ' + Math.round(mr.height / room * 100) + ' percent of the room above the caption');
-      if (mini.querySelector('.folder-count').textContent !== '5') errs.push('250: five members should show the count 5');
+      if (real.querySelector('.folder-count-badge').textContent !== '5') errs.push('250: five members should show the count 5');
+      if (real.querySelectorAll('.folder-card').length !== 5) errs.push('250: five members should show five mini cards');
     }
     const build = (n, w, h) => {
       const box = document.createElement('div');
       box.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;width:' + w + 'px;height:' + h + 'px';
-      const ids = ['p1', 'p2', 'p3', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'].slice(0, n);
+      const ids = Array.from({ length: 12 }, (_, i) => 'p' + i).slice(0, n);
       const tile = gf.buildFolderTile({ id: 'tfx', name: 'X', color: '', view_id: 'home', cell: [0, 0], members: ids });
       box.appendChild(tile);
       document.body.appendChild(box);
       const mini = tile.querySelector('.folder-mini');
+      const cards = [...tile.querySelectorAll('.folder-card')];
+      const cr = (e) => e.getBoundingClientRect();
+      const nameShown = (c) => { const e = c.querySelector('.folder-card-name'); return !!e && getComputedStyle(e).display !== 'none'; };
       const res = {
-        count: tile.querySelector('.folder-count').textContent,
-        dots: tile.querySelectorAll('.folder-dot').length,
-        parts: mini.children.length,
+        badge: tile.querySelector('.folder-count-badge').textContent,
+        badgeH: cr(tile.querySelector('.folder-count-badge')).height,
+        cards: cards.length,
+        side: tile.querySelector('.folder-cards').dataset.side,
+        last: cards.length ? cards[cards.length - 1].textContent : '',
+        legacy: tile.querySelectorAll('.folder-dot, .folder-dots, .folder-count').length,
         label: mini.getAttribute('aria-label'),
-        fs: parseFloat(getComputedStyle(tile.querySelector('.folder-count')).fontSize),
-        dw: tile.querySelector('.folder-dot').getBoundingClientRect().width,
-        rows: new Set([...tile.querySelectorAll('.folder-dot')].map((d) => Math.round(d.getBoundingClientRect().top))).size,
-        inside: mini.getBoundingClientRect().bottom <= tile.querySelector('.folder-title').getBoundingClientRect().top + 1 &&
-          mini.getBoundingClientRect().top >= tile.getBoundingClientRect().top - 1,
+        cardW: cards.length ? cr(cards[0]).width : 0,
+        cardH: cards.length ? cr(cards[0]).height : 0,
+        named: cards.filter((c) => !c.classList.contains('folder-card-more') && nameShown(c)).length,
+        fs: cards.length ? parseFloat(getComputedStyle(cards[0].querySelector('.folder-card-name') || cards[0]).fontSize) : 0,
+        inside: cr(mini).bottom <= cr(tile.querySelector('.folder-title')).top + 1 && cr(mini).top >= cr(tile).top - 1,
+        cardsInside: cards.every((c) => cr(c).left >= cr(mini).left - 1 && cr(c).right <= cr(mini).right + 1 && cr(c).bottom <= cr(mini).bottom + 1),
+        badgeInTile: cr(tile.querySelector('.folder-count-badge')).right <= cr(tile).right + 1 && cr(tile.querySelector('.folder-count-badge')).top >= cr(tile).top - 1,
       };
       box.remove();
       return res;
     };
-    const dotW = {};
-    for (const n of [1, 2, 4, 6, 9]) {
+    for (const n of [2, 3, 4, 5, 9, 12]) {
       for (const [w, h] of [[207, 148], [260, 150], [120, 86]]) {
         const r = build(n, w, h);
-        if (w === 207) dotW[n] = r.dw;
-        if (w === 207 && r.fs < 50) errs.push('250: the count is only ' + r.fs + ' px at 207x148, want at least 50');
-        if (r.rows !== 1) errs.push('250: ' + n + ' members: the dots sit in ' + r.rows + ' rows at ' + w + 'x' + h);
-        if (r.count !== String(n)) errs.push('250: ' + n + ' members show the count ' + r.count);
-        if (r.dots !== Math.min(n, 8)) errs.push('250: ' + n + ' members show ' + r.dots + ' dots, want ' + Math.min(n, 8));
-        if (r.parts !== 2) errs.push('250: the preview holds ' + r.parts + ' parts, want the count and the dots only');
+        const want = n > 9 ? 9 : n;
+        if (r.cards !== want) errs.push('250: ' + n + ' members show ' + r.cards + ' mini cards at ' + w + 'x' + h + ', want ' + want);
+        if (r.side !== (n <= 4 ? '2' : '3')) errs.push('250: ' + n + ' members use a ' + r.side + ' column grid');
+        if (n > 9 && r.last !== '+' + (n - 8)) errs.push('250: the last cell of ' + n + ' members reads ' + r.last + ', want +' + (n - 8));
+        if (r.badge !== String(n)) errs.push('250: ' + n + ' members show the badge ' + r.badge);
+        if (r.badgeH < 11 || r.badgeH > 14.5) errs.push('250: the count badge is ' + r.badgeH + ' px tall, want 11 to 14');
+        if (r.legacy) errs.push('250: the old count/dots markup is still drawn');
         if (!r.label || r.label.indexOf(String(n)) < 0) errs.push('250: the preview label does not name the count ' + n + ': ' + r.label);
         if (!r.inside) errs.push('250: ' + n + ' members: the preview is not inside the tile above the title at ' + w + 'x' + h);
+        if (!r.cardsInside) errs.push('250: ' + n + ' members: a mini card leaves the preview at ' + w + 'x' + h);
+        if (!r.badgeInTile) errs.push('250: ' + n + ' members: the badge leaves the tile at ' + w + 'x' + h);
+        if (!(r.cardW > 8 && r.cardH > 4)) errs.push('250: ' + n + ' members: a mini card is only ' + r.cardW + 'x' + r.cardH + ' at ' + w + 'x' + h);
+        if (w === 207 && n >= 5 && r.named !== Math.min(n, 8 + (n < 10 ? 1 : 0))) errs.push('250: ' + n + ' members at ' + w + 'x' + h + ' show ' + r.named + ' names, want ' + Math.min(n, 8 + (n < 10 ? 1 : 0)) + ' (cells are wide enough)');
+        if (w === 120 && n >= 5 && r.named !== 0) errs.push('250: ' + n + ' members at ' + w + 'x' + h + ' still show ' + r.named + ' names in cells under 44 px');
+        if (r.named && r.fs < 9) errs.push('250: a mini card name is ' + r.fs + ' px, below 9');
       }
     }
-    if (!(dotW[1] > dotW[9])) errs.push('250: one dot (' + dotW[1] + ' px) is not bigger than nine (' + dotW[9] + ' px)');
+    const two = build(2, 207, 148);
+    if (!(two.cardW > two.cardH * 0.6)) errs.push('250: two members should sit side by side in one row, cards are ' + two.cardW + 'x' + two.cardH);
+    // A member colour, an image and a plain prompt each draw their own card.
+    const probe = gf.buildFolderTile({ id: 'tfy', name: 'Y', color: '#112233', view_id: 'home', cell: [0, 0], members: ['p0', 'p1'] });
+    document.body.appendChild(probe);
+    const c0 = probe.querySelector('.folder-card');
+    if (getComputedStyle(c0).backgroundColor !== 'rgb(59, 130, 246)') errs.push('250: a coloured member card is ' + getComputedStyle(c0).backgroundColor + ', want its own colour');
+    if (!probe.classList.contains('tinted')) errs.push('250: a coloured folder should stay tinted');
+    probe.remove();
 """)
     # Clear copy history sits on the first line of the library head, beside the tabs.
     lib_head_body = r"""

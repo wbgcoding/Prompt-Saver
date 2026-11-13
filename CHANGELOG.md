@@ -25,6 +25,9 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Folder tiles show their members.** A folder in the grid now draws its members as small cards in a
+  2x2 or 3x3 grid (their colour or picture and, where there is room, their name; "+N" beyond nine)
+  with a small count badge in the corner, instead of one big number and a row of dots.
 - **Available tags in the editor.** The quick-add row in the prompt editor now lists every tag the
   tile does not have yet (most used first, 12 at a time with a "+N more" chip) instead of only the
   three most used.

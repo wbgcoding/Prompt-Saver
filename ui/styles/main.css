@@ -879,14 +879,14 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
    under them. Everything is drawn INSIDE the tile;
    the grid clips its cells, so nothing may reach past the edge. */
 /* ---- Grid folder tile ----
-   Reads like a folder on a desktop: a big preview of what is inside, a small label
-   under it. The preview does the identifying, so it gets the room; the name is a
-   caption at a fixed size and never grows; it used to carry .tile-name, which the
-   tile auto-fitter scales to prompt size, and a two-word folder name then filled the
-   whole cell. */
+   Reads like an iOS folder: a grid of mini cards, one per member (the member's colour or
+   image, its name as a small caption), a count badge in the corner and the folder name as
+   a caption under the cards. The name is a caption at a fixed size and never grows; it
+   must not carry .tile-name, which the tile auto-fitter scales to prompt size, and a
+   two-word folder name then filled the whole cell. */
 /* The tile is a normal card (surface, border, radius, hover accent from .tile); only
-   its content differs: a flat preview that fills the room above the name, which sits
-   as a caption at the bottom. */
+   its content differs: the mini cards fill the room above the name, which sits as a
+   caption at the bottom. */
 .folder-tile {
   flex-direction: column;
   justify-content: center;
@@ -902,10 +902,6 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
 .folder-mini {
   position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(4px, 5cqmin, 14px);
   /* Takes all the room above the caption; min-height 0 lets the column flex shrink
      it with the card instead of pushing the caption out. */
   flex: 1 1 auto;
@@ -917,19 +913,87 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   box-shadow: none;
   transition: filter var(--transition);
 }
-/* The number carries the exact count and fills the tile; the dots (at most eight, one row) shrink as their number grows (`--dot-k` from gridFolders.js). */
-.folder-count { font-size: clamp(18px, 40cqmin, 110px); font-weight: 700; line-height: 1; }
-.folder-dots { display: flex; flex-wrap: nowrap; justify-content: center; gap: clamp(3px, 2.5cqmin, 8px); max-width: 92%; }
-.folder-dot {
-  flex: 0 0 auto;
-  width: clamp(6px, calc(var(--dot-k, 8) * 1cqmin), 28px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 35%, transparent);
+/* The mini-card grid: 2x2 up to four members (two members: one row), 3x3 beyond. */
+.folder-cards {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  gap: clamp(2px, 2.5cqmin, 6px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
 }
-.folder-dot-plain { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
-.folder-dot > img { width: 100%; height: 100%; object-fit: cover; }
+.folder-cards[data-side="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+.folder-cards[data-rows="1"] { grid-template-rows: minmax(0, 1fr); }
+/* Each card measures itself: its name drops to a hidden state when the cell is too small to read. */
+.folder-card {
+  position: relative;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: calc(var(--radius, 10px) * 0.5);
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  background: color-mix(in srgb, var(--fg) 8%, var(--bg));
+  color: var(--fg);
+  --ink-shadow: none;
+}
+/* On a tinted folder the cards stand off the folder colour with an inner outline. */
+.folder-tile.tinted .folder-card { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent); }
+.folder-card-img > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.folder-card-more { font-weight: 700; }
+.folder-card-name {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(9px, 22cqmin, 15px);
+  font-weight: 600;
+  line-height: 1.15;
+  text-shadow: var(--ink-shadow, none);
+}
+.folder-card-more .folder-card-name { font-size: clamp(9px, 34cqmin, 18px); }
+/* A tall cell lets the name wrap to a second line. */
+@container (min-height: 38px) {
+  .folder-card-name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+/* Below about 44 px wide (or 14 px tall) a name cannot be read: the cell is colour or image only. */
+@container (max-width: 43px) { .folder-card:not(.folder-card-more) .folder-card-name { display: none; } }
+@container (max-height: 13px) { .folder-card:not(.folder-card-more) .folder-card-name { display: none; } }
+/* The member count: a small pill in the tile's top-right corner. */
+.folder-count-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 1;
+  box-sizing: border-box;
+  min-width: clamp(11px, 7cqmin, 14px);
+  height: clamp(11px, 7cqmin, 14px);
+  padding: 0 clamp(3px, 2cqmin, 5px);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--fg) 30%, transparent);
+  font-size: clamp(8px, 5.5cqmin, 10px);
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
 .folder-title {
   flex: 0 0 auto;
   max-width: 100%;
