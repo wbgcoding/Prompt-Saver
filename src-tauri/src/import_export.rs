@@ -5,7 +5,7 @@ use super::*;
 // True when the text, after any leading apostrophes, starts with a formula character. The
 // exporter adds one apostrophe to such a cell and the importer removes exactly one, so text
 // that already begins with `'-` or `'@` survives the round trip.
-fn starts_with_guarded_char(s: &str) -> bool {
+pub(crate) fn starts_with_guarded_char(s: &str) -> bool {
     matches!(s.trim_start_matches('\'').as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'))
 }
 
@@ -33,12 +33,12 @@ pub(crate) const VARIANT_SEP: &str = "\n<!-- next -->\n";
 // so it never equals the marker. The escape is exactly reversible for any number of
 // backslashes, and for marker lines that follow each other (a substring replace would let
 // two neighbours share their newline and escape only the first).
-fn variant_marker_backslashes(line: &str) -> Option<usize> {
+pub(crate) fn variant_marker_backslashes(line: &str) -> Option<usize> {
     let inner = line.strip_prefix("<!-- ")?.strip_suffix("next -->")?;
     inner.chars().all(|c| c == '\\').then_some(inner.len())
 }
 
-fn escape_variant_markers(entry: &str) -> String {
+pub(crate) fn escape_variant_markers(entry: &str) -> String {
     entry
         .split('\n')
         .map(|line| match variant_marker_backslashes(line) {
@@ -49,7 +49,7 @@ fn escape_variant_markers(entry: &str) -> String {
         .join("\n")
 }
 
-fn unescape_variant_markers(entry: &str) -> String {
+pub(crate) fn unescape_variant_markers(entry: &str) -> String {
     entry
         .split('\n')
         .map(|line| match variant_marker_backslashes(line) {

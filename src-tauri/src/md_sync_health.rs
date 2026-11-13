@@ -160,7 +160,7 @@ fn read_sync_lock_text(lock_path: &Path) -> String {
 
 // Judges the lock text read before this call. The file's age is read afterwards, so a lock
 // that another computer replaced in between looks young and is left alone.
-fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
+pub(crate) fn sync_lock_text_is_stale(lock_path: &Path, text: &str) -> bool {
     let key = sync_seen_key(lock_path);
     let Ok(meta) = fs::metadata(lock_path) else {
         sync_state().lock_sighted.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);

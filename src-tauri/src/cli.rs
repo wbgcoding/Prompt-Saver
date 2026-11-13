@@ -913,7 +913,7 @@ enum Cmd {
     SettingsSet { key: String, value: String, confirmed: bool },
 }
 
-fn usage_err(msg: impl Into<String>) -> String {
+pub(crate) fn usage_err(msg: impl Into<String>) -> String {
     let msg = msg.into();
     format!("{msg}\nRun \"prompt-saver --help\" for the full command list.")
 }
@@ -928,7 +928,7 @@ const MAX_NAME_LEN: usize = 500;
 const MAX_TEXT_LEN: usize = 500_000;
 const MAX_PATH_ARG_LEN: usize = 32_000;
 
-fn valid_name(s: &str) -> Result<String, String> {
+pub(crate) fn valid_name(s: &str) -> Result<String, String> {
     if s.is_empty() {
         return Err("name is empty".to_string());
     }
@@ -938,14 +938,14 @@ fn valid_name(s: &str) -> Result<String, String> {
     Ok(s.to_string())
 }
 
-fn valid_text(s: &str) -> Result<String, String> {
+pub(crate) fn valid_text(s: &str) -> Result<String, String> {
     if s.chars().count() > MAX_TEXT_LEN {
         return Err(format!("text longer than {MAX_TEXT_LEN} characters"));
     }
     Ok(s.to_string())
 }
 
-fn valid_path_arg(s: &str) -> Result<String, String> {
+pub(crate) fn valid_path_arg(s: &str) -> Result<String, String> {
     if s.is_empty() || s.contains('\0') || s.len() > MAX_PATH_ARG_LEN {
         return Err("path is empty, contains a NUL byte, or is too long".to_string());
     }
@@ -971,32 +971,32 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> Result<PathBuf, String> {
 // A tiny cursor over the remaining args, shared by every subcommand's parser. It owns its
 // items: taking a flag out replaces the list instead of leaking a copy, which matters now
 // that the app parses a command for every pipe request without exiting.
-struct Args {
-    items: Vec<String>,
-    pos: usize,
+pub(crate) struct Args {
+    pub(crate) items: Vec<String>,
+    pub(crate) pos: usize,
     // A bare `--` was read: everything after it is a value, never a flag.
-    end_of_flags: bool,
+    pub(crate) end_of_flags: bool,
 }
 
 // The flags that take the next item as their value. The scan for any flag steps over these
 // values, so a value that looks like a flag (`--text "--name"`) is never taken as one.
-const VALUE_FLAGS: &[&str] = &["--name", "--text", "--tags", "--notes", "--color", "--tag", "--format", "--ids", "--keep", "--scope"];
+pub(crate) const VALUE_FLAGS: &[&str] = &["--name", "--text", "--tags", "--notes", "--color", "--tag", "--format", "--ids", "--keep", "--scope"];
 
 impl Args {
-    fn new(items: &[String]) -> Self {
+    pub(crate) fn new(items: &[String]) -> Self {
         Args { items: items.to_vec(), pos: 0, end_of_flags: false }
     }
-    fn peek(&self) -> Option<&str> {
+    pub(crate) fn peek(&self) -> Option<&str> {
         self.items.get(self.pos).map(String::as_str)
     }
-    fn next(&mut self) -> Option<String> {
+    pub(crate) fn next(&mut self) -> Option<String> {
         let v = self.items.get(self.pos).cloned();
         if v.is_some() {
             self.pos += 1;
         }
         v
     }
-    fn next_positional(&mut self) -> Option<String> {
+    pub(crate) fn next_positional(&mut self) -> Option<String> {
         if !self.end_of_flags && self.peek() == Some("--") {
             self.pos += 1;
             self.end_of_flags = true;
@@ -1010,7 +1010,7 @@ impl Args {
     }
     // Index of the first item equal to `name` that is a flag in its own right: past the values of
     // other value flags and before a bare `--`.
-    fn find_flag(&self, name: &str) -> Option<usize> {
+    pub(crate) fn find_flag(&self, name: &str) -> Option<usize> {
         if self.end_of_flags {
             return None;
         }
@@ -1073,11 +1073,11 @@ fn parse(argv: &[String]) -> Result<Parsed, String> {
 
 // Whether the remaining args are exactly a bare `--help`/`-h`, checked before the real parse
 // so `--help` works even when required arguments are missing.
-fn wants_help(a: &Args) -> bool {
+pub(crate) fn wants_help(a: &Args) -> bool {
     a.items.get(a.pos..).is_some_and(|rest| rest == ["--help"] || rest == ["-h"])
 }
 
-fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
+pub(crate) fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
     let Some(i) = a.find_flag(name) else { return Ok(None) };
     let val = a.items.get(i + 1).ok_or_else(|| usage_err(format!("{name} needs a value")))?.clone();
     // Remove the flag and its value so positional parsing never sees them.
@@ -1088,7 +1088,7 @@ fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
     Ok(Some(val))
 }
 
-fn take_flag(a: &mut Args, name: &str) -> bool {
+pub(crate) fn take_flag(a: &mut Args, name: &str) -> bool {
     let Some(i) = a.find_flag(name) else { return false };
     let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
     kept.extend_from_slice(&a.items[i + 1..]);
@@ -1097,7 +1097,7 @@ fn take_flag(a: &mut Args, name: &str) -> bool {
     true
 }
 
-fn split_tags(raw: &str) -> Vec<String> {
+pub(crate) fn split_tags(raw: &str) -> Vec<String> {
     raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
 }
 
@@ -1376,7 +1376,7 @@ fn parse_settings(a: &mut Args) -> Result<Parsed, String> {
     Ok(Parsed::Run(cmd))
 }
 
-fn reject_extra(a: &Args) -> Result<(), String> {
+pub(crate) fn reject_extra(a: &Args) -> Result<(), String> {
     // A trailing bare `--` ends the flags and leaves nothing behind it to reject.
     let lone_marker = !a.end_of_flags && a.items.len() == a.pos + 1 && a.peek() == Some("--");
     if let Some(extra) = a.peek().filter(|_| !lone_marker) {

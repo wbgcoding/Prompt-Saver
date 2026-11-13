@@ -28,7 +28,7 @@ const WS: [char; 4] = [' ', '\n', '\t', '\r'];
 // ffmpeg's own token reader (av_get_token): leading blanks skipped, a backslash
 // escapes the next character, single quotes keep everything inside literally, and
 // the token ends at the first unquoted, unescaped terminator.
-fn av_token(c: &[char], i: &mut usize, term: &[char]) -> String {
+pub(crate) fn av_token(c: &[char], i: &mut usize, term: &[char]) -> String {
     while *i < c.len() && WS.contains(&c[*i]) {
         *i += 1;
     }
@@ -62,9 +62,9 @@ fn av_token(c: &[char], i: &mut usize, term: &[char]) -> String {
 
 // One filter of the graph: its name and its argument string (both unescaped once,
 // the way ffmpeg's graph parser hands them to the filter).
-struct GraphFilter {
-    name: String,
-    args: Option<String>,
+pub(crate) struct GraphFilter {
+    pub(crate) name: String,
+    pub(crate) args: Option<String>,
 }
 
 fn skip_ws(c: &[char], i: &mut usize) {
@@ -89,7 +89,7 @@ fn skip_labels(c: &[char], i: &mut usize) -> Result<(), String> {
     }
 }
 
-fn parse_graph(graph: &str) -> Result<Vec<GraphFilter>, String> {
+pub(crate) fn parse_graph(graph: &str) -> Result<Vec<GraphFilter>, String> {
     let c: Vec<char> = graph.chars().collect();
     let mut i = 0usize;
     let mut out = Vec::new();
@@ -124,7 +124,7 @@ fn is_key_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '/' | '.')
 }
 
-fn take_key(c: &[char], i: &mut usize) -> Option<String> {
+pub(crate) fn take_key(c: &[char], i: &mut usize) -> Option<String> {
     let mut j = *i;
     skip_ws(c, &mut j);
     let start = j;
@@ -142,7 +142,7 @@ fn take_key(c: &[char], i: &mut usize) -> Option<String> {
 
 // The filter's option string split the way ffmpeg splits it: `key=value` pairs and
 // shorthand values, separated by an unescaped colon.
-fn parse_filter_args(args: &str) -> Vec<(Option<String>, String)> {
+pub(crate) fn parse_filter_args(args: &str) -> Vec<(Option<String>, String)> {
     let c: Vec<char> = args.chars().collect();
     let mut i = 0usize;
     let mut out = Vec::new();
@@ -164,7 +164,7 @@ fn parse_filter_args(args: &str) -> Vec<(Option<String>, String)> {
 // The file a movie=/amovie= source reads, when its options are only that file and
 // an optional loop count; None for any other shape (format_name=, a second
 // positional value that would be one, unknown keys).
-fn movie_source_path(args: Option<&str>) -> Option<String> {
+pub(crate) fn movie_source_path(args: Option<&str>) -> Option<String> {
     let pairs = parse_filter_args(args?);
     let mut path: Option<String> = None;
     for (n, (key, val)) in pairs.into_iter().enumerate() {
