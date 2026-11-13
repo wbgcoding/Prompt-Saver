@@ -49,6 +49,10 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Underscores in the Markdown preview.** Names such as `snake_case` or
+  `{?first_name}` keep their underscores instead of turning into italics.
+- **Text in pictures with typo search off.** The library search finds text
+  inside attached pictures also when typo-tolerant search is switched off.
 - **Context menu in an open folder.** Right-clicking a tile inside an open
   folder showed the menu behind the folder; it now opens on top, and a double
   right-click opens the editor like on any other tile.

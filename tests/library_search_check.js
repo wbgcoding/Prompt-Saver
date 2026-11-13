@@ -4,7 +4,6 @@
 // never serve a stale answer), plus fuzzyMaxTyposFor, editDistWithin, fuzzyTokens, fuzzyWordHit.
 // The real source spans of library.js run in a node vm next to the real promptVars.js and
 // search.js; only flags, the query and the image-hit lists are fakes.
-// KNOWN_BUGS=1 also runs the assertions that currently fail on a real defect.
 // Run:  node tests/library_search_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
 const path = require("path");
@@ -18,10 +17,6 @@ const check = (label, actual, expected) => {
   count++;
   const a = JSON.stringify(actual), e = JSON.stringify(expected);
   if (a !== e) problems.push(`${label}: got ${a}, expected ${e}`);
-};
-const knownBug = (label, actual, expected) => {
-  if (process.env.KNOWN_BUGS === "1") return check(label, actual, expected);
-  console.log(`known bug skipped: ${label}`);
 };
 const read = (f) => fs.readFileSync(path.join(uiDir, f), "utf8").replace(/\r\n/g, "\n");
 const span = (src, from, to) => {
@@ -216,7 +211,7 @@ async function main() {
   const hits = (q, ids) => ({ query: q, ids: new Set(ids) });
   sb.OPT.ocrIndex = true;
   check("a picture hit scores ninety", score(pic, "needle", fz, hits("needle", [pic.id])), { score: 90, fuzzy: false, entryIndex: 0, fromImage: true });
-  knownBug("a picture hit also counts while the typo tier is off", score(pic, "needle", {}, hits("needle", [pic.id])), { score: 90, fuzzy: false, entryIndex: 0, fromImage: true });
+  check("a picture hit also counts while the typo tier is off", score(pic, "needle", {}, hits("needle", [pic.id])), { score: 90, fuzzy: false, entryIndex: 0, fromImage: true });
   check("a picture hit for another query does not count", score(pic, "needle", fz, hits("needl", [pic.id])), none);
   check("a picture hit for another prompt does not count", score(pic, "needle", fz, hits("needle", [pic.id + 1000])), none);
   check("the query is compared trimmed and folded", score(pic, "  NeEdLe ", fz, hits("needle", [pic.id])).score, 90);

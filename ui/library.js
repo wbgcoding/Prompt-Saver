@@ -396,10 +396,9 @@ export function computeLibSearchScore(p, imageHits = null) {
     }
   }
   if (best) return { score: best, fuzzy: false, entryIndex: bestEntry, field: bestKind, q };
-  if (!ctx.fuzzy) return { score: 0, fuzzy: false, entryIndex: 0 };
-  const qWords = ctx.qWords;
-  if (!qWords.length) return { score: 0, fuzzy: false, entryIndex: 0 };
-  for (let i = 0; i < fields.length; i++) {
+  // The typo tier is optional; the picture-text fallback below runs either way.
+  const qWords = ctx.fuzzy ? ctx.qWords : [];
+  for (let i = 0; qWords.length && i < fields.length; i++) {
     const [val, w, entryAt, kind] = fields[i];
     if (!val) continue;
     const words = entry.words[i] || (entry.words[i] = fuzzyTokens(val));
