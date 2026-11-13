@@ -2,7 +2,9 @@
 
 Backend: `cargo test --lib`. JS syntax: `node --check <file>`. Everything below runs
 from the project root. The browser-driven suites skip cleanly when no Chrome/Edge is
-installed. Run the whole list after any UI change.
+installed. Run the whole list after any UI change: `python tests/run_all.py` runs every
+command of the table below (`--quick` leaves out the slow browser walks, `--filter <text>`
+picks commands) and prints one line per suite plus the tail of each failure.
 
 `cargo test` and `cargo clippy` create `src-tauri/target/debug/` (~4 GB). Delete it as
 soon as the run has been evaluated; only `target/release/` ships.
