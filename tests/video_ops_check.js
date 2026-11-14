@@ -1316,6 +1316,23 @@ const pending = [];
   expect("the earlier replacement can still be undone", sb.VE.ops[0].rect.x === 0 && sb.VE.floor === 1, JSON.stringify(sb.VE.ops[0]) + " floor " + sb.VE.floor);
 }
 
+// Redo of a replacement whose predecessor was locked restores the floor as it was before the
+// undo, not a value derived from the list length.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  const ops = [];
+  for (let i = 0; i < 39; i++) ops.push({ tool: "cut", startMs: i * 10, endMs: i * 10 + 5 });
+  ops.push({ tool: "crop", rect: { x: 1, y: 1, w: 10, h: 10 }, _prev: { tool: "crop", rect: { x: 0, y: 0, w: 10, h: 10 } }, _prevLocked: true });
+  sb.VE = Object.assign(baseState(ops), { floor: 1, redo: [], undoMax: 50 });
+  const run = (code) => vm.runInContext(code, sb);
+  run("undo()");
+  expect("undo of a replacement with a locked predecessor locks it", sb.VE.floor === 40, String(sb.VE.floor));
+  run("redo()");
+  expect("redo gives the floor back exactly as it was", sb.VE.floor === 1, String(sb.VE.floor));
+  run("undo()"); run("redo()");
+  expect("a second undo and redo keeps it", sb.VE.floor === 1, String(sb.VE.floor));
+}
+
 // A live overlay video that is removed from the timeline is released like one cleared with the
 // layer: source dropped, so the decoder and the file handle do not linger until collection.
 {
