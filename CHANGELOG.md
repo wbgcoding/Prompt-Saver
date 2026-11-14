@@ -183,9 +183,42 @@ saving, backups, recordings, the editors and the installer.
 - **Recording.** Escape or the toast's Cancel button stops the start countdown,
   and the language update notices open the manage dialog, with the snooze under
   "Later".
+- **Restoring a backup.** A restore made right after a failed save no longer reverts to the old
+  library or settings on the next start.
+- **Recovered drafts.** Closing the editor on a draft recovered after a crash now asks before the
+  recovered text is thrown away.
+- **Dropping text on the window** opens a new prompt with that text instead of replacing what you
+  were typing in the text box.
+- **Tile pictures** that finished loading while a tile was being dragged now appear once the drag
+  ends.
+- **Hotkeys with Shift or AltGr** (for example Ctrl+Shift+1, or Ctrl+Shift+7 on a German keyboard)
+  are recorded as the key you pressed and fire as recorded.
+- **Arrow keys in the grid** skip archived prompts that are not shown, so Enter never copies a hidden
+  one.
+- **Expert menu.** Resetting all options keeps the first-run tour and open panels as they were and
+  brings per-prompt hotkeys and the floating buttons back at once; the fixed placeholder values list
+  hides while placeholders are off.
+- **Floating buttons and folders** pick up a new tile font or text size at once.
+- **Screenshot editor.** Redo after resizing the image and undoing later shapes no longer brings
+  back shapes that were undone.
+- **Two recordings in a row.** A recording that arrives while the result of the previous one is
+  still open saves the earlier one first and says so, instead of leaving it behind.
+- **Video editor.** Redo after many edits no longer locks earlier edits for good, and a video opened
+  from another folder keeps that folder as the export default after ffmpeg was downloaded.
+- **Batch export** started twice from the recordings manager no longer stacks two dialogs.
+- **Dictation** stops when you click stop right after it started hearing you.
+- **A second start** of the app can no longer be swallowed by another user's program, and a file
+  with an unusual name opened with the app no longer stops it from starting.
+- **Installer.** A "Just me" install by a standard user lands in that user's own profile, a portable
+  install creates no desktop shortcut and leaves no uninstaller behind, and a build without the
+  signing key is no longer reported as up to date.
 
 ### Security
 
+- **Portable mode** lets the app's windows read only its own media folders instead of the whole
+  folder the exe sits in.
+- **Language pack installs** start the elevated PowerShell by its full path.
+- **Network paths** in imported prompts are never resolved while a prompt is saved.
 - **Confidential prompts** are checked against the vault on every copy path,
   and snapshots sealed with another vault key are refused.
 - **Video export options** that would write files outside the chosen target
