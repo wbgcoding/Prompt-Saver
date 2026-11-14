@@ -90,6 +90,8 @@ saving, backups, recordings, the editors and the installer.
 - **Video editor keyboard.** Enter and Space on the focused "Original" button now toggle the
   original view, and the shortcut list shows Shift+Left and Shift+Right as a one second jump.
   Space plays and pauses again right after a mouse click on any toolbar button.
+- **Video editor copy notice.** Opening a recording in a freshly started editor window no longer
+  flashes the raw text key instead of "You are working on a copy".
 - **Voice input failures are no longer silent.** When dictation ends without hearing anything, a
   message names the Windows default microphone it listened to and opens the sound settings. A
   missing internet connection, a blocked or unavailable microphone, sound that is too quiet or noisy
