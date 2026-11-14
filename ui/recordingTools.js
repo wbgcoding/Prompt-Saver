@@ -59,7 +59,11 @@ export function batchReservedNames(dir, destDir, names) {
 // One small dialog for exporting several finished recordings at once: format, quality,
 // destination. The full video editor's export panel makes no sense for a batch of unrelated
 // files, so this never opens it.
+let batchExportClosePrevious = null;
 export async function runBatchExportRecordings(dir, names) {
+  // A second export asked for while the dialog still waits for an answer ends the first one
+  // (answered "no") before it takes the dialog over, so no listener of it stays behind.
+  if (batchExportClosePrevious) batchExportClosePrevious();
   const box = $("batch-export-modal");
   const summary = $("batch-export-summary");
   const formatSel = $("batch-export-format");
@@ -79,6 +83,7 @@ export async function runBatchExportRecordings(dir, names) {
   box.classList.remove("hidden");
   const started = await new Promise((resolve) => {
     const done = (v) => {
+      if (batchExportClosePrevious === closeThis) batchExportClosePrevious = null;
       box.classList.add("hidden");
       chooseDestBtn.onclick = null;
       startBtn.removeEventListener("click", onOk);
@@ -91,6 +96,8 @@ export async function runBatchExportRecordings(dir, names) {
       done(true);
     };
     const onCancel = () => done(false);
+    const closeThis = onCancel;
+    batchExportClosePrevious = closeThis;
     startBtn.addEventListener("click", onOk);
     $("batch-export-cancel").addEventListener("click", onCancel);
     $("batch-export-close").addEventListener("click", onCancel);
