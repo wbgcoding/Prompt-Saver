@@ -1045,7 +1045,7 @@ VIDEO_PROBE = """
         if (!overlayLive398.classList.contains('hidden') || !rects398.classList.contains('hidden')) {
           errs.push('398: a quick click on the show-original button did not hide the overlay and rects layers');
         }
-        if (origBadge398.classList.contains('hidden')) errs.push('398: the original badge did not appear once the original was locked on');
+        if (origBadge398.classList.contains('ve-badge-off')) errs.push('398: the original badge did not appear once the original was locked on');
         if (!origBtn398.classList.contains('active')) errs.push('398: the show-original button did not switch to its active state while locked on');
         origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
         origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
@@ -1053,7 +1053,7 @@ VIDEO_PROBE = """
         if (overlayLive398.classList.contains('hidden') || rects398.classList.contains('hidden')) {
           errs.push('398: a second click did not lock the original back off');
         }
-        if (!origBadge398.classList.contains('hidden')) errs.push('398: the original badge stayed after the second click turned it off');
+        if (!origBadge398.classList.contains('ve-badge-off')) errs.push('398: the original badge stayed after the second click turned it off');
         origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
         await sleep(450);
         if (!overlayLive398.classList.contains('hidden')) errs.push('398: holding the show-original button down did not hide the overlay layer');
@@ -1071,10 +1071,10 @@ VIDEO_PROBE = """
         origBtn398.focus();
         origBtn398.click();
         await sleep(30);
-        if (origBadge398.classList.contains('hidden')) errs.push('keyboard activation of the show-original button did not turn the original on');
+        if (origBadge398.classList.contains('ve-badge-off')) errs.push('keyboard activation of the show-original button did not turn the original on');
         origBtn398.click();
         await sleep(30);
-        if (!origBadge398.classList.contains('hidden')) errs.push('a second keyboard activation of the show-original button did not turn it off');
+        if (!origBadge398.classList.contains('ve-badge-off')) errs.push('a second keyboard activation of the show-original button did not turn it off');
       }
     }
 

@@ -911,8 +911,11 @@ const barOps = new WeakMap();
 const barEls = new Map();
 const BAR_EDGE_MIN_PX = 14;
 
+// Every bar gets both grips. On a bar narrower than BAR_EDGE_MIN_PX they stand just outside its
+// ends (the `ve-bar-narrow` class), so a bar shrunk to the minimum length keeps both edges
+// draggable; dragging the body still only selects.
 function addBarEdges(el, widthPx) {
-  if (widthPx < BAR_EDGE_MIN_PX) return;
+  if (widthPx < BAR_EDGE_MIN_PX) el.classList.add("ve-bar-narrow");
   for (const edge of ["a", "b"]) {
     const grip = document.createElement("span");
     grip.className = `ve-bar-edge ve-bar-edge-${edge}`;
@@ -1745,7 +1748,7 @@ const veOriginalToggle = makeHoldOrTapToggle((shown) => {
   $("ve-overlay-live").classList.toggle("hidden", shown);
   $("ve-rects").classList.toggle("hidden", shown);
   $("ve-original").classList.toggle("active", shown);
-  $("ve-original-badge").classList.toggle("hidden", !shown);
+  $("ve-original-badge").classList.toggle("ve-badge-off", !shown);
 });
 $("ve-original").addEventListener("pointerdown", () => veOriginalToggle.press());
 // Enter or Space on the focused button arrives as a click without a pointer (detail 0): treat it

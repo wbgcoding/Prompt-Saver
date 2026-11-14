@@ -310,6 +310,9 @@ body.video-body {
 .ve-bar-edge-a { left: 0; }
 .ve-bar-edge-b { right: 0; }
 .ve-ovbar .ve-bar-edge { top: -6px; bottom: -6px; }
+/* A bar too narrow for inner grips: the grips stand outside its two ends instead. */
+.ve-bar-narrow .ve-bar-edge-a { left: -6px; }
+.ve-bar-narrow .ve-bar-edge-b { right: -6px; }
 .ve-sel { position: absolute; top: 18px; bottom: 0; background: rgba(37, 99, 235, 0.18); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); pointer-events: none; }
 .ve-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--danger); pointer-events: none; }
 .ve-handle {
@@ -348,6 +351,9 @@ body.video-body {
   font-weight: 600;
   white-space: nowrap;
 }
+/* Hidden but still in the flow: the badge's space stays reserved so the button never moves
+   when the badge appears. */
+.ve-original-badge.ve-badge-off { visibility: hidden; }
 
 /* ---- side panel ---- */
 .ve-tabs { display: flex; gap: 4px; padding: 8px 10px 0; flex: 0 0 auto; }

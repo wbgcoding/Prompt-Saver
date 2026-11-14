@@ -710,4 +710,83 @@ def run(browser, tmp):
     await sleep(60);
     if (!modal.classList.contains('hidden')) errs.push('help: Escape did not close the dialog');
     """)
+
+    # A bar shrunk to the minimum length keeps both edges draggable, and its body still only selects.
+    failed += vprobe('tinybars', 'a bar narrower than 14 px keeps both edge grips', r"""
+    // 90-tinybars:
+    const { addOverlay } = await import('./videoOverlays.js');
+    const $ = (id) => document.getElementById(id);
+    const reg = $('ve-regions');
+    const mid = Math.round(VE.dur / 2);
+    const pxPerMs = () => $('ve-track').getBoundingClientRect().width / VE.dur;
+    const rangeOf = (op) => [op.startMs, op.endMs];
+    const exercise = async (label, selector, getOp, reset) => {
+      for (const edge of ['a', 'b']) {
+        reset();
+        const bar = document.querySelector(selector);
+        if (!bar) { errs.push('90-tinybars: ' + label + ': no bar'); return; }
+        const w = bar.getBoundingClientRect().width;
+        if (w >= 14) errs.push('90-tinybars: ' + label + ': the setup bar is ' + w + ' px wide, not narrow');
+        const grip = bar.querySelector('.ve-bar-edge-' + edge);
+        if (!grip) { errs.push('90-tinybars: ' + label + ': the narrow bar has no ' + edge + ' grip'); continue; }
+        const gr = grip.getBoundingClientRect();
+        const gx = gr.left + gr.width / 2, gy = gr.top + gr.height / 2;
+        const hit = document.elementFromPoint(gx, gy);
+        if (hit !== grip) errs.push('90-tinybars: ' + label + ': the ' + edge + ' grip is covered by ' + (hit && hit.className));
+        const before = rangeOf(getOp());
+        const dx = edge === 'a' ? -60 : 60;
+        ptr('pointerdown', gx, gy, grip);
+        ptr('pointermove', gx + dx, gy, reg);
+        ptr('pointerup', gx + dx, gy, reg);
+        await sleep(80);
+        const after = rangeOf(getOp());
+        const moved = Math.abs(after[edge === 'a' ? 0 : 1] - before[edge === 'a' ? 0 : 1]);
+        const fixed = after[edge === 'a' ? 1 : 0] === before[edge === 'a' ? 1 : 0];
+        if (moved < 30 / pxPerMs() || !fixed) errs.push('90-tinybars: ' + label + ': dragging the ' + edge + ' grip gave ' + JSON.stringify(before) + ' -> ' + JSON.stringify(after));
+      }
+      // The body of the bar selects and never moves it.
+      reset();
+      const bar = document.querySelector(selector);
+      const br = bar.getBoundingClientRect();
+      const cx = br.left + br.width / 2, cy = br.top + br.height / 2;
+      const before = rangeOf(getOp());
+      ptr('pointerdown', cx, cy, bar);
+      ptr('pointermove', cx + 60, cy, reg);
+      ptr('pointerup', cx + 60, cy, reg);
+      await sleep(80);
+      if (JSON.stringify(rangeOf(getOp())) !== JSON.stringify(before)) errs.push('90-tinybars: ' + label + ': a body drag moved the bar');
+    };
+    await addOverlay('frame'); await sleep(100);
+    const ov = () => VE.ops.find((o) => o.tool === 'overlay');
+    const resetOv = () => { const o = ov(); o.startMs = mid; o.endMs = mid + 100; VE.selOv = null; mod.renderRegions(); };
+    await exercise('overlay', '#ve-regions .ve-ovbar', ov, resetOv);
+    VE.ops = VE.ops.filter((o) => o.tool !== 'overlay'); mod.renderRegions();
+    VE.sel = { a: mid, b: mid + 100 }; mod.renderRegions(); $('ve-cut-add').click(); await sleep(100);
+    const cutOp = () => VE.ops.find((o) => o.tool === 'cut');
+    const resetCut = () => { const c = cutOp(); c.startMs = mid; c.endMs = mid + 100; VE.sel = null; mod.renderRegions(); };
+    await exercise('cut', '#ve-regions .ve-cut', cutOp, resetCut);
+    """)
+
+    # The Original badge never moves the button: its space stays reserved while it is hidden.
+    for size in ("1130,860", "1000,700", "940,640", "780,640"):
+        failed += vprobe('origbadge' + size[:3], 'the Original badge does not shift its button (' + size + ')', r"""
+    // 90-badge:
+    const $ = (id) => document.getElementById(id);
+    const btn = $('ve-original'), badge = $('ve-original-badge');
+    const x0 = btn.getBoundingClientRect().left, y0 = btn.getBoundingClientRect().top;
+    btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
+    btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
+    await sleep(60);
+    const bb = badge.getBoundingClientRect();
+    if (getComputedStyle(badge).visibility === 'hidden' || bb.width < 10) errs.push('90-badge: not visible while the original is locked on');
+    const r1 = btn.getBoundingClientRect();
+    if (Math.abs(r1.left - x0) > 0.5 || Math.abs(r1.top - y0) > 0.5) errs.push('90-badge: the button moved from ' + x0 + ',' + y0 + ' to ' + r1.left + ',' + r1.top);
+    if (bb.right > r1.left + 0.5 && bb.left < r1.right) errs.push('90-badge: overlaps the button');
+    const hit = document.elementFromPoint(x0 + 4, y0 + 4);
+    if (!hit || hit.closest('#ve-original') !== btn) errs.push('90-badge: the old button spot is covered by ' + (hit && (hit.id || hit.className)));
+    btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
+    btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
+    await sleep(60);
+    if (btn.classList.contains('active')) errs.push('90-badge: a second click did not unlock the original');
+    """, size=size)
     return failed
