@@ -92,6 +92,14 @@ saving, backups, recordings, the editors and the installer.
   Space plays and pauses again right after a mouse click on any toolbar button.
 - **Video editor copy notice.** Opening a recording in a freshly started editor window no longer
   flashes the raw text key instead of "You are working on a copy".
+- **Video editor bars.** Very short overlay and cut bars now have edge handles as well, so their
+  start and end can be dragged. The "Original" badge no longer pushes the show-original button to
+  the left when it appears.
+- **Video editor export.** A file name that is too long (more than 200 characters with the
+  extension) is refused with a hint instead of failing at the end, and an export error without a
+  known code no longer ends in "(Code ?)".
+- **Video editor image overlay.** Adding an image overlay with a file that is not a picture now
+  shows a message and adds nothing.
 - **Voice input failures are no longer silent.** When dictation ends without hearing anything, a
   message names the Windows default microphone it listened to and opens the sound settings. A
   missing internet connection, a blocked or unavailable microphone, sound that is too quiet or noisy
