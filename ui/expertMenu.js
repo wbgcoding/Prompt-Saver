@@ -1799,7 +1799,7 @@ export function renderExpert() {
       // Same reasoning as palette above: a hand-maintained name/value list has
       // no single "default" to diff against, and it means nothing while the
       // flag it sits under is off, so it never shows on its own.
-      const varFixedList = !expertOnlyChanged && group.varFixedList && flag("varFixed") &&
+      const varFixedList = !expertOnlyChanged && group.varFixedList && gateOpen("varFixed") &&
         (!searching || groupHit || i18nHit("expGroupVarFixed", q));
       // Bespoke, same reasoning as palette above: one hex string per key, no
       // single "default" the generic isRowChanged diff machinery could reuse.
