@@ -325,12 +325,16 @@ export function hideToast() {
 
 // Auto-hide that can be paused. The toast keeps a deadline; while the pointer rests on it or
 // the window is being dragged by its header, the clock stops and the remaining time is kept.
-// The native move loop of a window drag swallows the matching pointerup, so a drag ends when
-// the window stops reporting moves (TOAST_MOVE_SETTLE_MS after the last one, or after the
-// press when it never moves), with pointerup and focus as extra triggers. Resuming never
-// leaves less than TOAST_RESUME_MIN_MS, and a pause never lasts longer than TOAST_PAUSE_CAP_MS.
+// A hover pause has no upper limit: the toast stays as long as the pointer rests on it. A lost
+// pointerleave is covered by resuming when the window loses focus or becomes hidden. The native
+// move loop of a window drag swallows the matching pointerup, so a drag ends when the window
+// stops reporting moves (TOAST_MOVE_SETTLE_MS after the last one, or after the press when it
+// never moves), with pointerup and focus as extra triggers. Resuming never leaves less than
+// TOAST_RESUME_MIN_MS, and only a drag pause is capped, at TOAST_PAUSE_CAP_MS.
 export const TOAST_RESUME_MIN_MS = 3000;
 export const TOAST_PAUSE_CAP_MS = 30000;
+// A toast with an action button stays this long (ms) unless the call passes its own duration.
+export const TOAST_ACTION_MS = 20000;
 export const TOAST_MOVE_SETTLE_MS = 400;
 let toastDeadline = 0;
 let toastRemaining = 0;
@@ -352,11 +356,12 @@ function pauseToast() {
   toastPausedAt = Date.now();
   toastRemaining = Math.max(0, toastDeadline - toastPausedAt);
   clearTimeout(toastCapTimer);
-  toastCapTimer = setTimeout(() => {
-    toastHovered = false;
-    toastDragging = false;
-    resumeToast();
-  }, TOAST_PAUSE_CAP_MS);
+  if (toastDragging) {
+    toastCapTimer = setTimeout(() => {
+      toastDragging = false;
+      resumeToast();
+    }, TOAST_PAUSE_CAP_MS);
+  }
 }
 
 function resumeToast() {
@@ -384,6 +389,11 @@ function endToastDrag() {
 
 toastEl.addEventListener("pointerenter", () => { toastHovered = true; pauseToast(); });
 toastEl.addEventListener("pointerleave", () => { toastHovered = false; resumeToast(); });
+// A pointerleave that never arrives (the window lost focus or was hidden under the pointer)
+// must not keep the toast up for good.
+function dropToastHover() { toastHovered = false; resumeToast(); }
+window.addEventListener("blur", dropToastHover);
+document.addEventListener("visibilitychange", () => { if (document.hidden) dropToastHover(); });
 document.addEventListener("pointerdown", (e) => {
   const reg = e.target instanceof Element ? e.target.closest("[data-tauri-drag-region]") : null;
   if (!reg || reg.getAttribute("data-tauri-drag-region") === "false") return;
@@ -525,9 +535,9 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   void toastEl.offsetWidth;
   toastEl.classList.add("show");
   resetToastPause();
-  // A toast carrying an action button or chips needs longer to read and click than a plain
-  // message: the plain duration plus a fixed bonus (12000ms in all).
-  armToastTimer(duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
+  // A toast carrying an action button needs longer to read and click than a plain message
+  // (TOAST_ACTION_MS); a chip row gets the plain duration plus a fixed bonus (12000ms in all).
+  armToastTimer(duration ?? (action ? TOAST_ACTION_MS : hasChips ? TOAST_MS + 10600 : TOAST_MS));
   // Shown under a resting pointer: no enter event will come, so start paused.
   if (toastEl.matches(":hover")) { toastHovered = true; pauseToast(); }
 }

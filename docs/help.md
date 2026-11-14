@@ -1003,6 +1003,8 @@ off in the expert menu if you would rather the message stayed a plain
 confirmation; deleting a view or merging tags then asks first, since nothing
 could bring them back.
 
+Any message with a button stays for 20 seconds, and it stays as long as the pointer rests on it.
+
 ### Duplicate finder
 
 Flags tiles that are textually very similar, by a similarity score rather than

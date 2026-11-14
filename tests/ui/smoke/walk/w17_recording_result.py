@@ -207,7 +207,7 @@ SECTION = """\
       }
       window.__SMOKE_ARGS__ = [];
       window.__FIRE__('recording-captured', { path: 'C:/fake/raw5-cropnotice.mp4', resize_crop_at_ms: 4200 });
-      await sleep(30);
+      await sleep(300);
       if (!confirmModal.classList.contains('hidden')) {
         out.errors.push('rec-modal: resize-crop notice must be a toast, not a dialog');
       }
@@ -252,7 +252,7 @@ SECTION = """\
       await sleep(50);
       document.getElementById('toast').textContent = '';
       window.__FIRE__('recording-captured', { path: 'C:/fake/raw6-cropnotice-off.mp4', resize_crop_at_ms: 1000 });
-      await sleep(30);
+      await sleep(300);
       if (cropToast.querySelector('.toast-btn')) {
         out.errors.push('rec-modal: resize-crop toast must stay away while recCropNotice is off');
       }

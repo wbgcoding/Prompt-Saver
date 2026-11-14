@@ -103,6 +103,10 @@ ACTS = {
     "veovspot": "await sleep(600); document.getElementById('ve-tab-overlays').click(); await sleep(150); document.getElementById('ve-ov-add-spotlight').click(); await sleep(400); document.getElementById('ve-ov-editor').scrollIntoView({ block: 'center' }); await sleep(200);",
     # The export tab right after a file export: status line with the folder/file buttons under it.
     "veexportdone": "await sleep(600); document.getElementById('ve-tab-export').click(); await sleep(150); document.getElementById('ve-export-status').textContent = 'Exported: C:\\\\Users\\\\name\\\\Videos\\\\My clips\\\\recording-2026-11-07.mp4'; document.getElementById('ve-export-done-row').classList.remove('hidden'); document.getElementById('ve-export-saveas').classList.remove('hidden'); document.getElementById('ve-export-start').scrollIntoView({ block: 'end' }); await sleep(150);",
+    # Toasts with an action button: the long resize-crop notice, a short one (the undo shape) and
+    # the update card, each held open long enough to be shot.
+    "toast_crop": "const core = await import('./core.js'); core.toast(core.t('recCropNoticeMsg').replace('{s}','12'), { label: core.t('recCropNoticeSwitch'), onClick(){} }, '', null, 60000); await sleep(400);",
+    "toast_short": "const core = await import('./core.js'); core.toast('Prompt deleted', { label: core.t('undo'), onClick(){} }, '', null, 60000); await sleep(400);",
     "settings": "$('gear').click(); await sleep(300);",
     "settings_end": "$('gear').click(); await sleep(300); $('settings-main').lastElementChild.scrollIntoView(); await sleep(100);",
     "expert": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);",

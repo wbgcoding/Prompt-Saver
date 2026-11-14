@@ -1174,6 +1174,7 @@ section(() => {
   const timers = new Map();
   const classes = new Set();
   const doc = {};
+  const docState = { hidden: false, addEventListener: (n, fn) => { doc[n] = fn; } };
   const win = {};
   const el = {};
   let moved = () => {};
@@ -1202,7 +1203,7 @@ function showFor(ms) { clearTimeout(toastTimer); resetToastPause(); toastEl.clas
       classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
       addEventListener: (n, fn) => { el[n] = fn; },
     },
-    document: { addEventListener: (n, fn) => { doc[n] = fn; } },
+    document: docState,
     window: { addEventListener: (n, fn) => { win[n] = fn; } },
     getCurrentWindow: () => ({ onMoved: (fn) => { moved = fn; return Promise.resolve(); } }),
   });
@@ -1230,13 +1231,59 @@ function showFor(ms) { clearTimeout(toastTimer); resetToastPause(); toastEl.clas
   win.focus();
   advance(3000 + 10);
   check(!shown(), "window focus resumes a paused toast");
-  // The hard cap still frees a pointer that never leaves the toast.
+  // A hover pause has no upper limit; leaving resumes with the time that was left.
+  sb.showFor(20000);
+  advance(5000);
+  el.pointerenter();
+  advance(60000);
+  check(shown(), "a toast hovered for 60 s is still shown");
+  el.pointerleave();
+  advance(15000 - 1);
+  check(shown(), "after leaving, the toast keeps the remaining time");
+  advance(2);
+  check(!shown(), "after leaving, the toast hides once the remaining time is over");
+  // A leave with less than the minimum left still gets the minimum.
   sb.showFor(2000);
   el.pointerenter();
-  advance(29000);
-  check(shown(), "a hovered toast stays up inside the cap");
-  advance(1000 + 3000 + 10);
-  check(!shown(), "the hard cap resumes a hovered toast");
+  advance(120000);
+  el.pointerleave();
+  advance(3000 - 1);
+  check(shown(), "a hovered toast gets at least the resume minimum after leaving");
+  advance(2);
+  check(!shown(), "and hides after it");
+  // A pointerleave that never comes: losing focus or hiding the page resumes the clock.
+  sb.showFor(2000);
+  el.pointerenter();
+  advance(60000);
+  win.blur();
+  advance(3000 + 10);
+  check(!shown(), "window blur resumes a hovered toast whose pointerleave was lost");
+  sb.showFor(2000);
+  el.pointerenter();
+  advance(60000);
+  docState.hidden = true;
+  doc.visibilitychange();
+  advance(3000 + 10);
+  docState.hidden = false;
+  check(!shown(), "a hidden page resumes a hovered toast whose pointerleave was lost");
+  // A visibilitychange to visible must not end a hover.
+  sb.showFor(2000);
+  el.pointerenter();
+  doc.visibilitychange();
+  advance(60000);
+  check(shown(), "becoming visible keeps a hovered toast paused");
+  el.pointerleave();
+  advance(3000 + 10);
+  // The cap still frees a window drag that never ends.
+  sb.showFor(2000);
+  doc.pointerdown({ target });
+  for (let i = 0; i < 160; i++) { advance(200); moved(); }
+  check(shown(), "a drag pause keeps the toast while the window moves");
+  advance(31000);
+  check(!shown(), "the cap still ends a drag pause that never settles");
+  // A toast with an action button defaults to 20 s.
+  check(/TOAST_ACTION_MS\s*=\s*20000/.test(core), "an action toast lasts 20 s by default");
+  check(/duration \?\? \(action \? TOAST_ACTION_MS/.test(core), "toast() uses the action duration for an action");
 });
 
 // 70. The introduction tour can be shown again from the expert menu with the automatic open off,

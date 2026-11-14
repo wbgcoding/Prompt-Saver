@@ -570,24 +570,33 @@ export function bindCapture() {
     // the encoder, or a smaller mode picked) says so once; the default case stays silent.
     if (e.payload?.canvas_note === "monitor") toast(t("recCanvasFallbackMonitor"));
     else if (e.payload?.canvas_note === "window") toast(t("recCanvasFallbackWindow"));
-    // The "window size" canvas default cut off part of the picture because the window grew
-    // mid-recording: offer, once per occurrence and only while the notice is on, to switch the
-    // canvas to every display. Runs before the result menu opens, never instead of it.
-    const cropMs = e.payload?.resize_crop_at_ms;
-    if (cropMs != null && flag("recCropNotice")) {
-      const secs = Math.floor(cropMs / 1000);
-      toast(t("recCropNoticeMsg").replace("{s}", String(secs)), {
-        label: t("recCropNoticeSwitch"),
-        onClick: () => {
-          settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
-          invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
-        },
-      }, "", null, 12000);
-    }
     // "Finish and continue" split this recording into several files. The
     // dialog opens the LAST one; the backend keeps the earlier parts and they
     // follow it on Save, Attach or Edit and go to the discard folder with it.
     if (path) recWork = openRecModal(path, !!e.payload?.needs_crop);
+    // The "window size" canvas default cut off part of the picture because the window grew
+    // mid-recording: offer, once per occurrence and only while the notice is on, to switch the
+    // canvas to every display. Shown one frame after the result menu is visible (it opens at
+    // once and converts afterwards), so the notice lands on top of it, never instead of it.
+    const cropMs = e.payload?.resize_crop_at_ms;
+    if (cropMs != null && flag("recCropNotice")) {
+      const secs = Math.floor(cropMs / 1000);
+      let shown = false;
+      const showNotice = () => {
+        if (shown) return;
+        shown = true;
+        toast(t("recCropNoticeMsg").replace("{s}", String(secs)), {
+          label: t("recCropNoticeSwitch"),
+          onClick: () => {
+            settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
+            invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
+          },
+        });
+      };
+      // A hidden or minimized window paints no frames, so a timer backs the frame up.
+      requestAnimationFrame(showNotice);
+      setTimeout(showNotice, 120);
+    }
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());
   recModal.addEventListener("pointerdown", (e) => {

@@ -35,6 +35,9 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Readable notice after a window grew during recording.** The message is now short and uses the
+  full width of its card, with the button on its own line below. Any message with a button stays
+  20 seconds and never disappears while the pointer rests on it.
 - **Choose the area before reading an image file.** Right-clicking the text recognition button and
   picking an image now opens it in a crop view first, so only the area inside the frame is read (the
   whole image if you leave the frame alone). The Expert menu switch "Choose the area before reading
