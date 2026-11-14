@@ -118,6 +118,7 @@ export function initSnipEditor() {
   const snipEditStage = $("snip-edit-stage");
   const snipEditBaseCv = $("snip-edit-base");
   const snipEditLiveCv = $("snip-edit-live");
+  const snipEditHandlesEl = $("snip-edit-handles");
   const snipEditTextInput = $("snip-edit-text-input");
   const snipEditMeasureEl = $("snip-edit-measure");
   const snipEditNudgeHintEl = $("snip-edit-nudge-hint");
@@ -199,13 +200,14 @@ export function initSnipEditor() {
   function snipEditDist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
   // The one place image-pixel coordinates are computed. Canvas backing stores are the image's
   // native size; the CSS display size is SE.w * snipEditScale().
-  function snipEditToImage(ev) {
+  function snipEditToImageRaw(ev) {
     const r = snipEditBaseCv.getBoundingClientRect();
     const k = snipEditScale();
-    return {
-      x: snipEditClamp((ev.clientX - r.left) / k, 0, SE.w),
-      y: snipEditClamp((ev.clientY - r.top) / k, 0, SE.h),
-    };
+    return { x: (ev.clientX - r.left) / k, y: (ev.clientY - r.top) / k };
+  }
+  function snipEditToImage(ev) {
+    const p = snipEditToImageRaw(ev);
+    return { x: snipEditClamp(p.x, 0, SE.w), y: snipEditClamp(p.y, 0, SE.h) };
   }
   // Bounding rect of an op for snapping: a rect-shaped op has one, a two-point op (line, arrow,
   // pen, marker) gets the box around its points.
@@ -317,7 +319,10 @@ export function initSnipEditor() {
     const crop = SE.ops.find((o) => o.tool === "crop");
     if (crop && SE.tool !== "crop" && !bare) snipEditDrawCropDim(ctx, crop.rect); // crop tool shows its own live overlay instead
   }
-  function snipEditClearLive() { snipEditLiveCtx.clearRect(0, 0, SE.w, SE.h); }
+  function snipEditClearLive() {
+    snipEditLiveCtx.clearRect(0, 0, SE.w, SE.h);
+    snipEditHideHandles();
+  }
 
   function snipEditUpdateUndoRedoButtons() {
     $("snip-edit-undo").disabled = SE.ops.length <= SE.floor;
@@ -699,15 +704,94 @@ export function initSnipEditor() {
       sw: { x: r.x, y: r.y + r.h }, s: { x: r.x + r.w / 2, y: r.y + r.h }, se: { x: r.x + r.w, y: r.y + r.h },
     };
   }
-  // Handles keep one on-screen size at every zoom and stay inside the image, so a handle on the
-  // image edge is never cut off.
-  function snipEditPaintHandle(ctx, p) {
-    const hs = 10 / snipEditScale();
-    const x = snipEditClamp(p.x - hs / 2, 0, Math.max(0, SE.w - hs));
-    const y = snipEditClamp(p.y - hs / 2, 0, Math.max(0, SE.h - hs));
-    ctx.fillRect(x, y, hs, hs);
-    ctx.strokeRect(x, y, hs, hs);
+  // Handles keep one on-screen size (10 CSS px) at every zoom. They are DOM elements over the stage,
+  // not canvas pixels, so a handle on an image edge sits just outside the picture and is never cut
+  // off. Boxes are in image pixels: rect, crop and ellipse handles lie fully outside the frame
+  // and touch it, line and arrow end points stay centred on the point.
+  const SNIP_HANDLE_PX = 10;
+  function snipEditHandleBoxes(points, rect, scale, outward) {
+    const hs = SNIP_HANDLE_PX / scale;
+    const boxes = {};
+    for (const [name, p] of Object.entries(points)) {
+      let x = p.x - hs / 2, y = p.y - hs / 2;
+      if (outward && rect) {
+        if (name.includes("w")) x = rect.x - hs;
+        else if (name.includes("e")) x = rect.x + rect.w;
+        if (name.includes("n")) y = rect.y - hs;
+        else if (name.includes("s")) y = rect.y + rect.h;
+      }
+      boxes[name] = { x, y, w: hs, h: hs };
+    }
+    return boxes;
   }
+  const snipEditHandleEls = {};
+  function snipEditHideHandles() {
+    for (const el of Object.values(snipEditHandleEls)) el.style.visibility = "hidden";
+  }
+  // The elements are created once and moved afterwards: a drag keeps its pointer capture on the
+  // element that was pressed, so it must survive every redraw of the live layer.
+  function snipEditShowHandles(points, rect, outward) {
+    const k = snipEditScale();
+    const boxes = snipEditHandleBoxes(points, rect, k, outward);
+    const names = Object.keys(boxes);
+    for (const [name, el] of Object.entries(snipEditHandleEls)) {
+      if (!names.includes(name)) el.style.visibility = "hidden";
+    }
+    for (const name of names) {
+      let el = snipEditHandleEls[name];
+      if (!el) {
+        el = document.createElement("span");
+        el.className = "snip-h";
+        el.dataset.h = name;
+        snipEditHandleEls[name] = el;
+        snipEditHandlesEl.appendChild(el);
+      }
+      const b = boxes[name];
+      el.style.left = `${b.x * k}px`;
+      el.style.top = `${b.y * k}px`;
+      el.style.visibility = "visible";
+    }
+  }
+  // The one place a handle drag starts, whether the press landed on a handle element or on the
+  // image next to one. Returns false when there is nothing to drag.
+  function snipEditStartHandleDrag(kind, handle, pt) {
+    if (kind === "crop-resize") {
+      if (!SE.cropRect) return false;
+      SE.drag = { kind, handle, orig: { ...SE.cropRect } };
+      return true;
+    }
+    const op = SE.selOp;
+    if (!op) return false;
+    // The shape still shows its handles, so it stays what the arrows and Escape act on.
+    SE.lastNudged = op;
+    snipEditUpdateNudgeHint();
+    SE.drag = kind === "shape-endpoint"
+      ? { kind, op, handle, orig: op.points.map((p) => ({ ...p })) }
+      : { kind, op, handle, orig: { ...op.rect } };
+    return true;
+  }
+  function snipEditHandleKindNow() {
+    if (SE.tool === "crop") return "crop-resize";
+    if (SE.selOp && SE.selOp.tool === SE.tool) return SE.selOp.points ? "shape-endpoint" : "shape-resize";
+    return null;
+  }
+  snipEditHandlesEl.addEventListener("pointerdown", (e) => {
+    const el = e.target.closest ? e.target.closest(".snip-h") : null;
+    if (!el || !SE.active) return;
+    // A pan, the hand tool or an armed eyedropper act on the picture, not on the handle.
+    if (e.button !== 0 || SE.spaceDown || SE.tool === "hand" || SE.eyedropArm) { snipEditOnPointerDown(e); return; }
+    const kind = snipEditHandleKindNow();
+    if (!kind) return;
+    e.preventDefault();
+    snipEditFinishTextIfOpen();
+    snipEditHandKeysBack();
+    SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
+    if (!snipEditStartHandleDrag(kind, el.dataset.h, snipEditToImage(e))) return;
+    el.setPointerCapture(e.pointerId);
+  });
+  // The pressed handle keeps the pointer, so the drag also moves outside the image.
+  snipEditHandlesEl.addEventListener("pointermove", (e) => snipEditOnPointerMove(e));
   function snipEditHitCropHandle(pt, r) {
     const tol = 10 / snipEditScale();
     for (const [name, p] of Object.entries(snipEditCropHandlePoints(r))) {
@@ -749,12 +833,7 @@ export function initSnipEditor() {
     // Heavier dim once the box is at rest so the picture reads as cropped; lighter while an edge
     // is dragged so what would come back stays visible.
     snipEditDrawCropDim(snipEditLiveCtx, r, SE.drag ? 0.55 : 0.85);
-    snipEditLiveCtx.save();
-    snipEditLiveCtx.fillStyle = "#fff";
-    snipEditLiveCtx.strokeStyle = "#2563eb";
-    snipEditLiveCtx.lineWidth = 1.5 / snipEditScale();
-    for (const p of Object.values(snipEditCropHandlePoints(r))) snipEditPaintHandle(snipEditLiveCtx, p);
-    snipEditLiveCtx.restore();
+    snipEditShowHandles(snipEditCropHandlePoints(r), r, true);
     snipEditDrawGuides();
   }
   // While the crop tool is active SE.cropRect is the editable copy of the crop op; whatever
@@ -770,7 +849,7 @@ export function initSnipEditor() {
     const r = SE.cropRect;
     if (r) {
       const handle = snipEditHitCropHandle(pt, r);
-      if (handle) { SE.drag = { kind: "crop-resize", handle, orig: { ...r } }; return; }
+      if (handle) { snipEditStartHandleDrag("crop-resize", handle, pt); return; }
       // A box smaller than the image can be moved; a press anywhere else does nothing.
       if (!snipEditCropIsFull(r) && pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) {
         SE.drag = { kind: "crop-move", start: pt, orig: { ...r } };
@@ -857,7 +936,7 @@ export function initSnipEditor() {
     const r = SE.cropRect;
     if (!r || snipEditCropIsFull(r)) { snipEditFit(); return; }
     const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
-    snipEditSetZoom(Math.min(vw / r.w, vh / r.h) * (window.devicePixelRatio || 1));
+    snipEditSetZoom(Math.min((vw - 48) / r.w, (vh - 48) / r.h) * (window.devicePixelRatio || 1));
     const wr = snipEditWrap.getBoundingClientRect(), sr = snipEditStage.getBoundingClientRect();
     const k = snipEditScale();
     snipEditWrap.scrollLeft += sr.left + (r.x + r.w / 2) * k - (wr.left + snipEditWrap.clientLeft + vw / 2);
@@ -945,12 +1024,7 @@ export function initSnipEditor() {
     return "";
   }
   function snipEditPaintShapeHandles(op) {
-    snipEditLiveCtx.save();
-    snipEditLiveCtx.fillStyle = "#fff";
-    snipEditLiveCtx.strokeStyle = "#2563eb";
-    snipEditLiveCtx.lineWidth = 1.5 / snipEditScale();
-    for (const p of Object.values(snipEditShapeHandlePoints(op))) snipEditPaintHandle(snipEditLiveCtx, p);
-    snipEditLiveCtx.restore();
+    snipEditShowHandles(snipEditShapeHandlePoints(op), op.rect || null, !op.points);
   }
   function snipEditDrawShapeSelectionLive() {
     snipEditClearLive();
@@ -1552,8 +1626,9 @@ export function initSnipEditor() {
   }
   function snipEditFit() {
     const dpr = window.devicePixelRatio || 1;
-    const availW = (snipEditWrap.clientWidth - 24) * dpr;
-    const availH = (snipEditWrap.clientHeight - 24) * dpr;
+    // 24 CSS px stay free on every side so the handles outside the picture show at fit zoom.
+    const availW = (snipEditWrap.clientWidth - 48) * dpr;
+    const availH = (snipEditWrap.clientHeight - 48) * dpr;
     snipEditSetZoom(Math.min(1, availW / SE.w, availH / SE.h));
   }
 
@@ -1595,12 +1670,7 @@ export function initSnipEditor() {
         if (SE.selOp && SE.selOp.tool === SE.tool) {
           const handle = snipEditHitShapeHandle(pt, SE.selOp);
           if (handle) {
-            // The shape still shows its handles, so it stays what the arrows and Escape act on.
-            SE.lastNudged = SE.selOp;
-            snipEditUpdateNudgeHint();
-            SE.drag = SE.selOp.points
-              ? { kind: "shape-endpoint", op: SE.selOp, handle, orig: SE.selOp.points.map((p) => ({ ...p })) }
-              : { kind: "shape-resize", op: SE.selOp, handle, orig: { ...SE.selOp.rect } };
+            snipEditStartHandleDrag(SE.selOp.points ? "shape-endpoint" : "shape-resize", handle, pt);
             break;
           }
         }
@@ -1632,9 +1702,13 @@ export function initSnipEditor() {
       }
       return;
     }
-    const pt0 = snipEditToImage(e);
+    // A handle drag follows the pointer outside the image too; the resized rect (or end point) is
+    // clamped to the image afterwards.
+    const handleDrag = SE.drag.kind === "crop-resize" || SE.drag.kind === "shape-resize" || SE.drag.kind === "shape-endpoint";
+    const pt0 = handleDrag ? snipEditToImageRaw(e) : snipEditToImage(e);
     let pt = snipEditApplySnap(pt0, e.altKey);
     if (e.shiftKey) pt = snipEditApplyShiftConstraint(SE.drag, pt);
+    if (SE.drag.kind === "shape-endpoint") pt = { x: snipEditClamp(pt.x, 0, SE.w), y: snipEditClamp(pt.y, 0, SE.h) };
     switch (SE.drag.kind) {
       case "pen": case "marker": SE.drag.points.push(pt); snipEditScheduleLivePenStroke(); break;
       case "line": case "arrow": SE.drag.b = pt; snipEditDrawLiveLineArrow(); break;

@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipcrop`, `sniptext`, or another
+`library_pins`, `tilemenu`, `editor`, `editor_long`, `editor_tags`, `editor_adv`, `folder`, `folders_mix`, `folders_mix_small`, `help`, `help_capture`, `backup`, `recresult`, `snipedit`, `snipdraw`, `snipsel`, `snipcrop`, `sniptext`, or another
 page such as `video.html` (`video.html:vehelp_cut` shoots the help dialog at one section).
 A group (`@settings`, `@library`, `@tiles`, `@recording`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -148,6 +148,12 @@ ACTS = {
                 "const dv = $('snip-edit-live'); const dr = dv.getBoundingClientRect();"
                 "const dp = (t, x, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: dr.left + x, clientY: dr.top + y }));"
                 "dp('pointerdown', 120, 80, dv); dp('pointermove', 260, 150, dv); dp('pointerup', 260, 150); await sleep(300);",
+    # A drawn rectangle selected again by a click on its border: the handles around it.
+    "snipsel": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);"
+               "const sv = $('snip-edit-live'); const sr = sv.getBoundingClientRect();"
+               "const sp = (t, x, y, el) => (el || window).dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: sr.left + x, clientY: sr.top + y }));"
+               "sp('pointerdown', 120, 80, sv); sp('pointermove', 260, 150, sv); sp('pointerup', 260, 150); await sleep(200);"
+               "sp('pointerdown', 120, 110, sv); sp('pointerup', 120, 110); await sleep(300);",
     "snipcrop": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"crop\"]')?.click(); await sleep(400);",
     "sniptext": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"text\"]')?.click(); await sleep(300);"
                 "const lv = $('snip-edit-live'); const lr = lv.getBoundingClientRect();"
@@ -164,7 +170,7 @@ GROUPS = {
     "@library": ["library", "library_pins", "history"],
     "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_tags", "editor_tags_all", "editor_adv", "editor_rotate", "folder", "folders_mix", "folders_mix_small", "voicepop"],
     "@recording": ["recresult"],
-    "@snip": ["snipedit", "snipdraw", "snipcrop", "sniptext"],
+    "@snip": ["snipedit", "snipdraw", "snipsel", "snipcrop", "sniptext"],
     "@composer": ["main", "composer_tall"],
 }
 

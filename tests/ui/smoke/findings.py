@@ -2476,7 +2476,7 @@ def run(browser, tmp):
     const undo = document.getElementById('snip-edit-undo');
     const redo = document.getElementById('snip-edit-redo');
     const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
-    const alphaAt = (x, y) => live.getContext('2d').getImageData(x, y, 1, 1).data[3];
+    const shown = (n) => { const h = document.querySelector('#snip-edit-handles .snip-h[data-h="' + n + '"]'); return !!h && getComputedStyle(h).visibility === 'visible'; };
     const firePtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
       bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y,
     }));
@@ -2494,7 +2494,8 @@ def run(browser, tmp):
     const filled = () => {
       const sr = stage.getBoundingClientRect();
       const z = sr.width / live.width;
-      return Math.min(Math.abs(1200 * z - wrap.clientWidth), Math.abs(800 * z - wrap.clientHeight));
+      // The view keeps 48 CSS px free around the image for the handles that sit outside it.
+      return Math.min(Math.abs(1200 * z - (wrap.clientWidth - 48)), Math.abs(800 * z - (wrap.clientHeight - 48)));
     };
     const exportSize = async () => {
       window.__SMOKE_ARGS__.length = 0;
@@ -2507,8 +2508,8 @@ def run(browser, tmp):
     await snipOpen(1400, 800);
     document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleepMs(200);
     if (!undo.disabled) errs.push('830: the undo button is enabled before any crop');
-    for (const [x, y] of [[1, 1], [live.width - 2, 1], [1, live.height - 2], [live.width - 2, live.height - 2]]) {
-      if (alphaAt(x, y) === 0) errs.push('830: no handle is drawn at the image corner ' + x + ',' + y);
+    for (const n of ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e']) {
+      if (!shown(n)) errs.push('830: no handle is shown at the full-image box (' + n + ')');
     }
     await dragEdge('right', 1400, 1200);
     if (undo.disabled) errs.push('830: dragging an edge in did not create an undoable crop');
@@ -2517,7 +2518,7 @@ def run(browser, tmp):
     document.getElementById('snip-edit-undo').click(); await sleepMs(150);
     if (!undo.disabled) errs.push('830: undo left a crop behind');
     if (redo.disabled) errs.push('830: undo did not enable redo');
-    if (alphaAt(1, 1) === 0 || alphaAt(live.width - 2, live.height - 2) === 0) errs.push('830: the full-image box is not back after undo');
+    if (!shown('nw') || !shown('se')) errs.push('830: the full-image box is not back after undo');
     redo.click(); await sleepMs(150);
     if (undo.disabled) errs.push('830: redo did not bring the crop back');
     const size = await exportSize();
@@ -2540,20 +2541,24 @@ def run(browser, tmp):
     if (undo.disabled !== before) errs.push('830: a press inside the full-image box changed the crop');
 """)
     # The crop handles keep their on-screen size at every zoom and stay inside the image.
-    failed += ar_probe('cropgrip1', 'crop handles at the image corners are full white squares at every zoom', 'index', '880x600', '', snip_common + r"""
-    const live = document.getElementById('snip-edit-live');
-    const stage = document.getElementById('snip-edit-stage');
-    const white = (x, y) => { const d = live.getContext('2d').getImageData(x, y, 1, 1).data; return d[3] > 200 && d[0] > 240; };
+    failed += ar_probe('cropgrip1', 'crop handles at the image corners are full 10 px squares outside the image at every zoom', 'index', '880x600', '', snip_common + r"""
+    const base = document.getElementById('snip-edit-base');
+    const grip = (n) => document.querySelector('#snip-edit-handles .snip-h[data-h="' + n + '"]');
+    const near = (a, b) => Math.abs(a - b) <= 1;
+    const probe = (when) => {
+      const c = base.getBoundingClientRect();
+      const nw = grip('nw').getBoundingClientRect(), se = grip('se').getBoundingClientRect();
+      if (!near(nw.width, 10) || !near(nw.height, 10) || !near(se.width, 10)) errs.push('cropgrip: ' + when + ' a corner handle is not 10 px (' + nw.width.toFixed(1) + ')');
+      if (!near(nw.right, c.left) || !near(nw.bottom, c.top)) errs.push('cropgrip: ' + when + ' the top-left handle does not touch the image corner from outside');
+      if (!near(se.left, c.right) || !near(se.top, c.bottom)) errs.push('cropgrip: ' + when + ' the bottom-right handle does not touch the image corner from outside');
+      const w = document.getElementById('snip-edit-canvas-wrap').getBoundingClientRect();
+      if (when === 'at fit' && (nw.left < w.left - 0.5 || nw.top < w.top - 0.5 || se.right > w.right + 0.5 || se.bottom > w.bottom + 0.5)) errs.push('cropgrip: ' + when + ' a corner handle is cut off by the view');
+    };
     await snipOpen(1400, 800);
     document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleep(300);
-    let z = stage.getBoundingClientRect().width / live.width;
-    let k = Math.round(6 / z);
-    if (!white(k, k)) errs.push('cropgrip: the top-left corner handle is not white 6 px inside the corner (zoom ' + z.toFixed(2) + ')');
-    if (!white(live.width - 1 - k, live.height - 1 - k)) errs.push('cropgrip: the bottom-right corner handle is not white 6 px inside the corner');
+    probe('at fit');
     for (let i = 0; i < 2; i++) { document.getElementById('snip-edit-zoom-in').click(); await sleep(200); }
-    z = stage.getBoundingClientRect().width / live.width;
-    k = Math.round(6 / z);
-    if (!white(k, k)) errs.push('cropgrip: after zooming in the top-left corner handle is not white (zoom ' + z.toFixed(2) + ')');
+    probe('after zooming in');
 """)
     failed += ar_probe('bq830b', '830: Enter with the untouched full-image box leaves the editor open', 'index', '880x600', '', snip_common + r"""
     await snipOpen(1400, 800);

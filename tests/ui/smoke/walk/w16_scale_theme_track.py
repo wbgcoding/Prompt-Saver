@@ -825,12 +825,11 @@ SECTION = """\
           liveCv2.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: q2.x, clientY: q2.y }));
           window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: q2.x, clientY: q2.y }));
           await sleep(60);
-          // Selection handles are painted white on the LIVE canvas at fixed
-          // image-space points around the rect's border -- nothing is there
-          // until a click actually selects the shape (drawing one does not).
-          const liveCtx2 = liveCv2.getContext('2d');
-          const handlePoints = [[50, 50], [100, 50], [150, 50], [50, 100], [150, 100], [50, 150], [100, 150], [150, 150]];
-          const countPaintedHandles = () => handlePoints.filter(([hx, hy]) => liveCtx2.getImageData(hx, hy, 1, 1).data[3] > 200).length;
+          // Selection handles are square elements in the handle layer, outside the rect's
+          // frame -- none is shown until a click actually selects the shape (drawing one
+          // does not).
+          const handleEls = () => Array.from(document.querySelectorAll('#snip-edit-handles .snip-h'));
+          const countPaintedHandles = () => handleEls().filter((h) => getComputedStyle(h).visibility === 'visible').length;
           if (countPaintedHandles() !== 0) {
             out.errors.push('383: the freshly drawn rect already shows selection handles before it was clicked');
           }
@@ -856,58 +855,42 @@ SECTION = """\
           if (hint395 && hint395.offsetHeight < 8) {
             out.errors.push('395: the nudge hint has no line of its own under the image');
           }
-          // Handles are 8x8px squares (see snipEditPaintShapeHandles), too wide
-          // to tell a 4px move apart from noise with a single pixel sample --
-          // this instead finds the painted band's own centre within a window
-          // wide enough to hold it at every position it visits here but far
-          // enough from the neighbouring handles (50px apart) not to catch one
-          // of those instead.
-          const bandCentreX = (xMin, xMax, y) => {
-            let lo = null, hi = null;
-            for (let sx = xMin; sx <= xMax; sx++) {
-              if (liveCtx2.getImageData(sx, y, 1, 1).data[3] > 200) { if (lo === null) lo = sx; hi = sx; }
-            }
-            return lo === null ? null : (lo + hi) / 2;
+          // The handles are 10 CSS px squares in the handle layer: a move or a resize
+          // shows as the shift of the handle's own left/top, read back in image pixels.
+          const gripAt = (name) => {
+            const h = document.querySelector('#snip-edit-handles .snip-h[data-h="' + name + '"]');
+            return h ? { x: parseFloat(h.style.left) / zoom2, y: parseFloat(h.style.top) / zoom2 } : null;
           };
-          const bandCentreY = (x, yMin, yMax) => {
-            let lo = null, hi = null;
-            for (let sy = yMin; sy <= yMax; sy++) {
-              if (liveCtx2.getImageData(x, sy, 1, 1).data[3] > 200) { if (lo === null) lo = sy; hi = sy; }
-            }
-            return lo === null ? null : (lo + hi) / 2;
-          };
-          const nwBefore = bandCentreX(30, 70, 50);
-          const seBefore = bandCentreX(130, 170, 150);
+          const near395 = (a, b) => a !== null && b !== null && Math.abs(a - b) < 0.01;
+          const nwBefore = gripAt('nw');
+          const seBefore = gripAt('se');
           for (let i = 0; i < 4; i++) {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
             await sleep(20);
           }
-          const nwAfterMove = bandCentreX(30, 70, 50);
-          const seAfterMove = bandCentreX(130, 170, 150);
-          if (nwAfterMove !== nwBefore + 4 || seAfterMove !== seBefore + 4) {
+          const nwAfterMove = gripAt('nw');
+          const seAfterMove = gripAt('se');
+          if (!nwBefore || !nwAfterMove || !near395(nwAfterMove.x, nwBefore.x + 4) || !near395(seAfterMove.x, seBefore.x + 4)) {
             out.errors.push('395: four ArrowRight presses did not move the shape by exactly 4 pixels (corner at ' +
-              nwBefore + ' -> ' + nwAfterMove + ')');
+              (nwBefore && nwBefore.x) + ' -> ' + (nwAfterMove && nwAfterMove.x) + ')');
           }
           // Ctrl+ArrowRight grows the width from the still-fixed top-left corner
           // -- the bottom-right corner's row does not move yet, only its column.
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', ctrlKey: true, bubbles: true, cancelable: true }));
           await sleep(20);
-          const nwAfterWidthGrow = bandCentreX(30, 70, 50);
-          const seAfterWidthGrow = bandCentreX(130, 175, 150);
-          if (nwAfterWidthGrow !== nwAfterMove || seAfterWidthGrow !== seAfterMove + 1) {
+          const nwAfterWidthGrow = gripAt('nw');
+          const seAfterWidthGrow = gripAt('se');
+          if (!near395(nwAfterWidthGrow.x, nwAfterMove.x) || !near395(seAfterWidthGrow.x, seAfterMove.x + 1)) {
             out.errors.push('395: Ctrl+ArrowRight did not grow the shape from its top-left corner instead of moving it');
           }
           // Ctrl+ArrowDown then grows the height the same way -- its row
           // shifts down by one, its column stays exactly where the width
-          // growth above just left it. Row centres (not single pixels) again,
-          // since an 8px-tall handle square hides a 1px shift from a plain
-          // presence check at either row.
-          const seRowBeforeHeightGrow = bandCentreY(155, 140, 165);
+          // growth above just left it.
+          const seRowBeforeHeightGrow = gripAt('se').y;
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', ctrlKey: true, bubbles: true, cancelable: true }));
           await sleep(20);
-          const seRowAfterHeightGrow = bandCentreY(155, 140, 165);
-          const seColAfterHeightGrow = bandCentreX(130, 175, 151);
-          if (seRowAfterHeightGrow !== seRowBeforeHeightGrow + 1 || seColAfterHeightGrow !== seAfterWidthGrow) {
+          const seAfterHeightGrow = gripAt('se');
+          if (!near395(seAfterHeightGrow.y, seRowBeforeHeightGrow + 1) || !near395(seAfterHeightGrow.x, seAfterWidthGrow.x)) {
             out.errors.push('395: Ctrl+ArrowDown did not grow the shape height from its fixed top-left corner');
           }
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
@@ -915,7 +898,7 @@ SECTION = """\
           if (document.getElementById('snip-edit').classList.contains('hidden')) {
             out.errors.push('395: Escape while a shape was selected closed the whole editor instead of just deselecting it');
           }
-          if (bandCentreX(30, 70, 50) !== null || bandCentreY(155, 140, 165) !== null) {
+          if (countPaintedHandles() !== 0) {
             out.errors.push('395: Escape did not remove the selection handles');
           }
           if (!hint395.firstElementChild.classList.contains('hidden') || hint395.offsetHeight < 8) {

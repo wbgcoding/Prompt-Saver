@@ -334,7 +334,8 @@ ellipses, text labels, numbered step markers, a pixelate tool for blurring out
 sensitive details, and a focus area that dims everything outside a chosen area,
 with undo/redo. Zoom in for pixel-precise work and pan around with the Hand
 tool (or hold Space, or the middle mouse button) while zoomed in. Drag the
-edges or corners of the frame to crop. Resize
+edges or corners of the frame to crop; the handles sit just outside the
+image, so they never cover it, and stay fully visible at the image border. Resize
 changes the image's actual pixel size (not just the view): set a width,
 height, or percentage, with presets for 25/50/200% and "fit 1920 wide"; it is
 its own undoable step, so scaling back and forth never loses quality beyond
@@ -1230,7 +1231,9 @@ nummerierte Schritte, Pixelieren und ein Fokusbereich, der alles außerhalb eine
 Bereichs abdunkelt, mit Rückgängig/Wiederholen. Zum Heranzoomen für
 pixelgenaues Arbeiten lässt sich das Bild mit dem Hand-Werkzeug (oder
 gehaltener Leertaste bzw. der mittleren Maustaste) verschieben. Ziehe die
-Ränder oder Ecken des Rahmens, um zuzuschneiden. Die
+Ränder oder Ecken des Rahmens, um zuzuschneiden; die Griffe liegen knapp
+außerhalb des Bildes, verdecken es also nie und bleiben auch am Bildrand
+voll sichtbar. Die
 Größenänderung ändert die tatsächliche Pixelgröße des Bildes (nicht nur die
 Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 25/50/200 % und "auf 1920 Breite anpassen"; sie ist selbst ein rückgängig

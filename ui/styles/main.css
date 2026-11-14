@@ -2271,6 +2271,25 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .snip-edit-stage canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 /* Above 100 % a magnified pixel is a crisp square, not a blur. */
 .snip-edit-stage.pixelated canvas { image-rendering: pixelated; }
+/* Handles of the crop box and of a selected shape: DOM squares over the image, so a handle on an
+   image edge sits outside the picture instead of being clipped to it. Only the squares take the
+   pointer. */
+#snip-edit-handles { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.snip-h {
+  position: absolute;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1.5px solid #2563eb;
+  pointer-events: auto;
+  visibility: hidden;
+  cursor: move;
+}
+.snip-h[data-h="nw"], .snip-h[data-h="se"] { cursor: nwse-resize; }
+.snip-h[data-h="ne"], .snip-h[data-h="sw"] { cursor: nesw-resize; }
+.snip-h[data-h="n"], .snip-h[data-h="s"] { cursor: ns-resize; }
+.snip-h[data-h="w"], .snip-h[data-h="e"] { cursor: ew-resize; }
 #snip-edit-text-input {
   position: absolute;
   z-index: 5;

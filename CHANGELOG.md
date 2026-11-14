@@ -25,6 +25,9 @@ saving, backups, recordings, the editors and the installer.
 
 ### Improved
 
+- **Editor handles sit outside the image.** The handles of the crop frame and of a selected
+  rectangle or ellipse are drawn just outside the picture, so they no longer cover the
+  image or get cut off at its border.
 - **Statistics period.** The usage statistics have a period choice (last 7 days, last 30 days,
   last 12 months, all time) that sets the most used and never used lists, the chart (per day,
   per week or per month) and a new "Copies in this period" figure. While the statistics are on,
