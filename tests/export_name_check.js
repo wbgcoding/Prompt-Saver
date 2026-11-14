@@ -1,7 +1,7 @@
 // Video export "File name" field validation (ui/exportName.js: exportNameIsValid).
 // Run:  node tests/export_name_check.js      Exit: 0 = clean, 1 = problems.
 const path = require("path");
-const { exportNameIsValid, stripFormatExt } = require(path.join(__dirname, "..", "ui", "exportName.js"));
+const { exportNameIsValid, exportNameTooLong, stripFormatExt } = require(path.join(__dirname, "..", "ui", "exportName.js"));
 
 const problems = [];
 const check = (label, actual, expected) => {
@@ -39,6 +39,16 @@ check("another extension stays", stripFormatExt("clip.webm", "mp4"), "clip.webm"
 check("only a trailing extension goes", stripFormatExt("a.mp4.take", "mp4"), "a.mp4.take");
 check("a name that is only the extension stays", stripFormatExt(".mp4", "mp4"), ".mp4");
 check("empty input gives empty", stripFormatExt(null, "mp4"), "");
+
+// A name plus its extension stays within 200 characters, so the whole path component fits.
+check("a 195 char stem with .mp4 fits", exportNameTooLong("x".repeat(195), ".mp4"), false);
+check("a 196 char stem with .mp4 is exactly 200: fits", exportNameTooLong("x".repeat(196), ".mp4"), false);
+check("a 197 char stem with .mp4 is too long", exportNameTooLong("x".repeat(197), ".mp4"), true);
+check("a 300 char stem is too long", exportNameTooLong("x".repeat(300), "mp4"), true);
+check("the extension counts, with or without its dot", exportNameTooLong("x".repeat(196), "mp4"), false);
+check("surrounding blanks do not count", exportNameTooLong("  " + "x".repeat(196) + "  ", ".mp4"), false);
+check("a short name is fine", exportNameTooLong("clip", ".webm"), false);
+check("no name is not too long", exportNameTooLong("", ".mp4"), false);
 
 if (problems.length) {
   console.log("FAIL");

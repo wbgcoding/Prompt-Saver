@@ -767,6 +767,27 @@ def run(browser, tmp):
     await exercise('cut', '#ve-regions .ve-cut', cutOp, resetCut);
     """)
 
+    # A name that would make the file name longer than 200 characters is refused inline.
+    failed += vprobe('namelen', 'an over-long export name shows its own hint and blocks Export', r"""
+    // 90-namelen:
+    const $ = (id) => document.getElementById(id);
+    const nameInput = $('ve-export-name'), tooLong = $('ve-export-name-long'), invalid = $('ve-export-name-hint');
+    const type = async (v) => { nameInput.value = v; nameInput.dispatchEvent(new Event('input')); await sleep(40); };
+    if (!tooLong) { errs.push('90-namelen: there is no too-long hint element'); return; }
+    await type('x'.repeat(196));
+    if (!tooLong.classList.contains('hidden') || $('ve-export-start').disabled || nameInput.classList.contains('invalid')) errs.push('90-namelen: a name of exactly 200 with its extension is refused');
+    await type('x'.repeat(300));
+    if (tooLong.classList.contains('hidden')) errs.push('90-namelen: a 300 character name shows no hint');
+    if (!invalid.classList.contains('hidden')) errs.push('90-namelen: a 300 character name shows the bad-character hint too');
+    if (!$('ve-export-start').disabled) errs.push('90-namelen: Export stays enabled for a 300 character name');
+    if (!nameInput.classList.contains('invalid')) errs.push('90-namelen: the field is not marked invalid');
+    if (!/200/.test(tooLong.textContent) || /^veExport/.test(tooLong.textContent.trim())) errs.push('90-namelen: the hint text is "' + tooLong.textContent + '"');
+    await type('a/' + 'x'.repeat(300));
+    if (invalid.classList.contains('hidden') || !tooLong.classList.contains('hidden')) errs.push('90-namelen: bad characters must show only the bad-character hint');
+    await type('clip');
+    if (!tooLong.classList.contains('hidden') || $('ve-export-start').disabled) errs.push('90-namelen: a short name is still refused');
+    """)
+
     # The Original badge never moves the button: its space stays reserved while it is hidden.
     for size in ("1130,860", "1000,700", "940,640", "780,640"):
         failed += vprobe('origbadge' + size[:3], 'the Original badge does not shift its button (' + size + ')', r"""

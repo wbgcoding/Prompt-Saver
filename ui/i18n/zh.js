@@ -654,6 +654,7 @@ export default {
     veMoveNotAllowed: "无法从这里移动此视频。",
     veScaleUpHint: "大于源视频：视频将被放大。",
     veExportNameInvalid: "请使用不含 \\ / : * ? \" < > | 的名称。",
+    veExportNameTooLong: "名称太长（最多 200 个字符）。",
     veOvText: "文本",
     veOvTextTip: "在一段时间内向画面中写入一行文本。",
     veOvPixelate: "像素化",

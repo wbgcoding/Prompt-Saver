@@ -654,6 +654,7 @@ export default {
     veMoveNotAllowed: "Deze video kan vanaf hier niet worden verplaatst.",
     veScaleUpHint: "Groter dan de bron: de video wordt opgeschaald.",
     veExportNameInvalid: "Gebruik een naam zonder \\ / : * ? \" < > |.",
+    veExportNameTooLong: "De naam is te lang (maximaal 200 tekens).",
     veOvText: "Tekst",
     veOvTextTip: "Plaatst gedurende een tijdsbereik een regel tekst in het beeld.",
     veOvPixelate: "Pixeleren",

@@ -1,7 +1,7 @@
 // Video editor: the export run, its size estimate and the ffmpeg presence check.
 import { makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes } from "./floatShared.js";
 import { errMessageLogged } from "./errors.js";
-import { exportNameIsValid, stripFormatExt } from "./exportName.js";
+import { exportNameIsValid, exportNameTooLong, stripFormatExt } from "./exportName.js";
 import { confirmDialog } from "./dialog.js";
 import { exportFormat, exportQuality, effectiveSize, scaleTarget, exportMediaPaths, buildVideoChain, buildAudioChain, buildCopyMixChain, copyAudioMode, isLosslessCopy } from "./videoGraph.js";
 import { $, clamp, ETA_MIN_PCT, ETA_MIN_SECS, EXPORT_KBPS, fmtTime, formatExt, invoke, keptSegments, LANG, showExportErrorDetails, SILENT_FORMAT_LENGTH_WARN_MS, SILENT_FORMATS, t, toast, totalOutMs, updateAudioLabels, VE } from "./video.js";
@@ -106,9 +106,13 @@ export function syncExportButton() {
 // know about the others.
 export function applyExportGate() {
   syncExportButton();
-  const valid = exportNameIsValid($("ve-export-name").value);
+  const nameValue = $("ve-export-name").value;
+  const charsOk = exportNameIsValid(nameValue);
+  const tooLong = charsOk && exportNameTooLong(nameValue, `.${formatExt(exportFormat())}`);
+  const valid = charsOk && !tooLong;
   $("ve-export-name").classList.toggle("invalid", !valid);
-  $("ve-export-name-hint").classList.toggle("hidden", valid);
+  $("ve-export-name-hint").classList.toggle("hidden", charsOk);
+  $("ve-export-name-long").classList.toggle("hidden", !tooLong);
   const disabled = VE.exporting || !VE.ffmpeg;
   // "Copy to clipboard" writes to its own throwaway temp name (clip_export_path)
   // and never reads the file-name field at all, so a name the user has not

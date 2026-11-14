@@ -654,6 +654,7 @@ export default {
     veMoveNotAllowed: "Acest videoclip nu poate fi mutat de aici.",
     veScaleUpHint: "Mai mare decât sursa: videoclipul este mărit.",
     veExportNameInvalid: "Folosește un nume fără \\ / : * ? \" < > |.",
+    veExportNameTooLong: "Numele este prea lung (cel mult 200 de caractere).",
     veOvText: "Text",
     veOvTextTip: "Scrie un rând de text în imagine pentru un interval de timp.",
     veOvPixelate: "Pixelare",

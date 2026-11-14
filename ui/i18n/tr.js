@@ -654,6 +654,7 @@ export default {
     veMoveNotAllowed: "Bu video buradan taşınamıyor.",
     veScaleUpHint: "Kaynaktan büyük: video büyütülür.",
     veExportNameInvalid: "\\ / : * ? \" < > | içermeyen bir ad kullanın.",
+    veExportNameTooLong: "Ad çok uzun (en fazla 200 karakter).",
     veOvText: "Metin",
     veOvTextTip: "Belirli bir zaman aralığında görüntüye bir satır metin yazar.",
     veOvPixelate: "Pikselleştir",

@@ -654,6 +654,7 @@ export default {
     veMoveNotAllowed: "この動画はここからは移動できません。",
     veScaleUpHint: "元より大きいため、動画は拡大されます。",
     veExportNameInvalid: "\\ / : * ? \" < > | を含まない名前を使用してください。",
+    veExportNameTooLong: "名前が長すぎます（200 文字まで）。",
     veOvText: "テキスト",
     veOvTextTip: "指定した時間範囲で画面に1行のテキストを表示します。",
     veOvPixelate: "モザイク",

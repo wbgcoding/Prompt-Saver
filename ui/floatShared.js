@@ -470,8 +470,10 @@ export function parseFfmpegError(err, t, origin = "video") {
     payload = null;
   }
   if (!payload) return { message: errMessageLogged(text, t, origin), details: text };
+  // Without a known code the parenthetical that carries it goes too (either bracket style).
+  const noCode = (text) => text.replace(/\s*[(（][^()（）]*\{code\}[^()（）]*[)）]/, "");
   const message = payload.key === "ffErrOther"
-    ? t("ffErrOther").replace("{code}", () => payload.code != null ? String(payload.code) : "?")
+    ? (payload.code != null ? t("ffErrOther").replace("{code}", () => String(payload.code)) : noCode(t("ffErrOther")))
     : t(payload.key);
   return { message, details: payload.raw || "" };
 }

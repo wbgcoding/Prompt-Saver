@@ -630,6 +630,7 @@ export default {
     veMoveNotAllowed: "Cette vidéo ne peut pas être déplacée d'ici.",
     veScaleUpHint: "Plus grand que la source : la vidéo est agrandie.",
     veExportNameInvalid: "Utilisez un nom sans \\ / : * ? \" < > |.",
+    veExportNameTooLong: "Le nom est trop long (200 caractères au maximum).",
     veOvText: "Texte",
     veOvTextTip: "Écrit une ligne de texte dans l'image pendant une plage de temps.",
     veOvPixelate: "Pixeliser",

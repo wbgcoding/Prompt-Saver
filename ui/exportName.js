@@ -24,6 +24,16 @@ export function stripFormatExt(name, ext) {
   return text.slice(-tail.length).toLowerCase() === tail ? text.slice(0, -tail.length).trimEnd() : text;
 }
 
+// The longest name plus extension the field accepts: with the folder in front, the file name
+// stays well inside the 255 characters a path component may have, and an over-long name is
+// refused here instead of failing inside ffmpeg.
+export const EXPORT_NAME_MAX = 200;
+
+export function exportNameTooLong(name, ext) {
+  const dotExt = ext ? (String(ext).startsWith(".") ? String(ext) : `.${ext}`) : "";
+  return (name || "").trim().length + dotExt.length > EXPORT_NAME_MAX;
+}
+
 export function exportNameIsValid(name) {
   const trimmed = (name || "").trim();
   if (!trimmed || trimmed === "." || trimmed === "..") return false;

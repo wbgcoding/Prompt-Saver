@@ -104,6 +104,28 @@ async function main() {
   globalThis.window = {};
   check("logged: no Tauri handle does not raise", errMessageLogged("odd", t, "snip"), "K:errUnexpected");
   delete globalThis.window;
+
+  // ---- parseFfmpegError: the "(code N)" part is only there when a code is known
+  if (typeof globalThis.document === "undefined") globalThis.document = { addEventListener() {} };
+  const { parseFfmpegError } = await import(pathToFileURL(path.join(__dirname, "..", "ui", "floatShared.js")).href);
+  const OTHER = {
+    en: "The conversion failed (code {code}).",
+    de: "Die Konvertierung ist fehlgeschlagen (Code {code}).",
+    ja: "変換に失敗しました（コード {code}）。",
+    zh: "转换失败（代码 {code}）。",
+  };
+  const OTHER_EXPECT = {
+    en: "The conversion failed.",
+    de: "Die Konvertierung ist fehlgeschlagen.",
+    ja: "変換に失敗しました。",
+    zh: "转换失败。",
+  };
+  for (const lang of Object.keys(OTHER)) {
+    const tl = (k) => (k === "ffErrOther" ? OTHER[lang] : "K:" + k);
+    check("ffErrOther without a code drops the parenthetical (" + lang + ")", parseFfmpegError(JSON.stringify({ key: "ffErrOther", raw: "x" }), tl).message, OTHER_EXPECT[lang]);
+    check("ffErrOther with a null code drops it too (" + lang + ")", parseFfmpegError(JSON.stringify({ key: "ffErrOther", code: null, raw: "x" }), tl).message, OTHER_EXPECT[lang]);
+    check("ffErrOther keeps a known code (" + lang + ")", parseFfmpegError(JSON.stringify({ key: "ffErrOther", code: 7, raw: "x" }), tl).message, OTHER[lang].replace("{code}", "7"));
+  }
 }
 
 main().then(() => {

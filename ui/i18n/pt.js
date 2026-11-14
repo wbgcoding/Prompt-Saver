@@ -654,6 +654,7 @@ export default {
     veMoveNotAllowed: "Este vídeo não pode ser movido a partir daqui.",
     veScaleUpHint: "Maior que o original: o vídeo é ampliado.",
     veExportNameInvalid: "Use um nome sem \\ / : * ? \" < > |.",
+    veExportNameTooLong: "O nome é muito longo (no máximo 200 caracteres).",
     veOvText: "Texto",
     veOvTextTip: "Insere uma linha de texto na imagem durante um intervalo.",
     veOvPixelate: "Pixelizar",
