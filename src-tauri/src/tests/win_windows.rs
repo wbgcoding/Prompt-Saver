@@ -320,34 +320,31 @@ fn a_custom_frame_window_is_cut_to_the_frame_minus_the_outline() {
     let window = (0, 0, 100, 100);
     let frame = (7, 0, 86, 93);
     // Intersection (7,0)-(93,93), every side on the frame edge pulled in by 1.
-    assert_eq!(ww::window_capture_crop(window, window, frame, 1), Some((8, 1, 84, 91)));
+    assert_eq!(ww::window_capture_crop(window, frame, 1), Some((8, 1, 84, 91)));
     // No outline reported (Windows 10): the frame-sized crop.
-    assert_eq!(ww::window_capture_crop(window, window, frame, 0), Some((7, 0, 86, 93)));
+    assert_eq!(ww::window_capture_crop(window, frame, 0), Some((7, 0, 86, 93)));
     // The old client crop kept the whole bitmap, resize border included.
     assert_eq!(ww::client_crop(window, window), Some((0, 0, 100, 100)));
 }
 
 #[test]
-fn a_standard_frame_client_inside_the_frame_is_not_inset_again() {
-    // Window with 8 px resize border, frame 7 px in, client 8 px in and a 30 px title bar.
+fn a_standard_frame_window_keeps_its_caption_and_resize_border_free_frame() {
+    // Window with 8 px resize border, frame 7 px in, a 30 px title bar above the client.
     let window = (100, 100, 500, 400);
-    let client = (108, 130, 492, 392);
     let frame = (107, 100, 386, 293);
-    // Left and right: the client already lies inside the frame. Top: the title bar is not
-    // client. Bottom: client edge 392 is inside frame edge 393.
-    assert_eq!(ww::window_capture_crop(window, client, frame, 1), Some((8, 30, 384, 262)));
-    assert_eq!(ww::frame_edge_sides(client, frame), [false, false, false, false]);
-    // A custom-frame client reaches every edge of the frame.
-    assert_eq!(ww::frame_edge_sides((0, 0, 100, 100), (7, 0, 86, 93)), [true, true, true, true]);
+    // Frame (107,100)-(493,393) minus the 1 px outline: the title bar stays in.
+    assert_eq!(ww::window_capture_crop(window, frame, 1), Some((8, 1, 384, 291)));
+    // Windows 10 reports no outline: the whole frame.
+    assert_eq!(ww::window_capture_crop(window, frame, 0), Some((7, 0, 386, 293)));
 }
 
 #[test]
 fn the_crop_follows_negative_global_coordinates_and_rejects_nothing_left() {
     let window = (-1000, 50, -600, 350);
     let frame = (-993, 50, 386, 293);
-    assert_eq!(ww::window_capture_crop(window, window, frame, 1), Some((8, 1, 384, 291)));
-    assert_eq!(ww::window_capture_crop((0, 0, 10, 10), (0, 0, 10, 10), (4, 4, 2, 2), 1), None);
-    assert_eq!(ww::window_capture_crop((0, 0, 10, 10), (0, 0, 10, 10), (20, 20, 5, 5), 0), None);
+    assert_eq!(ww::window_capture_crop(window, frame, 1), Some((8, 1, 384, 291)));
+    assert_eq!(ww::window_capture_crop((0, 0, 10, 10), (4, 4, 2, 2), 1), None);
+    assert_eq!(ww::window_capture_crop((0, 0, 10, 10), (20, 20, 5, 5), 0), None);
 }
 
 #[test]
@@ -396,4 +393,14 @@ fn only_the_flagged_corners_are_cleared_and_zero_radius_is_a_no_op() {
     let mut same = image::RgbaImage::from_pixel(20, 20, image::Rgba([1, 2, 3, 255]));
     ww::clear_corner_alpha(&mut same, 0, [true; 4]);
     assert!(same.pixels().all(|p| p[3] == 255));
+}
+
+#[test]
+fn a_standard_frame_capture_keeps_the_title_bar() {
+    // Window 100,100-900,700 with a 31 px caption above the client, extended frame 107,100 786x593.
+    let window = (100, 100, 900, 700);
+    let frame = (107, 100, 786, 593);
+    // Frame minus the 1 px outline on every side, relative to the window origin: the
+    // title bar is inside; the client rect is not an input at all.
+    assert_eq!(ww::window_capture_crop(window, frame, 1), Some((8, 1, 784, 591)));
 }

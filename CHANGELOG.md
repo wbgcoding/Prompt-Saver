@@ -109,6 +109,8 @@ saving, backups, recordings, the editors and the installer.
   or grey edge: the invisible resize border and the thin outline are cut off, and on Windows 11
   the rounded corners are transparent in PNG and WebP files (JPEG and BMP keep the pixels that
   were there). The highlight in the screenshot overlay matches the result.
+- **Window screenshots keep the title bar.** Window screenshots always include the title bar,
+  also when the window is not covered.
 - **Editor close button after a new screenshot.** A close question left over from a previous
   screenshot can no longer make the close button of the next one do nothing.
 - **"Only changed" in the expert menu.** A setting you reset while the filter is on now stays in

@@ -326,7 +326,7 @@ switched off entirely.
 Captures part or all of the screen straight into a new tile. Drag a region, or
 click a window to capture it whole, even a normally-protected one like the Task
 Manager. The app's own windows are hidden for the moment of capture so they never
-end up in the shot. A window shot is cut to the visible window: no
+end up in the shot. A window shot is cut to the visible window with its title bar: no
 invisible resize border and no thin outline, and on Windows 11 the rounded
 corners are transparent in PNG and WebP files (JPEG and BMP keep the pixels that
 were there). The shot is on the clipboard right away.

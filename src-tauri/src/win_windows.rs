@@ -241,32 +241,22 @@ pub(crate) fn client_crop(window: (i32, i32, i32, i32), client: (i32, i32, i32, 
     Some((x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32))
 }
 
-/// Which sides (left, top, right, bottom) of the client area lie on the edge of the visible
-/// frame (`frame` = x, y, w, h in global pixels), not inside it.
-pub(crate) fn frame_edge_sides(client: (i32, i32, i32, i32), frame: (i32, i32, i32, i32)) -> [bool; 4] {
-    let (cl, ct, cr, cb) = client;
-    [cl <= frame.0, ct <= frame.1, cr >= frame.0.saturating_add(frame.2), cb >= frame.1.saturating_add(frame.3)]
-}
-
 /// The part of a window a screenshot keeps, inside the window bitmap: x, y, w, h. It is the
-/// client area cut to the visible frame (a custom-frame app's client rect reaches into the
-/// invisible resize border), and every side that lies on the frame edge is pulled in by
-/// `border` (the outline the system draws there). None when nothing is left.
+/// visible frame (title bar and borders included, the invisible resize border left out) cut
+/// to the window and pulled in by `border`, the outline the system draws on its edge. The
+/// client rect plays no part: a standard frame keeps its title bar. None when nothing is left.
 pub(crate) fn window_capture_crop(
     window: (i32, i32, i32, i32),
-    client: (i32, i32, i32, i32),
     frame: (i32, i32, i32, i32),
     border: i32,
 ) -> Option<(u32, u32, u32, u32)> {
     let (wl, wt, wr, wb) = window;
-    let (cl, ct, cr, cb) = client;
     let (fl, ft, fr, fb) = (frame.0, frame.1, frame.0.saturating_add(frame.2), frame.1.saturating_add(frame.3));
     let border = border.max(0);
-    let on = frame_edge_sides(client, frame);
-    let l = cl.max(fl).max(wl) + if on[0] { border } else { 0 };
-    let t = ct.max(ft).max(wt) + if on[1] { border } else { 0 };
-    let r = cr.min(fr).min(wr) - if on[2] { border } else { 0 };
-    let b = cb.min(fb).min(wb) - if on[3] { border } else { 0 };
+    let l = fl.max(wl).saturating_add(border);
+    let t = ft.max(wt).saturating_add(border);
+    let r = fr.min(wr).saturating_sub(border);
+    let b = fb.min(wb).saturating_sub(border);
     if r <= l || b <= t {
         return None;
     }
@@ -642,7 +632,7 @@ fn paint_dib(base_hwnd: isize, w: i32, h: i32, paint: impl FnOnce(isize, isize) 
 }
 
 /// The window's own pixels, as the window draws itself even when other windows cover it:
-/// the client area cut to the visible frame without the system outline, with the rounded
+/// the visible frame (title bar included) without the system outline, with the rounded
 /// corners transparent. None when the window is gone, empty, too big or refuses to draw.
 pub(crate) fn capture_window(id: u32) -> Option<image::RgbaImage> {
     let hwnd = hwnd_of(id);
@@ -652,8 +642,10 @@ pub(crate) fn capture_window(id: u32) -> Option<image::RgbaImage> {
     let window = (rw.left, rw.top, rw.right, rw.bottom);
     let client = (rc.left, rc.top, rc.right, rc.bottom);
     let border = border_thickness(hwnd);
-    let ((cx, cy, cw, ch), on_frame) = match frame_rect(id) {
-        Some(frame) => (window_capture_crop(window, client, frame, border)?, frame_edge_sides(client, frame)),
+    // The visible frame, title bar included; without one the client area is all that is known
+    // and the corners stay as drawn.
+    let ((cx, cy, cw, ch), corners) = match frame_rect(id) {
+        Some(frame) => (window_capture_crop(window, frame, border)?, [true; 4]),
         None => (client_crop(window, client)?, [false; 4]),
     };
     let mut bytes = paint_dib(hwnd, w, h, |mem, window_dc| unsafe {
@@ -665,8 +657,6 @@ pub(crate) fn capture_window(id: u32) -> Option<image::RgbaImage> {
     let full = image::RgbaImage::from_raw(w as u32, h as u32, bytes)?;
     let mut out = image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image();
     let radius = capture_corner_radius(id);
-    // A corner is only the window's corner where both of its sides are frame edges.
-    let corners = [on_frame[0] && on_frame[1], on_frame[1] && on_frame[2], on_frame[2] && on_frame[3], on_frame[3] && on_frame[0]];
     clear_corner_alpha(&mut out, radius, corners);
     Some(out)
 }
