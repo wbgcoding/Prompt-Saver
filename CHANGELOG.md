@@ -87,6 +87,8 @@ saving, backups, recordings, the editors and the installer.
 
 ### Fixed
 
+- **Video editor after a fresh install.** The installer now also ships ffprobe, so recordings
+  open in the video editor and show their length right away instead of waiting for a download.
 - **Video editor keyboard.** Enter and Space on the focused "Original" button now toggle the
   original view, and the shortcut list shows Shift+Left and Shift+Right as a one second jump.
   Space plays and pauses again right after a mouse click on any toolbar button.

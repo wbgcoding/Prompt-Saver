@@ -32,7 +32,7 @@
     "publisher": "BGCoding",
     "copyright": "© 2026 BGCoding",
     "targets": ["nsis"],
-    "resources": ["ffmpeg.exe", "ffmpeg-LICENSE"],
+    "resources": ["ffmpeg.exe", "ffprobe.exe", "ffmpeg-LICENSE"],
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
       "nsis": {
