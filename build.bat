@@ -215,8 +215,11 @@ set "BSART=dist\%APP_NAME%.exe"
 set "BSSETUP="
 if defined DIST_SETUP for %%I in ("!DIST_SETUP!") do set "BSSETUP=dist\%%~nxI"
 if defined BSSETUP set "BSART=!BSART!,!BSSETUP!"
-if defined BSSETUP if exist "!DIST_SETUP!.sha256" set "BSART=!BSART!,!BSSETUP!.sha256"
-if defined BSSETUP if exist "!DIST_SETUP!.sig" set "BSART=!BSART!,!BSSETUP!.sig"
+rem No stamp while the installer lacks its hash or signature (for example the signing key was
+rem missing), otherwise a later run with the key would report "up to date" and never sign it.
+if defined BSSETUP if not exist "!DIST_SETUP!.sha256" goto :bs_nosave
+if defined BSSETUP if not exist "!DIST_SETUP!.sig" goto :bs_nosave
+if defined BSSETUP set "BSART=!BSART!,!BSSETUP!.sha256,!BSSETUP!.sig"
 if exist "%BS%" powershell -NoProfile -ExecutionPolicy RemoteSigned -File "%BS%" -Save -Project "%~dp0." -Key "%BSKEY%" -Extra "%BSEXTRA%" -Artifact "!BSART!" >nul 2>&1
 :bs_nosave
 
