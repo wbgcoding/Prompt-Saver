@@ -1422,7 +1422,9 @@ pub(crate) async fn update_prompt(
                     let (d, w, h, sz) = match staged_media {
                         Some(m) if staged_valid => m,
                         _ => {
-                            let open = |v: &str| !v.is_empty() && !crate::asset_scope::held_untrusted(&marked_paths, v);
+                            let open = |v: &str| {
+                                !v.is_empty() && !attachment_path_refused(&own_dirs, &store_dir, v) && !crate::asset_scope::held_untrusted(&marked_paths, v)
+                            };
                             let media_source = if open(&p.file_path) { Some(p.file_path.as_str()) } else if open(&p.icon_path) { Some(p.icon_path.as_str()) } else { None };
                             match media_source {
                                 Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
