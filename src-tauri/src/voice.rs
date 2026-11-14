@@ -144,6 +144,24 @@ fn log(msg: &str) {
     super::append_crash_log(&format!("voice: {msg}"));
 }
 
+// The session start line. Whether a default microphone exists is enough for support; its
+// friendly name can carry a person's name ("<Name>'s AirPods") and the log gets shared.
+pub(super) fn session_start_line(
+    lang: &str,
+    auto_stop_sec: u32,
+    max_sec: u32,
+    interim: bool,
+    mic_console: Option<&str>,
+    mic_communications: Option<&str>,
+) -> String {
+    let yn = |m: Option<&str>| if m.is_some() { "yes" } else { "no" };
+    format!(
+        "session start lang={lang} auto_stop_sec={auto_stop_sec} max_sec={max_sec} interim={interim} mic_console={} mic_communications={}",
+        yn(mic_console),
+        yn(mic_communications)
+    )
+}
+
 // A failed WinRT setup step: logged with its HRESULT, mapped to the stable key the window shows.
 fn fail(step: &str, e: &windows::core::Error) -> &'static str {
     let key = error_key(e);
@@ -305,12 +323,10 @@ fn run_session(
 ) -> Result<(), &'static str> {
     let session_started = Instant::now();
     // The recognizer records from a default capture device Windows picks; both default roles are
-    // logged because the likeliest cause of "nothing heard" is a default that is not the mic in use.
+    // logged (present or not, never the name) because the likeliest cause of "nothing heard" is a default that is not the mic in use.
     let mic = crate::audio::default_mic_name();
     let mic_comm = crate::audio::default_mic_name_for(windows::Win32::Media::Audio::eCommunications);
-    log(&format!(
-        "session start lang={lang} auto_stop_sec={auto_stop_sec} max_sec={max_sec} interim={interim} mic_console={mic:?} mic_communications={mic_comm:?}"
-    ));
+    log(&session_start_line(lang, auto_stop_sec, max_sec, interim, mic.as_deref(), mic_comm.as_deref()));
     let diag = Arc::new(Diag::default());
 
     let language = Language::CreateLanguage(&HSTRING::from(lang)).map_err(|e| fail("language", &e))?;

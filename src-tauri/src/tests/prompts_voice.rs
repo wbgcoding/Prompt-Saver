@@ -1647,3 +1647,14 @@ fn a_hypothesis_always_counts_as_speech_even_without_partial_text() {
     let gate = body.find("if interim {").expect("only the emit is gated");
     assert!(touch < gate);
 }
+
+#[test]
+fn voice_session_start_line_logs_mic_presence_never_the_name() {
+    let line = voice::session_start_line("en-US", 6, 120, true, Some("Alex's AirPods"), None);
+    assert!(line.contains("mic_console=yes"), "{line}");
+    assert!(line.contains("mic_communications=no"), "{line}");
+    assert!(!line.contains("Alex") && !line.contains("AirPods"), "{line}");
+    let none = voice::session_start_line("de-DE", 0, 30, false, None, None);
+    assert!(none.contains("mic_console=no") && none.contains("mic_communications=no"), "{none}");
+    assert!(none.starts_with("session start lang=de-DE auto_stop_sec=0 max_sec=30 interim=false"), "{none}");
+}
