@@ -143,11 +143,12 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "CurrentUser"
   !define MULTIUSER_INSTALLMODEPAGE_SHOWUSERNAME
   !define MULTIUSER_INSTALLMODE_FUNCTION RestorePreviousInstallLocation
-  ; Admin, not Highest: "Highest" starts unelevated and RE-LAUNCHES the installer
-  ; the moment "all users" is picked, which looks like the setup restarting itself
-  ; mid-flow. Asking for elevation up front keeps it a single run (the all-users /
-  ; just-me choice still works, it only decides the location + registry hive).
-  !define MULTIUSER_EXECUTIONLEVEL Admin
+  ; Highest, not Admin: an administrator is still elevated up front (one run), but a
+  ; standard account starts unelevated, so "just me" installs into that account's own
+  ; profile and registry hive instead of the profile of whichever admin typed the UAC
+  ; credentials. Picking "all users" there relaunches the setup elevated, which is the
+  ; price of keeping per-user installs and the silent /UPDATE run in the right account.
+  !define MULTIUSER_EXECUTIONLEVEL Highest
   !include MultiUser.nsh
 !endif
 
@@ -529,7 +530,17 @@ Var AppStartMenuFolder
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW FinishPageShow
 !insertmacro MUI_PAGE_FINISH
+
+; A portable install leaves nothing outside its folder: no desktop shortcut offer.
+; The box is also unticked because a hidden checkbox still counts as ticked on leave.
+Function FinishPageShow
+  ${If} $PortableMode = 1
+    ${NSD_Uncheck} $mui.FinishPage.ShowReadme
+    ShowWindow $mui.FinishPage.ShowReadme ${SW_HIDE}
+  ${EndIf}
+FunctionEnd
 
 Function RunMainBinary
   nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" ""
@@ -1102,7 +1113,13 @@ Section Install
 
   ; Portable mode: skip every registry write + the uninstaller, leave only the
   ; copied files in the chosen folder. Standard mode does the full integration.
-  ${If} $PortableMode != 1
+  ${If} $PortableMode = 1
+    ; The app just removed from this very folder left its uninstaller behind (it ran
+    ; in place); with it present the app would start in installed mode.
+    ${If} $ToolsKeptIn == $INSTDIR
+      Delete "$INSTDIR\uninstall.exe"
+    ${EndIf}
+  ${Else}
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -1392,6 +1409,9 @@ Function CreateOrUpdateStartMenuShortcut
 FunctionEnd
 
 Function CreateOrUpdateDesktopShortcut
+  ; Portable installs never leave a shortcut outside their folder.
+  ${IfThen} $PortableMode = 1 ${|} Return ${|}
+
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\$OldMainBinaryName"
