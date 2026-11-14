@@ -1334,8 +1334,9 @@ export function confirmDiscardOrProceed(run) {
   confirmDiscardIfDirty().then((ok) => { if (ok) run(); });
 }
 
-export function startCreate() {
-  const text = inputEl.value.trim();
+export function startCreate(dropped) {
+  // Text dropped on the window opens the dialog directly and leaves the composer's own text alone.
+  const text = (typeof dropped === "string" ? dropped : inputEl.value).trim();
   if (!text) return;
   // Carry the composed text into the dialog so it can be reviewed/edited (and
   // previewed as Markdown) before saving.
@@ -2016,12 +2017,7 @@ export function setupDragDrop() {
     const text = e.dataTransfer?.getData("text");
     if (text && !(e.dataTransfer.files && e.dataTransfer.files.length)) {
       e.preventDefault();
-      confirmDiscardOrProceed(() => {
-        inputEl.value = text;
-        autoGrow(inputEl);
-        saveBtn.disabled = !text.trim();
-        startCreate();
-      });
+      confirmDiscardOrProceed(() => startCreate(text));
     }
   });
 }
