@@ -146,7 +146,8 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   ; Highest, not Admin: an administrator is still elevated up front (one run), but a
   ; standard account starts unelevated, so "just me" installs into that account's own
   ; profile and registry hive instead of the profile of whichever admin typed the UAC
-  ; credentials. Picking "all users" there relaunches the setup elevated, which is the
+  ; credentials. A standard account therefore gets no install-mode page and installs per
+  ; user only; an all-users install needs the setup started as administrator. That is the
   ; price of keeping per-user installs and the silent /UPDATE run in the right account.
   !define MULTIUSER_EXECUTIONLEVEL Highest
   !include MultiUser.nsh
