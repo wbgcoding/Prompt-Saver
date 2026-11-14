@@ -255,6 +255,38 @@ function sandbox() {
   sb.snipEditExportDataUrl();
   check("export crop: bare redraw before the draw, dimmed one after", calls, ["bare", "draw", "dimmed"]);
 }
+// A resize keeps its own snapshot of the surviving ops: later ops, a spotlight swap and
+// undo/redo must never leak into it (undo x3 then redo must not bring the marker back).
+{
+  const sb = {
+    SE: { ops: [], redo: [], floor: 0, tool: "rect", w: 100, h: 100, img: {}, rawCanvas: {}, drag: null },
+    SNIP_EDIT_UNDO_MAX: 50, SNIP_SCALE_MAX_AREA: 1e9,
+    toast() {}, t: (k) => k, snipOriginalToggle: { reset() {} },
+    snipEditCropCommit() {}, snipEditFinishTextIfOpen() {}, snipEditRedrawBase() {},
+    snipEditScaleCanvas: (c, w, h) => ({ width: w, height: h }),
+    snipEditBaseCv: {}, snipEditLiveCv: {}, snipEditDeselectShape() {}, snipEditSyncCropFromOps() {},
+    snipEditFit() {}, snipEditUpdateNudgeHint() {}, snipEditUpdateUndoRedoButtons() {}, snipEditNoteChange() {},
+    snipEditFitToCrop() {},
+  };
+  vm.createContext(sb);
+  for (const m of ["function snipEditApplyScale(targetW, targetH) {", "function snipEditRestoreScaleState(w, h, img, rawCanvas, ops) {",
+    "function snipEditUndo() {", "function snipEditRedo() {", "function snipEditPushOp(op, nudge) {",
+    "function snipEditPushUniqueOp(tool, op) {", "function snipEditReleaseBelowFloor() {", "function snipEditReleaseResize(op) {",
+    "function snipEditTrimResizeChain(newest) {", "function snipEditReinsert(op, prev, next) {"]) {
+    vm.runInContext(extractBlock(m), sb);
+  }
+  const SE = sb.SE;
+  sb.snipEditApplyScale(50, 50);
+  sb.snipEditPushOp({ tool: "step", point: { x: 1, y: 1 } });
+  sb.snipEditPushUniqueOp("spotlight", { tool: "spotlight", rect: {} });
+  sb.snipEditUndo(); sb.snipEditUndo(); sb.snipEditUndo();
+  check("resize undo x3: nothing left", SE.ops.map((o) => o.tool), []);
+  sb.snipEditRedo();
+  check("redo of the resize: only the resize", SE.ops.map((o) => o.tool), ["scale"]);
+  check("redo list after that: marker and spotlight", SE.redo.map((o) => o.tool), ["spotlight", "step"]);
+  sb.snipEditRedo(); sb.snipEditRedo();
+  check("full redo: each op once", SE.ops.map((o) => o.tool), ["scale", "step", "spotlight"]);
+}
 
 for (const p of problems) console.log("FAIL", p);
 console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
