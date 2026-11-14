@@ -469,7 +469,7 @@ pub(crate) const ERROR_LOG_ORIGINS: [&str; 33] = [
     "import-preview-modal", "library", "lightbox", "modal", "ocr-langs-modal", "ocr-modal",
     "rec-modal", "settings", "shortcuts-modal", "snip-edit", "stats-modal", "tag-modal",
     "theme-modal", "tour-modal", "trash-modal", "update-modal", "ve-overlay-live",
-    "video-cleanup-modal", "view-modal", "settings-expert", "main", "video", "snip",
+    "view-modal", "settings-expert", "main", "video", "snip", "manager",
 ];
 
 pub(crate) fn sanitize_error_log_origin(origin: &str) -> &'static str {

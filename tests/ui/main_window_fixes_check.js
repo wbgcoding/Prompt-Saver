@@ -47,7 +47,7 @@ section(() => {
   check(!!listMatch, "STACKED_DIALOGS list not found");
   if (listMatch) {
     const ids = JSON.parse(listMatch[1]);
-    for (const id of ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "video-cleanup-modal", "import-folder-modal", "import-preview-modal", "error-log-modal"]) {
+    for (const id of ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "import-folder-modal", "import-preview-modal", "error-log-modal"]) {
       check(ids.includes(id), `${id} is not a stacked dialog`);
     }
     // closeStackedDialog closes the first visible one and reports it.
@@ -389,9 +389,9 @@ section(() => {
     await sb.clearErrorLogAll();
     check(calls.join() === "clear_error_log", "confirming clears the error log");
   });
-  const em = read("recordingTools.js");
-  const at = em.indexOf('invoke("delete_discarded_recording_now"');
-  check(at > 0 && em.slice(at - 400, at).includes("videoDiscardedDeleteAsk"), "deleting a discarded recording asks first");
+  const em = read("manager.js");
+  const at = em.indexOf('invoke("media_delete_now"');
+  check(at > 0 && em.slice(at - 400, at).includes("mmDeleteNowAsk"), "deleting a discarded file asks first");
 });
 
 // 15. The chain overview keeps the placeholder syntax of the copy path: same pattern, same reserved names.
@@ -735,7 +735,7 @@ section(() => {
     const ref = /aria-labelledby="([^"]+)"/.exec(m[0]);
     return ref ? !ids.has(ref[1]) : !/data-i18n-aria=|aria-label=/.test(m[0]);
   }).map((m) => m[1]);
-  check(dialogs.length >= 27 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
+  check(dialogs.length >= 26 && !bad.length, "every dialog has an accessible name: " + bad.join(","));
 });
 
 // 33. Settings switches: a refused write puts the switch and the stored value back; a refused settings reset still reloads.
@@ -1459,22 +1459,19 @@ section(() => {
   check(r.log.length === 0, "focus already moved elsewhere is left alone");
 });
 
-// 81. The video cleanup dialog ignores a second open while it is up.
+// 81. The recordings cleanup button opens the media manager window, and the old dialog is gone.
 section(() => {
   const src = read("recordingTools.js");
-  const fn = extractBlock(src, "export async function openVideoCleanup(dir) {").replace("export ", "");
+  const fn = extractBlock(src, "export function openVideoCleanup() {").replace("export ", "");
   later(async () => {
-    let runs = 0, release;
-    const gate = new Promise((r) => { release = r; });
-    const sb = run("let videoCleanupOpen = false;\n" + fn + "\nglobalThis.open = openVideoCleanup;", {
-      openVideoCleanupRun: async () => { runs++; await gate; },
+    const calls = [];
+    const sb = run(fn + "\nglobalThis.open = openVideoCleanup;", {
+      invoke: async (cmd, args) => { calls.push([cmd, args]); },
+      errToast: () => {},
     });
-    const first = sb.open("d");
-    await sb.open("d");
-    check(runs === 1, "the second open is ignored while the first is up");
-    release(); await first;
-    await sb.open("d");
-    check(runs === 2, "the dialog opens again after it closed");
+    await sb.open();
+    check(calls.length === 1 && calls[0][0] === "open_media_manager" && calls[0][1].kind === "recordings", "the button opens the manager on the recordings");
+    check(!/video-cleanup-modal/.test(read("index.html")) && !/video-cleanup-modal/.test(read("main.js")), "the old cleanup dialog is not in the page any more");
   });
 });
 

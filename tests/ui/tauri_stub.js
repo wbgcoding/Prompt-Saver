@@ -350,6 +350,38 @@ function examplePristineIds() {
   });
 }
 
+// Files the media manager lists: a month of recordings in mixed formats, or screenshots with
+// and without a source-app label. Names follow the app's own patterns.
+function mmFixture(kind) {
+  const day = 86400000;
+  const now = Date.now();
+  const out = [];
+  if (kind === "screenshots") {
+    const apps = ["Notepad", "Visual-Studio-Code", "", "Microsoft-Edge", "", "Explorer"];
+    for (let i = 0; i < 14; i++) {
+      const stamp = `2026-05-${String(2 + (i % 20)).padStart(2, "0")}_1${i % 10}-2${i % 6}-0${i % 9}`;
+      const name = `Screenshot-${apps[i % apps.length] ? apps[i % apps.length] + "-" : ""}${stamp}.png`;
+      out.push({ name, path: "C:\\Screenshots\\" + name, size: 180000 + i * 91000, modified_ms: now - i * 2.3 * day, ext: "png",
+        app: apps[i % apps.length] ? apps[i % apps.length].replace(/-/g, " ") : null });
+    }
+    return out;
+  }
+  const exts = ["mp4", "mp4", "mkv", "webm", "mp4", "avi", "mp4", "gif", "mkv", "mp4", "webm", "mp4"];
+  for (let i = 0; i < 12; i++) {
+    const name = `Recording-2026-05-${String(1 + i).padStart(2, "0")}_10-${String(10 + i).padStart(2, "0")}-00.${exts[i]}`;
+    out.push({ name, path: "C:\\Recordings\\" + name, size: (3 + i * 17) * 1048576, modified_ms: now - i * 6.5 * day, ext: exts[i] });
+  }
+  return out;
+}
+
+// A drawn stand-in for a poster picture, colour from the name so tiles differ.
+function mmPosterSvg(name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h},55%,42%)"/><stop offset="1" stop-color="hsl(${(h + 50) % 360},60%,22%)"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><rect x="24" y="24" width="150" height="14" rx="4" fill="rgba(255,255,255,.35)"/><rect x="24" y="48" width="220" height="10" rx="4" fill="rgba(255,255,255,.2)"/></svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
 const RESULTS = {
   // Expert writes have to land in the stored blob: every later settings read (and
   // every window that re-reads them) must see the switch the user just flipped.
@@ -499,21 +531,30 @@ const RESULTS = {
   // probe can observe without a real OS clipboard.
   clip_export_path: (a) => "C:\\Temp\\ps-clipexport-test." + ((a && a.ext) || "mp4"),
   copy_file_to_clipboard: (a) => { window.__CLIP_EXPORT_COPIED__ = a && a.path; return true; },
-  // 340: recordingDir's folder-size readout and cleanup flow -- a fixed
-  // fixture so the probe can assert both the stats line and the confirm
-  // list's contents regardless of which age tier is selected.
+  // 340: recordingDir's folder-size readout, a fixed fixture for the stats line.
   video_folder_stats: () => [2, 5242880],
-  video_folder_cleanup_preview: () => [
-    { name: "old-recording.mp4", size: 3145728 },
-  ],
-  video_folder_cleanup: (a) => { window.__VIDEO_CLEANUP_CALLED__ = a; return 1; },
-  // The same modal's own discard-trash section -- window.__DISCARDED_FIXTURE__
-  // lets one probe step ask for an empty list (default) so the section stays
-  // hidden, without changing it for every other list_discarded_recordings call.
-  list_discarded_recordings: () => window.__DISCARDED_FIXTURE__ || [],
-  restore_discarded_recording: () => true,
-  delete_discarded_recording_now: () => true,
-  // The video-cleanup modal's "Export selected" batch flow -- one
+  // The media manager window: a fixed set of files per kind (window.__MM_FILES__ replaces it),
+  // an empty holding folder unless window.__MM_DISCARDED__ says otherwise, and posters that
+  // come back as "POSTER:<name>" paths which convertFileSrc turns into a drawn picture.
+  open_media_manager: () => null,
+  list_media: (a) => window.__MM_FILES__ || mmFixture(a.kind),
+  media_probe: (a) => (a.names || []).map((name, i) => ({
+    name, duration_ms: a.kind === "recordings" ? 20000 + ((i * 7919) % 11) * 61000 : 0,
+    width: a.kind === "recordings" ? 1920 : 1600 + (i % 3) * 160, height: a.kind === "recordings" ? 1080 : 900,
+  })),
+  media_poster: (a) => (/\.avi$/i.test(a.name) ? null : "POSTER:" + a.name),
+  media_list_discarded: () => window.__MM_DISCARDED__ || [],
+  media_discard: (a) => [(a.names || []).length, 24],
+  media_restore: () => true,
+  media_delete_now: () => true,
+  media_reveal: () => null,
+  media_play: () => null,
+  media_copy_file: () => true,
+  media_copy_image: () => null,
+  media_open_in_main: () => null,
+  media_export_in_main: () => null,
+  media_open_setting: () => null,
+  // The batch-export dialog (opened from the manager's export request) -- one
   // duration per file, no disk-space warning unless a probe sets
   // window.__EXPORT_DISK_WARN__, and the batch call itself recorded on
   // window.__BATCH_EXPORT_CALLED__ so a probe can assert its items.
@@ -1651,7 +1692,7 @@ window.__TAURI__ = {
     // Real Tauri turns a filesystem path into a loadable "asset://..." URL --
     // the stub just needs SOMETHING stable so a <video>/<img> src assignment
     // does not throw when a probe exercises a real-file preview path.
-    convertFileSrc: (path) => `asset://localhost/${encodeURIComponent(path)}`,
+    convertFileSrc: (path) => (String(path).startsWith("POSTER:") ? mmPosterSvg(String(path).slice(7)) : `asset://localhost/${encodeURIComponent(path)}`),
   },
   event: {
     listen: async (event, fn) => {

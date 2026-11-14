@@ -354,7 +354,7 @@ def run(browser, tmp):
       if (!/\b2\b/.test(line())) errs.push('564-4: fixture: first folder numbers missing: ' + line());
       await change('C:\Videos\B');
       if (/\b2\b/.test(line())) errs.push('564-4: the old folder numbers stayed on screen after picking another folder: ' + line());
-      if (!statsEl().querySelector('button').disabled) errs.push('564-4: the cleanup button stayed enabled for a folder that is not measured yet');
+      if (statsEl().querySelector('button').disabled) errs.push('564-4: the manage button is off while the folder is not measured yet');
       await change('C:\Videos\C');
       const byDir = (d) => gates.find((g) => g.dir === d);
       if (!byDir('C:\Videos\B') || !byDir('C:\Videos\C')) errs.push('564-4: fixture: both folder reads were not started');

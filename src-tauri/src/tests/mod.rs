@@ -28,6 +28,7 @@ mod rotation_settings;
 mod hotkeys_1;
 mod hotkeys_2;
 mod tray_pills;
+mod media_manager;
 mod timer;
 mod placeholders;
 #[cfg(windows)]
@@ -96,6 +97,8 @@ pub(super) use hotkeys_1::*;
 pub(super) use hotkeys_2::*;
 #[allow(unused_imports)]
 pub(super) use tray_pills::*;
+#[allow(unused_imports)]
+pub(super) use media_manager::*;
 #[allow(unused_imports)]
 pub(super) use timer::*;
 #[allow(unused_imports)]

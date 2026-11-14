@@ -246,6 +246,9 @@ pub(crate) struct Settings {
     pub(crate) video_prefs: HashMap<String, VideoPrefs>,
     #[serde(default)]
     pub(crate) window: Option<WindowGeom>,
+    // The media manager window's last size and position (logical size, physical position).
+    #[serde(default)]
+    pub(crate) manager_window: Option<WindowGeom>,
     #[serde(default = "default_on")]
     pub(crate) minimize_to_tray: bool,
     // False for a store written before the 30/90-day retention defaults; migrate() pins such a
@@ -434,6 +437,7 @@ impl Default for Settings {
             float_folders: Vec::new(),
             video_prefs: HashMap::new(),
             window: None,
+            manager_window: None,
             minimize_to_tray: true,
             retention_defaults_v2: true,
             autostart: false,

@@ -148,138 +148,55 @@ SECTION = """\
         if (!cleanBtn || cleanBtn.disabled) {
           out.errors.push('the video cleanup button is missing or disabled although the folder has files');
         } else {
+          window.__SMOKE_ARGS__ = [];
           cleanBtn.click();
           await sleep(200);
-          const modal = document.getElementById('video-cleanup-modal');
-          const ageSel = document.getElementById('video-cleanup-age');
-          const summary = document.getElementById('video-cleanup-summary');
-          const list = document.getElementById('video-cleanup-list');
-          if (!modal || modal.classList.contains('hidden')) {
-            out.errors.push('the video cleanup button did not open its confirm modal');
-          } else {
-            // 389: with nothing discarded yet, the trash section stays hidden --
-            // window.__DISCARDED_FIXTURE__ is unset at this point in the probe.
-            const discardedSection = document.getElementById('video-cleanup-discarded-section');
-            if (!discardedSection || !discardedSection.classList.contains('hidden')) {
-              out.errors.push('the discard-trash section shows although nothing was discarded');
-            }
-            if (ageSel.value !== '30') out.errors.push('the video cleanup age select does not default to 30 days');
-            const rows = [...list.querySelectorAll('.import-preview-row')];
-            if (rows.length !== 1) {
-              out.errors.push('the video cleanup preview lists ' + rows.length + ' rows, expected 1');
+          const mgrCall = window.__SMOKE_ARGS__.find(([c]) => c === 'open_media_manager');
+          if (!mgrCall || mgrCall[1].kind !== 'recordings') {
+            out.errors.push('the video cleanup button did not open the media manager on the recordings');
+          }
+          if (document.getElementById('video-cleanup-modal')) out.errors.push('the old cleanup dialog is still in the page');
+          // The manager hands its selection over for the batch export, which stays a dialog of
+          // this window: format, quality, destination, then the batch command with resolved paths.
+          {
+            window.__PICK_FOLDER__ = 'C:\\\\Export\\\\Out';
+            window.__BATCH_EXPORT_CALLED__ = null;
+            window.__FIRE__('manager-export', { dir: 'C:\\\\Recordings', names: ['old-recording.mp4'] });
+            await sleep(200);
+            const bModal = document.getElementById('batch-export-modal');
+            if (!bModal || bModal.classList.contains('hidden')) {
+              out.errors.push('the manager export request did not open the batch-export dialog');
             } else {
-              if ((rows[0].querySelector('.import-preview-name') || {}).textContent !== 'old-recording.mp4') {
-                out.errors.push('the video cleanup preview row has the wrong file name');
+              const bSummary = document.getElementById('batch-export-summary');
+              if (!(bSummary.textContent || '').includes('1')) {
+                out.errors.push('the batch export summary does not mention the 1 selected recording');
               }
-              if ((rows[0].querySelector('.import-preview-badge') || {}).textContent !== '3.0 MB') {
-                out.errors.push('the video cleanup preview row has the wrong size badge');
+              document.getElementById('batch-export-choose-dest').click();
+              await sleep(150);
+              const destOut = document.getElementById('batch-export-dest-out');
+              if ((destOut.textContent || '') !== 'C:\\\\Export\\\\Out') {
+                out.errors.push('choosing a destination folder did not show its path');
               }
-            }
-            if (!(summary.textContent || '').includes('3.0 MB')) {
-              out.errors.push('the video cleanup summary reads "' + summary.textContent + '"');
-            }
-            // A checkbox per row plus Select all/none feeds "Export
-            // selected", which opens its own small dialog for format,
-            // quality and destination, then calls the batch command with
-            // resolved source and destination paths.
-            {
-              const exportBtn = document.getElementById('video-cleanup-export');
-              if (exportBtn.disabled !== true) out.errors.push('the export-selected button starts enabled although nothing is checked');
-              document.getElementById('video-cleanup-select-all').click();
-              if (exportBtn.disabled) out.errors.push('Select all did not enable the export-selected button');
-              document.getElementById('video-cleanup-select-none').click();
-              if (!exportBtn.disabled) out.errors.push('Select none did not disable the export-selected button');
-              document.getElementById('video-cleanup-select-all').click();
-              window.__PICK_FOLDER__ = 'C:\\\\Export\\\\Out';
-              window.__BATCH_EXPORT_CALLED__ = null;
-              exportBtn.click();
+              document.getElementById('batch-export-start').click();
               await sleep(200);
-              const bModal = document.getElementById('batch-export-modal');
-              if (!bModal || bModal.classList.contains('hidden')) {
-                out.errors.push('Export selected did not open the batch-export dialog');
+              if (!window.__BATCH_EXPORT_CALLED__) {
+                out.errors.push('Start did not call export_recordings_batch');
               } else {
-                const bSummary = document.getElementById('batch-export-summary');
-                if (!(bSummary.textContent || '').includes('1')) {
-                  out.errors.push('the batch export summary does not mention the 1 selected recording');
-                }
-                document.getElementById('batch-export-choose-dest').click();
-                await sleep(150);
-                const destOut = document.getElementById('batch-export-dest-out');
-                if ((destOut.textContent || '') !== 'C:\\\\Export\\\\Out') {
-                  out.errors.push('choosing a destination folder did not show its path');
-                }
-                document.getElementById('batch-export-start').click();
-                await sleep(200);
-                if (!window.__BATCH_EXPORT_CALLED__) {
-                  out.errors.push('Start did not call export_recordings_batch');
-                } else {
-                  const items = window.__BATCH_EXPORT_CALLED__.items || [];
-                  if (items.length !== 1 || items[0].dest_path !== 'C:\\\\Export\\\\Out\\\\old-recording.mp4') {
-                    out.errors.push('export_recordings_batch got the wrong item paths: ' + JSON.stringify(items));
-                  }
-                }
-                if (!bModal.classList.contains('hidden')) out.errors.push('the batch-export dialog did not close after Start');
-                if (modal.classList.contains('hidden')) out.errors.push('the video-cleanup modal did not reopen after a batch export');
-              }
-              window.__PICK_FOLDER__ = null;
-            }
-            // Changing the age re-runs the preview with the new value.
-            window.__SMOKE_ARGS__ = [];
-            ageSel.value = '7';
-            ageSel.dispatchEvent(new Event('change', { bubbles: true }));
-            await sleep(200);
-            const previewCalls = window.__SMOKE_ARGS__.filter(([c]) => c === 'video_folder_cleanup_preview');
-            if (!previewCalls.length || previewCalls[previewCalls.length - 1][1].ageDays !== 7) {
-              out.errors.push('changing the cleanup age did not re-run the preview with the new value');
-            }
-            // Cancel must close without deleting anything.
-            window.__VIDEO_CLEANUP_CALLED__ = null;
-            document.getElementById('video-cleanup-cancel').click();
-            await sleep(200);
-            if (!modal.classList.contains('hidden')) out.errors.push('canceling the video cleanup did not close the modal');
-            if (window.__VIDEO_CLEANUP_CALLED__) out.errors.push('canceling the video cleanup deleted files anyway');
-            // Reopen (resets to the 30-day default) and confirm: this time it
-            // must actually delete and report back.
-            cleanBtn.click();
-            await sleep(200);
-            document.getElementById('video-cleanup-confirm').click();
-            await sleep(200);
-            if (!modal.classList.contains('hidden')) out.errors.push('confirming the video cleanup did not close the modal');
-            if (!window.__VIDEO_CLEANUP_CALLED__ || window.__VIDEO_CLEANUP_CALLED__.ageDays !== 30) {
-              out.errors.push('confirming the video cleanup did not call video_folder_cleanup with the shown age');
-            }
-            const toastEl3 = document.getElementById('toast');
-            if (!(toastEl3.textContent || '').includes('1 files deleted')) {
-              out.errors.push('the video cleanup done toast reads "' + toastEl3.textContent + '"');
-            }
-            // 389: now with one discarded recording waiting -- the trash section
-            // must appear, list it, and its Restore button must call the right command.
-            window.__DISCARDED_FIXTURE__ = [{ name: 'rec-discarded.mp4', size: 1048576 }];
-            cleanBtn.click();
-            await sleep(200);
-            if (discardedSection.classList.contains('hidden')) {
-              out.errors.push('the discard-trash section stays hidden although a recording was discarded');
-            } else {
-              const dRows = [...document.getElementById('video-cleanup-discarded-list').querySelectorAll('.import-preview-row')];
-              if (dRows.length !== 1) {
-                out.errors.push('the discard-trash list shows ' + dRows.length + ' rows, expected 1');
-              } else {
-                if ((dRows[0].querySelector('.import-preview-name') || {}).textContent !== 'rec-discarded.mp4') {
-                  out.errors.push('the discard-trash row has the wrong file name');
-                }
-                const restoreBtn = [...dRows[0].querySelectorAll('.import-preview-actions button')][0];
-                window.__SMOKE_ARGS__ = [];
-                restoreBtn.click();
-                await sleep(200);
-                const restoreCall = window.__SMOKE_ARGS__.find(([c]) => c === 'restore_discarded_recording');
-                if (!restoreCall || restoreCall[1].name !== 'rec-discarded.mp4') {
-                  out.errors.push('clicking Restore on a discarded recording did not call restore_discarded_recording with its name');
+                const items = window.__BATCH_EXPORT_CALLED__.items || [];
+                if (items.length !== 1 || items[0].dest_path !== 'C:\\\\Export\\\\Out\\\\old-recording.mp4') {
+                  out.errors.push('export_recordings_batch got the wrong item paths: ' + JSON.stringify(items));
                 }
               }
+              if (!bModal.classList.contains('hidden')) out.errors.push('the batch-export dialog did not close after Start');
             }
-            window.__DISCARDED_FIXTURE__ = null;
-            document.getElementById('video-cleanup-close').click();
-            await sleep(150);
+            window.__PICK_FOLDER__ = null;
+          }
+          // Something moved in the manager: the folder readout here asks again.
+          window.__SMOKE_ARGS__ = [];
+          window.__FIRE__('manager-changed', 'recordings');
+          await sleep(150);
+          if (!window.__SMOKE_ARGS__.some(([c]) => c === 'video_folder_stats')) {
+            out.errors.push('a change made in the manager did not refresh the folder readout');
           }
         }
       }

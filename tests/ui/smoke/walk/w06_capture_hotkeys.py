@@ -88,19 +88,12 @@ SECTION = """\
           out.errors.push('60: the record button menu has no visible Manage recordings entry');
         } else {
           if (manage60.textContent.trim() !== core60.t('manageRecordingsItem')) out.errors.push('60: the Manage recordings entry is mislabelled: ' + manage60.textContent);
+          window.__SMOKE_ARGS__ = [];
           manage60.click();
           await sleep(300);
-          const cleanup60 = document.getElementById('video-cleanup-modal');
           if (openEditPop && !openEditPop.classList.contains('hidden')) out.errors.push('60: choosing Manage recordings left the menu open');
-          if (!cleanup60 || cleanup60.classList.contains('hidden')) {
-            out.errors.push('60: Manage recordings did not open the recordings dialog');
-          } else {
-            const title60 = document.getElementById('video-cleanup-modal-title');
-            if (!title60 || title60.textContent.trim() !== core60.t('videoCleanupTitle')) out.errors.push('60: the recordings dialog title is wrong');
-            document.getElementById('video-cleanup-cancel').click();
-            await sleep(150);
-            if (!cleanup60.classList.contains('hidden')) out.errors.push('60: the recordings dialog did not close on Cancel');
-          }
+          const mgr60 = window.__SMOKE_ARGS__.find(([c]) => c === 'open_media_manager');
+          if (!mgr60 || mgr60[1].kind !== 'recordings') out.errors.push('60: Manage recordings did not open the media manager on the recordings');
         }
       }
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));

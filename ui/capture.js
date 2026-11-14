@@ -1,12 +1,13 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errText, errToast, flag, hideToast, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, openVideoEditor, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errText, errToast, flag, hideToast, invoke, LANG, listen, noticeToast, OCR_LANG_NOTICE_MS, openVideoEditor, optFlag, settings, settingsEl, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
 import { copyTextChecked, fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
-import { EXPERT_PATHS } from "./expertMenu.js";
-import { openVideoCleanup } from "./recordingTools.js";
+import { EXPERT_PATHS, showExpertPage } from "./expertMenu.js";
+import { bindMediaManagerEvents, openVideoCleanup } from "./recordingTools.js";
+import { flashSettingsRow } from "./settingsSearch.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { ocrErrToast, openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
 
@@ -75,7 +76,7 @@ export function bindCapture() {
     '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
     // A camera-only entry on the same popover, shown only when cameraRecord is on.
     '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>' +
-    // Record button only: the old-recordings dialog of the expert menu's recording folder.
+    // Record button only: opens the media manager window on the recordings.
     '<button type="button" role="menuitem" id="manage-recordings-item" class="hidden"></button>';
   document.body.appendChild(openEditorPop);
   function closeOpenEditorPop() {
@@ -106,7 +107,7 @@ export function bindCapture() {
   });
   openEditorPop.querySelector("#manage-recordings-item").addEventListener("click", () => {
     closeOpenEditorPop();
-    openVideoCleanup(EXPERT_PATHS.recordingDir.get());
+    openVideoCleanup();
   });
   $("snip-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -154,6 +155,22 @@ export function bindCapture() {
     await openExternalFileInEditor(path);
   }
   listen("edit-image-request", () => { openRequestedEditImage(); });
+  // The media manager window hands a file over to the editors, which live in this window.
+  listen("manager-open-file", async (e) => {
+    const path = e.payload?.path;
+    if (!path) return;
+    if (snipEditState().active && !(await snipEditRequestClose({ replacing: true }))) return;
+    await openExternalFileInEditor(path);
+  });
+  bindMediaManagerEvents({ recordingDir: () => EXPERT_PATHS.recordingDir.get() });
+  // The manager's empty state points at a setting: open the expert page and flash its row.
+  listen("manager-open-setting", (e) => {
+    const key = String(e.payload || "");
+    if (!key) return;
+    settingsEl.classList.remove("hidden");
+    showExpertPage(true);
+    flashSettingsRow(document.querySelector(`#settings-expert [data-setting-row="${key}"]`));
+  });
   // Driven by the recording state, not the click: the backend announces every change with
   // "recording-state", and showing the window again re-syncs it in case one was missed.
   function setRecordBtnState(state) {

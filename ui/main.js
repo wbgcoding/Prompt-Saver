@@ -139,12 +139,11 @@ function bind() {
   // Dialogs that live at the base z-index and later in the page than most other
   // overlays, topmost first. Promise-based ones have no close function of their
   // own: pressing their cancel/close button resolves them the way a click does.
-  const STACKED_DIALOGS = ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "video-cleanup-modal", "import-folder-modal", "import-preview-modal", "error-log-modal"];
+  const STACKED_DIALOGS = ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "import-folder-modal", "import-preview-modal", "error-log-modal"];
   const STACKED_DIALOG_CLOSE = {
     "ocr-langs-modal": closeLangsModal,
     "ocr-modal": () => $("ocr-modal-close").click(),
     "batch-export-modal": () => $("batch-export-cancel").click(),
-    "video-cleanup-modal": () => $("video-cleanup-cancel").click(),
     "import-folder-modal": () => $("import-folder-cancel").click(),
     "import-preview-modal": () => $("import-preview-cancel").click(),
     "error-log-modal": () => $("error-log-close").click(),

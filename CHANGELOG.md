@@ -11,6 +11,12 @@ saving, backups, recordings, the editors and the installer.
 
 ### Added
 
+- **Recordings manager.** The recording folder row in the Expert menu and the record button's
+  right-click menu open a window with a preview tile for every recording, sorting by date, size,
+  length or name, filters for format, age, size and length, and a search by name. Click opens a
+  recording in the video editor, double click plays it, a right-click menu shows it in its folder or
+  copies it, and several selected recordings can be exported or deleted together. Deleted files wait
+  in "Recently discarded" and can be restored. This replaces the old "Clean up" dialog.
 - **French.** French is now available as a UI language, including the installer,
   the tray menu, voice commands and the sample library.
 - **Quick voice settings.** Right-click the microphone button for quick voice

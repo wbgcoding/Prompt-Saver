@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <!-- main.css carries the theme tokens and every shared control style; manager.css only adds
+       this window's own layout. English is the fallback every window needs; the active
+       language loads on demand. -->
+  <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/manager.css" />
+  <link rel="modulepreload" href="i18n/en.js" />
+</head>
+<body class="mm-body">
+  <!-- No OS titlebar: this row is the title and the drag surface. -->
+  <div class="mm-titlebar" data-tauri-drag-region="deep">
+    <span id="mm-title" class="mm-title"></span>
+    <div id="mm-kind" class="mm-kind" role="tablist" data-tauri-drag-region="false">
+      <button id="mm-kind-recordings" type="button" role="tab" data-kind="recordings" data-i18n="mmKindRecs">Recordings</button>
+      <button id="mm-kind-screenshots" type="button" role="tab" data-kind="screenshots" data-i18n="mmKindShots">Screenshots</button>
+    </div>
+    <span class="mm-spacer"></span>
+    <button id="mm-close" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
+    </button>
+  </div>
+
+  <div class="mm-toolbar">
+    <input id="mm-search" class="mm-search" type="search" autocomplete="off" spellcheck="false" data-i18n-ph="mmSearchPh" data-i18n-aria="mmSearchPh" />
+    <label class="mm-field"><span data-i18n="mmSortLabel">Sort</span><select id="mm-sort"></select></label>
+    <label class="mm-field" id="mm-f-format"><span data-i18n="mmFilterFormat">Format</span><select id="mm-format"></select></label>
+    <label class="mm-field"><span data-i18n="mmFilterAge">Age</span><select id="mm-age"></select></label>
+    <label class="mm-field"><span data-i18n="mmFilterSize">Size</span><select id="mm-size"></select></label>
+    <label class="mm-field" id="mm-f-dur"><span data-i18n="mmFilterDuration">Length</span><select id="mm-dur"></select></label>
+    <button id="mm-refresh" class="icon-btn" type="button" data-i18n-title="mmRefresh" data-i18n-aria="mmRefresh">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>
+    </button>
+  </div>
+
+  <div id="mm-note" class="mm-note hidden"><span data-i18n="mmNoFfmpegPosters">Previews of some formats need ffmpeg.</span></div>
+
+  <div id="mm-scroll" class="mm-scroll" tabindex="-1">
+    <div id="mm-grid" class="mm-grid" role="listbox" aria-multiselectable="true"></div>
+    <div id="mm-empty" class="mm-empty hidden">
+      <p id="mm-empty-text"></p>
+      <button id="mm-empty-btn" class="ghost-btn hidden" type="button" data-i18n="mmShotsSaveOpen">Open setting</button>
+    </div>
+  </div>
+
+  <section id="mm-disc" class="mm-disc hidden">
+    <button id="mm-disc-head" class="mm-disc-head" type="button" aria-expanded="false">
+      <svg class="mm-disc-chev" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
+      <span id="mm-disc-label"></span>
+    </button>
+    <ul id="mm-disc-list" class="mm-disc-list hidden"></ul>
+  </section>
+
+  <div class="mm-footer">
+    <span id="mm-sel" class="mm-sel"></span>
+    <button id="mm-all" class="ghost-btn" type="button" data-i18n="selectAll">All</button>
+    <button id="mm-none" class="ghost-btn" type="button" data-i18n="selectNone">None</button>
+    <span class="mm-spacer"></span>
+    <button id="mm-export" class="ghost-btn" type="button" data-i18n="videoCleanupExportSelected">Export selected</button>
+    <button id="mm-del" class="ghost-btn mm-danger" type="button" data-i18n="mmDeleteSelected">Delete selected</button>
+  </div>
+
+  <div id="mm-toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="mm-ctx" class="ctx hidden" role="menu"></div>
+
+  <script type="module" src="manager.js"></script>
+</body>
+</html>

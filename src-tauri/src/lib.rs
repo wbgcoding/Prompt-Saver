@@ -206,6 +206,9 @@ use export_graph::*;
 mod media_files;
 use media_files::*;
 
+mod media_manager;
+use media_manager::*;
+
 mod parallel;
 
 #[cfg(windows)]
@@ -1140,6 +1143,21 @@ pub fn run() {
             video_editor::probe_extra_video_source,
             video_editor::read_key_sidecar,
             camera::open_camera_window,
+            media_manager::open_media_manager,
+            media_manager::list_media,
+            media_manager::media_probe,
+            media_manager::media_poster,
+            media_manager::media_reveal,
+            media_manager::media_play,
+            media_manager::media_copy_file,
+            media_manager::media_copy_image,
+            media_manager::media_discard,
+            media_manager::media_list_discarded,
+            media_manager::media_restore,
+            media_manager::media_delete_now,
+            media_manager::media_open_in_main,
+            media_manager::media_export_in_main,
+            media_manager::media_open_setting,
             camera::camera_begin_recording,
             camera::camera_append_chunk,
             camera::camera_permission_ready,

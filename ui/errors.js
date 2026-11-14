@@ -32,6 +32,7 @@ export const ERROR_MSG_KEYS = {
   "recording-target-switch-invalid-window": "recTargetSwitchInvalidWindow",
   "recording-target-switch-timeout": "recTargetSwitchTimeout",
   "file-missing": "openFileMissing",
+  "media-file-not-found": "openFileMissing",
   "ffmpeg-missing": "recFfmpegMissingHint",
   "demo-mode-multiple-instances": "demoModeMultipleInstances",
   "dir-not-picked": "syncDirNotApplied",

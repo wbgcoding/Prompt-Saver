@@ -420,10 +420,17 @@ the expert menu's own recording group and, once set, also show up in "All
 hotkeys" alongside the global and per-tile ones.
 
 The expert menu's recording-folder row shows how many videos are in it and
-how much space they use, with a "Clean up…" button next to it: pick 7, 30 or
-90 days, review the exact list of files that age would remove and how much
-it would free, then confirm. Nothing is ever deleted in the background;
-only this dialog, and only after you confirm it, ever removes a file.
+how much space they use, with a "Manage recordings…" button next to it. The
+same window opens from the right-click menu of the record button. It shows
+every recording as a tile with a preview picture, its length, size and date.
+Sort by date, size, length or name; narrow the list by format, age, size or
+length; search by name. A click opens a recording in the video editor, a
+double click plays it, a right-click offers the other actions (show in
+folder, copy the file or its path, delete). Select several tiles (checkbox,
+Ctrl or Shift) to export or delete them together. Nothing is removed for
+good right away: deleted files move to "Recently discarded" at the bottom of
+the window, where they can be restored for a while. Previews of some formats
+need ffmpeg.
 
 Stopping leads into a dialog offering Save, Save as…, Copy, Edit and Discard.
 Save and Copy use one shared recording folder (changeable here or in the
@@ -445,9 +452,9 @@ touched; both the grace period and the check interval are adjustable in the
 expert menu (System tab, Troubleshooting group), alongside a manual "clean up now" action. A new install deletes
 unused recordings after 90 days (expert menu, 0 = keep forever).
 
-The same cleanup dialog can also export several finished recordings at once.
-A checkbox per file, plus Select all/none, picks which ones; "Export
-selected" opens a small dialog for format, quality and a destination folder,
+The manager can also export several finished recordings at once. Select
+them, then choose "Export selected": a small dialog asks for format, quality
+and a destination folder,
 then encodes every checked recording and reports how many finished and how
 many failed.
 
@@ -1300,14 +1307,21 @@ Abbrechen) statt einer Vorschau; eine fehlgeschlagene oder abgebrochene
 Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
 Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
 automatisch und behält, was bis dahin aufgenommen wurde. Der
-Aufräumen-Dialog im Aufnahmeordner (Expertenmenü) kann mehrere fertige
-Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
-Qualität und Zielordner für alle zusammen wählen. Die Aufnahmeordner-Zeile
-im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
-Platz sie belegen, mit einem „Aufräumen…“-Button daneben: 7, 30 oder 90 Tage
-wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
-bestätigen. Gelöscht wird nie im Hintergrund, immer nur hier und nur nach
-Bestätigung. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90
+Aufnahmen-Manager kann mehrere fertige Aufnahmen auch in einem Rutsch
+exportieren: auswählen, „Auswahl exportieren“ wählen, dann Format, Qualität
+und Zielordner für alle zusammen angeben. Die Aufnahmeordner-Zeile im
+Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
+Platz sie belegen, mit einem Button „Aufnahmen verwalten…“ daneben; dasselbe
+Fenster öffnet sich auch im Rechtsklick-Menü des Aufnahme-Buttons. Es zeigt
+jede Aufnahme als Kachel mit Vorschaubild, Länge, Größe und Datum. Sortiert
+wird nach Datum, Größe, Länge oder Name, gefiltert nach Format, Alter, Größe
+oder Länge, und per Namenssuche. Ein Klick öffnet die Aufnahme im
+Video-Editor, ein Doppelklick spielt sie ab, ein Rechtsklick bietet die
+übrigen Aktionen (im Ordner zeigen, Datei oder Pfad kopieren, löschen).
+Mehrere Kacheln (Häkchen, Strg oder Umschalt) lassen sich gemeinsam
+exportieren oder löschen. Gelöscht wird nie sofort endgültig: Dateien wandern
+nach „Kürzlich verworfen“ unten im Fenster und lassen sich eine Zeit lang
+wiederherstellen. Vorschauen mancher Formate brauchen ffmpeg. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90
 Tagen (Expertenmenü, 0 = für immer). Eine Tastenanzeige
 (im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über

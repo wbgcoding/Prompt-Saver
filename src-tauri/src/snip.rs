@@ -334,6 +334,16 @@ pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
             }
         }
     }
+
+    // Posters of the media manager are flat files named by a hash of the source and its time;
+    // a poster nobody asked for lately belongs to a file that is gone or was replaced.
+    if let Ok(entries) = fs::read_dir(ocr_dir.join("media-posters")) {
+        for e in entries.flatten() {
+            if e.path().is_file() && is_stale(&e) {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+    }
 }
 
 // A working copy folder ends in the id of the process that opened it. The folder's own time is

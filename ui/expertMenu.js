@@ -1302,9 +1302,8 @@ export function pathRow(key) {
     const cleanBtn = document.createElement("button");
     cleanBtn.type = "button";
     cleanBtn.className = "ghost-btn";
-    cleanBtn.textContent = t("videoFolderCleanupBtn");
-    cleanBtn.disabled = !videoFolderInfo || videoFolderInfo.count === 0;
-    cleanBtn.addEventListener("click", () => openVideoCleanup(dir));
+    cleanBtn.textContent = t("manageRecordingsItem");
+    cleanBtn.addEventListener("click", () => openVideoCleanup());
     info.append(text, cleanBtn);
     row.appendChild(info);
   }
@@ -2105,8 +2104,6 @@ export function bindExpertMenu() {
   };
 
   $("banner-more").addEventListener("click", () => { bannerFront += 1; syncBannerStack(); });
-
-  attachSelectPicker($("video-cleanup-age"));
 
   // ---------- ffmpeg ----------
   // Fetched on demand only: never on app start, never in the background. Discovery (next to the

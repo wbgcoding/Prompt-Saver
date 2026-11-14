@@ -1,6 +1,6 @@
 // Backup dialog: storage and retention panels, restore and selective restore.
 import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, gateOpen, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
-import { applyFlags, applyValues, EXPERT_PATHS, rowResetBtn, withTip } from "./expertMenu.js";
+import { applyFlags, applyValues, rowResetBtn, withTip } from "./expertMenu.js";
 import { EXPERT_SELECTS, EXPERT_VALUES } from "./expertConfig.js";
 import { openVideoCleanup } from "./recordingTools.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage } from "./management.js";
@@ -232,7 +232,7 @@ export const RETENTION_CLEANUP = {
     try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
     undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
   },
-  recordings: () => { closeBackups(); openVideoCleanup(EXPERT_PATHS.recordingDir.get()); },
+  recordings: () => { closeBackups(); openVideoCleanup(); },
   discardedRecordings: () => retentionCleanupResult(invoke("sweep_discarded_recordings_now"), "recSweepNothing"),
   tempExports: () => retentionCleanupResult(invoke("sweep_clip_export_temp_now"), "recSweepNothing"),
   editStates: async () => {

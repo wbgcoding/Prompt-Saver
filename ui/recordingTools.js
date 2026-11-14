@@ -1,151 +1,28 @@
 // Recording folder tools in the expert menu: the old-recordings cleanup and the batch
 // re-export.
-import { $, errToast, invoke, LANG, t, toast } from "./core.js";
+import { $, errToast, invoke, LANG, listen, t, toast } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes } from "./floatShared.js";
 import { refreshVideoFolderInfo } from "./expertMenu.js";
 
-// The full "asks for an age, lists what that would delete, deletes only after
-// confirmation" flow for the recordingDir cleanup button in the expert menu. Preview and the
-// real delete share the same backend scan, and the delete also receives the
-// listed names, so only files that were shown (and are still stale) get removed.
-// A second open while the first is still up would rebind every handler of the one dialog
-// and leave the first call waiting forever, so a repeat open is ignored.
-let videoCleanupOpen = false;
-export async function openVideoCleanup(dir) {
-  if (videoCleanupOpen) return;
-  videoCleanupOpen = true;
-  try { await openVideoCleanupRun(dir); } finally { videoCleanupOpen = false; }
+// Cleaning up old recordings now happens in the media manager window: filter by age or size,
+// select, delete (with undo). The name stays because the expert menu, the backups screen and the
+// record button's menu all open it through here; the folder is resolved by the backend.
+export function openVideoCleanup() {
+  return invoke("open_media_manager", { kind: "recordings" }).catch((e) => errToast(e));
 }
 
-async function openVideoCleanupRun(dir) {
-  const box = $("video-cleanup-modal");
-  const ageSel = $("video-cleanup-age");
-  const summary = $("video-cleanup-summary");
-  const list = $("video-cleanup-list");
-  const confirmBtn = $("video-cleanup-confirm");
-  const selectAllBtn = $("video-cleanup-select-all");
-  const selectNoneBtn = $("video-cleanup-select-none");
-  const exportBtn = $("video-cleanup-export");
-  const checks = new Map(); // file name -> its row checkbox, rebuilt on every refresh
-  let shownNames = []; // exactly the names the list on screen shows, sent back on confirm
-  const updateExportBtn = () => {
-    exportBtn.disabled = ![...checks.values()].some((cb) => cb.checked);
-  };
-  const refresh = async () => {
-    const ageDays = Number(ageSel.value);
-    const files = await invoke("video_folder_cleanup_preview", { dir, ageDays }).catch((e) => { errToast(e); return []; });
-    shownNames = files.map((f) => f.name);
-    const totalBytes = files.reduce((s, f) => s + f.size, 0);
-    summary.textContent = files.length
-      ? t("videoCleanupSummary").replace("{n}", files.length).replace("{size}", fmtBytes(totalBytes, LANG))
-      : t("videoCleanupNone");
-    confirmBtn.disabled = files.length === 0;
-    list.innerHTML = "";
-    checks.clear();
-    for (const f of files) {
-      const row = document.createElement("div");
-      row.className = "import-preview-row";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.addEventListener("change", updateExportBtn);
-      checks.set(f.name, cb);
-      row.appendChild(cb);
-      const name = document.createElement("span");
-      name.className = "import-preview-name";
-      name.textContent = f.name;
-      const size = document.createElement("span");
-      size.className = "import-preview-badge";
-      size.textContent = fmtBytes(f.size, LANG);
-      row.append(name, size);
-      list.appendChild(row);
-    }
-    updateExportBtn();
-  };
-  // The trash section: a discarded recording in this folder's "verworfen" subfolder, restorable
-  // or deletable one at a time. Independent of the age-based bulk cleanup above, so it refreshes
-  // on its own after either action instead of closing the dialog.
-  const discardedSection = $("video-cleanup-discarded-section");
-  const discardedList = $("video-cleanup-discarded-list");
-  const refreshDiscarded = async () => {
-    const files = await invoke("list_discarded_recordings", { dir }).catch(() => []);
-    discardedSection.classList.toggle("hidden", files.length === 0);
-    discardedList.innerHTML = "";
-    for (const f of files) {
-      const row = document.createElement("div");
-      row.className = "import-preview-row";
-      const name = document.createElement("span");
-      name.className = "import-preview-name";
-      name.textContent = f.name;
-      const size = document.createElement("span");
-      size.className = "import-preview-badge";
-      size.textContent = fmtBytes(f.size, LANG);
-      const restoreBtn = document.createElement("button");
-      restoreBtn.type = "button";
-      restoreBtn.className = "ghost-btn";
-      restoreBtn.textContent = t("videoDiscardedRestore");
-      restoreBtn.addEventListener("click", async () => {
-        const ok = await invoke("restore_discarded_recording", { dir, name: f.name }).catch(() => false);
-        if (ok) { toast(t("videoDiscardedRestored")); refreshDiscarded(); refreshVideoFolderInfo(dir); }
-        else toast(t("videoDiscardedRestoreFailed"));
-      });
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "ghost-btn danger-btn";
-      deleteBtn.textContent = t("videoDiscardedDeleteNow");
-      deleteBtn.addEventListener("click", async () => {
-        const sure = await confirmDialog({ title: t("videoDiscardedDeleteNow"), message: t("videoDiscardedDeleteAsk"), confirmLabel: t("videoDiscardedDeleteNow") });
-        if (!sure) return;
-        const ok = await invoke("delete_discarded_recording_now", { dir, name: f.name }).catch(() => false);
-        if (ok) { refreshDiscarded(); refreshVideoFolderInfo(dir); }
-        else toast(t("videoDiscardedDeleteFailed"));
-      });
-      const actions = document.createElement("div");
-      actions.className = "import-preview-actions";
-      actions.append(restoreBtn, deleteBtn);
-      row.append(name, size, actions);
-      discardedList.appendChild(row);
-    }
-  };
-  ageSel.value = "30";
-  ageSel.onchange = refresh;
-  selectAllBtn.onclick = () => { for (const cb of checks.values()) cb.checked = true; updateExportBtn(); };
-  selectNoneBtn.onclick = () => { for (const cb of checks.values()) cb.checked = false; updateExportBtn(); };
-  exportBtn.onclick = async () => {
-    const names = [...checks.entries()].filter(([, cb]) => cb.checked).map(([name]) => name);
-    if (!names.length) return;
-    box.classList.add("hidden");
-    await runBatchExportRecordings(dir, names);
-    box.classList.remove("hidden");
-    await refresh();
-  };
-  await refresh();
-  await refreshDiscarded();
-  box.classList.remove("hidden");
-  const confirmed = await new Promise((resolve) => {
-    const done = (v) => {
-      box.classList.add("hidden");
-      ageSel.onchange = null;
-      selectAllBtn.onclick = null;
-      selectNoneBtn.onclick = null;
-      exportBtn.onclick = null;
-      confirmBtn.removeEventListener("click", onOk);
-      $("video-cleanup-cancel").removeEventListener("click", onCancel);
-      $("video-cleanup-close").removeEventListener("click", onCancel);
-      resolve(v);
-    };
-    const onOk = () => done(true);
-    const onCancel = () => done(false);
-    confirmBtn.addEventListener("click", onOk);
-    $("video-cleanup-cancel").addEventListener("click", onCancel);
-    $("video-cleanup-close").addEventListener("click", onCancel);
+// What the manager window asks of this window: export the files it selected through the
+// batch dialog here, and refresh the folder readout after it moved something to or from the
+// holding folder.
+export function bindMediaManagerEvents({ recordingDir }) {
+  listen("manager-export", (e) => {
+    const { dir, names } = e.payload || {};
+    if (dir && Array.isArray(names) && names.length) runBatchExportRecordings(dir, names);
   });
-  if (!confirmed) return;
-  const ageDays = Number(ageSel.value);
-  const deleted = await invoke("video_folder_cleanup", { dir, ageDays, names: shownNames }).catch((e) => { errToast(e); return null; });
-  if (deleted === null) return;
-  toast(t("videoFolderCleanupDone").replace("{n}", () => deleted));
-  refreshVideoFolderInfo(dir);
+  listen("manager-changed", (e) => {
+    if (e.payload === "recordings") refreshVideoFolderInfo(recordingDir());
+  });
 }
 
 // Video bitrate of the batch export's two lossy quality tiers.

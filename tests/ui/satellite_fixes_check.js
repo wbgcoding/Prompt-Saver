@@ -677,91 +677,56 @@ section(() => {
   check(/selectInput\(FONT_FILES\.map\(\(\[id\]\) => \[id, FONT_LABELS\[id\] \|\| id\]\)/.test(osrc), "the font select shows the display names");
 });
 
+// The manager window's discard flow: a failed move shows its error and does not announce an undo;
+// restore and delete address a file by kind and name alone, and a permanent delete asks first.
 section(() => {
-  const src = read("recordingTools.js");
-  const code = extractBlock(src, "async function openVideoCleanupRun(");
-  const listeners = {};
-  const mkEl = (id) => {
-    const e = { id, value: "30", textContent: "", disabled: false, checked: false, children: [] };
-    e.classList = { add() {}, remove() {}, toggle() {} };
-    e.appendChild = (c) => { e.children.push(c); return c; };
-    e.append = (...c) => { e.children.push(...c); };
-    e.addEventListener = (n, fn) => { listeners[id + ":" + n] = fn; };
-    e.removeEventListener = () => {};
-    Object.defineProperty(e, "innerHTML", { get: () => "", set: () => { e.children = []; } });
-    return e;
-  };
-  const els = {};
-  const toasts = [];
-  const errs = [];
-  const sb = {
-    $: (id) => (els[id] = els[id] || mkEl(id)),
-    invoke: async (cmd) => {
-      if (cmd === "video_folder_cleanup_preview") return [{ name: "a.mp4", size: 5 }];
-      if (cmd === "list_discarded_recordings") return [];
-      throw new Error("cleanup failed");
-    },
-    errToast: (e) => errs.push(String(e.message || e)), toast: (m) => toasts.push(m),
-    t: (k) => k, LANG: "en", fmtBytes: () => "5 B", confirmDialog: async () => true,
-    refreshVideoFolderInfo() {}, document: { createElement: () => mkEl("x") }, Number, String,
-  };
-  vm.createContext(sb);
-  vm.runInContext(code + String.fromCharCode(10) + "this.run = openVideoCleanupRun;", sb);
-  later(async () => {
-    const done = sb.run("C:/rec");
-    await new Promise((r) => setTimeout(r, 20));
-    listeners["video-cleanup-confirm:click"]();
-    await done;
-    check(errs.length === 1, "a failed cleanup shows its error");
-    check(!toasts.includes("videoFolderCleanupDone"), "a failed cleanup must not also report zero files deleted");
-  });
-});
-
-// The discard list has one source, the recording folder's trash: restore and delete address a take
-// by folder and name alone, with no source flag.
-section(() => {
-  const src = read("recordingTools.js");
-  const code = extractBlock(src, "async function openVideoCleanupRun(");
+  const src = read("manager.js");
+  const discard = extractBlock(src, "async function discardNames(names) {");
+  const restore = extractBlock(src, "async function restoreNames(names, announce) {");
+  const del = extractBlock(src, "async function deleteNow(name) {");
   const calls = [];
-  const mkEl = (id) => {
-    const e = { id, value: "30", textContent: "", disabled: false, checked: false, children: [], listeners: {} };
-    e.classList = { add() {}, remove() {}, toggle() {} };
-    e.appendChild = (c) => { e.children.push(c); return c; };
-    e.append = (...c) => { e.children.push(...c); };
-    e.addEventListener = (n, fn) => { e.listeners[n] = fn; };
-    e.removeEventListener = () => {};
-    Object.defineProperty(e, "innerHTML", { get: () => "", set: () => { e.children = []; } });
-    return e;
-  };
-  const els = {};
+  const errs = [];
+  const toasts = [];
+  let answer = true;
+  let failMove = true;
   const sb = {
-    $: (id) => (els[id] = els[id] || mkEl(id)),
+    kind: "recordings",
+    selected: new Set(),
+    settings: {},
+    byName: () => ({}),
     invoke: async (cmd, args) => {
-      if (cmd === "video_folder_cleanup_preview") return [];
-      if (cmd === "list_discarded_recordings") return [{ name: "rec-a.mp4", size: 1 }];
+      if (cmd === "media_discard" && failMove) throw new Error("move failed");
       calls.push([cmd, args]);
-      return true;
+      return cmd === "media_discard" ? [1, 24] : true;
     },
-    errToast() {}, toast() {}, t: (k) => k, LANG: "en", fmtBytes: () => "1 B", confirmDialog: async () => true,
-    refreshVideoFolderInfo() {}, document: { createElement: () => mkEl("x") }, Number, String,
+    errToast: (e) => errs.push(String(e.message || e)),
+    toast: (m) => toasts.push(m),
+    loadList: async () => {},
+    loadDiscarded: () => {},
+    confirmDialog: async () => answer,
+    fill: (k) => k,
+    t: (k) => k,
+    UNDO_TOAST_FALLBACK_MS: 8000,
+    Number,
   };
   vm.createContext(sb);
-  vm.runInContext(code + String.fromCharCode(10) + "this.run = openVideoCleanupRun;", sb);
+  vm.runInContext(discard + restore + del + String.fromCharCode(10) + "this.d = discardNames; this.r = restoreNames; this.x = deleteNow;", sb);
   later(async () => {
-    const done = sb.run("C:/rec");
-    await new Promise((r) => setTimeout(r, 20));
-    const rows = els["video-cleanup-discarded-list"].children;
-    check(rows.length === 1, "the trash of the recording folder is listed");
-    const buttons = (row) => row.children.find((c) => c.children.length === 2).children;
-    for (const row of rows) {
-      await buttons(row)[0].listeners.click();
-      await buttons(row)[1].listeners.click();
-    }
+    await sb.d(["a.mp4"]);
+    check(errs.length === 1 && !toasts.length, "a failed move shows its error and no undo toast");
+    check(calls.length === 0, "a failed move did not go on to restore or delete anything");
+    failMove = false;
+    await sb.d(["a.mp4"]);
+    check(toasts.includes("mmDeletedUndo"), "a successful move announces itself with the undo toast");
+    calls.length = 0;
+    await sb.r(["rec-a.mp4"], false);
+    answer = false;
+    await sb.x("rec-a.mp4");
+    check(!calls.some(([c]) => c === "media_delete_now"), "declining the question deletes nothing");
+    answer = true;
+    await sb.x("rec-a.mp4");
     const sent = calls.map(([c, a]) => c + ":" + Object.keys(a).sort().join(",")).join(" ");
-    check(sent === "restore_discarded_recording:dir,name delete_discarded_recording_now:dir,name", "restore and delete send only dir and name: " + sent);
-    els["video-cleanup-confirm"].listeners.click && els["video-cleanup-confirm"].listeners.click();
-    (els["video-cleanup-close"].onclick || els["video-cleanup-close"].listeners.click || (() => {}))();
-    await Promise.race([done, new Promise((r) => setTimeout(r, 50))]);
+    check(sent === "media_restore:kind,name media_delete_now:kind,name", "restore and delete send only kind and name: " + sent);
   });
 });
 

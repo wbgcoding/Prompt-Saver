@@ -639,15 +639,22 @@ pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
         return (0, 0);
     }
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
-    let (keep_h, custom) = {
+    let (keep_h, custom, shot_custom) = {
         let g = lock(&state);
-        (g.settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0), g.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default())
+        (
+            g.settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0),
+            g.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default(),
+            g.settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default(),
+        )
     };
     if keep_h <= 0.0 {
         return (0, 0);
     }
     let age = Duration::from_secs((keep_h * 3600.0) as u64);
-    discarded_stale_in(&discard_trash_dir(&recording_dir(&custom)), age)
+    let (c, b) = discarded_stale_in(&discard_trash_dir(&recording_dir(&custom)), age);
+    // The screenshot folder's holding folder ages out at the same age.
+    let (sc, sb) = discarded_screenshots_stale_in(&discard_trash_dir(&crate::snip::screenshot_dir(&shot_custom)), age);
+    (c + sc, b + sb)
 }
 
 // The discarded-recordings row's on-demand trigger. sweep_recordings_now answers for the

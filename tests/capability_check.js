@@ -33,6 +33,7 @@ const SATELLITES = [
   { page: "recbar.html", windows: ["rec-bar"], cap: "rec-bar" },
   { page: "video.html", windows: ["video-editor"], cap: "video-editor" },
   { page: "camera.html", windows: ["camera"], cap: "camera" },
+  { page: "manager.html", windows: ["manager"], cap: "manager" },
 ];
 const MAIN = { page: "index.html", windows: ["main"], cap: "default" };
 // Pages that load no script at all: their window needs no capability.
@@ -538,7 +539,7 @@ function checkCapabilityFiles() {
   const builders = [
     ["src/camera.rs", "camera"], ["src/rec_bar.rs", "rec-bar"], ["src/tray.rs", "tray-menu"],
     ["src/var_prompt.rs", "vars-0"], ["src/var_prompt.rs", "launcher"], ["src/video_editor.rs", "video-editor"],
-    ["src/snip.rs", "snip-0"], ["src/main_window.rs", "main"],
+    ["src/snip.rs", "snip-0"], ["src/main_window.rs", "main"], ["src/media_manager.rs", "manager"],
   ];
   for (const [file, label] of builders) {
     const src = fs.readFileSync(path.join(ROOT, "src-tauri", file), "utf8");
