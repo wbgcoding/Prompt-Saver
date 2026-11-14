@@ -526,6 +526,7 @@ export default {
     recMore: "Więcej…",
     recChangeFolder: "Zmień folder zapisu…",
     recSaved: "Nagranie zapisane",
+    recPrevSaved: "Poprzednie nagranie zostało zapisane.",
     recClosedAfterCopy: "Skopiowano, ale nie zapisano: zamknięcie tego okna spowoduje usunięcie pliku",
     flagRecSweepBroken: "Automatycznie usuwaj uszkodzone nagrania",
     tipRecSweepBroken: "Nagranie, które nie zostało prawidłowo zatrzymane (z powodu awarii lub wymuszonego zamknięcia), nie ma użytecznej ścieżki wideo i zostanie automatycznie usunięte po upływie poniższego okresu ochronnego. Trwające nagranie nigdy nie zostanie zmienione.",

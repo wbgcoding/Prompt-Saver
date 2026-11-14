@@ -503,6 +503,7 @@ export default {
     recMore: "Mehr…",
     recChangeFolder: "Speicherordner ändern…",
     recSaved: "Aufnahme gespeichert",
+    recPrevSaved: "Die vorige Aufnahme wurde gespeichert.",
     recClosedAfterCopy: "Kopiert, aber nicht gespeichert: beim Schließen wird die Datei gelöscht",
     flagRecSweepBroken: "Defekte Aufnahmen automatisch entfernen",
     tipRecSweepBroken: "Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), hat keine nutzbare Videospur und wird automatisch gelöscht, sobald sie die Schonfrist unten überschreitet. Eine laufende Aufnahme wird nie angerührt.",

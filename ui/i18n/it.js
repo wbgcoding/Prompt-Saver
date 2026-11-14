@@ -526,6 +526,7 @@ export default {
     recMore: "Altro…",
     recChangeFolder: "Cambia cartella di salvataggio…",
     recSaved: "Registrazione salvata",
+    recPrevSaved: "La registrazione precedente è stata salvata.",
     recClosedAfterCopy: "Copiata, ma non salvata: chiudendo questa finestra il file verrà eliminato",
     flagRecSweepBroken: "Rimuovi automaticamente le registrazioni danneggiate",
     tipRecSweepBroken: "Una registrazione che non ha raggiunto la normale procedura di arresto (per un arresto anomalo o forzato) non contiene una traccia video utilizzabile e viene eliminata automaticamente al termine del periodo di tolleranza indicato sotto. Le registrazioni in corso non vengono mai toccate.",

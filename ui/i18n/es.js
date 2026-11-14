@@ -526,6 +526,7 @@ export default {
     recMore: "Más…",
     recChangeFolder: "Cambiar la carpeta de guardado…",
     recSaved: "Grabación guardada",
+    recPrevSaved: "La grabación anterior se guardó.",
     recClosedAfterCopy: "Grabación copiada, pero no guardada: al cerrar esta ventana se elimina el archivo",
     flagRecSweepBroken: "Eliminar automáticamente las grabaciones dañadas",
     tipRecSweepBroken: "Una grabación que no llegó a detenerse correctamente (por un fallo o un apagado forzado) no tiene una pista de vídeo utilizable y se elimina automáticamente al terminar el periodo de gracia indicado abajo. Nunca se modifica una grabación en curso.",

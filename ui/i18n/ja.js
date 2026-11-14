@@ -526,6 +526,7 @@ export default {
     recMore: "その他…",
     recChangeFolder: "保存先フォルダーを変更…",
     recSaved: "録画を保存しました",
+    recPrevSaved: "前の録画を保存しました。",
     recClosedAfterCopy: "コピー済みですが未保存です。このウィンドウを閉じるとファイルが削除されます",
     flagRecSweepBroken: "破損した録画を自動的に削除",
     tipRecSweepBroken: "正常な停止処理に至らなかった録画（クラッシュや強制終了など）には使用可能な動画トラックがないため、下の猶予期間を過ぎると自動的に削除されます。実行中の録画には一切影響しません。",

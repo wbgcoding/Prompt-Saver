@@ -503,6 +503,7 @@ export default {
     recMore: "More…",
     recChangeFolder: "Change save folder…",
     recSaved: "Recording saved",
+    recPrevSaved: "The previous recording was saved.",
     recClosedAfterCopy: "Copied, but not saved: closing this window deletes the file",
     flagRecSweepBroken: "Remove broken recordings automatically",
     tipRecSweepBroken: "A recording that never stopped properly (a crash, a forced shutdown) has no usable video track and is deleted automatically once it is older than the grace period below. A running recording is never touched.",

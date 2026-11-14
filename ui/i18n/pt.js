@@ -526,6 +526,7 @@ export default {
     recMore: "Mais…",
     recChangeFolder: "Alterar a pasta de salvamento…",
     recSaved: "Gravação salva",
+    recPrevSaved: "A gravação anterior foi salva.",
     recClosedAfterCopy: "Copiada, mas não salva: fechar esta janela exclui o arquivo",
     flagRecSweepBroken: "Remover gravações danificadas automaticamente",
     tipRecSweepBroken: "Uma gravação que não foi encerrada corretamente (por falha ou desligamento forçado) não tem uma faixa de vídeo utilizável e é excluída automaticamente quando ultrapassa o período de tolerância abaixo. Uma gravação em andamento nunca é alterada.",

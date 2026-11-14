@@ -526,6 +526,7 @@ export default {
     recMore: "Meer…",
     recChangeFolder: "Opslagmap wijzigen…",
     recSaved: "Opname opgeslagen",
+    recPrevSaved: "De vorige opname is opgeslagen.",
     recClosedAfterCopy: "Gekopieerd, maar niet opgeslagen: als je dit venster sluit, wordt het bestand verwijderd",
     flagRecSweepBroken: "Beschadigde opnamen automatisch verwijderen",
     tipRecSweepBroken: "Een opname die de normale stopprocedure niet heeft bereikt (door een crash of gedwongen afsluiting), heeft geen bruikbare videotrack en wordt na de onderstaande respijtperiode automatisch verwijderd. Een lopende opname wordt nooit aangeraakt.",

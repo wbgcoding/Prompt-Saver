@@ -526,6 +526,7 @@ export default {
     recMore: "更多…",
     recChangeFolder: "更改保存文件夹…",
     recSaved: "录制内容已保存",
+    recPrevSaved: "上一段录制内容已保存。",
     recClosedAfterCopy: "已复制但未保存，关闭此窗口将删除文件",
     flagRecSweepBroken: "自动移除损坏的录制内容",
     tipRecSweepBroken: "未正常执行停止流程的录制内容（例如崩溃或强制关机）没有可用的视频轨道，并会在超过下方的宽限期后自动删除。正在进行的录制绝不会受到影响。",
