@@ -207,6 +207,15 @@ fn no_source_starts_a_windows_tool_by_a_bare_name() {
         let text = std::fs::read_to_string(&f).unwrap();
         let compact: String = text.split_whitespace().collect();
         if compact.contains("Command::new(\"") {
+            bad.push(name.clone());
+        }
+        // ShellExecuteW takes its program as an HSTRING literal; a bare "*.exe" there is resolved
+        // against the current directory first, and runas would elevate whatever sits there.
+        if compact
+            .split("HSTRING::from(\"")
+            .skip(1)
+            .any(|rest| rest.split('"').next().is_some_and(|lit| lit.to_lowercase().ends_with(".exe")))
+        {
             bad.push(name);
         }
     }

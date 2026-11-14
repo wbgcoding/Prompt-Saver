@@ -538,7 +538,7 @@ fn run_elevated_script(script: &str) -> Result<(), String> {
         ShellExecuteW(
             None,
             &HSTRING::from("runas"),
-            &HSTRING::from("powershell.exe"),
+            &HSTRING::from(super::webview2::powershell_exe().as_os_str()),
             &HSTRING::from(params),
             PCWSTR::null(),
             SW_HIDE,
